@@ -39,7 +39,26 @@ use world_api::WorldBackend;
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 const WORLD_PROJECT_DIR_OVERRIDE_ENV: &str = "SUBSTRATE_WORLD_PROJECT_DIR";
+const SUBSTRATE_PARENT_SPAN_ENV: &str = "SUBSTRATE_PARENT_SPAN_ID";
 const RESERVED_WORLD_REQUEST_PROFILES: &[&str] = &["world-deps-provision", "world-deps-probe"];
+
+fn inject_process_trace_env(
+    env_map: &mut std::collections::HashMap<String, String>,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
+) {
+    if let Ok(session_id) = std::env::var("SHIM_SESSION_ID") {
+        if !session_id.is_empty() {
+            env_map.insert("SHIM_SESSION_ID".to_string(), session_id);
+        }
+    }
+    if let Some(span_id) = parent_span_id {
+        env_map.insert(SUBSTRATE_PARENT_SPAN_ENV.to_string(), span_id.to_string());
+    }
+    if let Some(cmd_id) = parent_cmd_id {
+        env_map.insert("SHIM_PARENT_CMD_ID".to_string(), cmd_id.to_string());
+    }
+}
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(super) fn normalize_env_for_linux_guest(
@@ -177,6 +196,7 @@ pub(crate) struct PtyWorldOutcome {
 pub(super) fn execute_world_pty_over_ws(
     cmd: &str,
     span_id: &str,
+    parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<PtyWorldOutcome> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
@@ -222,6 +242,7 @@ pub(super) fn execute_world_pty_over_ws(
             &mut env_map,
         )?;
         ensure_world_deps_bin_on_path(&mut env_map);
+        inject_process_trace_env(&mut env_map, Some(span_id), parent_cmd_id);
         #[cfg(unix)]
         let (cols, rows) = get_term_size();
         #[cfg(not(target_os = "linux"))]
@@ -629,6 +650,7 @@ where
 pub(super) fn execute_world_pty_over_ws_macos(
     cmd: &str,
     span_id: &str,
+    parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<PtyWorldOutcome> {
     use base64::engine::general_purpose::STANDARD;
     use base64::Engine;
@@ -959,7 +981,19 @@ pub(crate) fn build_agent_client_and_request(
     agent_api_types::ExecuteRequest,
     String,
 )> {
-    build_agent_client_and_request_impl(cmd)
+    build_agent_client_and_request_with_trace_metadata(cmd, None, None)
+}
+
+pub(crate) fn build_agent_client_and_request_with_trace_metadata(
+    cmd: &str,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
+) -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::ExecuteRequest,
+    String,
+)> {
+    build_agent_client_and_request_impl(cmd, parent_span_id, parent_cmd_id)
 }
 
 pub(crate) fn build_agent_client_and_pending_diff_request() -> anyhow::Result<(
@@ -988,6 +1022,8 @@ fn current_world_request_profile() -> Option<String> {
 #[cfg(target_os = "linux")]
 fn build_agent_client_and_request_impl(
     cmd: &str,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<(
     agent_api_client::AgentClient,
     agent_api_types::ExecuteRequest,
@@ -1016,6 +1052,7 @@ fn build_agent_client_and_request_impl(
     )?;
     ensure_world_deps_bin_on_path(&mut env_map);
     preserve_world_project_dir_override(&mut env_map);
+    inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
     let request = ExecuteRequest {
         profile: current_world_request_profile(),
@@ -1083,6 +1120,8 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
 #[cfg(target_os = "macos")]
 fn build_agent_client_and_request_impl(
     cmd: &str,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<(
     agent_api_client::AgentClient,
     agent_api_types::ExecuteRequest,
@@ -1109,6 +1148,7 @@ fn build_agent_client_and_request_impl(
             &policy_snapshot,
             &mut env_map,
         )?;
+        inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
         let request = ExecuteRequest {
             profile: current_world_request_profile(),
@@ -1161,6 +1201,7 @@ fn build_agent_client_and_request_impl(
         &policy_snapshot,
         &mut env_map,
     )?;
+    inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
     let request = ExecuteRequest {
         profile: current_world_request_profile(),
@@ -1261,6 +1302,8 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
 #[cfg(target_os = "windows")]
 fn build_agent_client_and_request_impl(
     cmd: &str,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<(
     agent_api_client::AgentClient,
     agent_api_types::ExecuteRequest,
@@ -1307,6 +1350,7 @@ fn build_agent_client_and_request_impl(
         &policy_snapshot,
         &mut env_map,
     )?;
+    inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
     let request = ExecuteRequest {
         profile,
@@ -1367,8 +1411,13 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     Ok((client, request, agent_id))
 }
 
-pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStreamOutcome> {
-    let (client, request, agent_id) = build_agent_client_and_request(command)?;
+pub(crate) fn stream_non_pty_via_agent(
+    command: &str,
+    parent_span_id: Option<&str>,
+    parent_cmd_id: Option<&str>,
+) -> anyhow::Result<AgentStreamOutcome> {
+    let (client, request, agent_id) =
+        build_agent_client_and_request_with_trace_metadata(command, parent_span_id, parent_cmd_id)?;
 
     let host_visible = request.policy_snapshot.world_fs.host_visible;
     let empty_env: std::collections::HashMap<String, String> = std::collections::HashMap::new();

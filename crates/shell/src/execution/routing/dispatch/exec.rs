@@ -533,7 +533,7 @@ pub(crate) fn execute_command(
                     .map(|s| s.get_span_id().to_string())
                     .unwrap_or_else(|| cmd_id.to_string());
                 let completion_span_id = span.as_ref().map(|s| s.get_span_id().to_string());
-                match execute_world_pty_over_ws(trimmed, &span_id_for_ws) {
+                match execute_world_pty_over_ws(trimmed, &span_id_for_ws, Some(cmd_id)) {
                     Ok(outcome) => {
                         let code = outcome.exit_code;
                         append_process_events_to_trace(&outcome.process_telemetry)?;
@@ -734,7 +734,7 @@ pub(crate) fn execute_command(
                     .map(|s| s.get_span_id().to_string())
                     .unwrap_or_else(|| cmd_id.to_string());
                 let completion_span_id = span.as_ref().map(|s| s.get_span_id().to_string());
-                match execute_world_pty_over_ws_macos(trimmed, &span_id_for_ws) {
+                match execute_world_pty_over_ws_macos(trimmed, &span_id_for_ws, Some(cmd_id)) {
                     Ok(outcome) => {
                         let code = outcome.exit_code;
                         append_process_events_to_trace(&outcome.process_telemetry)?;
@@ -980,7 +980,11 @@ pub(crate) fn execute_command(
                     agent_command = format!("set -euo pipefail; {trimmed}");
                 }
             }
-            match stream_non_pty_via_agent(&agent_command) {
+            match stream_non_pty_via_agent(
+                &agent_command,
+                span_id_for_cmd_events.as_deref(),
+                Some(cmd_id),
+            ) {
                 Ok(outcome) => {
                     if let Some(active_span) = span.as_mut() {
                         active_span.set_execution_origin(ExecutionOrigin::World);
@@ -1057,7 +1061,11 @@ pub(crate) fn execute_command(
                     agent_command = format!("set -euo pipefail; {trimmed}");
                 }
             }
-            match stream_non_pty_via_agent(&agent_command) {
+            match stream_non_pty_via_agent(
+                &agent_command,
+                span_id_for_cmd_events.as_deref(),
+                Some(cmd_id),
+            ) {
                 Ok(outcome) => {
                     if let Some(active_span) = span.as_mut() {
                         active_span.set_execution_origin(ExecutionOrigin::World);
@@ -1169,7 +1177,8 @@ pub(crate) fn execute_command(
                     socket_activation::socket_activation_report().is_socket_activated(),
                 ),
             };
-            match stream_non_pty_via_agent(trimmed) {
+            match stream_non_pty_via_agent(trimmed, span_id_for_cmd_events.as_deref(), Some(cmd_id))
+            {
                 Ok(outcome) => {
                     if let Some(active_span) = span.as_mut() {
                         active_span.set_execution_origin(ExecutionOrigin::World);
