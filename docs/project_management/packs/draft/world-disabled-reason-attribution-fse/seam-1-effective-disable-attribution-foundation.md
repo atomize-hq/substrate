@@ -2,30 +2,32 @@
 seam_id: SEAM-1
 seam_slug: effective-disable-attribution-foundation
 type: integration
-status: proposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
-  required_threads: []
+  required_threads:
+    - THR-01
+    - THR-02
   stale_triggers:
     - ADR-0037 winning-layer precedence changes for world.enabled=false
     - tokenized display rules change for workspace or global config paths
     - allowlisted env token display rules change for SUBSTRATE_OVERRIDE_WORLD
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
 seam_exit_gate:
   required: true
-  planned_location: reserved_final_slice
+  planned_location: S3
   status: pending
 open_remediations: []
 ---
@@ -37,10 +39,10 @@ open_remediations: []
   - Eliminate precedence drift and redaction drift between replay and the source pack's already-researched semantics.
 - **Scope**
   - In:
-    - one helper or helper-adjacent seam that resolves exactly one outcome: `override_env`, `workspace_patch`, `global_patch`, or `unknown`
+    - one helper or helper-adjacent seam that resolves exactly one outcome: `cli_flag`, `override_env`, `workspace_patch`, `global_patch`, `default`, or `source_unknown`
     - tokenized display output for `<workspace>/.substrate/workspace.yaml` and `$SUBSTRATE_HOME/config.yaml`
     - allowlisted env-token handling for `SUBSTRATE_OVERRIDE_WORLD`
-    - deterministic precedence and redaction tests for override env, workspace config, global config, and unknown-source fallback
+    - deterministic precedence and redaction tests for CLI flag, override env, workspace config, global config, default layer, and the `source_unknown` fallback
   - Out:
     - replay origin-summary copy changes
     - replay host-warning copy changes

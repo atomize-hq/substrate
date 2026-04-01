@@ -469,11 +469,23 @@ impl WorldBackend for MacLimaBackend {
 }
 
 #[cfg(test)]
+mod test_util {
+    use std::sync::{LazyLock, Mutex, MutexGuard};
+
+    static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    pub(crate) fn lock_env() -> MutexGuard<'static, ()> {
+        ENV_LOCK.lock().expect("ENV_LOCK poisoned")
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_backend_creation() {
+        let _env_guard = crate::test_util::lock_env();
         let prev_substrate_lima_vm_name = std::env::var_os("SUBSTRATE_LIMA_VM_NAME");
         let prev_lima_vm_name = std::env::var_os("LIMA_VM_NAME");
         std::env::remove_var("SUBSTRATE_LIMA_VM_NAME");
@@ -505,6 +517,7 @@ mod tests {
 
     #[test]
     fn test_backend_vm_name_override_prefers_substrate_env() {
+        let _env_guard = crate::test_util::lock_env();
         let prev_substrate_lima_vm_name = std::env::var_os("SUBSTRATE_LIMA_VM_NAME");
         let prev_lima_vm_name = std::env::var_os("LIMA_VM_NAME");
 
@@ -536,6 +549,7 @@ mod tests {
 
     #[test]
     fn convert_exec_request_propagates_env_fs_mode() {
+        let _env_guard = crate::test_util::lock_env();
         let prev = std::env::var("SUBSTRATE_WORLD_FS_MODE").ok();
         std::env::set_var("SUBSTRATE_WORLD_FS_MODE", "read_only");
 

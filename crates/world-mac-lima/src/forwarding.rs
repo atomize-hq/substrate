@@ -478,6 +478,7 @@ mod tests {
 
     #[test]
     fn ssh_uds_forwarding_requires_capabilities_probe() {
+        let _env_guard = crate::test_util::lock_env();
         let temp = tempdir().expect("tempdir");
         let home = temp.path().join("home");
         let bin = temp.path().join("bin");
@@ -546,6 +547,7 @@ exit 0
 
     #[test]
     fn lima_ssh_config_path_prefers_lima_home_override() {
+        let _env_guard = crate::test_util::lock_env();
         let temp = tempdir().expect("tempdir");
         let override_home = temp.path().join("lima-home");
         fs::create_dir_all(override_home.join("substrate")).expect("lima home dir");
