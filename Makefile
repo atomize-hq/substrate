@@ -491,6 +491,7 @@ triad-task-start:
 	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
 	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
 	if [ -n "$(TASK_PLATFORM)" ]; then cmd="$$cmd --platform \"$(TASK_PLATFORM)\""; fi; \
+	if [ "$(FORCE)" = "1" ]; then cmd="$$cmd --force"; fi; \
 	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
 	eval "$$cmd"
 
@@ -510,6 +511,7 @@ triad-task-start-pair:
 	if [ -n "$(CODEX_PROFILE)" ]; then cmd="$$cmd --codex-profile \"$(CODEX_PROFILE)\""; fi; \
 	if [ -n "$(CODEX_MODEL)" ]; then cmd="$$cmd --codex-model \"$(CODEX_MODEL)\""; fi; \
 	if [ "$(CODEX_JSONL)" = "1" ]; then cmd="$$cmd --codex-jsonl"; fi; \
+	if [ "$(FORCE)" = "1" ]; then cmd="$$cmd --force"; fi; \
 	if [ "$(DRY_RUN)" = "1" ]; then cmd="$$cmd --dry-run"; fi; \
 	eval "$$cmd"
 

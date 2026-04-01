@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage:
-  make triad-task-start FEATURE_DIR=<path> TASK_ID=<id> [LAUNCH_CODEX=1] [CODEX_PROFILE=<p>] [CODEX_MODEL=<m>] [CODEX_JSONL=1] [TASK_PLATFORM=<p>] [DRY_RUN=1]
+  make triad-task-start FEATURE_DIR=<path> TASK_ID=<id> [LAUNCH_CODEX=1] [CODEX_PROFILE=<p>] [CODEX_MODEL=<m>] [CODEX_JSONL=1] [TASK_PLATFORM=<p>] [FORCE=1] [DRY_RUN=1]
 
 Required:
   --feature-dir <path>   Feature Planning Pack dir (e.g., docs/project_management/packs/active/<feature>)
@@ -16,6 +16,7 @@ Options:
   --codex-model <m>      Codex model (passed to `codex exec --model`)
   --codex-jsonl          Also capture Codex JSONL events to a file (uses `codex exec --json`)
   --platform <p>         linux|macos|windows|wsl (recorded in .taskmeta.json; optional)
+  --force                Bypass depends_on completion checks for this explicit start request
   --dry-run              Print what would happen; do not mutate git/worktrees
 
 Stdout contract (machine-parseable):
@@ -101,6 +102,7 @@ CODEX_MODEL=""
 CODEX_JSONL=0
 PLATFORM=""
 DRY_RUN=0
+FORCE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -134,6 +136,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=1
+            shift 1
+            ;;
+        --force)
+            FORCE=1
             shift 1
             ;;
         -h|--help)
@@ -323,8 +329,12 @@ esac
 # Planning Pack is approved and (when enabled) the execution preflight gate recommends ACCEPT.
 require_feature_start_gates "${TASKS_JSON}" "${FEATURE_DIR_ABS}"
 
-# Task-level gating: refuse to start unless depends_on tasks are completed.
-require_task_deps_completed "${TASKS_JSON}" "${TASK_ID}"
+# Task-level gating: refuse to start unless depends_on tasks are completed, unless explicitly forced.
+if [[ "${FORCE}" -eq 1 ]]; then
+    log "Force enabled; bypassing depends_on completion gate for ${TASK_ID}"
+else
+    require_task_deps_completed "${TASKS_JSON}" "${TASK_ID}"
+fi
 
 if [[ -z "${KICKOFF_RELPATH}" || "${KICKOFF_RELPATH}" == "null" ]]; then
     die "tasks.json task.kickoff_prompt must be set for ${TASK_ID}"
