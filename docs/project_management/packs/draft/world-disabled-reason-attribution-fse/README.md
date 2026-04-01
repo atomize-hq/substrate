@@ -23,15 +23,15 @@ Start here:
 
 Execution horizon:
 
-- Active seam: `SEAM-2`
-- Next seam: `SEAM-3`
-- Previous active seam: `SEAM-1` (its closeout now publishes `C-01` and `C-02`)
+- Active seam: `SEAM-3`
+- Next seam: `none`
+- Previous active seam: `SEAM-2` (its closeout now publishes `C-03` and `C-04`)
 
 Horizon inference:
 
-- `SEAM-2` is now active because `governance/seam-1-closeout.md` publishes the landed `C-01` / `C-02` handoff and clears the replay-runtime seam to consume it directly.
-- `SEAM-3` is now next because it still depends on `SEAM-2` publishing replay copy and telemetry truth before parity and lock-in work becomes current.
-- `SEAM-1` has left the forward planning window because its seam-exit gate passed and its closeout is now the authoritative upstream basis.
+- `SEAM-3` is now active because `governance/seam-2-closeout.md` publishes the landed `C-03` / `C-04` handoff and clears the parity seam to consume final runtime truth directly.
+- There is no remaining `next` seam inside this pack after `SEAM-3`; further work now belongs to execution and closeout rather than another horizon handoff.
+- `SEAM-2` has left the forward planning window because its seam-exit gate passed and its closeout is now the authoritative runtime handoff for parity work.
 
 Policy:
 

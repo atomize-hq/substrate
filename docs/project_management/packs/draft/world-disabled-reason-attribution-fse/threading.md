@@ -2,12 +2,12 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-2`
-  - `SEAM-1` closeout now publishes `C-01` / `C-02` and marks `promotion_readiness: ready`, so the replay-runtime seam can move into active planning and execution readiness.
-- **Next seam**: `SEAM-3`
-  - `SEAM-3` is now the immediate downstream consumer because it still depends on `SEAM-2` publishing runtime copy and telemetry truth.
-- **Previous active seam**: `SEAM-1`
-  - Its closeout is now the authoritative upstream basis for `THR-01` and `THR-02`.
+- **Active seam**: `SEAM-3`
+  - `SEAM-2` closeout now publishes `C-03` / `C-04` and marks `promotion_readiness: ready`, so the parity seam can move into active planning and execution readiness.
+- **Next seam**: `none`
+  - `SEAM-3` is the last seam in this extracted pack, so no additional forward-window seam remains after promotion.
+- **Previous active seam**: `SEAM-2`
+  - Its closeout is now the authoritative upstream basis for `THR-03` and `THR-04`.
 
 Horizon policy for this extracted pack:
 
@@ -80,9 +80,9 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-03`
   - **Purpose**: publish the final replay copy contract for origin summaries and host warnings so docs/tests/smoke can lock it in.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: reason fragments, recorded-host punctuation, host-warning cadence, or replay line count changes.
-  - **Satisfied by**: `governance/seam-2-closeout.md` now publishes the landed replay stderr contract, backed by `crates/shell/src/execution/routing/replay.rs`, `crates/shell/tests/replay_world.rs`, and commit `4c28c166`.
+  - **Satisfied by**: `governance/seam-2-closeout.md` publishes the landed replay stderr contract, and `SEAM-3` now consumes that published truth as the active parity seam.
   - **Notes**: this thread is the main user-visible contract handoff into the conformance seam.
 
 - **Thread ID**: `THR-04`
@@ -90,9 +90,9 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-04`
   - **Purpose**: publish the final machine-readable replay provenance contract for conformance, docs, and parity validation.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: telemetry field names, enum values, emission gates, omission rules, or redaction keys change.
-  - **Satisfied by**: `governance/seam-2-closeout.md` now publishes the landed replay telemetry contract, backed by `crates/replay/src/replay/executor.rs`, `crates/replay/tests/planner_executor.rs`, `crates/shell/tests/replay_world.rs`, and commit `05ca9bd6`.
+  - **Satisfied by**: `governance/seam-2-closeout.md` publishes the landed replay telemetry contract, and `SEAM-3` now consumes that published truth as the active parity seam.
   - **Notes**: Linux/macOS/Windows parity depends on this thread publishing the same schema and values.
 
 ## Dependency graph
@@ -112,10 +112,10 @@ flowchart LR
    - this seam has now landed and published the shared classifier plus provenance/redaction contract
    - its closeout is the authoritative upstream handoff for all later work
 2. `SEAM-2` second:
-   - this seam now owns the active window because it publishes the replay behavior that operators and trace consumers will actually see
-   - it can proceed against the revalidated `THR-01` / `THR-02` handoff from `SEAM-1`
+   - this seam has now landed and published the replay behavior that operators and trace consumers will actually see
+   - its closeout is the authoritative runtime handoff for parity work
 3. `SEAM-3` third:
-   - this seam remains queued behind `SEAM-2` because parity and lock-in should validate already-published runtime truth rather than speculative intermediate behavior
+   - this seam now owns the active window because parity and lock-in can validate already-published runtime truth instead of speculative intermediate behavior
 
 ## Workstreams
 

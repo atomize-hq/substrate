@@ -2,14 +2,16 @@
 seam_id: SEAM-3
 seam_slug: parity-and-contract-lock-in
 type: conformance
-status: proposed
-execution_horizon: next
+status: exec-ready
+execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
   required_threads:
     - THR-02
     - THR-03
@@ -20,9 +22,9 @@ basis:
     - required platform list or allowed platform divergences change
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -113,7 +115,7 @@ open_remediations: []
   - Its safety role is to close drift loops, preserve redaction guarantees, and make the feature reviewable across platforms.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `next` because it now sits immediately behind the active replay-runtime seam and should wait on published `C-03` / `C-04` truth before becoming active.
+    - `active` because `governance/seam-2-closeout.md` now publishes the landed `C-03` / `C-04` runtime truth this seam consumes.
   - Which threads matter most
     - `THR-03`
     - `THR-04`

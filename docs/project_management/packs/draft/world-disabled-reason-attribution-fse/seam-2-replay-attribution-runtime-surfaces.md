@@ -2,8 +2,8 @@
 seam_id: SEAM-2
 seam_slug: replay-attribution-runtime-surfaces
 type: capability
-status: proposed
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -20,16 +20,16 @@ basis:
     - telemetry field names, enum values, or omission rules change
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: reserved_final_slice
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
