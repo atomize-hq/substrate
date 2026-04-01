@@ -1,6 +1,7 @@
 //! Trace and replay helpers for routing.
 
 use crate::execution::cli::Cli;
+use crate::execution::config_model::{self, CliConfigOverrides, WorldDisableAttribution};
 use crate::execution::value_parse::parse_bool_flag;
 #[cfg(test)]
 use crate::execution::world_env_guard;
@@ -55,6 +56,7 @@ struct ReplayWorldMode {
     selected: ExecutionOrigin,
     source: ReplayWorldSource,
     flipped: bool,
+    effective_disable_attribution: Option<WorldDisableAttribution>,
 }
 
 impl ReplayWorldMode {
@@ -72,6 +74,7 @@ impl ReplayWorldMode {
                 selected: ExecutionOrigin::World,
                 source: ReplayWorldSource::ForceWorldFlag,
                 flipped: flip_requested,
+                effective_disable_attribution: None,
             };
         }
         if cli.no_world {
@@ -81,6 +84,7 @@ impl ReplayWorldMode {
                 selected: ExecutionOrigin::Host,
                 source: ReplayWorldSource::NoWorldFlag,
                 flipped: flip_requested,
+                effective_disable_attribution: None,
             };
         }
 
@@ -106,7 +110,16 @@ impl ReplayWorldMode {
             selected,
             source,
             flipped,
+            effective_disable_attribution: None,
         }
+    }
+
+    fn with_effective_disable_attribution(
+        mut self,
+        effective_disable_attribution: Option<WorldDisableAttribution>,
+    ) -> Self {
+        self.effective_disable_attribution = effective_disable_attribution;
+        self
     }
 
     fn selected_origin(&self) -> ExecutionOrigin {
@@ -155,6 +168,26 @@ impl ReplayWorldMode {
         self.source.reason_code(self.flipped)
     }
 
+    fn uses_effective_disable_attribution(&self) -> bool {
+        self.selected == ExecutionOrigin::Host
+            && self.recorded == ExecutionOrigin::Host
+            && !self.flipped
+            && matches!(self.source, ReplayWorldSource::Recorded)
+            && self.effective_disable_attribution.is_some()
+    }
+
+    fn display_reason_text(&self) -> String {
+        if self.uses_effective_disable_attribution() {
+            return self
+                .effective_disable_attribution
+                .as_ref()
+                .expect("effective disable attribution should be present")
+                .reason
+                .to_string();
+        }
+        self.reason_text()
+    }
+
     fn summary(&self) -> String {
         let recorded_label = match self.recorded_source {
             RecordedOriginSource::DefaultWorld => format!("{} (default)", self.recorded.as_str()),
@@ -165,11 +198,17 @@ impl ReplayWorldMode {
             && !self.flipped
             && !matches!(self.source, ReplayWorldSource::EnvDisabled { .. })
         {
+            if self.selected == ExecutionOrigin::Host {
+                return format!(
+                    "[replay] origin: host (recorded; {})",
+                    self.display_reason_text()
+                );
+            }
             return format!("[replay] origin: {}", recorded_label);
         }
 
         let direction = format!("{} -> {}", self.recorded.as_str(), self.selected.as_str());
-        let mut reason = self.reason_text();
+        let mut reason = self.display_reason_text();
         if self.flipped && matches!(self.source, ReplayWorldSource::EnvDisabled { .. }) {
             reason.push_str("; flip requested");
         }
@@ -189,6 +228,9 @@ impl ReplayWorldMode {
             };
         }
         match &self.source {
+            ReplayWorldSource::Recorded if self.uses_effective_disable_attribution() => {
+                Some(self.display_reason_text())
+            }
             ReplayWorldSource::NoWorldFlag => Some("--no-world flag".to_string()),
             ReplayWorldSource::EnvDisabled { raw } => {
                 Some(format!("SUBSTRATE_REPLAY_USE_WORLD={raw}"))
@@ -200,6 +242,23 @@ impl ReplayWorldMode {
             _ => None,
         }
     }
+}
+
+fn resolve_replay_effective_disable_attribution(cwd: &Path) -> Option<WorldDisableAttribution> {
+    let cli = CliConfigOverrides {
+        world_enabled: None,
+        anchor_mode: None,
+        anchor_path: None,
+        caged: None,
+    };
+    let (effective, explain) =
+        config_model::resolve_effective_config_with_explain(cwd, &cli, true).ok()?;
+    config_model::world_disable_attribution(
+        effective.world.enabled,
+        explain
+            .as_ref()
+            .and_then(|value| value.world_enabled_explain()),
+    )
 }
 
 fn apply_replay_world_mode_env(env: &mut HashMap<String, String>, mode: &ReplayWorldMode) {
@@ -355,8 +414,10 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
 
     // Respect replay toggle precedence: --world > --no-world > SUBSTRATE_REPLAY_USE_WORLD
     let recorded_source = recorded_origin_source(&state);
+    let effective_disable_attribution = resolve_replay_effective_disable_attribution(&state.cwd);
     let replay_world_mode =
-        ReplayWorldMode::from_inputs(state.recorded_origin, recorded_source, cli.flip_world, cli);
+        ReplayWorldMode::from_inputs(state.recorded_origin, recorded_source, cli.flip_world, cli)
+            .with_effective_disable_attribution(effective_disable_attribution);
     state.target_origin = replay_world_mode.selected_origin();
     state.origin_reason = Some(replay_world_mode.reason_text());
     state.origin_reason_code = Some(replay_world_mode.reason_code().to_string());
@@ -462,4 +523,41 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
     }
 
     std::process::exit(result.exit_code);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::execution::config_model::WorldDisableSource;
+
+    #[test]
+    fn recorded_host_summary_uses_effective_disable_source_unknown_reason() {
+        let mode = ReplayWorldMode {
+            recorded: ExecutionOrigin::Host,
+            recorded_source: RecordedOriginSource::Span,
+            selected: ExecutionOrigin::Host,
+            source: ReplayWorldSource::Recorded,
+            flipped: false,
+            effective_disable_attribution: Some(WorldDisableAttribution {
+                reason: "world isolation disabled by effective config (source unknown)",
+                source: WorldDisableSource {
+                    key: "world.enabled",
+                    layer: "source_unknown",
+                    value_display: false,
+                    flag: None,
+                    env: None,
+                    path_display: None,
+                },
+            }),
+        };
+
+        assert_eq!(
+            mode.summary(),
+            "[replay] origin: host (recorded; world isolation disabled by effective config (source unknown))"
+        );
+        assert_eq!(
+            mode.warn_reason().as_deref(),
+            Some("world isolation disabled by effective config (source unknown)")
+        );
+    }
 }

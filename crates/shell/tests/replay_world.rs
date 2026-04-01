@@ -19,7 +19,7 @@ fn trace_path(fixture: &ShellEnvFixture) -> PathBuf {
 }
 
 struct TraceOptions {
-    execution_origin: ExecutionOrigin,
+    execution_origin: Option<ExecutionOrigin>,
     transport_endpoint: Option<PathBuf>,
     transport_socket_activation: Option<bool>,
     replay_context: Option<Value>,
@@ -28,7 +28,7 @@ struct TraceOptions {
 impl Default for TraceOptions {
     fn default() -> Self {
         Self {
-            execution_origin: ExecutionOrigin::World,
+            execution_origin: Some(ExecutionOrigin::World),
             transport_endpoint: None,
             transport_socket_activation: None,
             replay_context: None,
@@ -53,8 +53,10 @@ fn write_trace_with_options(
         "cmd": cmd,
         "cwd": cwd.to_string_lossy(),
         "exit_code": 0,
-        "execution_origin": options.execution_origin,
     });
+    if let Some(origin) = options.execution_origin {
+        entry["execution_origin"] = json!(origin);
+    }
     if let Some(context) = options.replay_context {
         entry["replay_context"] = context;
     }
@@ -88,6 +90,40 @@ fn replay_strategy_entries(trace_path: &Path) -> Vec<Value> {
 
 fn latest_replay_strategy(trace_path: &Path) -> Option<Value> {
     replay_strategy_entries(trace_path).last().cloned()
+}
+
+fn write_workspace_world_disabled(workspace: &Path) {
+    let substrate_dir = workspace.join(".substrate");
+    fs::create_dir_all(&substrate_dir).expect("failed to create workspace .substrate dir");
+    fs::write(
+        substrate_dir.join("workspace.yaml"),
+        "world:\n  enabled: false\n",
+    )
+    .expect("failed to write workspace config");
+}
+
+fn write_global_world_disabled(fixture: &ShellEnvFixture) {
+    let substrate_dir = fixture.home().join(".substrate");
+    fs::create_dir_all(&substrate_dir).expect("failed to create global .substrate dir");
+    fs::write(
+        substrate_dir.join("config.yaml"),
+        "world:\n  enabled: false\n",
+    )
+    .expect("failed to write global config");
+}
+
+fn replay_context_with_execution_origin(cwd: &Path, origin: ExecutionOrigin) -> Value {
+    json!({
+        "path": env::var("PATH").unwrap_or_default(),
+        "env_hash": "test-env-hash",
+        "umask": 18,
+        "locale": "C.UTF-8",
+        "cwd": cwd.to_string_lossy(),
+        "policy_id": "test-policy",
+        "policy_commit": Value::Null,
+        "world_image_version": "test-world-image",
+        "execution_origin": origin,
+    })
 }
 
 fn command_complete_entries(trace_path: &Path) -> Vec<Value> {
@@ -861,7 +897,7 @@ fn replay_defaults_to_recorded_host_origin() {
         &cwd,
         &path_override,
         TraceOptions {
-            execution_origin: ExecutionOrigin::Host,
+            execution_origin: Some(ExecutionOrigin::Host),
             ..TraceOptions::default()
         },
     );
@@ -870,7 +906,7 @@ fn replay_defaults_to_recorded_host_origin() {
     let output = assert.get_output();
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("[replay] origin: host (recorded)"),
+        stderr.contains("[replay] origin: host (recorded; recorded origin (span))"),
         "recorded host origin should be reported when no flip/override is set: {stderr}"
     );
     assert!(
@@ -929,6 +965,166 @@ fn replay_defaults_to_recorded_host_origin() {
 }
 
 #[test]
+fn replay_recorded_host_origin_uses_replay_context_label() {
+    let fixture = ShellEnvFixture::new();
+    let cwd = fixture
+        .home()
+        .join("workspace-recorded-host-replay-context");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-recorded-host-replay-context";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+
+    let mut cmd = replay_command_with_options(
+        &fixture,
+        span_id,
+        "printf recorded-host-ctx > recorded-host-ctx.log",
+        &cwd,
+        &path_override,
+        TraceOptions {
+            execution_origin: None,
+            replay_context: Some(replay_context_with_execution_origin(
+                &cwd,
+                ExecutionOrigin::Host,
+            )),
+            ..TraceOptions::default()
+        },
+    );
+
+    let assert = cmd.assert().success();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    assert!(
+        stderr.contains("[replay] origin: host (recorded; recorded origin (replay_context))"),
+        "replay_context host origin should use the replay_context label: {stderr}"
+    );
+    assert!(
+        !stderr.contains("warn: running on host"),
+        "recorded replay_context host origin should not emit a host warning: {stderr}"
+    );
+}
+
+#[test]
+fn replay_recorded_host_origin_attributes_override_env() {
+    let fixture = ShellEnvFixture::new();
+    let cwd = fixture.home().join("workspace-recorded-host-override-env");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-recorded-host-override-env";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+
+    let mut cmd = replay_command_with_options(
+        &fixture,
+        span_id,
+        "printf recorded-host-override-env > recorded-host-override-env.log",
+        &cwd,
+        &path_override,
+        TraceOptions {
+            execution_origin: Some(ExecutionOrigin::Host),
+            ..TraceOptions::default()
+        },
+    );
+    cmd.env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+
+    let assert = cmd.assert().success();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let expected = "world isolation disabled by env override SUBSTRATE_OVERRIDE_WORLD=disabled";
+    assert!(
+        stderr.contains(&format!("[replay] origin: host (recorded; {expected})")),
+        "override-env host replay should use effective-disable attribution in the origin summary: {stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("[replay] warn: running on host ({expected})")),
+        "override-env host replay should use the same effective-disable attribution in the host warning: {stderr}"
+    );
+}
+
+#[test]
+fn replay_recorded_host_origin_attributes_workspace_config() {
+    let fixture = ShellEnvFixture::new();
+    let cwd = fixture
+        .home()
+        .join("workspace-recorded-host-workspace-config");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    write_workspace_world_disabled(&cwd);
+    let span_id = "span-recorded-host-workspace-config";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+
+    let mut cmd = replay_command_with_options(
+        &fixture,
+        span_id,
+        "printf recorded-host-workspace-config > recorded-host-workspace-config.log",
+        &cwd,
+        &path_override,
+        TraceOptions {
+            execution_origin: Some(ExecutionOrigin::Host),
+            ..TraceOptions::default()
+        },
+    );
+    cmd.env("SUBSTRATE_OVERRIDE_WORLD", "enabled");
+
+    let assert = cmd.assert().success();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let expected =
+        "world isolation disabled by workspace config <workspace>/.substrate/workspace.yaml (world.enabled: false)";
+    assert!(
+        stderr.contains(&format!("[replay] origin: host (recorded; {expected})")),
+        "workspace-disabled host replay should use the tokenized workspace attribution in the origin summary: {stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("[replay] warn: running on host ({expected})")),
+        "workspace-disabled host replay should use the same tokenized workspace attribution in the host warning: {stderr}"
+    );
+    assert!(
+        !stderr.contains(&cwd.join(".substrate/workspace.yaml").display().to_string()),
+        "workspace attribution should not leak absolute paths: {stderr}"
+    );
+}
+
+#[test]
+fn replay_recorded_host_origin_attributes_global_config() {
+    let fixture = ShellEnvFixture::new();
+    write_global_world_disabled(&fixture);
+    let cwd = fixture.home().join("workspace-recorded-host-global-config");
+    fs::create_dir_all(&cwd).expect("failed to create replay cwd");
+    let span_id = "span-recorded-host-global-config";
+    let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
+
+    let mut cmd = replay_command_with_options(
+        &fixture,
+        span_id,
+        "printf recorded-host-global-config > recorded-host-global-config.log",
+        &cwd,
+        &path_override,
+        TraceOptions {
+            execution_origin: Some(ExecutionOrigin::Host),
+            ..TraceOptions::default()
+        },
+    );
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD");
+
+    let assert = cmd.assert().success();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
+    let expected =
+        "world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)";
+    assert!(
+        stderr.contains(&format!("[replay] origin: host (recorded; {expected})")),
+        "global-disabled host replay should use the tokenized global attribution in the origin summary: {stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("[replay] warn: running on host ({expected})")),
+        "global-disabled host replay should use the same tokenized global attribution in the host warning: {stderr}"
+    );
+    assert!(
+        !stderr.contains(
+            &fixture
+                .home()
+                .join(".substrate/config.yaml")
+                .display()
+                .to_string()
+        ),
+        "global attribution should not leak absolute paths: {stderr}"
+    );
+}
+
+#[test]
 fn replay_flip_world_to_host_reports_reason() {
     let fixture = ShellEnvFixture::new();
     let cwd = fixture.home().join("workspace-flip-world");
@@ -943,7 +1139,7 @@ fn replay_flip_world_to_host_reports_reason() {
         &cwd,
         &path_override,
         TraceOptions {
-            execution_origin: ExecutionOrigin::World,
+            execution_origin: Some(ExecutionOrigin::World),
             ..TraceOptions::default()
         },
     );
@@ -1043,7 +1239,7 @@ fn replay_flip_host_to_world_prefers_agent_and_reports_origin() {
         &cwd,
         &path_override,
         TraceOptions {
-            execution_origin: ExecutionOrigin::Host,
+            execution_origin: Some(ExecutionOrigin::Host),
             transport_endpoint: Some(socket_path.clone()),
             transport_socket_activation: Some(true),
             ..TraceOptions::default()
@@ -1166,7 +1362,7 @@ fn replay_prefers_agent_when_socket_healthy() {
     let path_override = configure_nft_stub(&fixture, "#!/bin/sh\necho \"nft (test) v1\"\nexit 0\n");
     let anchor_root_str = anchor_root.display().to_string();
     let options = TraceOptions {
-        execution_origin: ExecutionOrigin::World,
+        execution_origin: Some(ExecutionOrigin::World),
         transport_endpoint: Some(socket_path.clone()),
         transport_socket_activation: Some(true),
         ..TraceOptions::default()
@@ -1303,7 +1499,7 @@ fn replay_emits_single_agent_warning_and_retries_copydiff_on_enospc() {
     let missing_socket_str = missing_socket.display().to_string();
     let enospc_prefix_str = enospc_prefix.display().to_string();
     let options = TraceOptions {
-        execution_origin: ExecutionOrigin::World,
+        execution_origin: Some(ExecutionOrigin::World),
         transport_endpoint: Some(missing_socket.clone()),
         transport_socket_activation: Some(false),
         ..TraceOptions::default()
@@ -1430,7 +1626,7 @@ fn replay_agent_fallback_uses_caged_project_dir() {
     let missing_socket_str = missing_socket.display().to_string();
     let anchor_root_str = anchor_root.display().to_string();
     let options = TraceOptions {
-        execution_origin: ExecutionOrigin::World,
+        execution_origin: Some(ExecutionOrigin::World),
         transport_endpoint: Some(missing_socket.clone()),
         transport_socket_activation: Some(false),
         ..TraceOptions::default()
@@ -1571,7 +1767,7 @@ fn replay_retries_copydiff_roots_and_dedupes_warnings() {
         &cwd,
         &path_override,
         TraceOptions {
-            execution_origin: ExecutionOrigin::World,
+            execution_origin: Some(ExecutionOrigin::World),
             transport_endpoint: Some(missing_socket.clone()),
             transport_socket_activation: Some(false),
             ..TraceOptions::default()
