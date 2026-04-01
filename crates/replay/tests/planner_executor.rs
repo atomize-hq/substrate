@@ -87,7 +87,7 @@ fn latest_replay_strategy(trace_path: &PathBuf) -> Option<Value> {
         .filter(|value| {
             value.get("event_type").and_then(|value| value.as_str()) == Some("replay_strategy")
         })
-        .last()
+        .next_back()
 }
 
 #[tokio::test]
