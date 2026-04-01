@@ -583,7 +583,7 @@
       "name": "WPEP3 integration (core merge)",
       "type": "integration",
       "phase": "WPEP3",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge WPEP3 code+test and validate core invariants before platform fixes.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP3-spec.md"
