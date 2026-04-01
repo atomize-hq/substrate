@@ -92,6 +92,47 @@ fn latest_replay_strategy(trace_path: &Path) -> Option<Value> {
     replay_strategy_entries(trace_path).last().cloned()
 }
 
+fn assert_world_disable_source(
+    strategy: &Value,
+    expected_reason: &str,
+    expected_code: &str,
+    expected_source: Value,
+) {
+    assert_eq!(
+        strategy
+            .get("origin_reason")
+            .and_then(|value| value.as_str()),
+        Some(expected_reason),
+        "origin_reason should match the published replay contract: {strategy:?}"
+    );
+    assert_eq!(
+        strategy
+            .get("origin_reason_code")
+            .and_then(|value| value.as_str()),
+        Some(expected_code),
+        "origin_reason_code should match the published replay contract: {strategy:?}"
+    );
+    assert_eq!(
+        strategy.get("world_disable_source"),
+        Some(&expected_source),
+        "world_disable_source should match the published replay contract: {strategy:?}"
+    );
+}
+
+fn assert_no_world_disable_source(strategy: &Value, expected_reason_code: &str) {
+    assert_eq!(
+        strategy
+            .get("origin_reason_code")
+            .and_then(|value| value.as_str()),
+        Some(expected_reason_code),
+        "origin_reason_code should stay on the replay-local path: {strategy:?}"
+    );
+    assert!(
+        strategy.get("world_disable_source").is_none(),
+        "replay-local opt-out cases must omit world_disable_source: {strategy:?}"
+    );
+}
+
 fn write_workspace_world_disabled(workspace: &Path) {
     let substrate_dir = workspace.join(".substrate");
     fs::create_dir_all(&substrate_dir).expect("failed to create workspace .substrate dir");
@@ -517,29 +558,20 @@ fn replay_host_span_respects_env_opt_out_without_agent_probe() {
         assert_eq!(
             strategy.get("strategy").and_then(|value| value.as_str()),
             Some("host"),
-            "replay_strategy should record host execution: {strategy:?}"
         );
         assert_eq!(
             strategy
                 .get("recorded_origin")
                 .and_then(|value| value.as_str()),
             Some("host"),
-            "replay_strategy recorded_origin should be host: {strategy:?}"
         );
         assert_eq!(
             strategy
                 .get("target_origin")
                 .and_then(|value| value.as_str()),
             Some("host"),
-            "replay_strategy target_origin should stay host: {strategy:?}"
         );
-        assert_eq!(
-            strategy
-                .get("origin_reason_code")
-                .and_then(|value| value.as_str()),
-            Some("env_disabled"),
-            "replay_strategy should note env opt-out reason: {strategy:?}"
-        );
+        assert_no_world_disable_source(&strategy, "env_disabled");
     } else {
         eprintln!("skipping host replay strategy assertions: no replay_strategy entries written");
     }
@@ -829,6 +861,27 @@ fn replay_no_world_flag_reports_world_toggle() {
         "scopes line missing for no-world flag run, stderr:\n{}",
         stderr
     );
+
+    let Some(strategy) = latest_replay_strategy(&trace_path(&fixture)) else {
+        panic!("expected replay_strategy entry for no-world flag run");
+    };
+    assert_eq!(
+        strategy.get("strategy").and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_origin")
+            .and_then(|value| value.as_str()),
+        Some("world")
+    );
+    assert_eq!(
+        strategy
+            .get("target_origin")
+            .and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_no_world_disable_source(&strategy, "flag_no_world");
 }
 
 #[test]
@@ -880,6 +933,27 @@ fn replay_env_override_reports_world_toggle() {
         "scopes line missing when env disables world, stderr:\n{}",
         stderr
     );
+
+    let Some(strategy) = latest_replay_strategy(&trace_path(&fixture)) else {
+        panic!("expected replay_strategy entry for env disable run");
+    };
+    assert_eq!(
+        strategy.get("strategy").and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_origin")
+            .and_then(|value| value.as_str()),
+        Some("world")
+    );
+    assert_eq!(
+        strategy
+            .get("target_origin")
+            .and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_no_world_disable_source(&strategy, "env_disabled");
 }
 
 #[test]
@@ -962,6 +1036,10 @@ fn replay_defaults_to_recorded_host_origin() {
         Some("recorded_origin"),
         "origin_reason_code should note the recorded origin path: {strategy:?}"
     );
+    assert!(
+        strategy.get("world_disable_source").is_none(),
+        "recorded host origin should not publish a world_disable_source: {strategy:?}"
+    );
 }
 
 #[test]
@@ -1034,6 +1112,36 @@ fn replay_recorded_host_origin_attributes_override_env() {
         stderr.contains(&format!("[replay] warn: running on host ({expected})")),
         "override-env host replay should use the same effective-disable attribution in the host warning: {stderr}"
     );
+    let Some(strategy) = latest_replay_strategy(&trace_path(&fixture)) else {
+        panic!("expected replay_strategy entry for override-env replay");
+    };
+    assert_eq!(
+        strategy.get("strategy").and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_origin")
+            .and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_eq!(
+        strategy
+            .get("target_origin")
+            .and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_world_disable_source(
+        &strategy,
+        expected,
+        "world_disabled_override_env",
+        json!({
+            "key": "world.enabled",
+            "layer": "override_env",
+            "value_display": false,
+            "env": "SUBSTRATE_OVERRIDE_WORLD"
+        }),
+    );
 }
 
 #[test]
@@ -1075,6 +1183,36 @@ fn replay_recorded_host_origin_attributes_workspace_config() {
     assert!(
         !stderr.contains(&cwd.join(".substrate/workspace.yaml").display().to_string()),
         "workspace attribution should not leak absolute paths: {stderr}"
+    );
+    let Some(strategy) = latest_replay_strategy(&trace_path(&fixture)) else {
+        panic!("expected replay_strategy entry for workspace replay");
+    };
+    assert_eq!(
+        strategy.get("strategy").and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_origin")
+            .and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_eq!(
+        strategy
+            .get("target_origin")
+            .and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_world_disable_source(
+        &strategy,
+        expected,
+        "world_disabled_workspace_patch",
+        json!({
+            "key": "world.enabled",
+            "layer": "workspace_patch",
+            "value_display": false,
+            "path_display": "<workspace>/.substrate/workspace.yaml"
+        }),
     );
 }
 
@@ -1121,6 +1259,36 @@ fn replay_recorded_host_origin_attributes_global_config() {
                 .to_string()
         ),
         "global attribution should not leak absolute paths: {stderr}"
+    );
+    let Some(strategy) = latest_replay_strategy(&trace_path(&fixture)) else {
+        panic!("expected replay_strategy entry for global replay");
+    };
+    assert_eq!(
+        strategy.get("strategy").and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_eq!(
+        strategy
+            .get("recorded_origin")
+            .and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_eq!(
+        strategy
+            .get("target_origin")
+            .and_then(|value| value.as_str()),
+        Some("host")
+    );
+    assert_world_disable_source(
+        &strategy,
+        expected,
+        "world_disabled_global_patch",
+        json!({
+            "key": "world.enabled",
+            "layer": "global_patch",
+            "value_display": false,
+            "path_display": "$SUBSTRATE_HOME/config.yaml"
+        }),
     );
 }
 
@@ -1205,6 +1373,10 @@ fn replay_flip_world_to_host_reports_reason() {
             .and_then(|value| value.as_str()),
         Some("--flip-world"),
         "fallback_reason should explain the host selection when flipped: {strategy:?}"
+    );
+    assert!(
+        strategy.get("world_disable_source").is_none(),
+        "flip-world is a replay-local opt-out and must not publish a world_disable_source: {strategy:?}"
     );
 }
 
@@ -1333,6 +1505,10 @@ fn replay_flip_host_to_world_prefers_agent_and_reports_origin() {
             .and_then(|value| value.as_str()),
         Some(socket_str.as_str()),
         "recorded transport endpoint should be captured for flipped agent replay: {strategy:?}"
+    );
+    assert!(
+        strategy.get("world_disable_source").is_none(),
+        "flip-host-to-world is not an effective-disable case and must omit world_disable_source: {strategy:?}"
     );
 }
 

@@ -208,6 +208,7 @@ pub fn reconstruct_state(
         target_origin: recorded_origin,
         origin_reason: None,
         origin_reason_code: None,
+        world_disable_source: None,
     })
 }
 

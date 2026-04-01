@@ -33,6 +33,7 @@ pub struct ExecutionState {
     pub target_origin: ExecutionOrigin,
     pub origin_reason: Option<String>,
     pub origin_reason_code: Option<String>,
+    pub world_disable_source: Option<serde_json::Value>,
 }
 
 /// Result of executing a command
@@ -81,6 +82,7 @@ mod tests {
             target_origin: ExecutionOrigin::Host,
             origin_reason: None,
             origin_reason_code: None,
+            world_disable_source: None,
         };
 
         let result = execute_direct(&state, 10).await.unwrap();
@@ -108,6 +110,7 @@ mod tests {
             target_origin: ExecutionOrigin::Host,
             origin_reason: None,
             origin_reason_code: None,
+            world_disable_source: None,
         };
         let res = execute_direct(&state, 10).await.unwrap();
         assert_eq!(res.exit_code, 0);

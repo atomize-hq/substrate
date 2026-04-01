@@ -1,13 +1,17 @@
 #![cfg(unix)]
 
+use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use tokio::sync::Mutex;
 
 use substrate_replay::replay::{
-    execute_direct, execute_in_world, parse_command, replay_sequence, world_isolation_available,
-    ExecutionResult, ExecutionState,
+    execute_direct, execute_in_world, parse_command, record_replay_strategy, replay_sequence,
+    world_isolation_available, ExecutionResult, ExecutionState,
 };
+use substrate_trace::{set_global_trace_context, TraceContext};
 
 static ENV_LOCK: Mutex<()> = Mutex::const_new(());
 
@@ -59,7 +63,31 @@ fn make_state(raw_cmd: &str) -> ExecutionState {
         target_origin: substrate_trace::ExecutionOrigin::Host,
         origin_reason: None,
         origin_reason_code: None,
+        world_disable_source: None,
     }
+}
+
+fn replay_strategy_trace_path() -> &'static PathBuf {
+    static TRACE_PATH: OnceLock<PathBuf> = OnceLock::new();
+    TRACE_PATH.get_or_init(|| {
+        let tempdir = Box::leak(Box::new(tempfile::tempdir().unwrap()));
+        let trace_path = tempdir.path().join("trace.jsonl");
+        let ctx = TraceContext::default();
+        ctx.init_trace(Some(trace_path.clone())).unwrap();
+        set_global_trace_context(ctx).unwrap();
+        trace_path
+    })
+}
+
+fn latest_replay_strategy(trace_path: &PathBuf) -> Option<Value> {
+    fs::read_to_string(trace_path)
+        .ok()?
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter(|value| {
+            value.get("event_type").and_then(|value| value.as_str()) == Some("replay_strategy")
+        })
+        .last()
 }
 
 #[tokio::test]
@@ -122,6 +150,95 @@ async fn replay_sequence_collects_success_and_failure() {
     assert_eq!(results[0].exit_code, 0);
     assert_eq!(String::from_utf8_lossy(&results[0].stdout).trim(), "ok");
     assert_ne!(results[1].exit_code, 0);
+}
+
+#[test]
+fn record_replay_strategy_emits_world_disable_source_for_effective_disable() {
+    let trace_path = replay_strategy_trace_path();
+    fs::write(trace_path, "").unwrap();
+
+    let mut state = make_state("echo effective-disable");
+    state.target_origin = substrate_trace::ExecutionOrigin::Host;
+    state.recorded_origin = substrate_trace::ExecutionOrigin::Host;
+    state.origin_reason =
+        Some("world isolation disabled by effective config (source unknown)".to_string());
+    state.origin_reason_code = Some("world_disabled_unknown".to_string());
+    state.world_disable_source = Some(json!({
+        "key": "world.enabled",
+        "layer": "unknown",
+        "value_display": false
+    }));
+
+    record_replay_strategy(
+        &state,
+        "host",
+        None,
+        None,
+        json!({"origin_summary": "host"}),
+    );
+
+    let Some(strategy) = latest_replay_strategy(trace_path) else {
+        panic!("expected replay_strategy entry");
+    };
+    assert_eq!(
+        strategy
+            .get("origin_reason")
+            .and_then(|value| value.as_str()),
+        Some("world isolation disabled by effective config (source unknown)")
+    );
+    assert_eq!(
+        strategy
+            .get("origin_reason_code")
+            .and_then(|value| value.as_str()),
+        Some("world_disabled_unknown")
+    );
+    assert_eq!(
+        strategy.get("world_disable_source"),
+        Some(&json!({
+            "key": "world.enabled",
+            "layer": "unknown",
+            "value_display": false
+        }))
+    );
+}
+
+#[test]
+fn record_replay_strategy_omits_world_disable_source_for_replay_local_opt_out() {
+    let trace_path = replay_strategy_trace_path();
+    fs::write(trace_path, "").unwrap();
+
+    let mut state = make_state("echo replay-local");
+    state.target_origin = substrate_trace::ExecutionOrigin::Host;
+    state.recorded_origin = substrate_trace::ExecutionOrigin::Host;
+    state.origin_reason = Some("SUBSTRATE_REPLAY_USE_WORLD=disabled".to_string());
+    state.origin_reason_code = Some("env_disabled".to_string());
+    state.world_disable_source = Some(json!({
+        "key": "world.enabled",
+        "layer": "unknown",
+        "value_display": false
+    }));
+
+    record_replay_strategy(
+        &state,
+        "host",
+        None,
+        Some("SUBSTRATE_REPLAY_USE_WORLD=disabled"),
+        json!({"origin_summary": "host"}),
+    );
+
+    let Some(strategy) = latest_replay_strategy(trace_path) else {
+        panic!("expected replay_strategy entry");
+    };
+    assert_eq!(
+        strategy
+            .get("origin_reason_code")
+            .and_then(|value| value.as_str()),
+        Some("env_disabled")
+    );
+    assert!(
+        strategy.get("world_disable_source").is_none(),
+        "replay-local opt-out must not emit world_disable_source: {strategy:?}"
+    );
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]

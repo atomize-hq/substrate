@@ -794,6 +794,14 @@ pub fn record_replay_strategy(
     if let Some(code) = &state.origin_reason_code {
         entry["origin_reason_code"] = json!(code);
     }
+    if let (Some(code), Some(world_disable_source)) = (
+        state.origin_reason_code.as_deref(),
+        state.world_disable_source.as_ref(),
+    ) {
+        if origin_reason_code_is_effective_disable(code) {
+            entry["world_disable_source"] = world_disable_source.clone();
+        }
+    }
 
     if let Some(transport) = state.recorded_transport.as_ref() {
         let mut transport_obj = json!({
@@ -823,6 +831,16 @@ pub fn record_replay_strategy(
     }
 
     let _ = append_to_trace(&entry);
+}
+
+fn origin_reason_code_is_effective_disable(code: &str) -> bool {
+    matches!(
+        code,
+        "world_disabled_override_env"
+            | "world_disabled_workspace_patch"
+            | "world_disabled_global_patch"
+            | "world_disabled_unknown"
+    )
 }
 
 #[cfg(target_os = "linux")]

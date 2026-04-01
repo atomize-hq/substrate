@@ -5,7 +5,7 @@ use crate::execution::config_model::{self, CliConfigOverrides, WorldDisableAttri
 use crate::execution::value_parse::parse_bool_flag;
 #[cfg(test)]
 use crate::execution::world_env_guard;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
@@ -165,7 +165,29 @@ impl ReplayWorldMode {
     }
 
     fn reason_code(&self) -> &'static str {
+        if self.uses_effective_disable_attribution() {
+            return self.effective_disable_reason_code();
+        }
         self.source.reason_code(self.flipped)
+    }
+
+    fn effective_disable_reason_code(&self) -> &'static str {
+        let attribution = self
+            .effective_disable_attribution
+            .as_ref()
+            .expect("effective-disable attribution should be present");
+        match attribution.source.layer {
+            "override_env" => "world_disabled_override_env",
+            "workspace_patch" => "world_disabled_workspace_patch",
+            "global_patch" => "world_disabled_global_patch",
+            "source_unknown" => "world_disabled_unknown",
+            "default" => panic!(
+                "replay effective-disable attribution reached non-publishable helper layer `default`; block S3"
+            ),
+            other => panic!(
+                "replay effective-disable attribution reached unexpected helper layer `{other}`; block S3"
+            ),
+        }
     }
 
     fn uses_effective_disable_attribution(&self) -> bool {
@@ -186,6 +208,34 @@ impl ReplayWorldMode {
                 .to_string();
         }
         self.reason_text()
+    }
+
+    fn effective_disable_source(&self) -> Option<serde_json::Value> {
+        if self.uses_effective_disable_attribution() {
+            let source = &self
+                .effective_disable_attribution
+                .as_ref()
+                .expect("effective disable attribution should be present")
+                .source;
+            let mut value =
+                serde_json::to_value(source).expect("world disable source should serialize");
+            if let Some(layer) = value.get_mut("layer") {
+                *layer = json!(match source.layer {
+                    "override_env" => "override_env",
+                    "workspace_patch" => "workspace_patch",
+                    "global_patch" => "global_patch",
+                    "source_unknown" => "unknown",
+                    "default" => panic!(
+                        "replay effective-disable attribution reached non-publishable helper layer `default`; block S3"
+                    ),
+                    other => panic!(
+                        "replay effective-disable attribution reached unexpected helper layer `{other}`; block S3"
+                    ),
+                });
+            }
+            return Some(value);
+        }
+        None
     }
 
     fn summary(&self) -> String {
@@ -418,9 +468,19 @@ pub(crate) fn handle_replay_command(span_id: &str, cli: &Cli) -> Result<()> {
     let replay_world_mode =
         ReplayWorldMode::from_inputs(state.recorded_origin, recorded_source, cli.flip_world, cli)
             .with_effective_disable_attribution(effective_disable_attribution);
+
+    if let Some(attribution) = replay_world_mode.effective_disable_attribution.as_ref() {
+        if attribution.source.layer == "default" {
+            return Err(anyhow!(
+                "replay effective-disable attribution reached non-publishable helper layer `default`; block S3"
+            ));
+        }
+    }
+
     state.target_origin = replay_world_mode.selected_origin();
-    state.origin_reason = Some(replay_world_mode.reason_text());
+    state.origin_reason = Some(replay_world_mode.display_reason_text());
     state.origin_reason_code = Some(replay_world_mode.reason_code().to_string());
+    state.world_disable_source = replay_world_mode.effective_disable_source();
 
     apply_replay_world_mode_env(&mut state.env, &replay_world_mode);
     inject_world_root_env(&mut state.env, &state.cwd);
@@ -558,6 +618,15 @@ mod tests {
         assert_eq!(
             mode.warn_reason().as_deref(),
             Some("world isolation disabled by effective config (source unknown)")
+        );
+        assert_eq!(mode.reason_code(), "world_disabled_unknown");
+        assert_eq!(
+            mode.effective_disable_source(),
+            Some(json!({
+                "key": "world.enabled",
+                "layer": "unknown",
+                "value_display": false,
+            }))
         );
     }
 }
