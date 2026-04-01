@@ -19,7 +19,7 @@ use crate::execution::{policy_snapshot::bootstrap_world_spec, socket_activation}
 use agent_api_client::AgentClient;
 #[cfg(not(target_os = "windows"))]
 use agent_api_types::ExecuteCancelRequestV1;
-use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, WorldFsMode};
+use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, ProcessEventsStatus, WorldFsMode};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
@@ -171,6 +171,7 @@ pub(super) fn collect_world_telemetry(
 pub(crate) struct PtyWorldOutcome {
     pub(crate) exit_code: i32,
     pub(crate) fs_strategy: Option<WorldFsStrategyTraceMeta>,
+    pub(crate) process_events: ProcessEventsTraceMeta,
 }
 
 #[cfg(target_os = "linux")]
@@ -375,6 +376,7 @@ pub(super) fn execute_world_pty_over_ws(
 
         let mut exit_code: i32 = 0;
         let mut fs_strategy: Option<WorldFsStrategyTraceMeta> = None;
+        let mut process_events = default_process_events_trace_meta();
         while let Some(msg) = stream.next().await {
             let msg = msg.map_err(|e| anyhow::anyhow!("ws recv: {}", e))?;
             if msg.is_text() {
@@ -391,6 +393,32 @@ pub(super) fn execute_world_pty_over_ws(
                         }
                         Some("exit") => {
                             exit_code = v.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32;
+                            process_events.events = v
+                                .get("process_events")
+                                .and_then(serde_json::Value::as_array)
+                                .cloned()
+                                .unwrap_or_default();
+                            if let Some(status) = v
+                                .get("process_events_status")
+                                .and_then(serde_json::Value::as_str)
+                            {
+                                process_events.status = match status {
+                                    "ok" => ProcessEventsStatus::Ok,
+                                    "truncated" => ProcessEventsStatus::Truncated,
+                                    "unavailable" => ProcessEventsStatus::Unavailable,
+                                    "error" => ProcessEventsStatus::Error,
+                                    _ => process_events.status,
+                                };
+                            }
+                            process_events.reason = v
+                                .get("process_events_reason")
+                                .and_then(serde_json::Value::as_str)
+                                .map(ToOwned::to_owned)
+                                .or_else(|| process_events.reason.take());
+                            process_events.dropped = v
+                                .get("process_events_dropped")
+                                .and_then(serde_json::Value::as_u64)
+                                .or_else(|| process_events.dropped.take());
                             if let (Some(primary), Some(final_strategy), Some(reason)) = (
                                 v.get("world_fs_strategy_primary")
                                     .and_then(serde_json::Value::as_str)
@@ -447,6 +475,7 @@ pub(super) fn execute_world_pty_over_ws(
         Ok::<PtyWorldOutcome, anyhow::Error>(PtyWorldOutcome {
             exit_code,
             fs_strategy,
+            process_events,
         })
     })?;
     Ok(outcome)
@@ -827,6 +856,7 @@ pub(crate) struct AgentStreamOutcome {
     pub(crate) scopes_used: Vec<String>,
     pub(crate) fs_diff: Option<substrate_common::FsDiff>,
     pub(crate) fs_strategy: Option<WorldFsStrategyTraceMeta>,
+    pub(crate) process_events: ProcessEventsTraceMeta,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -834,6 +864,14 @@ pub(crate) struct WorldFsStrategyTraceMeta {
     pub(crate) primary: substrate_common::WorldFsStrategy,
     pub(crate) final_strategy: substrate_common::WorldFsStrategy,
     pub(crate) fallback_reason: substrate_common::WorldFsStrategyFallbackReason,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProcessEventsTraceMeta {
+    pub(crate) events: Vec<serde_json::Value>,
+    pub(crate) status: ProcessEventsStatus,
+    pub(crate) reason: Option<String>,
+    pub(crate) dropped: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -863,6 +901,20 @@ fn parse_world_fs_strategy_unavailable_reason(
         }
     }
     None
+}
+
+pub(crate) fn default_process_events_trace_meta() -> ProcessEventsTraceMeta {
+    #[cfg(target_os = "windows")]
+    let reason = Some("not_supported_platform".to_string());
+    #[cfg(not(target_os = "windows"))]
+    let reason = Some("backend_disabled".to_string());
+
+    ProcessEventsTraceMeta {
+        events: Vec::new(),
+        status: ProcessEventsStatus::Unavailable,
+        reason,
+        dropped: None,
+    }
 }
 
 pub(crate) fn build_agent_client_and_request(
@@ -1301,6 +1353,7 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
             scopes_used: Vec::new(),
             fs_diff: None,
             fs_strategy: None,
+            process_events: default_process_events_trace_meta(),
         });
     }
 
@@ -1348,6 +1401,12 @@ pub(crate) fn stream_non_pty_via_agent(command: &str) -> anyhow::Result<AgentStr
                 scopes_used: response.scopes_used,
                 fs_diff: response.fs_diff,
                 fs_strategy: None,
+                process_events: ProcessEventsTraceMeta {
+                    events: Vec::new(),
+                    status: ProcessEventsStatus::Unavailable,
+                    reason: Some("not_supported_platform".to_string()),
+                    dropped: None,
+                },
             })
         }
 
@@ -1435,6 +1494,7 @@ where
     let mut scopes_used = Vec::new();
     let mut fs_diff = None;
     let mut fs_strategy = None;
+    let mut process_events = default_process_events_trace_meta();
     let mut active_span_id: Option<String> = None;
 
     loop {
@@ -1471,6 +1531,7 @@ where
                 &mut scopes_used,
                 &mut fs_diff,
                 &mut fs_strategy,
+                &mut process_events,
             )?;
             if exit_code.is_some() {
                 break;
@@ -1487,6 +1548,7 @@ where
             &mut scopes_used,
             &mut fs_diff,
             &mut fs_strategy,
+            &mut process_events,
         )?;
     }
 
@@ -1498,6 +1560,7 @@ where
         scopes_used,
         fs_diff,
         fs_strategy,
+        process_events,
     })
 }
 
@@ -1510,6 +1573,7 @@ pub(crate) fn consume_agent_stream_buffer(
     fs_diff: &mut Option<substrate_common::FsDiff>,
 ) -> anyhow::Result<()> {
     let mut ignored = None;
+    let mut ignored_process_events = default_process_events_trace_meta();
     consume_agent_stream_buffer_with_meta(
         agent_label,
         buffer,
@@ -1518,10 +1582,11 @@ pub(crate) fn consume_agent_stream_buffer(
         scopes_used,
         fs_diff,
         &mut ignored,
+        &mut ignored_process_events,
     )
 }
 
-fn consume_agent_stream_buffer_with_meta(
+pub(crate) fn consume_agent_stream_buffer_with_meta(
     agent_label: &str,
     buffer: &mut Vec<u8>,
     active_span_id: &mut Option<String>,
@@ -1529,6 +1594,7 @@ fn consume_agent_stream_buffer_with_meta(
     scopes_used: &mut Vec<String>,
     fs_diff: &mut Option<substrate_common::FsDiff>,
     fs_strategy: &mut Option<WorldFsStrategyTraceMeta>,
+    process_events: &mut ProcessEventsTraceMeta,
 ) -> anyhow::Result<()> {
     use anyhow::Context as _;
 
@@ -1595,11 +1661,22 @@ fn consume_agent_stream_buffer_with_meta(
                 exit,
                 scopes_used: scopes,
                 fs_diff: diff,
+                process_events: events,
+                process_events_status,
+                process_events_reason,
+                process_events_dropped,
                 ..
             } => {
                 *exit_code = Some(exit);
                 *scopes_used = scopes;
                 *fs_diff = diff;
+                process_events.events = events;
+                if let Some(status) = process_events_status {
+                    process_events.status = status;
+                }
+                process_events.reason =
+                    process_events_reason.or_else(|| process_events.reason.take());
+                process_events.dropped = process_events_dropped.or(process_events.dropped.take());
             }
             ExecuteStreamFrame::Error { message } => {
                 if message.contains("WORLD_FS_STRATEGY_UNAVAILABLE") {
@@ -1794,6 +1871,10 @@ mod tests {
                     span_id: "spn_interrupt".to_string(),
                     scopes_used: Vec::new(),
                     fs_diff: None,
+                    process_events: vec![],
+                    process_events_status: Some(agent_api_types::ProcessEventsStatus::Unavailable),
+                    process_events_reason: Some("backend_disabled".to_string()),
+                    process_events_dropped: None,
                 }),
             ];
 

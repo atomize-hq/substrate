@@ -1,6 +1,9 @@
 use super::*;
 use crate::execution::agent_events::{self, clear_agent_event_sender, init_event_channel};
-use agent_api_types::ExecuteStreamFrame;
+use crate::execution::routing::dispatch::world_ops::{
+    consume_agent_stream_buffer_with_meta, default_process_events_trace_meta,
+};
+use agent_api_types::{ExecuteStreamFrame, ProcessEventsStatus};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde_json::Value as JsonValue;
@@ -28,6 +31,10 @@ fn consume_agent_stream_buffer_emits_agent_events() {
                 span_id: "spn_test".into(),
                 scopes_used: vec!["scope:a".into()],
                 fs_diff: None,
+                process_events: vec![],
+                process_events_status: Some(ProcessEventsStatus::Unavailable),
+                process_events_reason: Some("backend_disabled".into()),
+                process_events_dropped: None,
             },
         ];
 
@@ -91,4 +98,49 @@ fn parse_fs_diff_from_agent_json() {
     assert!(diff.mods.is_empty());
     assert!(diff.deletes.is_empty());
     assert!(!diff.truncated);
+}
+
+#[test]
+fn consume_agent_stream_buffer_captures_process_event_summary() {
+    let frame = ExecuteStreamFrame::Exit {
+        exit: 0,
+        span_id: "spn_proc".into(),
+        scopes_used: vec![],
+        fs_diff: None,
+        process_events: vec![serde_json::json!({
+            "event_type": "world_process_exit",
+            "pid": 99,
+            "exit_code": 0,
+        })],
+        process_events_status: Some(ProcessEventsStatus::Truncated),
+        process_events_reason: Some("capture_overflow".into()),
+        process_events_dropped: Some(4),
+    };
+
+    let mut buffer = serde_json::to_vec(&frame).expect("serialize frame");
+    buffer.push(b'\n');
+
+    let mut exit_code = None;
+    let mut scopes_used = Vec::new();
+    let mut fs_diff = None;
+    let mut fs_strategy = None;
+    let mut process_events = default_process_events_trace_meta();
+
+    consume_agent_stream_buffer_with_meta(
+        "tester",
+        &mut buffer,
+        &mut None,
+        &mut exit_code,
+        &mut scopes_used,
+        &mut fs_diff,
+        &mut fs_strategy,
+        &mut process_events,
+    )
+    .expect("consume stream");
+
+    assert_eq!(exit_code, Some(0));
+    assert_eq!(process_events.status, ProcessEventsStatus::Truncated);
+    assert_eq!(process_events.reason.as_deref(), Some("capture_overflow"));
+    assert_eq!(process_events.dropped, Some(4));
+    assert_eq!(process_events.events.len(), 1);
 }

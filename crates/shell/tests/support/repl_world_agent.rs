@@ -354,6 +354,12 @@ impl ReplWorldAgentStub {
                                 span_id: "agent-span".to_string(),
                                 scopes_used: Vec::new(),
                                 fs_diff: None,
+                                process_events: vec![],
+                                process_events_status: Some(
+                                    agent_api_types::ProcessEventsStatus::Unavailable,
+                                ),
+                                process_events_reason: Some("backend_disabled".to_string()),
+                                process_events_dropped: None,
                             })
                             .expect("serialize exit"),
                         );

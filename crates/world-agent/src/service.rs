@@ -9,8 +9,8 @@ use agent_api_types::WorldFsEntryTypeV1;
 use agent_api_types::{
     Budget, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
     PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
-    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1,
-    WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
+    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, ProcessEventsStatus,
+    WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1, WorldProcessEvent,
 };
 #[cfg(target_os = "linux")]
 use anyhow::Context;
@@ -81,6 +81,19 @@ const NETFILTER_CGROUP_HELPER_REFUSAL_TEXT: &str =
     "refused isolated execution before command start";
 const NETFILTER_CGROUP_FORCE_DIRECT_TEXT: &str =
     "SUBSTRATE_WORLD_EXEC_FORCE_DIRECT is unsupported when isolate_network=true because cgroup attach is not guaranteed";
+
+fn default_process_event_diagnostics() -> (Vec<WorldProcessEvent>, ProcessEventsStatus, String) {
+    #[cfg(target_os = "windows")]
+    let reason = "not_supported_platform";
+    #[cfg(not(target_os = "windows"))]
+    let reason = "backend_disabled";
+
+    (
+        Vec::new(),
+        ProcessEventsStatus::Unavailable,
+        reason.to_string(),
+    )
+}
 
 fn resolve_landlock_helper_src_from_exe(exe: &std::path::Path) -> Option<std::path::PathBuf> {
     let is_world_agent_exe = exe.file_name().is_some_and(|name| {
@@ -468,6 +481,9 @@ impl WorldAgentService {
             enforcement_plan_b64,
         } = policy_inputs;
         self.record_doctor_request_context(policy_resolution_mode, isolate_network);
+        let span_id = format!("spn_{}", uuid::Uuid::now_v7());
+        let (process_events, process_events_status, process_events_reason) =
+            default_process_event_diagnostics();
 
         let host_visible = !isolation_full;
         let empty_env: HashMap<String, String> = HashMap::new();
@@ -475,7 +491,6 @@ impl WorldAgentService {
         if let Some(deny) =
             crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible)
         {
-            let span_id = format!("spn_{}", uuid::Uuid::now_v7());
             let message = crate::world_exec_guard::deny_message(&deny);
             return Ok(ExecuteResponse {
                 exit: 5,
@@ -484,6 +499,10 @@ impl WorldAgentService {
                 stderr_b64: BASE64.encode(message.as_bytes()),
                 scopes_used: Vec::new(),
                 fs_diff: None,
+                process_events,
+                process_events_status: Some(process_events_status),
+                process_events_reason: Some(process_events_reason),
+                process_events_dropped: None,
             });
         }
 
@@ -538,7 +557,7 @@ impl WorldAgentService {
             cwd,
             env: env_map,
             pty: req.pty,
-            span_id: None,
+            span_id: Some(span_id.clone()),
         };
 
         // Execute command
@@ -565,9 +584,6 @@ impl WorldAgentService {
             }
         }
 
-        // Generate span ID
-        let span_id = format!("spn_{}", uuid::Uuid::now_v7());
-
         Ok(ExecuteResponse {
             exit: result.exit,
             span_id,
@@ -575,6 +591,10 @@ impl WorldAgentService {
             stderr_b64: BASE64.encode(result.stderr),
             scopes_used: result.scopes_used,
             fs_diff: result.fs_diff,
+            process_events,
+            process_events_status: Some(process_events_status),
+            process_events_reason: Some(process_events_reason),
+            process_events_dropped: None,
         })
     }
 
@@ -1061,6 +1081,8 @@ impl WorldAgentService {
         } = policy_inputs;
         self.record_doctor_request_context(policy_resolution_mode, isolate_network);
         let always_isolate = should_always_isolate(&req);
+        let (process_events, process_events_status, process_events_reason) =
+            default_process_event_diagnostics();
 
         let host_visible = !isolation_full;
         let empty_env: HashMap<String, String> = HashMap::new();
@@ -1082,6 +1104,10 @@ impl WorldAgentService {
                     span_id,
                     scopes_used: Vec::new(),
                     fs_diff: None,
+                    process_events,
+                    process_events_status: Some(process_events_status),
+                    process_events_reason: Some(process_events_reason),
+                    process_events_dropped: None,
                 },
             ];
 
@@ -1209,6 +1235,10 @@ impl WorldAgentService {
                         span_id,
                         scopes_used: exec_result.scopes_used,
                         fs_diff: exec_result.fs_diff,
+                        process_events,
+                        process_events_status: Some(process_events_status),
+                        process_events_reason: Some(process_events_reason),
+                        process_events_dropped: None,
                     };
                     let _ = tx.send(frame);
                 }
@@ -1920,6 +1950,13 @@ mod tests {
                 display_path: None,
                 summary: None,
             }),
+            process_events: vec![serde_json::json!({
+                "event_type": "world_process_start",
+                "pid": 42,
+            })],
+            process_events_status: Some(ProcessEventsStatus::Truncated),
+            process_events_reason: Some("capture_overflow".to_string()),
+            process_events_dropped: Some(2),
         };
 
         let json = serde_json::to_string(&resp).expect("serialize ExecuteResponse");
@@ -1929,11 +1966,32 @@ mod tests {
         assert_eq!(back.exit, 0);
         assert_eq!(back.span_id, "spn_test");
         assert_eq!(back.scopes_used, vec!["tcp:example.com:443".to_string()]);
+        assert_eq!(
+            back.process_events_status,
+            Some(ProcessEventsStatus::Truncated)
+        );
+        assert_eq!(
+            back.process_events_reason.as_deref(),
+            Some("capture_overflow")
+        );
+        assert_eq!(back.process_events_dropped, Some(2));
+        assert_eq!(back.process_events.len(), 1);
         let fd = back.fs_diff.expect("fs_diff present");
         assert_eq!(fd.writes.len(), 1);
         assert_eq!(fd.writes[0], std::path::PathBuf::from("/tmp/a.txt"));
         assert!(fd.mods.is_empty());
         assert!(fd.deletes.is_empty());
+    }
+
+    #[test]
+    fn default_process_event_diagnostics_mark_capture_unavailable() {
+        let (events, status, reason) = default_process_event_diagnostics();
+        assert!(events.is_empty());
+        assert_eq!(status, ProcessEventsStatus::Unavailable);
+        #[cfg(target_os = "windows")]
+        assert_eq!(reason, "not_supported_platform");
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(reason, "backend_disabled");
     }
 
     #[test]

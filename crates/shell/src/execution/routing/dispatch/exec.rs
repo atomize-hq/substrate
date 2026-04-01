@@ -42,7 +42,9 @@ use substrate_common::{
 };
 #[cfg(target_os = "linux")]
 use substrate_trace::TransportMeta;
-use substrate_trace::{create_span_builder, ExecutionOrigin, PolicyDecision};
+use substrate_trace::{
+    append_to_trace, create_span_builder, init_trace, ExecutionOrigin, PolicyDecision,
+};
 
 #[cfg(target_os = "linux")]
 const WORLD_BACKEND_UNAVAILABLE_HINT: &str =
@@ -105,6 +107,34 @@ fn world_socket_note() -> Option<String> {
 #[cfg(not(target_os = "linux"))]
 fn world_socket_note() -> Option<String> {
     None
+}
+
+fn append_world_process_events_to_trace(events: &[serde_json::Value]) -> Result<()> {
+    if events.is_empty() {
+        return Ok(());
+    }
+    let _ = init_trace(None);
+    for event in events {
+        append_to_trace(event)?;
+    }
+    Ok(())
+}
+
+fn attach_process_event_summary(
+    extra: &mut serde_json::Value,
+    meta: &super::world_ops::ProcessEventsTraceMeta,
+) {
+    extra["process_events_status"] = json!(meta.status.as_str());
+    if meta.status != agent_api_types::ProcessEventsStatus::Ok {
+        if let Some(reason) = meta.reason.as_deref() {
+            extra["process_events_reason"] = json!(reason);
+        }
+    }
+    if meta.status == agent_api_types::ProcessEventsStatus::Truncated {
+        if let Some(dropped) = meta.dropped {
+            extra["process_events_dropped"] = json!(dropped);
+        }
+    }
 }
 
 fn warn_world_backend_unavailable_once() {
@@ -529,6 +559,7 @@ pub(crate) fn execute_command(
                 match execute_world_pty_over_ws(trimmed, &span_id_for_ws) {
                     Ok(outcome) => {
                         let code = outcome.exit_code;
+                        append_world_process_events_to_trace(&outcome.process_events.events)?;
                         if let Some(active_span) = span.take() {
                             let mut active_span = active_span;
                             active_span.set_execution_origin(ExecutionOrigin::World);
@@ -1216,6 +1247,7 @@ pub(crate) fn execute_command(
             }
         }
 
+        append_world_process_events_to_trace(&outcome.process_events.events)?;
         if let Some(mut active_span) = span {
             if let Ok(resolved) =
                 crate::execution::policy_snapshot::resolve_policy_snapshot_for_cwd(&cwd_for_profile)
@@ -1245,6 +1277,7 @@ pub(crate) fn execute_command(
         if let Some(span_id) = span_id_for_cmd_events.as_ref() {
             completion_extra["span_id"] = json!(span_id);
         }
+        attach_process_event_summary(&mut completion_extra, &outcome.process_events);
         if let Some(meta) = outcome.fs_strategy {
             completion_extra["world_fs_strategy_primary"] = json!(meta.primary.as_str());
             completion_extra["world_fs_strategy_final"] = json!(meta.final_strategy.as_str());

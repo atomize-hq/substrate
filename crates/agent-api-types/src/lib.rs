@@ -652,6 +652,36 @@ pub struct ExecuteResponse {
     pub scopes_used: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fs_diff: Option<FsDiff>,
+    #[serde(default)]
+    pub process_events: Vec<WorldProcessEvent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_events_status: Option<ProcessEventsStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_events_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_events_dropped: Option<u64>,
+}
+
+pub type WorldProcessEvent = serde_json::Value;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProcessEventsStatus {
+    Ok,
+    Truncated,
+    Unavailable,
+    Error,
+}
+
+impl ProcessEventsStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Truncated => "truncated",
+            Self::Unavailable => "unavailable",
+            Self::Error => "error",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -816,6 +846,14 @@ pub enum ExecuteStreamFrame {
         scopes_used: Vec<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         fs_diff: Option<FsDiff>,
+        #[serde(default)]
+        process_events: Vec<WorldProcessEvent>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        process_events_status: Option<ProcessEventsStatus>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        process_events_reason: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        process_events_dropped: Option<u64>,
     },
     /// Error reported while attempting to execute the command.
     Error { message: String },
@@ -922,6 +960,13 @@ mod tests {
             span_id: "spn_test".into(),
             scopes_used: vec!["tcp:example.com:443".into()],
             fs_diff: None,
+            process_events: vec![serde_json::json!({
+                "event_type": "world_process_start",
+                "pid": 42,
+            })],
+            process_events_status: Some(ProcessEventsStatus::Truncated),
+            process_events_reason: Some("capture_overflow".into()),
+            process_events_dropped: Some(3),
         };
 
         let json = serde_json::to_string(&frame).expect("serialize");
@@ -933,11 +978,19 @@ mod tests {
                 span_id,
                 scopes_used,
                 fs_diff,
+                process_events,
+                process_events_status,
+                process_events_reason,
+                process_events_dropped,
             } => {
                 assert_eq!(exit, 0);
                 assert_eq!(span_id, "spn_test");
                 assert_eq!(scopes_used, vec!["tcp:example.com:443".to_string()]);
                 assert!(fs_diff.is_none());
+                assert_eq!(process_events.len(), 1);
+                assert_eq!(process_events_status, Some(ProcessEventsStatus::Truncated));
+                assert_eq!(process_events_reason.as_deref(), Some("capture_overflow"));
+                assert_eq!(process_events_dropped, Some(3));
             }
             other => panic!("unexpected frame: {:?}", other),
         }

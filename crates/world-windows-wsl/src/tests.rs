@@ -1,7 +1,9 @@
 use super::backend::AgentApiMock;
 use super::warm::WarmCmd;
 use super::WindowsWslBackend;
-use agent_api_types::{ExecuteRequest, ExecuteResponse, FsDiff as AgentFsDiff};
+use agent_api_types::{
+    ExecuteRequest, ExecuteResponse, FsDiff as AgentFsDiff, ProcessEventsStatus,
+};
 use anyhow::anyhow;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
@@ -75,6 +77,10 @@ impl AgentApiMock for MockAgent {
                 stderr_b64: BASE64_STANDARD.encode(b""),
                 scopes_used: vec![],
                 fs_diff: None,
+                process_events: vec![],
+                process_events_status: Some(ProcessEventsStatus::Unavailable),
+                process_events_reason: Some("not_supported_platform".to_string()),
+                process_events_dropped: None,
             })
         })
     }
@@ -148,6 +154,10 @@ fn exec_routes_to_agent() {
             writes: vec![PathBuf::from("/mnt/c/repo/new.txt")],
             ..Default::default()
         }),
+        process_events: vec![],
+        process_events_status: Some(ProcessEventsStatus::Unavailable),
+        process_events_reason: Some("not_supported_platform".to_string()),
+        process_events_dropped: None,
     }));
 
     let spec = WorldSpec::default();
