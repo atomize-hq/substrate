@@ -248,7 +248,7 @@
       "name": "WPEP0 integration (final merge)",
       "type": "integration",
       "phase": "WPEP0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge WPEP0 core + platform parity fixes.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md",
