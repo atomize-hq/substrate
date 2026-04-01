@@ -111,7 +111,7 @@
       "name": "WPEP0 integration (core merge)",
       "type": "integration",
       "phase": "WPEP0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge WPEP0 code+test and validate core invariants before platform fixes.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md"
