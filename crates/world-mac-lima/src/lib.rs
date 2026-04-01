@@ -330,6 +330,7 @@ impl MacLimaBackend {
             world_fs_strategy_primary: None,
             world_fs_strategy_final: None,
             world_fs_strategy_fallback_reason: None,
+            process_telemetry: resp.process_telemetry,
         }
     }
 

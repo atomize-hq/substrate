@@ -354,6 +354,7 @@ impl ReplWorldAgentStub {
                                 span_id: "agent-span".to_string(),
                                 scopes_used: Vec::new(),
                                 fs_diff: None,
+                                process_telemetry: agent_api_types::ProcessTelemetry::default(),
                             })
                             .expect("serialize exit"),
                         );

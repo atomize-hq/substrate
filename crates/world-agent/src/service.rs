@@ -9,7 +9,7 @@ use agent_api_types::WorldFsEntryTypeV1;
 use agent_api_types::{
     Budget, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
     PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
-    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1,
+    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, ProcessTelemetry,
     WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
 };
 #[cfg(target_os = "linux")]
@@ -484,6 +484,7 @@ impl WorldAgentService {
                 stderr_b64: BASE64.encode(message.as_bytes()),
                 scopes_used: Vec::new(),
                 fs_diff: None,
+                process_telemetry: ProcessTelemetry::default(),
             });
         }
 
@@ -575,6 +576,7 @@ impl WorldAgentService {
             stderr_b64: BASE64.encode(result.stderr),
             scopes_used: result.scopes_used,
             fs_diff: result.fs_diff,
+            process_telemetry: result.process_telemetry,
         })
     }
 
@@ -1082,6 +1084,7 @@ impl WorldAgentService {
                     span_id,
                     scopes_used: Vec::new(),
                     fs_diff: None,
+                    process_telemetry: ProcessTelemetry::default(),
                 },
             ];
 
@@ -1209,6 +1212,7 @@ impl WorldAgentService {
                         span_id,
                         scopes_used: exec_result.scopes_used,
                         fs_diff: exec_result.fs_diff,
+                        process_telemetry: exec_result.process_telemetry,
                     };
                     let _ = tx.send(frame);
                 }
@@ -1920,6 +1924,7 @@ mod tests {
                 display_path: None,
                 summary: None,
             }),
+            process_telemetry: ProcessTelemetry::default(),
         };
 
         let json = serde_json::to_string(&resp).expect("serialize ExecuteResponse");

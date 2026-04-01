@@ -11,7 +11,7 @@ use std::io::{self, IsTerminal};
 use std::sync::Arc;
 use substrate_common::{
     agent_events::{AgentEvent, AgentEventKind},
-    log_schema,
+    log_schema, ProcessTelemetry,
 };
 use substrate_trace::{append_to_trace, init_trace};
 use tracing::{info, warn};
@@ -193,4 +193,41 @@ pub(crate) fn log_command_event(
     append_to_trace(&log_entry)?;
 
     Ok(())
+}
+
+pub(crate) fn append_process_events_to_trace(process_telemetry: &ProcessTelemetry) -> Result<()> {
+    if process_telemetry.process_events.is_empty() {
+        return Ok(());
+    }
+
+    let _ = init_trace(None);
+    for event in &process_telemetry.process_events {
+        let mut entry = serde_json::to_value(event)?;
+        if let Some(obj) = entry.as_object_mut() {
+            obj.insert(log_schema::COMPONENT.to_string(), json!("world-agent"));
+        }
+        append_to_trace(&entry)?;
+    }
+
+    Ok(())
+}
+
+pub(crate) fn add_process_telemetry_summary(
+    log_entry: &mut serde_json::Value,
+    process_telemetry: &ProcessTelemetry,
+) {
+    log_entry[log_schema::PROCESS_EVENTS_STATUS] =
+        json!(process_telemetry.process_events_status.as_str());
+
+    if process_telemetry.process_events_status != substrate_common::ProcessEventsStatus::Ok {
+        if let Some(reason) = process_telemetry.process_events_reason.as_ref() {
+            log_entry[log_schema::PROCESS_EVENTS_REASON] = json!(reason);
+        }
+    }
+
+    if process_telemetry.process_events_status == substrate_common::ProcessEventsStatus::Truncated {
+        if let Some(dropped) = process_telemetry.process_events_dropped {
+            log_entry[log_schema::PROCESS_EVENTS_DROPPED] = json!(dropped);
+        }
+    }
 }
