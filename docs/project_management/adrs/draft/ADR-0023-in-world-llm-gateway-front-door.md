@@ -2,6 +2,7 @@
 
 ## Status
 - Status: Draft
+- Supersession note: Architectural intent is superseded by `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`. Keep this ADR only as the original gateway-capability draft and historical context for the archived `llm_gateway_in_world` planning set.
 - Date (UTC): 2026-02-03
 - Owner(s): Spenser McConnell (Substrate)
 
@@ -14,6 +15,8 @@
   - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
 
 ## Related Docs
+- Successor ADR:
+  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - Plan: `docs/project_management/_archived/next/llm_gateway_in_world/plan.md`
 - Tasks: `docs/project_management/_archived/next/llm_gateway_in_world/tasks.json`
 - Spec manifest: `docs/project_management/_archived/next/llm_gateway_in_world/spec_manifest.md`
@@ -25,7 +28,11 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 2d669369caf458811d33597c36c4bcbbbe9bed1e5da4115e3b31e89eec1c0e3a
+ADR_BODY_SHA256: 5dfe844de3d4fc36e3bc0d9a4ae7c7f0b79dacfcb7dc8e918261738fc318ec83
+
+Supersession note:
+- Read `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md` as the current architectural source of truth for Substrate versus `substrate-gateway` ownership. This ADR remains useful for the original gateway-capability shape and archived execution planning, but it no longer defines the runtime ownership boundary.
+
 ### Changes (operator-facing)
 - Substrate-owned LLM gateway runs inside the world boundary
   - Existing: CLI agents and tooling may egress directly, or egress may transit a host-level proxy with unclear policy boundary.
