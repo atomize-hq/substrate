@@ -103,12 +103,12 @@ Example jq probes:
 
 ```bash
 span_id="$(
-  jq -r 'select(.component=="shell" and .event_type=="command_complete" and (.command|tostring|contains("bash -lc"))) | .span_id' \
+  jq -r -s '.[] | select(.component=="shell" and .event_type=="command_complete" and (.command|tostring|contains("bash -lc"))) | .span_id' \
     "$trace" | tail -n 1
 )"
 test -n "$span_id"
 
-jq -e --arg sp "$span_id" '
+jq -s -e --arg sp "$span_id" '
   any(select(.component=="world-agent" and .event_type=="world_process_start" and .parent_span==$sp))
 ' "$trace" >/dev/null
 ```
@@ -151,12 +151,12 @@ mkdir -p "$workspace"
 cd "$workspace"
 
 substrate workspace init --force >/dev/null
-SUBSTRATE_ENABLE_PREEXEC=1 substrate --command 'echo hello' >/dev/null
+SUBSTRATE_ENABLE_PREEXEC=1 SUBSTRATE_OVERRIDE_WORLD=disabled substrate --command 'export SUBSTRATE_SMOKE_PREEXEC=1' >/dev/null
 
 trace="$SUBSTRATE_HOME/trace.jsonl"
 test -f "$trace"
 
-jq -e '
+jq -s -e '
   any(select(.event_type=="builtin_command") | (.command_omitted==true))
 ' "$trace" >/dev/null
 ```

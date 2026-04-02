@@ -25,6 +25,49 @@ fn setup_isolated_home(temp: &tempfile::TempDir) -> PathBuf {
 }
 
 #[test]
+fn test_builtin_command_omits_command_body_in_trace() {
+    let temp = temp_dir("substrate-test-builtin-");
+    let home = setup_isolated_home(&temp);
+    let log_file = temp.path().join("trace.jsonl");
+
+    get_substrate_binary()
+        .env("HOME", &home)
+        .env("USERPROFILE", &home)
+        .env("SUBSTRATE_HOME", home.join(".substrate"))
+        .env("SHIM_TRACE_LOG", &log_file)
+        .env("SUBSTRATE_OVERRIDE_WORLD", "disabled")
+        .arg("-c")
+        .arg("export TOKEN=secret")
+        .assert()
+        .success();
+
+    let events: Vec<Value> = fs::read_to_string(&log_file)
+        .unwrap()
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("parse trace line"))
+        .collect();
+
+    let builtin = events
+        .iter()
+        .find(|event| {
+            event.get("component").and_then(Value::as_str) == Some("shell")
+                && event.get("event_type").and_then(Value::as_str) == Some("builtin_command")
+        })
+        .expect("builtin_command event");
+
+    assert_eq!(
+        builtin.get("command_omitted").and_then(Value::as_bool),
+        Some(true),
+        "builtin_command must include command_omitted=true: {builtin:?}"
+    );
+    assert!(
+        builtin.get("command").is_none(),
+        "builtin_command must omit command bodies: {builtin:?}"
+    );
+}
+
+#[test]
 fn test_command_start_finish_json_roundtrip() {
     let temp = temp_dir("substrate-test-");
     let home = setup_isolated_home(&temp);

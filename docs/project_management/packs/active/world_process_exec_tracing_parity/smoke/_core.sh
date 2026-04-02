@@ -71,7 +71,7 @@ case "${OSTYPE:-}" in
 esac
 
 expect_jq() {
-  jq -e "$@" "$trace" >/dev/null
+  jq -s -e "$@" "$trace" >/dev/null
 }
 
 echo "== Case A: shell joinability includes span_id =="
@@ -83,7 +83,7 @@ expect_jq --arg m "$marker" '
 '
 
 echo "== Case B: preexec canonical trace omits bodies (linux/macos only) =="
-SUBSTRATE_ENABLE_PREEXEC=1 "$SUBSTRATE_BIN" --command 'echo preexec' >/dev/null
+SUBSTRATE_ENABLE_PREEXEC=1 SUBSTRATE_OVERRIDE_WORLD=disabled "$SUBSTRATE_BIN" --command 'export SUBSTRATE_SMOKE_PREEXEC=1' >/dev/null
 expect_jq '
   any(select(.event_type=="builtin_command") | (.command_omitted==true))
 '
@@ -152,8 +152,8 @@ fi
 if [[ "$platform" == "linux" ]]; then
   echo "== Case D: linux includes world_process_* events joinable by parent_span =="
   span_id="$(
-    jq -r --arg m "$world_marker" '
-      select(.component=="shell" and .event_type=="command_complete" and (.command|tostring|contains($m))) | .span_id
+    jq -r -s --arg m "$world_marker" '
+      .[] | select(.component=="shell" and .event_type=="command_complete" and (.command|tostring|contains($m))) | .span_id
     ' "$trace" | tail -n 1
   )"
   test -n "$span_id"

@@ -1978,6 +1978,35 @@ mod tests {
     }
 
     #[test]
+    fn process_telemetry_redaction_helpers_redact_common_secret_shapes() {
+        let argv = vec![
+            "curl".to_string(),
+            "-H".to_string(),
+            "Authorization: Bearer abc123".to_string(),
+            "--token".to_string(),
+            "secret".to_string(),
+            "--password=supersecret".to_string(),
+        ];
+
+        let redacted = substrate_common::redact_process_argv(&argv);
+        assert_eq!(redacted[2], "Authorization: Bearer ***");
+        assert_eq!(redacted[4], "***");
+        assert_eq!(redacted[5], "--password=***");
+
+        assert!(substrate_common::process_env_key_allowlisted("HTTP_PROXY"));
+        assert!(!substrate_common::process_env_key_allowlisted(
+            "AWS_SECRET_ACCESS_KEY"
+        ));
+        assert_eq!(
+            substrate_common::redact_process_env_value(
+                "HTTP_PROXY",
+                "http://user:pass@example.com"
+            ),
+            "http://***@example.com"
+        );
+    }
+
+    #[test]
     fn world_deps_provision_profile_wraps_command_in_transient_systemd_unit() {
         let cmd = wrap_command_for_profile(
             Some("world-deps-provision"),

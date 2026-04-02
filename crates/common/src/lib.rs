@@ -240,6 +240,175 @@ pub fn redact_sensitive(arg: &str) -> String {
     }
 }
 
+pub fn process_env_key_allowlisted(key: &str) -> bool {
+    let key_upper = key.trim().to_ascii_uppercase();
+    matches!(
+        key_upper.as_str(),
+        "PATH" | "HOME" | "USER" | "SHELL" | "LANG" | "TERM" | "NO_PROXY" | "ALL_PROXY"
+    ) || key_upper.starts_with("LC_")
+        || key_upper.starts_with("SHIM_")
+        || key_upper.starts_with("SUBSTRATE_")
+        || (key_upper.starts_with("HTTP") && key_upper.ends_with("_PROXY"))
+}
+
+pub fn truncate_utf8_bytes(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
+        return value.to_string();
+    }
+
+    let mut count = 0usize;
+    let mut out = String::new();
+    for ch in value.chars() {
+        let ch_len = ch.len_utf8();
+        if count + ch_len > max_bytes {
+            break;
+        }
+        out.push(ch);
+        count += ch_len;
+    }
+    out
+}
+
+fn redact_url_credentials(value: &str) -> String {
+    let Some(scheme_idx) = value.find("://") else {
+        return value.to_string();
+    };
+    let after_scheme = scheme_idx + 3;
+    let Some(at_idx) = value[after_scheme..]
+        .find('@')
+        .map(|idx| idx + after_scheme)
+    else {
+        return value.to_string();
+    };
+    let slash_idx = value[after_scheme..]
+        .find('/')
+        .map(|idx| idx + after_scheme)
+        .unwrap_or(value.len());
+    if at_idx > slash_idx {
+        return value.to_string();
+    }
+
+    let userinfo = &value[after_scheme..at_idx];
+    if userinfo.is_empty() {
+        return value.to_string();
+    }
+
+    format!("{}***@{}", &value[..after_scheme], &value[at_idx + 1..])
+}
+
+fn redact_bearer_tokens(value: &str) -> String {
+    let lower = value.to_ascii_lowercase();
+    let Some(bearer_idx) = lower.find("bearer ") else {
+        return value.to_string();
+    };
+    let token_start = bearer_idx + "bearer ".len();
+    let token_end = value[token_start..]
+        .find(|c: char| c.is_whitespace())
+        .map(|idx| idx + token_start)
+        .unwrap_or(value.len());
+    if token_start >= token_end {
+        return value.to_string();
+    }
+    format!("{}***{}", &value[..token_start], &value[token_end..])
+}
+
+fn redact_kv_like(value: &str) -> String {
+    let lower = value.to_ascii_lowercase();
+    for needle in [
+        "token=",
+        "password=",
+        "secret=",
+        "apikey=",
+        "api_key=",
+        "api-key=",
+    ] {
+        if let Some(start) = lower.find(needle) {
+            let value_start = start + needle.len();
+            let value_end = value[value_start..]
+                .find(|c: char| c.is_whitespace() || c == '&' || c == ';')
+                .map(|idx| idx + value_start)
+                .unwrap_or(value.len());
+            return format!(
+                "{}{}***{}",
+                &value[..start],
+                &value[start..value_start],
+                &value[value_end..]
+            );
+        }
+    }
+    value.to_string()
+}
+
+pub fn redact_process_env_value(_key: &str, value: &str) -> String {
+    let value = redact_url_credentials(value);
+    let value = redact_bearer_tokens(&value);
+    redact_kv_like(&value)
+}
+
+fn is_sensitive_flag(flag: &str) -> bool {
+    let flag = flag.trim();
+    if !flag.starts_with('-') {
+        return false;
+    }
+
+    let lower = flag.to_ascii_lowercase();
+    matches!(lower.as_str(), "-p" | "--header")
+        || lower.contains("token")
+        || lower.contains("password")
+        || lower.contains("secret")
+        || lower.contains("apikey")
+        || lower.contains("api_key")
+        || lower.contains("api-key")
+        || lower.contains("auth")
+        || lower.contains("bearer")
+        || lower.contains("private-key")
+        || lower.contains("ssh-key")
+}
+
+pub fn redact_process_argv(argv: &[String]) -> Vec<String> {
+    let mut out = Vec::with_capacity(argv.len());
+    let mut idx = 0usize;
+
+    while idx < argv.len() {
+        let arg = &argv[idx];
+
+        if let Some((flag, _value)) = arg.split_once('=').filter(|(k, _)| k.starts_with('-')) {
+            if is_sensitive_flag(flag) {
+                out.push(format!("{flag}=***"));
+                idx += 1;
+                continue;
+            }
+        }
+
+        if arg == "-H" || arg == "--header" {
+            out.push(arg.clone());
+            if let Some(next) = argv.get(idx + 1) {
+                out.push(redact_process_env_value("", next));
+                idx += 2;
+                continue;
+            }
+            idx += 1;
+            continue;
+        }
+
+        if is_sensitive_flag(arg) {
+            out.push(arg.clone());
+            if idx + 1 < argv.len() {
+                out.push("***".to_string());
+                idx += 2;
+                continue;
+            }
+            idx += 1;
+            continue;
+        }
+
+        out.push(redact_process_env_value("", arg));
+        idx += 1;
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,6 +433,77 @@ mod tests {
         assert_eq!(redact_sensitive("normal_arg"), "normal_arg");
         assert_eq!(redact_sensitive("token=secret123"), "token=***");
         assert_eq!(redact_sensitive("--password"), "***");
+    }
+
+    #[test]
+    fn process_env_key_allowlist_matches_adr_0028_defaults() {
+        for key in [
+            "PATH",
+            "HOME",
+            "USER",
+            "SHELL",
+            "LANG",
+            "TERM",
+            "LC_ALL",
+            "LC_CTYPE",
+            "SUBSTRATE_WORLD_SOCKET",
+            "SHIM_SESSION_ID",
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "NO_PROXY",
+        ] {
+            assert!(
+                process_env_key_allowlisted(key),
+                "expected allowlisted: {key}"
+            );
+        }
+
+        for key in ["AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "SOME_RANDOM_VAR"] {
+            assert!(
+                !process_env_key_allowlisted(key),
+                "expected not allowlisted: {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn truncate_utf8_bytes_preserves_utf8_boundaries() {
+        let value = "αβγδε";
+        let truncated = truncate_utf8_bytes(value, 5);
+        assert!(value.starts_with(&truncated));
+        assert!(truncated.is_char_boundary(truncated.len()));
+        assert!(truncated.len() <= 5);
+    }
+
+    #[test]
+    fn redact_process_env_value_redacts_url_credentials_and_bearer_tokens() {
+        assert_eq!(
+            redact_process_env_value("", "http://user:pass@example.com/path"),
+            "http://***@example.com/path"
+        );
+        assert_eq!(
+            redact_process_env_value("", "Authorization: Bearer abc123"),
+            "Authorization: Bearer ***"
+        );
+        assert_eq!(redact_process_env_value("", "token=abc123"), "token=***");
+    }
+
+    #[test]
+    fn redact_process_argv_redacts_flag_paired_and_equals_forms() {
+        let argv = vec![
+            "curl".to_string(),
+            "-H".to_string(),
+            "Authorization: Bearer abc123".to_string(),
+            "--token".to_string(),
+            "secret".to_string(),
+            "--password=supersecret".to_string(),
+            "http://user:pass@example.com".to_string(),
+        ];
+        let redacted = redact_process_argv(&argv);
+        assert_eq!(redacted[2], "Authorization: Bearer ***");
+        assert_eq!(redacted[4], "***");
+        assert_eq!(redacted[5], "--password=***");
+        assert_eq!(redacted[6], "http://***@example.com");
     }
 
     proptest! {

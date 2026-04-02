@@ -138,7 +138,6 @@ pub(crate) fn log_command_event(
         log_schema::EVENT_TYPE: event_type,
         log_schema::SESSION_ID: config.session_id,
         log_schema::COMMAND_ID: cmd_id,
-        "command": command,
         log_schema::COMPONENT: "shell",
         "mode": match &config.mode {
             ShellMode::Interactive { .. } => "interactive",
@@ -154,6 +153,12 @@ pub(crate) fn log_command_event(
         "isatty_stderr": stderr_is_tty,
         "pty": matches!(&config.mode, ShellMode::Interactive { use_pty: true }),
     });
+
+    if event_type == "builtin_command" {
+        log_entry["command_omitted"] = json!(true);
+    } else {
+        log_entry["command"] = json!(command);
+    }
 
     if matches!(&config.mode, ShellMode::Interactive { .. }) {
         log_entry["repl_mode"] = json!(if config.async_repl { "async" } else { "sync" });

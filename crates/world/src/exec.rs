@@ -19,6 +19,10 @@ use std::sync::{Mutex, OnceLock};
 #[cfg(target_os = "linux")]
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 #[cfg(target_os = "linux")]
+use substrate_common::{
+    process_env_key_allowlisted, redact_process_argv, redact_process_env_value, truncate_utf8_bytes,
+};
+#[cfg(target_os = "linux")]
 use substrate_common::{ProcessEvent, ProcessEventType, ProcessEventsStatus};
 
 #[cfg(target_os = "linux")]
@@ -28,6 +32,10 @@ fn active_exec_registry() -> &'static Mutex<HashMap<String, i32>> {
 }
 
 const PROCESS_EVENTS_DEFAULT_MAX: usize = 10_000;
+#[cfg(target_os = "linux")]
+const PROCESS_ENV_VALUE_MAX_BYTES: usize = 4 * 1024;
+#[cfg(target_os = "linux")]
+const PROCESS_ARG_VALUE_MAX_BYTES: usize = 4 * 1024;
 
 #[cfg(target_os = "linux")]
 const PROCESS_EVENTS_BACKEND: &str = "world-linux-ptrace";
@@ -310,6 +318,50 @@ fn proc_ppid(pid: libc::pid_t) -> Option<u32> {
 }
 
 #[cfg(target_os = "linux")]
+fn proc_cmdline(pid: libc::pid_t) -> Option<Vec<String>> {
+    let raw = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+    if raw.is_empty() {
+        return None;
+    }
+
+    let mut argv = Vec::new();
+    for part in raw.split(|b| *b == 0) {
+        if part.is_empty() {
+            continue;
+        }
+        argv.push(String::from_utf8_lossy(part).to_string());
+    }
+    (!argv.is_empty()).then_some(argv)
+}
+
+#[cfg(target_os = "linux")]
+fn proc_environ_allowlisted(pid: libc::pid_t) -> Option<HashMap<String, String>> {
+    let raw = std::fs::read(format!("/proc/{pid}/environ")).ok()?;
+    if raw.is_empty() {
+        return None;
+    }
+
+    let mut env = HashMap::new();
+    for part in raw.split(|b| *b == 0) {
+        if part.is_empty() {
+            continue;
+        }
+        let pair = String::from_utf8_lossy(part);
+        let Some((key, value)) = pair.split_once('=') else {
+            continue;
+        };
+        if !process_env_key_allowlisted(key) {
+            continue;
+        }
+        let redacted = redact_process_env_value(key, value);
+        let capped = truncate_utf8_bytes(&redacted, PROCESS_ENV_VALUE_MAX_BYTES);
+        env.insert(key.to_string(), capped);
+    }
+
+    (!env.is_empty()).then_some(env)
+}
+
+#[cfg(target_os = "linux")]
 fn now_ts_parts() -> (String, u64) {
     let now = SystemTime::now();
     let unix = now
@@ -327,6 +379,8 @@ struct TrackedProcess {
     ppid: u32,
     cwd: String,
     exe: Option<String>,
+    argv: Option<Vec<String>>,
+    env: Option<HashMap<String, String>>,
     started_at: Instant,
     start_ts: String,
     start_unix_ns: u64,
@@ -404,6 +458,12 @@ impl TelemetryCollector {
 
 #[cfg(target_os = "linux")]
 fn emit_start_event(collector: &mut TelemetryCollector, pid: libc::pid_t, state: &TrackedProcess) {
+    let argv = state.argv.clone();
+    let (argv, argv_omitted) = if let Some(argv) = argv {
+        (Some(argv), None)
+    } else {
+        (None, Some(true))
+    };
     collector.push(ProcessEvent {
         event_type: ProcessEventType::WorldProcessStart,
         ts: state.start_ts.clone(),
@@ -415,13 +475,13 @@ fn emit_start_event(collector: &mut TelemetryCollector, pid: libc::pid_t, state:
         cwd: state.cwd.clone(),
         parent_span: collector.spec.parent_span.clone(),
         parent_cmd_id: collector.spec.parent_cmd_id.clone(),
-        argv: None,
-        argv_omitted: Some(true),
+        argv,
+        argv_omitted,
         exe: state.exe.clone(),
         exit_code: None,
         signal: None,
         duration_ms: None,
-        env: None,
+        env: state.env.clone(),
     });
 }
 
@@ -432,6 +492,8 @@ fn build_tracked_process(pid: libc::pid_t, parent_pid: Option<u32>) -> TrackedPr
         ppid: parent_pid.or_else(|| proc_ppid(pid)).unwrap_or(0),
         cwd: proc_link(pid, "cwd").unwrap_or_else(|| "/".to_string()),
         exe: proc_link(pid, "exe"),
+        argv: None,
+        env: None,
         started_at: Instant::now(),
         start_ts,
         start_unix_ns,
@@ -439,6 +501,21 @@ fn build_tracked_process(pid: libc::pid_t, parent_pid: Option<u32>) -> TrackedPr
         options_applied: false,
         start_emitted: false,
     }
+}
+
+#[cfg(target_os = "linux")]
+fn refresh_tracked_process_metadata(pid: libc::pid_t, state: &mut TrackedProcess) {
+    if let Some(cwd) = proc_link(pid, "cwd") {
+        state.cwd = cwd;
+    }
+    state.exe = proc_link(pid, "exe");
+    state.argv = proc_cmdline(pid).map(|argv| {
+        redact_process_argv(&argv)
+            .into_iter()
+            .map(|arg| truncate_utf8_bytes(&arg, PROCESS_ARG_VALUE_MAX_BYTES))
+            .collect::<Vec<_>>()
+    });
+    state.env = proc_environ_allowlisted(pid);
 }
 
 #[cfg(target_os = "linux")]
@@ -454,6 +531,12 @@ fn finish_tracked_process(
         .elapsed()
         .as_millis()
         .min(u128::from(u64::MAX)) as u64;
+    let argv = state.argv.clone();
+    let (argv, argv_omitted) = if let Some(argv) = argv {
+        (Some(argv), None)
+    } else {
+        (None, Some(true))
+    };
     collector.push(ProcessEvent {
         event_type: ProcessEventType::WorldProcessExit,
         ts,
@@ -465,8 +548,8 @@ fn finish_tracked_process(
         cwd: state.exit_cwd.unwrap_or(state.cwd),
         parent_span: collector.spec.parent_span.clone(),
         parent_cmd_id: collector.spec.parent_cmd_id.clone(),
-        argv: None,
-        argv_omitted: Some(true),
+        argv,
+        argv_omitted,
         exe: state.exe,
         exit_code: if libc::WIFEXITED(raw_status) {
             Some(libc::WEXITSTATUS(raw_status))
@@ -550,6 +633,7 @@ pub fn trace_spawned_process_tree(
 
     let mut root_state = build_tracked_process(root_pid, None);
     root_state.options_applied = true;
+    refresh_tracked_process_metadata(root_pid, &mut root_state);
     emit_start_event(&mut collector, root_pid, &root_state);
     root_state.start_emitted = true;
     tracked.insert(root_pid, root_state);
@@ -604,7 +688,18 @@ pub fn trace_spawned_process_tree(
                 state.options_applied = true;
             }
 
-            if !state.start_emitted {
+            let should_emit_start = !state.start_emitted
+                && (pid == root_pid
+                    || event == libc::PTRACE_EVENT_EXEC
+                    || event == libc::PTRACE_EVENT_EXIT);
+            if should_emit_start {
+                if event == libc::PTRACE_EVENT_EXEC {
+                    let (ts, ts_unix_ns) = now_ts_parts();
+                    state.start_ts = ts;
+                    state.start_unix_ns = ts_unix_ns;
+                    state.started_at = Instant::now();
+                }
+                refresh_tracked_process_metadata(pid, state);
                 emit_start_event(&mut collector, pid, state);
                 state.start_emitted = true;
             }
