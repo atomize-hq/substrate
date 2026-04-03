@@ -133,7 +133,7 @@ For toolbox control-plane tool calls, the operator-visible identity fields are:
 
 - `router`
   - Meaning: the control-plane authority that accepted the call and selected toolbox handling.
-  - Example: `agent-toolbox`.
+  - Example: `agent_toolbox`.
 
 - `protocol`
   - Meaning: the toolbox wire contract.
@@ -155,7 +155,7 @@ For toolbox control-plane tool calls, the operator-visible identity fields are:
 
 Operator rule:
 - Do not infer `provider` or `auth_authority` from `backend_id`.
-- Do not infer a second execution plane from the presence of `router=agent-toolbox`.
+- Do not infer a second execution plane from the presence of `router=agent_toolbox`.
 
 ### Config
 - This ADR does not add new config or policy file families.
@@ -197,15 +197,14 @@ Operator rule:
   - `orchestration_session_id`
   - `run_id`
   - `agent_id`
+  - `client`
+  - `router`
+  - `protocol`
   - `role: "orchestrator"`
   - `backend_id`
   - `tool_call_id`
   - `toolbox_version`
   - `tool_name`
-- Optional identity fields (additive; may be derived rather than stored):
-  - `protocol`
-    - Meaning: toolbox wire contract identity (e.g., `mcp.toolbox.v1`).
-    - Note: in v1, `protocol` MAY be persisted explicitly, but it is always derivable from “MCP + `toolbox_version`”.
 - Completion-only fields:
   - `outcome: "ok" | "error" | "denied"`
   - `duration_ms`
@@ -220,7 +219,7 @@ Operator rule:
 - Host orchestrator call:
   - `client=claude_code`
   - `backend_id=cli:claude_code`
-  - `router=agent-toolbox`
+  - `router=agent_toolbox`
   - `protocol=mcp.toolbox.v1`
   - toolbox tool: `substrate.get_effective_policy`
 - Expected start record fields:
@@ -232,9 +231,11 @@ Operator rule:
   - `orchestration_session_id=<orchestration session>`
   - `run_id=<run>`
   - `agent_id=<orchestrator agent>`
+  - `client=claude_code`
+  - `router=agent_toolbox`
+  - `protocol=mcp.toolbox.v1`
   - `role=orchestrator`
   - `backend_id=cli:claude_code`
-  - `protocol=mcp.toolbox.v1` (optional; may be derived from `toolbox_version`)
   - `args_omitted=true`
 - Expected completion record fields:
   - same correlation fields
@@ -328,7 +329,7 @@ Operator rule:
 - Protected invariants:
   - `backend_id` is adapter-only.
   - `provider` and `auth_authority` are absent in v1 toolbox calls.
-  - `router=agent-toolbox` does not imply a second execution plane.
+  - `router=agent_toolbox` does not imply a second execution plane.
   - World state access must stay inside existing Substrate internals.
 
 ## Validation Plan (Authoritative)

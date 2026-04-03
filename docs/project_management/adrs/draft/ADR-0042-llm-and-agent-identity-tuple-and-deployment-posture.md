@@ -26,6 +26,8 @@ clarification layer that precedes later Agent Hub updates and any additive confi
 - Gateway ownership and adapter contracts:
   - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+- Additive policy follow-on:
+  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Follow-on agent orchestration ADRs:
   - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
   - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
@@ -112,6 +114,21 @@ Operator-facing rules:
 - No secrets should be emitted into trace by default.
 - The tuple does not replace the canonical correlation vocabulary and join keys in ADR-0028.
 
+Canonical token format:
+- `client`, `router`, `provider`, and `auth_authority` MUST use normalized lowercase snake_case ids.
+  - Examples:
+    - `client=claude_code`
+    - `router=substrate_gateway`
+    - `provider=azure_openai`
+    - `auth_authority=codex_subscription`
+- `protocol` MUST use a normalized lowercase dotted id, optionally ending with a version token.
+  - Examples:
+    - `openai.responses`
+    - `anthropic.messages`
+    - `uaa.agent.session`
+    - `mcp.toolbox.v1`
+- Human-readable prose labels MAY appear in surrounding text, but operator-visible status, policy, and trace surfaces MUST use the normalized ids above.
+
 ### Deployment / placement posture
 The placement model has two postures and one transport adjunct:
 
@@ -151,6 +168,8 @@ Non-negotiable interpretation:
 - This ADR introduces no new config files and no new config keys.
 - Source of truth for config/policy files, precedence, and fail-closed semantics remains:
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+- Router/provider/protocol/auth-authority policy constraints are introduced additively by:
+  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Placement posture is expressed via existing config/policy:
   - `llm.gateway.mode: in_world|host_only`
   - `llm.fail_closed.routing` (no host fallback when true)
@@ -166,7 +185,7 @@ Non-negotiable interpretation:
 
 #### Claude Code pointed at `substrate-gateway`
 - `client`: `claude_code`
-- `router`: `substrate-gateway`
+- `router`: `substrate_gateway`
 - `provider`: may vary by request or config, such as `openai`, `anthropic`, or another supported provider
 - `auth_authority`: Claude subscription login state, Claude gateway token, or API credential path depending on the chosen mode
 - `protocol`: the surface being spoken, such as Anthropic Messages or compatible gateway protocol semantics
@@ -178,15 +197,16 @@ Why this matters:
 
 #### Codex using Responses API and `~/.codex/auth.json`
 - `client`: `codex`
-- `router`: `substrate-gateway` or a direct approved path, depending on deployment posture
+- `router`: `substrate_gateway` or `direct_provider_path`, depending on deployment posture and policy
 - `provider`: `openai`
 - `auth_authority`: Codex subscription auth, derived from `~/.codex/auth.json`, or another approved OpenAI credential authority
-- `protocol`: OpenAI Responses API
+- `protocol`: `openai.responses`
 
 Why this matters:
 - The Responses API is a protocol choice, not the same thing as client identity.
 - The credential source in `~/.codex/auth.json` is an auth authority, not the provider itself.
 - The same client can remain `codex` while the effective provider/protocol/auth path is made explicit.
+- If direct provider routing is permitted, that permission must be explicit in policy; it must not be inferred from the provider or protocol alone.
 
 ### Config / policy implications
 - `ADR-0027` remains the source of truth for where config/policy lives and how fail-closed gating works.
@@ -227,6 +247,7 @@ Why this matters:
   - `provider` cannot be inferred from `auth_authority`.
   - `protocol` cannot be used to smuggle authority or bypass routing policy.
   - A host-only posture does not imply a second standing host gateway.
+  - `router` cannot be inferred from `provider`, `protocol`, or deployment posture; if multiple routers are permitted, policy must say so explicitly.
 
 ## Sequencing / Dependencies
 - Sequencing entry: `docs/project_management/packs/sequencing.json` → `llm-and-agent-identity-tuple-and-deployment-posture` (or next available identity-tuple slot)

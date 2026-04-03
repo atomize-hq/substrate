@@ -43,9 +43,9 @@ This ADR is a minimal additive follow-on to ADR-0027. It keeps the existing file
 
 ADR_BODY_SHA256: b34acee4a294d4a59e394e21151c91c1463d5011e4c865bf2deb4be28ac5de9f
 ### Changes (operator-facing)
-- Add tuple-axis policy allowlists without creating a new config system
-  - Existing: `llm.allowed_backends` and `agents.allowed_backends` gate backend ids, but they do not let operators state provider, protocol, or auth-authority constraints independently.
-  - New: Substrate adds tuple-axis allowlists under `llm` so operators can separately constrain `provider`, `protocol`, and `auth_authority` while keeping backend ids as adapter/backend gates only.
+- Add tuple-axis policy constraints without creating a new config system
+  - Existing: `llm.allowed_backends` and `agents.allowed_backends` gate backend ids, but they do not let operators state router, provider, protocol, or auth-authority constraints independently.
+  - New: Substrate adds tuple-axis narrowing constraints under `llm.constraints` so operators can separately constrain `router`, `provider`, `protocol`, and `auth_authority` while keeping backend ids as adapter/backend gates only.
   - Why: This removes the last ambiguity from the operator model without inventing new files or collapsing the router, client, provider, and auth authority into one label.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
@@ -74,6 +74,7 @@ ADR_BODY_SHA256: b34acee4a294d4a59e394e21151c91c1463d5011e4c865bf2deb4be28ac5de9
 - Keep `llm.allowed_backends` and `agents.allowed_backends` intact as backend/adapter gates.
 - Keep secrets out of YAML; only names, ids, and references are allowed.
 - Preserve fail-closed behavior with no implicit host fallback.
+- Keep tuple-axis policy semantics distinct from the existing deny-by-default backend allowlists.
 
 ## Non-Goals
 - Creating new config or policy files.
@@ -104,7 +105,7 @@ ADR_BODY_SHA256: b34acee4a294d4a59e394e21151c91c1463d5011e4c865bf2deb4be28ac5de9
 - Schema:
   - No new config files.
   - No new policy files.
-  - v1 does not require new config keys to express the tuple; the minimal additive change is policy-side tuple-axis allowlists under `llm`.
+  - v1 does not require new config keys to express the tuple; the minimal additive change is policy-side tuple-axis constraints under `llm.constraints`.
   - Existing keys remain authoritative:
     - `llm.allowed_backends`
     - `agents.allowed_backends`
@@ -114,29 +115,40 @@ ADR_BODY_SHA256: b34acee4a294d4a59e394e21151c91c1463d5011e4c865bf2deb4be28ac5de9
     - `agents.host_credentials.read.allowed_backends`
     - `net_allowed`
   - New additive policy keys (authoritative; minimal set):
-    - `llm.allowed_providers: [string]`
-      - Meaning: upstream provider ids allowed for LLM fulfillment.
+    - `llm.constraints.routers: [string]`
+      - Meaning: normalized router ids allowed for LLM fulfillment.
+      - Examples: `substrate_gateway`, `direct_provider_path`.
+      - Default (effective): `[]`.
+      - Constraint semantics:
+        - If empty: routing is unconstrained beyond backend/adapter gating and fail-closed posture.
+        - If non-empty: the selected effective `router` MUST be in this list.
+    - `llm.constraints.providers: [string]`
+      - Meaning: normalized upstream provider ids allowed for LLM fulfillment.
       - Examples: `openai`, `anthropic`, `azure_openai`.
-      - Default (effective): `[]` (meaning “no additional provider constraint beyond backend/adapter gating”).
-      - Gate semantics:
-        - If empty: does not further restrict routing.
+      - Default (effective): `[]`.
+      - Constraint semantics:
+        - If empty: routing is unconstrained beyond backend/adapter gating and fail-closed posture.
         - If non-empty: the selected effective `provider` MUST be in this list.
-    - `llm.allowed_protocols: [string]`
-      - Meaning: protocol/capability surfaces allowed for LLM requests.
+    - `llm.constraints.protocols: [string]`
+      - Meaning: normalized protocol ids allowed for LLM requests.
       - Examples: `openai.responses`, `openai.chat_completions`, `anthropic.messages`.
-      - Default (effective): `[]` (meaning “no additional protocol constraint beyond backend/adapter gating”).
-      - Gate semantics:
-        - If empty: does not further restrict routing.
+      - Default (effective): `[]`.
+      - Constraint semantics:
+        - If empty: routing is unconstrained beyond backend/adapter gating and fail-closed posture.
         - If non-empty: the selected effective `protocol` MUST be in this list.
-    - `llm.allowed_auth_authorities: [string]`
-      - Meaning: credential or billing authorities allowed for LLM requests.
+    - `llm.constraints.auth_authorities: [string]`
+      - Meaning: normalized credential or billing authority ids allowed for LLM requests.
       - Examples: `codex_subscription`, `claude_pro_subscription`, `anthropic_api_key`, `gateway_delegated_secret`.
-      - Default (effective): `[]` (meaning “no additional auth-authority constraint beyond backend/adapter gating”).
-      - Gate semantics:
-        - If empty: does not further restrict routing.
+      - Default (effective): `[]`.
+      - Constraint semantics:
+        - If empty: routing is unconstrained beyond backend/adapter gating and fail-closed posture.
         - If non-empty: the selected effective `auth_authority` MUST be in this list.
+  - Canonical tokenization:
+    - `router`, `provider`, and `auth_authority` values MUST use normalized lowercase snake_case ids.
+    - `protocol` values MUST use normalized lowercase dotted ids.
+    - Human-readable labels MAY appear in prose, but policy values and operator-visible status/trace outputs MUST use the normalized ids above.
   - Config additions under `llm.routing` are not required for v1.
-    - If a later operator-facing default-provider knob is introduced, it must remain additive and must not replace the policy allowlists above.
+    - If a later operator-facing default-provider knob is introduced, it must remain additive and must not replace the policy constraints above.
 
 ### Platform guarantees
 - Linux:
@@ -152,22 +164,23 @@ ADR_BODY_SHA256: b34acee4a294d4a59e394e21151c91c1463d5011e4c865bf2deb4be28ac5de9
   - `crates/shell`: config/policy surfaces and `--explain` presentation.
   - `crates/broker`: policy evaluation and allow/deny decisions.
   - `crates/world-agent` and world backends: secret delivery and boundary enforcement.
-  - `substrate-gateway`: consumes provider/protocol/auth-authority constraints when routing requests.
+  - `substrate-gateway`: consumes router/provider/protocol/auth-authority constraints when routing requests.
 - End-to-end flow:
   - Inputs:
     - client request metadata
     - backend/adapter selection
-    - tuple-axis policy allowlists
+    - tuple-axis policy constraints
     - `net_allowed`
     - host credential read permissions
   - Derived state:
     - allowed backend/adapter ids
+    - allowed router ids
     - allowed provider ids
     - allowed protocol ids
     - allowed auth-authority ids
     - effective placement posture
   - Actions:
-    - validate requested provider/protocol/auth authority against policy
+    - validate requested router/provider/protocol/auth authority against policy
     - keep `llm.allowed_backends` and `agents.allowed_backends` as backend/adapter gates
     - allow `host_to_world_bridge` only as transport, never as a second control plane
   - Outputs:
@@ -222,7 +235,7 @@ ADR_BODY_SHA256: b34acee4a294d4a59e394e21151c91c1463d5011e4c865bf2deb4be28ac5de9
 ## Security / Safety Posture
 - Fail-closed rules:
   - Empty backend allowlists remain deny-by-default (existing ADR-0027 posture).
-  - `llm.allowed_providers`, `llm.allowed_protocols`, and `llm.allowed_auth_authorities` are additional policy gates:
+  - `llm.constraints.routers`, `llm.constraints.providers`, `llm.constraints.protocols`, and `llm.constraints.auth_authorities` are narrowing constraints:
     - when non-empty they MUST be enforced (deny if not matched),
     - when empty they impose no additional restriction beyond backend/adapter gating.
   - `llm.fail_closed.routing` and `agents.fail_closed.routing` still govern host fallback behavior.
@@ -237,12 +250,12 @@ ADR_BODY_SHA256: b34acee4a294d4a59e394e21151c91c1463d5011e4c865bf2deb4be28ac5de9
 
 ### Tests
 - Unit tests:
-  - tuple-axis allowlist parsing for providers, protocols, and auth authorities
-  - fail-closed behavior with empty allowlists
-  - precedence between backend/adapter allowlists and tuple-axis allowlists
+  - tuple-axis constraint parsing for routers, providers, protocols, and auth authorities
+  - fail-closed behavior with empty backend allowlists and empty tuple-axis constraints
+  - precedence between backend/adapter allowlists and tuple-axis constraints
 - Integration tests:
   - `substrate config show --explain` and `substrate policy current show --explain` surface tuple-axis keys and provenance
-  - denied provider/protocol/auth-authority combinations produce clear operator explanations
+  - denied router/provider/protocol/auth-authority combinations produce clear operator explanations
 
 ### Manual validation
 - Review the two concrete cases in this ADR:
@@ -252,13 +265,13 @@ ADR_BODY_SHA256: b34acee4a294d4a59e394e21151c91c1463d5011e4c865bf2deb4be28ac5de9
 ## Rollout / Backwards Compatibility
 - This ADR is additive.
 - Existing backend allowlists remain in place and keep their adapter/backend gating role.
-- Operators who do not add the new tuple-axis allowlists keep the current deny-by-default posture.
+- Operators who do not add the new tuple-axis constraints keep the current deny-by-default backend posture, with no additional tuple-axis narrowing.
 - Future additions must preserve the separation between backend ids and tuple-axis constraints.
 
 ## Decision Summary
 - Options (required; at least two):
-  - A) Keep policy expressed only in terms of backend/adapter ids and rely on overloaded labels or context for provider/protocol/auth-authority meaning.
-  - B) Add tuple-axis allowlists for provider, protocol, and auth authority while preserving backend/adapter allowlists for runtime selection.
+  - A) Keep policy expressed only in terms of backend/adapter ids and rely on overloaded labels or context for router/provider/protocol/auth-authority meaning.
+  - B) Add tuple-axis constraints for router, provider, protocol, and auth authority while preserving backend/adapter allowlists for runtime selection.
 - Selection:
   - Chosen: B
   - Rationale: this is the minimal additive extension that makes the tuple model operable without changing config file families or introducing a second policy system.

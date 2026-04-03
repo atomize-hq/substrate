@@ -177,7 +177,7 @@ Concrete example:
   - Agent Hub selects `backend_id=cli:claude_code` as the host-scoped orchestrator (role assignment is carried separately; do not encode role in the id).
   - Agent Hub records the pure orchestration run as:
     - `client=claude_code`
-    - `router=agent-hub`
+    - `router=agent_hub`
     - `protocol=uaa.agent.session`
     - `backend_id=cli:claude_code`
     - `provider`: absent
@@ -185,7 +185,7 @@ Concrete example:
   - Agent Hub then dispatches a world-scoped member backend:
     - `backend_id=cli:codex`
     - `client=codex`
-    - `router=agent-hub`
+    - `router=agent_hub`
     - `protocol=uaa.agent.session`
     - `world_id=world-17`
     - `world_generation=3`
@@ -194,13 +194,13 @@ Concrete example:
 - The world-scoped member later calls LLM via `substrate-gateway`
   - The nested LLM request record is separate from the orchestration record:
     - `client=codex`
-    - `router=substrate-gateway`
+    - `router=substrate_gateway`
     - `protocol=openai.responses`
-    - `backend_id=api:openai`
+    - `backend_id=cli:codex`
     - `provider=openai`
     - `auth_authority=codex_subscription`
   - Operator reading rule:
-    - the agent run stays `agent-hub` + UAA protocol + `backend_id`
+    - the agent run stays `agent_hub` + UAA protocol + `backend_id`
     - the nested LLM record carries `provider` and `auth_authority`
     - the `world_id` remains on the world-scoped agent record so boundary sharing stays verifiable
 
@@ -213,7 +213,7 @@ Concrete example:
   - If the selected orchestrator is world-scoped, the hub MUST fail closed.
   - World-scoped member agents MAY be dispatched into a shared world boundary for the orchestration session.
   - `agents.allowed_backends` remains the backend allowlist keyed by `backend_id`.
-  - `llm.allowed_backends` and the tuple-axis allowlists from ADR-0043 remain the gateway-side policy gates for nested LLM requests.
+  - `llm.allowed_backends` and the tuple-axis constraints from ADR-0043 remain the gateway-side policy gates for nested LLM requests.
 - Backend id mapping:
   - `backend_id = "<kind>:<agent_id>"`
   - This derived id is the only id used for allowlisting and trace attribution on the agent side.
