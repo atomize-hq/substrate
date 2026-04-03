@@ -4,6 +4,7 @@
 - Status: Draft
 - Date (UTC): 2026-02-09
 - Owner(s): Spenser McConnell (Substrate)
+- Superseded by: `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 
 ## Scope
 - Feature directory: `docs/project_management/_archived/next/orchestration_mcp_toolbox/`
@@ -20,7 +21,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: fb909753c2550d697895759d7e68567ba2536457086afb5414d34bbfa8448889
+ADR_BODY_SHA256: 24f8f422c1813381e2dc1245e483eb010d765d48d7915186aa94a6da9534bf99
 ### Changes (operator-facing)
 - Substrate exposes an internal orchestration toolbox providing orchestrator-only tools (speaks MCP)
   - Existing: Orchestration context and levers are primarily internal; agents cannot uniformly access Substrate orchestration functions.
