@@ -2,6 +2,7 @@
 
 ## Status
 - Status: Draft
+- Supersession note: The architectural intent of this ADR is superseded by `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`, which preserves the stable backend-id / allowlisting contract while replacing the bespoke Substrate-local engine assumption with a gateway-hosted adapter contract.
 - Date (UTC): 2026-02-03
 - Owner(s): Spenser McConnell (Substrate)
 
@@ -23,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 0e7889cf9241c33071cef5a595bf027c9e47496bba8075f66d3f0faee9cae1f4
+ADR_BODY_SHA256: 638e918a8adc2e127758a2404181a9c63eb49b22933430ed892cec94d8ae48ee
 ### Changes (operator-facing)
 - Treat subscription-authenticated CLIs (starting with Codex) as LLM “provider backends”
   - Existing: Cross-provider routing typically requires API keys or external proxies; subscription-authenticated CLIs cannot be used as provider backends in a controlled way.
