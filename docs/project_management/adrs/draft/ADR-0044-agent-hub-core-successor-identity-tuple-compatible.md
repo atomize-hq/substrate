@@ -48,7 +48,7 @@ ADR_BODY_SHA256: f903ebf4711628a2ab287c89184603c6cac2efd5a9fbcbf57e72a3f57d7f484
 
 - Separate pure agent-run identity from nested gateway-backed LLM identity
   - Existing: backend ids and trace attribution can be read as if they imply provider, auth authority, and protocol all at once.
-  - New: pure agent runs expose `client`, `router`, `protocol`, and `backend_id`; `provider` and `auth_authority` are absent unless the agent triggers a nested LLM request through `substrate-gateway`.
+  - New: pure agent runs expose `client`, `router`, `protocol`, and `backend_id`; `provider` and `auth_authority` are absent unless the agent triggers a nested LLM request through `substrate_gateway`.
   - Why: this keeps operator approval and audit output readable when a host orchestrator dispatches a world-scoped member agent that later calls an LLM.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
@@ -132,7 +132,7 @@ For pure agent runs, the operator-visible record is:
 
 - `router`
   - Meaning: the orchestration authority that accepted the run and selected placement/routing.
-  - Example: `agent-hub` for agent orchestration records.
+  - Example: `agent_hub` for agent orchestration records.
 
 - `protocol`
   - Meaning: the agent backend contract being spoken.
@@ -160,7 +160,7 @@ For nested LLM calls made by an agent, the visible record changes:
 - `client`
   - stays the originating agent runtime or agent session.
 - `router`
-  - becomes `substrate-gateway`.
+  - becomes `substrate_gateway`.
 - `provider`
   - identifies the upstream model provider that actually fulfilled the request.
 - `auth_authority`
@@ -191,7 +191,7 @@ Concrete example:
     - `world_generation=3`
     - `provider`: absent
     - `auth_authority`: absent
-- The world-scoped member later calls LLM via `substrate-gateway`
+- The world-scoped member later calls LLM via `substrate_gateway`
   - The nested LLM request record is separate from the orchestration record:
     - `client=codex`
     - `router=substrate_gateway`
@@ -233,7 +233,7 @@ Concrete example:
   - `crates/agent-hub` (new or successor module): registry, session router, and world-placement coordinator.
   - `crates/shell`: operator-facing list/status/doctor presentation.
   - `crates/trace`: canonical event and trace attribution sink.
-  - `substrate-gateway`: nested LLM fulfillment boundary for agent-triggered model calls.
+  - `substrate_gateway`: nested LLM fulfillment boundary for agent-triggered model calls.
 
 - End-to-end flow:
   - Inputs:
@@ -250,7 +250,7 @@ Concrete example:
     - choose the host-scoped orchestrator
     - dispatch member agents using UAA-style session semantics
     - record pure agent events without provider/auth fields
-    - route nested LLM calls through `substrate-gateway` when an agent explicitly asks for model help
+    - route nested LLM calls through `substrate_gateway` when an agent explicitly asks for model help
   - Outputs:
     - status/doctor output
     - structured event stream

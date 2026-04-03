@@ -164,7 +164,7 @@ ADR_BODY_SHA256: b34acee4a294d4a59e394e21151c91c1463d5011e4c865bf2deb4be28ac5de9
   - `crates/shell`: config/policy surfaces and `--explain` presentation.
   - `crates/broker`: policy evaluation and allow/deny decisions.
   - `crates/world-agent` and world backends: secret delivery and boundary enforcement.
-  - `substrate-gateway`: consumes router/provider/protocol/auth-authority constraints when routing requests.
+  - `substrate_gateway`: consumes router/provider/protocol/auth-authority constraints when routing requests.
 - End-to-end flow:
   - Inputs:
     - client request metadata
@@ -259,7 +259,7 @@ ADR_BODY_SHA256: b34acee4a294d4a59e394e21151c91c1463d5011e4c865bf2deb4be28ac5de9
 
 ### Manual validation
 - Review the two concrete cases in this ADR:
-  - Claude Code pointed at `substrate-gateway` and routed to OpenAI vs Anthropic under policy control.
+  - Claude Code pointed at `substrate_gateway` and routed to OpenAI vs Anthropic under policy control.
   - Codex + Responses API + `~/.codex/auth.json`, with `auth_authority` expressed separately from `provider`.
 
 ## Rollout / Backwards Compatibility

@@ -45,7 +45,7 @@ ADR_BODY_SHA256: 0ada6b766a041fcd389fe0be822204ab251392e286456fb2de7043dfbcb00d9
 - Replace overloaded backend-id interpretation with an explicit identity tuple
   - Existing: operator-facing docs and traces can accidentally collapse client origin, router authority, upstream provider, auth authority, and protocol shape into one overloaded backend label.
   - New: Substrate treats these as distinct semantic fields: `client`, `router`, `provider`, `auth_authority`, and `protocol`.
-  - Why: A single backend id is not enough to explain what is actually happening when a host client is pointed at `substrate-gateway`, when the gateway fans out to multiple providers, or when subscription-based auth and API-key auth both exist in the same ecosystem.
+  - Why: A single backend id is not enough to explain what is actually happening when a host client is pointed at `substrate_gateway`, when the gateway fans out to multiple providers, or when subscription-based auth and API-key auth both exist in the same ecosystem.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
     - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
@@ -73,7 +73,7 @@ ADR_BODY_SHA256: 0ada6b766a041fcd389fe0be822204ab251392e286456fb2de7043dfbcb00d9
 - Make it clear that `host_to_world_bridge` is transport-only, not a second router or second permanent gateway.
 - Preserve the existing Substrate ownership split:
   - Substrate owns policy, world placement, lifecycle, secret delivery, operator UX, and canonical tracing.
-  - `substrate-gateway` owns runtime routing and fulfillment inside the boundary.
+  - `substrate_gateway` owns runtime routing and fulfillment inside the boundary.
 - Keep per-request routing hints explicit and policy-gated.
 
 ## Non-Goals
@@ -93,7 +93,7 @@ The operator-visible identity tuple is:
 
 - `router`
   - Meaning: the routing authority that accepted the request and selected fulfillment.
-  - Example: `substrate-gateway` as the canonical routing boundary.
+  - Example: `substrate_gateway` as the canonical routing boundary.
 
 - `provider`
   - Meaning: the upstream service that actually fulfilled the request.
@@ -134,7 +134,7 @@ The placement model has two postures and one transport adjunct:
 
 - `in_world`
   - The canonical fulfillment posture.
-  - `substrate-gateway` runs inside the world boundary when worlds are enabled and policy requires in-world execution.
+  - `substrate_gateway` runs inside the world boundary when worlds are enabled and policy requires in-world execution.
 
 - `host_only`
   - A fallback posture for host-only environments or explicit policy-permitted host execution.
@@ -183,7 +183,7 @@ Non-negotiable interpretation:
 
 ### Concrete examples
 
-#### Claude Code pointed at `substrate-gateway`
+#### Claude Code pointed at `substrate_gateway`
 - `client`: `claude_code`
 - `router`: `substrate_gateway`
 - `provider`: may vary by request or config, such as `openai`, `anthropic`, or another supported provider
@@ -216,7 +216,7 @@ Why this matters:
 
 ## Architecture Shape
 - Components:
-  - `substrate-gateway`: routing authority and in-world fulfillment boundary.
+  - `substrate_gateway`: routing authority and in-world fulfillment boundary.
   - `crates/world-agent` and world backends: transport and lifecycle into the world boundary.
   - `crates/broker`: policy gating and explainability.
   - `crates/trace`: canonical trace persistence and correlation vocabulary.
@@ -302,7 +302,7 @@ Why this matters:
 
 ### Manual validation
 - Review against the concrete cases in this ADR:
-  - Claude Code pointed at `substrate-gateway`.
+  - Claude Code pointed at `substrate_gateway`.
   - Codex using Responses API with `~/.codex/auth.json`.
 - Confirm that every tuple field has a distinct operator meaning and that none of them collapse into another field.
 - Confirm that the host-to-world bridge is described only as transport.
