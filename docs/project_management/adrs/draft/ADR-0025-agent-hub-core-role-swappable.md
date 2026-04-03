@@ -4,6 +4,7 @@
 - Status: Draft
 - Date (UTC): 2026-02-09
 - Owner(s): Spenser McConnell (Substrate)
+- Superseded by: `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
 
 ## Scope
 - Feature directory: `docs/project_management/_archived/next/agent_hub_core/`
@@ -19,7 +20,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: ac9ed0f58ba23a1e4d8cbc764dd5af4f66117872ee45093fbba815b704d95a0a
+ADR_BODY_SHA256: a1beafeadd0d0cb480745724dfb520a52ef5ae886dcd2174c2d66b4567db63dc
 ### Changes (operator-facing)
 - Agent Hub provides a stable registry + session router for CLI and API agents
   - Existing: Substrate can run worlds, trace commands, and call a world-agent API, but “agents” are not uniformly registered/routed as role-swappable backends.
