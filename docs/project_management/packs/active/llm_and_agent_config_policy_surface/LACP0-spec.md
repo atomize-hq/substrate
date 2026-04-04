@@ -7,6 +7,9 @@ Authoritative inputs:
 - Contract: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md`
 - Schema: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`
 - Decisions: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md`
+- Additive follow-ons (not owned by this slice):
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 
 ## Scope (in-slice)
 - Strict schema acceptance for new config keys in:
@@ -24,6 +27,7 @@ Authoritative inputs:
 - Implementing any LLM gateway, engine, agent hub, or orchestration behavior (those ADRs consume the surfaces defined here).
 - Adding new config/policy file families or changing the existing precedence model.
 - Agent inventory parsing and `policy_overlay` validation/composition (owned by `LACP1-spec.md`).
+- Implementing tuple-axis policy keys under `llm.constraints.*`; that additive surface belongs to ADR-0043 and must not be silently absorbed by this slice.
 
 ## User-visible behavior (authoritative)
 
@@ -37,6 +41,7 @@ Authoritative inputs:
 ### Explain/provenance stability
 - `substrate config current show --explain` MUST include the new `llm.*` and `agents.*` keys with correct provenance (global/workspace/env/default).
 - `substrate policy current show --explain` MUST include the new `llm.*`, `agents.*`, and `workflow.router.*` keys with correct provenance (global/workspace/default).
+- Explain output for this slice MUST NOT imply that `llm.routing.default_backend` alone determines the full operator-facing tuple from ADR-0042.
 
 ## Acceptance criteria
 
@@ -46,4 +51,3 @@ Authoritative inputs:
    - `substrate policy global set llm.allowed_backends+=cli:codex agents.allowed_backends+=cli:codex` exits `0`.
 3) Unknown keys are rejected (exit `2`) for both config and policy patches.
 4) `--explain` output includes the new key paths in both config and policy views.
-

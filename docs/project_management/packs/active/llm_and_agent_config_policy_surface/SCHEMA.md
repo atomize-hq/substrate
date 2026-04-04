@@ -4,6 +4,9 @@ This document defines the authoritative key paths, types, defaults, and merge st
 
 Authoritative ADR:
 - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+- Additive follow-ons:
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 
 ## General rules (strictness + errors)
 - Unknown keys in config/policy patches MUST be rejected (exit code `2`).
@@ -31,6 +34,7 @@ Examples:
 Notes:
 - This ADR does **not** enumerate the complete set of available backends. It only defines the id format and the config/policy key paths that select/allowlist them.
 - The authoritative “what backends exist and what they do” contracts live in the gateway/engine and agent hub ADRs (Phase 4/5), and can be referenced during the Phase 8 circle-back once those contracts are accepted.
+- Backend ids are selectors for adapters/runtime backends. They are not a substitute for the ADR-0042 identity tuple (`client`, `router`, `provider`, `auth_authority`, `protocol`).
 
 ## Agent inventory directory (new)
 
@@ -69,6 +73,7 @@ Merge strategy:
   - Constraint: `host_only` is only permissible when effective policy has `llm.fail_closed.routing=false`.
 - `llm.routing.default_backend: string`
   - Default (effective): empty string (meaning “no default backend selected”).
+  - Interpretation note: this key selects a backend/adapter id only. It MUST NOT be treated as a collapsed encoding of `client`, `router`, `provider`, `auth_authority`, or `protocol`.
 
 ### `agents`
 - `agents.enabled: bool`
@@ -117,6 +122,15 @@ Merge strategy:
   - Default (effective): `[]` (deny-by-default; no secret host env reads allowed for LLM secret delivery).
   - Constraints: names only; values must never be stored in Substrate YAML; missing names fail closed with actionable errors.
 
+Phase 8 additive note:
+- ADR-0043 extends this policy family with tuple-axis narrowing constraints under `llm.constraints`:
+  - `llm.constraints.routers`
+  - `llm.constraints.providers`
+  - `llm.constraints.protocols`
+  - `llm.constraints.auth_authorities`
+- Those keys are additive follow-on policy surfaces. They are not implemented or fully specified by this pack, but they must be interpreted as narrowing constraints layered on top of backend/adapter allowlists.
+- In v1, `client` remains an operator-visible semantic field rather than a standalone policy key in this pack.
+
 ### `agents`
 - `agents.allowed_backends: [string]`
   - Default (effective): `[]` (deny-by-default).
@@ -134,6 +148,7 @@ Merge strategy:
 ### `workflow.router` (router daemon indirect execution)
 
 Phase 8 additive note: ADR-0029 introduces an indirect execution path (trace event → request → action). This path MUST be explicitly policy-gated and fail-closed by default.
+This `workflow.router` namespace is distinct from the LLM identity-tuple field `router` defined by ADR-0042. It governs workflow-router-daemon behavior only.
 
 - `workflow.router.enabled: bool`
   - Default (effective): `false` (fail-closed).

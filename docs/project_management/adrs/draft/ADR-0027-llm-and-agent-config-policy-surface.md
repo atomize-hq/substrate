@@ -38,6 +38,9 @@
   - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 - Profiles (future; must remain compatible):
   - `docs/project_management/adrs/draft/ADR-0020-profiles-config-policy-snapshots.md`
+- Identity / tuple follow-ons (additive; must remain compatible):
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - LLM + agents feature ADRs (draft; must defer to this ADR for config/policy shape):
   - `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
   - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
@@ -62,6 +65,10 @@ ADR_BODY_SHA256: bceb2cda66397248d4b6109f362435cfdc4241b28b1366e35ebedd7f881ffdc
     - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/contract.md#L1`
     - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md#L1`
     - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/decision_register.md#L1`
+- Phase 8 additive clarification:
+  - This ADR remains the source of truth for config/policy file families, precedence, fail-closed posture, backend allowlists, and host-side secret-read gates.
+  - ADR-0042 defines the operator-facing identity tuple (`client`, `router`, `provider`, `auth_authority`, `protocol`).
+  - ADR-0043 extends this ADR additively with tuple-axis policy constraints so backend ids do not need to carry tuple meaning by themselves.
 
 ## Problem / Context
 - The next major body of work adds:
@@ -149,6 +156,7 @@ All keys below are part of the config schema and MUST be strict (unknown keys re
 - `llm.routing.default_backend: string`
   - Meaning: identifier of the default backend used by the gateway/router when no explicit override is provided.
   - Format: `<kind>:<name>` (e.g., `cli:codex`, `cli:claude_code`, `api:openai`).
+  - Interpretation note: this selects a backend/adapter id only. It MUST NOT be treated as a collapsed encoding of `client`, `router`, `provider`, `auth_authority`, or `protocol`.
 
 Constraints:
 - Config files MUST NOT contain secrets. Backend authentication must rely on:
@@ -226,6 +234,15 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
   - Default: `[]` (deny-by-default; no secret host env reads allowed for LLM secret delivery).
   - Note: env var names only; values must never be stored in Substrate YAML; missing names fail closed with actionable errors.
 
+Phase 8 additive note:
+- ADR-0043 extends this policy family with tuple-axis narrowing constraints under `llm.constraints`:
+  - `llm.constraints.routers`
+  - `llm.constraints.providers`
+  - `llm.constraints.protocols`
+  - `llm.constraints.auth_authorities`
+- Those keys narrow the effective `router`, `provider`, `protocol`, and `auth_authority` independently of backend/adapter allowlists.
+- In v1, `client` remains an operator-visible semantic field defined by ADR-0042, but is not a standalone policy key in this ADR.
+
 ##### `agents` (agent backend gating; enforced in agent hub)
 - `agents.allowed_backends: [string]`
   - Meaning: allowlist of backend ids eligible for assignment/routing (empty means “no backends allowed”).
@@ -244,6 +261,7 @@ All keys below are part of the policy schema and MUST be strict (unknown keys re
 ##### `workflow.router` (indirect execution via router daemon; enforced in router)
 
 Phase 8 additive note: ADR-0029 introduces an indirect execution path (trace event → request → action). This must be explicitly policy-gated, fail-closed by default, and explainable.
+This `workflow.router` namespace is unrelated to the LLM identity-tuple field `router` defined by ADR-0042. It governs the workflow router daemon only and MUST NOT be read as the semantic routing authority for LLM fulfillment.
 
 - `workflow.router.enabled: bool`
   - Meaning: when `true`, router-derived requests/actions are eligible for evaluation/execution (still gated by the additional allowlists below).
@@ -306,6 +324,8 @@ Phase 8 additive note: ADR-0029 introduces an indirect execution path (trace eve
   - LLM gateway ADRs (front door + engines) must use this ADR’s config/policy shape.
   - Agent hub ADRs must use this ADR’s config/policy shape.
   - Profiles ADR (ADR-0020) must treat these keys as part of “complete config/policy snapshots”.
+  - ADR-0042 defines the operator-facing tuple semantics and must not be collapsed back into backend ids.
+  - ADR-0043 is the additive policy-surface extension for tuple-axis constraints within this config/policy root.
 
 ## Security / Safety Posture
 - Fail-closed rules:
@@ -317,6 +337,8 @@ Phase 8 additive note: ADR-0029 introduces an indirect execution path (trace eve
 - Protected paths/invariants:
   - Config files must not store secrets; secrets must be provided via backend-owned mechanisms (subscription state) or environment variables.
   - Any logging of request/response bodies must be explicitly enabled and must honor the repo’s redaction posture (details live in LLM gateway ADRs).
+  - The five-part identity tuple from ADR-0042 remains semantically distinct from backend ids.
+  - In v1, policy can constrain `router`, `provider`, `protocol`, and `auth_authority` via ADR-0043, while `client` remains operator-visible metadata rather than a standalone policy key.
 
 ## Validation Plan (Authoritative)
 

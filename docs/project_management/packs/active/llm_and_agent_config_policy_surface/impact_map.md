@@ -12,6 +12,8 @@ Authoring standards:
 - Feature directory: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/`
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md` (semantic follow-on)
+  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md` (policy follow-on)
 - Spec manifest:
   - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/spec_manifest.md`
 
@@ -81,6 +83,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
     - Future profiles snapshots (ADR-0020) must include these keys without special-casing.
   - Contradiction risks:
     - Partial/loose schema acceptance (allowing unknown keys) would undermine fail-closed posture and create drift.
+    - Treating `llm.routing.default_backend` as if it encodes the full operator-facing tuple would create semantic drift once ADR-0042/0043 are in play.
 
 - Change: a new agent inventory directory model becomes part of the operator-visible file layout.
   - Direct impact:
@@ -101,6 +104,7 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
     - Downstream components (gateway/engine/hub/router) must treat these keys as the sole source of truth (no ad-hoc env var bypasses).
   - Contradiction risks:
     - Implementations that treat policy as “feature flags” (e.g., adding `policy.llm.enabled`) would contradict DR-0004 and must not ship.
+    - Confusing `workflow.router.*` with the ADR-0042 tuple field `router` would conflate workflow-daemon gating with LLM routing authority.
 
 ## Cross-queue scan (ADRs + Planning Packs)
 
@@ -126,6 +130,14 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - Overlap surfaces: `workflow.router.*` policy gates.
   - Conflict: no (dependent; Phase 8 additive).
   - Resolution (explicit): router ADR must treat `workflow.router.*` as policy-owned gates and remain fail-closed by default.
+- ADR: `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - Overlap surfaces: operator-facing interpretation of backend ids versus `client`/`router`/`provider`/`auth_authority`/`protocol`.
+  - Conflict: no, but terminology drift is possible.
+  - Resolution (explicit): this pack must continue to own config/policy roots and backend-id surfaces, while ADR-0042 owns tuple semantics.
+- ADR: `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+  - Overlap surfaces: additive `llm.constraints.*` policy keys.
+  - Conflict: no, if ownership stays split.
+  - Resolution (explicit): this pack should not absorb ADR-0043 implementation scope; it should only stay terminology-compatible and avoid implying backend ids carry tuple meaning by themselves.
 
 ### Related Phase 8 tracks (cross-cutting; use ADRs/registry)
 
@@ -134,6 +146,8 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 - CLI backend engine: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
 - Agent hub core: `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
 - Router daemon: `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+- Identity tuple semantics: `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+- Tuple-axis policy surface: `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 - Workflow engine: `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
 
 ## Follow-ups (explicit)

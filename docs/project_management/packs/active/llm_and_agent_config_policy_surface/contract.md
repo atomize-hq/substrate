@@ -6,6 +6,9 @@ Authoritative inputs:
 - ADR: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
 - Schema: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`
 - Decisions: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md`
+- Additive follow-ons:
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
 
 ## What changes
 - Substrate’s LLM + agent features are governed via the existing layered config/policy patch files:
@@ -36,6 +39,7 @@ Authoritative inputs:
   - `llm.gateway.mode=host_only` is only permissible when effective policy has `llm.fail_closed.routing=false` (see schema + ADR).
 - **Backend allowlists are deny-by-default.**
   - If `llm.allowed_backends=[]` or `agents.allowed_backends=[]`, routing must fail closed (no implicit backend selection).
+  - Backend ids remain adapter/runtime selectors. They MUST NOT be treated as a collapsed encoding of the operator-facing tuple fields from ADR-0042 (`client`, `router`, `provider`, `auth_authority`, `protocol`).
 - **Per-agent policy overlays can only tighten.**
   - Agent files MAY include a `policy_overlay`, but it MUST be restriction-only (cannot broaden beyond base policy).
 - **No secrets in config/policy files.**
@@ -43,6 +47,13 @@ Authoritative inputs:
   - If a backend adapter needs to read host credential material (e.g., a CLI’s existing login state) in order to deliver required auth fields to an in-world component over a Substrate-owned secret channel, that host credential read MUST be explicitly policy-gated (`agents.host_credentials.read.allowed_backends`).
 - **Router indirect execution is fail-closed by default.**
   - Router-derived requests/actions (ADR-0029) MUST be explicitly policy-enabled via `workflow.router.enabled=true` and remain guarded by deny-by-default allowlists (rule ids, workflow ids, and target workspace ids).
+  - The `workflow.router.*` namespace governs the workflow router daemon only. It is distinct from the LLM identity-tuple field `router` defined by ADR-0042.
+
+## Phase 8 additive alignment
+- ADR-0027 remains the config/policy root for file locations, precedence, fail-closed posture, backend allowlists, and host-side secret-read gates.
+- ADR-0042 defines the operator-facing identity tuple (`client`, `router`, `provider`, `auth_authority`, `protocol`).
+- ADR-0043 extends the policy surface additively with tuple-axis constraints under `llm.constraints.*`.
+- In v1, `client` remains operator-visible metadata rather than a standalone policy key in this pack.
 
 ## Precedence (summary)
 - Config effective precedence is unchanged and applies per-key:
@@ -77,6 +88,9 @@ agents:
     cli:
       mode: persistent
 ```
+
+Interpretation note:
+- `llm.routing.default_backend` selects the default backend/adapter id only. It does not by itself determine the effective `router`, `provider`, `auth_authority`, or `protocol`.
 
 Global policy patch (`~/.substrate/policy.yaml`):
 ```yaml

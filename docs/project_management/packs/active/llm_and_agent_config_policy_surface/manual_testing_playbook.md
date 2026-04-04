@@ -17,6 +17,7 @@ Prereqs:
 5. Verify effective views include the keys:
    - `substrate config current show --explain`
    - `substrate policy current show --explain`
+   - Confirm the docs/operator interpretation remains correct: `llm.routing.default_backend=cli:codex` selects a backend/adapter id only and does not by itself imply the full tuple (`client`, `router`, `provider`, `auth_authority`, `protocol`).
 6. Verify unknown keys are rejected (exit code `2`):
    - `substrate config global set llm.unknown_key=true`
    - `substrate policy global set agents.unknown_key=true`
@@ -32,6 +33,8 @@ Prereqs:
 4. Verify `--explain` shows the override sources:
    - `substrate config current show --explain`
    - `substrate policy current show --explain`
+5. Terminology check:
+   - Confirm no output or surrounding docs imply that `workflow.router.*` is the same thing as the ADR-0042 tuple field `router`.
 
 ## 3) Agent inventory strictness + restriction-only overlays
 

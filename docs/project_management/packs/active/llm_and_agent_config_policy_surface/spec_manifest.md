@@ -18,6 +18,8 @@ Authoring standard:
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
   - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
   - `docs/project_management/adrs/draft/ADR-0020-profiles-config-policy-snapshots.md`
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md` (operator-facing tuple semantics)
+  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md` (additive `llm.constraints.*` tuple-axis policy surface)
   - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md` (Phase 8 additive keys: `workflow.router.*`)
 
 ## Required spec documents (authoritative)
@@ -58,6 +60,8 @@ Spec templates:
 | New config key families (`llm.*`, `agents.*`)                                                     | `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`                  | key paths, types/enums, defaults, constraints (`llm.gateway.mode` vs policy)                          |
 | New policy key families (`llm.*`, `agents.*`, `workflow.router.*`)                                | `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`                  | key paths, types/enums, defaults, deny-by-default allowlists, constraints                             |
 | Backend id format (`<kind>:<name>`)                                                               | `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`                  | grammar, examples, where it applies                                                                   |
+| Tuple semantics (`client`, `router`, `provider`, `auth_authority`, `protocol`)                   | `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md` | operator-facing meaning of tuple fields; deployment posture; tuple-vs-backend separation              |
+| Tuple-axis policy constraints (`llm.constraints.*`)                                               | `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`              | additive policy keys for `router`, `provider`, `protocol`, and `auth_authority`                       |
 | Agent inventory directory model                                                                   | `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`                  | file locations, precedence rules, strictness rules, “no secrets” invariant                            |
 | Embedded per-agent `policy_overlay`                                                               | `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`                  | allowed key subset + restriction-only composition rules and error posture                             |
 | Operator-facing invariants (fail-closed defaults; deny-by-default allowlists; no secrets in YAML) | `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md`                | enable/allowlist interplay, fail-closed routing invariants, examples                                  |
@@ -77,3 +81,4 @@ For the docs above, confirm they explicitly define:
 - Error model and failure posture (exit `2` for schema violations; fail-closed routing invariants).
 - Security/redaction invariants (no secret values in YAML; names-only allowlists for secret sourcing).
 - Platform guarantees (Linux/macOS parity for file shapes and key paths for this Planning Pack).
+- Ownership boundaries versus additive follow-ons (backend ids here; tuple semantics in ADR-0042; tuple-axis policy in ADR-0043).

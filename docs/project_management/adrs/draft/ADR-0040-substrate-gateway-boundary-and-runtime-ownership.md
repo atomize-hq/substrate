@@ -83,6 +83,17 @@ ADR_BODY_SHA256: f05a9a857afd1d7bed8750aa0a1e5f314551574fc515e3f8d51a3473e76fb7c
   - `substrate world gateway status`: Substrate reports gateway availability, policy posture, and client wiring in a Substrate-owned format.
   - `substrate world gateway restart`: Substrate restarts the gateway as an explicit lifecycle operation, including secret rotation flows.
   - `substrate world gateway status --json`: structured Substrate-owned status output; the authoritative operator surface for gateway wiring.
+- Client wiring contract:
+  - `substrate world gateway status --json` is the authoritative Substrate-owned wiring surface and MUST include non-secret `client_wiring.*` fields for the gateway endpoints Substrate wants operators and in-world clients to use.
+  - Human-readable wiring output MAY be abbreviated by default, but `substrate world gateway status` MUST remain the stable operator entrypoint for discovering gateway wiring.
+  - Stable non-secret wiring env var names remain:
+    - `SUBSTRATE_LLM_OPENAI_BASE_URL`
+    - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`
+  - These values point to Substrate-managed gateway endpoints, not upstream provider endpoints.
+  - These base URLs are intended for in-world reachability (clients/backends executing inside the world boundary), not as a guarantee of direct host reachability.
+- Secret delivery contract boundary:
+  - This ADR intentionally preserves only the ownership rule that Substrate owns policy-gated host secret sourcing and host-to-world secret delivery for integrated operation.
+  - Exact secret transport mechanics, canonical auth field naming, and compatibility-path details remain governed by ADR-0027 and the referenced gateway secret-delivery/decision docs rather than being redefined here.
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (unless explicitly overridden here)
   - `0`: success
@@ -100,6 +111,9 @@ ADR_BODY_SHA256: f05a9a857afd1d7bed8750aa0a1e5f314551574fc515e3f8d51a3473e76fb7c
   - This ADR does not add a new config family.
   - Gateway-local config files, admin mutation surfaces, and local persistence paths are not Substrate contract surfaces.
   - Any gateway-local config or admin surface is implementation-specific to `substrate-gateway` and must not be required for Substrate-managed operation.
+  - Host-side secret-read gates and backend-selection constraints continue to come from ADR-0027, including:
+    - `llm.secrets.env_allowed`
+    - `agents.host_credentials.read.allowed_backends`
 
 ### Platform guarantees
 - Linux:
