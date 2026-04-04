@@ -62,7 +62,7 @@ ADR_BODY_SHA256: 638e918a8adc2e127758a2404181a9c63eb49b22933430ed892cec94d8ae48e
 
 ### CLI
 - This ADR adds no new top-level CLI commands beyond those defined by ADR-0023.
-- When `substrate world status gateway` is invoked and a CLI backend is enabled, status output includes:
+- When `substrate world gateway status` is invoked and a CLI backend is enabled, status output includes:
   - backend availability (binary found / authenticated status unknown / last invocation success),
   - session mode (per-request vs persistent),
   - declared capabilities (stream support, tool-call support).

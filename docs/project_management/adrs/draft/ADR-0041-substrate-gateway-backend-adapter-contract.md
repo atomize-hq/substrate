@@ -90,9 +90,9 @@ ADR_BODY_SHA256: f29d4a50dd9ef213ba366be8412c0a3b9d4507e4f81d187459438693740315b
 
 ### CLI
 - Commands:
-  - `substrate world status gateway`: continues to be the authoritative Substrate-owned status surface for gateway availability, routing posture, and backend capability visibility.
-  - `substrate world sync gateway`: continues to ensure the in-world gateway runtime is running for the active world session and is the lifecycle entrypoint for adapter-backed operation.
-  - `substrate world sync gateway --restart`: continues to be the explicit lifecycle operation for secret rotation or adapter restart.
+  - `substrate world gateway status`: continues to be the authoritative Substrate-owned status surface for gateway availability, routing posture, and backend capability visibility.
+  - `substrate world gateway sync`: continues to ensure the in-world gateway runtime is running for the active world session and is the lifecycle entrypoint for adapter-backed operation.
+  - `substrate world gateway restart`: continues to be the explicit lifecycle operation for secret rotation or adapter restart.
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - `0`: success

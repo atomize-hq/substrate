@@ -158,8 +158,8 @@ Non-negotiable interpretation:
 ### CLI
 - This ADR introduces no new commands.
 - Existing status/wiring surfaces (owned elsewhere) SHOULD be extended additively to make the tuple and placement posture operator-visible:
-  - `substrate world status gateway --json`: report the effective placement posture and router identity; include capability and protocol hints where safe and available.
-  - `substrate world sync gateway`: remains the lifecycle entrypoint for ensuring the in-world router is available and for policy-gated secret delivery.
+  - `substrate world gateway status --json`: report the effective placement posture and router identity; include capability and protocol hints where safe and available.
+  - `substrate world gateway sync`: remains the lifecycle entrypoint for ensuring the in-world router is available and for policy-gated secret delivery.
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - This ADR introduces no new exit codes.

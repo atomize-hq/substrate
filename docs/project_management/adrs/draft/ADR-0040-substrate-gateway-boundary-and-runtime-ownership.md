@@ -79,10 +79,10 @@ ADR_BODY_SHA256: f05a9a857afd1d7bed8750aa0a1e5f314551574fc515e3f8d51a3473e76fb7c
 
 ### CLI
 - Commands:
-  - `substrate world sync gateway`: Substrate ensures the in-world gateway is running for the active world session, performs policy-gated secret delivery, and exposes operator-visible wiring/status.
-  - `substrate world status gateway`: Substrate reports gateway availability, policy posture, and client wiring in a Substrate-owned format.
-  - `substrate world sync gateway --restart`: Substrate restarts the gateway as an explicit lifecycle operation, including secret rotation flows.
-  - `substrate world status gateway --json`: structured Substrate-owned status output; the authoritative operator surface for gateway wiring.
+  - `substrate world gateway sync`: Substrate ensures the in-world gateway is running for the active world session, performs policy-gated secret delivery, and exposes operator-visible wiring/status.
+  - `substrate world gateway status`: Substrate reports gateway availability, policy posture, and client wiring in a Substrate-owned format.
+  - `substrate world gateway restart`: Substrate restarts the gateway as an explicit lifecycle operation, including secret rotation flows.
+  - `substrate world gateway status --json`: structured Substrate-owned status output; the authoritative operator surface for gateway wiring.
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (unless explicitly overridden here)
   - `0`: success
