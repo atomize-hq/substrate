@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 pub const AGENT_EVENT_CHANNEL_MAX_BYTES: usize = 64;
 
@@ -62,7 +62,11 @@ pub struct AgentEvent {
     pub span_id: Option<String>,
 
     // Routing hint (optional; secrets-safe)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_sanitized_channel"
+    )]
     pub channel: Option<String>,
 
     // Tuple-compatible metadata (optional; semantics delegated to later ADRs)
@@ -187,4 +191,12 @@ fn agent_event_channel_pattern() -> &'static Regex {
         // - ASCII-safe tokens only
         Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,63}$").expect("channel regex is valid")
     })
+}
+
+fn deserialize_sanitized_channel<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = Option::<String>::deserialize(deserializer)?;
+    Ok(AgentEvent::sanitize_channel(raw))
 }
