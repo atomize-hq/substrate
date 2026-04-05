@@ -127,7 +127,7 @@
       "name": "OR0 integration",
       "type": "integration",
       "phase": "OR0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge OR0 code+test and validate local integration gates.",
       "references": [
         "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/plan.md",

@@ -323,3 +323,10 @@
   - `CODEX_TEST_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR0/test/events.jsonl`
   - `CODEX_TEST_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR0/test/stderr.log`
 - Blockers: `NONE`
+
+## START — 2026-04-05T12:35:37Z — integ — OR0-integ
+- Worktree: `wt/agent-hub-concurrent-execution-output-routing-or0-integ`
+- Branch: `agent-hub-concurrent-execution-output-routing-or0-integ`
+- Orchestration branch: `feat/agent-hub-concurrent-execution-output-routing`
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="$FEATURE_DIR" TASK_ID="$INTEG_TASK_ID" LAUNCH_CODEX=1`
