@@ -378,3 +378,10 @@
 - Candidate validation SHA: `cc61d1a8a5d8310a08f1c59d4cacbd100017d6c8`
 - Wrapper summary: `/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR1/wrapper/triad-task-start-complete.20260405T125440Z.summary.json`
 - Local preflight (Linux): `bash docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh` → FAIL (`structured agent output missing from transcript`)
+- CI audit:
+  - ci-testing: `RECOMMEND=run` (`REASON=no_last_green_run_found`)
+  - feature-smoke: `RECOMMEND=run` (`REASON=no_last_green_run_found`)
+- Dispatched gates:
+  - compile parity: `https://github.com/atomize-hq/substrate/actions/runs/24002461950` → `success`
+  - ci-testing (quick): `https://github.com/atomize-hq/substrate/actions/runs/24002517758` → `success`
+  - feature-smoke (behavior): `https://github.com/atomize-hq/substrate/actions/runs/24002669379` → `failure` (failed platforms: `linux,macos,windows`)
