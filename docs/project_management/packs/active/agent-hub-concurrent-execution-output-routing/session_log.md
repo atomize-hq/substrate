@@ -365,3 +365,7 @@
 ## END — 2026-04-05T13:11:03Z — test — OR1-test
 - HEAD: `4b59f9156363210ff064bfe738a4e2b9ac618688`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR1/test/last_message.md`
+
+## START — 2026-04-05T13:11:03Z — integration — OR1-integ-core
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing" TASK_ID="OR1-integ-core" LAUNCH_CODEX=1`
