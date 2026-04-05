@@ -154,11 +154,17 @@ pub(crate) fn schedule_demo_events() {
     let orchestration_session_id = orchestration_session_id();
     let run_id = Uuid::now_v7().to_string();
 
+    let mut first = AgentEvent::message(
+        "demo-agent",
+        orchestration_session_id.clone(),
+        run_id.clone(),
+        AgentEventKind::TaskProgress,
+        "Demo agent event #1".to_string(),
+    );
+    first.role = Some("member".to_string());
+    let _ = publish_agent_event(first);
+
     let events = vec![
-        (
-            Duration::from_millis(1200),
-            "Demo agent event #1".to_string(),
-        ),
         (
             Duration::from_millis(400),
             "Demo agent event #2".to_string(),

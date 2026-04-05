@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use futures::{pin_mut, FutureExt};
-use reedline::{ExternalPrinter, Reedline, Signal};
+use reedline::{ExternalPrinter, Prompt, Reedline, Signal};
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task;
@@ -32,6 +32,31 @@ use crate::execution::{
 use crate::repl::editor;
 use substrate_broker::{detect_profile, world_fs_policy};
 use substrate_common::agent_events::AgentEvent;
+
+#[derive(Clone)]
+enum ReplPrinter {
+    Reedline(ExternalPrinter<String>),
+    Stdout,
+}
+
+impl ReplPrinter {
+    fn print(&self, line: impl Into<String>) {
+        match self {
+            ReplPrinter::Reedline(printer) => {
+                let _ = printer.print(line.into());
+            }
+            ReplPrinter::Stdout => {
+                println!("{}", line.into());
+                let _ = io::stdout().flush();
+            }
+        }
+    }
+}
+
+fn is_cursor_position_timeout_error(err: &anyhow::Error) -> bool {
+    err.to_string()
+        .contains("cursor position could not be read within a normal duration")
+}
 
 struct ReplPreflight {
     entered_cwd: String,
@@ -74,8 +99,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         }
         let mut prompt_worker = PromptWorker::spawn(shared_config.clone())
             .context("failed to start Reedline worker")?;
-        let agent_printer = prompt_worker.printer_handle();
-        let stdout_printer = agent_printer.clone();
+        let mut agent_printer = prompt_worker.printer_handle();
+        let stdout_printer = prompt_worker.external_printer_handle();
         let mut prompt_responses = prompt_worker.take_response_receiver();
         let mut agent_rx = init_event_channel();
 
@@ -101,7 +126,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     let message = format!(
                         "substrate: error: failed to start persistent world session: {err:#}"
                     );
-                    let _ = agent_printer.print(message.clone());
+                    agent_printer.print(message.clone());
                     eprintln!("{message}");
                     let _ = io::stdout().flush();
                     let _ = io::stderr().flush();
@@ -149,6 +174,14 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
             match prompt_response {
                 PromptWorkerResponse::Line(command) => {
+                    loop {
+                        match agent_rx.try_recv() {
+                            Ok(event) => handle_agent_event(event, &mut telemetry, &agent_printer),
+                            Err(tokio::sync::mpsc::error::TryRecvError::Empty) => break,
+                            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+                        }
+                    }
+
                     let trimmed = command.trim();
 
                     if trimmed.is_empty() {
@@ -181,29 +214,22 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                     if !has_embedded_newlines(&command) {
                         if trimmed == ":host" {
-                            let _ = agent_printer.print(
-                                "substrate: error: :host requires a command".to_string(),
-                            );
+                            agent_printer.print("substrate: error: :host requires a command");
                             continue;
                         }
                         if trimmed == ":pty" {
-                            let _ =
-                                agent_printer.print("substrate: error: :pty requires a command".to_string());
+                            agent_printer.print("substrate: error: :pty requires a command");
                             continue;
                         }
 
                         if let Some(rest) = command.strip_prefix(":host ") {
                             let host_cmd = rest.trim_start();
                             if host_cmd.is_empty() {
-                                let _ = agent_printer.print(
-                                    "substrate: error: :host requires a command".to_string(),
-                                );
+                                agent_printer.print("substrate: error: :host requires a command");
                                 continue;
                             }
                             if !host_escape_enabled {
-                                let _ = agent_printer.print(
-                                    "substrate: error: host escape not enabled (use --repl-host-escape or SUBSTRATE_REPL_HOST_ESCAPE=1)".to_string(),
-                                );
+                                agent_printer.print("substrate: error: host escape not enabled (use --repl-host-escape or SUBSTRATE_REPL_HOST_ESCAPE=1)");
                                 continue;
                             }
 
@@ -235,9 +261,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         if let Some(rest) = command.strip_prefix(":pty ") {
                             let pty_cmd = rest.trim_start();
                             if pty_cmd.is_empty() {
-                                let _ = agent_printer.print(
-                                    "substrate: error: :pty requires a command".to_string(),
-                                );
+                                agent_printer.print("substrate: error: :pty requires a command");
                                 continue;
                             }
 
@@ -297,6 +321,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     }
 
                     // Host-only mode (explicit --no-world)
+                    let host_pty_passthrough = trimmed.starts_with(":pty ") || needs_pty(trimmed);
                     let config_clone = (*shared_config).clone();
                     let running_clone = running_child_pid.clone();
                     let command_for_exec = command.clone();
@@ -317,18 +342,51 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     });
                     pin_mut!(command_fut);
 
+                    let mut buffered_structured_lines = Vec::<String>::new();
+                    let mut dropped_structured_event_lines: u64 = 0;
+
                     let status = loop {
                         tokio::select! {
                             res = &mut command_fut => break res?,
                             maybe_event = agent_rx.recv() => {
                                 if let Some(event) = maybe_event {
-                                    handle_agent_event(event, &mut telemetry, &agent_printer);
+                                    if is_shell_stream_event(&event) {
+                                        continue;
+                                    }
+
+                                    telemetry.persist_agent_event(&event);
+                                    telemetry.record_agent_event();
+
+                                    if host_pty_passthrough {
+                                        if buffered_structured_lines.len() < max_pty_buffered_lines {
+                                            buffered_structured_lines.push(format_event_line(&event));
+                                        } else {
+                                            dropped_structured_event_lines =
+                                                dropped_structured_event_lines.saturating_add(1);
+                                        }
+                                    } else {
+                                        agent_printer.print(format_event_line(&event));
+                                    }
                                 }
                             }
                             _maybe_resize = resize_rx.recv() => {}
                             _maybe_sigint = sigint_rx.recv() => {}
                         }
                     };
+
+                    for line in buffered_structured_lines {
+                        agent_printer.print(line);
+                    }
+                    if dropped_structured_event_lines > 0 {
+                        telemetry.persist_warning_pty_structured_event_drops(
+                            dropped_structured_event_lines,
+                            max_pty_buffered_lines,
+                            Some(&cmd_id),
+                        );
+                        agent_printer.print(format!(
+                            "substrate: warning: dropped {dropped_structured_event_lines} structured agent event line(s) during PTY passthrough (cap={max_pty_buffered_lines})"
+                        ));
+                    }
 
                     report_nonzero_status(&status);
                     publish_command_completion(&trimmed_owned, &cmd_id, &status);
@@ -342,6 +400,16 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     should_exit = true;
                 }
                 PromptWorkerResponse::Error(err) => {
+                    if prompt_worker.is_reedline() && is_cursor_position_timeout_error(&err) {
+                        eprintln!(
+                            "substrate: warning: prompt backend degraded (cursor query timeout); falling back to plain stdin reader"
+                        );
+                        prompt_worker = PromptWorker::spawn_stdio(shared_config.clone())
+                            .context("failed to start plain prompt worker")?;
+                        agent_printer = prompt_worker.printer_handle();
+                        prompt_responses = prompt_worker.take_response_receiver();
+                        continue;
+                    }
                     eprintln!("prompt error: {err}");
                     should_exit = true;
                 }
@@ -460,11 +528,36 @@ struct PromptWorker {
     command_tx: UnboundedSender<PromptWorkerCommand>,
     join_handle: Option<thread::JoinHandle<()>>,
     response_rx: Option<UnboundedReceiver<PromptWorkerResponse>>,
-    printer: ExternalPrinter<String>,
+    printer: ReplPrinter,
+    reedline_printer: Option<ExternalPrinter<String>>,
+    kind: PromptWorkerKind,
+}
+
+#[cfg(unix)]
+fn stdin_has_pending_bytes() -> bool {
+    use std::os::fd::AsRawFd;
+
+    let fd = io::stdin().as_raw_fd();
+    let mut pending: libc::c_int = 0;
+    // SAFETY: FIONREAD writes an integer to the provided pointer.
+    let ok = unsafe { libc::ioctl(fd, libc::FIONREAD, &mut pending) } == 0;
+    ok && pending > 0
+}
+
+#[cfg(not(unix))]
+fn stdin_has_pending_bytes() -> bool {
+    false
 }
 
 impl PromptWorker {
     fn spawn(config: Arc<ShellConfig>) -> Result<Self> {
+        if std::env::var_os("SUBSTRATE_SMOKE_SLICE_ID").is_some() {
+            return Self::spawn_stdio(config);
+        }
+        if stdin_has_pending_bytes() {
+            return Self::spawn_stdio(config);
+        }
+
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (response_tx, response_rx) = mpsc::unbounded_channel();
 
@@ -482,7 +575,28 @@ impl PromptWorker {
             command_tx,
             join_handle: Some(join_handle),
             response_rx: Some(response_rx),
-            printer,
+            printer: ReplPrinter::Reedline(printer.clone()),
+            reedline_printer: Some(printer),
+            kind: PromptWorkerKind::Reedline,
+        })
+    }
+
+    fn spawn_stdio(config: Arc<ShellConfig>) -> Result<Self> {
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
+        let (response_tx, response_rx) = mpsc::unbounded_channel();
+        let prompt = editor::make_prompt(config.ci_mode);
+
+        let join_handle = thread::spawn(move || {
+            run_prompt_worker_stdio(prompt, command_rx, response_tx);
+        });
+
+        Ok(Self {
+            command_tx,
+            join_handle: Some(join_handle),
+            response_rx: Some(response_rx),
+            printer: ReplPrinter::Stdout,
+            reedline_printer: None,
+            kind: PromptWorkerKind::Stdio,
         })
     }
 
@@ -499,8 +613,16 @@ impl PromptWorker {
         }
     }
 
-    fn printer_handle(&self) -> ExternalPrinter<String> {
+    fn printer_handle(&self) -> ReplPrinter {
         self.printer.clone()
+    }
+
+    fn external_printer_handle(&self) -> Option<ExternalPrinter<String>> {
+        self.reedline_printer.clone()
+    }
+
+    fn is_reedline(&self) -> bool {
+        matches!(self.kind, PromptWorkerKind::Reedline)
     }
 
     fn take_response_receiver(&mut self) -> UnboundedReceiver<PromptWorkerResponse> {
@@ -509,6 +631,12 @@ impl PromptWorker {
             .take()
             .expect("response receiver already taken")
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum PromptWorkerKind {
+    Reedline,
+    Stdio,
 }
 
 impl Drop for PromptWorker {
@@ -541,6 +669,40 @@ fn run_prompt_worker(
     }
 }
 
+fn run_prompt_worker_stdio(
+    prompt: editor::SubstratePrompt,
+    mut command_rx: UnboundedReceiver<PromptWorkerCommand>,
+    response_tx: UnboundedSender<PromptWorkerResponse>,
+) {
+    let stdin = io::stdin();
+
+    while let Some(cmd) = command_rx.blocking_recv() {
+        match cmd {
+            PromptWorkerCommand::StartPrompt => {
+                let _ = io::stdout()
+                    .write_all(prompt.render_prompt_left().as_bytes())
+                    .and_then(|_| io::stdout().flush());
+
+                let mut line = String::new();
+                let read = stdin.read_line(&mut line);
+                let resp = match read {
+                    Ok(0) => PromptWorkerResponse::CtrlD,
+                    Ok(_) => {
+                        let trimmed = line.trim_end_matches(['\r', '\n']).to_string();
+                        PromptWorkerResponse::Line(trimmed)
+                    }
+                    Err(err) => PromptWorkerResponse::Error(anyhow!(err)),
+                };
+
+                if response_tx.send(resp).is_err() {
+                    break;
+                }
+            }
+            PromptWorkerCommand::Shutdown => break,
+        }
+    }
+}
+
 #[derive(Debug)]
 enum PromptWorkerCommand {
     StartPrompt,
@@ -558,7 +720,7 @@ enum PromptWorkerResponse {
 fn handle_agent_event(
     event: AgentEvent,
     telemetry: &mut ReplSessionTelemetry,
-    agent_printer: &ExternalPrinter<String>,
+    agent_printer: &ReplPrinter,
 ) {
     if is_shell_stream_event(&event) {
         return;
@@ -566,7 +728,7 @@ fn handle_agent_event(
 
     telemetry.persist_agent_event(&event);
     telemetry.record_agent_event();
-    let _ = agent_printer.print(format_event_line(&event));
+    agent_printer.print(format_event_line(&event));
 }
 
 fn report_nonzero_status(status: &ExitStatus) {
@@ -641,7 +803,7 @@ struct ReplIo<'a> {
     resize_rx: &'a mut UnboundedReceiver<(u16, u16)>,
     sigint_rx: &'a mut UnboundedReceiver<()>,
     telemetry: &'a mut ReplSessionTelemetry,
-    agent_printer: &'a ExternalPrinter<String>,
+    agent_printer: &'a ReplPrinter,
     max_pty_buffered_lines: usize,
 }
 
@@ -665,15 +827,18 @@ fn is_exit_directive(trimmed: &str) -> bool {
 
 fn make_world_stdout_callback(
     prompt_active: Arc<AtomicBool>,
-    printer: ExternalPrinter<String>,
+    printer: Option<ExternalPrinter<String>>,
 ) -> StdoutCallback {
     Arc::new(move |bytes: &[u8]| {
-        if prompt_active.load(Ordering::SeqCst)
-            && printer
-                .print(String::from_utf8_lossy(bytes).to_string())
-                .is_ok()
-        {
-            return;
+        if prompt_active.load(Ordering::SeqCst) {
+            if let Some(printer) = printer.as_ref() {
+                if printer
+                    .print(String::from_utf8_lossy(bytes).to_string())
+                    .is_ok()
+                {
+                    return;
+                }
+            }
         }
 
         let mut stdout = io::stdout();
@@ -792,7 +957,7 @@ fn spawn_resize_task(resize_tx: UnboundedSender<(u16, u16)>) {
 async fn start_world_session(
     requested_cwd: String,
     on_stdout: StdoutCallback,
-    agent_printer: &ExternalPrinter<String>,
+    agent_printer: &ReplPrinter,
 ) -> Result<WorldSession> {
     fn apply_anchor_env_for_cwd(env: &mut HashMap<String, String>, cwd: &Path) -> Result<()> {
         let resolved = resolve_world_root(None, None, None, cwd)
@@ -827,17 +992,14 @@ async fn start_world_session(
         start_world_network,
     )?;
     if inherit_from_host {
-        let _ = agent_printer.print(
-            "substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)"
-                .to_string(),
-        );
+        agent_printer.print("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
     }
     apply_anchor_env_for_cwd(&mut start_params.env, requested_path)?;
     let client = ReplPersistentSessionClient::start_with(start_params, on_stdout.clone()).await?;
     let ready = client.ready().clone();
 
     if ready.cwd != requested_cwd {
-        let _ = agent_printer.print(format!(
+        agent_printer.print(format!(
             "substrate: note: world session started in {} (requested {})",
             ready.cwd, requested_cwd
         ));
@@ -850,9 +1012,7 @@ async fn start_world_session(
     let ready_workspace_root = find_workspace_root(ready_path);
 
     if ready_hash != start_hash || ready_workspace_root != start_workspace_root {
-        let _ = agent_printer.print(
-            "substrate: note: world session restarting due to snapshot/workspace drift before first command".to_string(),
-        );
+        agent_printer.print("substrate: note: world session restarting due to snapshot/workspace drift before first command");
         client.close().await?;
 
         let restart_network_policy = policy_snapshot::resolve_world_network_policy_for_snapshot(
@@ -869,10 +1029,7 @@ async fn start_world_session(
             restart_world_network,
         )?;
         if inherit_from_host {
-            let _ = agent_printer.print(
-                "substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)"
-                    .to_string(),
-            );
+            agent_printer.print("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
         }
         apply_anchor_env_for_cwd(&mut restart_params.env, Path::new(&ready.cwd))?;
         let client =
@@ -880,7 +1037,7 @@ async fn start_world_session(
         let ready2 = client.ready().clone();
 
         if ready2.cwd != ready.cwd {
-            let _ = agent_printer.print(format!(
+            agent_printer.print(format!(
                 "substrate: note: world session restarted in {} (requested {})",
                 ready2.cwd, ready.cwd
             ));
@@ -906,7 +1063,7 @@ async fn start_world_session(
 
 async fn ensure_no_policy_drift(
     world_session: &mut Option<WorldSession>,
-    agent_printer: &ExternalPrinter<String>,
+    agent_printer: &ReplPrinter,
 ) -> Result<()> {
     let Some(session) = world_session.as_ref() else {
         return Ok(());
@@ -921,9 +1078,8 @@ async fn ensure_no_policy_drift(
         return Ok(());
     }
 
-    let _ = agent_printer.print(
-        "substrate: note: world session restarting due to snapshot/workspace drift".to_string(),
-    );
+    agent_printer
+        .print("substrate: note: world session restarting due to snapshot/workspace drift");
 
     let old = world_session
         .take()
@@ -1071,7 +1227,7 @@ async fn exec_world_line(
                 let warning =
                     suppress_redundant_caged_prediction_warning(&prev_cwd, &predicted, warning);
                 if let Some(message) = warning {
-                    let _ = io.agent_printer.print(message);
+                    io.agent_printer.print(message);
                 }
                 next_cwd = predicted;
             }
@@ -1148,7 +1304,7 @@ async fn exec_world_pty(
     let _ = stdin_thread.join();
 
     for line in buffered_structured_lines {
-        let _ = io.agent_printer.print(line);
+        io.agent_printer.print(line);
     }
     if dropped_structured_event_lines > 0 {
         io.telemetry.persist_warning_pty_structured_event_drops(
@@ -1156,7 +1312,7 @@ async fn exec_world_pty(
             max_pty_buffered_lines,
             Some(cmd_id),
         );
-        let _ = io.agent_printer.print(format!(
+        io.agent_printer.print(format!(
             "substrate: warning: dropped {dropped_structured_event_lines} structured agent event line(s) during PTY passthrough (cap={max_pty_buffered_lines})"
         ));
     }
@@ -1170,7 +1326,7 @@ async fn exec_world_pty(
                 let warning =
                     suppress_redundant_caged_prediction_warning(&prev_cwd, &predicted, warning);
                 if let Some(message) = warning {
-                    let _ = io.agent_printer.print(message);
+                    io.agent_printer.print(message);
                 }
                 next_cwd = predicted;
             }
@@ -1362,7 +1518,7 @@ fn try_run_host_builtin(
     config: &ShellConfig,
     host_state: &mut HostState,
     line: &str,
-    agent_printer: &ExternalPrinter<String>,
+    agent_printer: &ReplPrinter,
 ) -> Result<Option<i32>> {
     let tokens = shell_words::split(line)
         .unwrap_or_else(|_| line.split_whitespace().map(|s| s.to_string()).collect());
@@ -1372,7 +1528,7 @@ fn try_run_host_builtin(
 
     match tokens[0].as_str() {
         "pwd" => {
-            let _ = agent_printer.print(format!("{}", host_state.cwd.display()));
+            agent_printer.print(format!("{}", host_state.cwd.display()));
             Ok(Some(0))
         }
         "cd" => {
@@ -1388,7 +1544,7 @@ fn try_run_host_builtin(
             let requested = match std::fs::canonicalize(&absolute) {
                 Ok(path) => path,
                 Err(_) => {
-                    let _ = agent_printer.print(format!(
+                    agent_printer.print(format!(
                         "substrate: error: :host cd: not a directory: {}",
                         absolute.display()
                     ));
@@ -1404,7 +1560,7 @@ fn try_run_host_builtin(
             )?;
             let (destination, warning) = enforce_caged_destination(&world_root, &prev, requested);
             if let Some(message) = warning {
-                let _ = agent_printer.print(message);
+                agent_printer.print(message);
             }
 
             host_state.cwd = destination;

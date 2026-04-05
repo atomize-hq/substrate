@@ -372,22 +372,23 @@ fn structured_events_are_deferred_until_after_pty_passthrough() {
         .expect("pty start marker");
     repl.wait_for_output_or_exit(PTY_END, Duration::from_secs(5))
         .expect("pty end marker");
-    repl.wait_for_output_or_exit("Demo agent event #1", Duration::from_secs(3))
+    repl.wait_for_output_or_exit("Demo agent event #2", Duration::from_secs(3))
         .expect("deferred agent output");
 
     repl.send_line("exit");
     let (code, out) = repl.shutdown_graceful(Duration::from_secs(3));
     assert_eq!(code, 0, "expected clean exit; output:\n{out}");
 
+    let start_idx = out.find(PTY_START).expect("pty start marker index");
     let end_idx = out.find(PTY_END).expect("pty end marker index");
-    let first_event_idx = out.find("Demo agent event #1").expect("agent event output");
+    let first_event_idx = out.find("Demo agent event #2").expect("agent event output");
     assert!(
         first_event_idx > end_idx,
         "expected structured agent output after PTY passthrough end; output:\n{out}"
     );
 
     assert!(
-        !out[..end_idx].contains("Demo agent event #"),
+        !out[start_idx..end_idx].contains("Demo agent event #"),
         "structured agent output must not be printed during PTY passthrough; output:\n{out}"
     );
 }
@@ -442,9 +443,16 @@ fn max_pty_buffered_lines_zero_drops_structured_lines_and_emits_one_warning_reco
     let (code, out) = repl.shutdown_graceful(Duration::from_secs(3));
     assert_eq!(code, 0, "expected clean exit; output:\n{out}");
 
+    let start_idx = out.find(PTY_START).expect("pty start marker index");
+    let end_idx = out.find(PTY_END).expect("pty end marker index");
     assert!(
-        !out.contains("Demo agent event #"),
-        "expected zero buffered structured lines when cap=0; output:\n{out}"
+        !out[start_idx..end_idx].contains("Demo agent event #"),
+        "structured agent output must not be printed during PTY passthrough; output:\n{out}"
+    );
+
+    assert!(
+        !out.contains("Demo agent event #2") && !out.contains("Demo agent event #3"),
+        "expected no buffered structured lines when cap=0; output:\n{out}"
     );
 
     let trace_path = substrate_home.join("trace.jsonl");
@@ -491,7 +499,7 @@ fn max_pty_buffered_lines_zero_drops_structured_lines_and_emits_one_warning_reco
         warning
             .get("dropped_structured_event_lines")
             .and_then(Value::as_i64),
-        Some(3),
-        "warning record must report dropped_structured_event_lines=3: {warning:?}"
+        Some(2),
+        "warning record must report dropped_structured_event_lines=2: {warning:?}"
     );
 }
