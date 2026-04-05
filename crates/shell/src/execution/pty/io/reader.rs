@@ -39,54 +39,55 @@ pub(crate) fn handle_pty_io(
         if !should_forward_stdin() {
             None
         } else {
-        let control_clone = control.clone();
-        let done_writer = Arc::clone(&done);
-        let cmd_id_stdin = cmd_id.to_string();
-        Some(thread::spawn(move || {
-            let mut stdin = io::stdin();
-            let mut buffer = vec![0u8; 4096];
+            let control_clone = control.clone();
+            let done_writer = Arc::clone(&done);
+            let cmd_id_stdin = cmd_id.to_string();
+            Some(thread::spawn(move || {
+                let mut stdin = io::stdin();
+                let mut buffer = vec![0u8; 4096];
 
-            while !done_writer.load(Ordering::Relaxed) {
-                use nix::sys::select::{select, FdSet};
-                use nix::sys::time::TimeVal;
-                use std::os::unix::io::{AsFd, AsRawFd};
+                while !done_writer.load(Ordering::Relaxed) {
+                    use nix::sys::select::{select, FdSet};
+                    use nix::sys::time::TimeVal;
+                    use std::os::unix::io::{AsFd, AsRawFd};
 
-                let stdin_fd = stdin.as_raw_fd();
-                let stdin_borrowed = stdin.as_fd();
-                let mut read_fds = FdSet::new();
-                read_fds.insert(stdin_borrowed);
+                    let stdin_fd = stdin.as_raw_fd();
+                    let stdin_borrowed = stdin.as_fd();
+                    let mut read_fds = FdSet::new();
+                    read_fds.insert(stdin_borrowed);
 
-                let mut timeout = TimeVal::new(0, 100_000);
-                let result = select(
-                    stdin_fd + 1,
-                    Some(&mut read_fds),
-                    None,
-                    None,
-                    Some(&mut timeout),
-                );
+                    let mut timeout = TimeVal::new(0, 100_000);
+                    let result = select(
+                        stdin_fd + 1,
+                        Some(&mut read_fds),
+                        None,
+                        None,
+                        Some(&mut timeout),
+                    );
 
-                match result {
-                    Ok(0) => continue,
-                    Ok(_) if read_fds.contains(stdin_borrowed) => match stdin.read(&mut buffer) {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            control_clone.write(buffer[..n].to_vec());
-                        }
+                    match result {
+                        Ok(0) => continue,
+                        Ok(_) if read_fds.contains(stdin_borrowed) => match stdin.read(&mut buffer)
+                        {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                control_clone.write(buffer[..n].to_vec());
+                            }
+                            Err(e) => {
+                                log::warn!("[{cmd_id_stdin}] Failed to read from stdin: {e}");
+                                break;
+                            }
+                        },
+                        Ok(_) => continue,
                         Err(e) => {
-                            log::warn!("[{cmd_id_stdin}] Failed to read from stdin: {e}");
-                            break;
-                        }
-                    },
-                    Ok(_) => continue,
-                    Err(e) => {
-                        if e != nix::errno::Errno::EINTR {
-                            log::warn!("[{cmd_id_stdin}] select() failed: {e}");
-                            break;
+                            if e != nix::errno::Errno::EINTR {
+                                log::warn!("[{cmd_id_stdin}] select() failed: {e}");
+                                break;
+                            }
                         }
                     }
                 }
-            }
-        }))
+            }))
         }
     };
 
