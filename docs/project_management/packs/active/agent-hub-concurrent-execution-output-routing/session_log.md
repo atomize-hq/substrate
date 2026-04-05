@@ -99,3 +99,26 @@
   - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` (with `FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` exported) → exit `0`
   - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit `0`
 - Exit codes observed: `0` only.
+
+## START — 2026-04-05T09:16:56Z — execution — F0-exec-preflight
+- Feature: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
+- Branch: `feat/agent-hub-concurrent-execution-output-routing`
+- Goal: Run the feature-level execution preflight gate before OR0 triad launch and verify checkpoint cadence, prompt coverage, and smoke/manual parity.
+- Inputs read:
+  - `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/plan.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/session_log.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR1-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/kickoff_prompts/F0-exec-preflight.md`
+- Commands run (with results):
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` → exit `0` (`ACTION=noop`)
