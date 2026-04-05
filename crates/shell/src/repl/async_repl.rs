@@ -33,11 +33,11 @@ use crate::repl::editor;
 use substrate_broker::{detect_profile, world_fs_policy};
 use substrate_common::agent_events::AgentEvent;
 
-const MAX_BUFFERED_STRUCTURED_LINES_DURING_PTY: usize = 2048;
-
 struct ReplPreflight {
     entered_cwd: String,
     exit_cwd: crate::execution::config_model::ReplExitCwdMode,
+    max_pty_buffered_lines: usize,
+    max_pty_buffered_lines_clamp: Option<crate::execution::config_model::I64ClampInfo>,
 }
 
 pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
@@ -58,9 +58,20 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
     let entered_cwd = preflight.entered_cwd.clone();
     let repl_exit_cwd = preflight.exit_cwd;
+    let max_pty_buffered_lines = preflight.max_pty_buffered_lines;
+    let max_pty_buffered_lines_clamp = preflight.max_pty_buffered_lines_clamp;
 
     let exit_code = rt.block_on(async move {
         let mut telemetry = ReplSessionTelemetry::new(shared_config.clone(), "async");
+        if let Some(clamp) = max_pty_buffered_lines_clamp {
+            telemetry.persist_warning_config_value_clamped(
+                "repl.max_pty_buffered_lines",
+                clamp.provided,
+                clamp.effective,
+                clamp.min,
+                clamp.max,
+            );
+        }
         let mut prompt_worker = PromptWorker::spawn(shared_config.clone())
             .context("failed to start Reedline worker")?;
         let agent_printer = prompt_worker.printer_handle();
@@ -202,6 +213,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 sigint_rx: &mut sigint_rx,
                                 telemetry: &mut telemetry,
                                 agent_printer: &agent_printer,
+                                max_pty_buffered_lines,
                             };
                             let exit_code = exec_host_line(
                                 shared_config.as_ref(),
@@ -241,6 +253,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                         sigint_rx: &mut sigint_rx,
                                         telemetry: &mut telemetry,
                                         agent_printer: &agent_printer,
+                                        max_pty_buffered_lines,
                                     };
                                     exec_world_pty(session, pty_cmd, &cmd_id, &mut io_ctx).await?
                                 };
@@ -267,6 +280,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 sigint_rx: &mut sigint_rx,
                                 telemetry: &mut telemetry,
                                 agent_printer: &agent_printer,
+                                max_pty_buffered_lines,
                             };
                             if pty {
                                 exec_world_pty(session, &command, &cmd_id, &mut io_ctx).await?
@@ -628,6 +642,7 @@ struct ReplIo<'a> {
     sigint_rx: &'a mut UnboundedReceiver<()>,
     telemetry: &'a mut ReplSessionTelemetry,
     agent_printer: &'a ExternalPrinter<String>,
+    max_pty_buffered_lines: usize,
 }
 
 fn has_embedded_newlines(s: &str) -> bool {
@@ -692,6 +707,9 @@ fn preflight_caging_required(config: &ShellConfig) -> Result<ReplPreflight> {
     )?;
 
     let exit_cwd = effective_config.repl.exit_cwd;
+    let max_pty_buffered_lines =
+        usize::try_from(effective_config.repl.max_pty_buffered_lines).unwrap_or_default();
+    let max_pty_buffered_lines_clamp = effective_config.repl.max_pty_buffered_lines_clamp;
 
     let policy_mode = effective_config.policy.mode;
     std::env::set_var("SUBSTRATE_POLICY_MODE", policy_mode.as_str());
@@ -729,6 +747,8 @@ fn preflight_caging_required(config: &ShellConfig) -> Result<ReplPreflight> {
     Ok(ReplPreflight {
         entered_cwd,
         exit_cwd,
+        max_pty_buffered_lines,
+        max_pty_buffered_lines_clamp,
     })
 }
 
@@ -1074,7 +1094,9 @@ async fn exec_world_pty(
     let stdin_done = Arc::new(AtomicBool::new(false));
     let stdin_thread = spawn_passthrough_stdin_thread(stdin_tx, stdin_done.clone(), cmd_id);
 
+    let max_pty_buffered_lines = io.max_pty_buffered_lines;
     let mut buffered_structured_lines = Vec::<String>::new();
+    let mut dropped_structured_event_lines: u64 = 0;
 
     let prev_cwd = session.world_cwd.clone();
     let (exit, cwd) = {
@@ -1100,15 +1122,11 @@ async fn exec_world_pty(
 
                     io.telemetry.persist_agent_event(&event);
                     io.telemetry.record_agent_event();
-                    if buffered_structured_lines.len() < MAX_BUFFERED_STRUCTURED_LINES_DURING_PTY {
+                    if buffered_structured_lines.len() < max_pty_buffered_lines {
                         buffered_structured_lines.push(format_event_line(&event));
-                    } else if buffered_structured_lines.len()
-                        == MAX_BUFFERED_STRUCTURED_LINES_DURING_PTY
-                    {
-                        buffered_structured_lines.push(
-                            "substrate: warning: structured output dropped during :pty (buffer full)"
-                                .to_string(),
-                        );
+                    } else {
+                        dropped_structured_event_lines =
+                            dropped_structured_event_lines.saturating_add(1);
                     }
                 }
             }
@@ -1131,6 +1149,16 @@ async fn exec_world_pty(
 
     for line in buffered_structured_lines {
         let _ = io.agent_printer.print(line);
+    }
+    if dropped_structured_event_lines > 0 {
+        io.telemetry.persist_warning_pty_structured_event_drops(
+            dropped_structured_event_lines,
+            max_pty_buffered_lines,
+            Some(cmd_id),
+        );
+        let _ = io.agent_printer.print(format!(
+            "substrate: warning: dropped {dropped_structured_event_lines} structured agent event line(s) during PTY passthrough (cap={max_pty_buffered_lines})"
+        ));
     }
 
     let mut next_cwd = cwd;

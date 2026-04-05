@@ -64,6 +64,62 @@ impl ReplSessionTelemetry {
         }
     }
 
+    pub(crate) fn persist_warning_pty_structured_event_drops(
+        &self,
+        dropped_structured_event_lines: u64,
+        max_pty_buffered_lines: usize,
+        cmd_id: Option<&str>,
+    ) {
+        let dropped_i64 = i64::try_from(dropped_structured_event_lines).unwrap_or(i64::MAX);
+        let max_i64 = i64::try_from(max_pty_buffered_lines).unwrap_or(i64::MAX);
+
+        let mut entry = json!({
+            log_schema::TIMESTAMP: Utc::now().to_rfc3339(),
+            log_schema::EVENT_TYPE: "warning",
+            log_schema::SESSION_ID: self.config.session_id,
+            log_schema::COMPONENT: "shell",
+            "code": "pty_structured_event_drops",
+            "dropped_structured_event_lines": dropped_i64,
+            "max_pty_buffered_lines": max_i64,
+        });
+
+        if let Some(cmd_id) = cmd_id {
+            entry[log_schema::COMMAND_ID] = json!(cmd_id);
+        }
+
+        let _ = init_trace(None);
+        if let Err(err) = append_to_trace(&entry) {
+            warn!(target = "substrate::shell", error = %err, "failed to append pty_structured_event_drops warning record");
+        }
+    }
+
+    pub(crate) fn persist_warning_config_value_clamped(
+        &self,
+        key: &str,
+        provided: i64,
+        effective: i64,
+        min: i64,
+        max: i64,
+    ) {
+        let entry = json!({
+            log_schema::TIMESTAMP: Utc::now().to_rfc3339(),
+            log_schema::EVENT_TYPE: "warning",
+            log_schema::SESSION_ID: self.config.session_id,
+            log_schema::COMPONENT: "shell",
+            "code": "config_value_clamped",
+            "key": key,
+            "provided": provided,
+            "effective": effective,
+            "min": min,
+            "max": max,
+        });
+
+        let _ = init_trace(None);
+        if let Err(err) = append_to_trace(&entry) {
+            warn!(target = "substrate::shell", error = %err, "failed to append config_value_clamped warning record");
+        }
+    }
+
     pub(crate) fn record_command(&mut self) {
         self.metrics.commands_executed = self.metrics.commands_executed.saturating_add(1);
     }
