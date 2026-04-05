@@ -331,7 +331,7 @@
         "Do not edit planning docs inside the worktree.",
         "Verify worktree and .taskmeta.json exist"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/agent-hub-concurrent-execution-output-routing-or1-integ-core"
     },
