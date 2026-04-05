@@ -394,6 +394,7 @@
 ## END — 2026-04-05T17:41:44Z — platform-fix — OR1-integ-linux
 - Branch head validated: `agent-hub-concurrent-execution-output-routing-or1-integ-linux` @ `ccab07c418590ada0502fdbf3ebd2e254ed22480`
 - Last message: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR1/integ-linux/last_message.md`
+- Linux smoke rerun: `https://github.com/atomize-hq/substrate/actions/runs/24006968308` → `success` (checkout=`ccab07c418590ada0502fdbf3ebd2e254ed22480`, workflow=`feat/agent-hub-concurrent-execution-output-routing` @ `6a0dfd4e91e51198586573bfc7681ed74bc0082b`)
 
 ## START — 2026-04-05T14:30:18Z — platform-fix — OR1-integ-macos
 - Worktree: `/home/spenser/__Active_code/substrate/wt/agent-hub-concurrent-execution-output-routing-or1-integ-macos`
