@@ -122,3 +122,23 @@
   - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/kickoff_prompts/F0-exec-preflight.md`
 - Commands run (with results):
   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` → exit `0` (`ACTION=noop`)
+
+## END — 2026-04-05T09:19:32Z — execution — F0-exec-preflight
+- Recommendation:
+  - `REVISE`
+- Summary of findings:
+  - `tasks.json` meta and checkpoint wiring are correct for schema v4 boundary-only execution (`checkpoint_boundaries=["OR1"]`, `CP1-ci-checkpoint` depends on `OR1-integ-core`, OR1-only platform-fix tasks present, OR0 has no boundary-only platform-fix tasks).
+  - All 13 task ids have kickoff prompts, and every kickoff prompt contains the exact rule line `Do not edit planning docs inside the worktree.`
+  - Blocking issue: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` still declares `Status: Draft`, so the gate cannot verify an accepted ADR.
+  - Blocking issue: smoke scripts do not mirror the manual execution path; they only wrap `cargo test` suites and do not drive real `substrate` workflows or assert canonical trace / operator-visible warning behavior from the playbook.
+- Files updated:
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/execution_preflight_report.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/session_log.md`
+- Commands run (with results):
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` → exit `0`
+  - `jq -e . docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json >/dev/null` → exit `0`
+  - `python3` parse of fenced JSON in `ci_checkpoint_plan.md` → exit `0`
+  - `python3` kickoff prompt coverage/rule verification across all task ids → exit `0`
+- Required next step:
+  - Accept the ADR and upgrade the smoke scripts to execution-grade feature smoke, then re-run `F0-exec-preflight` before launching `OR0-code` / `OR0-test`.

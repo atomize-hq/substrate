@@ -18,7 +18,7 @@
       "name": "Execution preflight gate (feature start)",
       "type": "ops",
       "phase": "F0",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Validate Planning Pack mechanical invariants, cross-platform cadence wiring, and smoke/playbook parity before starting OR0.",
       "references": [
         "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/execution_preflight_report.md",
