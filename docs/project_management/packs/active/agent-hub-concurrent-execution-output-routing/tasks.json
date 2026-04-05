@@ -59,7 +59,7 @@
       "name": "OR0 code",
       "type": "code",
       "phase": "OR0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement OR0 envelope enforcement + canonical agent_event trace persistence.",
       "references": [
         "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-spec.md",

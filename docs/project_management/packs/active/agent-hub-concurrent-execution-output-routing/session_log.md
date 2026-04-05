@@ -271,3 +271,10 @@
   - `python3` smoke/manual parity probe → exit `0`
 - Next step:
   - `OR0-code` and `OR0-test` may start.
+
+## START — 2026-04-05T12:14:43Z — code — OR0-code
+- Worktree: `wt/agent-hub-concurrent-execution-output-routing-or0-code`
+- Branch: `agent-hub-concurrent-execution-output-routing-or0-code`
+- Orchestration branch: `feat/agent-hub-concurrent-execution-output-routing`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" LAUNCH_CODEX=1`
