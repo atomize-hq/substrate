@@ -11,9 +11,9 @@
 - Keep wrapper exit-status pass-through and operator or env-doc propagation outside this slice.
 
 ## Inputs (authoritative)
-- Operator-facing precedence, warning, exit-code, and remediation contract: `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-- Accepted warning and pass-through decisions: `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` (`DR-0002`, `DR-0004`)
-- Slice boundary and required assertions: `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- Operator-facing precedence, warning, exit-code, and remediation contract: `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+- Accepted warning and pass-through decisions: `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md` (`DR-0002`, `DR-0004`)
+- Slice boundary and required assertions: `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
 - Implementation surfaces constrained by this slice:
   - `scripts/substrate/install-substrate.sh`
 
@@ -43,6 +43,6 @@
 - AC-BEDPM1-06: When the ordered `PATH` probe detects more than one supported manager, the installer emits the exact warning line from `contract.md` once to stderr, lists detected managers in fixed probe-order order, selects the earliest detected manager from that same order, records `pkg_manager.source=path_probe`, and places the warning before the stable decision line.
 
 ## Out of scope
-- Safe os-release parsing, normalized distro fields, `<unknown>` sentinel ownership, distro-family mapping, and the base decision-line timing contract remain owned by `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`.
-- Wrapper exit-status pass-through in `scripts/substrate/install.sh` and propagation into `docs/INSTALLATION.md` and `docs/reference/env/contract.md` remain owned by `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`.
-- Hermetic smoke coverage, the thin Linux smoke wrapper, and manual evidence capture remain owned by `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`.
+- Safe os-release parsing, normalized distro fields, `<unknown>` sentinel ownership, distro-family mapping, and the base decision-line timing contract remain owned by `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`.
+- Wrapper exit-status pass-through in `scripts/substrate/install.sh` and propagation into `docs/INSTALLATION.md` and `docs/reference/env/contract.md` remain owned by `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`.
+- Hermetic smoke coverage, the thin Linux smoke wrapper, and manual evidence capture remain owned by `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`.

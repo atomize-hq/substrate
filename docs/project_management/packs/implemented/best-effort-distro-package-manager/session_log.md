@@ -51,3 +51,65 @@
 - Blockers:
   - `pre-planning/spec_manifest.md` remains outside the tracked-output allowlist and still blocks `planning-lint`
   - see `logs/pws/BEDPM-PWS-tasks_checkpoints/allowlist_request.json`
+
+## START — 2026-04-05T09:59:47Z — remediation-agent — planning quality-gate remediation
+- Feature: `docs/project_management/packs/implemented/best-effort-distro-package-manager/`
+- Goal: resolve `quality_gate_report.md` Finding 002 and re-run the planning quality gate to an `ACCEPT` recommendation
+- Defects addressed:
+  - `Finding 002` — `pre-planning/spec_manifest.md` task-model drift blocked `planning-lint`
+- Files to change:
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/impact_map.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/plan.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/kickoff_prompts/*`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/*/*`
+  - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
+- Commands planned:
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"`
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"`
+  - `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
+
+## END — 2026-04-05T10:00:21Z — remediation-agent — planning quality-gate remediation
+- Defects addressed:
+  - `Finding 002` — reconciled `pre-planning/spec_manifest.md` to the accepted schema v4 boundary-only cross-platform task model
+- Additional drift corrected:
+  - normalized pack-local references from the obsolete `draft/` location to the implemented feature directory so `tasks.json`, kickoff prompts, plan/specs, and playbook resolve on disk
+  - updated `ADR-0031` related-doc links and sequencing reference to the current pack path
+  - refreshed ADR executive-summary hashes for referenced ADRs that blocked `planning-lint`
+- Files changed:
+  - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
+  - `docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md`
+  - `docs/project_management/adrs/draft/ADR-0033-routing-weasel.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/plan.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/impact_map.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/kickoff_prompts/*`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/*/*`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/quality_gate_report.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/session_log.md`
+- Commands run:
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"` → `2`
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"` → `2`
+  - `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0031-detecting-badger.md` → `0`
+  - `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0032-stashing-ferret.md` → `0`
+  - `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0033-routing-weasel.md` → `0`
+  - `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md` → `0`
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"` → `0`
+  - `PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"` → `0`
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"` → `0`
+  - `jq -e . "docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json" >/dev/null` → `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → `0`
+  - `python3 - <<'PY' ... tasks.json required-field audit ... PY` → `0`
+- Result:
+  - required mechanical checks pass
+  - pack is ready for a fresh quality-gate re-review pass

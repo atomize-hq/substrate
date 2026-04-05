@@ -229,18 +229,18 @@
 ## Evidence Links
 
 - Step sentinels:
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/logs/spec-manifest/last_message.md`
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/logs/impact-map/last_message.md`
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/logs/min-spec-draft/last_message.md`
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/logs/CI-checkpoint/last_message.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/logs/spec-manifest/last_message.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/logs/impact-map/last_message.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/logs/min-spec-draft/last_message.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/logs/CI-checkpoint/last_message.md`
 - Canonical pre-planning artifacts used:
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/impact_map.md`
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/minimal_spec_draft.md`
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/impact_map.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/minimal_spec_draft.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md`
 - Lift evidence:
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/logs/workstream-triage/pm_lift_pack.json`
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/logs/workstream-triage/pm_lift_intake.json`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/logs/workstream-triage/pm_lift_pack.json`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/logs/workstream-triage/pm_lift_intake.json`
 
 ## Follow-ups
 

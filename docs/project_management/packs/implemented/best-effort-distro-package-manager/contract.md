@@ -3,9 +3,9 @@
 This file is the single authoritative operator-facing contract for Linux hosted package-manager detection, override, reporting, and wrapper exit-status behavior introduced by ADR-0031.
 
 Decision inputs:
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/impact_map.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/impact_map.md`
 - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
 
 External authoritative inputs:
@@ -14,15 +14,14 @@ External authoritative inputs:
 
 ## Authority + scope
 
-- Canonical planning-pack path for this feature: `docs/project_management/packs/draft/best-effort-distro-package-manager/`
-- Stale ADR references to `docs/project_management/packs/draft/detecting-badger/` do not override this contract.
+- Canonical planning-pack path for this feature: `docs/project_management/packs/implemented/best-effort-distro-package-manager/`
 - In scope:
   - `scripts/substrate/install-substrate.sh`
   - `scripts/substrate/install.sh`
   - `docs/INSTALLATION.md`
   - `docs/reference/env/contract.md`
   - `tests/installers/pkg_manager_detection_smoke.sh`
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
 - Out of scope:
   - `scripts/substrate/dev-install-substrate.sh`
   - runtime crates and world backends
@@ -255,4 +254,4 @@ External authoritative inputs:
 - This ADR does not change per-manager package-name mapping tables.
 - This ADR does not change `scripts/substrate/dev-install-substrate.sh`.
 - This ADR does not change world-deps behavior or guest-world provisioning semantics.
-- `docs/INSTALLATION.md`, `docs/reference/env/contract.md`, `tests/installers/pkg_manager_detection_smoke.sh`, and `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh` must reuse the precedence chain, manager vocabulary, `pkg_manager.source` vocabulary, `<unknown>` sentinel, warning line, decision line, exit-code meanings, and remediation posture defined here without drift.
+- `docs/INSTALLATION.md`, `docs/reference/env/contract.md`, `tests/installers/pkg_manager_detection_smoke.sh`, and `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh` must reuse the precedence chain, manager vocabulary, `pkg_manager.source` vocabulary, `<unknown>` sentinel, warning line, decision line, exit-code meanings, and remediation posture defined here without drift.

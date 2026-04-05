@@ -16,7 +16,7 @@ Scope:
 **Decision owner(s):** Installer + security maintainers  
 **Date:** 2026-03-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`, `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`, `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
 
 **Problem / Context**
 
@@ -66,7 +66,7 @@ Scope:
 
 **Impacted contract surfaces**
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
   - os-release read + parsing contract
   - emitted `<unknown>` sentinel behavior
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md`
@@ -76,7 +76,7 @@ Scope:
 
 - `docs/INSTALLATION.md`
 - `tests/installers/pkg_manager_detection_smoke.sh`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
 
 **Follow-up tasks (explicit)**
 
@@ -90,7 +90,7 @@ Scope:
 **Decision owner(s):** Installer maintainers  
 **Date:** 2026-03-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`, `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`, `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
 
 **Problem / Context**
 
@@ -139,7 +139,7 @@ Scope:
 
 **Impacted contract surfaces**
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
   - `PATH` probe contract
   - multi-manager warning line
   - decision-line source vocabulary
@@ -151,7 +151,7 @@ Scope:
 - `docs/INSTALLATION.md`
 - `docs/reference/env/contract.md`
 - `tests/installers/pkg_manager_detection_smoke.sh`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md`
 
 **Follow-up tasks (explicit)**
@@ -166,7 +166,7 @@ Scope:
 **Decision owner(s):** Installer + planning maintainers  
 **Date:** 2026-03-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`, `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`, `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
 
 **Problem / Context**
 
@@ -215,10 +215,10 @@ Scope:
 
 **Impacted contract surfaces**
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
   - `SUBSTRATE_INSTALL_OS_RELEASE_PATH` env-var contract
   - os-release read-path precedence and absence semantics
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
   - selected env-var ownership mapping
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md`
   - inherited alternate-input contract
@@ -227,7 +227,7 @@ Scope:
 
 - `docs/reference/env/contract.md`
 - `tests/installers/pkg_manager_detection_smoke.sh`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md`
 
 **Follow-up tasks (explicit)**
@@ -242,7 +242,7 @@ Scope:
 **Decision owner(s):** Installer maintainers  
 **Date:** 2026-03-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`, `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`, `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
 
 **Problem / Context**
 
@@ -291,18 +291,18 @@ Scope:
 
 **Impacted contract surfaces**
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
   - wrapper interaction rules
   - exit-code table
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
   - wrapper exit-status ownership mapping
 
 **Downstream docs constrained by the selection**
 
 - `docs/INSTALLATION.md`
 - `tests/installers/pkg_manager_detection_smoke.sh`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
 
 **Follow-up tasks (explicit)**
 
@@ -316,7 +316,7 @@ Scope:
 **Decision owner(s):** Planning + validation maintainers  
 **Date:** 2026-03-08  
 **Status:** Accepted  
-**Related docs:** `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`, `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/impact_map.md`
+**Related docs:** `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`, `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/impact_map.md`
 
 **Problem / Context**
 
@@ -364,16 +364,16 @@ Scope:
 
 **Impacted contract surfaces**
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
   - exact repo test path ownership mapping
   - feature-local smoke topology mapping
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
   - downstream no-drift reuse rule for smoke and docs
 
 **Downstream docs constrained by the selection**
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
 - `tests/installers/pkg_manager_detection_smoke.sh`
 
 **Follow-up tasks (explicit)**

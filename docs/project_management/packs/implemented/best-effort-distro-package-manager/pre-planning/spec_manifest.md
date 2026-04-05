@@ -6,7 +6,7 @@ Authoring standard:
 - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
-- Feature directory: `docs/project_management/packs/draft/best-effort-distro-package-manager/`
+- Feature directory: `docs/project_management/packs/implemented/best-effort-distro-package-manager/`
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
 - Supporting references that inform this manifest but are not owned by this pack:
@@ -39,11 +39,12 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
 - The only filesystem read contract is `/etc/os-release`; `contract.md` owns that path and its absence semantics.
 - The behavior delta is Linux-only; `contract.md` owns the explicit no-change contract for macOS and Windows.
 - ADR-0031 does not require a migration, deprecation window, or staged rollout.
-- ADR-0031 lift data says `cross_platform=false`; `pre-planning/ci_checkpoint_plan.md` is required planning scaffolding for checkpoint cadence only and does not create a second operator contract.
+- ADR-0031's behavior delta remains Linux-only, but this pack uses the schema v4 cross-platform automation model because CI parity is required on `linux`, `macos`, and `windows` while behavior smoke remains Linux-only.
+- `pre-planning/ci_checkpoint_plan.md` is therefore a required planning artifact for checkpoint cadence and does not create a second operator contract.
 
 ### Planning pack scaffolding (required)
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md` (this file)
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md` (this file)
   - Owns (authoritative):
     - the exact required-doc set for this feature directory
     - the surface-to-doc ownership map
@@ -52,11 +53,11 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
   - Must define:
     - a surface-complete coverage matrix with exactly one owner per ADR-touched surface
     - the explicit statement that unselected doc classes stay unselected for ADR-0031
-    - the Linux-only planning posture for this feature
+    - the schema v4 cross-platform planning posture for Linux behavior smoke plus Linux, macOS, and Windows CI parity
   - Links (non-authoritative):
     - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/impact_map.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/impact_map.md`
   - Owns (authoritative):
     - the exact create/edit touch set for this feature
     - the cascading implications and cross-pack conflicts
@@ -72,11 +73,11 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
       - world-deps behavior
     - the downstream contract dependency with `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/`
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
-    - slice specs under `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
+    - slice specs under `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/`
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md`
   - Owns (authoritative):
     - the checkpoint grouping for the accepted slice order
     - the gate cadence that tasks/checkpoint wiring must mirror
@@ -85,9 +86,9 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
     - the exact gate list that must run before the checkpoint is marked complete
     - the canonical relationship between checkpoint groups and `tasks.json` checkpoint metadata
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json`
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/plan.md`
   - Owns (authoritative):
     - the execution order for `BEDPM0`, `BEDPM1`, `BEDPM2`, and `BEDPM3`
     - the required validation commands and evidence expectations
@@ -99,24 +100,25 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
       - `pre-planning/ci_checkpoint_plan.md`
     - the exact slice order `BEDPM0` → `BEDPM1` → `BEDPM2` → `BEDPM3`
     - the exact validation commands for the hermetic installer harness and the feature-local Linux smoke script
-    - the exact rule that this pack uses Linux-only validation artifacts; macOS and Windows remain explicit no-change platforms for ADR-0031
+    - the exact rule that this pack uses Linux-only behavior validation artifacts while macOS and Windows remain explicit no-change platforms that participate in CI parity only
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json` (already exists)
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json` (already exists)
   - Owns (authoritative):
     - the triad task graph and automation metadata for this pack
   - Must define:
     - the orchestration branch `feat/best-effort-distro-package-manager`
-    - a Linux-only task model for this pack:
-      - `meta.cross_platform` = `false`
+    - the schema v4 cross-platform task model for this pack:
+      - `meta.cross_platform` = `true`
       - `meta.behavior_platforms_required` MUST be `["linux"]`
+      - `meta.ci_parity_platforms_required` MUST be `["linux","macos","windows"]`
       - `meta.checkpoint_boundaries` MUST match `pre-planning/ci_checkpoint_plan.md` and end at `BEDPM3`
-      - any CI parity platform metadata MUST match `pre-planning/ci_checkpoint_plan.md`
+      - only `BEDPM3` defines `*-integ-core` and `*-integ-<platform>` tasks; normal slices use only `X-integ`
     - triad task IDs and dependencies for:
       - `BEDPM0-code`, `BEDPM0-test`, `BEDPM0-integ`
       - `BEDPM1-code`, `BEDPM1-test`, `BEDPM1-integ`
@@ -126,31 +128,31 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
     - acceptance-criteria traceability to `AC-BEDPM*` IDs
     - kickoff prompt paths for every task
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md`
-    - slice specs under `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/plan.md`
+    - slice specs under `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/`
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/session_log.md`
   - Owns (authoritative):
     - the append-only planning and execution log for this pack
   - Must define:
     - initialization from `docs/project_management/system/templates/planning_pack/session_log.md.tmpl`
     - the rule that every task start and end is recorded with timestamp and task id
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json`
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/quality_gate_report.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/quality_gate_report.md`
   - Owns (authoritative):
     - the planning quality-gate outcome for starting execution triads
   - Must define:
     - initialization from `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`
     - the rule that triads MUST NOT start unless the recommendation is `ACCEPT`
-    - evidence that `make planning-lint FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager"` passed
+    - evidence that `make planning-lint FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"` passed
   - Links (non-authoritative):
     - every required artifact referenced by the recommendation
 
 ### Feature contract + decisions (required)
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
   - Owns (authoritative):
     - the Linux installer contract introduced or changed by ADR-0031
     - the operator-visible output, failure, and precedence rules for package-manager selection
@@ -216,9 +218,9 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
   - Links (non-authoritative):
     - `docs/project_management/system/standards/shared/CONTRACT_SURFACE_STANDARD.md`
     - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
   - Owns (authoritative):
     - the A/B decisions required to remove ambiguity from ADR-0031
   - Must define:
@@ -246,14 +248,14 @@ No separate protocol, schema, telemetry, filesystem-semantics, platform-parity, 
     - the exact impacted contract surfaces for each selected option
     - the exact downstream docs that inherit the selected output vocabulary
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
     - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/contract.md`
 
 ### Slice specs (required)
 
-Slice specs MUST use one canonical per-slice file under `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/`, with the concrete accepted paths listed below.
+Slice specs MUST use one canonical per-slice file under `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/`, with the concrete accepted paths listed below.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
   - Owns (authoritative):
     - the `BEDPM0` slice scope and acceptance criteria for distro detection, mapping, and stable reporting
   - Must define:
@@ -266,10 +268,10 @@ Slice specs MUST use one canonical per-slice file under `docs/project_management
       - the decision line appears exactly once before prerequisite installation begins
     - the contract-link rule: this slice spec links to `contract.md` and does not redefine the operator-facing contract
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`
   - Owns (authoritative):
     - the `BEDPM1` slice scope and acceptance criteria for override precedence, deterministic fallback, and actionable failure posture
   - Must define:
@@ -283,10 +285,10 @@ Slice specs MUST use one canonical per-slice file under `docs/project_management
       - the multi-manager `PATH` branch follows the single order and warning posture selected by `decision_register.md`
     - the contract-link rule: this slice spec links to `contract.md` and does not redefine CLI, env-var, or exit-code tables
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`
   - Owns (authoritative):
     - the `BEDPM2` slice scope and acceptance criteria for wrapper exit-status pass-through and operator/env-doc propagation
   - Must define:
@@ -297,10 +299,10 @@ Slice specs MUST use one canonical per-slice file under `docs/project_management
       - `docs/reference/env/contract.md` reuses the selected `PKG_MANAGER` and `SUBSTRATE_INSTALL_OS_RELEASE_PATH` contract without drift
     - the contract-link rule: this slice spec links to `contract.md` and `decision_register.md` and does not redefine the operator-facing contract
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
   - Owns (authoritative):
     - the `BEDPM3` slice scope and acceptance criteria for hermetic validation, thin smoke-wrapper alignment, and evidence capture
   - Must define:
@@ -318,12 +320,12 @@ Slice specs MUST use one canonical per-slice file under `docs/project_management
     - the exact rule that `smoke/linux-smoke.sh` remains a thin wrapper over the selected repo test and that any local container smoke remains non-gating and outside the required feature-local smoke contract
     - the contract-link rule: this slice spec links to `contract.md` and `decision_register.md` and does not redefine the operator-facing contract
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
 
 ### Validation artifacts (required)
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
   - Owns (authoritative):
     - the deterministic operator validation workflow for ADR-0031
   - Must define:
@@ -336,10 +338,10 @@ Slice specs MUST use one canonical per-slice file under `docs/project_management
     - the exact command that runs `smoke/linux-smoke.sh`
     - the explicit statement that macOS and Windows have no behavior delta under this ADR
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
   - Owns (authoritative):
     - the non-interactive Linux smoke validation steps for this feature
   - Must define:
@@ -348,8 +350,8 @@ Slice specs MUST use one canonical per-slice file under `docs/project_management
     - the exact relation between the smoke script and the hermetic `tests/installers/` harness selected by `BEDPM3-spec.md`
     - the smoke script’s own exit-code contract
   - Links (non-authoritative):
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
 
 ## Coverage matrix (surface → authoritative doc)
 
@@ -357,39 +359,39 @@ Every surface touched by ADR-0031 must appear here.
 
 | Surface | Authoritative doc | What must be explicitly defined |
 | --- | --- | --- |
-| Canonical feature directory and canonical slice IDs (`BEDPM0`, `BEDPM1`, `BEDPM2`, `BEDPM3`) | `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md` | exact directory path; exact slice ids; exact slice spec paths; explicit rejection of `C0/C1/C2` in planning artifacts |
-| Installer entrypoint `scripts/substrate/install-substrate.sh` | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | script scope, Linux-only behavior delta, explicit no-change surfaces |
-| CLI flag `--pkg-manager` | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact flag name; allowed values `apt-get`, `dnf`, `yum`, `pacman`, `zypper`; precedence; validation; availability checks; exit-code mapping |
-| Legacy env override `PKG_MANAGER` | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | allowed values, precedence, validation, failure posture |
-| Alternate os-release env var `SUBSTRATE_INSTALL_OS_RELEASE_PATH` | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact name, absolute-path validation, precedence against `/etc/os-release`, invalid-path semantics, Linux-only scope |
-| `/etc/os-release` read semantics | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact path, keys read, safe parsing rule, missing-file behavior, `&lt;unknown&gt;` sentinel |
-| Distro-family mapping table | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact families, exact match rules, exact preferred manager per family |
-| Emitted selected-manager vocabulary | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact strings `apt-get|dnf|yum|pacman|zypper`; exact conditions that emit each |
-| Emitted `pkg_manager.source` vocabulary | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact strings `flag|env|os_release|path_probe`; exact conditions that emit each |
-| Fixed fallback `PATH` probe order | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact ordered probe list; selection rule when several supported managers exist |
-| Multi-manager `PATH` ambiguity policy | `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` | warn-vs-fail selection, rationale, and exact downstream docs constrained by the selection |
-| Wrapper exit-status preservation selection | `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` | wrapper pass-through vs collapse selection, rationale, and impacted downstream docs |
-| Stderr decision line format | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | exact string template, exact stream, exact placement relative to prerequisite installation |
-| Override-failure remediation content | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | required guidance elements for invalid override, missing manager binary, and no-supported-manager failure |
-| Exit-code meanings for this feature (`0`, `2`, `3`, `4`) | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | taxonomy reference, per-code meaning, and explicit no override for unrelated taxonomy slots |
-| `/etc/os-release` parser decision | `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` | exactly two parser options, one selection, and the contract sections constrained by the selection |
-| Hermetic alternate-os-release input posture | `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` | exactly two options, one selection, and the exact rule for whether a production-visible env var exists |
-| Feature-local smoke topology selection | `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` | thin-wrapper vs independent-smoke selection, rationale, and exact validation docs constrained by the selection |
-| Explicit no-change surfaces | `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md` | no new config file, no persistent config key, no detection network call, no macOS change, no Windows change, no package-map-table change |
-| Exact implementation touch set and out-of-scope paths | `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/impact_map.md` | touched repo paths, untouched repo paths, operator-doc updates, downstream dependency boundaries |
-| CI cadence checkpoints | `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md` | checkpoint boundary at `BEDPM3`; gate list; tasks.json checkpoint alignment |
-| `BEDPM0` acceptance criteria | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md` | detection/mapping/reporting assertions and evidence commands |
-| `BEDPM1` acceptance criteria | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md` | precedence/failure assertions and evidence commands |
-| `BEDPM2` acceptance criteria | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md` | wrapper exit-status pass-through and operator/env-doc propagation assertions |
-| Exact hermetic test harness path and `BEDPM3` validation assertions | `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md` | exact `tests/installers/` path, stub inputs, assertions, thin-wrapper alignment, and non-gating local-container rule |
-| Manual operator validation | `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md` | exact commands, expected stderr text, expected exit codes |
-| Automated Linux smoke validation | `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh` | exact smoke commands, assertions, and script exit-code contract |
-| Task graph and automation metadata | `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json` | exact task ids, dependencies, references, kickoff prompts, Linux-only task model |
-| Slice order and validation evidence requirements | `docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md` | exact sequence, exact validation commands, exact artifact expectations |
+| Canonical feature directory and canonical slice IDs (`BEDPM0`, `BEDPM1`, `BEDPM2`, `BEDPM3`) | `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md` | exact directory path; exact slice ids; exact slice spec paths; explicit rejection of `C0/C1/C2` in planning artifacts |
+| Installer entrypoint `scripts/substrate/install-substrate.sh` | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | script scope, Linux-only behavior delta, explicit no-change surfaces |
+| CLI flag `--pkg-manager` | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | exact flag name; allowed values `apt-get`, `dnf`, `yum`, `pacman`, `zypper`; precedence; validation; availability checks; exit-code mapping |
+| Legacy env override `PKG_MANAGER` | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | allowed values, precedence, validation, failure posture |
+| Alternate os-release env var `SUBSTRATE_INSTALL_OS_RELEASE_PATH` | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | exact name, absolute-path validation, precedence against `/etc/os-release`, invalid-path semantics, Linux-only scope |
+| `/etc/os-release` read semantics | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | exact path, keys read, safe parsing rule, missing-file behavior, `&lt;unknown&gt;` sentinel |
+| Distro-family mapping table | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | exact families, exact match rules, exact preferred manager per family |
+| Emitted selected-manager vocabulary | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | exact strings `apt-get|dnf|yum|pacman|zypper`; exact conditions that emit each |
+| Emitted `pkg_manager.source` vocabulary | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | exact strings `flag|env|os_release|path_probe`; exact conditions that emit each |
+| Fixed fallback `PATH` probe order | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | exact ordered probe list; selection rule when several supported managers exist |
+| Multi-manager `PATH` ambiguity policy | `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md` | warn-vs-fail selection, rationale, and exact downstream docs constrained by the selection |
+| Wrapper exit-status preservation selection | `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md` | wrapper pass-through vs collapse selection, rationale, and impacted downstream docs |
+| Stderr decision line format | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | exact string template, exact stream, exact placement relative to prerequisite installation |
+| Override-failure remediation content | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | required guidance elements for invalid override, missing manager binary, and no-supported-manager failure |
+| Exit-code meanings for this feature (`0`, `2`, `3`, `4`) | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | taxonomy reference, per-code meaning, and explicit no override for unrelated taxonomy slots |
+| `/etc/os-release` parser decision | `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md` | exactly two parser options, one selection, and the contract sections constrained by the selection |
+| Hermetic alternate-os-release input posture | `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md` | exactly two options, one selection, and the exact rule for whether a production-visible env var exists |
+| Feature-local smoke topology selection | `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md` | thin-wrapper vs independent-smoke selection, rationale, and exact validation docs constrained by the selection |
+| Explicit no-change surfaces | `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md` | no new config file, no persistent config key, no detection network call, no macOS change, no Windows change, no package-map-table change |
+| Exact implementation touch set and out-of-scope paths | `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/impact_map.md` | touched repo paths, untouched repo paths, operator-doc updates, downstream dependency boundaries |
+| CI cadence checkpoints | `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md` | checkpoint boundary at `BEDPM3`; gate list; tasks.json checkpoint alignment |
+| `BEDPM0` acceptance criteria | `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md` | detection/mapping/reporting assertions and evidence commands |
+| `BEDPM1` acceptance criteria | `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md` | precedence/failure assertions and evidence commands |
+| `BEDPM2` acceptance criteria | `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md` | wrapper exit-status pass-through and operator/env-doc propagation assertions |
+| Exact hermetic test harness path and `BEDPM3` validation assertions | `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md` | exact `tests/installers/` path, stub inputs, assertions, thin-wrapper alignment, and non-gating local-container rule |
+| Manual operator validation | `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md` | exact commands, expected stderr text, expected exit codes |
+| Automated Linux smoke validation | `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh` | exact smoke commands, assertions, and script exit-code contract |
+| Task graph and automation metadata | `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json` | exact task ids, dependencies, references, kickoff prompts, and the schema v4 cross-platform task model with Linux behavior smoke plus Linux/macOS/Windows CI parity |
+| Slice order and validation evidence requirements | `docs/project_management/packs/implemented/best-effort-distro-package-manager/plan.md` | exact sequence, exact validation commands, exact artifact expectations |
 
 ## Determinism checklist (per document; must be satisfied before quality gate)
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
   - MUST define one exact precedence order and one exact emitted vocabulary for selected manager and source.
   - MUST define one exact `/etc/os-release` parsing and absence contract, including `&lt;unknown&gt;` behavior.
   - MUST define one exact fallback `PATH` probe order and one exact ambiguity-warning or ambiguity-failure contract.
@@ -399,7 +401,7 @@ Every surface touched by ADR-0031 must appear here.
   - MUST define `SUBSTRATE_INSTALL_OS_RELEASE_PATH` with exact name, precedence, path-validation, invalid-path semantics, and Linux-only scope.
   - MUST define the wrapper pass-through rule for `scripts/substrate/install.sh`.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
   - MUST include DR-0001, DR-0002, DR-0003, DR-0004, and DR-0005.
   - Each decision MUST contain exactly two options and exactly one selected option.
   - Each selected option MUST link to the contract or slice sections that implement it.
@@ -407,68 +409,65 @@ Every surface touched by ADR-0031 must appear here.
   - DR-0004 MUST state one exact wrapper result for feature exit codes `0`, `2`, `3`, and `4`.
   - DR-0005 MUST state that `smoke/linux-smoke.sh` is either a thin wrapper or an independent contract and must pick exactly one result.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
   - MUST scope the slice to detection, mapping, and reporting only.
   - MUST define runnable acceptance criteria that prove Debian-family, Arch-family, Fedora/RHEL-family, and missing-os-release branches.
   - MUST include at least one acceptance criterion that proves the decision line appears exactly once before package installation begins.
   - MUST link to `contract.md` instead of restating CLI or exit-code tables.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`
   - MUST scope the slice to override precedence, deterministic fallback, and failure posture.
   - MUST define runnable acceptance criteria that prove `--pkg-manager` overrides `PKG_MANAGER`, `PKG_MANAGER` overrides autodetection, invalid values exit with `2`, missing forced manager exits with `3`, and no-supported-manager exits with `4`.
   - MUST include one acceptance criterion for the selected multi-manager `PATH` posture from `decision_register.md`.
   - MUST link to `contract.md` instead of restating CLI or exit-code tables.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`
   - MUST scope the slice to wrapper exit-status pass-through and operator/env-doc propagation only.
   - MUST define runnable acceptance criteria that prove `scripts/substrate/install.sh` preserves upstream `0`, `2`, `3`, and `4` outcomes for this feature path.
   - MUST require `docs/INSTALLATION.md` and `docs/reference/env/contract.md` to reuse the selected precedence, warning, remediation, and alternate os-release contract without drift.
   - MUST link to `contract.md` instead of restating CLI, env-var, or exit-code tables.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
   - MUST define one exact hermetic test harness path under `tests/installers/`.
   - MUST define one exact fake-input mechanism for os-release content and one exact fake-input mechanism for supported-manager binaries.
   - MUST require assertions for precedence, source vocabulary, missing-os-release fallback, wrapper pass-through, and required remediation content.
   - MUST state that `smoke/linux-smoke.sh` remains a thin wrapper over the selected repo test and that any local container smoke stays outside the required feature-local smoke contract.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
   - MUST include exact commands and expected key stderr text for default Debian-family, default Arch-family, forced override, legacy env override, and no-supported-manager failure.
   - MUST reference `smoke/linux-smoke.sh`.
   - MUST state that macOS and Windows are explicit no-change platforms for ADR-0031.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
   - MUST define exact non-interactive Linux smoke steps and exact assertions.
   - MUST define its own pass/fail exit-code contract.
   - MUST reference the hermetic `tests/installers/` harness selected by `BEDPM3-spec.md` or explicitly inline the same assertions without drift.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/impact_map.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/impact_map.md`
   - MUST enumerate the exact implementation touch set, the exact operator-doc touch set, and the explicit no-change boundary for dev-install and runtime crates.
   - MUST call out the downstream dependency on `persist-detected-linux-distro-pkg-manager`.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/plan.md`
   - MUST define the exact slice order `BEDPM0` → `BEDPM1` → `BEDPM2` → `BEDPM3`.
   - MUST define the exact validation commands and the exact evidence expected from the manual playbook and Linux smoke script.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md`
   - MUST define the single checkpoint boundary at `BEDPM3`.
   - MUST define the exact gates and their pass criteria.
   - MUST define the exact `tasks.json` checkpoint metadata that must match it.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json`
   - MUST define the full triad task graph for `BEDPM0`, `BEDPM1`, `BEDPM2`, and `BEDPM3`.
-  - MUST align to the Linux-only validation posture selected by this manifest.
+  - MUST align to the schema v4 cross-platform validation posture selected by this manifest: Linux behavior smoke plus Linux/macOS/Windows CI parity.
   - MUST ensure each task’s acceptance criteria point at the relevant slice-spec `AC-BEDPM*` ids and do not duplicate conflicting contract text.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/session_log.md`
   - MUST define the append-only START/END task logging rule with timestamp and task id.
 
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/quality_gate_report.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/quality_gate_report.md`
   - MUST record the planning-lint evidence and one exact gate recommendation.
   - MUST block execution triads until the recommendation is `ACCEPT`.
 
 ## Follow-ups
 
-- ADR path reconciliation: `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md` still points related docs at `docs/project_management/packs/draft/detecting-badger/`. Planning artifacts for this feature MUST use `docs/project_management/packs/draft/best-effort-distro-package-manager/`.
-- Slice ID reconciliation: ADR-0031 uses generic `C0/C1/C2`. Planning artifacts for this feature MUST use the accepted slice order `BEDPM0/BEDPM1/BEDPM2/BEDPM3` and MUST include the ADR-to-slice mapping.
-- CI checkpoint-plan drift: `pre-planning/ci_checkpoint_plan.md` currently predates the accepted `BEDPM3` end-of-checkpoint boundary. Planning MUST update that file and matching `tasks.json` checkpoint metadata before quality gate.
-- Tasks metadata drift: `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json` currently declares `meta.cross_platform=true` with Linux/macOS/Windows platform arrays. That conflicts with ADR-0031 lift data (`cross_platform=false`) and this manifest’s Linux-only doc set. Planning MUST reconcile `tasks.json` to the Linux-only posture before quality gate.
+- None.

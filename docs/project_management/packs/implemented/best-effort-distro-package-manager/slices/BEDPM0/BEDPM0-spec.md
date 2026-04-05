@@ -11,9 +11,9 @@
 - Keep explicit override precedence, invalid override failures, no-supported-manager exit handling, wrapper pass-through, and downstream documentation propagation outside this slice.
 
 ## Inputs (authoritative)
-- Operator-facing detection, mapping, `<unknown>`, and decision-line contract: `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-- Accepted parser and mapping decisions: `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` (`DR-0001`, `DR-0002`, `DR-0003`)
-- Slice boundary and required assertions: `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- Operator-facing detection, mapping, `<unknown>`, and decision-line contract: `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+- Accepted parser and mapping decisions: `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md` (`DR-0001`, `DR-0002`, `DR-0003`)
+- Slice boundary and required assertions: `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
 - Implementation surfaces constrained by this slice:
   - `scripts/substrate/install-substrate.sh`
 
@@ -45,6 +45,6 @@
 - AC-BEDPM0-05: For every concrete manager selection produced by this slice, the stable decision line appears on stderr exactly once after selection completes and before prerequisite installation begins; the implementation does not emit a second decision line for the same run.
 
 ## Out of scope
-- Parsing `--pkg-manager`, honoring `PKG_MANAGER`, fixed `PATH` probe order, multi-manager warnings, and exits `2`, `3`, or `4` remain owned by `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`.
-- Wrapper exit-status pass-through in `scripts/substrate/install.sh` and propagation into `docs/INSTALLATION.md` and `docs/reference/env/contract.md` remain owned by `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`.
-- Hermetic repo-test assertions, the thin Linux smoke wrapper, and manual evidence capture remain owned by `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`.
+- Parsing `--pkg-manager`, honoring `PKG_MANAGER`, fixed `PATH` probe order, multi-manager warnings, and exits `2`, `3`, or `4` remain owned by `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`.
+- Wrapper exit-status pass-through in `scripts/substrate/install.sh` and propagation into `docs/INSTALLATION.md` and `docs/reference/env/contract.md` remain owned by `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`.
+- Hermetic repo-test assertions, the thin Linux smoke wrapper, and manual evidence capture remain owned by `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`.

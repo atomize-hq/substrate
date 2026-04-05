@@ -2,14 +2,14 @@
 
 ## Scope
 - Production code only; no new tests.
-- Spec: `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`
+- Spec: `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in `wt/best-effort-distro-package-manager-bedpm1-code` on branch `best-effort-distro-package-manager-bedpm1-code` and that `.taskmeta.json` exists.
 2. Read `plan.md`, `tasks.json`, `session_log.md`, the BEDPM1 spec, and this prompt.
-3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager" SLICE_ID="BEDPM1"`.
+3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run `make triad-task-start-pair FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager" SLICE_ID="BEDPM1"`.
 
 ## Requirements
 - Implement only the production-code behavior in BEDPM1.

@@ -2,7 +2,7 @@
 
 ## Scope
 - Resolve macOS compile or test parity failures for BEDPM3 after `CP1-ci-checkpoint`.
-- Spec: `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
+- Spec: `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
@@ -10,7 +10,7 @@ Do not edit planning docs inside the worktree.
 1. Run this task on a macOS host.
 2. Verify you are in `wt/best-effort-distro-package-manager-bedpm3-integ-macos` on branch `best-effort-distro-package-manager-bedpm3-integ-macos` and that `.taskmeta.json` exists.
 3. Read `plan.md`, `tasks.json`, `session_log.md`, the BEDPM3 spec, and this prompt.
-4. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run `make triad-task-start FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager" TASK_ID="BEDPM3-integ-macos" TASK_PLATFORM=macos`.
+4. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run `make triad-task-start FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager" TASK_ID="BEDPM3-integ-macos" TASK_PLATFORM=macos`.
 
 ## Requirements
 - Merge `BEDPM3-integ-core` into this worktree before fixing anything.

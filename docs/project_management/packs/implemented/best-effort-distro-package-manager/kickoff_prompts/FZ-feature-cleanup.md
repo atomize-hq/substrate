@@ -13,9 +13,9 @@ Do not edit planning docs inside the worktree.
 
 ## Requirements
 - Run the cleanup dry run first:
-  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
 - Run the cleanup after the dry run is clean:
-  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager" REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
+  - `make triad-feature-cleanup FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager" REMOVE_WORKTREES=1 PRUNE_LOCAL=1`
 
 ## End Checklist
 1. Paste the cleanup summary into `session_log.md`.

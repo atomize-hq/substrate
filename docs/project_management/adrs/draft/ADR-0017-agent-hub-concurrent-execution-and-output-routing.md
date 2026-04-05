@@ -1,11 +1,13 @@
 # ADR-0017 — Agent Hub Concurrent Execution and Output Routing
 
 ## Status
-- Status: Draft
+
+- Status: Accepted
 - Date (UTC): 2026-01-25
 - Owner(s): Substrate maintainers
 
 ## Scope
+
 - Feature directory: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
@@ -14,6 +16,7 @@
   - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
+
 - Plan: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/plan.md`
 - Tasks: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json`
 - Spec manifest: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
@@ -53,7 +56,9 @@
 ## Executive Summary (Operator)
 
 ADR_BODY_SHA256: d5d6a84d7e059276d0ec4312ffe030c4234089ff419b31f86f8f5cef1a7f055b
+
 ### Changes (operator-facing)
+
 - Make concurrent outputs predictable and non-corrupting when multiple agents run
   - Existing: Substrate can render concurrent **structured** agent output during the REPL (e.g., `:demo-agent`), but there is no explicit output contract that separates:
     - raw PTY byte streams (world sessions, TUIs), from
@@ -71,6 +76,7 @@ ADR_BODY_SHA256: d5d6a84d7e059276d0ec4312ffe030c4234089ff419b31f86f8f5cef1a7f055
     - `crates/shell/src/repl/async_repl.rs` (concurrent structured printing today)
 
 ## Problem / Context
+
 - Substrate’s future direction includes an agent hub that runs multiple concurrent agent CLIs (Codex / Claude Code / Gemini CLI and others) through capability-driven, session-oriented adapter semantics rather than ad hoc wrappers/bindings.
 - Substrate already supports concurrent **structured** event printing in the REPL today, but it is string-based and not designed to interleave with raw PTY byte streams.
 - The world-first REPL work (ADR-0016) introduces a long-lived world PTY byte stream where:
@@ -82,6 +88,7 @@ ADR_BODY_SHA256: d5d6a84d7e059276d0ec4312ffe030c4234089ff419b31f86f8f5cef1a7f055
   - and inconsistent operator expectations as agent hub capabilities expand.
 
 ## Goals
+
 - Define an explicit output routing contract that separates:
   - PTY byte streams (binary-safe), and
   - structured agent hub events (typed, attributable).
@@ -90,13 +97,16 @@ ADR_BODY_SHA256: d5d6a84d7e059276d0ec4312ffe030c4234089ff419b31f86f8f5cef1a7f055
 - Provide a forward-compatible surface for future UI work (including block-based terminal UIs), without changing core execution semantics.
 
 ## Non-Goals
+
 - Designing the full agent hub configuration model (providers, credentials, tool installation).
 - Providing a full block-based terminal UI as part of this ADR.
 - Solving job control/backgrounding in the REPL (out of scope for ADR-0016 and remains out of scope here).
 - Adding new world-agent wire protocols beyond what ADR-0016 requires.
 
 ## User Contract (Authoritative)
+
 ### CLI
+
 - Commands and flags: no new top-level `substrate` commands or flags are introduced by this ADR.
 - Interactive scope: this ADR defines output routing behavior for the interactive REPL and any execution path that enters PTY passthrough (as defined by ADR-0016).
 - Exit codes:
@@ -106,6 +116,7 @@ ADR_BODY_SHA256: d5d6a84d7e059276d0ec4312ffe030c4234089ff419b31f86f8f5cef1a7f055
   - `2`: actionable user error (including invalid config types/values at the CLI/config boundary)
 
 ### Output Classes
+
 - **PTY output**:
   - Raw bytes from a PTY stream (world sessions, TUIs, interactive commands).
   - MUST be forwarded and rendered as bytes (binary-safe).
@@ -114,6 +125,7 @@ ADR_BODY_SHA256: d5d6a84d7e059276d0ec4312ffe030c4234089ff419b31f86f8f5cef1a7f055
   - MUST be rendered via a structured output path that does not require injecting bytes into a PTY stream.
 
 ### Rendering Rules (Interactive REPL)
+
 - During PTY passthrough (TUIs/interactive commands), Substrate MUST NOT inject structured agent events into the PTY byte stream.
   - Structured events MUST be handled via a bounded buffer and MUST NOT backpressure execution.
   - If the buffer overflows, Substrate MUST drop additional structured lines for the duration of the passthrough and MUST emit an explicit dropped-count summary after passthrough ends.
@@ -123,6 +135,7 @@ ADR_BODY_SHA256: d5d6a84d7e059276d0ec4312ffe030c4234089ff419b31f86f8f5cef1a7f055
   - PTY bytes MUST be rendered as raw bytes with prompt/input redraw semantics (byte fidelity preserved).
 
 ### Attribution (Structured Events)
+
 - PTY bytes are not attributed to a specific agent/task by default (session-level stream).
 - Structured agent events MUST include stable attribution fields suitable for deterministic joins across the LLM/agent/workflow/router tracks.
   - `backend_id` remains adapter/backend identity only (`<kind>:<name>`).
@@ -152,10 +165,12 @@ ADR_BODY_SHA256: d5d6a84d7e059276d0ec4312ffe030c4234089ff419b31f86f8f5cef1a7f055
 Structured agent events are serialized as a top-level envelope with stable correlation fields for deterministic joins. This envelope is the surface emitted to the shell/UI and (after adding `session_id` and any trace-writer metadata) persisted to canonical trace.
 
 Authoritative shape and field requirements live in:
+
 - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0003, DR-0008, DR-0009)
 - Phase 8 correlation vocabulary (canonical field names): `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
 
 Envelope fields (top-level; no nesting required for joinability):
+
 - `ts` (RFC3339 UTC timestamp)
 - `kind` (enum; `registered|status|task_start|task_progress|task_end|pty_data|alert`)
 - Correlation (required/conditional/optional):
@@ -171,12 +186,14 @@ Envelope fields (top-level; no nesting required for joinability):
 - `data` (JSON object; schema depends on `kind`)
 
 Envelope interpretation:
+
 - `backend_id` is adapter/backend identity only and is never a substitute for `client`, `router`, `provider`, `auth_authority`, or `protocol`.
 - The operator-facing tuple semantics live in ADR-0042; this ADR only owns output routing, rendering, and the event-envelope shape needed for joins.
 - For pure agent/toolbox records, `provider` and `auth_authority` MAY be absent.
 - For nested gateway-backed LLM records, `provider` and `auth_authority` MAY be present and must follow the newer gateway/identity contracts.
 
 `channel` constraints (non-negotiable):
+
 - Meaning: a producer-declared event-plane routing hint (pub/sub-style “topic”) for subscribe/filter and for explainable suppression summaries; it MUST NOT be used for policy gating.
 - MUST be producer-declared (not arbitrary user-provided freeform) and MUST NOT contain secrets.
 - MUST be capped (implementation-defined cap) and MUST be safe to print and persist.
@@ -184,16 +201,19 @@ Envelope interpretation:
 ### World session reuse + restart attribution (Phase 8 additive; operator-verifiable)
 
 World-scoped member agents share a world boundary by default (same `world_id` per `orchestration_session_id`) per Agent Hub core decisions. Operators MUST be able to verify:
+
 - whether multiple agents shared the same world boundary (`world_id` on world-scoped events), and
 - when/why a world was restarted (explicit structured alert events; never implied).
 
 Authoritative sources:
+
 - World reuse semantics: `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0004)
 - Drift handling + reason taxonomy: `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0008)
 - `world_restarted` alert schema: `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0010)
 - `world_restart_required` alert schema (fail-closed drift posture): `docs/project_management/_archived/next/agent_hub_core/decision_register.md` (DR-0009)
 
 Structured alert event: `world_restarted` (required on auto-restart)
+
 - Envelope:
   - `kind: "alert"`
   - correlation: `orchestration_session_id`, `run_id`, `agent_id`, `role: "orchestrator"` (required)
@@ -206,9 +226,11 @@ Structured alert event: `world_restarted` (required on auto-restart)
   - `message` (human-readable; safe to print/persist)
 
 Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
+
 - The hub MUST NOT restart implicitly; it MUST fail closed and MUST emit a structured alert event with `data.code="world_restart_required"` (schema in DR-0009), using the same DR-0008 reason taxonomy.
 
 ### Config (buffer tuning)
+
 - Files and locations (existing layering model):
   - Global config patch: `$SUBSTRATE_HOME/config.yaml`
   - Workspace config patch: `<workspace_root>/.substrate/workspace.yaml`
@@ -232,6 +254,7 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
       ```
 
 ### Platform Notes
+
 - All platforms:
   - The output routing and rendering rules in this ADR are required anywhere PTY passthrough and structured agent events can occur concurrently.
 - Linux/macOS:
@@ -240,7 +263,9 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
   - This ADR introduces no platform-specific exceptions; if PTY passthrough is supported on Windows, the same non-injection rule applies.
 
 ## Architecture Shape
+
 ### Components affected
+
 - `crates/shell`:
   - Maintains two concurrent output paths:
     - PTY-bytes rendering path (binary-safe).
@@ -255,6 +280,7 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
     - Source of truth: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0009)
 
 ### End-to-end flow
+
 - Inputs:
   - PTY byte stream from world-agent streaming (`/v1/stream`) or host PTY passthrough.
   - Structured agent events emitted by agent hub wrappers/orchestration and/or internal REPL tasks.
@@ -271,6 +297,7 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
   - Canonical trace records for structured events with correlation fields (per DR-0009).
 
 ## Sequencing / Dependencies
+
 - Sequencing entry: `docs/project_management/packs/sequencing.json` → `agent_hub_concurrent_execution_output_routing` (order `41`).
 - Orchestration branch: `feat/agent-hub-concurrent-execution-output-routing`
 - Prerequisite integration task IDs: none (ADR-0016 is already implemented; this ADR is self-contained).
@@ -279,6 +306,7 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
   - Correlation vocabulary and field names must remain consistent with `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` (additive-only alignment).
 
 ## Security / Safety Posture
+
 - Fail-closed vs degrade behavior:
   - Fail-closed: this ADR does not introduce any implicit host execution path; world execution posture remains governed by existing policy/config (see ADR-0016 for REPL world enablement and fail-closed startup rules).
   - Degrade (bounded): during PTY passthrough, structured agent events degrade by dropping after the bounded cap is reached; execution must not be backpressured by structured printing.
@@ -289,7 +317,9 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
   - Structured agent events MUST include stable correlation fields and MUST be persisted to canonical trace (DR-0003/DR-0008/DR-0009).
 
 ## Validation Plan (Authoritative)
+
 ### Tests
+
 - Unit tests:
   - During PTY passthrough, structured agent events are buffered up to the cap and dropped beyond the cap without corrupting TUI output.
   - While idle, out-of-band PTY bytes are rendered without corrupting the input buffer.
@@ -298,19 +328,23 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
   - REPL scenario where a PTY passthrough command is active while structured agent events are emitted concurrently; verify no corruption and correct drop-summary behavior at the end of passthrough.
 
 ### Manual validation
+
 - Manual playbook: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
   - Verify a structured-event producer (e.g., `:demo-agent`) can run concurrently with a PTY passthrough command without corrupting the terminal.
 
 ### Smoke scripts
+
 - Linux: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
 - macOS: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
 - Windows: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
+
 - Greenfield breaking is acceptable: behavior changes are allowed so long as the operator-facing contract is explicit and high-signal.
 - This ADR does not deprecate any stable public API; it only refines interactive output behavior.
 
 ## Decision Summary
+
 - Decision Register entries:
   - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md`:
     - DR-0001, DR-0002, DR-0003, DR-0004, DR-0005, DR-0006, DR-0007, DR-0008, DR-0009, DR-0010, DR-0011, DR-0012, DR-0013
