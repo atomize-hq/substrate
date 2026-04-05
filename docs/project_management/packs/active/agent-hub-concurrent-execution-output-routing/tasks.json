@@ -93,7 +93,7 @@
       "name": "OR0 test",
       "type": "test",
       "phase": "OR0",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Add tests for OR0 envelope invariants and agent_event trace persistence shape (flattened record).",
       "references": [
         "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-spec.md",
