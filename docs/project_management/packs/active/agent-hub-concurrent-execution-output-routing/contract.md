@@ -15,6 +15,10 @@ This document is the operator-facing contract summary for:
   - Rendering structured events MUST NOT stall/slow execution (bounded buffering + drop is permitted in passthrough).
 - **Durable observability.**
   - Every structured agent event MUST be persisted as its own canonical trace record (details: `telemetry-spec.md`).
+- **Identity boundary is explicit.**
+  - `backend_id` is an adapter/backend identifier only (`<kind>:<name>`).
+  - This pack owns output routing, rendering, and the event-envelope contract only.
+  - Tuple semantics (`client`, `router`, `provider`, `auth_authority`, `protocol`) remain owned by ADR-0042, ADR-0044, and ADR-0045 and are only carried here additively when applicable.
 
 ## Output routing contract
 
@@ -30,6 +34,16 @@ This document is the operator-facing contract summary for:
 - Source: agent hub orchestration and/or internal REPL tasks.
 - Handling: printed via the structured renderer (never mixed into PTY bytes).
 - Envelope schema (authoritative): `agent-hub-event-envelope-schema-spec.md`.
+
+### Identity-compatible envelope posture
+
+- `backend_id` MUST NOT be overloaded with provider, auth, router, client, or protocol meaning.
+- Pure agent/toolbox records MAY omit `provider` and `auth_authority`.
+- Nested gateway-backed LLM records MAY include `client`, `router`, `provider`, `auth_authority`, and `protocol` as top-level metadata when emitted by later ADR-governed producers.
+- Presence and normalization rules for those tuple fields are delegated to:
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 
 ### REPL mode: Idle (prompt active)
 

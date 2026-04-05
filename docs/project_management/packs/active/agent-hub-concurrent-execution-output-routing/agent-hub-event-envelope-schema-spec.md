@@ -58,7 +58,8 @@ Attribution + correlation fields:
 - `backend_id`
   - Type: string
   - Required: no
-  - Meaning: `<kind>:<name>` stable backend identifier (when known).
+  - Meaning: `<kind>:<name>` stable adapter/backend identifier (when known).
+  - Rule: adapter-only; MUST NOT be treated as provider, auth authority, router, client, or protocol identity.
 - `orchestration_session_id`
   - Type: string
   - Required: yes
@@ -83,6 +84,39 @@ Attribution + correlation fields:
 - `span_id`
   - Type: string
   - Required: no
+
+Tuple-compatible metadata (optional; semantics delegated to newer ADRs):
+
+- `client`
+  - Type: string
+  - Required: no
+  - Meaning: originating runtime or caller surface when the emitter has a meaningful client concept.
+- `router`
+  - Type: string
+  - Required: no
+  - Meaning: routing/control authority when the emitter has a meaningful router concept.
+- `provider`
+  - Type: string
+  - Required: no
+  - Meaning: upstream fulfillment provider.
+  - Presence rule: absent on pure agent/toolbox records; may be present on nested gateway-backed LLM records.
+- `auth_authority`
+  - Type: string
+  - Required: no
+  - Meaning: credential or billing authority for a nested fulfilled request.
+  - Presence rule: absent on pure agent/toolbox records; may be present on nested gateway-backed LLM records.
+- `protocol`
+  - Type: string
+  - Required: no
+  - Meaning: contract surface being spoken when known (for example `uaa.agent.session`, `mcp.toolbox.v1`, `openai.responses`).
+
+Delegation boundary (non-negotiable):
+
+- ADR-0017 and this pack own only the envelope shape, rendering, and trace-join posture.
+- Semantics, normalization, and operator-facing interpretation for `client`, `router`, `provider`, `auth_authority`, and `protocol` remain owned by:
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 
 Routing hint:
 
@@ -181,6 +215,43 @@ Additional fields for `data.code="world_restart_required"`:
 }
 ```
 
+### Pure agent/toolbox record (no nested provider/auth fields)
+
+```json
+{
+  "ts": "2026-04-03T00:00:00Z",
+  "kind": "status",
+  "agent_id": "claude_code",
+  "backend_id": "cli:claude_code",
+  "client": "claude_code",
+  "router": "agent_toolbox",
+  "protocol": "mcp.toolbox.v1",
+  "orchestration_session_id": "orch_123",
+  "run_id": "run_123",
+  "role": "orchestrator",
+  "data": { "message": "toolbox inspection started" }
+}
+```
+
+### Nested gateway-backed LLM record
+
+```json
+{
+  "ts": "2026-04-03T00:00:01Z",
+  "kind": "status",
+  "agent_id": "codex",
+  "backend_id": "cli:codex",
+  "client": "codex",
+  "router": "substrate_gateway",
+  "provider": "openai",
+  "auth_authority": "codex_subscription",
+  "protocol": "openai.responses",
+  "orchestration_session_id": "orch_123",
+  "run_id": "run_456",
+  "data": { "message": "nested LLM request accepted" }
+}
+```
+
 ### Alert: world restarted
 
 ```json
@@ -231,5 +302,7 @@ Additional fields for `data.code="world_restart_required"`:
 ## Acceptance criteria (testable)
 
 - Every emitted structured agent event contains the required top-level fields (`ts`, `kind`, `agent_id`, `orchestration_session_id`, `run_id`, `data`).
+- When present, `client`, `router`, `provider`, `auth_authority`, and `protocol` remain top-level metadata fields; `backend_id` remains adapter-only.
+- Pure agent/toolbox records omit `provider` and `auth_authority`; nested gateway-backed LLM records may include them.
 - Producers emit only `kind` values from the allowed taxonomy; consumers ignore unknown `kind` values without crashing.
 - `channel` is producer-declared, bounded, and safe-to-print (unsafe values are dropped).

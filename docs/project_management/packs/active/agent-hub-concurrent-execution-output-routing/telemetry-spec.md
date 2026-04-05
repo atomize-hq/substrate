@@ -41,6 +41,13 @@ Canonical record:
 Optional envelope fields (top-level; emitted when known and applicable):
 
 - `backend_id`, `thread_id`, `role`, `world_id`, `cmd_id`, `span_id`, `channel`, `project`
+- `client`, `router`, `provider`, `auth_authority`, `protocol`
+
+Identity boundary:
+
+- `backend_id` remains the stable adapter/backend id and MUST NOT be overloaded with provider/auth/protocol meaning.
+- `client`, `router`, `provider`, `auth_authority`, and `protocol` are optional tuple-compatible metadata carried additively when applicable.
+- Presence and normalization of those tuple fields are delegated to ADR-0042, ADR-0044, and ADR-0045; this pack only requires that, when emitted, they remain top-level and trace-safe.
 
 Redaction rule:
 
@@ -49,6 +56,7 @@ Redaction rule:
 Consumer impact:
 
 - Enables deterministic multi-agent joins and downstream routing without terminal scraping.
+- Keeps pure agent/toolbox records distinct from nested gateway-backed LLM records without changing the ADR-0017 envelope owner.
 
 ### PTY passthrough suppression summary records
 
@@ -107,5 +115,6 @@ Canonical record:
   - `session_id`
   - `component="agent-hub"`
   - the envelope fields at the record top level (no nested envelope object).
+- Optional tuple-compatible metadata stays top-level when emitted, and `backend_id` remains adapter-only.
 - Each PTY passthrough session that drops structured lines produces exactly one `code="pty_structured_event_drops"` warning record.
 - A clamped config value produces exactly one `code="config_value_clamped"` warning record and does not change exit code.

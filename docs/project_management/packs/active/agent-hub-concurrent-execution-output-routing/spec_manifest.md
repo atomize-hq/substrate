@@ -11,6 +11,12 @@ Authoring standard:
 - Feature directory: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- Alignment ADRs (delegated ownership; no pack takeover):
+  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 
 ## Required spec documents (authoritative)
 
@@ -41,6 +47,7 @@ Spec templates:
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | REPL output routing contract (PTY bytes vs structured events)            | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md`                             | routing rules per mode (idle vs passthrough), non-injection invariants, drop behavior      |
 | Structured agent event envelope                                          | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md` | required top-level fields, kind taxonomy, per-kind `data` schema, channel constraints      |
+| Adapter-only `backend_id` + tuple-compatible optional metadata           | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md` | `backend_id` semantics, optional top-level tuple fields, and explicit delegation boundaries |
 | Config key `repl.max_pty_buffered_lines`                                 | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md`                             | default, precedence, bounds, invalid/out-of-range handling, warning emission rules         |
 | Exit/error posture (config parse failures, warnings)                     | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md`                             | exit code mapping, “warnings do not change exit code”, hard-error conditions               |
 | Trace record types for structured agent events and suppression summaries | `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`                       | record `event_type`s, required correlation fields, stability/redaction rules               |
@@ -60,4 +67,5 @@ For the docs above, confirm they explicitly define:
 - Error model and failure posture (hard-error vs clamp+warning; no PTY injection).
 - Ordering/atomicity/concurrency rules (buffering, drop, flush timing).
 - Security/redaction invariants (`channel` constraints; no secrets in structured events).
+- Delegated ownership boundaries (`backend_id` stays adapter-only; tuple semantics stay in ADR-0042/0044/0045).
 - Platform guarantees (Linux/macOS/Windows parity expectations; any permitted divergence is explicit).

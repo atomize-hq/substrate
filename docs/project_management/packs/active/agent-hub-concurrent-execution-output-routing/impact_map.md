@@ -12,6 +12,12 @@ Authoring standards:
 - Feature directory: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- Alignment ADRs:
+  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 - Spec manifest:
   - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
 
@@ -106,6 +112,19 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - Contradiction risks:
     - Allowing arbitrary user-provided strings into `channel` would risk secret leakage into trace; producers must drop unsafe values.
 
+### Identity / attribution posture
+
+- Change: the envelope must stay tuple-compatible without taking ownership of tuple semantics.
+  - Direct impact:
+    - `backend_id` remains adapter/backend identity only.
+    - Pure agent/toolbox records and nested gateway-backed LLM records can share one envelope shape without conflating their semantics.
+  - Cascading impact:
+    - Optional top-level tuple metadata (`client`, `router`, `provider`, `auth_authority`, `protocol`) must be preserved when present.
+    - Presence rules and normalization stay delegated to ADR-0042, ADR-0044, and ADR-0045.
+  - Contradiction risks:
+    - Treating `backend_id` as provider/auth/protocol would break allowlist clarity and operator attribution.
+    - Re-specifying tuple semantics here would make this pack compete with the newer ADR ownership split.
+
 ## Cross-queue scan (ADRs + Planning Packs)
 
 ### Relevant ADRs (queued/unimplemented)
@@ -118,19 +137,30 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
   - Overlap surfaces: correlation vocabulary (`orchestration_session_id`, `run_id`, `agent_id`, `role`, `world_id`, `span_id`), trace record expectations.
   - Conflict: potential (field naming/placement drift).
   - Resolution (explicit): ADR-0017 requires top-level correlation fields on agent events; ADR-0028 is additive and must remain consistent with this envelope (no reshapes).
-- ADR: `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
-  - Overlap surfaces: event plane semantics, world reuse (`world_id`), attribution requirements.
+- ADR: `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - Overlap surfaces: backend identity (`backend_id`) and adapter selection clarity.
   - Conflict: no.
-  - Resolution (explicit): ADR-0017 defines the envelope + rendering contract; hub-core ADRs consume the envelope and must not redefine it.
-- ADR: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
-  - Overlap surfaces: backend identity (`backend_id`) and correlation propagation for agent-driven execution.
+  - Resolution (explicit): ADR-0017 owns envelope/output routing only; ADR-0041 owns adapter contract semantics and keeps `backend_id` stable and adapter-only.
+- ADR: `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - Overlap surfaces: optional tuple metadata carried on structured event records.
   - Conflict: no.
-  - Resolution (explicit): CLI-backend routing defers to ADR-0017 for structured event envelope rules and to ADR-0028 for trace vocabulary.
+  - Resolution (explicit): ADR-0017 allows tuple-compatible top-level metadata but defers tuple meaning and normalization to ADR-0042.
+- ADR: `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+  - Overlap surfaces: pure agent-run identity, world reuse (`world_id`), and nested LLM visibility.
+  - Conflict: no.
+  - Resolution (explicit): ADR-0017 defines the shared envelope and rendering contract; ADR-0044 defines agent-hub identity semantics and nested-record interpretation.
+- ADR: `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
+  - Overlap surfaces: toolbox record identity, trace joinability, and pure toolbox record absence semantics for provider/auth fields.
+  - Conflict: no.
+  - Resolution (explicit): ADR-0017 remains the envelope/output-routing owner; ADR-0045 defines toolbox-specific tuple semantics and record families.
 
 ### Related Phase 8 tracks (cross-cutting; use ADRs/registry)
 
 - Phase 8 registry (cross-cutting lock): `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
-- CLI backend engine: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
+- Gateway backend adapter contract: `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+- Identity tuple + deployment posture: `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+- Agent Hub successor: `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+- Orchestration toolbox: `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 - Router daemon: `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
 - Workflow engine: `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
 
@@ -139,6 +169,6 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 - Decision Register entries required:
   - None (ADR-0017 already has DR-0001..DR-0010 capturing the key A/B choices).
 - Spec updates required (if any):
-  - If ADR-0028 requires additional required correlation fields, update:
+  - If ADR-0028 requires additional required correlation fields, or if ADR-0042/ADR-0044/ADR-0045 add envelope-carried tuple metadata, update:
     - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/agent-hub-event-envelope-schema-spec.md`
     - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`

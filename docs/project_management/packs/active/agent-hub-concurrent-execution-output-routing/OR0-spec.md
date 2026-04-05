@@ -29,6 +29,8 @@ Non-negotiable:
 - Producers emit all required envelope fields.
 - Envelope correlation fields are top-level keys (not nested).
 - `channel` is producer-declared and secrets-safe; unsafe values are dropped deterministically.
+- `backend_id` remains adapter-only and MUST NOT be repurposed as provider/auth/protocol meaning.
+- Optional tuple-compatible metadata (`client`, `router`, `provider`, `auth_authority`, `protocol`) remains top-level when present, but its semantics are delegated to ADR-0042, ADR-0044, and ADR-0045.
 
 ### Canonical trace persistence (agent events)
 
@@ -63,3 +65,4 @@ Clarification (Phase 8; non-negotiable):
 - The tests assert:
   - one `event_type="agent_event"` record is appended per emitted event, and
   - required envelope fields exist at the trace record top level.
+  - optional tuple-compatible metadata remains top-level when present, and `backend_id` is preserved as a distinct adapter id.
