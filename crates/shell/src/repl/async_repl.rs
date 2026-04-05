@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -533,28 +533,9 @@ struct PromptWorker {
     kind: PromptWorkerKind,
 }
 
-#[cfg(unix)]
-fn stdin_has_pending_bytes() -> bool {
-    use std::os::fd::AsRawFd;
-
-    let fd = io::stdin().as_raw_fd();
-    let mut pending: libc::c_int = 0;
-    // SAFETY: FIONREAD writes an integer to the provided pointer.
-    let ok = unsafe { libc::ioctl(fd, libc::FIONREAD, &mut pending) } == 0;
-    ok && pending > 0
-}
-
-#[cfg(not(unix))]
-fn stdin_has_pending_bytes() -> bool {
-    false
-}
-
 impl PromptWorker {
     fn spawn(config: Arc<ShellConfig>) -> Result<Self> {
-        if std::env::var_os("SUBSTRATE_SMOKE_SLICE_ID").is_some() {
-            return Self::spawn_stdio(config);
-        }
-        if stdin_has_pending_bytes() {
+        if !io::stdin().is_terminal() {
             return Self::spawn_stdio(config);
         }
 
@@ -674,6 +655,64 @@ fn run_prompt_worker_stdio(
     mut command_rx: UnboundedReceiver<PromptWorkerCommand>,
     response_tx: UnboundedSender<PromptWorkerResponse>,
 ) {
+    #[cfg(unix)]
+    struct StdinEchoGuard {
+        fd: std::os::fd::RawFd,
+        original: libc::termios,
+        active: bool,
+    }
+
+    #[cfg(unix)]
+    impl StdinEchoGuard {
+        fn new() -> Self {
+            use std::os::fd::AsRawFd;
+            let fd = io::stdin().as_raw_fd();
+
+            let mut original: libc::termios = unsafe { std::mem::zeroed() };
+            // SAFETY: tcgetattr expects a valid fd and termios pointer.
+            let ok = unsafe { libc::tcgetattr(fd, &mut original as *mut libc::termios) } == 0;
+            if !ok {
+                return Self {
+                    fd,
+                    original,
+                    active: false,
+                };
+            }
+
+            let mut next = original;
+            next.c_lflag &= !(libc::ECHO | libc::ECHONL);
+            // SAFETY: tcsetattr expects a valid fd and termios pointer.
+            let set_ok =
+                unsafe { libc::tcsetattr(fd, libc::TCSANOW, &next as *const libc::termios) } == 0;
+
+            Self {
+                fd,
+                original,
+                active: set_ok,
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for StdinEchoGuard {
+        fn drop(&mut self) {
+            if !self.active {
+                return;
+            }
+            // SAFETY: tcsetattr expects a valid fd and termios pointer.
+            let _ = unsafe {
+                libc::tcsetattr(
+                    self.fd,
+                    libc::TCSANOW,
+                    &self.original as *const libc::termios,
+                )
+            };
+        }
+    }
+
+    #[cfg(unix)]
+    let _echo_guard = StdinEchoGuard::new();
+
     let stdin = io::stdin();
 
     while let Some(cmd) = command_rx.blocking_recv() {
