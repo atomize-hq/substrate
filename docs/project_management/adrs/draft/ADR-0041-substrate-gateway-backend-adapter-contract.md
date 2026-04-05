@@ -42,7 +42,7 @@ This ADR is a successor to ADR-0024 and should be read as a contract clarificati
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f29d4a50dd9ef213ba366be8412c0a3b9d4507e4f81d187459438693740315b4
+ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb3539
 ### Changes (operator-facing)
 - Replace the bespoke Substrate-local engine assumption with a gateway adapter contract
   - Existing: ADR-0024 frames backend execution as if Substrate should own a distinct `llm-manager` / per-CLI engine layer as the primary implementation path.

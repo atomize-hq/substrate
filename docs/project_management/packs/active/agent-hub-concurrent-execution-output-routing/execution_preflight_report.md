@@ -1,6 +1,6 @@
 # Execution Preflight Gate Report — agent-hub-concurrent-execution-output-routing
 
-Date (UTC): 2026-04-05T11:08:08Z
+Date (UTC): 2026-04-05T12:05:00Z
 
 Standard:
 
@@ -12,12 +12,9 @@ Feature directory:
 
 ## Recommendation
 
-RECOMMENDATION: **REVISE**
+RECOMMENDATION: **ACCEPT**
 
-Triads must not begin yet. The pack is mechanically wired for schema-v4 boundary-only execution, and the governing ADR is accepted, but the smoke layer still fails the start-gate standard.
-
-1. The smoke scripts do not yet mirror the manual feature-validation workflow.
-   - The manual playbook validates real `substrate` flows (`:demo-agent`, PTY overlap, trace assertions, warning assertions), but all three smoke scripts only dispatch test binaries via `cargo test` and report `OK` on suite success.
+Triads may begin. The pack remains mechanically wired for schema-v4 boundary-only execution, the governing ADR is accepted, and the smoke layer now mirrors the manual feature-validation workflow closely enough for the start gate.
 
 ## Inputs Reviewed
 
@@ -58,9 +55,9 @@ From `docs/project_management/packs/active/agent-hub-concurrent-execution-output
   - Every task id in `tasks.json` has a kickoff prompt file.
   - Every kickoff prompt contains the exact rule line: `Do not edit planning docs inside the worktree.`
 
-## 2) Smoke Scripts Are Not “Toy” Checks
+## 2) Smoke Scripts Mirror the Manual Workflow
 
-Smoke scripts must be a runnable, minimal version of how a careful human validates the feature.
+Smoke scripts are a runnable, minimal version of how a careful human validates the feature.
 
 Manual playbook:
 
@@ -75,20 +72,17 @@ Smoke scripts:
 Parity notes (map smoke ↔ manual; include concrete assertions):
 
 - Manual step(s):
-  - Linux/macOS manual flow creates a temp workspace and `SUBSTRATE_HOME`, runs `substrate --no-world`, overlaps `:demo-agent` with `:pty`, then asserts trace contents and the post-passthrough warning behavior.
-  - Windows manual flow runs `substrate --no-world --command ":demo-agent"` and asserts `event_type="agent_event"` exists in canonical trace.
+  - Linux/macOS manual flow creates a temp workspace and `SUBSTRATE_HOME`, runs `substrate --no-world`, overlaps `:demo-agent` with `:pty`, then asserts transcript ordering, `trace.jsonl` contents, and the post-passthrough suppression warning behavior.
+  - Windows manual flow creates a temp workspace and `SUBSTRATE_HOME`, runs `substrate --no-world --command ":demo-agent"`, then asserts `event_type="agent_event"` exists in canonical trace.
 - Smoke command(s):
-  - Linux/macOS: `cargo test -p substrate-common --test agent_hub_event_envelope_schema`, `cargo test -p shell --test agent_hub_trace_persistence`, and for `OR1`, `cargo test -p shell --test repl_output_routing` plus `cargo test -p shell --test repl_config_max_pty_buffered_lines`.
-  - Windows: the same `cargo test` suites.
+  - Linux/macOS smoke creates a temp home/workspace, runs `substrate workspace init --force`, and drives the real REPL through `script` with `:demo-agent`, `:pty bash -lc 'echo PTY_START; sleep 2; echo PTY_END'`, and `exit`.
+  - Windows smoke creates a temp home/workspace, runs `substrate workspace init --force`, and executes `substrate --no-world --command ":demo-agent"`.
 - Expected output/assertion(s):
-  - Manual playbook expects real CLI behavior, trace-file assertions, and operator-visible suppression behavior.
-  - Smoke scripts currently assert only that the selected test suites exit `0` and then print `OK: ... smoke`.
-
-## Gaps (must fix before execution begins):
-
-- Gap 1: Smoke does not mirror the manual workflow closely enough.
-  - The scripts do not execute `substrate` commands, do not create temporary homes/workspaces, do not assert `trace.jsonl` contents, and do not check the operator-visible warning/output behavior described in the manual playbook.
-  - As written, the smoke layer is a thin test-suite wrapper, not a minimal execution-grade reproduction of the feature behavior.
+  - Linux/macOS smoke asserts `PTY_START` and `PTY_END` are present, no `Demo agent event` line appears between those markers, a warning line appears after passthrough ends, `trace.jsonl` exists, at least one flattened `agent_event` record exists, and the `pty_structured_event_drops` warning record exists for `OR1`.
+  - Windows smoke asserts `trace.jsonl` exists and at least one flattened `agent_event` record exists.
+- Mechanical parity probe result:
+  - Smoke scripts no longer contain `cargo test` wrappers.
+  - Smoke scripts contain the real `substrate` commands and `jq -e` trace assertions required by the manual playbook.
 
 ## 3) CI Dispatch Path Is Runnable
 
@@ -126,7 +120,9 @@ Run ids/URLs (if executed during preflight):
 
 ## 4) Required Fixes Before Starting OR0
 
-- Replace the current smoke scripts with execution-grade smoke flows that minimally reproduce the manual assertions:
-  - Linux/macOS smoke should drive `substrate` with a temp workspace/home, overlap `:demo-agent` with PTY passthrough, and assert canonical trace plus suppression warning behavior.
-  - Windows smoke should drive the `:demo-agent` path and assert canonical trace persistence only, consistent with the platform parity spec.
-- Re-run `F0-exec-preflight` after those fixes land; do not start `OR0-code` / `OR0-test` before the rerun returns `ACCEPT`.
+- None.
+
+## Decision
+
+- Execution preflight is complete.
+- `OR0-code` and `OR0-test` may start.

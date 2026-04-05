@@ -35,7 +35,7 @@ This ADR supersedes the older backend-id-centric Agent Hub framing in ADR-0025 a
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f903ebf4711628a2ab287c89184603c6cac2efd5a9fbcbf57e72a3f57d7f4843
+ADR_BODY_SHA256: d9b8f16acf256bc582ac1cfaaa23cd75f48bc990f7ebe221ee6406763beaea51
 ### Changes (operator-facing)
 - Replace the older “role-swappable backend” assumption with a UAA-compatible agent hub contract
   - Existing: ADR-0025 treats any backend id as a possible orchestrator/member backend and mixes role assignment, transport, and backend identity into one conceptual surface.

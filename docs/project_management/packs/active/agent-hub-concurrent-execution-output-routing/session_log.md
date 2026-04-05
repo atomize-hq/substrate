@@ -189,3 +189,85 @@
   - `rg -n "self-hosted|linux-host|feature-smoke|ci-testing" .github/workflows docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing` → exit `0`
 - Required next step:
   - Upgrade the smoke scripts to execution-grade feature smoke, then re-run `F0-exec-preflight` before launching `OR0-code` / `OR0-test`.
+
+## START — 2026-04-05T11:40:00Z — remediation — smoke/manual parity
+- Feature: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
+- Branch: `feat/agent-hub-concurrent-execution-output-routing`
+- Goal: Resolve the remaining start-gate blocker by replacing the toy smoke wrappers with execution-grade smoke flows that mirror the manual playbook.
+- Defects addressed:
+  - Quality gate `DEFECT` findings remaining in `quality_gate_report.md`: `NONE`
+  - Execution preflight blocker: smoke scripts did not drive real `substrate` workflows or assert transcript/trace behavior.
+- Planned file updates:
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/execution_preflight_report.md`
+
+## END — 2026-04-05T11:53:26Z — remediation — smoke/manual parity
+- Summary of changes (exhaustive):
+  - Replaced Linux/macOS smoke wrappers with temp-home/temp-workspace `substrate` smoke flows that run `workspace init`, drive `:demo-agent` plus `:pty` through a real REPL PTY session, assert transcript ordering, and assert canonical trace records with `jq -e`.
+  - Replaced the Windows smoke wrapper with a temp-home/temp-workspace `substrate --no-world --command ":demo-agent"` flow that asserts canonical `agent_event` trace persistence.
+  - Corrected the manual playbook prerequisites to include the Unix `script` dependency used by smoke automation and corrected the REPL exit directive from `:quit` to `exit`.
+  - Refreshed ADR executive-summary hashes required by `planning-lint` for the ADRs referenced by this pack.
+- Files changed:
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/windows-smoke.ps1`
+  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
+- Commands run (with results):
+  - `bash -n docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh` → exit `0`
+  - `bash -n docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh` → exit `0`
+  - `python3` smoke/manual parity probe (verifies smoke scripts use `substrate`, remove `cargo test`, include `jq -e` trace assertions, and manual playbook uses `exit`) → exit `0`
+  - `make adr-fix ADR="docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md"` → exit `0`
+  - `python3` ADR refresh loop over referenced ADRs (`ADR-0016`, `ADR-0017`, `ADR-0021`, `ADR-0028`, `ADR-0029`, `ADR-0041`, `ADR-0042`, `ADR-0044`, `ADR-0045`) invoking `make adr-fix ADR=<path>` → exit `0`
+
+## START — 2026-04-05T11:54:00Z — execution — F0-exec-preflight
+- Feature: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
+- Branch: `feat/agent-hub-concurrent-execution-output-routing`
+- Goal: Re-run the feature-level execution preflight gate after smoke/manual parity remediation and verify that the start gate is now satisfied.
+- Inputs re-read:
+  - `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/plan.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/session_log.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR1-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/execution_preflight_report.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/kickoff_prompts/F0-exec-preflight.md`
+
+## END — 2026-04-05T11:58:00Z — execution — F0-exec-preflight
+- Recommendation:
+  - `ACCEPT`
+- Summary of findings:
+  - `tasks.json` meta and checkpoint wiring remain correct for schema v4 boundary-only execution (`checkpoint_boundaries=["OR1"]`, `CP1-ci-checkpoint` depends on `OR1-integ-core`, OR1-only boundary platform-fix tasks present, OR0 has no boundary-only platform-fix tasks).
+  - `ADR-0017` remains accepted and aligned with the pack intent.
+  - All 13 task ids still have kickoff prompts, and every kickoff prompt contains the exact rule line `Do not edit planning docs inside the worktree.`
+  - The smoke scripts now mirror the manual feature-validation workflow closely enough for the execution preflight standard: Linux/macOS use temp workspace/home `substrate` REPL smoke with PTY overlap and transcript/trace assertions; Windows uses temp workspace/home `substrate --no-world --command ":demo-agent"` and trace assertions.
+- Files updated:
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/execution_preflight_report.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/session_log.md`
+- Commands run (with results):
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` (with `FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` exported) → exit `0`
+  - `PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR="$FEATURE_DIR"` (with `FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` exported) → exit `0`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` (with `FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` exported) → exit `0`
+  - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null` (with `FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` exported) → exit `0`
+  - `jq -e . docs/project_management/packs/sequencing.json >/dev/null` → exit `0`
+  - `bash -n docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/linux-smoke.sh` → exit `0`
+  - `bash -n docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/smoke/macos-smoke.sh` → exit `0`
+  - `python3` smoke/manual parity probe → exit `0`
+- Next step:
+  - `OR0-code` and `OR0-test` may start.
