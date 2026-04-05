@@ -3,10 +3,27 @@
 use super::super::control::PtyControl;
 use super::types::PtyExitStatus;
 use anyhow::Result;
+use std::env;
 use std::io::{self, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
+
+fn should_forward_stdin() -> bool {
+    if let Ok(value) = env::var("SUBSTRATE_PTY_FORWARD_STDIN") {
+        let value = value.to_ascii_lowercase();
+        return matches!(value.as_str(), "1" | "true" | "yes" | "on");
+    }
+
+    // In CI, PTY harnesses like `script` often pre-buffer the entire input stream. Forwarding
+    // stdin during a `:pty <command>` run can consume subsequent REPL commands (like `exit`),
+    // leaving the parent session blocked at the next prompt.
+    if env::var_os("CI").is_some() || env::var_os("GITHUB_ACTIONS").is_some() {
+        return false;
+    }
+
+    true
+}
 
 pub(crate) fn handle_pty_io(
     control: PtyControl,
@@ -19,54 +36,59 @@ pub(crate) fn handle_pty_io(
 
     #[cfg(unix)]
     let stdin_join: Option<thread::JoinHandle<()>> = {
-        let control_clone = control.clone();
-        let done_writer = Arc::clone(&done);
-        let cmd_id_stdin = cmd_id.to_string();
-        Some(thread::spawn(move || {
-            let mut stdin = io::stdin();
-            let mut buffer = vec![0u8; 4096];
+        if !should_forward_stdin() {
+            None
+        } else {
+            let control_clone = control.clone();
+            let done_writer = Arc::clone(&done);
+            let cmd_id_stdin = cmd_id.to_string();
+            Some(thread::spawn(move || {
+                let mut stdin = io::stdin();
+                let mut buffer = vec![0u8; 4096];
 
-            while !done_writer.load(Ordering::Relaxed) {
-                use nix::sys::select::{select, FdSet};
-                use nix::sys::time::TimeVal;
-                use std::os::unix::io::{AsFd, AsRawFd};
+                while !done_writer.load(Ordering::Relaxed) {
+                    use nix::sys::select::{select, FdSet};
+                    use nix::sys::time::TimeVal;
+                    use std::os::unix::io::{AsFd, AsRawFd};
 
-                let stdin_fd = stdin.as_raw_fd();
-                let stdin_borrowed = stdin.as_fd();
-                let mut read_fds = FdSet::new();
-                read_fds.insert(stdin_borrowed);
+                    let stdin_fd = stdin.as_raw_fd();
+                    let stdin_borrowed = stdin.as_fd();
+                    let mut read_fds = FdSet::new();
+                    read_fds.insert(stdin_borrowed);
 
-                let mut timeout = TimeVal::new(0, 100_000);
-                let result = select(
-                    stdin_fd + 1,
-                    Some(&mut read_fds),
-                    None,
-                    None,
-                    Some(&mut timeout),
-                );
+                    let mut timeout = TimeVal::new(0, 100_000);
+                    let result = select(
+                        stdin_fd + 1,
+                        Some(&mut read_fds),
+                        None,
+                        None,
+                        Some(&mut timeout),
+                    );
 
-                match result {
-                    Ok(0) => continue,
-                    Ok(_) if read_fds.contains(stdin_borrowed) => match stdin.read(&mut buffer) {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            control_clone.write(buffer[..n].to_vec());
-                        }
+                    match result {
+                        Ok(0) => continue,
+                        Ok(_) if read_fds.contains(stdin_borrowed) => match stdin.read(&mut buffer)
+                        {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                control_clone.write(buffer[..n].to_vec());
+                            }
+                            Err(e) => {
+                                log::warn!("[{cmd_id_stdin}] Failed to read from stdin: {e}");
+                                break;
+                            }
+                        },
+                        Ok(_) => continue,
                         Err(e) => {
-                            log::warn!("[{cmd_id_stdin}] Failed to read from stdin: {e}");
-                            break;
-                        }
-                    },
-                    Ok(_) => continue,
-                    Err(e) => {
-                        if e != nix::errno::Errno::EINTR {
-                            log::warn!("[{cmd_id_stdin}] select() failed: {e}");
-                            break;
+                            if e != nix::errno::Errno::EINTR {
+                                log::warn!("[{cmd_id_stdin}] select() failed: {e}");
+                                break;
+                            }
                         }
                     }
                 }
-            }
-        }))
+            }))
+        }
     };
 
     #[cfg(not(unix))]
@@ -113,6 +135,11 @@ pub(crate) fn handle_pty_io(
 
     done.store(true, Ordering::Relaxed);
 
+    // Ensure the PTY master is closed before joining the output thread so a blocking read can
+    // observe EOF and terminate.
+    control.close();
+    let _ = manager_handle.join();
+
     thread::sleep(std::time::Duration::from_millis(50));
 
     let _ = output_thread.join();
@@ -136,9 +163,6 @@ pub(crate) fn handle_pty_io(
             }
         }
     }
-
-    control.close();
-    let _ = manager_handle.join();
 
     Ok(PtyExitStatus::from_portable_pty(portable_status))
 }

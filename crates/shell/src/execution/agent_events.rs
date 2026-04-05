@@ -123,8 +123,12 @@ pub(crate) fn format_event_line(event: &AgentEvent) -> String {
 }
 
 fn extract_event_message(kind: &AgentEventKind, data: &serde_json::Value) -> String {
+    fn escape_line_breaks(raw: &str) -> String {
+        raw.replace('\n', "\\n").replace('\r', "\\r")
+    }
+
     if let Some(msg) = data.get("message").and_then(serde_json::Value::as_str) {
-        return msg.to_string();
+        return escape_line_breaks(msg);
     }
 
     if let Some(chunk) = data.get("chunk").and_then(serde_json::Value::as_str) {
@@ -132,13 +136,13 @@ fn extract_event_message(kind: &AgentEventKind, data: &serde_json::Value) -> Str
             .get("stream")
             .and_then(serde_json::Value::as_str)
             .unwrap_or("stdout");
-        return format!("{}: {}", stream, chunk);
+        return escape_line_breaks(&format!("{}: {}", stream, chunk));
     }
 
     if data.is_null() {
         kind.to_string()
     } else {
-        data.to_string()
+        escape_line_breaks(&data.to_string())
     }
 }
 
@@ -150,11 +154,17 @@ pub(crate) fn schedule_demo_events() {
     let orchestration_session_id = orchestration_session_id();
     let run_id = Uuid::now_v7().to_string();
 
+    let mut first = AgentEvent::message(
+        "demo-agent",
+        orchestration_session_id.clone(),
+        run_id.clone(),
+        AgentEventKind::TaskProgress,
+        "Demo agent event #1".to_string(),
+    );
+    first.role = Some("member".to_string());
+    let _ = publish_agent_event(first);
+
     let events = vec![
-        (
-            Duration::from_millis(1200),
-            "Demo agent event #1".to_string(),
-        ),
         (
             Duration::from_millis(400),
             "Demo agent event #2".to_string(),
