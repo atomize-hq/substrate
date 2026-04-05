@@ -385,3 +385,19 @@
   - compile parity: `https://github.com/atomize-hq/substrate/actions/runs/24002461950` → `success`
   - ci-testing (quick): `https://github.com/atomize-hq/substrate/actions/runs/24002517758` → `success`
   - feature-smoke (behavior): `https://github.com/atomize-hq/substrate/actions/runs/24002669379` → `failure` (failed platforms: `linux,macos,windows`)
+
+## START — 2026-04-05T14:30:18Z — platform-fix — OR1-integ-linux
+- Worktree: `/home/spenser/__Active_code/substrate/wt/agent-hub-concurrent-execution-output-routing-or1-integ-linux`
+- Branch: `agent-hub-concurrent-execution-output-routing-or1-integ-linux`
+- Source smoke: `https://github.com/atomize-hq/substrate/actions/runs/24002669379` (linux failed)
+
+## START — 2026-04-05T14:30:18Z — platform-fix — OR1-integ-macos
+- Worktree: `/home/spenser/__Active_code/substrate/wt/agent-hub-concurrent-execution-output-routing-or1-integ-macos`
+- Branch: `agent-hub-concurrent-execution-output-routing-or1-integ-macos`
+- Source smoke: `https://github.com/atomize-hq/substrate/actions/runs/24002669379` (macos failed)
+- Cancelled hung macOS self-hosted run: `https://github.com/atomize-hq/substrate/actions/runs/24003029168` → `cancelled` (hung in `Run integration checks (macOS self-hosted)` for ~29m)
+
+## START — 2026-04-05T14:30:18Z — platform-fix — OR1-integ-windows
+- Worktree: `/home/spenser/__Active_code/substrate/wt/agent-hub-concurrent-execution-output-routing-or1-integ-windows`
+- Branch: `agent-hub-concurrent-execution-output-routing-or1-integ-windows`
+- Source smoke: `https://github.com/atomize-hq/substrate/actions/runs/24002669379` (windows failed)

@@ -424,7 +424,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing\" TASK_ID=\"OR1-integ-linux\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "workflow": ".github/workflows/feature-smoke.yml",
       "worktree": "wt/agent-hub-concurrent-execution-output-routing-or1-integ-linux"
@@ -477,7 +477,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing\" TASK_ID=\"OR1-integ-macos\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "workflow": ".github/workflows/feature-smoke.yml",
       "worktree": "wt/agent-hub-concurrent-execution-output-routing-or1-integ-macos"
@@ -530,7 +530,7 @@
         "Set status to in_progress; add START entry; commit docs",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing\" TASK_ID=\"OR1-integ-windows\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "workflow": ".github/workflows/feature-smoke.yml",
       "worktree": "wt/agent-hub-concurrent-execution-output-routing-or1-integ-windows"
