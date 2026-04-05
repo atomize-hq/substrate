@@ -278,3 +278,10 @@
 - Orchestration branch: `feat/agent-hub-concurrent-execution-output-routing`
 - Dispatch:
   - `make triad-task-start-pair FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" LAUNCH_CODEX=1`
+
+## START — 2026-04-05T12:15:02Z — test — OR0-test
+- Worktree: `wt/agent-hub-concurrent-execution-output-routing-or0-test`
+- Branch: `agent-hub-concurrent-execution-output-routing-or0-test`
+- Orchestration branch: `feat/agent-hub-concurrent-execution-output-routing`
+- Dispatch:
+  - `make triad-task-start-pair FEATURE_DIR="$FEATURE_DIR" SLICE_ID="$SLICE_ID" LAUNCH_CODEX=1`
