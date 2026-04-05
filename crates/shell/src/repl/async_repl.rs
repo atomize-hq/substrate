@@ -535,6 +535,15 @@ struct PromptWorker {
 
 impl PromptWorker {
     fn spawn(config: Arc<ShellConfig>) -> Result<Self> {
+        // CI runners often drive Substrate through PTY harnesses like `script` where Reedline's
+        // cursor position query can consume the piped input stream. Prefer a plain stdin-backed
+        // prompt in CI to keep smoke runs deterministic.
+        if config.ci_mode
+            || std::env::var_os("CI").is_some()
+            || std::env::var_os("GITHUB_ACTIONS").is_some()
+        {
+            return Self::spawn_stdio(config);
+        }
         if !io::stdin().is_terminal() {
             return Self::spawn_stdio(config);
         }

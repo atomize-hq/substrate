@@ -532,16 +532,16 @@ impl ShellConfig {
             .or_else(|_| env::var("USERPROFILE")) // Windows support
             .context("HOME/USERPROFILE not set")?;
 
+        let substrate_home = substrate_paths::substrate_home()?;
         let trace_log_file = env::var("SHIM_TRACE_LOG")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from(&home).join(".substrate/trace.jsonl"));
+            .unwrap_or_else(|_| substrate_home.join("trace.jsonl"));
 
         let original_path = env::var("SHIM_ORIGINAL_PATH")
             .or_else(|_| env::var("PATH"))
             .context("No PATH found")?;
 
         let shim_dir = substrate_common::paths::shims_dir()?;
-        let substrate_home = substrate_paths::substrate_home()?;
         let config_path = substrate_paths::config_file()?;
         if !config_path.exists() {
             eprintln!(

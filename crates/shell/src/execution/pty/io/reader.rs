@@ -3,10 +3,27 @@
 use super::super::control::PtyControl;
 use super::types::PtyExitStatus;
 use anyhow::Result;
+use std::env;
 use std::io::{self, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
+
+fn should_forward_stdin() -> bool {
+    if let Ok(value) = env::var("SUBSTRATE_PTY_FORWARD_STDIN") {
+        let value = value.to_ascii_lowercase();
+        return matches!(value.as_str(), "1" | "true" | "yes" | "on");
+    }
+
+    // In CI, PTY harnesses like `script` often pre-buffer the entire input stream. Forwarding
+    // stdin during a `:pty <command>` run can consume subsequent REPL commands (like `exit`),
+    // leaving the parent session blocked at the next prompt.
+    if env::var_os("CI").is_some() || env::var_os("GITHUB_ACTIONS").is_some() {
+        return false;
+    }
+
+    true
+}
 
 pub(crate) fn handle_pty_io(
     control: PtyControl,
@@ -19,6 +36,9 @@ pub(crate) fn handle_pty_io(
 
     #[cfg(unix)]
     let stdin_join: Option<thread::JoinHandle<()>> = {
+        if !should_forward_stdin() {
+            None
+        } else {
         let control_clone = control.clone();
         let done_writer = Arc::clone(&done);
         let cmd_id_stdin = cmd_id.to_string();
@@ -67,6 +87,7 @@ pub(crate) fn handle_pty_io(
                 }
             }
         }))
+        }
     };
 
     #[cfg(not(unix))]
@@ -113,6 +134,11 @@ pub(crate) fn handle_pty_io(
 
     done.store(true, Ordering::Relaxed);
 
+    // Ensure the PTY master is closed before joining the output thread so a blocking read can
+    // observe EOF and terminate.
+    control.close();
+    let _ = manager_handle.join();
+
     thread::sleep(std::time::Duration::from_millis(50));
 
     let _ = output_thread.join();
@@ -136,9 +162,6 @@ pub(crate) fn handle_pty_io(
             }
         }
     }
-
-    control.close();
-    let _ = manager_handle.join();
 
     Ok(PtyExitStatus::from_portable_pty(portable_status))
 }
