@@ -349,3 +349,11 @@
   - `CODEX_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR0/integ/events.jsonl`
   - `CODEX_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR0/integ/stderr.log`
 - Blockers: `NONE`
+
+## START — 2026-04-05T12:54:41Z — code — OR1-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing" SLICE_ID="OR1"`
+
+## START — 2026-04-05T12:54:41Z — test — OR1-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing" SLICE_ID="OR1"`
