@@ -372,7 +372,7 @@
         "Read ci_checkpoint_plan.md, tasks.json, session_log.md, kickoff prompt",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "ops",
       "worktree": null
     },
@@ -631,9 +631,9 @@
         "Confirm all tasks are completed and merged as intended",
         "Set status to in_progress; add START entry; commit docs"
       ],
-      "status": "pending",
-      "type": "ops",
-      "worktree": null
-    }
+  "status": "pending",
+  "type": "ops",
+  "worktree": null
+}
   ]
 }

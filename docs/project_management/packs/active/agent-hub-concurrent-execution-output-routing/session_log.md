@@ -373,3 +373,7 @@
 ## END — 2026-04-05T13:22:22Z — integration — OR1-integ-core
 - HEAD: `cc61d1a8a5d8310a08f1c59d4cacbd100017d6c8`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR1/integ-core/last_message.md`
+
+## START — 2026-04-05T13:23:13Z — checkpoint — CP1-ci-checkpoint
+- Candidate validation SHA: `cc61d1a8a5d8310a08f1c59d4cacbd100017d6c8`
+- Wrapper summary: `/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR1/wrapper/triad-task-start-complete.20260405T125440Z.summary.json`
