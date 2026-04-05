@@ -165,3 +165,27 @@
   - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/kickoff_prompts/F0-exec-preflight.md`
 - Commands run (with results):
   - `make triad-orch-ensure FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` → exit `0` (`ACTION=noop`)
+
+## END — 2026-04-05T11:08:08Z — execution — F0-exec-preflight
+- Recommendation:
+  - `REVISE`
+- Summary of findings:
+  - `tasks.json` meta and checkpoint wiring remain correct for schema v4 boundary-only execution (`checkpoint_boundaries=["OR1"]`, `CP1-ci-checkpoint` depends on `OR1-integ-core`, OR1-only boundary platform-fix tasks present, OR0 has no boundary-only platform-fix tasks).
+  - `ADR-0017` is accepted and still matches the pack intent, so the ADR-basis blocker from the earlier preflight run is cleared.
+  - All 13 task ids have kickoff prompts, and every kickoff prompt contains the exact rule line `Do not edit planning docs inside the worktree.`
+  - Remaining blocker: the smoke scripts still do not mirror the manual feature-validation workflow and therefore do not satisfy the execution preflight standard.
+- Files updated:
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/execution_preflight_report.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/session_log.md`
+- Commands run (with results):
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` → exit `0`
+  - `jq -e . docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json >/dev/null` → exit `0`
+  - `python3` parse of fenced JSON in `ci_checkpoint_plan.md` → exit `0`
+  - `python3` tasks.json meta/checkpoint verification (`schema_version`, platform lists, `checkpoint_boundaries`, `CP1-ci-checkpoint`, OR1-only boundary tasks) → exit `0`
+  - `python3` kickoff prompt coverage/rule verification across all task ids → exit `0`
+  - `python3` manual-playbook vs smoke parity probe → exit `0` (`manual` includes real `substrate` workflow assertions; smoke scripts still use `cargo test` wrappers)
+  - `ls scripts/ci-audit` → exit `0`
+  - `rg -n "self-hosted|linux-host|feature-smoke|ci-testing" .github/workflows docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing` → exit `0`
+- Required next step:
+  - Upgrade the smoke scripts to execution-grade feature smoke, then re-run `F0-exec-preflight` before launching `OR0-code` / `OR0-test`.

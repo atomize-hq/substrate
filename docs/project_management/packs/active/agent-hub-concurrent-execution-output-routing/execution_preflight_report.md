@@ -1,6 +1,6 @@
 # Execution Preflight Gate Report — agent-hub-concurrent-execution-output-routing
 
-Date (UTC): 2026-04-05T09:16:56Z
+Date (UTC): 2026-04-05T11:08:08Z
 
 Standard:
 
@@ -14,21 +14,19 @@ Feature directory:
 
 RECOMMENDATION: **REVISE**
 
-Triads must not begin yet. The pack is mechanically wired for schema-v4 boundary-only execution, but two start-gate blockers remain:
+Triads must not begin yet. The pack is mechanically wired for schema-v4 boundary-only execution, and the governing ADR is accepted, but the smoke layer still fails the start-gate standard.
 
-1. The governing ADR is not accepted yet.
-   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` still declares `Status: Draft`, while this gate requires an accepted ADR that still matches execution intent.
-2. The smoke layer does not yet mirror the manual feature-validation workflow.
+1. The smoke scripts do not yet mirror the manual feature-validation workflow.
    - The manual playbook validates real `substrate` flows (`:demo-agent`, PTY overlap, trace assertions, warning assertions), but all three smoke scripts only dispatch test binaries via `cargo test` and report `OK` on suite success.
 
 ## Inputs Reviewed
 
 - [x] Planning quality gate is `ACCEPT` (`docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/quality_gate_report.md`)
-- [ ] ADR accepted and still matches intent
+- [x] ADR accepted and still matches intent
 - [x] Planning Pack complete (`plan.md`, `tasks.json`, `session_log.md`, specs, kickoff prompts)
 - [x] Triad sizing is appropriate (each slice is one behavior delta; no “grab bag” slices)
 - [x] Required planning artifacts exist: `spec_manifest.md`, `impact_map.md`, `ci_checkpoint_plan.md`, `manual_testing_playbook.md`
-- [x] Cross-platform plan is explicit (tasks.json meta: behavior + CI parity platforms; WSL settings absent because WSL is not required)
+- [x] Cross-platform plan is explicit (tasks.json meta: behavior + CI parity platforms; WSL is not required for this pack)
 
 ## 0) Slice Sizing (one behavior delta each)
 
@@ -88,9 +86,7 @@ Parity notes (map smoke ↔ manual; include concrete assertions):
 
 ## Gaps (must fix before execution begins):
 
-- Gap 1: ADR acceptance is missing.
-  - The preflight cannot certify “ADR accepted and still matches intent” while `ADR-0017` remains `Draft`.
-- Gap 2: Smoke does not mirror the manual workflow closely enough.
+- Gap 1: Smoke does not mirror the manual workflow closely enough.
   - The scripts do not execute `substrate` commands, do not create temporary homes/workspaces, do not assert `trace.jsonl` contents, and do not check the operator-visible warning/output behavior described in the manual playbook.
   - As written, the smoke layer is a thin test-suite wrapper, not a minimal execution-grade reproduction of the feature behavior.
 
@@ -130,7 +126,6 @@ Run ids/URLs (if executed during preflight):
 
 ## 4) Required Fixes Before Starting OR0
 
-- Promote `ADR-0017` to an accepted status, or update the governing execution basis so the preflight can truthfully verify an accepted authoritative decision source.
 - Replace the current smoke scripts with execution-grade smoke flows that minimally reproduce the manual assertions:
   - Linux/macOS smoke should drive `substrate` with a temp workspace/home, overlap `:demo-agent` with PTY passthrough, and assert canonical trace plus suppression warning behavior.
   - Windows smoke should drive the `:demo-agent` path and assert canonical trace persistence only, consistent with the platform parity spec.
