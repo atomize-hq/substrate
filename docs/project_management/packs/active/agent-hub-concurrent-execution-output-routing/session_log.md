@@ -330,3 +330,22 @@
 - Orchestration branch: `feat/agent-hub-concurrent-execution-output-routing`
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="$FEATURE_DIR" TASK_ID="$INTEG_TASK_ID" LAUNCH_CODEX=1`
+
+## END — 2026-04-05T12:46:58Z — integ — OR0-integ
+- Worktree: `/home/spenser/__Active_code/substrate/wt/agent-hub-concurrent-execution-output-routing-or0-integ`
+- Branch: `agent-hub-concurrent-execution-output-routing-or0-integ`
+- HEAD: `161503265158f398716d61fe2684738129df0aea`
+- Codex: `CODEX_EXIT=0`
+- Finisher summary:
+  - `TASK_BRANCH=agent-hub-concurrent-execution-output-routing-or0-integ`
+  - `WORKTREE=/home/spenser/__Active_code/substrate/wt/agent-hub-concurrent-execution-output-routing-or0-integ`
+  - `HEAD=161503265158f398716d61fe2684738129df0aea`
+  - `COMMITS=5`
+  - `CHECKS=verify-only; impact_map_touchset:skipped; impact_map_source:legacy`
+  - `SMOKE_RUN=skipped`
+  - `MERGED_TO_ORCH=true`
+- Artifacts:
+  - `CODEX_LAST_MESSAGE_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR0/integ/last_message.md`
+  - `CODEX_EVENTS_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR0/integ/events.jsonl`
+  - `CODEX_STDERR_PATH=/home/spenser/__Active_code/substrate/docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/logs/OR0/integ/stderr.log`
+- Blockers: `NONE`
