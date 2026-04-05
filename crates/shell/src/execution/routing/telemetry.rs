@@ -58,6 +58,12 @@ impl ReplSessionTelemetry {
         self.metrics.agent_events = self.metrics.agent_events.saturating_add(1);
     }
 
+    pub(crate) fn persist_agent_event(&self, event: &AgentEvent) {
+        if let Err(err) = append_agent_event_to_trace(&self.config, event) {
+            warn!(target = "substrate::shell", error = %err, "failed to append agent_event trace record");
+        }
+    }
+
     pub(crate) fn record_command(&mut self) {
         self.metrics.commands_executed = self.metrics.commands_executed.saturating_add(1);
     }
@@ -119,6 +125,25 @@ fn log_repl_event(
         "repl_status"
     );
 
+    Ok(())
+}
+
+fn append_agent_event_to_trace(config: &ShellConfig, event: &AgentEvent) -> Result<()> {
+    let mut sanitized = event.clone();
+    let channel = sanitized.channel.take();
+    sanitized.set_channel(channel);
+
+    let mut entry = serde_json::to_value(&sanitized)?;
+    let obj = entry
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("agent event must serialize as a JSON object"))?;
+
+    obj.insert(log_schema::EVENT_TYPE.to_string(), json!("agent_event"));
+    obj.insert(log_schema::SESSION_ID.to_string(), json!(config.session_id));
+    obj.insert(log_schema::COMPONENT.to_string(), json!("agent-hub"));
+
+    let _ = init_trace(None);
+    append_to_trace(&entry)?;
     Ok(())
 }
 
