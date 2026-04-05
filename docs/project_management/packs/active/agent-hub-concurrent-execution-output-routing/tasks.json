@@ -234,7 +234,7 @@
         "Do not edit planning docs inside the worktree.",
         "Read OR1-spec.md and referenced decision register entries"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "code",
       "worktree": "wt/agent-hub-concurrent-execution-output-routing-or1-code"
     },
@@ -276,7 +276,7 @@
         "Do not edit planning docs inside the worktree.",
         "Read OR1-spec.md and referenced decision register entries"
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "test",
       "worktree": "wt/agent-hub-concurrent-execution-output-routing-or1-test"
     },
