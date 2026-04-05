@@ -142,3 +142,26 @@
   - `python3` kickoff prompt coverage/rule verification across all task ids → exit `0`
 - Required next step:
   - Accept the ADR and upgrade the smoke scripts to execution-grade feature smoke, then re-run `F0-exec-preflight` before launching `OR0-code` / `OR0-test`.
+
+## START — 2026-04-05T11:06:52Z — execution — F0-exec-preflight
+- Feature: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
+- Branch: `feat/agent-hub-concurrent-execution-output-routing`
+- Goal: Re-run the feature-level execution preflight gate before OR0 triad launch and verify the current branch state against the execution start-gate requirements.
+- Inputs read:
+  - `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+  - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/plan.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/tasks.json`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/session_log.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/spec_manifest.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/contract.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR1-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/telemetry-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/platform-parity-spec.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/manual_testing_playbook.md`
+  - `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/kickoff_prompts/F0-exec-preflight.md`
+- Commands run (with results):
+  - `make triad-orch-ensure FEATURE_DIR="docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing"` → exit `0` (`ACTION=noop`)
