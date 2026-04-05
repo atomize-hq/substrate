@@ -5,9 +5,11 @@ use std::time::Duration;
 
 use substrate_common::agent_events::{AgentEvent, AgentEventKind};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use uuid::Uuid;
 
 /// Global sender storage so any component can publish agent events.
 static AGENT_EVENT_SENDER: OnceLock<Mutex<Option<UnboundedSender<AgentEvent>>>> = OnceLock::new();
+static ORCHESTRATION_SESSION_ID: OnceLock<String> = OnceLock::new();
 
 #[cfg(test)]
 static EVENT_TEST_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
@@ -61,7 +63,13 @@ pub(crate) fn clear_agent_event_sender() {
     }
 }
 
-pub(crate) fn publish_command_completion(command: &str, status: &ExitStatus) {
+pub(crate) fn orchestration_session_id() -> String {
+    ORCHESTRATION_SESSION_ID
+        .get_or_init(|| Uuid::now_v7().to_string())
+        .clone()
+}
+
+pub(crate) fn publish_command_completion(command: &str, cmd_id: &str, status: &ExitStatus) {
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
@@ -78,21 +86,27 @@ pub(crate) fn publish_command_completion(command: &str, status: &ExitStatus) {
             return;
         }
 
-        let event = AgentEvent::message(
+        let mut event = AgentEvent::message(
             "shell",
+            orchestration_session_id(),
+            cmd_id.to_string(),
             AgentEventKind::TaskEnd,
             format!("Command `{command}` completed successfully"),
         );
+        event.cmd_id = Some(cmd_id.to_string());
         let _ = publish_agent_event(event);
         return;
     }
 
     let code = status.code().unwrap_or(-1);
-    let event = AgentEvent::message(
+    let mut event = AgentEvent::message(
         "shell",
+        orchestration_session_id(),
+        cmd_id.to_string(),
         AgentEventKind::Alert,
         format!("Command `{command}` exited with status {code}"),
     );
+    event.cmd_id = Some(cmd_id.to_string());
 
     let _ = publish_agent_event(event);
 }
@@ -133,6 +147,9 @@ pub(crate) fn schedule_demo_events() {
         return;
     }
 
+    let orchestration_session_id = orchestration_session_id();
+    let run_id = Uuid::now_v7().to_string();
+
     let events = vec![
         (
             Duration::from_millis(1200),
@@ -151,11 +168,15 @@ pub(crate) fn schedule_demo_events() {
     thread::spawn(move || {
         for (delay, message) in events {
             thread::sleep(delay);
-            let _ = publish_agent_event(AgentEvent::message(
-                "demo",
+            let mut event = AgentEvent::message(
+                "demo-agent",
+                orchestration_session_id.clone(),
+                run_id.clone(),
                 AgentEventKind::TaskProgress,
                 message,
-            ));
+            );
+            event.role = Some("member".to_string());
+            let _ = publish_agent_event(event);
         }
     });
 }
@@ -167,29 +188,41 @@ pub(crate) fn schedule_demo_burst(agent_count: usize, events_per_agent: usize, d
 
     let agent_count = agent_count.clamp(1, 16);
     let events_per_agent = events_per_agent.clamp(1, 10_000);
+    let orchestration_session_id = orchestration_session_id();
+    let run_id = Uuid::now_v7().to_string();
 
     for agent_idx in 0..agent_count {
         let agent = format!("burst-{agent_idx:02}");
         thread::spawn({
             let agent_name = agent.clone();
+            let orchestration_session_id = orchestration_session_id.clone();
+            let run_id = run_id.clone();
             move || {
                 for event_idx in 0..events_per_agent {
                     let message = format!("chunk #{event_idx:05}");
                     let is_stderr = event_idx % 20 == 0;
-                    let _ = publish_agent_event(AgentEvent::stream_chunk(
+                    let mut event = AgentEvent::stream_chunk(
                         agent_name.as_str(),
+                        orchestration_session_id.clone(),
+                        run_id.clone(),
                         is_stderr,
                         message,
-                    ));
+                    );
+                    event.role = Some("member".to_string());
+                    let _ = publish_agent_event(event);
                     if !delay.is_zero() {
                         thread::sleep(delay);
                     }
                 }
-                let _ = publish_agent_event(AgentEvent::message(
+                let mut event = AgentEvent::message(
                     agent_name.clone(),
+                    orchestration_session_id,
+                    run_id,
                     AgentEventKind::TaskEnd,
                     "burst complete",
-                ));
+                );
+                event.role = Some("member".to_string());
+                let _ = publish_agent_event(event);
             }
         });
     }

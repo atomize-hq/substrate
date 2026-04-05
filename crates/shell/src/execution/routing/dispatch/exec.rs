@@ -1594,7 +1594,7 @@ where
             match std::io::Read::read(&mut reader, &mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    emit_stream_chunk(&agent_label, &buf[..n], is_stderr);
+                    emit_stream_chunk(&agent_label, "unknown", None, &buf[..n], is_stderr);
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(anyhow::anyhow!("pipe read failed: {}", e)),

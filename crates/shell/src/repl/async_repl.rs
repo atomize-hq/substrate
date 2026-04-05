@@ -215,7 +215,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             .await?;
                             let status = exit_status_from_code(exit_code);
                             report_nonzero_status(&status);
-                            publish_command_completion(&trimmed_owned, &status);
+                            publish_command_completion(&trimmed_owned, &cmd_id, &status);
                             telemetry.record_command();
                             continue;
                         }
@@ -247,7 +247,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
                                 let status = exit_status_from_code(exit_code);
                                 report_nonzero_status(&status);
-                                publish_command_completion(&trimmed_owned, &status);
+                                publish_command_completion(&trimmed_owned, &cmd_id, &status);
                                 telemetry.record_command();
                                 continue;
                             }
@@ -277,7 +277,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
                         let status = exit_status_from_code(exit_code);
                         report_nonzero_status(&status);
-                        publish_command_completion(&trimmed_owned, &status);
+                        publish_command_completion(&trimmed_owned, &cmd_id, &status);
                         telemetry.record_command();
                         continue;
                     }
@@ -286,8 +286,14 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     let config_clone = (*shared_config).clone();
                     let running_clone = running_child_pid.clone();
                     let command_for_exec = command.clone();
+                    let cmd_id_for_exec = cmd_id.clone();
                     let command_fut = task::spawn_blocking(move || {
-                        execute_command(&config_clone, &command_for_exec, &cmd_id, running_clone)
+                        execute_command(
+                            &config_clone,
+                            &command_for_exec,
+                            &cmd_id_for_exec,
+                            running_clone,
+                        )
                     })
                     .map(|res: Result<Result<ExitStatus, anyhow::Error>, tokio::task::JoinError>| {
                         match res {
@@ -311,7 +317,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     };
 
                     report_nonzero_status(&status);
-                    publish_command_completion(&trimmed_owned, &status);
+                    publish_command_completion(&trimmed_owned, &cmd_id, &status);
                     telemetry.record_command();
                 }
                 PromptWorkerResponse::CtrlC => {
@@ -544,6 +550,7 @@ fn handle_agent_event(
         return;
     }
 
+    telemetry.persist_agent_event(&event);
     telemetry.record_agent_event();
     let _ = agent_printer.print(format_event_line(&event));
 }
@@ -1091,6 +1098,7 @@ async fn exec_world_pty(
                         continue;
                     }
 
+                    io.telemetry.persist_agent_event(&event);
                     io.telemetry.record_agent_event();
                     if buffered_structured_lines.len() < MAX_BUFFERED_STRUCTURED_LINES_DURING_PTY {
                         buffered_structured_lines.push(format_event_line(&event));
