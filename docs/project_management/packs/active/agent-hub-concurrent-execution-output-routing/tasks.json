@@ -382,8 +382,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "OR1-integ-core",
-        "CP1-ci-checkpoint"
+        "OR1-integ-core"
       ],
       "description": "Linux platform-fix integration task (record evidence even when no code changes are needed).",
       "end_checklist": [
@@ -436,8 +435,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "OR1-integ-core",
-        "CP1-ci-checkpoint"
+        "OR1-integ-core"
       ],
       "description": "macOS platform-fix integration task (record evidence even when no code changes are needed).",
       "end_checklist": [
@@ -490,8 +488,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "OR1-integ-core",
-        "CP1-ci-checkpoint"
+        "OR1-integ-core"
       ],
       "description": "Windows platform-fix integration task (record evidence even when no code changes are needed).",
       "end_checklist": [
