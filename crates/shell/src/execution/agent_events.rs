@@ -123,8 +123,12 @@ pub(crate) fn format_event_line(event: &AgentEvent) -> String {
 }
 
 fn extract_event_message(kind: &AgentEventKind, data: &serde_json::Value) -> String {
+    fn escape_line_breaks(raw: &str) -> String {
+        raw.replace('\n', "\\n").replace('\r', "\\r")
+    }
+
     if let Some(msg) = data.get("message").and_then(serde_json::Value::as_str) {
-        return msg.to_string();
+        return escape_line_breaks(msg);
     }
 
     if let Some(chunk) = data.get("chunk").and_then(serde_json::Value::as_str) {
@@ -132,13 +136,13 @@ fn extract_event_message(kind: &AgentEventKind, data: &serde_json::Value) -> Str
             .get("stream")
             .and_then(serde_json::Value::as_str)
             .unwrap_or("stdout");
-        return format!("{}: {}", stream, chunk);
+        return escape_line_breaks(&format!("{}: {}", stream, chunk));
     }
 
     if data.is_null() {
         kind.to_string()
     } else {
-        data.to_string()
+        escape_line_breaks(&data.to_string())
     }
 }
 
