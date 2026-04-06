@@ -12,9 +12,9 @@
 - Keep distro detection, override evaluation, and hermetic validation ownership outside this slice.
 
 ## Inputs (authoritative)
-- Operator-facing wrapper, precedence, warning, remediation, and env-var contract: `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-- Accepted wrapper and smoke-topology decisions: `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` (`DR-0003`, `DR-0004`, `DR-0005`)
-- Slice boundary and required assertions: `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- Operator-facing wrapper, precedence, warning, remediation, and env-var contract: `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+- Accepted wrapper and smoke-topology decisions: `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md` (`DR-0003`, `DR-0004`, `DR-0005`)
+- Slice boundary and required assertions: `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
 - Implementation and documentation surfaces constrained by this slice:
   - `scripts/substrate/install.sh`
   - `docs/INSTALLATION.md`
@@ -45,6 +45,6 @@
 - AC-BEDPM2-05: `docs/reference/env/contract.md` documents `SUBSTRATE_INSTALL_OS_RELEASE_PATH` with the exact hook name, absolute-path requirement, readable-regular-file requirement, `<unknown>` degradation on invalid or unreadable alternate paths, and the rule that setting the hook suppresses fallback reads from `/etc/os-release`.
 
 ## Out of scope
-- Safe os-release parsing, distro-family mapping, `<unknown>` sentinel ownership, and stable decision-line timing remain owned by `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`.
-- Explicit override precedence, ordered `PATH` probing, multi-manager warnings, and exits `2`, `3`, or `4` remain owned by `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`.
-- Hermetic repo-test assertions, the thin Linux smoke wrapper, and manual evidence capture remain owned by `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`.
+- Safe os-release parsing, distro-family mapping, `<unknown>` sentinel ownership, and stable decision-line timing remain owned by `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`.
+- Explicit override precedence, ordered `PATH` probing, multi-manager warnings, and exits `2`, `3`, or `4` remain owned by `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`.
+- Hermetic repo-test assertions, the thin Linux smoke wrapper, and manual evidence capture remain owned by `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`.

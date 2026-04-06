@@ -8,7 +8,7 @@
 
 ## Scope
 
-- Feature directory: `docs/project_management/packs/draft/best-effort-distro-package-manager/` (ASSUMPTION: created during planning)
+- Feature directory: `docs/project_management/packs/implemented/best-effort-distro-package-manager/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/system/standards/adr/EXECUTIVE_SUMMARY_STANDARD.md`
@@ -16,15 +16,15 @@
 ## Related Docs (links only)
 
 - Intake: `docs/project_management/intake/adrs/detecting_badger_adr_intake.md`
-- Plan: `docs/project_management/packs/draft/detecting-badger/plan.md`
-- Tasks: `docs/project_management/packs/draft/detecting-badger/tasks.json`
-- Spec manifest: `docs/project_management/packs/draft/detecting-badger/spec_manifest.md`
-- Decision Register (if required): `docs/project_management/packs/draft/detecting-badger/decision_register.md`
-- Impact Map (if required): `docs/project_management/packs/draft/detecting-badger/impact_map.md`
+- Plan: `docs/project_management/packs/implemented/best-effort-distro-package-manager/plan.md`
+- Tasks: `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json`
+- Spec manifest: `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- Decision Register (if required): `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
+- Impact Map (if required): `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/impact_map.md`
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 3170d703467337b54ade435f6d6ae36cc0c8c2f6df64535f73bf77fa5db54635
+ADR_BODY_SHA256: 23e14267a5edb13e6659a1ef7ec0ac7aa447564211467d8bed82d4807a764b90
 
 ### Changes (operator-facing)
 
@@ -173,7 +173,7 @@ Add a hermetic test under `tests/installers/` that exercises the precedence rule
 
 ## Sequencing / Dependencies
 
-- Sequencing entry: `docs/project_management/packs/sequencing.json` → ASSUMPTION: add a “detecting-badger” entry before execution begins.
+- Sequencing entry: `docs/project_management/packs/sequencing.json` → `best_effort_distro_package_manager`
 - Related/coordination-only intake: `provisioning_otter` (no hard dependency declared in intake).
 
 ## Work Lift (discovery estimate)
@@ -236,7 +236,7 @@ Add a hermetic test under `tests/installers/` that exercises the precedence rule
 
 ### Manual validation
 
-- Manual playbook: `docs/project_management/packs/draft/detecting-badger/manual_testing_playbook.md` (planned)
+- Manual playbook: `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
   - Must include: examples for default Ubuntu selection, default Arch selection, forced override (`--pkg-manager`), legacy env (`PKG_MANAGER`), and a failure mode with remediation.
 
 ### Smoke scripts
@@ -253,7 +253,7 @@ Add a hermetic test under `tests/installers/` that exercises the precedence rule
 ## Decision Summary
 
 - Decision Register entries (if applicable):
-  - `docs/project_management/packs/draft/detecting-badger/decision_register.md`:
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`:
     - DR-0001 (parser approach for `/etc/os-release`)
     - DR-0002 (ambiguity policy for multi-manager PATH probe: warn vs fail)
     - DR-0003 (test hook: allow alternate os-release path vs test-only harness)

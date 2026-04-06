@@ -35,7 +35,7 @@ This ADR supersedes the older orchestration-toolbox framing in ADR-0026 and shou
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: d31cb5cd58f0d98d185abd330d39f9b3c55b31b5cbeab8a920189936d847891d
+ADR_BODY_SHA256: 41a4e1478057cd1a67695c503531f4fbcab3f4d08e2b3d896b7bfd8327f0e7d6
 ### Changes (operator-facing)
 - Keep the orchestration toolbox as an internal MCP server, but make v1 explicitly introspection-only
   - Existing: ADR-0026 already intends an internal toolbox, but the operator-visible identity and trace story predates the tuple model.

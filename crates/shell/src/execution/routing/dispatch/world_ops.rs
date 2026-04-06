@@ -1420,6 +1420,8 @@ pub(crate) fn stream_non_pty_via_agent(
 ) -> anyhow::Result<AgentStreamOutcome> {
     let (client, request, agent_id) =
         build_agent_client_and_request_with_trace_metadata(command, parent_span_id, parent_cmd_id)?;
+    let run_id = parent_cmd_id.unwrap_or("unknown").to_string();
+    let parent_span_id = parent_span_id.map(|s| s.to_string());
 
     let host_visible = request.policy_snapshot.world_fs.host_visible;
     let empty_env: std::collections::HashMap<String, String> = std::collections::HashMap::new();
@@ -1433,7 +1435,13 @@ pub(crate) fn stream_non_pty_via_agent(
         substrate_common::world_exec_guard::check_command(&request.cmd, cwd, env_map, host_visible)
     {
         let message = substrate_common::world_exec_guard::deny_message(&deny);
-        emit_stream_chunk(&agent_id, message.as_bytes(), true);
+        emit_stream_chunk(
+            &agent_id,
+            &run_id,
+            parent_span_id.as_deref(),
+            message.as_bytes(),
+            true,
+        );
         return Ok(AgentStreamOutcome {
             exit_code: 5,
             scopes_used: Vec::new(),
@@ -1479,8 +1487,8 @@ pub(crate) fn stream_non_pty_via_agent(
             let stderr = BASE64
                 .decode(response.stderr_b64.as_bytes())
                 .unwrap_or_else(|_| response.stderr_b64.clone().into_bytes());
-            emit_stream_chunk(&agent_id, &stdout, false);
-            emit_stream_chunk(&agent_id, &stderr, true);
+            emit_stream_chunk(&agent_id, &run_id, parent_span_id.as_deref(), &stdout, false);
+            emit_stream_chunk(&agent_id, &run_id, parent_span_id.as_deref(), &stderr, true);
 
             Ok(AgentStreamOutcome {
                 exit_code: response.exit,
@@ -1705,13 +1713,21 @@ pub(crate) fn consume_agent_stream_buffer_with_meta(
                 let bytes = BASE64
                     .decode(chunk_b64.as_bytes())
                     .map_err(|e| anyhow::anyhow!("invalid stdout chunk: {}", e))?;
-                emit_stream_chunk(agent_label, &bytes, false);
+                let run_id = active_span_id.as_deref().unwrap_or("unknown");
+                emit_stream_chunk(
+                    agent_label,
+                    run_id,
+                    active_span_id.as_deref(),
+                    &bytes,
+                    false,
+                );
             }
             ExecuteStreamFrame::Stderr { chunk_b64 } => {
                 let bytes = BASE64
                     .decode(chunk_b64.as_bytes())
                     .map_err(|e| anyhow::anyhow!("invalid stderr chunk: {}", e))?;
-                emit_stream_chunk(agent_label, &bytes, true);
+                let run_id = active_span_id.as_deref().unwrap_or("unknown");
+                emit_stream_chunk(agent_label, run_id, active_span_id.as_deref(), &bytes, true);
             }
             ExecuteStreamFrame::Event { event } => {
                 if let (Some(primary), Some(final_strategy), Some(reason)) = (
@@ -1767,7 +1783,13 @@ pub(crate) fn consume_agent_stream_buffer_with_meta(
     Ok(())
 }
 
-pub(super) fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool) {
+pub(super) fn emit_stream_chunk(
+    agent_label: &str,
+    run_id: &str,
+    span_id: Option<&str>,
+    data: &[u8],
+    is_stderr: bool,
+) {
     use std::io::Write;
 
     if is_stderr {
@@ -1781,11 +1803,15 @@ pub(super) fn emit_stream_chunk(agent_label: &str, data: &[u8], is_stderr: bool)
     }
 
     let text = String::from_utf8_lossy(data);
-    let _ = publish_agent_event(AgentEvent::stream_chunk(
+    let mut event = AgentEvent::stream_chunk(
         agent_label,
+        crate::execution::agent_events::orchestration_session_id(),
+        run_id.to_string(),
         is_stderr,
         text.to_string(),
-    ));
+    );
+    event.span_id = span_id.map(|s| s.to_string());
+    let _ = publish_agent_event(event);
 }
 
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]

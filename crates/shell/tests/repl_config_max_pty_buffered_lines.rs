@@ -3,6 +3,7 @@
 #[path = "support/mod.rs"]
 mod support;
 
+use serde_json::Value;
 use serial_test::serial;
 use std::fs;
 use std::io::Write;
@@ -12,8 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use support::{binary_path, ensure_substrate_built, temp_dir, ReplWorldAgentStub, StreamBehavior};
-use tempfile::TempDir;
+use support::{binary_path, ensure_substrate_built, temp_dir};
 
 #[cfg(unix)]
 fn set_fd_nonblocking(fd: i32) {
@@ -81,19 +81,6 @@ metadata: {}
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
 }
 
-fn short_socket_dir(prefix: &str) -> TempDir {
-    tempfile::Builder::new()
-        .prefix(prefix)
-        .tempdir_in("/tmp")
-        .expect("create short socket tempdir in /tmp")
-}
-
-fn write_workspace_patch(workspace_root: &Path, patch: &str) {
-    let dir = workspace_root.join(".substrate");
-    fs::create_dir_all(&dir).expect("create .substrate");
-    fs::write(dir.join("workspace.yaml"), patch).expect("write workspace.yaml");
-}
-
 struct PtyRepl {
     child: Box<dyn portable_pty::Child + Send>,
     master: Option<Box<dyn portable_pty::MasterPty + Send>>,
@@ -105,14 +92,7 @@ struct PtyRepl {
 }
 
 impl PtyRepl {
-    fn spawn(
-        project_dir: &Path,
-        home_dir: &Path,
-        substrate_home: &Path,
-        socket_path: &Path,
-        extra_env: &[(&str, &str)],
-        args: &[&str],
-    ) -> Self {
+    fn spawn(project_dir: &Path, home_dir: &Path, substrate_home: &Path) -> Self {
         ensure_substrate_built();
 
         let pty_system = native_pty_system();
@@ -136,26 +116,20 @@ impl PtyRepl {
         }
 
         let mut cmd = CommandBuilder::new(binary_path());
-        cmd.args(args);
         cmd.cwd(project_dir);
         cmd.env("HOME", home_dir);
         cmd.env("USERPROFILE", home_dir);
         cmd.env("SUBSTRATE_HOME", substrate_home);
         cmd.env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path());
-        cmd.env("SUBSTRATE_CAGED", "0");
-        cmd.arg("--uncaged");
-        cmd.env("SHIM_TRACE_LOG", home_dir.join(".substrate/trace.jsonl"));
-        cmd.env("SUBSTRATE_WORLD_SOCKET", socket_path);
-        cmd.env("SUBSTRATE_OVERRIDE_WORLD", "enabled");
+        cmd.env("SHIM_TRACE_LOG", substrate_home.join("trace.jsonl"));
+        cmd.env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
         cmd.env_remove("SHIM_ORIGINAL_PATH");
         cmd.env_remove("SUBSTRATE_WORLD");
         cmd.env_remove("SUBSTRATE_WORLD_ENABLED");
         cmd.env_remove("SUBSTRATE_WORLD_ID");
         cmd.env("SHELL", "/bin/bash");
+        cmd.arg("--async-repl");
         cmd.arg("--shim-skip");
-        for (k, v) in extra_env {
-            cmd.env(k, v);
-        }
 
         let child = pair.slave.spawn_command(cmd).expect("spawn substrate");
         let writer: Arc<Mutex<Box<dyn Write + Send>>> =
@@ -268,11 +242,7 @@ impl PtyRepl {
             }
             if self.try_wait()? {
                 anyhow::bail!(
-                    "process exited before seeing `{needle}` (code={}); output so far:\n{}",
-                    self.waited
-                        .as_ref()
-                        .map(|s| s.exit_code() as i32)
-                        .unwrap_or(-1),
+                    "process exited while waiting for `{needle}`; output so far:\n{}",
                     self.output_string()
                 );
             }
@@ -297,6 +267,8 @@ impl PtyRepl {
     }
 
     fn shutdown(mut self) -> (i32, String) {
+        self.stop_reader.store(true, Ordering::Relaxed);
+        self.master.take();
         if self.waited.is_none() {
             let _ = self.child.kill();
             let status = self.child.wait().expect("wait child");
@@ -305,8 +277,6 @@ impl PtyRepl {
         if let Some(handle) = self.reader_handle.take() {
             let _ = handle.join();
         }
-        self.stop_reader.store(true, Ordering::Relaxed);
-        self.master.take();
         let code = self
             .waited
             .as_ref()
@@ -316,166 +286,147 @@ impl PtyRepl {
     }
 }
 
-fn find_exit_note_path(output: &str) -> Option<String> {
-    let prefix = "substrate: note: returning to host cwd: ";
-    output.lines().find_map(|line| {
-        let trimmed = line.trim_end_matches('\r');
-        // When running under a PTY, reedline may leave the prompt prefix on the same line as
-        // the note (e.g. `substrate> substrate: note: ...`). Accept the note anywhere in-line.
-        trimmed
-            .find(prefix)
-            .map(|start| trimmed[start + prefix.len()..].trim().to_string())
-    })
+fn read_trace(trace_path: &Path) -> Vec<Value> {
+    fs::read_to_string(trace_path)
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("parse trace line"))
+        .collect()
+}
+
+struct ReplConfigClampRun {
+    _temp: tempfile::TempDir,
+    code: i32,
+    out: String,
+    trace_path: PathBuf,
+}
+
+fn run_repl_with_global_config(config_yaml: &str) -> ReplConfigClampRun {
+    let temp = temp_dir("substrate-or1-config-clamp-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(substrate_home.join("shims")).expect("create shims dir");
+    fs::create_dir_all(&project).expect("create project dir");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    write_policy(&substrate_home);
+    fs::write(substrate_home.join("config.yaml"), config_yaml).expect("write config.yaml");
+
+    let trace_path = substrate_home.join("trace.jsonl");
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home);
+    repl.wait_for_output_or_exit("Substrate v", Duration::from_secs(3))
+        .expect("banner");
+    repl.send_line("exit");
+    let (code, out) = repl.shutdown_graceful(Duration::from_secs(3));
+    ReplConfigClampRun {
+        _temp: temp,
+        code,
+        out,
+        trace_path,
+    }
 }
 
 #[test]
 #[serial]
-fn wfgadax3_prints_exit_note_when_world_cwd_differs_default_target_is_entered_cwd() {
-    let temp = temp_dir("substrate-wfgadax3-entered-");
-    let home = temp.path().join("home");
-    let project = temp.path().join("project");
-    let substrate_home = home.join(".substrate");
-    let exit_target = project.join("exit-target");
+fn out_of_range_config_is_clamped_and_emits_one_warning_record_high() {
+    let run = run_repl_with_global_config(
+        r#"world:
+  enabled: true
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+repl:
+  max_pty_buffered_lines: 99999
+"#,
+    );
+    assert_eq!(run.code, 0, "expected clean exit; output:\n{}", run.out);
 
-    fs::create_dir_all(home.join(".substrate")).expect("create home/.substrate");
-    fs::create_dir_all(&exit_target).expect("create exit-target");
-    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
-    fs::create_dir_all(&substrate_home).expect("create substrate home");
-    write_profile(&project);
-    write_policy(&substrate_home);
-
-    let sock_temp = short_socket_dir("sub-wfgadax3-entered-");
-    let sock = sock_temp.path().join("world.sock");
-    let _server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
-
-    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output_or_exit("Substrate v", Duration::from_secs(2))
-        .expect("banner");
-
-    repl.send_line("cd exit-target");
-    repl.wait_for_output_or_exit(
-        "__PERSISTENT_EXEC_STUB__ eof cd exit-target",
-        Duration::from_secs(3),
-    )
-    .expect("cd executed");
-
-    repl.send_line("exit");
-    let (code, out) = repl.shutdown_graceful(Duration::from_secs(3));
-    assert_eq!(code, 0, "expected clean exit; output:\n{out}");
-
-    let note = find_exit_note_path(&out).unwrap_or_else(|| {
-        panic!("expected REPL to print exit note when world_cwd != entered_cwd; output:\n{out}")
-    });
-
-    let expected = project.canonicalize().unwrap_or(project);
-    let actual = PathBuf::from(note)
-        .canonicalize()
-        .expect("note path should exist");
+    let events = read_trace(&run.trace_path);
+    let warnings: Vec<&Value> = events
+        .iter()
+        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("warning"))
+        .filter(|event| event.get("code").and_then(Value::as_str) == Some("config_value_clamped"))
+        .collect();
     assert_eq!(
-        actual, expected,
-        "expected exit note path to be entered_cwd"
+        warnings.len(),
+        1,
+        "expected exactly one config_value_clamped warning record; got: {warnings:?}"
+    );
+
+    let warning = warnings[0];
+    assert_eq!(
+        warning.get("component").and_then(Value::as_str),
+        Some("shell"),
+        "warning record must have component=shell: {warning:?}"
+    );
+    assert_eq!(
+        warning.get("key").and_then(Value::as_str),
+        Some("repl.max_pty_buffered_lines"),
+        "warning record must have key=repl.max_pty_buffered_lines: {warning:?}"
+    );
+    assert_eq!(
+        warning.get("provided").and_then(Value::as_i64),
+        Some(99999),
+        "warning record must have provided=99999: {warning:?}"
+    );
+    assert_eq!(
+        warning.get("effective").and_then(Value::as_i64),
+        Some(16384),
+        "warning record must have effective=16384: {warning:?}"
+    );
+    assert_eq!(
+        warning.get("min").and_then(Value::as_i64),
+        Some(0),
+        "warning record must have min=0: {warning:?}"
+    );
+    assert_eq!(
+        warning.get("max").and_then(Value::as_i64),
+        Some(16384),
+        "warning record must have max=16384: {warning:?}"
     );
 }
 
 #[test]
 #[serial]
-fn wfgadax3_repl_exit_cwd_last_world_selects_world_cwd_as_exit_target_when_representable() {
-    let temp = temp_dir("substrate-wfgadax3-last-world-");
-    let home = temp.path().join("home");
-    let project = temp.path().join("project");
-    let substrate_home = home.join(".substrate");
-    let exit_target = project.join("exit-target");
+fn out_of_range_config_is_clamped_and_emits_one_warning_record_low() {
+    let run = run_repl_with_global_config(
+        r#"world:
+  enabled: true
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+repl:
+  max_pty_buffered_lines: -5
+"#,
+    );
+    assert_eq!(run.code, 0, "expected clean exit; output:\n{}", run.out);
 
-    fs::create_dir_all(home.join(".substrate")).expect("create home/.substrate");
-    fs::create_dir_all(&exit_target).expect("create exit-target");
-    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
-    fs::create_dir_all(&substrate_home).expect("create substrate home");
-    write_profile(&project);
-    write_policy(&substrate_home);
-    write_workspace_patch(&project, "repl:\n  exit_cwd: last_world\n");
-
-    let sock_temp = short_socket_dir("sub-wfgadax3-last-world-");
-    let sock = sock_temp.path().join("world.sock");
-    let _server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
-
-    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output_or_exit("Substrate v", Duration::from_secs(2))
-        .expect("banner");
-
-    repl.send_line("cd exit-target");
-    repl.wait_for_output_or_exit(
-        "__PERSISTENT_EXEC_STUB__ eof cd exit-target",
-        Duration::from_secs(3),
-    )
-    .expect("cd executed");
-
-    repl.send_line("exit");
-    let (code, out) = repl.shutdown_graceful(Duration::from_secs(3));
-    assert_eq!(code, 0, "expected clean exit; output:\n{out}");
-
-    let note = find_exit_note_path(&out).unwrap_or_else(|| {
-        panic!("expected REPL to print exit note when world_cwd != entered_cwd; output:\n{out}")
-    });
-
-    let expected = exit_target.canonicalize().unwrap_or(exit_target);
-    let actual = PathBuf::from(note)
-        .canonicalize()
-        .expect("note path should exist");
+    let events = read_trace(&run.trace_path);
+    let warnings: Vec<&Value> = events
+        .iter()
+        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("warning"))
+        .filter(|event| event.get("code").and_then(Value::as_str) == Some("config_value_clamped"))
+        .collect();
     assert_eq!(
-        actual, expected,
-        "expected exit note path to be last_world cwd"
+        warnings.len(),
+        1,
+        "expected exactly one config_value_clamped warning record; got: {warnings:?}"
     );
-}
 
-#[test]
-fn wfgadax3_repl_exit_cwd_rejects_invalid_modes_as_hard_error_exit_2() {
-    ensure_substrate_built();
-
-    let temp = temp_dir("substrate-wfgadax3-invalid-mode-");
-    let home = temp.path().join("home");
-    let project = temp.path().join("project");
-    let substrate_home = temp.path().join("substrate-home");
-    fs::create_dir_all(&home).expect("create home");
-    fs::create_dir_all(&project).expect("create project");
-    fs::create_dir_all(&substrate_home).expect("create substrate home");
-    fs::write(temp.path().join("trace.jsonl"), "").expect("seed trace");
-
-    write_policy(&substrate_home);
-    fs::write(
-        substrate_home.join("config.yaml"),
-        "repl:\n  exit_cwd: not-a-mode\n",
-    )
-    .expect("write config.yaml");
-
-    let marker = "__WFGADAX3_INVALID_MODE_MARKER__";
-    let mut cmd = assert_cmd::Command::new(binary_path());
-    let assert = cmd
-        .current_dir(&project)
-        .env("HOME", &home)
-        .env("USERPROFILE", &home)
-        .env("SUBSTRATE_HOME", &substrate_home)
-        .env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path())
-        .env("SHIM_TRACE_LOG", temp.path().join("trace.jsonl"))
-        .env("SUBSTRATE_OVERRIDE_WORLD", "disabled")
-        .env("SUBSTRATE_CAGED", "0")
-        .arg("--uncaged")
-        .arg("--shim-skip")
-        .arg("-c")
-        .arg(format!("printf {marker}"))
-        .assert()
-        .code(2);
-
-    let out = assert.get_output();
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        !stdout.contains(marker),
-        "expected hard error to occur before execution; stdout:\n{stdout}"
+    let warning = warnings[0];
+    assert_eq!(
+        warning.get("provided").and_then(Value::as_i64),
+        Some(-5),
+        "warning record must have provided=-5: {warning:?}"
     );
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        stderr.contains("repl.exit_cwd")
-            && stderr.contains("entered")
-            && stderr.contains("last_world"),
-        "expected stderr to mention repl.exit_cwd and supported modes; stderr:\n{stderr}"
+    assert_eq!(
+        warning.get("effective").and_then(Value::as_i64),
+        Some(0),
+        "warning record must have effective=0: {warning:?}"
     );
 }

@@ -22,7 +22,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 45d3c1ee693075301345bff0e7fffea5197a59a57b8941c04e7c9c458fd321ec
+ADR_BODY_SHA256: 00f0e59a75d7c14684e02cfe0e4e9d8f108c65758f66062f9a6331113fcfc27a
 
 ### Changes (operator-facing)
 - Linux installer writes stable host-detection metadata to `$SUBSTRATE_HOME/install_state.json`

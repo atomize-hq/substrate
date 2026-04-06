@@ -7,11 +7,11 @@ Authoring standards:
 - `docs/project_management/system/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
-- Feature directory: `docs/project_management/packs/draft/best-effort-distro-package-manager/`
+- Feature directory: `docs/project_management/packs/implemented/best-effort-distro-package-manager/`
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
 - Spec manifest:
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
 
 ## Touch set (explicit)
 
@@ -21,26 +21,26 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - Each entry is a top-level bullet containing exactly one backticked path token.
 - Empty section is exactly `- None` (case-sensitive, no extra text).
 - The Touch Set must include at least one non-None entry total across all sections.
-- To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="docs/project_management/packs/draft/best-effort-distro-package-manager"` (strict packs only).
+- To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="docs/project_management/packs/implemented/best-effort-distro-package-manager"` (strict packs only).
 
 ### Create
 - `tests/installers/pkg_manager_detection_smoke.sh`
 
 ### Edit
 - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/plan.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/session_log.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/quality_gate_report.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/plan.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/session_log.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/quality_gate_report.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json`
 - `docs/project_management/packs/sequencing.json`
 - `scripts/ci-audit/ci_audit.sh`
 - `scripts/substrate/install-substrate.sh`
@@ -141,13 +141,13 @@ For each externally visible change, list:
     - `scripts/substrate/dev-install-substrate.sh` does not adopt distro/package-manager detection or the new override surface under ADR-0031.
     - macOS and Windows operator behavior does not change.
   - Cascading impact:
-    - `tasks.json` must flip from `cross_platform=true` to a Linux-only planning posture.
+    - `tasks.json` must keep the schema v4 cross-platform automation model while separating Linux behavior smoke from CI parity-only validation on macOS and Windows.
     - `docs/INSTALLATION.md` must scope the new behavior to Linux hosted installs and keep macOS/Windows text unchanged.
   - Contradiction risks:
-    - The current task metadata requires Linux, macOS, and Windows behavior evidence even though the ADR and spec manifest define a Linux-only behavior delta.
+    - A task model that does not separate Linux behavior smoke from macOS and Windows CI parity would overstate no-change-platform behavior requirements.
   - Resolution options (A/B):
-    - Option A: keep cross-platform task metadata and inflate the pack with no-change validation on macOS and Windows.
-    - Option B: narrow `tasks.json` to Linux-only behavior and CI parity requirements for ADR-0031.
+    - Option A: narrow the task graph to Linux-only and drop cross-platform CI parity from the automation pack.
+    - Option B: keep `meta.cross_platform=true`, require Linux behavior smoke, require Linux/macOS/Windows CI parity, and use the schema v4 boundary-only checkpoint model.
     - Selected: Option B.
 
 ### Policy / isolation / security posture
@@ -167,7 +167,7 @@ For each externally visible change, list:
 - Change: the pack needs one hermetic repo test and one feature-local Linux smoke wrapper, not two competing implementation authorities.
   - Direct impact:
     - `tests/installers/pkg_manager_detection_smoke.sh` becomes the exact repo test path for stubbed PATH/os-release validation.
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh` becomes the feature-local wrapper that calls the same assertions and captures planning evidence.
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh` becomes the feature-local wrapper that calls the same assertions and captures planning evidence.
   - Cascading impact:
     - `BEDPM3-spec.md` must make the repo test authoritative and the feature-local smoke script a thin orchestrating wrapper.
     - `docs/INSTALLATION.md` and `manual_testing_playbook.md` must reference the same visible stderr line and override/remediation examples as the repo test.
@@ -237,7 +237,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
     - Option B: confine ADR-0031 edits to argument parsing, detection, reporting, and prerequisite-install branches so world-enable and dev-install follow-on work rebase cleanly.
     - Selected: Option B.
 
-- ADR: `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
+- ADR: `docs/project_management/adrs/implemented/ADR-0003-policy-and-config-mental-model-simplification.md`
   - Overlap surfaces:
     - environment-variable documentation posture
     - installer path/config precedence language
@@ -312,15 +312,14 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
 ## Follow-ups (explicit)
 
 - Decision Register entries required:
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` — record the selected fallback PATH order and the selected wrapper exit-code pass-through rule.
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` — record the selected alternate os-release input contract: `SUBSTRATE_INSTALL_OS_RELEASE_PATH`.
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md` — record that `smoke/linux-smoke.sh` is a thin wrapper over `tests/installers/pkg_manager_detection_smoke.sh`.
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md` — record the selected fallback PATH order and the selected wrapper exit-code pass-through rule.
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md` — record the selected alternate os-release input contract: `SUBSTRATE_INSTALL_OS_RELEASE_PATH`.
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md` — record that `smoke/linux-smoke.sh` is a thin wrapper over `tests/installers/pkg_manager_detection_smoke.sh`.
 
 - Spec and planning updates required:
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md` — pin `tests/installers/pkg_manager_detection_smoke.sh` as the exact hermetic repo test path and align the selected `SUBSTRATE_INSTALL_OS_RELEASE_PATH` contract.
-  - `docs/project_management/packs/draft/best-effort-distro-package-manager/tasks.json` — narrow the pack to Linux-only behavior and CI parity metadata, then add `BEDPM0`, `BEDPM1`, `BEDPM2`, and `BEDPM3` triads.
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md` — pin `tests/installers/pkg_manager_detection_smoke.sh` as the exact hermetic repo test path and align the selected `SUBSTRATE_INSTALL_OS_RELEASE_PATH` contract.
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json` — keep the schema v4 cross-platform task graph aligned to Linux behavior smoke, Linux/macOS/Windows CI parity, and the `BEDPM3` checkpoint boundary.
   - `docs/project_management/packs/sequencing.json` — add the feature entry and sequence ADR-0031 ahead of `persist-detected-linux-distro-pkg-manager`.
 
 - Ownership-gap reminders:
-  - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md` — correct Related Docs and feature-directory path drift from `detecting-badger` to `best-effort-distro-package-manager`.
   - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/` — remove any remaining ambiguity by inheriting `SUBSTRATE_INSTALL_OS_RELEASE_PATH`, `<unknown>`, and `pkg_manager.source` exactly from this pack once ADR-0031 planning artifacts exist.

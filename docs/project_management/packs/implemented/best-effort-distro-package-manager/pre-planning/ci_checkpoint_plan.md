@@ -6,11 +6,11 @@ Standard:
 - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
 
 ## Inputs
-- Feature directory: `docs/project_management/packs/draft/best-effort-distro-package-manager/`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/impact_map.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/minimal_spec_draft.md` (draft slice skeleton + cross-cutting invariants)
-- Slice specs: see `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md` (slice specs live under `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/<SLICE_ID>/<SLICE_ID>-spec.md`).
+- Feature directory: `docs/project_management/packs/implemented/best-effort-distro-package-manager/`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/impact_map.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/minimal_spec_draft.md` (draft slice skeleton + cross-cutting invariants)
+- Slice specs: see `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md` (slice specs live under `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/<SLICE_ID>/<SLICE_ID>-spec.md`).
 - Required platforms (authoritative; from `tasks.json`):
   - Behavior smoke platforms: `linux`
   - CI parity platforms: `linux`, `macos`, `windows`
@@ -61,8 +61,8 @@ Standard:
   - Installer contract and decision surfaces:
     - `scripts/substrate/install-substrate.sh`
     - `scripts/substrate/install.sh`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
   - Operator-facing docs and env semantics:
     - `docs/INSTALLATION.md`
     - `docs/reference/env/contract.md`
@@ -70,8 +70,8 @@ Standard:
     - `SUBSTRATE_INSTALL_OS_RELEASE_PATH`
   - Validation/evidence surfaces:
     - `tests/installers/pkg_manager_detection_smoke.sh`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
-    - `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+    - `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
     - `slices/BEDPM0/BEDPM0-spec.md`
     - `slices/BEDPM1/BEDPM1-spec.md`
     - `slices/BEDPM2/BEDPM2-spec.md`
@@ -94,6 +94,3 @@ Standard:
 - Platform scope remains:
   - behavior smoke: `linux`
   - CI parity: `linux`, `macos`, `windows`
-- Remaining planning drift is tracked separately:
-  - `pre-planning/spec_manifest.md` still carries stale task-model text that says `meta.cross_platform = false`
-  - the tasks/checkpoints lane logged an allowlist request and draft patch under `logs/pws/BEDPM-PWS-tasks_checkpoints/` so that drift can be reconciled without downgrading the pack

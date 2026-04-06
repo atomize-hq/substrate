@@ -1,9 +1,9 @@
 # Manual Testing Playbook — best-effort-distro-package-manager (BEDPM)
 
 This playbook validates the Linux hosted-installer contract defined by:
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM3/BEDPM3-spec.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
 
 Exit code taxonomy:
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
@@ -15,7 +15,7 @@ Exit code taxonomy:
 
 Validation authority:
 - `tests/installers/pkg_manager_detection_smoke.sh` remains the authoritative assertion suite.
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh` is the non-interactive rerun entrypoint and must not define a second contract.
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh` is the non-interactive rerun entrypoint and must not define a second contract.
 
 ## Prerequisites
 
@@ -28,7 +28,7 @@ Validation authority:
 Run:
 
 ```bash
-bash docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh
+bash docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh
 ```
 
 Expected:
@@ -385,7 +385,7 @@ PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh --bedpm-installer-conforma
 Expected:
 
 - Exit `0`.
-- The command runs `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh` through the Lima-backed Linux guest path.
+- The command runs `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh` through the Lima-backed Linux guest path.
 - The resulting output matches the authoritative Linux smoke behavior instead of implying native macOS package-manager-selection behavior.
 
 ## Cleanup

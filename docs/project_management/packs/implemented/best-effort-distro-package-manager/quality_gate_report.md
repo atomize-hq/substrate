@@ -160,3 +160,179 @@ PY
 ### Blockers to execution
 - `make planning-lint FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager"` exits `2`
 - `quality_gate_report.md` cannot recommend `ACCEPT` until `pre-planning/spec_manifest.md` is reconciled
+
+---
+
+## Pass 2 — 2026-04-05 — Recommendation: ACCEPT (post-remediation re-review)
+
+## Metadata
+- Feature directory: `docs/project_management/packs/implemented/best-effort-distro-package-manager/`
+- Reviewed commit: `2817d76ca7c95ae95fe21e3f73670fa15d83708a` (plus uncommitted planning-doc remediation)
+- Reviewer: `Codex (remediation re-review)`
+- Date (UTC): `2026-04-05`
+- Recommendation: `ACCEPT`
+
+## Evidence: Commands Run (verbatim)
+
+```bash
+export FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"
+
+jq -e . "$FEATURE_DIR/tasks.json" >/dev/null
+# exit: 0
+
+jq -e . docs/project_management/packs/sequencing.json >/dev/null
+# exit: 0
+
+python3 - <<'PY'
+import json, os
+feature_dir=os.environ["FEATURE_DIR"]
+path=os.path.join(feature_dir, "tasks.json")
+data=json.load(open(path, "r", encoding="utf-8"))
+tasks=data["tasks"] if isinstance(data, dict) and "tasks" in data else data
+required=[
+  "id","name","type","phase","status","description",
+  "references","acceptance_criteria","start_checklist","end_checklist",
+  "worktree","integration_task","kickoff_prompt",
+  "depends_on","concurrent_with"
+]
+missing=[]
+for t in tasks:
+  m=[k for k in required if k not in t]
+  if m:
+    missing.append((t.get("id","<no id>"),m))
+if missing:
+  for tid,m in missing:
+    print(tid,":",", ".join(m))
+  raise SystemExit(1)
+print("OK: tasks.json required fields present")
+PY
+# exit: 0
+
+make planning-lint FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+
+PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+
+make planning-validate FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+```
+
+## Required Inputs Read End-to-End (checklist)
+
+- ADR(s): `YES`
+- `spec_manifest.md`: `YES`
+- `plan.md`: `YES`
+- `tasks.json`: `YES`
+- `session_log.md`: `YES`
+- All specs in scope: `YES`
+- `decision_register.md`: `YES`
+- `impact_map.md`: `YES`
+- `manual_testing_playbook.md`: `YES`
+- Feature smoke scripts under `smoke/`: `YES`
+- `docs/project_management/packs/sequencing.json`: `YES`
+- Standards:
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`: `YES`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`: `YES`
+  - `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`: `YES`
+  - `docs/project_management/system/prompts/planning/quality_gate_reviewer.md`: `YES`
+  - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`: `YES`
+  - `docs/project_management/system/standards/ci/PLATFORM_INTEGRATION_AND_CI.md`: `YES`
+  - `docs/project_management/system/standards/triad/TRIAD_WORKFLOW_CROSS_PLATFORM_INTEG.md`: `YES`
+  - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`: `YES`
+  - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`: `YES`
+
+## Gate Results (PASS/FAIL with evidence)
+
+### 1) Zero-ambiguity contracts
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/plan.md`
+- Notes: The authoritative manifest now matches the accepted schema v4 boundary-only cross-platform task model and no longer contradicts the pack’s implemented location.
+
+### 2) Decision quality (2 options, explicit tradeoffs, explicit selection)
+- Result: `PASS`
+- Evidence: `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`
+- Notes: DR-0001 through DR-0005 remain A/B-only with explicit selections and impacted surfaces.
+
+### 3) Cross-doc consistency (CLI/config/exit codes/paths)
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
+  - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
+- Notes: Pack-local paths, kickoff prompts, and schema-v4 cross-platform metadata now agree on the implemented feature directory and checkpoint model.
+
+### 4) Sequencing and dependency alignment
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/packs/sequencing.json` entry `best_effort_distro_package_manager`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json`
+- Notes: `BEDPM3` remains the single checkpoint boundary and matches `ci_checkpoint_plan.md`.
+
+### 5) Testability and validation readiness
+- Result: `PASS`
+- Evidence:
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`
+- Notes: The manual playbook and smoke wrapper both reference the implemented pack path and remain aligned to the same Linux behavior contract.
+
+### 5.1) Cross-platform parity task structure (schema v4)
+- Result: `PASS`
+- Evidence:
+  - `tasks.json` meta: `schema_version=4`, `cross_platform=true`, `behavior_platforms_required=["linux"]`, `ci_parity_platforms_required=["linux","macos","windows"]`, `checkpoint_boundaries=["BEDPM3"]`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/ci_checkpoint_plan.md`
+- Notes: The pack uses the boundary-only platform-fix model correctly.
+
+### 6) Triad interoperability (execution workflow)
+- Result: `PASS`
+- Evidence:
+  - `python3` required-field audit exits `0`
+  - `make planning-validate FEATURE_DIR="$FEATURE_DIR"` exits `0`
+- Notes: `tasks.json` now points to existing kickoff prompts under the implemented feature directory and the kickoff sentinel checks pass.
+
+## Findings
+
+### Finding 004 — Finding 002 remediation is complete in `spec_manifest.md`
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+  - `make planning-lint FEATURE_DIR="$FEATURE_DIR"` → `0`
+- Impact: Removes the recorded blocker that prevented the pack from reaching `ACCEPT`.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+### Finding 005 — Implemented-pack path drift is resolved across tasks, prompts, and playbook surfaces
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/tasks.json`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/kickoff_prompts/CP1-ci-checkpoint.md`
+  - `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`
+  - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
+- Impact: Prevents broken prompt paths and dead document links from failing the planning gate after the pack moved from `draft/` to `implemented/`.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+### Finding 006 — Mechanical planning checks pass for the implemented pack
+- Status: `VERIFIED`
+- Evidence:
+  - `make planning-lint FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"` → `0`
+  - `PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"` → `0`
+  - `make planning-validate FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager"` → `0`
+  - `jq -e . "$FEATURE_DIR/tasks.json"` → `0`
+  - `jq -e . docs/project_management/packs/sequencing.json` → `0`
+- Impact: Confirms the Planning Pack is mechanically execution-ready.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+## Decision: ACCEPT
+
+### Summary
+- The recorded blocker in Finding 002 is remediated, the implemented-pack path drift is resolved, and the required planning checks now pass end-to-end.
+- Execution triads may begin.

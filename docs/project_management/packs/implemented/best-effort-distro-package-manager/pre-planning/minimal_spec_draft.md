@@ -8,10 +8,10 @@ This draft defines only pack-level defaults, precedence rules, naming, and cross
 
 This draft does not define slice-specific acceptance criteria, detailed schemas, implementation task wiring, or full user-facing contract tables.
 
-Until full planning creates `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`, downstream pre-planning artifacts for this pack must treat these inputs as the only authoritative inputs:
+Until full planning creates `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`, downstream pre-planning artifacts for this pack must treat these inputs as the only authoritative inputs:
 - `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
-- `docs/project_management/packs/draft/best-effort-distro-package-manager/pre-planning/impact_map.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/spec_manifest.md`
+- `docs/project_management/packs/implemented/best-effort-distro-package-manager/pre-planning/impact_map.md`
 
 During full planning, authority splits as follows:
 - `contract.md` owns CLI, env-var, exit-code, path, and platform contract text.
@@ -61,7 +61,7 @@ During full planning, authority splits as follows:
 - Linux is the only behavior-changing platform in scope. macOS and Windows remain no-change platforms.
 - Implementation touch stays inside installer shell scripts, installer docs, repo tests, and planning artifacts. No implementation change belongs under `crates/`, `src/`, `crates/world/`, `crates/world-mac-lima/`, `crates/world-windows-wsl/`, `crates/shim/`, `crates/shell/`, or `crates/world-agent/`.
 - The exact repo test path for hermetic validation is fixed: `tests/installers/pkg_manager_detection_smoke.sh`.
-- The feature-local smoke script `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh` is a thin wrapper over the repo test path above and does not define a second contract.
+- The feature-local smoke script `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh` is a thin wrapper over the repo test path above and does not define a second contract.
 - `docs/INSTALLATION.md` and `docs/reference/env/contract.md` must reuse the same precedence chain, vocabularies, stderr line shape, exit classes, and remediation posture.
 - `docs/project_management/packs/draft/persist-detected-linux-distro-pkg-manager/` consumes the detection vocabulary, `<unknown>` sentinel, and `SUBSTRATE_INSTALL_OS_RELEASE_PATH` contract from this pack. It does not redefine them.
 
@@ -88,18 +88,18 @@ Workstream triage may propose edits to this slice skeleton as recommendations in
 - `slice_id`: `BEDPM0`
 - `name`: `Stabilize distro detection and reporting`
 - `intent`: Stabilize best-effort distro detection, distro-family mapping, and the single stderr decision line. Lock the shared vocabulary and `<unknown>` sentinel used by all downstream docs and slices.
-- `likely touch surfaces`: `scripts/substrate/install-substrate.sh`; `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`; `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`; `docs/INSTALLATION.md`
+- `likely touch surfaces`: `scripts/substrate/install-substrate.sh`; `docs/project_management/packs/implemented/best-effort-distro-package-manager/contract.md`; `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`; `docs/INSTALLATION.md`
 
 ### `BEDPM1`
 
 - `slice_id`: `BEDPM1`
 - `name`: `Lock override precedence and failure classes`
 - `intent`: Stabilize explicit override precedence, deterministic fallback order, wrapper exit-code pass-through, and the actionable failure contract for unsupported or unavailable managers.
-- `likely touch surfaces`: `scripts/substrate/install-substrate.sh`; `scripts/substrate/install.sh`; `docs/project_management/packs/draft/best-effort-distro-package-manager/decision_register.md`; `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`; `docs/reference/env/contract.md`
+- `likely touch surfaces`: `scripts/substrate/install-substrate.sh`; `scripts/substrate/install.sh`; `docs/project_management/packs/implemented/best-effort-distro-package-manager/decision_register.md`; `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM1/BEDPM1-spec.md`; `docs/reference/env/contract.md`
 
 ### `BEDPM2`
 
 - `slice_id`: `BEDPM2`
 - `name`: `Prove hermetic detection behavior`
 - `intent`: Stabilize the repo test path, feature-local smoke wrapper, and manual evidence path for precedence, mapping, warning, and remediation behavior without host mutation.
-- `likely touch surfaces`: `tests/installers/pkg_manager_detection_smoke.sh`; `docs/project_management/packs/draft/best-effort-distro-package-manager/smoke/linux-smoke.sh`; `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md`; `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`
+- `likely touch surfaces`: `tests/installers/pkg_manager_detection_smoke.sh`; `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh`; `docs/project_management/packs/implemented/best-effort-distro-package-manager/manual_testing_playbook.md`; `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM2/BEDPM2-spec.md`

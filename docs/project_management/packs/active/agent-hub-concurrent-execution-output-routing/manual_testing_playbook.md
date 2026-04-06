@@ -21,6 +21,7 @@ Validates ADR-0017 operator-visible behavior for concurrent structured agent eve
 - Tools:
   - `jq`
   - `bash` (Linux/macOS)
+  - `script` (Linux/macOS smoke automation)
   - PowerShell 7 (`pwsh`) (Windows)
 
 Exit code taxonomy for Substrate CLI behavior:
@@ -105,7 +106,7 @@ In the interactive REPL session, run:
 2. Immediately start a PTY passthrough command that overlaps with demo output:
    - `:pty bash -lc 'echo PTY_START; sleep 2; echo PTY_END'`
 3. Exit the REPL:
-   - `:quit`
+   - `exit`
 
 Expected:
 

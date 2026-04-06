@@ -58,6 +58,68 @@ impl ReplSessionTelemetry {
         self.metrics.agent_events = self.metrics.agent_events.saturating_add(1);
     }
 
+    pub(crate) fn persist_agent_event(&self, event: &AgentEvent) {
+        if let Err(err) = append_agent_event_to_trace(&self.config, event) {
+            warn!(target = "substrate::shell", error = %err, "failed to append agent_event trace record");
+        }
+    }
+
+    pub(crate) fn persist_warning_pty_structured_event_drops(
+        &self,
+        dropped_structured_event_lines: u64,
+        max_pty_buffered_lines: usize,
+        cmd_id: Option<&str>,
+    ) {
+        let dropped_i64 = i64::try_from(dropped_structured_event_lines).unwrap_or(i64::MAX);
+        let max_i64 = i64::try_from(max_pty_buffered_lines).unwrap_or(i64::MAX);
+
+        let mut entry = json!({
+            log_schema::TIMESTAMP: Utc::now().to_rfc3339(),
+            log_schema::EVENT_TYPE: "warning",
+            log_schema::SESSION_ID: self.config.session_id,
+            log_schema::COMPONENT: "shell",
+            "code": "pty_structured_event_drops",
+            "dropped_structured_event_lines": dropped_i64,
+            "max_pty_buffered_lines": max_i64,
+        });
+
+        if let Some(cmd_id) = cmd_id {
+            entry[log_schema::COMMAND_ID] = json!(cmd_id);
+        }
+
+        let _ = init_trace(None);
+        if let Err(err) = append_to_trace(&entry) {
+            warn!(target = "substrate::shell", error = %err, "failed to append pty_structured_event_drops warning record");
+        }
+    }
+
+    pub(crate) fn persist_warning_config_value_clamped(
+        &self,
+        key: &str,
+        provided: i64,
+        effective: i64,
+        min: i64,
+        max: i64,
+    ) {
+        let entry = json!({
+            log_schema::TIMESTAMP: Utc::now().to_rfc3339(),
+            log_schema::EVENT_TYPE: "warning",
+            log_schema::SESSION_ID: self.config.session_id,
+            log_schema::COMPONENT: "shell",
+            "code": "config_value_clamped",
+            "key": key,
+            "provided": provided,
+            "effective": effective,
+            "min": min,
+            "max": max,
+        });
+
+        let _ = init_trace(None);
+        if let Err(err) = append_to_trace(&entry) {
+            warn!(target = "substrate::shell", error = %err, "failed to append config_value_clamped warning record");
+        }
+    }
+
     pub(crate) fn record_command(&mut self) {
         self.metrics.commands_executed = self.metrics.commands_executed.saturating_add(1);
     }
@@ -119,6 +181,25 @@ fn log_repl_event(
         "repl_status"
     );
 
+    Ok(())
+}
+
+fn append_agent_event_to_trace(config: &ShellConfig, event: &AgentEvent) -> Result<()> {
+    let mut sanitized = event.clone();
+    let channel = sanitized.channel.take();
+    sanitized.set_channel(channel);
+
+    let mut entry = serde_json::to_value(&sanitized)?;
+    let obj = entry
+        .as_object_mut()
+        .ok_or_else(|| anyhow::anyhow!("agent event must serialize as a JSON object"))?;
+
+    obj.insert(log_schema::EVENT_TYPE.to_string(), json!("agent_event"));
+    obj.insert(log_schema::SESSION_ID.to_string(), json!(config.session_id));
+    obj.insert(log_schema::COMPONENT.to_string(), json!("agent-hub"));
+
+    let _ = init_trace(None);
+    append_to_trace(&entry)?;
     Ok(())
 }
 

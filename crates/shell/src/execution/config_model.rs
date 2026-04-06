@@ -91,6 +91,10 @@ pub(crate) fn is_user_error(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| cause.is::<UserError>())
 }
 
+pub(crate) const REPL_MAX_PTY_BUFFERED_LINES_MIN: i64 = 0;
+pub(crate) const REPL_MAX_PTY_BUFFERED_LINES_MAX: i64 = 16_384;
+pub(crate) const REPL_MAX_PTY_BUFFERED_LINES_DEFAULT: i64 = 2_048;
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct SubstrateConfig {
@@ -138,10 +142,31 @@ impl<'de> Deserialize<'de> for ReplExitCwdMode {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct I64ClampInfo {
+    pub provided: i64,
+    pub effective: i64,
+    pub min: i64,
+    pub max: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct ReplConfig {
     pub exit_cwd: ReplExitCwdMode,
+    pub max_pty_buffered_lines: i64,
+    #[serde(skip)]
+    pub max_pty_buffered_lines_clamp: Option<I64ClampInfo>,
+}
+
+impl Default for ReplConfig {
+    fn default() -> Self {
+        Self {
+            exit_cwd: ReplExitCwdMode::default(),
+            max_pty_buffered_lines: REPL_MAX_PTY_BUFFERED_LINES_DEFAULT,
+            max_pty_buffered_lines_clamp: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -469,11 +494,13 @@ pub(crate) struct SyncConfigPatch {
 pub(crate) struct ReplConfigPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub exit_cwd: Option<ReplExitCwdMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_pty_buffered_lines: Option<i64>,
 }
 
 impl ReplConfigPatch {
     fn is_empty(&self) -> bool {
-        self.exit_cwd.is_none()
+        self.exit_cwd.is_none() && self.max_pty_buffered_lines.is_none()
     }
 }
 
@@ -1158,6 +1185,46 @@ fn resolve_effective_from_layers(
         );
     }
 
+    // repl.max_pty_buffered_lines
+    let (raw_max_pty_buffered_lines, max_pty_buffered_lines_src) = resolve_replace(
+        effective.repl.max_pty_buffered_lines,
+        global_patch.repl.max_pty_buffered_lines,
+        workspace_patch
+            .map(|(p, _)| p.repl.max_pty_buffered_lines)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    let max_pty_buffered_lines = raw_max_pty_buffered_lines.clamp(
+        REPL_MAX_PTY_BUFFERED_LINES_MIN,
+        REPL_MAX_PTY_BUFFERED_LINES_MAX,
+    );
+    effective.repl.max_pty_buffered_lines = max_pty_buffered_lines;
+    if raw_max_pty_buffered_lines != max_pty_buffered_lines {
+        effective.repl.max_pty_buffered_lines_clamp = Some(I64ClampInfo {
+            provided: raw_max_pty_buffered_lines,
+            effective: max_pty_buffered_lines,
+            min: REPL_MAX_PTY_BUFFERED_LINES_MIN,
+            max: REPL_MAX_PTY_BUFFERED_LINES_MAX,
+        });
+    } else {
+        effective.repl.max_pty_buffered_lines_clamp = None;
+    }
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "repl.max_pty_buffered_lines".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    max_pty_buffered_lines_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
     // policy.mode (from config.yaml/workspace.yaml, not policy.yaml)
     let (policy_mode, policy_mode_src) = resolve_replace(
         effective.policy.mode,
@@ -1633,6 +1700,11 @@ fn apply_update_to_patch(patch: &mut SubstrateConfigPatch, update: &ConfigUpdate
         "repl.exit_cwd" => {
             apply_enum_repl_exit_cwd_opt(&mut patch.repl.exit_cwd, &update.op, &update.value)
         }
+        "repl.max_pty_buffered_lines" => apply_i64_opt(
+            &mut patch.repl.max_pty_buffered_lines,
+            &update.op,
+            &update.value,
+        ),
 
         _ => Err(user_error(format!(
             "unsupported config key '{}'",
@@ -1662,6 +1734,7 @@ fn reset_patch_key(patch: &mut SubstrateConfigPatch, key: &str) -> Result<bool> 
         "sync.exclude" => reset_opt(&mut patch.sync.exclude),
 
         "repl.exit_cwd" => reset_opt(&mut patch.repl.exit_cwd),
+        "repl.max_pty_buffered_lines" => reset_opt(&mut patch.repl.max_pty_buffered_lines),
 
         _ => Err(user_error(format!("unsupported config key '{}'", key))),
     }
@@ -1681,6 +1754,21 @@ fn apply_bool_opt(target: &mut Option<bool>, op: &UpdateOp, raw: &str) -> Result
         user_error(format!(
             "invalid boolean '{}'; expected true|false|1|0|yes|no|on|off",
             raw
+        ))
+    })?;
+    let changed = *target != Some(next);
+    *target = Some(next);
+    Ok(changed)
+}
+
+fn apply_i64_opt(target: &mut Option<i64>, op: &UpdateOp, raw: &str) -> Result<bool> {
+    if *op != UpdateOp::Set {
+        return Err(user_error("unsupported operator for integer key"));
+    }
+    let next = raw.trim().parse::<i64>().map_err(|_| {
+        user_error(format!(
+            "invalid integer '{}'; expected a whole number",
+            raw.trim()
         ))
     })?;
     let changed = *target != Some(next);

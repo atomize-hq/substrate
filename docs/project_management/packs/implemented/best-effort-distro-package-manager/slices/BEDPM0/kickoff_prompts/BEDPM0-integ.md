@@ -2,14 +2,14 @@
 
 ## Scope
 - Merge BEDPM0 code and tests, reconcile to spec, and make the slice green locally.
-- Spec: `docs/project_management/packs/draft/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
+- Spec: `docs/project_management/packs/implemented/best-effort-distro-package-manager/slices/BEDPM0/BEDPM0-spec.md`
 
 ## Start Checklist
 Do not edit planning docs inside the worktree.
 
 1. Verify you are in `wt/best-effort-distro-package-manager-bedpm0-integ` on branch `best-effort-distro-package-manager-bedpm0-integ` and that `.taskmeta.json` exists.
 2. Read `plan.md`, `tasks.json`, `session_log.md`, the BEDPM0 spec, and this prompt.
-3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run `make triad-task-start FEATURE_DIR="docs/project_management/packs/draft/best-effort-distro-package-manager" TASK_ID="BEDPM0-integ"`.
+3. If `.taskmeta.json` is missing or mismatched, stop and ask the operator to run `make triad-task-start FEATURE_DIR="docs/project_management/packs/implemented/best-effort-distro-package-manager" TASK_ID="BEDPM0-integ"`.
 
 ## Requirements
 - Merge the BEDPM0 code and test branches into this worktree. The spec wins on drift.
