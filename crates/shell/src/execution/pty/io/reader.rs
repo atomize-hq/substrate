@@ -3,12 +3,15 @@
 use super::super::control::PtyControl;
 use super::types::PtyExitStatus;
 use anyhow::Result;
-use std::env;
 use std::io::{self, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 
+#[cfg(unix)]
+use std::env;
+
+#[cfg(unix)]
 fn should_forward_stdin() -> bool {
     if let Ok(value) = env::var("SUBSTRATE_PTY_FORWARD_STDIN") {
         let value = value.to_ascii_lowercase();
