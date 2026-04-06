@@ -320,9 +320,11 @@ fn find_exit_note_path(output: &str) -> Option<String> {
     let prefix = "substrate: note: returning to host cwd: ";
     output.lines().find_map(|line| {
         let trimmed = line.trim_end_matches('\r');
+        // When running under a PTY, reedline may leave the prompt prefix on the same line as
+        // the note (e.g. `substrate> substrate: note: ...`). Accept the note anywhere in-line.
         trimmed
-            .strip_prefix(prefix)
-            .map(|rest| rest.trim().to_string())
+            .find(prefix)
+            .map(|start| trimmed[start + prefix.len()..].trim().to_string())
     })
 }
 
