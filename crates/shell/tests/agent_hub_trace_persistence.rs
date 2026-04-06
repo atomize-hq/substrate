@@ -227,7 +227,7 @@ impl PtyRepl {
     fn send_line(&mut self, line: &str) {
         let mut writer = self.writer.lock().expect("pty writer");
         writer.write_all(line.as_bytes()).expect("write line");
-        writer.write_all(b"\r").expect("write CR");
+        writer.write_all(b"\n").expect("write LF");
         writer.flush().expect("flush");
     }
 

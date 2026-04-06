@@ -408,8 +408,10 @@ impl PtyRepl {
     fn send_line(&mut self, line: &str) {
         if let Ok(mut w) = self.writer.lock() {
             let _ = w.write_all(line.as_bytes());
-            // Use CR for Enter; many line editors expect this in terminal mode.
-            let _ = w.write_all(b"\r");
+            // Use LF for Enter so both the stdio prompt worker (read_line) and
+            // Reedline-backed prompt worker reliably consume the line under PTY
+            // harnesses in CI.
+            let _ = w.write_all(b"\n");
             let _ = w.flush();
         }
     }

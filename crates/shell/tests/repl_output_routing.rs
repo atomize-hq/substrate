@@ -276,7 +276,7 @@ impl PtyRepl {
     fn send_line(&mut self, line: &str) {
         if let Ok(mut w) = self.writer.lock() {
             let _ = w.write_all(line.as_bytes());
-            let _ = w.write_all(b"\r");
+            let _ = w.write_all(b"\n");
             let _ = w.flush();
         }
     }
