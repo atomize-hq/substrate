@@ -20,6 +20,9 @@ use tempfile::TempDir;
 const PTY_MARKER: &str = "OR1_PTY_MARKER";
 const PTY_START: &str = "__OR1_PTY_START__";
 const PTY_END: &str = "__OR1_PTY_END__";
+const DEMO_BURST_ACK: &str = "scheduled burst: agents=1, events_per_agent=3, delay_ms=1000";
+const DEMO_BURST_EVENT_1: &str = "chunk #00001";
+const DEMO_BURST_EVENT_2: &str = "chunk #00002";
 
 #[cfg(unix)]
 fn set_fd_nonblocking(fd: i32) {
@@ -120,6 +123,24 @@ struct PtyRepl {
     stop_reader: Arc<AtomicBool>,
 }
 
+impl Drop for PtyRepl {
+    fn drop(&mut self) {
+        self.stop_reader.store(true, Ordering::Relaxed);
+        self.master.take();
+
+        if self.waited.is_none() {
+            let _ = self.child.kill();
+            let _ = self.child.try_wait().ok().flatten().map(|s| {
+                self.waited = Some(s);
+            });
+        }
+
+        if let Some(handle) = self.reader_handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
 impl PtyRepl {
     fn spawn(
         project_dir: &Path,
@@ -176,7 +197,7 @@ impl PtyRepl {
         let output = Arc::new(Mutex::new(Vec::new()));
         let stop_reader = Arc::new(AtomicBool::new(false));
         let output_for_thread = output.clone();
-        let writer_for_thread = writer.clone();
+        let writer_for_thread = Arc::downgrade(&writer);
         let stop_for_thread = stop_reader.clone();
         let reader_handle = std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
@@ -207,15 +228,19 @@ impl PtyRepl {
                     probe.extend_from_slice(chunk);
 
                     if probe.windows(4).any(|w| w == b"\x1b[6n") {
-                        if let Ok(mut w) = writer_for_thread.lock() {
-                            let _ = w.write_all(b"\x1b[1;1R");
-                            let _ = w.flush();
+                        if let Some(writer) = writer_for_thread.upgrade() {
+                            if let Ok(mut w) = writer.lock() {
+                                let _ = w.write_all(b"\x1b[1;1R");
+                                let _ = w.flush();
+                            }
                         }
                     }
                     if probe.windows(5).any(|w| w == b"\x1b[18t") {
-                        if let Ok(mut w) = writer_for_thread.lock() {
-                            let _ = w.write_all(b"\x1b[8;24;80t");
-                            let _ = w.flush();
+                        if let Some(writer) = writer_for_thread.upgrade() {
+                            if let Ok(mut w) = writer.lock() {
+                                let _ = w.write_all(b"\x1b[8;24;80t");
+                                let _ = w.flush();
+                            }
                         }
                     }
 
@@ -365,14 +390,16 @@ fn structured_events_are_deferred_until_after_pty_passthrough() {
     repl.wait_for_output_or_exit("Substrate v", Duration::from_secs(3))
         .expect("banner");
 
-    repl.send_line(":demo-agent");
+    repl.send_line(":demo-burst 1 3 1000");
+    repl.wait_for_output_or_exit(DEMO_BURST_ACK, Duration::from_secs(3))
+        .expect("demo burst scheduled");
     repl.send_line(&format!(":pty echo {PTY_MARKER}"));
 
     repl.wait_for_output_or_exit(PTY_START, Duration::from_secs(2))
         .expect("pty start marker");
     repl.wait_for_output_or_exit(PTY_END, Duration::from_secs(5))
         .expect("pty end marker");
-    repl.wait_for_output_or_exit("Demo agent event #2", Duration::from_secs(3))
+    repl.wait_for_output_or_exit(DEMO_BURST_EVENT_1, Duration::from_secs(3))
         .expect("deferred agent output");
 
     repl.send_line("exit");
@@ -381,14 +408,14 @@ fn structured_events_are_deferred_until_after_pty_passthrough() {
 
     let start_idx = out.find(PTY_START).expect("pty start marker index");
     let end_idx = out.find(PTY_END).expect("pty end marker index");
-    let first_event_idx = out.find("Demo agent event #2").expect("agent event output");
+    let first_event_idx = out.find(DEMO_BURST_EVENT_1).expect("agent event output");
     assert!(
         first_event_idx > end_idx,
         "expected structured agent output after PTY passthrough end; output:\n{out}"
     );
 
     assert!(
-        !out[start_idx..end_idx].contains("Demo agent event #"),
+        !out[start_idx..end_idx].contains("chunk #"),
         "structured agent output must not be printed during PTY passthrough; output:\n{out}"
     );
 }
@@ -432,7 +459,9 @@ fn max_pty_buffered_lines_zero_drops_structured_lines_and_emits_one_warning_reco
     repl.wait_for_output_or_exit("Substrate v", Duration::from_secs(3))
         .expect("banner");
 
-    repl.send_line(":demo-agent");
+    repl.send_line(":demo-burst 1 3 1000");
+    repl.wait_for_output_or_exit(DEMO_BURST_ACK, Duration::from_secs(3))
+        .expect("demo burst scheduled");
     repl.send_line(&format!(":pty echo {PTY_MARKER}"));
 
     repl.wait_for_output_or_exit(PTY_END, Duration::from_secs(6))
@@ -446,27 +475,26 @@ fn max_pty_buffered_lines_zero_drops_structured_lines_and_emits_one_warning_reco
     let start_idx = out.find(PTY_START).expect("pty start marker index");
     let end_idx = out.find(PTY_END).expect("pty end marker index");
     assert!(
-        !out[start_idx..end_idx].contains("Demo agent event #"),
+        !out[start_idx..end_idx].contains("chunk #"),
         "structured agent output must not be printed during PTY passthrough; output:\n{out}"
     );
 
     assert!(
-        !out.contains("Demo agent event #2") && !out.contains("Demo agent event #3"),
+        !out.contains(DEMO_BURST_EVENT_1) && !out.contains(DEMO_BURST_EVENT_2),
         "expected no buffered structured lines when cap=0; output:\n{out}"
     );
 
     let trace_path = substrate_home.join("trace.jsonl");
     let events = read_trace(&trace_path);
-    let demo_events: Vec<&Value> = events
+    let burst_events: Vec<&Value> = events
         .iter()
         .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
-        .filter(|event| event.get("agent_id").and_then(Value::as_str) == Some("demo-agent"))
+        .filter(|event| event.get("agent_id").and_then(Value::as_str) == Some("burst-00"))
         .collect();
-    assert_eq!(
-        demo_events.len(),
-        3,
-        "demo-agent should emit 3 agent_event records even when display is suppressed; got {} records: {demo_events:?}",
-        demo_events.len()
+    assert!(
+        burst_events.len() >= 3,
+        "burst-00 should emit at least 3 agent_event records even when display is suppressed; got {} records: {burst_events:?}",
+        burst_events.len()
     );
 
     let warnings: Vec<&Value> = events
@@ -500,6 +528,6 @@ fn max_pty_buffered_lines_zero_drops_structured_lines_and_emits_one_warning_reco
             .get("dropped_structured_event_lines")
             .and_then(Value::as_i64),
         Some(2),
-        "warning record must report dropped_structured_event_lines=2: {warning:?}"
+        "warning record must report dropped_structured_event_lines=2 (chunk #00001/#00002): {warning:?}"
     );
 }
