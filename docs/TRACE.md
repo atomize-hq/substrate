@@ -120,7 +120,7 @@ The current runtime already lands these fields on completion spans:
 
 ### World Process Telemetry (`world_process_*`)
 
-`world_process_*` is the canonical subprocess exec/exit telemetry family introduced by ADR-0028. Linux-backed executions now emit these records; the authoritative schema and protocol live in [SCHEMA.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md) and [PROTOCOL.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/PROTOCOL.md).
+`world_process_*` is the canonical subprocess exec/exit telemetry family introduced by ADR-0028. Linux-backed executions emit these records; on other platforms, the contract is degrade-only and is summarized through shell completion fields such as `process_events_status` and `process_events_reason` instead of `world_process_*` records. The authoritative schema and protocol live in [SCHEMA.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md) and [PROTOCOL.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/PROTOCOL.md).
 
 Event names:
 - `world_process_start`
@@ -136,6 +136,7 @@ Record posture:
 - `argv` is redacted or explicitly omitted.
 - `env` is allowlist-only and redacted.
 - `process_events_status` and `process_events_reason` describe degrade/truncation behavior at the protocol layer.
+- Canonical trace omission for builtin and preexec command bodies remains non-negotiable; `builtin_command` records must omit raw command bodies even when wrap or preexec-related routing is active.
 
 ### Phase 8 Additive Correlation (selected fields; operator-facing summary)
 

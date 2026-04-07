@@ -28,7 +28,7 @@ Effective-disable attribution uses the published contract fragments
 `world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)`, and
 `world isolation disabled by effective config (source unknown)`.
 
-Replay request construction now uses the shared four-case world-network contract:
+Replay request construction is governed by the canonical shared four-case world-network contract, not a replay-local heuristic:
 - gate off plus restrictive `net_allowed` => no requested isolation
 - gate on plus allow-all `["*"]` => no requested isolation
 - gate on plus deny-all `[]` => requested isolation with an empty allowlist
