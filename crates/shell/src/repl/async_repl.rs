@@ -58,6 +58,89 @@ fn is_cursor_position_timeout_error(err: &anyhow::Error) -> bool {
         .contains("cursor position could not be read within a normal duration")
 }
 
+fn is_terminal_loss_io_error(err: &std::io::Error) -> bool {
+    if matches!(
+        err.kind(),
+        std::io::ErrorKind::BrokenPipe
+            | std::io::ErrorKind::NotConnected
+            | std::io::ErrorKind::UnexpectedEof
+    ) {
+        return true;
+    }
+
+    #[cfg(unix)]
+    {
+        if let Some(code) = err.raw_os_error() {
+            return matches!(code, libc::ENOTTY | libc::EIO | libc::EBADF);
+        }
+    }
+
+    false
+}
+
+fn is_terminal_loss_error(err: &anyhow::Error) -> bool {
+    for cause in err.chain() {
+        if let Some(io_err) = cause.downcast_ref::<std::io::Error>() {
+            if is_terminal_loss_io_error(io_err) {
+                return true;
+            }
+        }
+    }
+
+    let message = err.to_string().to_lowercase();
+    message.contains("broken pipe")
+        || message.contains("not connected")
+        || message.contains("bad file descriptor")
+        || message.contains("inappropriate ioctl for device")
+        || message.contains("input/output error")
+        || message.contains("terminal invalid")
+        || message.contains("end of file")
+        || message.contains("unexpected eof")
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReplTerminationCause {
+    NormalExit,
+    AbnormalTerminalLoss,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PromptWorkerShutdownDisposition {
+    Graceful,
+    Abandon,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PromptWorkerErrorDisposition {
+    FallbackToStdio,
+    AbnormalTerminalLoss,
+    GenericError,
+}
+
+fn classify_prompt_worker_error(
+    is_reedline: bool,
+    err: &anyhow::Error,
+) -> PromptWorkerErrorDisposition {
+    if is_reedline && is_cursor_position_timeout_error(err) {
+        PromptWorkerErrorDisposition::FallbackToStdio
+    } else if is_reedline && is_terminal_loss_error(err) {
+        PromptWorkerErrorDisposition::AbnormalTerminalLoss
+    } else if is_reedline {
+        PromptWorkerErrorDisposition::GenericError
+    } else {
+        PromptWorkerErrorDisposition::GenericError
+    }
+}
+
+fn shutdown_disposition_for_termination_cause(
+    cause: ReplTerminationCause,
+) -> PromptWorkerShutdownDisposition {
+    match cause {
+        ReplTerminationCause::NormalExit => PromptWorkerShutdownDisposition::Graceful,
+        ReplTerminationCause::AbnormalTerminalLoss => PromptWorkerShutdownDisposition::Abandon,
+    }
+}
+
 struct ReplPreflight {
     entered_cwd: String,
     exit_cwd: crate::execution::config_model::ReplExitCwdMode,
@@ -139,18 +222,30 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         };
 
         let mut should_exit = false;
+        let mut termination_cause = ReplTerminationCause::NormalExit;
         while !should_exit {
             prompt_active.store(true, Ordering::SeqCst);
-            prompt_worker
-                .request_prompt()
-                .context("failed to request prompt")?;
+            if let Err(err) = prompt_worker.request_prompt() {
+                termination_cause = ReplTerminationCause::AbnormalTerminalLoss;
+                should_exit = true;
+                eprintln!(
+                    "substrate: error: abnormal terminal loss: failed to request prompt: {err:#}"
+                );
+                prompt_active.store(false, Ordering::SeqCst);
+                continue;
+            }
 
             let prompt_response = loop {
                 tokio::select! {
                     resp = prompt_responses.recv() => {
                         match resp {
                             Some(resp) => break resp,
-                            None => return Err(anyhow!("prompt worker closed")),
+                            None => {
+                                termination_cause = ReplTerminationCause::AbnormalTerminalLoss;
+                                break PromptWorkerResponse::Error(anyhow!(
+                                    "prompt worker closed unexpectedly"
+                                ));
+                            }
                         }
                     }
                     maybe_event = agent_rx.recv() => {
@@ -400,18 +495,27 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     should_exit = true;
                 }
                 PromptWorkerResponse::Error(err) => {
-                    if prompt_worker.is_reedline() && is_cursor_position_timeout_error(&err) {
-                        eprintln!(
-                            "substrate: warning: prompt backend degraded (cursor query timeout); falling back to plain stdin reader"
-                        );
-                        prompt_worker = PromptWorker::spawn_stdio(shared_config.clone())
-                            .context("failed to start plain prompt worker")?;
-                        agent_printer = prompt_worker.printer_handle();
-                        prompt_responses = prompt_worker.take_response_receiver();
-                        continue;
+                    match classify_prompt_worker_error(prompt_worker.is_reedline(), &err) {
+                        PromptWorkerErrorDisposition::FallbackToStdio => {
+                            eprintln!(
+                                "substrate: warning: prompt backend degraded (cursor query timeout); falling back to plain stdin reader"
+                            );
+                            prompt_worker = PromptWorker::spawn_stdio(shared_config.clone())
+                                .context("failed to start plain prompt worker")?;
+                            agent_printer = prompt_worker.printer_handle();
+                            prompt_responses = prompt_worker.take_response_receiver();
+                            continue;
+                        }
+                        PromptWorkerErrorDisposition::AbnormalTerminalLoss => {
+                            termination_cause = ReplTerminationCause::AbnormalTerminalLoss;
+                            should_exit = true;
+                            eprintln!("substrate: error: abnormal terminal loss: {err:#}");
+                        }
+                        PromptWorkerErrorDisposition::GenericError => {
+                            eprintln!("prompt error: {err}");
+                            should_exit = true;
+                        }
                     }
-                    eprintln!("prompt error: {err}");
-                    should_exit = true;
                 }
             }
         }
@@ -469,7 +573,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         };
 
-        prompt_worker.shutdown();
+        prompt_worker.shutdown_with_disposition(shutdown_disposition_for_termination_cause(
+            termination_cause,
+        ));
         clear_agent_event_sender();
 
         let auto_sync_exit_code: i32 = {
@@ -518,7 +624,12 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             let _ = session.client.close().await;
         }
 
-        Ok::<_, anyhow::Error>(auto_sync_exit_code)
+        let exit_code = match termination_cause {
+            ReplTerminationCause::NormalExit => auto_sync_exit_code,
+            ReplTerminationCause::AbnormalTerminalLoss => 1,
+        };
+
+        Ok::<_, anyhow::Error>(exit_code)
     })?;
 
     Ok(exit_code)
@@ -597,9 +708,20 @@ impl PromptWorker {
     }
 
     fn shutdown(&mut self) {
+        self.shutdown_with_disposition(PromptWorkerShutdownDisposition::Graceful);
+    }
+
+    fn shutdown_with_disposition(&mut self, disposition: PromptWorkerShutdownDisposition) {
         let _ = self.command_tx.send(PromptWorkerCommand::Shutdown);
-        if let Some(handle) = self.join_handle.take() {
-            let _ = handle.join();
+        match disposition {
+            PromptWorkerShutdownDisposition::Graceful => {
+                if let Some(handle) = self.join_handle.take() {
+                    let _ = handle.join();
+                }
+            }
+            PromptWorkerShutdownDisposition::Abandon => {
+                let _ = self.join_handle.take();
+            }
         }
     }
 
@@ -1728,6 +1850,70 @@ fn exit_status_from_code(code: i32) -> ExitStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn classify_prompt_worker_error_falls_back_on_cursor_timeout() {
+        let err = anyhow!("cursor position could not be read within a normal duration");
+
+        assert_eq!(
+            classify_prompt_worker_error(true, &err),
+            PromptWorkerErrorDisposition::FallbackToStdio
+        );
+    }
+
+    #[test]
+    fn classify_prompt_worker_error_treats_reedline_failures_as_abnormal_terminal_loss() {
+        let err = anyhow!(io::Error::from_raw_os_error(libc::ENOTTY));
+
+        assert_eq!(
+            classify_prompt_worker_error(true, &err),
+            PromptWorkerErrorDisposition::AbnormalTerminalLoss
+        );
+    }
+
+    #[test]
+    fn classify_prompt_worker_error_treats_common_terminal_loss_errors_as_abnormal() {
+        let cases = [
+            anyhow!(io::Error::from_raw_os_error(libc::ENOTTY)),
+            anyhow!(io::Error::from_raw_os_error(libc::EIO)),
+            anyhow!(io::Error::from_raw_os_error(libc::EBADF)),
+            anyhow!(io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe")),
+            anyhow!(io::Error::new(io::ErrorKind::NotConnected, "not connected")),
+            anyhow!(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "unexpected eof"
+            )),
+        ];
+
+        for err in &cases {
+            assert_eq!(
+                classify_prompt_worker_error(true, err),
+                PromptWorkerErrorDisposition::AbnormalTerminalLoss
+            );
+        }
+    }
+
+    #[test]
+    fn classify_prompt_worker_error_keeps_unrelated_reedline_errors_generic() {
+        let err = anyhow!("completion menu rendering failed");
+
+        assert_eq!(
+            classify_prompt_worker_error(true, &err),
+            PromptWorkerErrorDisposition::GenericError
+        );
+    }
+
+    #[test]
+    fn shutdown_disposition_tracks_termination_cause() {
+        assert_eq!(
+            shutdown_disposition_for_termination_cause(ReplTerminationCause::NormalExit),
+            PromptWorkerShutdownDisposition::Graceful
+        );
+        assert_eq!(
+            shutdown_disposition_for_termination_cause(ReplTerminationCause::AbnormalTerminalLoss),
+            PromptWorkerShutdownDisposition::Abandon
+        );
+    }
 
     #[test]
     fn parse_demo_burst_defaults() {
