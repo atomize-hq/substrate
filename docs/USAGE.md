@@ -16,6 +16,8 @@ substrate> npm test
 substrate> exit
 ```
 
+Normal interactive `exit` / `quit` ends the REPL with process exit code `0`. If the controlling terminal is revoked or disconnected after startup, Substrate exits with code `1` and may emit one best-effort abnormal-terminal-loss diagnostic before it terminates. The current automated proof for that path is the macOS revoke harness in `crates/shell/tests/repl_tty_disconnect_macos.rs`; treat that as landed evidence for this behavior, not as a blanket platform guarantee.
+
 ### Legacy REPL (fallback)
 
 The async, event-driven REPL now powers interactive sessions by default and
