@@ -77,6 +77,12 @@ fn test_wrap_mode_builtin_command_omits_command_body_in_trace() {
             "builtin_command must omit command bodies: {builtin:?}"
         );
     }
+    assert!(
+        !events.iter().any(|event| {
+            event.get("event_type").and_then(Value::as_str) == Some("builtin_command_raw")
+        }),
+        "canonical trace must not emit builtin_command_raw payloads: {events:?}"
+    );
 }
 
 #[test]

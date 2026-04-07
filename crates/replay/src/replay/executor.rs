@@ -1150,4 +1150,46 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn build_agent_execute_request_keeps_restrictive_net_allowed_unisolated_when_filter_disabled() {
+        let _lock = env_lock();
+        let previous = std::env::var_os("SUBSTRATE_AGENT_ID");
+        unsafe {
+            std::env::set_var("SUBSTRATE_AGENT_ID", "tester");
+        }
+
+        let state = execution_state();
+        let snapshot = snapshot_with_net_allowed(&[" Example.COM. ", "api.example.com"])
+            .canonicalize()
+            .expect("canonicalize snapshot");
+
+        let request = build_agent_execute_request(&state, snapshot, false).expect("build request");
+        let world_network = request
+            .world_network
+            .expect("world_network should be populated");
+
+        assert!(
+            !world_network.isolate_network,
+            "gate-off replay must not request isolation for a restrictive policy"
+        );
+        assert!(
+            world_network.allowed_domains.is_empty(),
+            "gate-off replay must not carry allowlisted domains when isolation is disabled"
+        );
+        assert_eq!(
+            request.policy_snapshot.net_allowed,
+            vec!["example.com".to_string(), "api.example.com".to_string()]
+        );
+
+        if let Some(value) = previous {
+            unsafe {
+                std::env::set_var("SUBSTRATE_AGENT_ID", value);
+            }
+        } else {
+            unsafe {
+                std::env::remove_var("SUBSTRATE_AGENT_ID");
+            }
+        }
+    }
 }
