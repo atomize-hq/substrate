@@ -11,6 +11,7 @@ use tokio::time::{timeout, Duration};
 
 use super::{ExecutionResult, ExecutionState};
 use crate::replay::helpers::replay_verbose;
+use agent_api_types::{ExecuteRequest, PolicySnapshotV3};
 #[cfg(target_os = "linux")]
 use substrate_common::FsDiff;
 use substrate_common::{log_schema, WorldRootMode};
@@ -20,9 +21,8 @@ use substrate_trace::append_to_trace;
 use agent_api_client::AgentClient;
 #[cfg(target_os = "linux")]
 use agent_api_types::{
-    ExecuteRequest, ExecuteResponse, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
-    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
-    WorldFsDenyEnforcementV3,
+    ExecuteResponse, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
+    PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldFsDenyEnforcementV3,
 };
 #[cfg(target_os = "linux")]
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -104,6 +104,46 @@ fn resolve_policy_snapshot_v3_for_cwd(cwd: &Path) -> Result<PolicySnapshotV3> {
     snapshot
         .canonicalize()
         .map_err(|err| anyhow!("invalid PolicySnapshotV3 derived from broker policy: {err}"))
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn world_net_filter_from_process_env() -> Result<bool> {
+    let raw = std::env::var("SUBSTRATE_WORLD_NET_FILTER")
+        .context("missing SUBSTRATE_WORLD_NET_FILTER runtime env for replay")?;
+    parse_bool_env("SUBSTRATE_WORLD_NET_FILTER", &raw)
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn parse_bool_env(name: &str, raw: &str) -> Result<bool> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Ok(true),
+        "0" | "false" | "no" | "off" => Ok(false),
+        other => anyhow::bail!("{name} must be a boolean-like value (got '{other}')"),
+    }
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn build_agent_execute_request(
+    state: &ExecutionState,
+    policy_snapshot: PolicySnapshotV3,
+    world_net_filter: bool,
+) -> Result<ExecuteRequest> {
+    let world_network = policy_snapshot
+        .resolve_world_network_routing(world_net_filter)
+        .map_err(|err| anyhow!("invalid PolicySnapshotV3: {err}"))?;
+
+    Ok(ExecuteRequest {
+        profile: None,
+        cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''")),
+        cwd: Some(state.cwd.display().to_string()),
+        env: Some(state.env.clone()),
+        pty: false,
+        agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "replay".to_string()),
+        budget: None,
+        policy_snapshot,
+        world_network: Some(world_network),
+        world_fs_mode: Some(substrate_broker::world_fs_mode()),
+    })
 }
 
 #[cfg(target_os = "linux")]
@@ -897,18 +937,9 @@ async fn try_agent_backend(
         }
     }
 
-    let request = ExecuteRequest {
-        profile: None,
-        cmd: format!("bash -lc '{}'", state.raw_cmd.replace("'", "'\\''")),
-        cwd: Some(state.cwd.display().to_string()),
-        env: Some(state.env.clone()),
-        pty: false,
-        agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "replay".to_string()),
-        budget: None,
-        policy_snapshot: resolve_policy_snapshot_v3_for_cwd(&state.cwd)?,
-        world_network: None,
-        world_fs_mode: Some(substrate_broker::world_fs_mode()),
-    };
+    let policy_snapshot = resolve_policy_snapshot_v3_for_cwd(&state.cwd)?;
+    let world_net_filter = world_net_filter_from_process_env()?;
+    let request = build_agent_execute_request(state, policy_snapshot, world_net_filter)?;
 
     let start = Instant::now();
     match timeout(Duration::from_secs(timeout_secs), client.execute(request)).await {
@@ -997,4 +1028,126 @@ fn agent_socket_path(state: &ExecutionState) -> std::path::PathBuf {
     }
 
     std::path::PathBuf::from("/run/substrate.sock")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_api_types::{
+        PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
+        PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    };
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    fn snapshot_with_net_allowed(net_allowed: &[&str]) -> PolicySnapshotV3 {
+        PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: net_allowed
+                .iter()
+                .map(|entry| (*entry).to_string())
+                .collect(),
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: true,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        }
+    }
+
+    fn execution_state() -> ExecutionState {
+        ExecutionState {
+            raw_cmd: "echo hi".to_string(),
+            command: "echo".to_string(),
+            args: vec!["hi".to_string()],
+            cwd: std::env::current_dir().unwrap(),
+            env: HashMap::new(),
+            stdin: None,
+            session_id: "session-1".to_string(),
+            span_id: "span-1".to_string(),
+            recorded_origin: substrate_trace::ExecutionOrigin::World,
+            recorded_origin_source: None,
+            recorded_transport: None,
+            target_origin: substrate_trace::ExecutionOrigin::World,
+            origin_reason: None,
+            origin_reason_code: None,
+            world_disable_source: None,
+        }
+    }
+
+    #[test]
+    fn world_net_filter_from_process_env_reads_exported_runtime_state() {
+        let _lock = env_lock();
+        let previous = std::env::var_os("SUBSTRATE_WORLD_NET_FILTER");
+        unsafe {
+            std::env::set_var("SUBSTRATE_WORLD_NET_FILTER", "1");
+        }
+
+        assert!(world_net_filter_from_process_env().expect("read runtime env"));
+        unsafe {
+            std::env::set_var("SUBSTRATE_WORLD_NET_FILTER", "0");
+        }
+        assert!(!world_net_filter_from_process_env().expect("read runtime env"));
+
+        if let Some(value) = previous {
+            unsafe {
+                std::env::set_var("SUBSTRATE_WORLD_NET_FILTER", value);
+            }
+        } else {
+            unsafe {
+                std::env::remove_var("SUBSTRATE_WORLD_NET_FILTER");
+            }
+        }
+    }
+
+    #[test]
+    fn build_agent_execute_request_populates_world_network_from_shared_helper() {
+        let _lock = env_lock();
+        let previous = std::env::var_os("SUBSTRATE_AGENT_ID");
+        unsafe {
+            std::env::set_var("SUBSTRATE_AGENT_ID", "tester");
+        }
+        let state = execution_state();
+        let snapshot = snapshot_with_net_allowed(&[" Example.COM. ", "api.example.com"]);
+
+        let request = build_agent_execute_request(&state, snapshot, true).expect("build request");
+        let world_network = request
+            .world_network
+            .expect("world_network should be populated");
+
+        assert!(world_network.isolate_network);
+        assert_eq!(
+            world_network.allowed_domains,
+            vec!["example.com".to_string(), "api.example.com".to_string()]
+        );
+
+        if let Some(value) = previous {
+            unsafe {
+                std::env::set_var("SUBSTRATE_AGENT_ID", value);
+            }
+        } else {
+            unsafe {
+                std::env::remove_var("SUBSTRATE_AGENT_ID");
+            }
+        }
+    }
 }
