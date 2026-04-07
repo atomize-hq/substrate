@@ -109,6 +109,7 @@ ADR_BODY_SHA256: 339caac9c2e14856e07f9f2d2af15038207bc67717c1b81d736717267a279c4
   - Hardened protocol invariant (DR-22): user-submitted programs MUST NOT be able to access session infrastructure or control-plane endpoints/handles (e.g., inherited `/v1/stream` WebSocket FDs or other session control endpoints). Close-on-exec alone is necessary but not sufficient; the evaluator execution context must not have access in the first place. See decision register DR-22 and `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`.
   - `exit` / `quit`: exits the REPL; Substrate shuts down the world session as part of cleanup.
     - `exit` may include an optional numeric argument (e.g., `exit 2`), but this is treated as an operator request to end the REPL (it is not sent into the world session as a command). The REPL process exit code remains `0` on normal user exit (see `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`).
+    - If the interactive terminal is revoked/disconnected after REPL startup (for example, controlling-TTY loss during Reedline input), the REPL process MUST terminate with exit code `1` because this is an abnormal runtime failure, not a normal operator exit.
   - Protocol and state machine are authoritative:
     - `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`
     - `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`
@@ -139,7 +140,9 @@ ADR_BODY_SHA256: 339caac9c2e14856e07f9f2d2af15038207bc67717c1b81d736717267a279c4
 
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
-  - The interactive REPL process exit code remains `0` on normal `exit`/`quit`, and non-zero only on startup/config errors that prevent starting the REPL.
+  - The interactive REPL process exit code remains `0` on normal `exit`/`quit`.
+  - Startup/config failures that prevent starting the REPL remain non-zero per the shell entrypoint/runtime taxonomy.
+  - Abnormal runtime termination after startup, including controlling-TTY revoke/disconnect during interactive input, MUST return exit code `1`.
   - Per-command exit codes are surfaced via existing REPL printing behavior and recorded in trace spans.
 
 ### Config
