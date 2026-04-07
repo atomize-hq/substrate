@@ -36,6 +36,8 @@ Evidence (example stack signature):
 
 A reliable repro exists by spawning Substrate under a PTY, allowing the prompt to render, then invoking `revoke(2)` on the PTY slave device path (for example `/dev/ttys154`). After revoke, CPU ramps to ~100% and remains pinned until the process is terminated.
 
+This is a macOS-proven failure in shared REPL prompt code, not a macOS-only code path.
+
 ### 4.2 Repo-verified current behavior
 
 - The async REPL prompt path is implemented in `crates/shell/src/repl/async_repl.rs`.
