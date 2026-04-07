@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-1
 seam_slug: execution-contract-surfaces
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
@@ -18,9 +18,9 @@ basis:
     - `docs/project_management/packs/active/world_process_exec_tracing_parity/manual_testing_playbook.md` or `smoke/_core.sh` changes Case B expectations without updating the published behavior matrix
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending

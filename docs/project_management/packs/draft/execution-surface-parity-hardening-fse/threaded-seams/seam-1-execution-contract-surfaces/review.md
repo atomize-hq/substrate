@@ -63,11 +63,13 @@ flowchart TB
 
 ## Pre-exec gate disposition
 
-- **Review gate**: pending
+- **Review gate**: passed
 - **Contract gate concerns**:
   - `S00` must make `C-01` and `C-02` concrete enough that downstream slices do not reinterpret routing or behavior-matrix semantics locally.
 - **Revalidation prerequisites**:
   - re-check `crates/replay/src/replay/executor.rs`, `crates/shell/src/execution/policy_snapshot.rs`, `crates/shell/src/execution/manager.rs`, `crates/shell/src/scripts/bash_preexec.rs`, and the active WPEP playbook/smoke assets immediately before promotion to `exec-ready`
+- **Contract gate**: passed (`S00` makes `C-01` and `C-02` concrete, maps them to explicit runtime and publication surfaces, and keeps the owned producer contract scoped to one contract-first seam.)
+- **Revalidation gate**: passed (the current repo still matches the seam basis: `policy_snapshot.rs` remains the canonical routing authority, replay still needs that helper wiring, `bash_preexec.rs` still enforces `command_omitted: true`, and the active WPEP playbook/smoke assets remain the validation surfaces `S2` must update.)
 - **Opened remediations**: none
 
 ## Planned seam-exit gate focus

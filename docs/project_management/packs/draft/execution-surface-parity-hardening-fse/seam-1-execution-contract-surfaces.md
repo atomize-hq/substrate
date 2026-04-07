@@ -2,15 +2,16 @@
 seam_id: SEAM-1
 seam_slug: execution-contract-surfaces
 type: integration
-status: proposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
-  required_threads: []
+  required_threads:
+    - THR-01
   stale_triggers:
     - world-network routing semantics change in the shell or world-agent path
     - replay request construction changes without updating the four-case routing matrix
@@ -18,9 +19,9 @@ basis:
     - the active world_process_exec_tracing_parity playbook changes Case B expectations outside this pack
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
