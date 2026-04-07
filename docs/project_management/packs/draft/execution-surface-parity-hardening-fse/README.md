@@ -29,13 +29,13 @@ Planning assumptions used for extraction:
 
 Execution horizon:
 
-- Active seam: `SEAM-2`
-- Next seam: `SEAM-3`
+- Active seam: `SEAM-3`
+- Next seam: none
 
 Policy:
 
 - only the active seam is eligible for authoritative downstream sub-slices by default
-- the next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
+- there is no remaining `next` seam in this pack after `SEAM-3`; any further work should come from a new pack or a reopened basis change
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that own undefined contracts may reserve `S00` as a contract-definition boundary slice once seam-local planning begins
 - future seams remain seam briefs

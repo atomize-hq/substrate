@@ -2,15 +2,16 @@
 seam_id: SEAM-3
 seam_slug: cross-surface-parity-and-drift-guards
 type: conformance
-status: proposed
-execution_horizon: next
+status: exec-ready
+execution_horizon: active
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts:
     - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
   required_threads:
     - THR-01
     - THR-02
@@ -20,9 +21,9 @@ basis:
     - WPEP playbook, REPLAY docs, TRACE docs, or USAGE docs drift before the conformance seam revalidates them
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -62,11 +63,10 @@ open_remediations: []
   - this seam is not a cleanup bucket for unfinished runtime work from upstream seams
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-2`
-    - `THR-02`
+    - none once `SEAM-1` and `SEAM-2` closeouts remain current
   - Transitive blockers:
-    - any late ADR or decision-record change that modifies the published contracts from the first two seams
-    - platform-specific verification gaps that remain unresolved after upstream landing
+    - any late ADR or decision-record change that modifies the published contracts from the first two seams after this seam decomposes
+    - platform-specific verification gaps reopened by later runtime or harness drift
   - Direct consumers:
     - none inside this pack
   - Derived consumers:
@@ -79,13 +79,13 @@ open_remediations: []
   - For this seam specifically: seam-local review should prove every doc or smoke assertion maps directly to a landed upstream contract, and that any remaining drift is captured as an explicit stale trigger or remediation rather than left implicit.
 - **Risks / unknowns**:
   - Risk: upstream seams land with partial docs/test updates, forcing conformance to absorb unfinished runtime cleanup.
-  - De-risk plan: require closeout-backed contract publication on `THR-01` and `THR-02` before this seam decomposes.
+  - De-risk plan: keep seam-local review tied to the published closeouts for `THR-01` and `THR-02`, and refresh stale triggers whenever the upstream runtime or validation surfaces drift.
   - Risk: the active WPEP pack changes in parallel and invalidates the extracted basis.
-  - De-risk plan: keep basis currentness provisional and require revalidation against landed upstream evidence before promotion.
+  - De-risk plan: treat the basis as current at promotion time, then reopen revalidation only if the WPEP pack or upstream closeouts drift again.
 - **Rollout / safety**:
   This seam should only lock and verify previously landed behavior. It reduces operator confusion and future regression risk without expanding product scope.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is `next` because `SEAM-1` has already published `THR-01`, but this seam still waits on `SEAM-2` publishing `THR-02` before it can become active.
+  - Why this seam is `active`, `next`, or `future`: it is `active` because `SEAM-1` and `SEAM-2` have both published the contracts this seam consumes, so the pack can now lock those truths into docs, smoke guidance, and regression surfaces.
   - Which threads matter most: `THR-01`, `THR-02`
   - What the first seam-local review should focus on: mapping each smoke or doc assertion back to landed upstream evidence and rejecting any attempt to use conformance to finish missing runtime work
 - **Expected seam-exit concerns**:

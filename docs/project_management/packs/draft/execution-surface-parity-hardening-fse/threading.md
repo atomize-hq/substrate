@@ -2,10 +2,9 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-2`
-  - active capability seam that hardens one bounded abnormal-interactive-runtime path against the now-published execution-language baseline from `SEAM-1`
-- **Next seam**: `SEAM-3`
-  - next conformance seam that can now queue behind `SEAM-2` because `THR-01` is published and `THR-02` remains the last upstream publication blocker
+- **Active seam**: `SEAM-3`
+  - active conformance seam that consumes the now-published routing, tracing, and abnormal-terminal-loss contracts and locks them into docs, smoke guidance, and regression guards
+- **Next seam**: none
 - **Future seams**: none
 
 ## Source basis carried forward from intake and fact-finding
@@ -74,9 +73,9 @@
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: publish one coherent routing plus tracing-validation basis before docs, smoke guidance, and regression lock-in try to consume those behaviors.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: changes to policy snapshot semantics, replay request construction, `SUBSTRATE_ENABLE_PREEXEC` forwarding rules, WPEP Case B scope, or canonical trace omission rules.
-  - **Satisfied by**: `governance/seam-1-closeout.md` recording the landed four-case replay-routing contract and the chosen behavior matrix, followed by seam-local review in `SEAM-3` that revalidates docs, playbooks, and regression surfaces against that landed truth.
+  - **Satisfied by**: `governance/seam-1-closeout.md` recording the landed four-case replay-routing contract and behavior matrix, followed by `threaded-seams/seam-3-cross-surface-parity-and-drift-guards/review.md` revalidating downstream docs, playbooks, and regression surfaces against that truth.
   - **Notes**: this thread intentionally carries both replay and tracing semantics because the pack's biggest failure mode is validating one execution surface against assumptions that were made in another.
 
 - **Thread ID**: `THR-02`
@@ -84,9 +83,9 @@
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-03`
   - **Purpose**: publish the abnormal interactive-terminal-loss contract so documentation and regression surfaces can lock onto one explicit operator experience.
-  - **State**: `identified`
+  - **State**: `revalidated`
   - **Revalidation trigger**: changes to async REPL shutdown behavior, exit-code taxonomy wording, Reedline or crossterm integration, or the macOS revoke regression harness.
-  - **Satisfied by**: `governance/seam-2-closeout.md` recording landed revoke/disconnect evidence and seam-local review in `SEAM-3` that revalidates docs and tests against the landed runtime behavior.
+  - **Satisfied by**: `governance/seam-2-closeout.md` recording landed revoke/disconnect evidence and `threaded-seams/seam-3-cross-surface-parity-and-drift-guards/review.md` revalidating docs and tests against the landed runtime behavior.
   - **Notes**: the runtime fix is bounded, but the drift risk is high because exit status, stderr wording, and cleanup semantics can diverge again without explicit lock-in.
 
 ## Dependency graph
@@ -99,9 +98,9 @@ flowchart LR
 
 ## Critical path
 
-1. `SEAM-1` has landed and published `THR-01`, so it leaves the forward horizon as a completed producer seam.
-2. `SEAM-2` is the active seam because it is the highest-priority bounded runtime hardening change now that the pack has an explicit operator and validation language baseline.
-3. `SEAM-3` is next because cross-surface docs and drift guards can queue behind `SEAM-2`, but still require `THR-02` closeout-backed publication before execution.
+1. `SEAM-1` landed and published `THR-01`, establishing the replay-routing and tracing-validation basis.
+2. `SEAM-2` landed and published `THR-02`, establishing the abnormal terminal-loss runtime and proof basis.
+3. `SEAM-3` is now the active seam because the full upstream contract set is published and ready for cross-surface revalidation.
 
 ## Workstreams
 
@@ -115,4 +114,4 @@ flowchart LR
 
 - **Conformance and drift-guard workstream**
   - `SEAM-3`
-  - consumes `THR-01` and `THR-02` to align docs, smoke guidance, and regression surfaces once the runtime seams have landed
+  - consumes revalidated `THR-01` and `THR-02` to align docs, smoke guidance, and regression surfaces against the landed runtime truth
