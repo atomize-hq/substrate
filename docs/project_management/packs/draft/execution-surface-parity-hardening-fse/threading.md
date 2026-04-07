@@ -2,12 +2,11 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-  - active integration seam publishing the replay-routing contract and the tracing-validation behavior matrix that the initiative currently lacks
-- **Next seam**: `SEAM-2`
-  - next capability seam that hardens one bounded abnormal-interactive-runtime path and reserves its own exit contract for later lock-in
-- **Future seams**: `SEAM-3`
-  - future conformance seam that remains at seam-brief depth until the first two seams publish their closeout-backed contracts
+- **Active seam**: `SEAM-2`
+  - active capability seam that hardens one bounded abnormal-interactive-runtime path against the now-published execution-language baseline from `SEAM-1`
+- **Next seam**: `SEAM-3`
+  - next conformance seam that can now queue behind `SEAM-2` because `THR-01` is published and `THR-02` remains the last upstream publication blocker
+- **Future seams**: none
 
 ## Source basis carried forward from intake and fact-finding
 
@@ -75,7 +74,7 @@
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: publish one coherent routing plus tracing-validation basis before docs, smoke guidance, and regression lock-in try to consume those behaviors.
-  - **State**: `identified`
+  - **State**: `published`
   - **Revalidation trigger**: changes to policy snapshot semantics, replay request construction, `SUBSTRATE_ENABLE_PREEXEC` forwarding rules, WPEP Case B scope, or canonical trace omission rules.
   - **Satisfied by**: `governance/seam-1-closeout.md` recording the landed four-case replay-routing contract and the chosen behavior matrix, followed by seam-local review in `SEAM-3` that revalidates docs, playbooks, and regression surfaces against that landed truth.
   - **Notes**: this thread intentionally carries both replay and tracing semantics because the pack's biggest failure mode is validating one execution surface against assumptions that were made in another.
@@ -100,9 +99,9 @@ flowchart LR
 
 ## Critical path
 
-1. `SEAM-1` is the active seam because it removes the two most ambiguous control-plane assumptions in the initiative: replay routing parity and tracing-validation semantics.
-2. `SEAM-2` is the next seam because it is the highest-priority bounded runtime hardening change once the pack has an explicit operator and validation language baseline.
-3. `SEAM-3` remains future because cross-surface docs and drift guards only become authoritative after `SEAM-1` and `SEAM-2` publish their contracts and closeout evidence.
+1. `SEAM-1` has landed and published `THR-01`, so it leaves the forward horizon as a completed producer seam.
+2. `SEAM-2` is the active seam because it is the highest-priority bounded runtime hardening change now that the pack has an explicit operator and validation language baseline.
+3. `SEAM-3` is next because cross-surface docs and drift guards can queue behind `SEAM-2`, but still require `THR-02` closeout-backed publication before execution.
 
 ## Workstreams
 

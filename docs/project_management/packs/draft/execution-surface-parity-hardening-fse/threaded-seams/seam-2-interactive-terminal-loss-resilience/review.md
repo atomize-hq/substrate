@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-2
 review_phase: pre_exec
-execution_horizon: next
+execution_horizon: active
 basis_ref: seam.md#basis
 ---
 # Review Bundle - SEAM-2 Interactive terminal-loss resilience
@@ -54,16 +54,18 @@ flowchart TB
   - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` already defines abnormal controlling-TTY loss as exit code `1` after startup.
   - `docs/reference/env/contract.md` and `docs/USAGE.md` do not yet publish a focused operator contract for this revoke/disconnect path.
   - Current PTY harnesses prove Reedline/PTTY plumbing exists, but they do not yet lock the exact macOS revoke failure mode.
+  - `../../governance/seam-1-closeout.md` now publishes the execution-language baseline this seam expected, so no upstream contract ambiguity remains on the path to `exec-ready`.
 - No remediation is opened during decomposition. The contract-definition and runtime-proof slices exist to remove the current ambiguity before execution starts.
 
 ## Pre-exec gate disposition
 
-- **Review gate**: pending
+- **Review gate**: passed
 - **Contract gate concerns**:
-  - `S00` must make `C-03` concrete enough that implementation does not guess how to distinguish abnormal terminal loss, how many diagnostics to print, or what cleanup proof counts as sufficient.
+  - `S00` now bounds `C-03` tightly enough that implementation does not need to guess how to distinguish abnormal terminal loss, how many diagnostics to print, or what cleanup proof counts as sufficient.
 - **Revalidation prerequisites**:
-  - re-check `crates/shell/src/repl/async_repl.rs`, optional prompt-editor support in `crates/shell/src/repl/editor.rs`, the existing PTY REPL harnesses, and the authoritative exit wording in `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`, `docs/reference/env/contract.md`, and `docs/USAGE.md` immediately before promotion to `exec-ready`
-  - revalidate against `SEAM-1` closeout-backed execution-language publication before this `next` seam becomes `exec-ready`
+  - re-check `crates/shell/src/repl/async_repl.rs`, optional prompt-editor support in `crates/shell/src/repl/editor.rs`, the existing PTY REPL harnesses, and the authoritative exit wording in `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`, `docs/reference/env/contract.md`, and `docs/USAGE.md` immediately before execution starts
+- **Contract gate**: passed (the seam-local contract baseline is concrete in `S00` and carried consistently into the runtime, regression, publication, and exit-gate slices.)
+- **Revalidation gate**: passed (`SEAM-1` closeout-backed execution-language publication is now landed, the seam basis still matches current repo evidence, and no blocking pre-exec remediations are open.)
 - **Opened remediations**: none
 
 ## Planned seam-exit gate focus

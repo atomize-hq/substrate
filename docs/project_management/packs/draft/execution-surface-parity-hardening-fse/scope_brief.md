@@ -4,8 +4,8 @@ pack_version: v1
 pack_status: extracted
 source_ref: docs/project_management/intake/work_items/taming_tapir_work_item_intake.md; docs/project_management/intake/work_items/taming_tapir_fact_finding.md; docs/project_management/intake/work_items/aligning_otter_work_item_intake.md; docs/project_management/intake/work_items/untangling_lemur_work_item_intake.md
 execution_horizon:
-  active_seam: SEAM-1
-  next_seam: SEAM-2
+  active_seam: SEAM-2
+  next_seam: SEAM-3
 ---
 
 # Scope Brief - Execution Surface Parity Hardening
@@ -49,6 +49,6 @@ execution_horizon:
   - cross-surface docs can drift again if conformance is not explicitly owned after runtime seams land
 - **Assumptions**:
   - the pack uses an integration-first seam axis because the highest-risk failures come from contract drift between execution surfaces
-  - `SEAM-1` is active because it publishes the ambiguous routing and validation contracts that later documentation and conformance work must trust
-  - `SEAM-2` is next because it is a bounded runtime hardening seam whose docs and operator wording should consume the same normalized execution contract language
-  - `SEAM-3` remains future because meaningful cross-surface lock-in only starts after the runtime contracts from `SEAM-1` and `SEAM-2` are published
+  - `SEAM-1` has landed and published the routing and tracing-validation contracts that downstream seams now consume
+  - `SEAM-2` is active because its bounded runtime hardening work revalidated cleanly against the `SEAM-1` closeout-backed execution-language baseline
+  - `SEAM-3` is next because `THR-01` is now published, but meaningful cross-surface lock-in still waits on `SEAM-2` publishing `THR-02`

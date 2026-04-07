@@ -2,14 +2,15 @@
 seam_id: SEAM-2
 seam_slug: interactive-terminal-loss-resilience
 type: capability
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: exec-ready
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads: []
   stale_triggers:
     - Reedline or crossterm prompt-worker behavior changes in async_repl.rs
@@ -18,9 +19,9 @@ basis:
     - the macOS PTY revoke harness or CI environment assumptions change the Reedline path under test
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -87,7 +88,7 @@ open_remediations: []
 - **Rollout / safety**:
   This seam is intentionally host-only and shell-local. It should improve safety by making abnormal interactive termination explicit and bounded without changing backend behavior or adding operator knobs.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is `next` because it is already well-bounded, but the pack keeps it one step behind the active contract-publication seam so its docs and operator wording can be reviewed against a normalized execution-language baseline.
+  - Why this seam is `active`, `next`, or `future`: it is `active` because `SEAM-1` has now published the execution-language baseline and this seam revalidated cleanly against that landed upstream closeout.
   - Which threads matter most: `THR-02`
   - What the first seam-local review should focus on: prompt-worker unwind strategy, exit-code separation from auto-sync, and child-cleanup guarantees in the macOS regression harness
 - **Expected seam-exit concerns**:

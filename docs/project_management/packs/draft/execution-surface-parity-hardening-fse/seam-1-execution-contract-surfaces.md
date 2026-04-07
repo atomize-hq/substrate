@@ -2,8 +2,8 @@
 seam_id: SEAM-1
 seam_slug: execution-contract-surfaces
 type: integration
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -23,12 +23,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -88,7 +88,7 @@ open_remediations: []
 - **Rollout / safety**:
   No new public CLI or config surface is assumed here. The seam should reduce security-sensitive routing drift and validation ambiguity while preserving the safe-by-default trace posture.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is the active seam because it publishes the most ambiguous and highest-leverage contracts in the initiative, and both runtime changes and conformance work are less trustworthy until those contracts are explicit.
+  - Why this seam is `active`, `next`, or `future`: it is now `future` only because it has landed and left the forward planning window after publishing `C-01`, `C-02`, and `THR-01`.
   - Which threads matter most: `THR-01`
   - What the first seam-local review should focus on: whether the routing contract and behavior matrix are scoped tightly enough to decompose cleanly, and whether the chosen Case B assertion actually tests the intended safety posture
 - **Expected seam-exit concerns**:

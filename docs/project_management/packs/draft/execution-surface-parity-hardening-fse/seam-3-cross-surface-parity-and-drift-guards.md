@@ -3,13 +3,14 @@ seam_id: SEAM-3
 seam_slug: cross-surface-parity-and-drift-guards
 type: conformance
 status: proposed
-execution_horizon: future
-plan_version: v1
+execution_horizon: next
+plan_version: v2
 basis:
   currentness: provisional
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads:
     - THR-01
     - THR-02
@@ -61,9 +62,7 @@ open_remediations: []
   - this seam is not a cleanup bucket for unfinished runtime work from upstream seams
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-1`
     - `SEAM-2`
-    - `THR-01`
     - `THR-02`
   - Transitive blockers:
     - any late ADR or decision-record change that modifies the published contracts from the first two seams
@@ -86,7 +85,7 @@ open_remediations: []
 - **Rollout / safety**:
   This seam should only lock and verify previously landed behavior. It reduces operator confusion and future regression risk without expanding product scope.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is `future` because it only becomes real after `SEAM-1` and `SEAM-2` publish closeout-backed contracts that can be revalidated and locked.
+  - Why this seam is `active`, `next`, or `future`: it is `next` because `SEAM-1` has already published `THR-01`, but this seam still waits on `SEAM-2` publishing `THR-02` before it can become active.
   - Which threads matter most: `THR-01`, `THR-02`
   - What the first seam-local review should focus on: mapping each smoke or doc assertion back to landed upstream evidence and rejecting any attempt to use conformance to finish missing runtime work
 - **Expected seam-exit concerns**:

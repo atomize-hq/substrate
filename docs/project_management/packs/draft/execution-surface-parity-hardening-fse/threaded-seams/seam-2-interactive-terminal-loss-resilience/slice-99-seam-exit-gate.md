@@ -2,11 +2,11 @@
 slice_id: S99
 seam_id: SEAM-2
 slice_kind: seam_exit_gate
-execution_horizon: next
-status: decomposed
-plan_version: v1
+execution_horizon: active
+status: exec-ready
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   basis_ref: seam.md#basis
   stale_triggers: []
 gates:

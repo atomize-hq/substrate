@@ -1,14 +1,15 @@
 ---
 seam_id: SEAM-2
 seam_slug: interactive-terminal-loss-resilience
-status: decomposed
-execution_horizon: next
-plan_version: v1
+status: exec-ready
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_seam_brief: ../../seam-2-interactive-terminal-loss-resilience.md
   source_scope_ref: ../../scope_brief.md
-  upstream_closeouts: []
+  upstream_closeouts:
+    - ../../governance/seam-1-closeout.md
   required_threads:
     - THR-02
   stale_triggers:
@@ -18,9 +19,9 @@ basis:
     - the macOS PTY revoke harness or CI assumptions change the Reedline path under test
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -52,15 +53,15 @@ open_remediations: []
   - Seam-local proof must cover prompt-worker unwind out of the Reedline path, one bounded stderr diagnostic, process exit code `1`, and bounded child cleanup on revoke/disconnect failure paths.
   - Accepted publication of the final operator contract belongs to `S99` and `../../governance/seam-2-closeout.md`, not as a precondition for producer-seam execution.
 - **Basis posture**:
-  - Currentness: provisional
-  - Upstream closeouts assumed: none; this seam remains `next`, so `SEAM-1` closeout-backed execution-language publication must still be revalidated before promotion
+  - Currentness: current
+  - Upstream closeouts assumed: `../../governance/seam-1-closeout.md`; the `SEAM-1` closeout-backed execution-language publication has been revalidated for this seam
   - Required threads: `THR-02`
   - Stale triggers: see frontmatter `basis.stale_triggers`
 - **Threading constraints**
-  - Upstream blockers: current async REPL worker behavior in `crates/shell/src/repl/async_repl.rs`, the repo's PTY harness patterns, and eventual revalidation against `SEAM-1`'s closeout-backed execution-language baseline before `exec-ready`
+  - Upstream blockers: current async REPL worker behavior in `crates/shell/src/repl/async_repl.rs` and the repo's PTY harness patterns
   - Downstream blocked seams: `SEAM-3`
   - Contracts produced: `C-03`
-  - Contracts consumed: no upstream published contract thread yet; this seam instead consumes the current ADR and exit-contract wording as provisional basis that must be revalidated before promotion
+  - Contracts consumed: the landed `SEAM-1` closeout-backed execution-language baseline plus the current ADR and exit-contract wording that define this seam's abnormal-terminal-loss contract surface
 
 ## Review bundle
 
