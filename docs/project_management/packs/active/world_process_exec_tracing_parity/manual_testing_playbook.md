@@ -10,6 +10,7 @@ Standard:
   - in-world process exec/exit telemetry persistence into canonical trace,
   - explicit degrade diagnostics on unsupported platforms,
   - span correctness/joinability ergonomics and preexec safety posture.
+  - bounded `THR-02` wording remains diagnostic-only in the shared guidance surfaces.
 
 ## Prerequisites
 
@@ -73,7 +74,7 @@ Expected:
 - Exit code `0`.
 - Output contains an `OK:` line.
 
-## Case 4 — Manual validation: process events persisted and joinable (Linux)
+## Case 4 — Manual validation: shell span joins to linux-backed `world_process_*` records
 
 Run in a temp home/workspace:
 
@@ -119,7 +120,7 @@ Expected:
 - On Linux-backed execution, this is the authoritative place to assert that `world_process_*` records are present and joinable by `parent_span`.
 - On non-Linux platforms, treat `world_process_*` as a degrade-only surface and do not require the joinability assertion.
 
-## Case 5 — Manual validation: argv omission vs argv capture (Linux-backed backends)
+## Case 5 — Manual validation: published argv posture for WPEP2 and WPEP3 (Linux-backed backends)
 
 WPEP2 expectation:
 
@@ -129,7 +130,7 @@ WPEP3 expectation:
 
 - At least one `world_process_start` record includes `argv` (array) and no `argv_omitted` fields exist.
 
-## Case 6 — Manual validation: explicit degrade diagnostics (Windows)
+## Case 6 — Manual validation: explicit degrade-only summaries (Windows)
 
 Run a simple world command and confirm the shell completion record includes an explicit “unavailable” diagnostic for process telemetry.
 
@@ -141,7 +142,7 @@ Expected:
   - `process_events_reason: "not_supported_platform"`
 - Windows does not assert `world_process_*` records for this feature; the degrade summary is the contract.
 
-## Case 7 — Manual validation: wrap builtin canonical trace omits bodies
+## Case 7 — Manual validation: Case B wrap-mode builtin trace omits bodies
 
 Run:
 
