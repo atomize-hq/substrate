@@ -1,7 +1,7 @@
 # WPEP2 — spec — Linux in-world process capture (ptrace) + caps/truncation
 
 ## Scope (explicit)
-- Implement Linux process tree capture for in-world executions (ptrace-based).
+- Land Linux process tree capture for in-world executions (ptrace-based).
   - Supported backends: native Linux and macOS Lima guest (world-agent runs on Linux; `docs/WORLD.md`).
 - Provisioning requirement (Linux-backed backends):
   - The `substrate-world-agent` systemd service MUST include `CAP_SYS_PTRACE` in `CapabilityBoundingSet` and `AmbientCapabilities`.

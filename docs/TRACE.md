@@ -118,21 +118,21 @@ The current runtime already lands these fields on completion spans:
 }
 ```
 
-### Planned World Process Telemetry (`world_process_*`)
+### World Process Telemetry (`world_process_*`)
 
-`world_process_*` is the reserved/planned event family for subprocess exec/exit telemetry introduced by ADR-0028. The current runtime does not emit these records yet; the authoritative target schema lives in [SCHEMA.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md).
+`world_process_*` is the canonical subprocess exec/exit telemetry family introduced by ADR-0028. Linux-backed executions now emit these records; the authoritative schema and protocol live in [SCHEMA.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md) and [PROTOCOL.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/active/world_process_exec_tracing_parity/PROTOCOL.md).
 
-Planned event names:
+Event names:
 - `world_process_start`
 - `world_process_exit`
 
-Planned required join keys:
+Required join keys:
 - `session_id`
 - `world_id`
 - `parent_span`
 - `parent_cmd_id` when available
 
-Planned record posture:
+Record posture:
 - `argv` is redacted or explicitly omitted.
 - `env` is allowlist-only and redacted.
 - `process_events_status` and `process_events_reason` describe degrade/truncation behavior at the protocol layer.
@@ -146,7 +146,7 @@ These are canonical cross-feature correlation identifiers. Details and required/
 - `run_id`: unit-of-work identifier inside an orchestration session; required on structured agent events and other run-scoped families.
 - `agent_id`: actor/principal identifier (`human` for direct operator actions; agent inventory id for agent-driven records).
 - `backend_id`: backend identifier in `<kind>:<name>` form (e.g., `cli:codex`, `api:openai`) when a specific backend is involved.
-- `world_id`: world boundary identity; required on in-world telemetry families (e.g., planned `world_process_*`) and any record that describes an in-world boundary/session.
+- `world_id`: world boundary identity; required on in-world telemetry families (e.g., `world_process_*`) and any record that describes an in-world boundary/session.
 
 ### Router-Derived Event Families (workflow router daemon; Phase 8)
 

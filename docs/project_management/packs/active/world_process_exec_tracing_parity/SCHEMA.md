@@ -1,7 +1,7 @@
 # world_process_exec_tracing_parity — schema
 
 This document defines the authoritative trace schema surfaces introduced or tightened by ADR-0028.
-It captures the landed command-span fixes and the planned `world_process_*` family in a single place so the pack stays aligned with the current implementation.
+It captures the landed command-span fixes and the landed `world_process_*` family in a single place so the pack stays aligned with the current implementation.
 
 ## 1) Span records (command_start / command_complete)
 
@@ -43,9 +43,9 @@ For any world execution summary (`component: "shell"` and `event_type: "command_
   - `world_fs_strategy_final`
   - `world_fs_strategy_fallback_reason`
 
-## 3) World process event family (planned; reserved by ADR-0028 / WPEP1-WPEP3)
+## 3) World process event family (landed for Linux-backed executions; WPEP3 remains redaction hardening)
 
-This family is the target schema for the new world subprocess telemetry path. The current runtime does not emit these records yet; this section exists so downstream schema and docs can align before implementation lands.
+This family is the canonical schema for the world subprocess telemetry path. Linux-backed executions now emit these records; this section exists so downstream schema and docs can align with the landed runtime truth while WPEP3 continues to harden argv/env redaction.
 
 ### Event types
 - `world_process_start`

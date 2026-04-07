@@ -11,8 +11,8 @@ Authoritative inputs:
 ## What changes
 - Canonical trace (`~/.substrate/trace.jsonl`) gains:
   - joinability improvements across shell/shim/replay records, and
-  - a planned `world_process_*` event family for subprocess exec/exit telemetry (Linux backend; degrade elsewhere when implemented).
-- Phase 8 additive note (cross-feature): ADR-0028 also defines a shared correlation vocabulary and reserves/adds additional trace families (router/toolbox/workflow). This planning pack implements the landed joinability and preexec posture, while the `world_process_*` family remains the planned target for the later world-process slices; router-derived families are owned by ADR-0029 and documented in the router decision register.
+  - landed `world_process_*` subprocess exec/exit telemetry for Linux-backed executions, with explicit degrade diagnostics elsewhere.
+- Phase 8 additive note (cross-feature): ADR-0028 also defines a shared correlation vocabulary and reserves/adds additional trace families (router/toolbox/workflow). This pack now publishes the landed replay-routing contract, the landed process-telemetry posture, and the remaining WPEP3 redaction/env-capture hardening; router-derived families are owned by ADR-0029 and documented in the router decision register.
 
 ## Non-negotiable invariants
 - Canonical trace is safe-by-default:

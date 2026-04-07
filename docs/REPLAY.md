@@ -28,6 +28,15 @@ Effective-disable attribution uses the published contract fragments
 `world isolation disabled by global config $SUBSTRATE_HOME/config.yaml (world.enabled: false)`, and
 `world isolation disabled by effective config (source unknown)`.
 
+Replay request construction now uses the shared four-case world-network contract:
+- gate off plus restrictive `net_allowed` => no requested isolation
+- gate on plus allow-all `["*"]` => no requested isolation
+- gate on plus deny-all `[]` => requested isolation with an empty allowlist
+- gate on plus restrictive allowlist => requested isolation with canonical domains
+
+Both local and agent-backed replay derive `policy_snapshot.net_allowed` and `world_network`
+from that same contract, not replay-local heuristics.
+
 On Linux, world-mode replay is agent-first: when `/run/substrate.sock` responds, `--replay-verbose`
 prints `[replay] world strategy: agent (socket=..., project_dir=...)`. If the agent is unavailable,
 replay emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket`
