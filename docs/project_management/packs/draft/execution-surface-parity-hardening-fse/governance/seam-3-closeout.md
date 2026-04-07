@@ -80,11 +80,14 @@ Execution landed and the consumer seam now records the cross-surface revalidatio
 
 - `bash -n docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/_core.sh`
 - `cargo test -p shell test_wrap_mode_builtin_command_omits_command_body_in_trace -- --nocapture`
-- `cargo test -p shell world_process_exec_tracing_parity_wpep1 -- --nocapture`
-- `cargo test -p shell world_process_exec_tracing_parity_wpep2 -- --nocapture`
+- `cargo test -p shell --test world_process_exec_tracing_parity_wpep1 -- --nocapture`
+- `cargo test -p shell --test world_process_exec_tracing_parity_wpep2 -- --nocapture`
 - `cargo test -p shell shell_env_script_mode_sets_preexec_flag_for_bash -- --nocapture`
 - `cargo test -p shell --test repl_tty_disconnect_macos -- --nocapture --test-threads=1`
 - `cargo test -p agent-api-types policy_snapshot_v3_resolve_world_network_routing_matches_four_case_matrix -- --nocapture`
 - `cargo test -p substrate-replay world_net_filter_from_process_env_reads_exported_runtime_state -- --nocapture`
-- `cargo test -p shell world_process_exec_tracing_parity_wpep3 -- --nocapture`
-- The WPEP3 test is Linux-only (`#![cfg(all(unix, target_os = "linux"))]` in `crates/shell/tests/world_process_exec_tracing_parity_wpep3.rs`), so on this macOS host that surface is evidenced by the landed code/readback, not by local test execution.
+- `cargo test -p shell --test world_process_exec_tracing_parity_wpep3 -- --nocapture`
+- `crates/shell/tests/world_process_exec_tracing_parity_wpep{1,2,3}.rs` are all Linux-only (`#![cfg(all(unix, target_os = "linux"))]`).
+- On a Linux host, run the `--test ...` commands above directly.
+- On this macOS host, the Linux-only WPEP tests were validated inside the Lima Ubuntu guest rather than via host `cargo test`.
+- The shared macOS workspace mount is read-only for the harness temp root at `target/tests-tmp`, so the guest validation must run from a writable guest-local checkout or copy instead of the mounted host workspace path.
