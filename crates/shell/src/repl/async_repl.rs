@@ -3,7 +3,7 @@ use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -96,6 +96,75 @@ fn is_terminal_loss_error(err: &anyhow::Error) -> bool {
         || message.contains("terminal invalid")
         || message.contains("end of file")
         || message.contains("unexpected eof")
+}
+
+fn detect_terminal_loss_while_prompting() -> Option<anyhow::Error> {
+    if !io::stdin().is_terminal() {
+        return Some(anyhow!("controlling terminal is no longer a TTY"));
+    }
+
+    #[cfg(unix)]
+    {
+        let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
+        let rc = unsafe { libc::tcgetattr(libc::STDIN_FILENO, termios.as_mut_ptr()) };
+        if rc == 0 {
+            return None;
+        }
+
+        let err = std::io::Error::last_os_error();
+        if is_terminal_loss_io_error(&err) {
+            return Some(anyhow!(err).context("controlling terminal became invalid"));
+        }
+    }
+
+    None
+}
+
+fn emit_best_effort_terminal_loss_diagnostic(err: &anyhow::Error) {
+    let message = format!("substrate: error: abnormal terminal loss: {err:#}\n");
+
+    #[cfg(unix)]
+    {
+        unsafe {
+            let _ = libc::write(
+                libc::STDERR_FILENO,
+                message.as_bytes().as_ptr().cast(),
+                message.len(),
+            );
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = io::stderr().write_all(message.as_bytes());
+        let _ = io::stderr().flush();
+    }
+}
+
+fn spawn_prompt_terminal_loss_monitor(
+    prompt_active: Arc<AtomicBool>,
+    terminal_loss_detected: Arc<AtomicBool>,
+    terminal_loss_message: Arc<Mutex<Option<String>>>,
+) {
+    thread::spawn(move || {
+        while prompt_active.load(Ordering::SeqCst) {
+            if let Some(err) = detect_terminal_loss_while_prompting() {
+                let mut guard = terminal_loss_message
+                    .lock()
+                    .expect("terminal loss message mutex poisoned");
+                *guard = Some(format!("{err:#}"));
+                terminal_loss_detected.store(true, Ordering::SeqCst);
+                #[cfg(unix)]
+                unsafe {
+                    // Best effort: force any blocked prompt read off stdin once the TTY is known
+                    // to be invalid so Reedline can surface an error instead of spinning forever.
+                    let _ = libc::close(libc::STDIN_FILENO);
+                }
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    });
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -228,12 +297,24 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             if let Err(err) = prompt_worker.request_prompt() {
                 termination_cause = ReplTerminationCause::AbnormalTerminalLoss;
                 should_exit = true;
-                eprintln!(
-                    "substrate: error: abnormal terminal loss: failed to request prompt: {err:#}"
+                emit_best_effort_terminal_loss_diagnostic(
+                    &anyhow!("failed to request prompt: {err:#}"),
                 );
                 prompt_active.store(false, Ordering::SeqCst);
                 continue;
             }
+
+            let terminal_loss_detected = Arc::new(AtomicBool::new(false));
+            let terminal_loss_message = Arc::new(Mutex::new(None::<String>));
+            if prompt_worker.is_reedline() {
+                spawn_prompt_terminal_loss_monitor(
+                    prompt_active.clone(),
+                    terminal_loss_detected.clone(),
+                    terminal_loss_message.clone(),
+                );
+            }
+            let mut prompt_health_check = tokio::time::interval(Duration::from_millis(100));
+            prompt_health_check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
             let prompt_response = loop {
                 tokio::select! {
@@ -262,6 +343,17 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     }
                     _maybe_sigint = sigint_rx.recv() => {
                         // In Idle, Reedline handles Ctrl+C; ignore host-originated SIGINT here.
+                    }
+                    _ = prompt_health_check.tick(), if prompt_worker.is_reedline() => {
+                        if terminal_loss_detected.load(Ordering::SeqCst) {
+                            let message = terminal_loss_message
+                                .lock()
+                                .expect("terminal loss message mutex poisoned")
+                                .take()
+                                .unwrap_or_else(|| "controlling terminal became invalid".to_string());
+                            termination_cause = ReplTerminationCause::AbnormalTerminalLoss;
+                            break PromptWorkerResponse::AbnormalTerminalLoss(anyhow!(message));
+                        }
                     }
                 }
             };
@@ -494,6 +586,11 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     println!("^D");
                     should_exit = true;
                 }
+                PromptWorkerResponse::AbnormalTerminalLoss(err) => {
+                    termination_cause = ReplTerminationCause::AbnormalTerminalLoss;
+                    should_exit = true;
+                    emit_best_effort_terminal_loss_diagnostic(&err);
+                }
                 PromptWorkerResponse::Error(err) => {
                     match classify_prompt_worker_error(prompt_worker.is_reedline(), &err) {
                         PromptWorkerErrorDisposition::FallbackToStdio => {
@@ -509,7 +606,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         PromptWorkerErrorDisposition::AbnormalTerminalLoss => {
                             termination_cause = ReplTerminationCause::AbnormalTerminalLoss;
                             should_exit = true;
-                            eprintln!("substrate: error: abnormal terminal loss: {err:#}");
+                            emit_best_effort_terminal_loss_diagnostic(&err);
                         }
                         PromptWorkerErrorDisposition::GenericError => {
                             eprintln!("prompt error: {err}");
@@ -618,7 +715,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         }
 
-        io::stdout().flush().ok();
+        if termination_cause == ReplTerminationCause::NormalExit {
+            io::stdout().flush().ok();
+        }
 
         if let Some(session) = world_session.take() {
             let _ = session.client.close().await;
@@ -884,6 +983,7 @@ enum PromptWorkerResponse {
     Line(String),
     CtrlC,
     CtrlD,
+    AbnormalTerminalLoss(anyhow::Error),
     Error(anyhow::Error),
 }
 
