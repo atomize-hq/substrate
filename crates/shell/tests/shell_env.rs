@@ -158,6 +158,89 @@ managers:
 }
 
 #[test]
+fn shell_env_wrap_mode_does_not_set_preexec_flag() {
+    let fixture = ShellEnvFixture::new();
+    let host_bash_env = fixture.home().join("host_wrap_env.sh");
+    fs::write(&host_bash_env, "export HOST_WRAP=1\n").unwrap();
+
+    let script = format!(
+        "printf '%s\\n' \"{marker}\" \"${{BASH_ENV:-none}}\" \
+         \"${{SUBSTRATE_ENABLE_PREEXEC:-none}}\"",
+        marker = PAYLOAD_MARKER
+    );
+    let output = substrate_command_for_home(&fixture)
+        .env("BASH_ENV", &host_bash_env)
+        .env(
+            "SUBSTRATE_WORLD_SOCKET",
+            fixture.home().join("missing-world.sock"),
+        )
+        .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
+        .arg("-c")
+        .arg(script)
+        .output()
+        .expect("failed to run substrate -c for wrap preexec env test");
+
+    assert!(
+        output.status.success(),
+        "substrate -c failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let lines = payload_lines(&output.stdout);
+    assert_eq!(
+        lines.len(),
+        2,
+        "unexpected payload: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert_eq!(lines[0], fixture.preexec_path().display().to_string());
+    assert_eq!(lines[1], "none");
+}
+
+#[test]
+fn shell_env_script_mode_sets_preexec_flag_for_bash() {
+    let fixture = ShellEnvFixture::new();
+    let script_path = fixture.home().join("script-mode-preexec.sh");
+    fs::write(
+        &script_path,
+        format!(
+            "printf '%s\\n' \"{marker}\" \"${{SUBSTRATE_ENABLE_PREEXEC:-none}}\" \"${{BASH_ENV:-none}}\"",
+            marker = PAYLOAD_MARKER
+        ),
+    )
+    .unwrap();
+
+    let output = substrate_command_for_home(&fixture)
+        .env(
+            "SUBSTRATE_WORLD_SOCKET",
+            fixture.home().join("missing-world.sock"),
+        )
+        .env("SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE", "manual")
+        .arg("-f")
+        .arg(&script_path)
+        .output()
+        .expect("failed to run substrate -f for script preexec env test");
+
+    assert!(
+        output.status.success(),
+        "substrate -f failed: stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let lines = payload_lines(&output.stdout);
+    assert_eq!(
+        lines.len(),
+        2,
+        "unexpected payload: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert_eq!(lines[0], "1");
+    assert_eq!(lines[1], fixture.preexec_path().display().to_string());
+}
+
+#[test]
 fn shell_env_no_world_skips_manager_env() {
     let fixture = ShellEnvFixture::new();
     let host_path = fixture.home().join("host-only");

@@ -82,13 +82,20 @@ expect_jq --arg m "$marker" '
   any(select(.component=="shell" and .event_type=="command_complete" and (.command|tostring|contains($m))) | has("span_id"))
 '
 
-echo "== Case B: preexec canonical trace omits bodies (linux/macos only) =="
-SUBSTRATE_ENABLE_PREEXEC=1 SUBSTRATE_OVERRIDE_WORLD=disabled "$SUBSTRATE_BIN" --command 'export SUBSTRATE_SMOKE_PREEXEC=1' >/dev/null
+echo "== Case B: wrap builtin canonical trace omits bodies (linux/macos only) =="
+SUBSTRATE_OVERRIDE_WORLD=disabled "$SUBSTRATE_BIN" --command 'export SUBSTRATE_SMOKE_WRAP=1' >/dev/null
+
+expect_jq '
+  any(select(.event_type=="builtin_command" and .mode=="wrap") | (.command_omitted==true))
+'
 expect_jq '
   any(select(.event_type=="builtin_command") | (.command_omitted==true))
 '
 expect_jq '
   all(select(.event_type=="builtin_command") | (.command_omitted==true))
+'
+expect_jq '
+  (any(select(.event_type=="builtin_command") | has("command"))) | not
 '
 expect_jq '
   (any(select(.event_type=="builtin_command_raw"))) | not
@@ -150,7 +157,7 @@ if [[ "$slice_id" == "WPEP1" ]]; then
 fi
 
 if [[ "$platform" == "linux" ]]; then
-  echo "== Case D: linux includes world_process_* events joinable by parent_span =="
+  echo "== Case D: linux-backed world_process_* events are joinable by parent_span =="
   span_id="$(
     jq -r -s --arg m "$world_marker" '
       .[] | select(.component=="shell" and .event_type=="command_complete" and (.command|tostring|contains($m))) | .span_id
