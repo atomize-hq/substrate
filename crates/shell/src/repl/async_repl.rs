@@ -1949,6 +1949,46 @@ fn exit_status_from_code(code: i32) -> ExitStatus {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    fn reedline_terminal_loss_error() -> anyhow::Error {
+        anyhow!(io::Error::from_raw_os_error(libc::ENOTTY))
+    }
+
+    #[cfg(not(unix))]
+    fn reedline_terminal_loss_error() -> anyhow::Error {
+        anyhow!("terminal invalid")
+    }
+
+    #[cfg(unix)]
+    fn common_terminal_loss_errors() -> Vec<anyhow::Error> {
+        vec![
+            anyhow!(io::Error::from_raw_os_error(libc::ENOTTY)),
+            anyhow!(io::Error::from_raw_os_error(libc::EIO)),
+            anyhow!(io::Error::from_raw_os_error(libc::EBADF)),
+            anyhow!(io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe")),
+            anyhow!(io::Error::new(io::ErrorKind::NotConnected, "not connected")),
+            anyhow!(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "unexpected eof"
+            )),
+        ]
+    }
+
+    #[cfg(not(unix))]
+    fn common_terminal_loss_errors() -> Vec<anyhow::Error> {
+        vec![
+            anyhow!("terminal invalid"),
+            anyhow!("input/output error"),
+            anyhow!("bad file descriptor"),
+            anyhow!(io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe")),
+            anyhow!(io::Error::new(io::ErrorKind::NotConnected, "not connected")),
+            anyhow!(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "unexpected eof"
+            )),
+        ]
+    }
+
     #[test]
     fn classify_prompt_worker_error_falls_back_on_cursor_timeout() {
         let err = anyhow!("cursor position could not be read within a normal duration");
@@ -1961,7 +2001,7 @@ mod tests {
 
     #[test]
     fn classify_prompt_worker_error_treats_reedline_failures_as_abnormal_terminal_loss() {
-        let err = anyhow!(io::Error::from_raw_os_error(libc::ENOTTY));
+        let err = reedline_terminal_loss_error();
 
         assert_eq!(
             classify_prompt_worker_error(true, &err),
@@ -1971,17 +2011,7 @@ mod tests {
 
     #[test]
     fn classify_prompt_worker_error_treats_common_terminal_loss_errors_as_abnormal() {
-        let cases = [
-            anyhow!(io::Error::from_raw_os_error(libc::ENOTTY)),
-            anyhow!(io::Error::from_raw_os_error(libc::EIO)),
-            anyhow!(io::Error::from_raw_os_error(libc::EBADF)),
-            anyhow!(io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe")),
-            anyhow!(io::Error::new(io::ErrorKind::NotConnected, "not connected")),
-            anyhow!(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "unexpected eof"
-            )),
-        ];
+        let cases = common_terminal_loss_errors();
 
         for err in &cases {
             assert_eq!(
