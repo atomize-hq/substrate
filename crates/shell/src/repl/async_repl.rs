@@ -194,8 +194,6 @@ fn classify_prompt_worker_error(
         PromptWorkerErrorDisposition::FallbackToStdio
     } else if is_reedline && is_terminal_loss_error(err) {
         PromptWorkerErrorDisposition::AbnormalTerminalLoss
-    } else if is_reedline {
-        PromptWorkerErrorDisposition::GenericError
     } else {
         PromptWorkerErrorDisposition::GenericError
     }
