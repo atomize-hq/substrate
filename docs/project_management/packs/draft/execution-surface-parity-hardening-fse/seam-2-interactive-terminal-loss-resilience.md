@@ -2,8 +2,8 @@
 seam_id: SEAM-2
 seam_slug: interactive-terminal-loss-resilience
 type: capability
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -23,12 +23,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -88,7 +88,7 @@ open_remediations: []
 - **Rollout / safety**:
   This seam is intentionally host-only and shell-local. It should improve safety by making abnormal interactive termination explicit and bounded without changing backend behavior or adding operator knobs.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is `active` because `SEAM-1` has now published the execution-language baseline and this seam revalidated cleanly against that landed upstream closeout.
+  - Why this seam is `active`, `next`, or `future`: it is now `future` only because it has landed and left the forward planning window after publishing `C-03` and `THR-02`.
   - Which threads matter most: `THR-02`
   - What the first seam-local review should focus on: prompt-worker unwind strategy, exit-code separation from auto-sync, and child-cleanup guarantees in the macOS regression harness
 - **Expected seam-exit concerns**:

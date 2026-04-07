@@ -1,16 +1,11 @@
 # Pack Closeout - execution-surface-parity-hardening
 
-- **Remaining open seams**:
-  - `SEAM-1`
-  - `SEAM-2`
-  - `SEAM-3`
-- **Open remediations still blocking pack closeout**: none at extraction time
-- **Threads still not closed**:
-  - `THR-01`
-  - `THR-02`
-- **Downstream stale triggers still requiring attention**:
-  - none recorded yet; future closeout must capture any drift between the extracted review surfaces and landed runtime reality
+- **Pack status**: landed and complete
+- **Remaining open seams**: none
+- **Open remediations still blocking pack closeout**: none
+- **Threads still not closed**: none; `THR-01` and `THR-02` now have landed closeout evidence and terminal revalidation across `SEAM-1`, `SEAM-2`, and `SEAM-3`
+- **Downstream stale triggers still requiring attention**: none inside this pack; future replay, tracing, or REPL drift against the locked docs, smoke, and regression surfaces should reopen follow-on work rather than leave this pack active
 - **Evidence summary**:
-  - extraction complete at seam-brief depth
-  - no seam-local review or post-exec evidence exists yet
-  - pack closeout remains blocked until `SEAM-1`, `SEAM-2`, and `SEAM-3` each record closeout evidence and thread disposition
+  - `SEAM-1` closeout records the landed replay-routing and tracing-validation contracts in `governance/seam-1-closeout.md`
+  - `SEAM-2` closeout records the landed abnormal-terminal-loss runtime and publication contract in `governance/seam-2-closeout.md`
+  - `SEAM-3` closeout records the terminal cross-surface docs, playbook, smoke, and regression lock-in in `governance/seam-3-closeout.md`

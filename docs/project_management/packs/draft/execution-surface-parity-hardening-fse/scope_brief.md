@@ -4,7 +4,7 @@ pack_version: v1
 pack_status: extracted
 source_ref: docs/project_management/intake/work_items/taming_tapir_work_item_intake.md; docs/project_management/intake/work_items/taming_tapir_fact_finding.md; docs/project_management/intake/work_items/aligning_otter_work_item_intake.md; docs/project_management/intake/work_items/untangling_lemur_work_item_intake.md
 execution_horizon:
-  active_seam: SEAM-3
+  active_seam: null
   next_seam: null
 ---
 
@@ -51,4 +51,4 @@ execution_horizon:
   - the pack uses an integration-first seam axis because the highest-risk failures come from contract drift between execution surfaces
   - `SEAM-1` has landed and published the routing and tracing-validation contracts that downstream seams now consume
   - `SEAM-2` has now landed and published the abnormal terminal-loss contract on `THR-02`
-  - `SEAM-3` is active because both upstream producer seams have landed and the final conformance window can now consume `THR-01` and `THR-02` together
+  - `SEAM-3` has now landed and closed the final conformance window that consumed `THR-01` and `THR-02` together

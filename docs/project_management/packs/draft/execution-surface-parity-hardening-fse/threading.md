@@ -2,9 +2,11 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-3`
-  - active conformance seam that consumes the now-published routing, tracing, and abnormal-terminal-loss contracts and locks them into docs, smoke guidance, and regression guards
-- **Next seam**: none
+- **Active seam**: none
+  - `SEAM-3` has passed its seam-exit gate and left the forward planning window.
+- **Next seam**: `none`
+- **Previous active seam**: `SEAM-3`
+  - its closeout is now the authoritative terminal evidence set for `THR-01` and `THR-02`
 - **Future seams**: none
 
 ## Source basis carried forward from intake and fact-finding
@@ -100,7 +102,7 @@ flowchart LR
 
 1. `SEAM-1` landed and published `THR-01`, establishing the replay-routing and tracing-validation basis.
 2. `SEAM-2` landed and published `THR-02`, establishing the abnormal terminal-loss runtime and proof basis.
-3. `SEAM-3` is now the active seam because the full upstream contract set is published and ready for cross-surface revalidation.
+3. `SEAM-3` landed and now records the terminal cross-surface revalidation evidence for the full published contract set.
 
 ## Workstreams
 

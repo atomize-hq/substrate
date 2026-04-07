@@ -29,8 +29,15 @@ Planning assumptions used for extraction:
 
 Execution horizon:
 
-- Active seam: `SEAM-3`
-- Next seam: none
+- Active seam: `none`
+- Next seam: `none`
+- Previous active seam: `SEAM-3` (its closeout now records the terminal cross-surface revalidation evidence for `THR-01` and `THR-02`)
+
+Horizon inference:
+
+- `SEAM-3` has now left the forward planning window because its seam-exit gate passed and `governance/seam-3-closeout.md` records the final conformance evidence.
+- There is no remaining `next` seam inside this pack after `SEAM-3`; the pack is now in closeout posture rather than another promotion handoff.
+- `SEAM-1` and `SEAM-2` remain historical upstream seams whose closeouts provide the authoritative basis for the landed final seam.
 
 Policy:
 

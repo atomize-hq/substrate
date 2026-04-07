@@ -2,8 +2,8 @@
 seam_id: SEAM-3
 seam_slug: cross-surface-parity-and-drift-guards
 type: conformance
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -25,12 +25,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -85,7 +85,7 @@ open_remediations: []
 - **Rollout / safety**:
   This seam should only lock and verify previously landed behavior. It reduces operator confusion and future regression risk without expanding product scope.
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is `active` because `SEAM-1` and `SEAM-2` have both published the contracts this seam consumes, so the pack can now lock those truths into docs, smoke guidance, and regression surfaces.
+  - Why this seam is `active`, `next`, or `future`: it is now `future` only because it has landed and left the forward planning window after closing the final conformance pass for `THR-01` and `THR-02`.
   - Which threads matter most: `THR-01`, `THR-02`
   - What the first seam-local review should focus on: mapping each smoke or doc assertion back to landed upstream evidence and rejecting any attempt to use conformance to finish missing runtime work
 - **Expected seam-exit concerns**:
