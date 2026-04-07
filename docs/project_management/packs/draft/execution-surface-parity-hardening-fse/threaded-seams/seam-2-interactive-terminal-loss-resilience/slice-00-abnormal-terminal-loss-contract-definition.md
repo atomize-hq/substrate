@@ -56,9 +56,16 @@ open_remediations: []
    - one best-effort stderr diagnostic is allowed and expected
    - the REPL process exits with code `1`
    - no orphaned child or CPU-spinning process remains after the terminal-loss path
-4. **Verification checklist**:
+4. **Named surfaces**:
+   - **Runtime surface**: `crates/shell/src/repl/async_repl.rs`
+   - **Regression-proof surface**: a macOS-targeted revoke/disconnect test under `crates/shell/tests/` that exercises the Reedline path specifically
+   - these are the only execution surfaces this contract constrains; later slices own the runtime change, proof implementation, and publication wording
+5. **Pass/fail boundaries**:
+   - **pass** when the runtime surface can express an explicit abnormal termination cause distinct from normal exit and the regression-proof surface can prove bounded exit plus cleanup on the Reedline path
+   - **fail** when terminal loss is still indistinguishable from normal `CtrlD`, the proof falls back to a stdio prompt-worker path, or cleanup/exit remains ambiguous
+6. **Verification checklist**:
    - runtime behavior carries an explicit abnormal termination cause distinct from normal exit
-   - a macOS-targeted revoke/disconnect proof exercises the Reedline path specifically and asserts bounded exit plus cleanup
+   - the regression-proof surface exercises the Reedline path and asserts bounded exit plus cleanup on revoke/disconnect
    - authoritative docs describe the same exit-code and diagnostic contract without introducing broader promises than the landed runtime supports
 
 #### S00.T1 - Record the runtime contract for abnormal terminal loss
