@@ -74,7 +74,7 @@ expect_jq() {
   jq -s -e "$@" "$trace" >/dev/null
 }
 
-echo "== Case A: shell joinability includes span_id =="
+echo "== Case A: shell span_id joins to the command_complete record =="
 marker="WPEP_SMOKE_MARKER_JOIN_${slice_id}_$RANDOM"
 "$SUBSTRATE_BIN" --command "echo $marker" >/dev/null
 
@@ -82,13 +82,20 @@ expect_jq --arg m "$marker" '
   any(select(.component=="shell" and .event_type=="command_complete" and (.command|tostring|contains($m))) | has("span_id"))
 '
 
-echo "== Case B: preexec canonical trace omits bodies (linux/macos only) =="
-SUBSTRATE_ENABLE_PREEXEC=1 SUBSTRATE_OVERRIDE_WORLD=disabled "$SUBSTRATE_BIN" --command 'export SUBSTRATE_SMOKE_PREEXEC=1' >/dev/null
+echo "== Case B: wrap-mode builtin trace omits command bodies (linux/macos only) =="
+SUBSTRATE_OVERRIDE_WORLD=disabled "$SUBSTRATE_BIN" --command 'export SUBSTRATE_SMOKE_WRAP=1' >/dev/null
+
+expect_jq '
+  any(select(.event_type=="builtin_command" and .mode=="wrap") | (.command_omitted==true))
+'
 expect_jq '
   any(select(.event_type=="builtin_command") | (.command_omitted==true))
 '
 expect_jq '
   all(select(.event_type=="builtin_command") | (.command_omitted==true))
+'
+expect_jq '
+  (any(select(.event_type=="builtin_command") | has("command"))) | not
 '
 expect_jq '
   (any(select(.event_type=="builtin_command_raw"))) | not
@@ -99,7 +106,7 @@ if [[ "$slice_id" == "WPEP0" ]]; then
   exit 0
 fi
 
-echo "== Case C: world completion record carries process_events_status =="
+echo "== Case C: world completion record carries the published process_events_status posture =="
 world_marker="WPEP_SMOKE_MARKER_WORLD_${slice_id}_$RANDOM"
 "$SUBSTRATE_BIN" --world --command "bash -lc \"echo $world_marker; sh -lc true; echo done\"" >/dev/null
 
@@ -150,7 +157,7 @@ if [[ "$slice_id" == "WPEP1" ]]; then
 fi
 
 if [[ "$platform" == "linux" ]]; then
-  echo "== Case D: linux includes world_process_* events joinable by parent_span =="
+  echo "== Case D: linux-backed world_process_* events are joinable by parent_span =="
   span_id="$(
     jq -r -s --arg m "$world_marker" '
       .[] | select(.component=="shell" and .event_type=="command_complete" and (.command|tostring|contains($m))) | .span_id
@@ -166,14 +173,14 @@ if [[ "$platform" == "linux" ]]; then
   '
 
   if [[ "$slice_id" == "WPEP2" ]]; then
-    echo "== Case E: argv omission explicit for WPEP2 =="
+    echo "== Case E: WPEP2 publishes argv_omitted = true =="
     expect_jq --arg sp "$span_id" '
       all(select(.component=="world-agent" and (.event_type=="world_process_start" or .event_type=="world_process_exit") and .parent_span==$sp) | (.argv_omitted==true))
     '
   fi
 
   if [[ "$slice_id" == "WPEP3" ]]; then
-    echo "== Case E: argv present (redacted) for WPEP3 =="
+    echo "== Case E: WPEP3 publishes argv with redaction =="
     expect_jq --arg sp "$span_id" '
       any(select(.component=="world-agent" and .event_type=="world_process_start" and .parent_span==$sp) | (has("argv") and (.argv|type=="array")))
     '

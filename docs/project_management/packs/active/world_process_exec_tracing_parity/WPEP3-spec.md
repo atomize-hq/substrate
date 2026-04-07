@@ -1,7 +1,7 @@
 # WPEP3 — spec — redaction hardening + argv/env capture for process events
 
 ## Scope (explicit)
-- Implement shared redaction helpers suitable for process-granularity capture:
+- Future hardening: implement shared redaction helpers suitable for process-granularity capture:
   - argv redaction handles flag-paired secrets (`--flag value`) and equals form (`--flag=value`).
   - env redaction handles URL credentials, headers, and common token patterns.
 - Upgrade Linux-backed capture (native Linux + macOS Lima guest) to emit:
@@ -24,4 +24,3 @@
 ## Out of scope (explicit)
 - Windows/WSL process capture.
 - Per-event streaming of process telemetry over `/v1/stream` (follow-on optimization).
-

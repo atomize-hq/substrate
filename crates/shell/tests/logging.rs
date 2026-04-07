@@ -25,7 +25,7 @@ fn setup_isolated_home(temp: &tempfile::TempDir) -> PathBuf {
 }
 
 #[test]
-fn test_builtin_command_omits_command_body_in_trace() {
+fn test_wrap_mode_builtin_command_omits_command_body_in_trace() {
     let temp = temp_dir("substrate-test-builtin-");
     let home = setup_isolated_home(&temp);
     let log_file = temp.path().join("trace.jsonl");
@@ -36,6 +36,7 @@ fn test_builtin_command_omits_command_body_in_trace() {
         .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &log_file)
         .env("SUBSTRATE_OVERRIDE_WORLD", "disabled")
+        .env("SUBSTRATE_ENABLE_PREEXEC", "1")
         .arg("-c")
         .arg("export TOKEN=secret")
         .assert()
@@ -48,22 +49,39 @@ fn test_builtin_command_omits_command_body_in_trace() {
         .map(|line| serde_json::from_str(line).expect("parse trace line"))
         .collect();
 
-    let builtin = events
+    let builtin_events: Vec<&Value> = events
         .iter()
-        .find(|event| {
+        .filter(|event| {
             event.get("component").and_then(Value::as_str) == Some("shell")
                 && event.get("event_type").and_then(Value::as_str) == Some("builtin_command")
         })
-        .expect("builtin_command event");
+        .collect();
 
-    assert_eq!(
-        builtin.get("command_omitted").and_then(Value::as_bool),
-        Some(true),
-        "builtin_command must include command_omitted=true: {builtin:?}"
-    );
     assert!(
-        builtin.get("command").is_none(),
-        "builtin_command must omit command bodies: {builtin:?}"
+        !builtin_events.is_empty(),
+        "expected at least one builtin_command event: {events:?}"
+    );
+    for builtin in builtin_events {
+        assert_eq!(
+            builtin.get("mode").and_then(Value::as_str),
+            Some("wrap"),
+            "wrap-mode builtin_command should be tagged with mode=wrap: {builtin:?}"
+        );
+        assert_eq!(
+            builtin.get("command_omitted").and_then(Value::as_bool),
+            Some(true),
+            "builtin_command must include command_omitted=true: {builtin:?}"
+        );
+        assert!(
+            builtin.get("command").is_none(),
+            "builtin_command must omit command bodies: {builtin:?}"
+        );
+    }
+    assert!(
+        !events.iter().any(|event| {
+            event.get("event_type").and_then(Value::as_str) == Some("builtin_command_raw")
+        }),
+        "canonical trace must not emit builtin_command_raw payloads: {events:?}"
     );
 }
 

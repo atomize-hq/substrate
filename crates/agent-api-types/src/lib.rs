@@ -202,6 +202,28 @@ impl PolicySnapshotV3 {
         let _ = self.canonicalize()?;
         Ok(())
     }
+
+    pub fn resolve_world_network_routing(
+        &self,
+        world_net_filter: bool,
+    ) -> Result<WorldNetworkRoutingV1, String> {
+        let snapshot = self.canonicalize()?;
+        let restrictive = snapshot.net_allowed.as_slice() != ["*"];
+        let isolate_network = world_net_filter && restrictive;
+
+        if isolate_network {
+            validate_net_allowed_for_enforcement(&snapshot.net_allowed)?;
+        }
+
+        Ok(WorldNetworkRoutingV1 {
+            isolate_network,
+            allowed_domains: if isolate_network {
+                snapshot.net_allowed
+            } else {
+                Vec::new()
+            },
+        })
+    }
 }
 
 pub fn canonicalize_net_allowed(entries: &[String]) -> Vec<String> {
@@ -1223,6 +1245,108 @@ mod tests {
         };
 
         snapshot.validate().expect("snapshot validates");
+    }
+
+    #[test]
+    fn policy_snapshot_v3_resolve_world_network_routing_matches_four_case_matrix() {
+        let allow_all = PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: vec!["*".to_string()],
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: true,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+
+        let restrictive = PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: vec![" Example.COM. ".to_string(), "api.example.com".to_string()],
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: true,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+
+        let deny_all = PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: Vec::new(),
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                read: Some(PolicySnapshotWorldFsDimensionV3 {
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                }),
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: true,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+
+        let allow_all_disabled = allow_all
+            .resolve_world_network_routing(false)
+            .expect("allow-all with filter off");
+        assert!(!allow_all_disabled.isolate_network);
+        assert!(allow_all_disabled.allowed_domains.is_empty());
+
+        let allow_all_enabled = allow_all
+            .resolve_world_network_routing(true)
+            .expect("allow-all with filter on");
+        assert!(!allow_all_enabled.isolate_network);
+        assert!(allow_all_enabled.allowed_domains.is_empty());
+
+        let deny_all_enabled = deny_all
+            .resolve_world_network_routing(true)
+            .expect("deny-all with filter on");
+        assert!(deny_all_enabled.isolate_network);
+        assert!(deny_all_enabled.allowed_domains.is_empty());
+
+        let restrictive_enabled = restrictive
+            .resolve_world_network_routing(true)
+            .expect("restrictive with filter on");
+        assert!(restrictive_enabled.isolate_network);
+        assert_eq!(
+            restrictive_enabled.allowed_domains,
+            vec!["example.com".to_string(), "api.example.com".to_string()]
+        );
     }
 
     #[test]

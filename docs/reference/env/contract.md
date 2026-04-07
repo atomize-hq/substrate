@@ -54,6 +54,11 @@ Failure behavior for config-shaped env vars:
   - Shell entrypoints (no subcommand): exit code `1` (error returned from invocation planning).
   - Config/policy commands: exit code `2` (user/config error).
 
+### Interactive REPL exit behavior
+- Normal interactive `exit` / `quit` remains process exit code `0`.
+- If the controlling terminal is revoked or disconnected after interactive startup, the REPL exits with code `1`.
+- On that abnormal path, Substrate may attempt one best-effort stderr diagnostic before exit. The supported operator contract is the bounded `0` versus `1` split, not a broader guarantee about how every platform surfaces the diagnostic.
+
 ### Other binaries/services
 Components such as `substrate-shim`, `substrate-world-agent`, `host-proxy`, and `forwarder` do not consult the Substrate YAML config. Their behavior is controlled by their own supported environment variables listed below.
 

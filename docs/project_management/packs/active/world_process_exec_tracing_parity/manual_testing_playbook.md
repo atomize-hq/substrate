@@ -10,6 +10,7 @@ Standard:
   - in-world process exec/exit telemetry persistence into canonical trace,
   - explicit degrade diagnostics on unsupported platforms,
   - span correctness/joinability ergonomics and preexec safety posture.
+  - bounded `THR-02` wording remains diagnostic-only in the shared guidance surfaces.
 
 ## Prerequisites
 
@@ -73,7 +74,7 @@ Expected:
 - Exit code `0`.
 - Output contains an `OK:` line.
 
-## Case 4 — Manual validation: process events persisted and joinable (Linux)
+## Case 4 — Manual validation: shell span joins to linux-backed `world_process_*` records
 
 Run in a temp home/workspace:
 
@@ -116,8 +117,10 @@ jq -s -e --arg sp "$span_id" '
 Expected:
 
 - Both probes succeed (exit `0`).
+- On Linux-backed execution, this is the authoritative place to assert that `world_process_*` records are present and joinable by `parent_span`.
+- On non-Linux platforms, treat `world_process_*` as a degrade-only surface and do not require the joinability assertion.
 
-## Case 5 — Manual validation: argv omission vs argv capture (Linux-backed backends)
+## Case 5 — Manual validation: published argv posture for WPEP2 and WPEP3 (Linux-backed backends)
 
 WPEP2 expectation:
 
@@ -127,7 +130,7 @@ WPEP3 expectation:
 
 - At least one `world_process_start` record includes `argv` (array) and no `argv_omitted` fields exist.
 
-## Case 6 — Manual validation: explicit degrade diagnostics (Windows)
+## Case 6 — Manual validation: explicit degrade-only summaries (Windows)
 
 Run a simple world command and confirm the shell completion record includes an explicit “unavailable” diagnostic for process telemetry.
 
@@ -137,8 +140,9 @@ Expected:
 - The corresponding `component: "shell"` `event_type: "command_complete"` record includes:
   - `process_events_status: "unavailable"`
   - `process_events_reason: "not_supported_platform"`
+- Windows does not assert `world_process_*` records for this feature; the degrade summary is the contract.
 
-## Case 7 — Manual validation: preexec canonical trace omits bodies
+## Case 7 — Manual validation: Case B wrap-mode builtin trace omits bodies
 
 Run:
 
@@ -151,16 +155,29 @@ mkdir -p "$workspace"
 cd "$workspace"
 
 substrate workspace init --force >/dev/null
-SUBSTRATE_ENABLE_PREEXEC=1 SUBSTRATE_OVERRIDE_WORLD=disabled substrate --command 'export SUBSTRATE_SMOKE_PREEXEC=1' >/dev/null
+SUBSTRATE_OVERRIDE_WORLD=disabled substrate --command 'export SUBSTRATE_SMOKE_WRAP=1' >/dev/null
 
 trace="$SUBSTRATE_HOME/trace.jsonl"
 test -f "$trace"
 
 jq -s -e '
-  any(select(.event_type=="builtin_command") | (.command_omitted==true))
+  any(select(.event_type=="builtin_command" and .mode=="wrap") | (.command_omitted==true))
+' "$trace" >/dev/null
+
+jq -s -e '
+  all(select(.event_type=="builtin_command") | (.command_omitted==true))
+' "$trace" >/dev/null
+
+jq -s -e '
+  (any(select(.event_type=="builtin_command") | has("command"))) | not
 ' "$trace" >/dev/null
 ```
 
 Expected:
 
-- Exit code `0` and at least one `builtin_command` record has `command_omitted: true`.
+- Exit code `0`.
+- The wrap command produces at least one `builtin_command` record with `mode: "wrap"` and `command_omitted: true`.
+- Canonical trace must not contain raw `command` bodies for `builtin_command` records.
+- This case intentionally asserts the observable wrap-mode builtin-routing path directly.
+- Script-mode `SUBSTRATE_ENABLE_PREEXEC` wiring remains part of the published matrix, but the deterministic proof for that cell lives in `crates/shell/tests/shell_env.rs` (`shell_env_script_mode_sets_preexec_flag_for_bash`) rather than this operator-facing smoke flow.
+- Interactive preexec removal remains a runtime/code-path invariant rather than a playbook assertion here.

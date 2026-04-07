@@ -216,10 +216,7 @@ fn resolve_world_network_policy(
         .canonicalize()
         .map_err(|err| anyhow!("invalid PolicySnapshotV3: {err}"))?;
 
-    let restrictive = snapshot.net_allowed.as_slice() != ["*"];
-    let isolate_network = world_net_filter && restrictive;
-
-    if isolate_network {
+    if world_net_filter && snapshot.net_allowed.as_slice() != ["*"] {
         validate_net_allowed_for_enforcement(&snapshot.net_allowed).map_err(|err| {
             crate::execution::config_model::user_error(format!(
                 "invalid policy net_allowed for world netfilter enforcement: {err}"
@@ -227,16 +224,14 @@ fn resolve_world_network_policy(
         })?;
     }
 
-    let allowed_domains = if isolate_network {
-        snapshot.net_allowed.clone()
-    } else {
-        Vec::new()
-    };
+    let routing = snapshot
+        .resolve_world_network_routing(world_net_filter)
+        .map_err(|err| anyhow!("invalid PolicySnapshotV3: {err}"))?;
 
     Ok(ResolvedWorldNetworkPolicy {
         snapshot,
-        isolate_network,
-        allowed_domains,
+        isolate_network: routing.isolate_network,
+        allowed_domains: routing.allowed_domains,
     })
 }
 

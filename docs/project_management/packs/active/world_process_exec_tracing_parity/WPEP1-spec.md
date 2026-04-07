@@ -1,14 +1,13 @@
 # WPEP1 — spec — world-agent API + persistence plumbing for process events
 
 ## Scope (explicit)
-- Define and implement the host↔world-agent transport shape for process telemetry diagnostics:
+- Land the host↔world-agent transport shape for process telemetry diagnostics:
   - `process_events_status`
   - `process_events_reason`
   - `process_events_dropped` (when truncated)
 - Persist diagnostics on the shell completion record for world executions:
   - `component: "shell"`, `event_type: "command_complete"` includes `process_events_status` and `process_events_reason` (when status != "ok").
-- Wire the shell persistence path for `process_events` when present:
-  - shell appends `world_process_start`/`world_process_exit` records to canonical trace.
+- Shell appends `world_process_start`/`world_process_exit` records to canonical trace on Linux-backed executions when `process_events` are present.
 
 ## Acceptance (explicit)
 - For a world execution, shell trace includes a completion summary with `process_events_status`.
