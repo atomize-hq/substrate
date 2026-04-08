@@ -56,6 +56,10 @@ impl ConfigSetFixture {
         self.substrate_home.join("config.yaml")
     }
 
+    fn global_policy_path(&self) -> PathBuf {
+        self.substrate_home.join("policy.yaml")
+    }
+
     fn init_workspace(&self) {
         let output = self
             .command()
@@ -123,6 +127,10 @@ impl ConfigSetFixture {
             cmd.arg(key);
         }
         cmd.output().expect("failed to run config global reset")
+    }
+
+    fn write_global_policy_patch(&self, contents: &str) {
+        fs::write(self.global_policy_path(), contents).expect("failed to write policy.yaml");
     }
 }
 
@@ -262,6 +270,149 @@ fn config_set_rejects_unknown_key_without_mutation() {
 }
 
 #[test]
+fn config_set_workspace_accepts_new_llm_and_agents_keys() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+
+    let output = fixture.set_json(
+        &fixture.workspace_root,
+        &[
+            "llm.enabled=true",
+            "llm.gateway.enabled=true",
+            "llm.gateway.mode=in_world",
+            "llm.routing.default_backend=cli:codex",
+            "agents.enabled=true",
+            "agents.defaults.execution.scope=host",
+            "agents.defaults.cli.mode=per_request",
+            "agents.hub.orchestrator_agent_id=orchestrator-main",
+            "agents.hub.world_restart.on_drift=fail_closed",
+            "agents.toolbox.enabled=true",
+            "agents.toolbox.bind.transport=tcp",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "config set should succeed for new llm/agents keys: {output:?}"
+    );
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout).expect("effective JSON parse");
+    assert_eq!(
+        json.pointer("/llm/enabled").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        json.pointer("/llm/gateway/enabled")
+            .and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        json.pointer("/llm/gateway/mode").and_then(|v| v.as_str()),
+        Some("in_world")
+    );
+    assert_eq!(
+        json.pointer("/llm/routing/default_backend")
+            .and_then(|v| v.as_str()),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        json.pointer("/agents/enabled").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        json.pointer("/agents/defaults/execution/scope")
+            .and_then(|v| v.as_str()),
+        Some("host")
+    );
+    assert_eq!(
+        json.pointer("/agents/defaults/cli/mode")
+            .and_then(|v| v.as_str()),
+        Some("per_request")
+    );
+    assert_eq!(
+        json.pointer("/agents/hub/orchestrator_agent_id")
+            .and_then(|v| v.as_str()),
+        Some("orchestrator-main")
+    );
+    assert_eq!(
+        json.pointer("/agents/hub/world_restart/on_drift")
+            .and_then(|v| v.as_str()),
+        Some("fail_closed")
+    );
+    assert_eq!(
+        json.pointer("/agents/toolbox/enabled")
+            .and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    assert_eq!(
+        json.pointer("/agents/toolbox/bind/transport")
+            .and_then(|v| v.as_str()),
+        Some("tcp")
+    );
+
+    let yaml = fixture.read_workspace_yaml();
+    let root = yaml.as_mapping().expect("workspace.yaml root mapping");
+    assert!(
+        root.contains_key(YamlValue::String("llm".to_string())),
+        "workspace patch should include llm section: {yaml:?}"
+    );
+    assert!(
+        root.contains_key(YamlValue::String("agents".to_string())),
+        "workspace patch should include agents section: {yaml:?}"
+    );
+}
+
+#[test]
+fn config_global_set_accepts_new_llm_and_agents_keys() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+
+    let output = fixture.global_set_json(
+        &fixture.workspace_root,
+        &[
+            "llm.enabled=true",
+            "llm.gateway.enabled=true",
+            "llm.gateway.mode=in_world",
+            "llm.routing.default_backend=api:openai",
+            "agents.enabled=true",
+            "agents.defaults.execution.scope=world",
+            "agents.defaults.cli.mode=persistent",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "config global set should accept new llm/agents keys: {output:?}"
+    );
+
+    let json: JsonValue = serde_json::from_slice(&output.stdout).expect("effective JSON parse");
+    assert_eq!(
+        json.pointer("/llm/routing/default_backend")
+            .and_then(|v| v.as_str()),
+        Some("api:openai")
+    );
+    assert_eq!(
+        json.pointer("/agents/defaults/execution/scope")
+            .and_then(|v| v.as_str()),
+        Some("world")
+    );
+    assert_eq!(
+        json.pointer("/agents/defaults/cli/mode")
+            .and_then(|v| v.as_str()),
+        Some("persistent")
+    );
+
+    let yaml = fixture.read_global_yaml();
+    let root = yaml.as_mapping().expect("config.yaml root mapping");
+    assert!(
+        root.contains_key(YamlValue::String("llm".to_string())),
+        "global patch should include llm section: {yaml:?}"
+    );
+    assert!(
+        root.contains_key(YamlValue::String("agents".to_string())),
+        "global patch should include agents section: {yaml:?}"
+    );
+}
+
+#[test]
 fn config_set_accepts_boolean_synonyms() {
     let fixture = ConfigSetFixture::new();
     fixture.init_workspace();
@@ -284,6 +435,48 @@ fn config_set_accepts_boolean_synonyms() {
 }
 
 #[test]
+fn config_set_rejects_invalid_new_key_values_without_mutation() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+    let before = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
+
+    let output = fixture.set_json(&fixture.workspace_root, &["llm.gateway.mode=invalid"]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid llm.gateway.mode should exit 2: {output:?}"
+    );
+
+    let after = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
+    assert_eq!(before, after, "workspace.yaml must not change on error");
+}
+
+#[test]
+fn config_set_rejects_malformed_llm_default_backend_id_without_mutation() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+    let before = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
+
+    let output = fixture.set_json(
+        &fixture.workspace_root,
+        &["llm.routing.default_backend=CLI:Codex"],
+    );
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid llm.routing.default_backend should exit 2: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("llm.routing.default_backend"),
+        "stderr should mention invalid backend id key\nstderr: {stderr}"
+    );
+
+    let after = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
+    assert_eq!(before, after, "workspace.yaml must not change on error");
+}
+
+#[test]
 fn config_set_rejects_invalid_list_literal_without_mutation() {
     let fixture = ConfigSetFixture::new();
     fixture.init_workspace();
@@ -298,6 +491,32 @@ fn config_set_rejects_invalid_list_literal_without_mutation() {
 
     let after = fs::read_to_string(fixture.workspace_config_path()).expect("read workspace.yaml");
     assert_eq!(before, after, "workspace.yaml must not change on error");
+}
+
+#[test]
+fn config_set_rejects_host_only_gateway_when_effective_policy_requires_fail_closed_routing() {
+    let fixture = ConfigSetFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_policy_patch(
+        r#"
+llm:
+  fail_closed:
+    routing: true
+"#,
+    );
+
+    let output = fixture.global_set_json(&fixture.workspace_root, &["llm.gateway.mode=host_only"]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "host_only gateway should be rejected when llm.fail_closed.routing=true: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("llm.gateway.mode=host_only")
+            && stderr.contains("llm.fail_closed.routing=false"),
+        "stderr should mention fail-closed policy constraint\nstderr: {stderr}"
+    );
 }
 
 #[test]

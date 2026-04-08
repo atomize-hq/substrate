@@ -1,4 +1,5 @@
 pub mod agent_events;
+mod agents_cmd;
 mod auto_sync;
 mod cli;
 mod config_cmd;
@@ -28,6 +29,7 @@ mod value_parse;
 mod workspace;
 mod workspace_cmd;
 
+pub(crate) use agents_cmd::handle_agents_command;
 pub(crate) use auto_sync::run_auto_sync_if_enabled;
 pub use cli::*;
 pub(crate) use config_cmd::handle_config_command;

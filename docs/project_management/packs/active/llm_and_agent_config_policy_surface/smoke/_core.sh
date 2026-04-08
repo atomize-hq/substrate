@@ -31,32 +31,6 @@ workspace="$tmp_root/workspace"
 mkdir -p "$workspace"
 cd "$workspace"
 
-echo "== Setup: workspace + patches =="
-"$SUBSTRATE_BIN" workspace init --force >/dev/null
-"$SUBSTRATE_BIN" config global init --force >/dev/null
-"$SUBSTRATE_BIN" policy global init --force >/dev/null
-
-echo "== Setup: minimal agent inventory =="
-mkdir -p "$SUBSTRATE_HOME/agents"
-cat >"$SUBSTRATE_HOME/agents/codex.yaml" <<'YAML'
-version: 1
-id: codex
-config:
-  kind: cli
-  enabled: true
-  execution:
-    scope: world
-  cli:
-    binary: codex
-    mode: persistent
-  capabilities:
-    llm: true
-policy_overlay:
-  agents:
-    fail_closed:
-      routing: true
-YAML
-
 expect_exit() {
   local want="$1"
   shift
@@ -71,6 +45,33 @@ expect_exit() {
     exit 1
   fi
 }
+
+echo "== Setup: workspace + patches =="
+"$SUBSTRATE_BIN" workspace init --force >/dev/null
+"$SUBSTRATE_BIN" config global init --force >/dev/null
+"$SUBSTRATE_BIN" policy global init --force >/dev/null
+
+echo "== Setup: minimal agent inventory =="
+mkdir -p "$SUBSTRATE_HOME/agents"
+expect_exit 0 "$SUBSTRATE_BIN" policy global set \
+  'world_fs.host_visible=false'
+cat >"$SUBSTRATE_HOME/agents/codex.yaml" <<'YAML'
+version: 1
+id: codex
+config:
+  kind: cli
+  enabled: true
+  execution:
+    scope: world
+  cli:
+    binary: codex
+    mode: persistent
+policy_overlay:
+  world_fs:
+    read:
+      allow_list:
+        - "."
+YAML
 
 echo "== Case 1: config keys accept =="
 expect_exit 0 "$SUBSTRATE_BIN" config global set \
@@ -135,9 +136,9 @@ expect_exit 2 "$SUBSTRATE_BIN" agents validate
 rm -f "$SUBSTRATE_HOME/agents/mismatch.yaml"
 
 echo "== Case 8: overlay broadening reject (exit 2) =="
-cat >"$SUBSTRATE_HOME/agents/broaden.yaml" <<'YAML'
+cat >"$SUBSTRATE_HOME/agents/broaden_llm.yaml" <<'YAML'
 version: 1
-id: broaden
+id: broaden_llm
 config:
   kind: cli
   enabled: true
@@ -153,6 +154,27 @@ policy_overlay:
         - "OPENAI_API_KEY"
 YAML
 expect_exit 2 "$SUBSTRATE_BIN" agents validate
-rm -f "$SUBSTRATE_HOME/agents/broaden.yaml"
+rm -f "$SUBSTRATE_HOME/agents/broaden_llm.yaml"
+
+echo "== Case 9: world_fs broadening reject (exit 2) =="
+cat >"$SUBSTRATE_HOME/agents/broaden_world_fs.yaml" <<'YAML'
+version: 1
+id: broaden_world_fs
+config:
+  kind: cli
+  enabled: true
+  execution:
+    scope: world
+  cli:
+    binary: codex
+    mode: persistent
+policy_overlay:
+  world_fs:
+    read:
+      allow_list:
+        - "/tmp"
+YAML
+expect_exit 2 "$SUBSTRATE_BIN" agents validate
+rm -f "$SUBSTRATE_HOME/agents/broaden_world_fs.yaml"
 
 echo "OK: llm_and_agent_config_policy_surface smoke passed"

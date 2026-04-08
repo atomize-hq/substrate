@@ -67,16 +67,16 @@ fn make_state(raw_cmd: &str) -> ExecutionState {
     }
 }
 
-fn replay_strategy_trace_path() -> &'static PathBuf {
-    static TRACE_PATH: OnceLock<PathBuf> = OnceLock::new();
-    TRACE_PATH.get_or_init(|| {
-        let tempdir = Box::leak(Box::new(tempfile::tempdir().unwrap()));
-        let trace_path = tempdir.path().join("trace.jsonl");
+fn replay_strategy_trace_path() -> PathBuf {
+    static TRACE_CTX_INIT: OnceLock<()> = OnceLock::new();
+    let tempdir = Box::leak(Box::new(tempfile::tempdir().unwrap()));
+    let trace_path = tempdir.path().join("trace.jsonl");
+    TRACE_CTX_INIT.get_or_init(|| {
         let ctx = TraceContext::default();
-        ctx.init_trace(Some(trace_path.clone())).unwrap();
         set_global_trace_context(ctx).unwrap();
-        trace_path
-    })
+    });
+    substrate_trace::init_trace(Some(trace_path.clone())).unwrap();
+    trace_path
 }
 
 fn latest_replay_strategy(trace_path: &PathBuf) -> Option<Value> {
@@ -154,8 +154,8 @@ async fn replay_sequence_collects_success_and_failure() {
 
 #[test]
 fn record_replay_strategy_emits_world_disable_source_for_effective_disable() {
+    let _lock = ENV_LOCK.blocking_lock();
     let trace_path = replay_strategy_trace_path();
-    fs::write(trace_path, "").unwrap();
 
     let mut state = make_state("echo effective-disable");
     state.target_origin = substrate_trace::ExecutionOrigin::Host;
@@ -177,7 +177,7 @@ fn record_replay_strategy_emits_world_disable_source_for_effective_disable() {
         json!({"origin_summary": "host"}),
     );
 
-    let Some(strategy) = latest_replay_strategy(trace_path) else {
+    let Some(strategy) = latest_replay_strategy(&trace_path) else {
         panic!("expected replay_strategy entry");
     };
     assert_eq!(
@@ -204,8 +204,8 @@ fn record_replay_strategy_emits_world_disable_source_for_effective_disable() {
 
 #[test]
 fn record_replay_strategy_omits_world_disable_source_for_replay_local_opt_out() {
+    let _lock = ENV_LOCK.blocking_lock();
     let trace_path = replay_strategy_trace_path();
-    fs::write(trace_path, "").unwrap();
 
     let mut state = make_state("echo replay-local");
     state.target_origin = substrate_trace::ExecutionOrigin::Host;
@@ -226,7 +226,7 @@ fn record_replay_strategy_omits_world_disable_source_for_replay_local_opt_out() 
         json!({"origin_summary": "host"}),
     );
 
-    let Some(strategy) = latest_replay_strategy(trace_path) else {
+    let Some(strategy) = latest_replay_strategy(&trace_path) else {
         panic!("expected replay_strategy entry");
     };
     assert_eq!(

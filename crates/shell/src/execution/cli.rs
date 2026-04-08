@@ -158,6 +158,7 @@ pub enum SubCommands {
     Config(ConfigCmd),
     Policy(PolicyCmd),
     Workspace(WorkspaceCmd),
+    Agents(AgentsCmd),
     Shim(ShimCmd),
     Health(HealthCmd),
 }
@@ -392,6 +393,18 @@ pub struct PolicySetArgs {
 pub struct WorkspaceCmd {
     #[command(subcommand)]
     pub action: WorkspaceAction,
+}
+
+#[derive(Args, Debug)]
+pub struct AgentsCmd {
+    #[command(subcommand)]
+    pub action: AgentsAction,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AgentsAction {
+    /// Validate discovered agent inventory files
+    Validate,
 }
 
 #[derive(Subcommand, Debug)]

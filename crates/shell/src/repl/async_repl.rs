@@ -1285,16 +1285,29 @@ fn resolve_world_restart_on_drift(
     .on_drift)
 }
 
-async fn handle_detected_world_drift(
-    old_session: WorldSession,
+struct WorldDriftRequest<'a> {
     requested_cwd: String,
     policy_snapshot: agent_api_types::PolicySnapshotV3,
     snapshot_hash: String,
     workspace_root: Option<PathBuf>,
-    agent_printer: &ReplPrinter,
-    telemetry: &mut ReplSessionTelemetry,
+    agent_printer: &'a ReplPrinter,
+    telemetry: &'a mut ReplSessionTelemetry,
     reason: WorldRestartReason,
+}
+
+async fn handle_detected_world_drift(
+    old_session: WorldSession,
+    request: WorldDriftRequest<'_>,
 ) -> Result<WorldSession> {
+    let WorldDriftRequest {
+        requested_cwd,
+        policy_snapshot,
+        snapshot_hash,
+        workspace_root,
+        agent_printer,
+        telemetry,
+        reason,
+    } = request;
     let on_drift = resolve_world_restart_on_drift(Path::new(&requested_cwd))?;
     match on_drift {
         crate::execution::config_model::WorldRestartOnDriftMode::AutoRestart => {
@@ -1329,17 +1342,30 @@ async fn handle_detected_world_drift(
     }
 }
 
-async fn open_world_session(
+struct OpenWorldSessionRequest<'a> {
     requested_cwd: String,
-    requested_path: &Path,
+    requested_path: &'a Path,
     resolved_policy_snapshot: agent_api_types::PolicySnapshotV3,
     snapshot_hash: String,
     workspace_root: Option<PathBuf>,
     on_stdout: StdoutCallback,
-    agent_printer: &ReplPrinter,
+    agent_printer: &'a ReplPrinter,
     world_generation: u64,
     restarted: bool,
-) -> Result<WorldSession> {
+}
+
+async fn open_world_session(request: OpenWorldSessionRequest<'_>) -> Result<WorldSession> {
+    let OpenWorldSessionRequest {
+        requested_cwd,
+        requested_path,
+        resolved_policy_snapshot,
+        snapshot_hash,
+        workspace_root,
+        on_stdout,
+        agent_printer,
+        world_generation,
+        restarted,
+    } = request;
     let world_network_policy = policy_snapshot::resolve_world_network_policy_for_snapshot(
         resolved_policy_snapshot,
         requested_path,
@@ -1394,17 +1420,17 @@ async fn restart_world_session(
 
     old_session.client.close().await?;
 
-    let new_session = open_world_session(
+    let new_session = open_world_session(OpenWorldSessionRequest {
         requested_cwd,
-        requested_path.as_path(),
-        policy_snapshot,
+        requested_path: requested_path.as_path(),
+        resolved_policy_snapshot: policy_snapshot,
         snapshot_hash,
         workspace_root,
         on_stdout,
         agent_printer,
-        previous_world_generation.saturating_add(1),
-        true,
-    )
+        world_generation: previous_world_generation.saturating_add(1),
+        restarted: true,
+    })
     .await?;
 
     emit_world_restarted_alert(
@@ -1568,17 +1594,17 @@ async fn start_world_session(
         .context("policy snapshot (start)")?;
     let start_hash = resolved_start.snapshot_hash.clone();
     let start_workspace_root = find_workspace_root(requested_path);
-    let session = open_world_session(
-        requested_cwd.clone(),
+    let session = open_world_session(OpenWorldSessionRequest {
+        requested_cwd: requested_cwd.clone(),
         requested_path,
-        resolved_start.snapshot,
-        start_hash.clone(),
-        start_workspace_root.clone(),
+        resolved_policy_snapshot: resolved_start.snapshot,
+        snapshot_hash: start_hash.clone(),
+        workspace_root: start_workspace_root.clone(),
         on_stdout,
         agent_printer,
-        0,
-        false,
-    )
+        world_generation: 0,
+        restarted: false,
+    })
     .await?;
 
     let ready_cwd = session.world_cwd.clone();
@@ -1606,13 +1632,15 @@ async fn start_world_session(
         agent_printer.print(note);
         return handle_detected_world_drift(
             session,
-            ready_cwd,
-            resolved_ready.snapshot,
-            ready_hash,
-            ready_workspace_root,
-            agent_printer,
-            telemetry,
-            reason,
+            WorldDriftRequest {
+                requested_cwd: ready_cwd,
+                policy_snapshot: resolved_ready.snapshot,
+                snapshot_hash: ready_hash,
+                workspace_root: ready_workspace_root,
+                agent_printer,
+                telemetry,
+                reason,
+            },
         )
         .await;
     }
@@ -1662,13 +1690,15 @@ async fn ensure_no_policy_drift(
     *world_session = Some(
         handle_detected_world_drift(
             old,
-            requested,
-            resolved.snapshot,
-            resolved.snapshot_hash,
-            workspace_root,
-            agent_printer,
-            telemetry,
-            reason,
+            WorldDriftRequest {
+                requested_cwd: requested,
+                policy_snapshot: resolved.snapshot,
+                snapshot_hash: resolved.snapshot_hash,
+                workspace_root,
+                agent_printer,
+                telemetry,
+                reason,
+            },
         )
         .await?,
     );
