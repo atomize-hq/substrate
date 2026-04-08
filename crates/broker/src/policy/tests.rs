@@ -194,8 +194,8 @@ fn pcm1_policy_yaml_accepts_llm_agents_and_workflow_router_families() {
     let raw = pcm1_policy_yaml_with_backend_entries("cli:codex", "cli:codex", "cli:codex");
     let policy: Policy = serde_yaml::from_str(&raw).expect("policy with new key families parses");
 
-    assert_eq!(policy.llm_fail_closed_routing, false);
-    assert_eq!(policy.llm_require_approval, true);
+    assert!(!policy.llm_fail_closed_routing);
+    assert!(policy.llm_require_approval);
     assert_eq!(policy.llm_allowed_backends, vec!["cli:codex".to_string()]);
     assert_eq!(
         policy.llm_secrets_env_allowed,
@@ -205,13 +205,13 @@ fn pcm1_policy_yaml_accepts_llm_agents_and_workflow_router_families() {
         policy.agents_allowed_backends,
         vec!["cli:codex".to_string()]
     );
-    assert_eq!(policy.agents_fail_closed_routing, false);
+    assert!(!policy.agents_fail_closed_routing);
     assert_eq!(
         policy.agents_host_credentials_read_allowed_backends,
         vec!["cli:codex".to_string()]
     );
-    assert_eq!(policy.workflow_router_enabled, true);
-    assert_eq!(policy.workflow_router_allow_cross_workspace, true);
+    assert!(policy.workflow_router_enabled);
+    assert!(policy.workflow_router_allow_cross_workspace);
     assert_eq!(
         policy.workflow_router_allowed_rule_ids,
         vec!["rule-1".to_string()]
