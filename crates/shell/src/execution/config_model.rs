@@ -12,6 +12,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
+use substrate_broker::validate_backend_id;
 use substrate_common::paths as substrate_paths;
 use substrate_common::WorldRootMode;
 
@@ -102,6 +103,7 @@ pub(crate) struct SubstrateConfig {
     pub policy: PolicyConfig,
     pub sync: SyncConfig,
     pub repl: ReplConfig,
+    pub llm: LlmConfig,
     pub agents: AgentsConfig,
 }
 
@@ -168,6 +170,50 @@ impl Default for ReplConfig {
             max_pty_buffered_lines_clamp: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct LlmConfig {
+    pub enabled: bool,
+    pub gateway: LlmGatewayConfig,
+    pub routing: LlmRoutingConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct LlmGatewayConfig {
+    pub enabled: bool,
+    pub mode: LlmGatewayMode,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum LlmGatewayMode {
+    InWorld,
+    HostOnly,
+}
+
+impl Default for LlmGatewayMode {
+    fn default() -> Self {
+        Self::InWorld
+    }
+}
+
+impl LlmGatewayMode {
+    pub(crate) fn parse_insensitive(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "in_world" => Some(Self::InWorld),
+            "host_only" => Some(Self::HostOnly),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct LlmRoutingConfig {
+    pub default_backend: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -363,27 +409,124 @@ pub(crate) struct SyncConfig {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentsConfig {
+    pub enabled: bool,
+    pub defaults: AgentDefaultsConfig,
     pub hub: AgentHubConfig,
+    pub toolbox: AgentToolboxConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentDefaultsConfig {
+    pub execution: AgentDefaultsExecutionConfig,
+    pub cli: AgentDefaultsCliConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentDefaultsExecutionConfig {
+    pub scope: AgentExecutionScope,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum AgentExecutionScope {
+    Host,
+    World,
+}
+
+impl Default for AgentExecutionScope {
+    fn default() -> Self {
+        Self::World
+    }
+}
+
+impl AgentExecutionScope {
+    pub(crate) fn parse_insensitive(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "host" => Some(Self::Host),
+            "world" => Some(Self::World),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentDefaultsCliConfig {
+    pub mode: AgentCliMode,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum AgentCliMode {
+    Persistent,
+    PerRequest,
+}
+
+impl Default for AgentCliMode {
+    fn default() -> Self {
+        Self::Persistent
+    }
+}
+
+impl AgentCliMode {
+    pub(crate) fn parse_insensitive(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "persistent" => Some(Self::Persistent),
+            "per_request" => Some(Self::PerRequest),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentToolboxConfig {
+    pub enabled: bool,
+    pub bind: AgentToolboxBindConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentToolboxBindConfig {
+    pub transport: AgentToolboxBindTransport,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum AgentToolboxBindTransport {
+    Uds,
+    Tcp,
+}
+
+impl Default for AgentToolboxBindTransport {
+    fn default() -> Self {
+        Self::Uds
+    }
+}
+
+impl AgentToolboxBindTransport {
+    pub(crate) fn parse_insensitive(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "uds" => Some(Self::Uds),
+            "tcp" => Some(Self::Tcp),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentHubConfig {
+    pub orchestrator_agent_id: String,
     pub world_restart: AgentHubWorldRestartConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentHubWorldRestartConfig {
     pub on_drift: WorldRestartOnDriftMode,
-}
-
-impl Default for AgentHubWorldRestartConfig {
-    fn default() -> Self {
-        Self {
-            on_drift: WorldRestartOnDriftMode::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -428,6 +571,8 @@ pub(crate) struct SubstrateConfigPatch {
     pub sync: SyncConfigPatch,
     #[serde(skip_serializing_if = "ReplConfigPatch::is_empty")]
     pub repl: ReplConfigPatch,
+    #[serde(skip_serializing_if = "LlmConfigPatch::is_empty")]
+    pub llm: LlmConfigPatch,
     #[serde(skip_serializing_if = "AgentsConfigPatch::is_empty")]
     pub agents: AgentsConfigPatch,
 }
@@ -438,6 +583,7 @@ impl SubstrateConfigPatch {
             && self.policy.is_empty()
             && self.sync.is_empty()
             && self.repl.is_empty()
+            && self.llm.is_empty()
             && self.agents.is_empty()
     }
 }
@@ -559,27 +705,124 @@ impl ReplConfigPatch {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
+pub(crate) struct LlmConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "LlmGatewayConfigPatch::is_empty")]
+    pub gateway: LlmGatewayConfigPatch,
+    #[serde(skip_serializing_if = "LlmRoutingConfigPatch::is_empty")]
+    pub routing: LlmRoutingConfigPatch,
+}
+
+impl LlmConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none() && self.gateway.is_empty() && self.routing.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct LlmGatewayConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<LlmGatewayMode>,
+}
+
+impl LlmGatewayConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none() && self.mode.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct LlmRoutingConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_backend: Option<String>,
+}
+
+impl LlmRoutingConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.default_backend.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentsConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "AgentDefaultsConfigPatch::is_empty")]
+    pub defaults: AgentDefaultsConfigPatch,
     #[serde(skip_serializing_if = "AgentHubConfigPatch::is_empty")]
     pub hub: AgentHubConfigPatch,
+    #[serde(skip_serializing_if = "AgentToolboxConfigPatch::is_empty")]
+    pub toolbox: AgentToolboxConfigPatch,
 }
 
 impl AgentsConfigPatch {
     fn is_empty(&self) -> bool {
-        self.hub.is_empty()
+        self.enabled.is_none()
+            && self.defaults.is_empty()
+            && self.hub.is_empty()
+            && self.toolbox.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentDefaultsConfigPatch {
+    #[serde(skip_serializing_if = "AgentDefaultsExecutionConfigPatch::is_empty")]
+    pub execution: AgentDefaultsExecutionConfigPatch,
+    #[serde(skip_serializing_if = "AgentDefaultsCliConfigPatch::is_empty")]
+    pub cli: AgentDefaultsCliConfigPatch,
+}
+
+impl AgentDefaultsConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.execution.is_empty() && self.cli.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentDefaultsExecutionConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<AgentExecutionScope>,
+}
+
+impl AgentDefaultsExecutionConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.scope.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentDefaultsCliConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<AgentCliMode>,
+}
+
+impl AgentDefaultsCliConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.mode.is_none()
     }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentHubConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orchestrator_agent_id: Option<String>,
     #[serde(skip_serializing_if = "AgentHubWorldRestartConfigPatch::is_empty")]
     pub world_restart: AgentHubWorldRestartConfigPatch,
 }
 
 impl AgentHubConfigPatch {
     fn is_empty(&self) -> bool {
-        self.world_restart.is_empty()
+        self.orchestrator_agent_id.is_none() && self.world_restart.is_empty()
     }
 }
 
@@ -593,6 +836,34 @@ pub(crate) struct AgentHubWorldRestartConfigPatch {
 impl AgentHubWorldRestartConfigPatch {
     fn is_empty(&self) -> bool {
         self.on_drift.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentToolboxConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "AgentToolboxBindConfigPatch::is_empty")]
+    pub bind: AgentToolboxBindConfigPatch,
+}
+
+impl AgentToolboxConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none() && self.bind.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentToolboxBindConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport: Option<AgentToolboxBindTransport>,
+}
+
+impl AgentToolboxBindConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.transport.is_none()
     }
 }
 
@@ -899,7 +1170,7 @@ pub(crate) fn parse_config_yaml(path: &Path, raw: &str) -> Result<SubstrateConfi
             err.to_string().trim()
         ))
     })?;
-    validate_config(&parsed)?;
+    validate_local_config(&parsed)?;
     Ok(parsed)
 }
 
@@ -927,6 +1198,7 @@ pub(crate) fn parse_config_patch_yaml(path: &Path, raw: &str) -> Result<Substrat
             err.to_string().trim()
         ))
     })?;
+    validate_config_patch(&parsed)?;
     Ok(parsed)
 }
 
@@ -948,7 +1220,7 @@ pub(crate) fn resolve_effective_config_with_explain(
         .as_ref()
         .map(|(p, path)| (p, path.as_path()));
 
-    resolve_effective_from_layers(
+    let resolved = resolve_effective_from_layers(
         &global_patch,
         &global_path,
         workspace_ref,
@@ -956,7 +1228,9 @@ pub(crate) fn resolve_effective_config_with_explain(
         cli,
         explain,
         true,
-    )
+    )?;
+    validate_config_against_effective_policy(cwd, &resolved.0)?;
+    Ok(resolved)
 }
 
 fn load_config_patch_layers_cached(cwd: &Path) -> Result<LoadedConfigPatchLayers> {
@@ -1317,6 +1591,208 @@ fn resolve_effective_from_layers(
         );
     }
 
+    // llm.enabled
+    let (llm_enabled, llm_enabled_src) = resolve_replace(
+        effective.llm.enabled,
+        global_patch.llm.enabled,
+        workspace_patch.map(|(p, _)| p.llm.enabled).unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.llm.enabled = llm_enabled;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "llm.enabled".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(llm_enabled_src, global_path, workspace_path)],
+            },
+        );
+    }
+
+    // llm.gateway.enabled
+    let (llm_gateway_enabled, llm_gateway_enabled_src) = resolve_replace(
+        effective.llm.gateway.enabled,
+        global_patch.llm.gateway.enabled,
+        workspace_patch
+            .map(|(p, _)| p.llm.gateway.enabled)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.llm.gateway.enabled = llm_gateway_enabled;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "llm.gateway.enabled".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    llm_gateway_enabled_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    // llm.gateway.mode
+    let (llm_gateway_mode, llm_gateway_mode_src) = resolve_replace(
+        effective.llm.gateway.mode,
+        global_patch.llm.gateway.mode,
+        workspace_patch
+            .map(|(p, _)| p.llm.gateway.mode)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.llm.gateway.mode = llm_gateway_mode;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "llm.gateway.mode".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    llm_gateway_mode_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    // llm.routing.default_backend
+    let (llm_default_backend, llm_default_backend_src) = resolve_replace(
+        effective.llm.routing.default_backend.clone(),
+        global_patch.llm.routing.default_backend.clone(),
+        workspace_patch
+            .map(|(p, _)| p.llm.routing.default_backend.clone())
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.llm.routing.default_backend = llm_default_backend;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "llm.routing.default_backend".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    llm_default_backend_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    // agents.enabled
+    let (agents_enabled, agents_enabled_src) = resolve_replace(
+        effective.agents.enabled,
+        global_patch.agents.enabled,
+        workspace_patch
+            .map(|(p, _)| p.agents.enabled)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.agents.enabled = agents_enabled;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.enabled".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agents_enabled_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    // agents.defaults.execution.scope
+    let (agent_execution_scope, agent_execution_scope_src) = resolve_replace(
+        effective.agents.defaults.execution.scope,
+        global_patch.agents.defaults.execution.scope,
+        workspace_patch
+            .map(|(p, _)| p.agents.defaults.execution.scope)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.agents.defaults.execution.scope = agent_execution_scope;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.defaults.execution.scope".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agent_execution_scope_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    // agents.defaults.cli.mode
+    let (agent_cli_mode, agent_cli_mode_src) = resolve_replace(
+        effective.agents.defaults.cli.mode,
+        global_patch.agents.defaults.cli.mode,
+        workspace_patch
+            .map(|(p, _)| p.agents.defaults.cli.mode)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.agents.defaults.cli.mode = agent_cli_mode;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.defaults.cli.mode".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    agent_cli_mode_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    // agents.hub.orchestrator_agent_id
+    let (orchestrator_agent_id, orchestrator_agent_id_src) = resolve_replace(
+        effective.agents.hub.orchestrator_agent_id.clone(),
+        global_patch.agents.hub.orchestrator_agent_id.clone(),
+        workspace_patch
+            .map(|(p, _)| p.agents.hub.orchestrator_agent_id.clone())
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.agents.hub.orchestrator_agent_id = orchestrator_agent_id;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.hub.orchestrator_agent_id".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    orchestrator_agent_id_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
     // agents.hub.world_restart.on_drift
     let (world_restart_on_drift, world_restart_on_drift_src) = resolve_replace(
         effective.agents.hub.world_restart.on_drift,
@@ -1336,6 +1812,58 @@ fn resolve_effective_from_layers(
                 merge_strategy: "replace".to_string(),
                 sources: vec![explain_source(
                     world_restart_on_drift_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    // agents.toolbox.enabled
+    let (toolbox_enabled, toolbox_enabled_src) = resolve_replace(
+        effective.agents.toolbox.enabled,
+        global_patch.agents.toolbox.enabled,
+        workspace_patch
+            .map(|(p, _)| p.agents.toolbox.enabled)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.agents.toolbox.enabled = toolbox_enabled;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.toolbox.enabled".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    toolbox_enabled_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    // agents.toolbox.bind.transport
+    let (toolbox_transport, toolbox_transport_src) = resolve_replace(
+        effective.agents.toolbox.bind.transport,
+        global_patch.agents.toolbox.bind.transport,
+        workspace_patch
+            .map(|(p, _)| p.agents.toolbox.bind.transport)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.agents.toolbox.bind.transport = toolbox_transport;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.toolbox.bind.transport".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    toolbox_transport_src,
                     global_path,
                     workspace_path,
                 )],
@@ -1550,7 +2078,7 @@ fn resolve_effective_from_layers(
         apply_protected_excludes(&mut effective.sync.exclude);
     }
 
-    validate_config(&effective)?;
+    validate_local_config(&effective)?;
 
     let explain = explain_keys.map(|keys| ConfigExplainV1 {
         kind: "substrate.config.explain.v1".to_string(),
@@ -1762,10 +2290,48 @@ pub(crate) fn reset_patch_keys(patch: &mut SubstrateConfigPatch, keys: &[String]
     Ok(changed)
 }
 
-fn validate_config(cfg: &SubstrateConfig) -> Result<()> {
+fn validate_local_config(cfg: &SubstrateConfig) -> Result<()> {
     if cfg.world.anchor_mode == WorldRootMode::Custom && cfg.world.anchor_path.trim().is_empty() {
         return Err(user_error(
             "anchor_mode=custom requires world.anchor_path to be non-empty",
+        ));
+    }
+    validate_backend_id_or_empty(
+        &cfg.llm.routing.default_backend,
+        "llm.routing.default_backend",
+    )?;
+    Ok(())
+}
+
+fn validate_config_patch(patch: &SubstrateConfigPatch) -> Result<()> {
+    if let Some(default_backend) = patch.llm.routing.default_backend.as_deref() {
+        validate_backend_id_or_empty(default_backend, "llm.routing.default_backend")?;
+    }
+    Ok(())
+}
+
+fn validate_backend_id_or_empty(value: &str, key: &str) -> Result<()> {
+    if value.trim().is_empty() {
+        return Ok(());
+    }
+    validate_backend_id(value).map_err(|_| {
+        user_error(format!(
+            "invalid {} '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+            key,
+            value.trim()
+        ))
+    })
+}
+
+fn validate_config_against_effective_policy(cwd: &Path, cfg: &SubstrateConfig) -> Result<()> {
+    if cfg.llm.gateway.mode != LlmGatewayMode::HostOnly {
+        return Ok(());
+    }
+    let (policy, _) = substrate_broker::resolve_effective_policy_with_explain(cwd, false)
+        .map_err(|err| user_error(err.to_string()))?;
+    if policy.llm_fail_closed_routing {
+        return Err(user_error(
+            "llm.gateway.mode=host_only requires effective policy llm.fail_closed.routing=false",
         ));
     }
     Ok(())
@@ -1823,8 +2389,45 @@ fn apply_update_to_patch(patch: &mut SubstrateConfigPatch, update: &ConfigUpdate
             &update.op,
             &update.value,
         ),
+        "llm.enabled" => apply_bool_opt(&mut patch.llm.enabled, &update.op, &update.value),
+        "llm.gateway.enabled" => {
+            apply_bool_opt(&mut patch.llm.gateway.enabled, &update.op, &update.value)
+        }
+        "llm.gateway.mode" => {
+            apply_enum_llm_gateway_mode_opt(&mut patch.llm.gateway.mode, &update.op, &update.value)
+        }
+        "llm.routing.default_backend" => apply_backend_id_or_empty_opt(
+            &mut patch.llm.routing.default_backend,
+            &update.op,
+            &update.value,
+            "llm.routing.default_backend",
+        ),
+        "agents.enabled" => apply_bool_opt(&mut patch.agents.enabled, &update.op, &update.value),
+        "agents.defaults.execution.scope" => apply_enum_agent_execution_scope_opt(
+            &mut patch.agents.defaults.execution.scope,
+            &update.op,
+            &update.value,
+        ),
+        "agents.defaults.cli.mode" => apply_enum_agent_cli_mode_opt(
+            &mut patch.agents.defaults.cli.mode,
+            &update.op,
+            &update.value,
+        ),
+        "agents.hub.orchestrator_agent_id" => apply_string_opt(
+            &mut patch.agents.hub.orchestrator_agent_id,
+            &update.op,
+            &update.value,
+        ),
         "agents.hub.world_restart.on_drift" => apply_enum_world_restart_on_drift_opt(
             &mut patch.agents.hub.world_restart.on_drift,
+            &update.op,
+            &update.value,
+        ),
+        "agents.toolbox.enabled" => {
+            apply_bool_opt(&mut patch.agents.toolbox.enabled, &update.op, &update.value)
+        }
+        "agents.toolbox.bind.transport" => apply_enum_agent_toolbox_bind_transport_opt(
+            &mut patch.agents.toolbox.bind.transport,
             &update.op,
             &update.value,
         ),
@@ -1858,9 +2461,21 @@ fn reset_patch_key(patch: &mut SubstrateConfigPatch, key: &str) -> Result<bool> 
 
         "repl.exit_cwd" => reset_opt(&mut patch.repl.exit_cwd),
         "repl.max_pty_buffered_lines" => reset_opt(&mut patch.repl.max_pty_buffered_lines),
+        "llm.enabled" => reset_opt(&mut patch.llm.enabled),
+        "llm.gateway.enabled" => reset_opt(&mut patch.llm.gateway.enabled),
+        "llm.gateway.mode" => reset_opt(&mut patch.llm.gateway.mode),
+        "llm.routing.default_backend" => reset_opt(&mut patch.llm.routing.default_backend),
+        "agents.enabled" => reset_opt(&mut patch.agents.enabled),
+        "agents.defaults.execution.scope" => reset_opt(&mut patch.agents.defaults.execution.scope),
+        "agents.defaults.cli.mode" => reset_opt(&mut patch.agents.defaults.cli.mode),
+        "agents.hub.orchestrator_agent_id" => {
+            reset_opt(&mut patch.agents.hub.orchestrator_agent_id)
+        }
         "agents.hub.world_restart.on_drift" => {
             reset_opt(&mut patch.agents.hub.world_restart.on_drift)
         }
+        "agents.toolbox.enabled" => reset_opt(&mut patch.agents.toolbox.enabled),
+        "agents.toolbox.bind.transport" => reset_opt(&mut patch.agents.toolbox.bind.transport),
 
         _ => Err(user_error(format!("unsupported config key '{}'", key))),
     }
@@ -1978,6 +2593,82 @@ fn apply_enum_world_restart_on_drift_opt(
     Ok(changed)
 }
 
+fn apply_enum_llm_gateway_mode_opt(
+    target: &mut Option<LlmGatewayMode>,
+    op: &UpdateOp,
+    raw: &str,
+) -> Result<bool> {
+    if *op != UpdateOp::Set {
+        return Err(user_error("unsupported operator for enum key"));
+    }
+    let next = LlmGatewayMode::parse_insensitive(raw).ok_or_else(|| {
+        user_error(format!(
+            "invalid llm.gateway.mode '{}'; expected in_world or host_only",
+            raw
+        ))
+    })?;
+    let changed = *target != Some(next);
+    *target = Some(next);
+    Ok(changed)
+}
+
+fn apply_enum_agent_execution_scope_opt(
+    target: &mut Option<AgentExecutionScope>,
+    op: &UpdateOp,
+    raw: &str,
+) -> Result<bool> {
+    if *op != UpdateOp::Set {
+        return Err(user_error("unsupported operator for enum key"));
+    }
+    let next = AgentExecutionScope::parse_insensitive(raw).ok_or_else(|| {
+        user_error(format!(
+            "invalid agents.defaults.execution.scope '{}'; expected host or world",
+            raw
+        ))
+    })?;
+    let changed = *target != Some(next);
+    *target = Some(next);
+    Ok(changed)
+}
+
+fn apply_enum_agent_cli_mode_opt(
+    target: &mut Option<AgentCliMode>,
+    op: &UpdateOp,
+    raw: &str,
+) -> Result<bool> {
+    if *op != UpdateOp::Set {
+        return Err(user_error("unsupported operator for enum key"));
+    }
+    let next = AgentCliMode::parse_insensitive(raw).ok_or_else(|| {
+        user_error(format!(
+            "invalid agents.defaults.cli.mode '{}'; expected persistent or per_request",
+            raw
+        ))
+    })?;
+    let changed = *target != Some(next);
+    *target = Some(next);
+    Ok(changed)
+}
+
+fn apply_enum_agent_toolbox_bind_transport_opt(
+    target: &mut Option<AgentToolboxBindTransport>,
+    op: &UpdateOp,
+    raw: &str,
+) -> Result<bool> {
+    if *op != UpdateOp::Set {
+        return Err(user_error("unsupported operator for enum key"));
+    }
+    let next = AgentToolboxBindTransport::parse_insensitive(raw).ok_or_else(|| {
+        user_error(format!(
+            "invalid agents.toolbox.bind.transport '{}'; expected uds or tcp",
+            raw
+        ))
+    })?;
+    let changed = *target != Some(next);
+    *target = Some(next);
+    Ok(changed)
+}
+
 fn apply_enum_sync_direction_opt(
     target: &mut Option<SyncDirection>,
     op: &UpdateOp,
@@ -2058,6 +2749,21 @@ fn apply_string_opt(target: &mut Option<String>, op: &UpdateOp, raw: &str) -> Re
     if *op != UpdateOp::Set {
         return Err(user_error("unsupported operator for string key"));
     }
+    let changed = target.as_deref() != Some(raw);
+    *target = Some(raw.to_string());
+    Ok(changed)
+}
+
+fn apply_backend_id_or_empty_opt(
+    target: &mut Option<String>,
+    op: &UpdateOp,
+    raw: &str,
+    key: &str,
+) -> Result<bool> {
+    if *op != UpdateOp::Set {
+        return Err(user_error("unsupported operator for string key"));
+    }
+    validate_backend_id_or_empty(raw, key)?;
     let changed = target.as_deref() != Some(raw);
     *target = Some(raw.to_string());
     Ok(changed)

@@ -7,7 +7,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use substrate_broker::{Policy, PolicyExplainV1, WorldFsDenyEnforcement, WorldFsDimensionPolicy};
+use substrate_broker::{
+    validate_backend_id, Policy, PolicyExplainV1, WorldFsDenyEnforcement, WorldFsDimensionPolicy,
+};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
@@ -18,6 +20,12 @@ pub(crate) struct PolicyPatch {
     pub name: Option<String>,
     #[serde(skip_serializing_if = "WorldFsPatch::is_empty")]
     pub world_fs: WorldFsPatch,
+    #[serde(skip_serializing_if = "LlmPatch::is_empty")]
+    pub llm: LlmPatch,
+    #[serde(skip_serializing_if = "AgentsPatch::is_empty")]
+    pub agents: AgentsPatch,
+    #[serde(skip_serializing_if = "WorkflowPatch::is_empty")]
+    pub workflow: WorkflowPatch,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub net_allowed: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -41,6 +49,9 @@ impl PolicyPatch {
         self.id.is_none()
             && self.name.is_none()
             && self.world_fs.is_empty()
+            && self.llm.is_empty()
+            && self.agents.is_empty()
+            && self.workflow.is_empty()
             && self.net_allowed.is_none()
             && self.cmd_allowed.is_none()
             && self.cmd_denied.is_none()
@@ -49,6 +60,150 @@ impl PolicyPatch {
             && self.allow_shell_operators.is_none()
             && self.limits.is_empty()
             && self.metadata.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct LlmPatch {
+    #[serde(skip_serializing_if = "LlmFailClosedPatch::is_empty")]
+    pub fail_closed: LlmFailClosedPatch,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_approval: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_backends: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "LlmSecretsPatch::is_empty")]
+    pub secrets: LlmSecretsPatch,
+}
+
+impl LlmPatch {
+    fn is_empty(&self) -> bool {
+        self.fail_closed.is_empty()
+            && self.require_approval.is_none()
+            && self.allowed_backends.is_none()
+            && self.secrets.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct LlmFailClosedPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routing: Option<bool>,
+}
+
+impl LlmFailClosedPatch {
+    fn is_empty(&self) -> bool {
+        self.routing.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct LlmSecretsPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub env_allowed: Option<Vec<String>>,
+}
+
+impl LlmSecretsPatch {
+    fn is_empty(&self) -> bool {
+        self.env_allowed.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentsPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_backends: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "AgentsFailClosedPatch::is_empty")]
+    pub fail_closed: AgentsFailClosedPatch,
+    #[serde(skip_serializing_if = "AgentsHostCredentialsPatch::is_empty")]
+    pub host_credentials: AgentsHostCredentialsPatch,
+}
+
+impl AgentsPatch {
+    fn is_empty(&self) -> bool {
+        self.allowed_backends.is_none()
+            && self.fail_closed.is_empty()
+            && self.host_credentials.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentsFailClosedPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routing: Option<bool>,
+}
+
+impl AgentsFailClosedPatch {
+    fn is_empty(&self) -> bool {
+        self.routing.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentsHostCredentialsPatch {
+    #[serde(skip_serializing_if = "AgentsHostCredentialsReadPatch::is_empty")]
+    pub read: AgentsHostCredentialsReadPatch,
+}
+
+impl AgentsHostCredentialsPatch {
+    fn is_empty(&self) -> bool {
+        self.read.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentsHostCredentialsReadPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_backends: Option<Vec<String>>,
+}
+
+impl AgentsHostCredentialsReadPatch {
+    fn is_empty(&self) -> bool {
+        self.allowed_backends.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct WorkflowPatch {
+    #[serde(skip_serializing_if = "WorkflowRouterPatch::is_empty")]
+    pub router: WorkflowRouterPatch,
+}
+
+impl WorkflowPatch {
+    fn is_empty(&self) -> bool {
+        self.router.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct WorkflowRouterPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_cross_workspace: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_rule_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_workflow_ids: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_target_workspace_ids: Option<Vec<String>>,
+}
+
+impl WorkflowRouterPatch {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none()
+            && self.allow_cross_workspace.is_none()
+            && self.allowed_rule_ids.is_none()
+            && self.allowed_workflow_ids.is_none()
+            && self.allowed_target_workspace_ids.is_none()
     }
 }
 
@@ -189,7 +344,34 @@ pub(crate) fn parse_policy_patch_yaml(path: &Path, raw: &str) -> Result<PolicyPa
             err.to_string().trim()
         ))
     })?;
+    validate_policy_patch(&parsed)?;
     Ok(parsed)
+}
+
+fn validate_policy_patch(patch: &PolicyPatch) -> Result<()> {
+    validate_backend_id_list_opt(&patch.llm.allowed_backends, "llm.allowed_backends")?;
+    validate_backend_id_list_opt(&patch.agents.allowed_backends, "agents.allowed_backends")?;
+    validate_backend_id_list_opt(
+        &patch.agents.host_credentials.read.allowed_backends,
+        "agents.host_credentials.read.allowed_backends",
+    )?;
+    Ok(())
+}
+
+fn validate_backend_id_list_opt(values: &Option<Vec<String>>, key: &str) -> Result<()> {
+    let Some(values) = values else {
+        return Ok(());
+    };
+    for value in values {
+        validate_backend_id(value).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid {} entry '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+                key,
+                value.trim()
+            ))
+        })?;
+    }
+    Ok(())
 }
 
 pub(crate) fn apply_updates_to_policy_patch(
@@ -748,6 +930,25 @@ fn validate_policy(policy: &Policy) -> Result<()> {
             "world_fs.deny_enforcement must be present when any deny_list is non-empty",
         ));
     }
+    validate_backend_id_list(&policy.llm_allowed_backends, "llm.allowed_backends")?;
+    validate_backend_id_list(&policy.agents_allowed_backends, "agents.allowed_backends")?;
+    validate_backend_id_list(
+        &policy.agents_host_credentials_read_allowed_backends,
+        "agents.host_credentials.read.allowed_backends",
+    )?;
+    Ok(())
+}
+
+fn validate_backend_id_list(values: &[String], key: &str) -> Result<()> {
+    for value in values {
+        validate_backend_id(value).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid {} entry '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+                key,
+                value.trim()
+            ))
+        })?;
+    }
     Ok(())
 }
 
@@ -824,6 +1025,42 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
         }
         target.world_fs_write = Some(dim);
     }
+    if let Some(v) = patch.llm.fail_closed.routing {
+        target.llm_fail_closed_routing = v;
+    }
+    if let Some(v) = patch.llm.require_approval {
+        target.llm_require_approval = v;
+    }
+    if let Some(v) = &patch.llm.allowed_backends {
+        target.llm_allowed_backends = v.clone();
+    }
+    if let Some(v) = &patch.llm.secrets.env_allowed {
+        target.llm_secrets_env_allowed = v.clone();
+    }
+    if let Some(v) = &patch.agents.allowed_backends {
+        target.agents_allowed_backends = v.clone();
+    }
+    if let Some(v) = patch.agents.fail_closed.routing {
+        target.agents_fail_closed_routing = v;
+    }
+    if let Some(v) = &patch.agents.host_credentials.read.allowed_backends {
+        target.agents_host_credentials_read_allowed_backends = v.clone();
+    }
+    if let Some(v) = patch.workflow.router.enabled {
+        target.workflow_router_enabled = v;
+    }
+    if let Some(v) = patch.workflow.router.allow_cross_workspace {
+        target.workflow_router_allow_cross_workspace = v;
+    }
+    if let Some(v) = &patch.workflow.router.allowed_rule_ids {
+        target.workflow_router_allowed_rule_ids = v.clone();
+    }
+    if let Some(v) = &patch.workflow.router.allowed_workflow_ids {
+        target.workflow_router_allowed_workflow_ids = v.clone();
+    }
+    if let Some(v) = &patch.workflow.router.allowed_target_workspace_ids {
+        target.workflow_router_allowed_target_workspace_ids = v.clone();
+    }
     if let Some(v) = &patch.net_allowed {
         target.net_allowed = v.clone();
     }
@@ -892,6 +1129,38 @@ fn reset_policy_patch_key(patch: &mut PolicyPatch, key: &str) -> Result<bool> {
             Ok(was)
         }
 
+        "llm.fail_closed.routing" => Ok(patch.llm.fail_closed.routing.take().is_some()),
+        "llm.require_approval" => Ok(patch.llm.require_approval.take().is_some()),
+        "llm.allowed_backends" => Ok(patch.llm.allowed_backends.take().is_some()),
+        "llm.secrets.env_allowed" => Ok(patch.llm.secrets.env_allowed.take().is_some()),
+
+        "agents.allowed_backends" => Ok(patch.agents.allowed_backends.take().is_some()),
+        "agents.fail_closed.routing" => Ok(patch.agents.fail_closed.routing.take().is_some()),
+        "agents.host_credentials.read.allowed_backends" => Ok(patch
+            .agents
+            .host_credentials
+            .read
+            .allowed_backends
+            .take()
+            .is_some()),
+
+        "workflow.router.enabled" => Ok(patch.workflow.router.enabled.take().is_some()),
+        "workflow.router.allow_cross_workspace" => {
+            Ok(patch.workflow.router.allow_cross_workspace.take().is_some())
+        }
+        "workflow.router.allowed_rule_ids" => {
+            Ok(patch.workflow.router.allowed_rule_ids.take().is_some())
+        }
+        "workflow.router.allowed_workflow_ids" => {
+            Ok(patch.workflow.router.allowed_workflow_ids.take().is_some())
+        }
+        "workflow.router.allowed_target_workspace_ids" => Ok(patch
+            .workflow
+            .router
+            .allowed_target_workspace_ids
+            .take()
+            .is_some()),
+
         "net_allowed" => Ok(patch.net_allowed.take().is_some()),
         "cmd_allowed" => Ok(patch.cmd_allowed.take().is_some()),
         "cmd_denied" => Ok(patch.cmd_denied.take().is_some()),
@@ -956,6 +1225,55 @@ fn apply_update_to_patch(patch: &mut PolicyPatch, update: &ConfigUpdate) -> Resu
         "world_fs.write.deny_list" => {
             apply_string_list_opt(&mut patch.world_fs.write.deny_list, update)
         }
+
+        "llm.fail_closed.routing" => apply_bool_opt(
+            &mut patch.llm.fail_closed.routing,
+            &update.op,
+            &update.value,
+        ),
+        "llm.require_approval" => {
+            apply_bool_opt(&mut patch.llm.require_approval, &update.op, &update.value)
+        }
+        "llm.allowed_backends" => {
+            apply_backend_id_list_opt(&mut patch.llm.allowed_backends, update)
+        }
+        "llm.secrets.env_allowed" => {
+            apply_string_list_opt(&mut patch.llm.secrets.env_allowed, update)
+        }
+
+        "agents.allowed_backends" => {
+            apply_backend_id_list_opt(&mut patch.agents.allowed_backends, update)
+        }
+        "agents.fail_closed.routing" => apply_bool_opt(
+            &mut patch.agents.fail_closed.routing,
+            &update.op,
+            &update.value,
+        ),
+        "agents.host_credentials.read.allowed_backends" => apply_backend_id_list_opt(
+            &mut patch.agents.host_credentials.read.allowed_backends,
+            update,
+        ),
+
+        "workflow.router.enabled" => apply_bool_opt(
+            &mut patch.workflow.router.enabled,
+            &update.op,
+            &update.value,
+        ),
+        "workflow.router.allow_cross_workspace" => apply_bool_opt(
+            &mut patch.workflow.router.allow_cross_workspace,
+            &update.op,
+            &update.value,
+        ),
+        "workflow.router.allowed_rule_ids" => {
+            apply_string_list_opt(&mut patch.workflow.router.allowed_rule_ids, update)
+        }
+        "workflow.router.allowed_workflow_ids" => {
+            apply_string_list_opt(&mut patch.workflow.router.allowed_workflow_ids, update)
+        }
+        "workflow.router.allowed_target_workspace_ids" => apply_string_list_opt(
+            &mut patch.workflow.router.allowed_target_workspace_ids,
+            update,
+        ),
 
         "net_allowed" => apply_string_list_opt(&mut patch.net_allowed, update),
         "cmd_allowed" => apply_string_list_opt(&mut patch.cmd_allowed, update),
@@ -1113,6 +1431,41 @@ fn apply_string_list_opt(target: &mut Option<Vec<String>>, update: &ConfigUpdate
             let Some(list) = target.as_mut() else {
                 return Ok(false);
             };
+            if list.iter().any(|item| item == &update.value) {
+                return Ok(false);
+            }
+            list.push(update.value.clone());
+            Ok(true)
+        }
+        UpdateOp::Remove => {
+            let Some(list) = target.as_mut() else {
+                return Ok(false);
+            };
+            let before = list.len();
+            list.retain(|item| item != &update.value);
+            Ok(before != list.len())
+        }
+    }
+}
+
+fn apply_backend_id_list_opt(
+    target: &mut Option<Vec<String>>,
+    update: &ConfigUpdate,
+) -> Result<bool> {
+    match update.op {
+        UpdateOp::Set => {
+            let parsed = parse_yaml_string_list(&update.value)?;
+            validate_backend_id_list(&parsed, update.key.as_str())?;
+            let next = Some(parsed);
+            if *target == next {
+                return Ok(false);
+            }
+            *target = next;
+            Ok(true)
+        }
+        UpdateOp::Append => {
+            validate_backend_id_list(std::slice::from_ref(&update.value), update.key.as_str())?;
+            let list = target.get_or_insert_with(Vec::new);
             if list.iter().any(|item| item == &update.value) {
                 return Ok(false);
             }

@@ -412,6 +412,9 @@ impl Serialize for SortedMetadata<'_> {
 struct EffectivePolicyDisplayV3<'a> {
     policy: &'a Policy,
     world_fs: WorldFsEffectiveDisplayV3,
+    llm: LlmEffectiveDisplayV1,
+    agents: AgentsEffectiveDisplayV1,
+    workflow: WorkflowEffectiveDisplayV1,
     metadata: SortedMetadata<'a>,
 }
 
@@ -421,10 +424,13 @@ impl Serialize for EffectivePolicyDisplayV3<'_> {
         S: serde::Serializer,
     {
         let policy = self.policy;
-        let mut map = serializer.serialize_map(Some(11))?;
+        let mut map = serializer.serialize_map(Some(14))?;
         map.serialize_entry("id", &policy.id)?;
         map.serialize_entry("name", &policy.name)?;
         map.serialize_entry("world_fs", &self.world_fs)?;
+        map.serialize_entry("llm", &self.llm)?;
+        map.serialize_entry("agents", &self.agents)?;
+        map.serialize_entry("workflow", &self.workflow)?;
         map.serialize_entry("net_allowed", &policy.net_allowed)?;
         map.serialize_entry("cmd_allowed", &policy.cmd_allowed)?;
         map.serialize_entry("cmd_denied", &policy.cmd_denied)?;
@@ -473,6 +479,69 @@ struct WorldFsWriteEffectiveDisplayV3 {
     allow_list: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     deny_list: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct LlmEffectiveDisplayV1 {
+    fail_closed: LlmFailClosedEffectiveDisplayV1,
+    require_approval: bool,
+    allowed_backends: Vec<String>,
+    secrets: LlmSecretsEffectiveDisplayV1,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct LlmFailClosedEffectiveDisplayV1 {
+    routing: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct LlmSecretsEffectiveDisplayV1 {
+    env_allowed: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsEffectiveDisplayV1 {
+    allowed_backends: Vec<String>,
+    fail_closed: AgentsFailClosedEffectiveDisplayV1,
+    host_credentials: AgentsHostCredentialsEffectiveDisplayV1,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsFailClosedEffectiveDisplayV1 {
+    routing: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsHostCredentialsEffectiveDisplayV1 {
+    read: AgentsHostCredentialsReadEffectiveDisplayV1,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsHostCredentialsReadEffectiveDisplayV1 {
+    allowed_backends: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorkflowEffectiveDisplayV1 {
+    router: WorkflowRouterEffectiveDisplayV1,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct WorkflowRouterEffectiveDisplayV1 {
+    enabled: bool,
+    allow_cross_workspace: bool,
+    allowed_rule_ids: Vec<String>,
+    allowed_workflow_ids: Vec<String>,
+    allowed_target_workspace_ids: Vec<String>,
 }
 
 fn display_policy_v3(policy: &Policy) -> Result<EffectivePolicyDisplayV3<'_>> {
@@ -530,6 +599,38 @@ fn display_policy_v3(policy: &Policy) -> Result<EffectivePolicyDisplayV3<'_>> {
                 enabled: policy.world_fs_write_enabled,
                 allow_list: write_allow_list,
                 deny_list: write_deny_list,
+            },
+        },
+        llm: LlmEffectiveDisplayV1 {
+            fail_closed: LlmFailClosedEffectiveDisplayV1 {
+                routing: policy.llm_fail_closed_routing,
+            },
+            require_approval: policy.llm_require_approval,
+            allowed_backends: policy.llm_allowed_backends.clone(),
+            secrets: LlmSecretsEffectiveDisplayV1 {
+                env_allowed: policy.llm_secrets_env_allowed.clone(),
+            },
+        },
+        agents: AgentsEffectiveDisplayV1 {
+            allowed_backends: policy.agents_allowed_backends.clone(),
+            fail_closed: AgentsFailClosedEffectiveDisplayV1 {
+                routing: policy.agents_fail_closed_routing,
+            },
+            host_credentials: AgentsHostCredentialsEffectiveDisplayV1 {
+                read: AgentsHostCredentialsReadEffectiveDisplayV1 {
+                    allowed_backends: policy.agents_host_credentials_read_allowed_backends.clone(),
+                },
+            },
+        },
+        workflow: WorkflowEffectiveDisplayV1 {
+            router: WorkflowRouterEffectiveDisplayV1 {
+                enabled: policy.workflow_router_enabled,
+                allow_cross_workspace: policy.workflow_router_allow_cross_workspace,
+                allowed_rule_ids: policy.workflow_router_allowed_rule_ids.clone(),
+                allowed_workflow_ids: policy.workflow_router_allowed_workflow_ids.clone(),
+                allowed_target_workspace_ids: policy
+                    .workflow_router_allowed_target_workspace_ids
+                    .clone(),
             },
         },
         metadata: SortedMetadata(&policy.metadata),

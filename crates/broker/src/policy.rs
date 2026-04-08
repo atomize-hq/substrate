@@ -8,6 +8,57 @@ fn default_allow_shell_operators() -> bool {
     true
 }
 
+fn matches_backend_kind(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+fn matches_backend_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' || byte == b'-'
+        })
+}
+
+pub fn validate_backend_id(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    let Some((kind, name)) = trimmed.split_once(':') else {
+        return Err(format!(
+            "invalid backend id '{}'; expected <kind>:<name>",
+            trimmed
+        ));
+    };
+    if !matches_backend_kind(kind) || !matches_backend_name(name) || name.contains(':') {
+        return Err(format!(
+            "invalid backend id '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+            trimmed
+        ));
+    }
+    Ok(())
+}
+
+fn validate_backend_ids(values: &[String], key: &str) -> Result<(), String> {
+    for value in values {
+        validate_backend_id(value).map_err(|_| {
+            format!(
+                "invalid {} entry '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn intersect_ordered(lhs: &[String], rhs: &[String]) -> Vec<String> {
+    lhs.iter()
+        .filter(|value| rhs.iter().any(|other| other == *value))
+        .cloned()
+        .collect()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorldFsDenyEnforcement {
@@ -120,6 +171,144 @@ pub struct WorldFsPolicy {
     pub write_allowlist: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LlmPolicyFileV1 {
+    fail_closed: LlmFailClosedPolicyFileV1,
+    require_approval: bool,
+    allowed_backends: Vec<String>,
+    secrets: LlmSecretsPolicyFileV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LlmFailClosedPolicyFileV1 {
+    routing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LlmSecretsPolicyFileV1 {
+    env_allowed: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsPolicyFileV1 {
+    allowed_backends: Vec<String>,
+    fail_closed: AgentsFailClosedPolicyFileV1,
+    host_credentials: AgentsHostCredentialsPolicyFileV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsFailClosedPolicyFileV1 {
+    routing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsHostCredentialsPolicyFileV1 {
+    read: AgentsHostCredentialsReadPolicyFileV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsHostCredentialsReadPolicyFileV1 {
+    allowed_backends: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkflowPolicyFileV1 {
+    router: WorkflowRouterPolicyFileV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkflowRouterPolicyFileV1 {
+    enabled: bool,
+    allow_cross_workspace: bool,
+    allowed_rule_ids: Vec<String>,
+    allowed_workflow_ids: Vec<String>,
+    allowed_target_workspace_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawLlmPolicyV1 {
+    fail_closed: RawLlmFailClosedPolicyV1,
+    require_approval: bool,
+    allowed_backends: Vec<String>,
+    secrets: RawLlmSecretsPolicyV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawLlmFailClosedPolicyV1 {
+    routing: bool,
+}
+
+impl Default for RawLlmFailClosedPolicyV1 {
+    fn default() -> Self {
+        Self { routing: true }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawLlmSecretsPolicyV1 {
+    env_allowed: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawAgentsPolicyV1 {
+    allowed_backends: Vec<String>,
+    fail_closed: RawAgentsFailClosedPolicyV1,
+    host_credentials: RawAgentsHostCredentialsPolicyV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawAgentsFailClosedPolicyV1 {
+    routing: bool,
+}
+
+impl Default for RawAgentsFailClosedPolicyV1 {
+    fn default() -> Self {
+        Self { routing: true }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawAgentsHostCredentialsPolicyV1 {
+    read: RawAgentsHostCredentialsReadPolicyV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawAgentsHostCredentialsReadPolicyV1 {
+    allowed_backends: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawWorkflowPolicyV1 {
+    router: RawWorkflowRouterPolicyV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawWorkflowRouterPolicyV1 {
+    enabled: bool,
+    allow_cross_workspace: bool,
+    allowed_rule_ids: Vec<String>,
+    allowed_workflow_ids: Vec<String>,
+    allowed_target_workspace_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Policy {
     pub id: String,
@@ -140,6 +329,24 @@ pub struct Policy {
     pub world_fs_discover: Option<WorldFsDimensionPolicy>, // world_fs.discover (V2; optional)
     pub world_fs_read: Option<WorldFsDimensionPolicy>,    // world_fs.read (V2)
     pub world_fs_write: Option<WorldFsDimensionPolicy>, // world_fs.write (V2; required iff mode=writable)
+
+    // LLM
+    pub llm_fail_closed_routing: bool, // llm.fail_closed.routing
+    pub llm_require_approval: bool,    // llm.require_approval
+    pub llm_allowed_backends: Vec<String>, // llm.allowed_backends
+    pub llm_secrets_env_allowed: Vec<String>, // llm.secrets.env_allowed
+
+    // Agents
+    pub agents_allowed_backends: Vec<String>, // agents.allowed_backends
+    pub agents_fail_closed_routing: bool,     // agents.fail_closed.routing
+    pub agents_host_credentials_read_allowed_backends: Vec<String>, // agents.host_credentials.read.allowed_backends
+
+    // Workflow router
+    pub workflow_router_enabled: bool, // workflow.router.enabled
+    pub workflow_router_allow_cross_workspace: bool, // workflow.router.allow_cross_workspace
+    pub workflow_router_allowed_rule_ids: Vec<String>, // workflow.router.allowed_rule_ids
+    pub workflow_router_allowed_workflow_ids: Vec<String>, // workflow.router.allowed_workflow_ids
+    pub workflow_router_allowed_target_workspace_ids: Vec<String>, // workflow.router.allowed_target_workspace_ids
 
     // Network
     pub net_allowed: Vec<String>, // Allowed hosts/domains
@@ -179,6 +386,18 @@ impl Default for Policy {
             world_fs_discover: None,
             world_fs_read: None,
             world_fs_write: None,
+            llm_fail_closed_routing: true,
+            llm_require_approval: false,
+            llm_allowed_backends: Vec::new(),
+            llm_secrets_env_allowed: Vec::new(),
+            agents_allowed_backends: Vec::new(),
+            agents_fail_closed_routing: true,
+            agents_host_credentials_read_allowed_backends: Vec::new(),
+            workflow_router_enabled: false,
+            workflow_router_allow_cross_workspace: false,
+            workflow_router_allowed_rule_ids: Vec::new(),
+            workflow_router_allowed_workflow_ids: Vec::new(),
+            workflow_router_allowed_target_workspace_ids: Vec::new(),
             net_allowed: vec![],
             cmd_allowed: vec![],
             cmd_denied: vec![
@@ -223,6 +442,12 @@ struct RawPolicyV2 {
     id: String,
     name: String,
     world_fs: RawWorldFsV2,
+    #[serde(default)]
+    llm: RawLlmPolicyV1,
+    #[serde(default)]
+    agents: RawAgentsPolicyV1,
+    #[serde(default)]
+    workflow: RawWorkflowPolicyV1,
 
     net_allowed: Vec<String>,
 
@@ -272,6 +497,9 @@ struct PolicyFileV2<'a> {
     id: &'a str,
     name: &'a str,
     world_fs: WorldFsFileV2<'a>,
+    llm: LlmPolicyFileV1,
+    agents: AgentsPolicyFileV1,
+    workflow: WorkflowPolicyFileV1,
 
     net_allowed: &'a [String],
 
@@ -424,6 +652,41 @@ impl Policy {
         self.world_fs_caged_required =
             self.world_fs_caged_required || other.world_fs_caged_required;
         self.world_fs_write_enabled = self.world_fs_write_enabled && other.world_fs_write_enabled;
+        self.llm_fail_closed_routing =
+            self.llm_fail_closed_routing || other.llm_fail_closed_routing;
+        self.llm_require_approval = self.llm_require_approval || other.llm_require_approval;
+        self.llm_allowed_backends =
+            intersect_ordered(&self.llm_allowed_backends, &other.llm_allowed_backends);
+        self.llm_secrets_env_allowed = intersect_ordered(
+            &self.llm_secrets_env_allowed,
+            &other.llm_secrets_env_allowed,
+        );
+        self.agents_allowed_backends = intersect_ordered(
+            &self.agents_allowed_backends,
+            &other.agents_allowed_backends,
+        );
+        self.agents_fail_closed_routing =
+            self.agents_fail_closed_routing || other.agents_fail_closed_routing;
+        self.agents_host_credentials_read_allowed_backends = intersect_ordered(
+            &self.agents_host_credentials_read_allowed_backends,
+            &other.agents_host_credentials_read_allowed_backends,
+        );
+        self.workflow_router_enabled =
+            self.workflow_router_enabled && other.workflow_router_enabled;
+        self.workflow_router_allow_cross_workspace = self.workflow_router_allow_cross_workspace
+            && other.workflow_router_allow_cross_workspace;
+        self.workflow_router_allowed_rule_ids = intersect_ordered(
+            &self.workflow_router_allowed_rule_ids,
+            &other.workflow_router_allowed_rule_ids,
+        );
+        self.workflow_router_allowed_workflow_ids = intersect_ordered(
+            &self.workflow_router_allowed_workflow_ids,
+            &other.workflow_router_allowed_workflow_ids,
+        );
+        self.workflow_router_allowed_target_workspace_ids = intersect_ordered(
+            &self.workflow_router_allowed_target_workspace_ids,
+            &other.workflow_router_allowed_target_workspace_ids,
+        );
         self.world_fs_deny_enforcement = merge_deny_enforcement(
             self.world_fs_deny_enforcement,
             other.world_fs_deny_enforcement,
@@ -513,8 +776,7 @@ impl<'de> Deserialize<'de> for Policy {
         let value = serde_yaml::Value::deserialize(deserializer)?;
         let raw: RawPolicyV2 = serde_yaml::from_value(value).map_err(serde::de::Error::custom)?;
         Policy::validate_world_fs(&raw.world_fs).map_err(serde::de::Error::custom)?;
-
-        Ok(Self {
+        let policy = Self {
             id: raw.id,
             name: raw.name,
             fs_read: raw
@@ -544,6 +806,25 @@ impl<'de> Deserialize<'de> for Policy {
             world_fs_discover: raw.world_fs.discover,
             world_fs_read: raw.world_fs.read,
             world_fs_write: raw.world_fs.write,
+            llm_fail_closed_routing: raw.llm.fail_closed.routing,
+            llm_require_approval: raw.llm.require_approval,
+            llm_allowed_backends: raw.llm.allowed_backends,
+            llm_secrets_env_allowed: raw.llm.secrets.env_allowed,
+            agents_allowed_backends: raw.agents.allowed_backends,
+            agents_fail_closed_routing: raw.agents.fail_closed.routing,
+            agents_host_credentials_read_allowed_backends: raw
+                .agents
+                .host_credentials
+                .read
+                .allowed_backends,
+            workflow_router_enabled: raw.workflow.router.enabled,
+            workflow_router_allow_cross_workspace: raw.workflow.router.allow_cross_workspace,
+            workflow_router_allowed_rule_ids: raw.workflow.router.allowed_rule_ids,
+            workflow_router_allowed_workflow_ids: raw.workflow.router.allowed_workflow_ids,
+            workflow_router_allowed_target_workspace_ids: raw
+                .workflow
+                .router
+                .allowed_target_workspace_ids,
             net_allowed: raw.net_allowed,
             cmd_allowed: raw.cmd_allowed,
             cmd_denied: raw.cmd_denied,
@@ -552,7 +833,17 @@ impl<'de> Deserialize<'de> for Policy {
             allow_shell_operators: raw.allow_shell_operators,
             limits: raw.limits,
             metadata: raw.metadata,
-        })
+        };
+        validate_backend_ids(&policy.llm_allowed_backends, "llm.allowed_backends")
+            .map_err(serde::de::Error::custom)?;
+        validate_backend_ids(&policy.agents_allowed_backends, "agents.allowed_backends")
+            .map_err(serde::de::Error::custom)?;
+        validate_backend_ids(
+            &policy.agents_host_credentials_read_allowed_backends,
+            "agents.host_credentials.read.allowed_backends",
+        )
+        .map_err(serde::de::Error::custom)?;
+        Ok(policy)
     }
 }
 
@@ -591,6 +882,40 @@ impl Serialize for Policy {
                 discover,
                 read,
                 write,
+            },
+            llm: LlmPolicyFileV1 {
+                fail_closed: LlmFailClosedPolicyFileV1 {
+                    routing: self.llm_fail_closed_routing,
+                },
+                require_approval: self.llm_require_approval,
+                allowed_backends: self.llm_allowed_backends.clone(),
+                secrets: LlmSecretsPolicyFileV1 {
+                    env_allowed: self.llm_secrets_env_allowed.clone(),
+                },
+            },
+            agents: AgentsPolicyFileV1 {
+                allowed_backends: self.agents_allowed_backends.clone(),
+                fail_closed: AgentsFailClosedPolicyFileV1 {
+                    routing: self.agents_fail_closed_routing,
+                },
+                host_credentials: AgentsHostCredentialsPolicyFileV1 {
+                    read: AgentsHostCredentialsReadPolicyFileV1 {
+                        allowed_backends: self
+                            .agents_host_credentials_read_allowed_backends
+                            .clone(),
+                    },
+                },
+            },
+            workflow: WorkflowPolicyFileV1 {
+                router: WorkflowRouterPolicyFileV1 {
+                    enabled: self.workflow_router_enabled,
+                    allow_cross_workspace: self.workflow_router_allow_cross_workspace,
+                    allowed_rule_ids: self.workflow_router_allowed_rule_ids.clone(),
+                    allowed_workflow_ids: self.workflow_router_allowed_workflow_ids.clone(),
+                    allowed_target_workspace_ids: self
+                        .workflow_router_allowed_target_workspace_ids
+                        .clone(),
+                },
             },
             net_allowed: &self.net_allowed,
             cmd_allowed: &self.cmd_allowed,
