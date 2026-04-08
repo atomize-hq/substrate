@@ -3,6 +3,7 @@
 #[path = "support/mod.rs"]
 mod support;
 
+use serde_json::Value;
 use serial_test::serial;
 use std::fs;
 use std::io::Write;
@@ -152,6 +153,15 @@ fn wait_for_min_start_sessions(
         "timed out waiting for persistent start sessions >= {min_starts}; got {}; records: {guard:#?}",
         guard.persistent_start_sessions.len(),
     );
+}
+
+fn read_trace(trace_path: &Path) -> Vec<Value> {
+    fs::read_to_string(trace_path)
+        .expect("read trace")
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("parse trace line"))
+        .collect()
 }
 
 fn assert_world_network_payload(
@@ -698,10 +708,11 @@ fn c3_drift_restart_restarts_session_and_emits_message() {
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
     fs::create_dir_all(&home).expect("create home");
     fs::create_dir_all(&project).expect("create project");
     fs::create_dir_all(&substrate_home).expect("create substrate home");
-    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    fs::write(&trace_path, "").expect("seed trace");
     write_profile(&project);
     write_policy(&substrate_home, true);
 
@@ -739,6 +750,172 @@ fn c3_drift_restart_restarts_session_and_emits_message() {
     assert!(
         lower.contains("restart") && (lower.contains("drift") || lower.contains("snapshot")),
         "expected an operator-visible drift-restart message, got output:\n{out}"
+    );
+
+    drop(guard);
+
+    let events = read_trace(&trace_path);
+    let alerts: Vec<&Value> = events
+        .iter()
+        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
+        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("alert"))
+        .filter(|event| {
+            event.pointer("/data/code").and_then(Value::as_str) == Some("world_restarted")
+        })
+        .collect();
+    assert_eq!(
+        alerts.len(),
+        1,
+        "expected exactly one world_restarted alert record, got: {alerts:?}"
+    );
+
+    let alert = alerts[0];
+    assert_eq!(
+        alert.get("agent_id").and_then(Value::as_str),
+        Some("shell"),
+        "restart alert must attribute to shell: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("backend_id").and_then(Value::as_str),
+        Some("shell:repl"),
+        "restart alert must preserve backend attribution: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("role").and_then(Value::as_str),
+        Some("orchestrator"),
+        "restart alert must carry role=orchestrator: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("world_id").and_then(Value::as_str),
+        Some("wld_stub_0001"),
+        "top-level world_id must point at the pre-restart world: {alert:?}"
+    );
+    assert_eq!(
+        alert.pointer("/data/reason").and_then(Value::as_str),
+        Some("policy_snapshot_changed"),
+        "policy drift restart should classify as policy_snapshot_changed: {alert:?}"
+    );
+    assert_eq!(
+        alert.pointer("/data/on_drift").and_then(Value::as_str),
+        Some("auto_restart"),
+        "restart alert must record on_drift=auto_restart: {alert:?}"
+    );
+    assert_eq!(
+        alert
+            .pointer("/data/previous_world_id")
+            .and_then(Value::as_str),
+        Some("wld_stub_0001"),
+        "restart alert must capture previous world_id: {alert:?}"
+    );
+    assert_eq!(
+        alert.pointer("/data/new_world_id").and_then(Value::as_str),
+        Some("wld_stub_0002"),
+        "restart alert must capture new world_id: {alert:?}"
+    );
+    assert_eq!(
+        alert
+            .pointer("/data/previous_world_generation")
+            .and_then(Value::as_u64),
+        Some(0),
+        "restart alert must capture previous generation 0: {alert:?}"
+    );
+    assert_eq!(
+        alert
+            .pointer("/data/new_world_generation")
+            .and_then(Value::as_u64),
+        Some(1),
+        "restart alert must capture new generation 1: {alert:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn c3_startup_drift_restart_emits_world_restarted_alert() {
+    let temp = temp_dir("substrate-c3-startup-drift-restart-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let child = project.join("child");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&child).expect("create project child");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_workspace_marker(&project);
+    write_profile(&project);
+    write_policy(&substrate_home, true);
+
+    let parent_cwd = temp.path().to_string_lossy().into_owned();
+
+    let sock_temp = short_socket_dir("sub-c3ws-startup-drift-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_first_ready_cwd_override(
+        &sock,
+        StreamBehavior::Normal,
+        parent_cwd,
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&child, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    wait_for_min_start_sessions(&records, 2, Duration::from_secs(3));
+    repl.send_line("exit");
+
+    let (_code, out) = repl.shutdown_graceful(Duration::from_secs(3));
+
+    let lower = out.to_ascii_lowercase();
+    assert!(
+        lower.contains("restarting due to snapshot/workspace drift before first command"),
+        "expected startup drift restart note, got output:\n{out}"
+    );
+
+    let events = read_trace(&trace_path);
+    let alerts: Vec<&Value> = events
+        .iter()
+        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
+        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("alert"))
+        .filter(|event| {
+            event.pointer("/data/code").and_then(Value::as_str) == Some("world_restarted")
+        })
+        .collect();
+    assert_eq!(
+        alerts.len(),
+        1,
+        "expected exactly one startup world_restarted alert record, got: {alerts:?}"
+    );
+
+    let alert = alerts[0];
+    assert_eq!(
+        alert.pointer("/data/reason").and_then(Value::as_str),
+        Some("workspace_root_changed"),
+        "startup drift restart should classify as workspace_root_changed: {alert:?}"
+    );
+    assert_eq!(
+        alert
+            .pointer("/data/previous_world_id")
+            .and_then(Value::as_str),
+        Some("wld_stub_0001"),
+        "startup drift alert must capture the first world id: {alert:?}"
+    );
+    assert_eq!(
+        alert.pointer("/data/new_world_id").and_then(Value::as_str),
+        Some("wld_stub_0002"),
+        "startup drift alert must capture the restarted world id: {alert:?}"
+    );
+    assert_eq!(
+        alert
+            .pointer("/data/previous_world_generation")
+            .and_then(Value::as_u64),
+        Some(0),
+        "startup drift alert must start from generation 0: {alert:?}"
+    );
+    assert_eq!(
+        alert
+            .pointer("/data/new_world_generation")
+            .and_then(Value::as_u64),
+        Some(1),
+        "startup drift alert must increment to generation 1: {alert:?}"
     );
 }
 

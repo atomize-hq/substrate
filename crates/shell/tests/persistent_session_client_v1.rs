@@ -5,6 +5,7 @@ fn ready_frame(protocol_version: u32) -> serde_json::Value {
     json!({
         "type": "ready",
         "session_nonce": "0123456789abcdef0123456789abcdef",
+        "world_id": "wld_test",
         "cwd": "/",
         "protocol_version": protocol_version,
     })

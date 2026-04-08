@@ -57,6 +57,11 @@ Rules:
 - Out-of-band PTY bytes MUST render as raw bytes and MUST NOT corrupt the prompt/input buffer.
 - Structured agent events MUST render without corrupting the prompt/input buffer.
 
+Current REPL runtime scope:
+
+- The REPL currently emits structured `kind="alert"` events with `data.code="world_restarted"` when it auto-restarts a persistent world session after snapshot/workspace drift.
+- `data.code="world_restart_required"` remains schema-reserved for a future fail-closed drift posture and is not emitted by today’s REPL runtime.
+
 ### REPL mode: PTY passthrough (TUI active)
 
 During PTY passthrough:

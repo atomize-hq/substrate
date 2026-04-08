@@ -3,7 +3,7 @@ use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
-use substrate_common::agent_events::{AgentEvent, AgentEventKind};
+use substrate_common::agent_events::{AgentEvent, AgentEventKind, MessageEventKind};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use uuid::Uuid;
 
@@ -90,7 +90,7 @@ pub(crate) fn publish_command_completion(command: &str, cmd_id: &str, status: &E
             "shell",
             orchestration_session_id(),
             cmd_id.to_string(),
-            AgentEventKind::TaskEnd,
+            MessageEventKind::TaskEnd,
             format!("Command `{command}` completed successfully"),
         );
         event.cmd_id = Some(cmd_id.to_string());
@@ -103,7 +103,7 @@ pub(crate) fn publish_command_completion(command: &str, cmd_id: &str, status: &E
         "shell",
         orchestration_session_id(),
         cmd_id.to_string(),
-        AgentEventKind::Alert,
+        MessageEventKind::TaskEnd,
         format!("Command `{command}` exited with status {code}"),
     );
     event.cmd_id = Some(cmd_id.to_string());
@@ -158,7 +158,7 @@ pub(crate) fn schedule_demo_events() {
         "demo-agent",
         orchestration_session_id.clone(),
         run_id.clone(),
-        AgentEventKind::TaskProgress,
+        MessageEventKind::TaskProgress,
         "Demo agent event #1".to_string(),
     );
     first.role = Some("member".to_string());
@@ -182,7 +182,7 @@ pub(crate) fn schedule_demo_events() {
                 "demo-agent",
                 orchestration_session_id.clone(),
                 run_id.clone(),
-                AgentEventKind::TaskProgress,
+                MessageEventKind::TaskProgress,
                 message,
             );
             event.role = Some("member".to_string());
@@ -228,7 +228,7 @@ pub(crate) fn schedule_demo_burst(agent_count: usize, events_per_agent: usize, d
                     agent_name.clone(),
                     orchestration_session_id,
                     run_id,
-                    AgentEventKind::TaskEnd,
+                    MessageEventKind::TaskEnd,
                     "burst complete",
                 );
                 event.role = Some("member".to_string());
@@ -242,7 +242,23 @@ pub(crate) fn schedule_demo_burst(agent_count: usize, events_per_agent: usize, d
 mod tests {
     use super::*;
     use std::collections::HashMap;
+    #[cfg(unix)]
+    use std::os::unix::process::ExitStatusExt;
+    #[cfg(windows)]
+    use std::os::windows::process::ExitStatusExt;
     use tokio::runtime::Runtime;
+
+    fn exit_status_from_code(code: i32) -> ExitStatus {
+        #[cfg(unix)]
+        {
+            ExitStatus::from_raw(code << 8)
+        }
+
+        #[cfg(windows)]
+        {
+            ExitStatus::from_raw(code as u32)
+        }
+    }
 
     #[test]
     fn schedule_demo_burst_emits_expected_events() {
@@ -272,6 +288,64 @@ mod tests {
                 counts
             );
             assert_eq!(completions, 2);
+        });
+        clear_agent_event_sender();
+    }
+
+    #[test]
+    fn publish_command_completion_failure_emits_task_end_with_cmd_id() {
+        let _guard = super::acquire_event_test_guard();
+        let rt = Runtime::new().expect("runtime");
+        rt.block_on(async {
+            let mut rx = init_event_channel();
+            let cmd_id = "cmd-failure";
+            let status = exit_status_from_code(7);
+
+            publish_command_completion("false", cmd_id, &status);
+
+            let event = rx.recv().await.expect("event");
+            assert_eq!(event.kind, AgentEventKind::TaskEnd);
+            assert_eq!(event.cmd_id.as_deref(), Some(cmd_id));
+            assert_eq!(
+                event
+                    .data
+                    .get("message")
+                    .and_then(serde_json::Value::as_str),
+                Some("Command `false` exited with status 7")
+            );
+            assert!(
+                event.data.get("code").is_none(),
+                "failed command completion must not be emitted as alert payload: {:?}",
+                event.data
+            );
+        });
+        clear_agent_event_sender();
+    }
+
+    #[test]
+    fn publish_command_completion_success_emits_task_end_when_enabled() {
+        let _guard = super::acquire_event_test_guard();
+        let rt = Runtime::new().expect("runtime");
+        rt.block_on(async {
+            let mut rx = init_event_channel();
+            let cmd_id = "cmd-success";
+            let status = exit_status_from_code(0);
+            std::env::set_var("SUBSTRATE_COMMAND_SUCCESS_EVENTS", "1");
+
+            publish_command_completion("true", cmd_id, &status);
+
+            let event = rx.recv().await.expect("event");
+            assert_eq!(event.kind, AgentEventKind::TaskEnd);
+            assert_eq!(event.cmd_id.as_deref(), Some(cmd_id));
+            assert_eq!(
+                event
+                    .data
+                    .get("message")
+                    .and_then(serde_json::Value::as_str),
+                Some("Command `true` completed successfully")
+            );
+
+            std::env::remove_var("SUBSTRATE_COMMAND_SUCCESS_EVENTS");
         });
         clear_agent_event_sender();
     }

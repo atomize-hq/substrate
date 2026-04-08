@@ -78,6 +78,7 @@ mod imp {
     #[derive(Debug, Clone)]
     pub(crate) struct ReadyFrame {
         pub(crate) session_nonce: String,
+        pub(crate) world_id: String,
         pub(crate) cwd: String,
         pub(crate) protocol_version: u32,
     }
@@ -163,6 +164,13 @@ mod imp {
                 let _ = read_task.await;
                 return Err(anyhow!(
                     "protocol error: invalid ready.session_nonce (expected 32 lowercase hex chars)"
+                ));
+            }
+            if ready.world_id.trim().is_empty() {
+                read_task.abort();
+                let _ = read_task.await;
+                return Err(anyhow!(
+                    "protocol error: ready.world_id must be a non-empty string"
                 ));
             }
             if !ready.cwd.starts_with('/') {
@@ -389,6 +397,7 @@ mod imp {
     enum ServerFrame {
         Ready {
             session_nonce: String,
+            world_id: String,
             cwd: String,
             protocol_version: u32,
         },
@@ -521,11 +530,18 @@ mod imp {
         match frame {
             ServerFrame::Ready {
                 session_nonce,
+                world_id,
                 cwd,
                 protocol_version,
             } => {
+                if world_id.trim().is_empty() {
+                    return Err(anyhow!(
+                        "protocol error: ready.world_id must be a non-empty string"
+                    ));
+                }
                 let ready = ReadyFrame {
                     session_nonce,
+                    world_id,
                     cwd,
                     protocol_version,
                 };
@@ -896,6 +912,7 @@ mod imp {
     #[derive(Debug, Clone)]
     pub(crate) struct ReadyFrame {
         pub(crate) session_nonce: String,
+        pub(crate) world_id: String,
         pub(crate) cwd: String,
         pub(crate) protocol_version: u32,
     }

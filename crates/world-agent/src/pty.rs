@@ -205,6 +205,7 @@ enum PersistentServerMessage {
     #[cfg(target_os = "linux")]
     Ready {
         session_nonce: String,
+        world_id: String,
         cwd: PathBuf,
         protocol_version: u32,
     },
@@ -991,6 +992,7 @@ async fn handle_persistent_session(
     if ws_write_tx
         .send(PersistentServerMessage::Ready {
             session_nonce,
+            world_id: world.world_id.clone(),
             cwd: ready_cwd.clone(),
             protocol_version: 1,
         })

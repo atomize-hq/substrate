@@ -61,6 +61,7 @@ enum Phase {
 enum ServerFrame {
     Ready {
         session_nonce: String,
+        world_id: String,
         cwd: String,
         protocol_version: u32,
     },
@@ -152,6 +153,7 @@ impl PersistentSessionClientCore {
         match frame {
             ServerFrame::Ready {
                 session_nonce,
+                world_id,
                 cwd,
                 protocol_version,
             } => {
@@ -170,6 +172,10 @@ impl PersistentSessionClientCore {
                     return Err(self.latch_fatal(
                         "protocol error: invalid ready.session_nonce (expected hex32)",
                     ));
+                }
+                if world_id.trim().is_empty() {
+                    return Err(self
+                        .latch_fatal("protocol error: ready.world_id must be a non-empty string"));
                 }
                 if !cwd.starts_with('/') {
                     return Err(self.latch_fatal(format!(
@@ -294,6 +300,7 @@ mod tests {
             .on_server_frame(json!({
                 "type": "ready",
                 "session_nonce": hex32('a'),
+                "world_id": "wld_test",
                 "cwd": "/",
                 "protocol_version": 2,
             }))
@@ -317,6 +324,7 @@ mod tests {
         core.on_server_frame(json!({
             "type": "ready",
             "session_nonce": hex32('b'),
+            "world_id": "wld_test",
             "cwd": "/",
             "protocol_version": 1,
         }))
@@ -337,6 +345,7 @@ mod tests {
         core.on_server_frame(json!({
             "type": "ready",
             "session_nonce": hex32('e'),
+            "world_id": "wld_test",
             "cwd": "/",
             "protocol_version": 1,
         }))
@@ -380,6 +389,7 @@ mod tests {
         core.on_server_frame(json!({
             "type": "ready",
             "session_nonce": hex32('1'),
+            "world_id": "wld_test",
             "cwd": "/",
             "protocol_version": 1,
         }))
@@ -399,6 +409,7 @@ mod tests {
         core.on_server_frame(json!({
             "type": "ready",
             "session_nonce": hex32('2'),
+            "world_id": "wld_test",
             "cwd": "/",
             "protocol_version": 1,
         }))
@@ -419,6 +430,7 @@ mod tests {
         core.on_server_frame(json!({
             "type": "ready",
             "session_nonce": hex32('3'),
+            "world_id": "wld_test",
             "cwd": "/",
             "protocol_version": 1,
         }))
@@ -432,5 +444,40 @@ mod tests {
             .unwrap_err();
         assert!(err.is_fatal());
         assert!(err.to_string().contains("base64"));
+    }
+
+    #[test]
+    fn test_ready_world_id_is_required() {
+        let mut core = PersistentSessionClientCore::new();
+        core.note_start_session_sent();
+
+        let err = core
+            .on_server_frame(json!({
+                "type": "ready",
+                "session_nonce": hex32('4'),
+                "cwd": "/",
+                "protocol_version": 1,
+            }))
+            .unwrap_err();
+        assert!(err.is_fatal());
+        assert!(err.to_string().contains("world_id"));
+    }
+
+    #[test]
+    fn test_ready_world_id_must_be_non_empty() {
+        let mut core = PersistentSessionClientCore::new();
+        core.note_start_session_sent();
+
+        let err = core
+            .on_server_frame(json!({
+                "type": "ready",
+                "session_nonce": hex32('5'),
+                "world_id": "",
+                "cwd": "/",
+                "protocol_version": 1,
+            }))
+            .unwrap_err();
+        assert!(err.is_fatal());
+        assert!(err.to_string().contains("world_id"));
     }
 }

@@ -15,6 +15,7 @@ fn ready_frame(protocol_version: u32) -> serde_json::Value {
     json!({
         "type": "ready",
         "session_nonce": "0123456789abcdef0123456789abcdef",
+        "world_id": "wld_test",
         "cwd": "/",
         "protocol_version": protocol_version,
     })
@@ -144,4 +145,37 @@ fn exit_after_shutdown_is_expected_and_not_an_error() -> Result<(), PersistentSe
     client.note_shutdown_initiated();
     client.on_server_frame(exit_frame(0))?;
     Ok(())
+}
+
+#[test]
+fn ready_missing_world_id_is_fatal_protocol_error() {
+    let mut client = PersistentSessionClientCore::new();
+    client.note_start_session_sent();
+
+    let err = client
+        .on_server_frame(json!({
+            "type": "ready",
+            "session_nonce": "0123456789abcdef0123456789abcdef",
+            "cwd": "/",
+            "protocol_version": 1,
+        }))
+        .expect_err("ready.world_id is required");
+    assert!(err.is_fatal(), "missing world_id must be fatal: {err:#}");
+}
+
+#[test]
+fn ready_empty_world_id_is_fatal_protocol_error() {
+    let mut client = PersistentSessionClientCore::new();
+    client.note_start_session_sent();
+
+    let err = client
+        .on_server_frame(json!({
+            "type": "ready",
+            "session_nonce": "0123456789abcdef0123456789abcdef",
+            "world_id": "",
+            "cwd": "/",
+            "protocol_version": 1,
+        }))
+        .expect_err("ready.world_id must be non-empty");
+    assert!(err.is_fatal(), "empty world_id must be fatal: {err:#}");
 }

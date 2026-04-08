@@ -567,6 +567,10 @@ async fn start_session_yields_ready_with_fresh_hex32_session_nonce() {
         .get("session_nonce")
         .and_then(Value::as_str)
         .expect("ready.session_nonce string");
+    let world_id = frame
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("ready.world_id string");
     assert_eq!(
         nonce.len(),
         32,
@@ -577,6 +581,10 @@ async fn start_session_yields_ready_with_fresh_hex32_session_nonce() {
             .chars()
             .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
         "ready.session_nonce must be lowercase hex"
+    );
+    assert!(
+        !world_id.trim().is_empty(),
+        "ready.world_id must be a non-empty string"
     );
 
     drop(ws);

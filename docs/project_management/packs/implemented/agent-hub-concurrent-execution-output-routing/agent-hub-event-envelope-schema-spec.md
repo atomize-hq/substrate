@@ -163,7 +163,9 @@ Legacy field (reserved; not required by ADR-0017):
   - Required: yes
   - Known codes (v1; schema-owned by ADR-0017):
     - `world_restarted`
+      - Current REPL runtime status: emitted for drift-triggered auto-restarts of persistent world sessions.
     - `world_restart_required`
+      - Current REPL runtime status: reserved for a future fail-closed drift posture; not emitted by today’s REPL runtime.
 - `data.message`
   - Type: string
   - Required: yes (human-readable; safe to print/persist)
@@ -180,6 +182,7 @@ Additional fields for `data.code="world_restarted"`:
 Additional fields for `data.code="world_restart_required"`:
 
 - Schema is authoritative in `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/decision_register.md` (DR-0009).
+- Runtime note: current REPL/runtime implementations do not emit this alert yet.
 
 ### Canonicalization rules (explicit)
 

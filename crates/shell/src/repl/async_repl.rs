@@ -16,8 +16,8 @@ use tokio::task;
 use uuid::Uuid;
 
 use crate::execution::agent_events::{
-    clear_agent_event_sender, format_event_line, init_event_channel, publish_command_completion,
-    schedule_demo_burst, schedule_demo_events,
+    clear_agent_event_sender, format_event_line, init_event_channel, orchestration_session_id,
+    publish_agent_event, publish_command_completion, schedule_demo_burst, schedule_demo_events,
 };
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
@@ -1060,10 +1060,34 @@ impl HostState {
 
 struct WorldSession {
     client: ReplPersistentSessionClient,
+    world_id: String,
+    world_generation: u64,
     world_cwd: String,
     snapshot_hash: String,
     workspace_root: Option<PathBuf>,
     on_stdout: StdoutCallback,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WorldRestartReason {
+    PolicySnapshotChanged,
+    WorkspaceRootChanged,
+}
+
+impl WorldRestartReason {
+    fn code(self) -> &'static str {
+        match self {
+            Self::PolicySnapshotChanged => "policy_snapshot_changed",
+            Self::WorkspaceRootChanged => "workspace_root_changed",
+        }
+    }
+
+    fn message(self) -> &'static str {
+        match self {
+            Self::PolicySnapshotChanged => "world restarted due to policy snapshot drift",
+            Self::WorkspaceRootChanged => "world restarted due to workspace root drift",
+        }
+    }
 }
 
 struct ReplIo<'a> {
@@ -1081,6 +1105,163 @@ fn has_embedded_newlines(s: &str) -> bool {
     // multi-line commands that disable certain REPL directives like `:pty`/`:host`.
     let trimmed = s.trim_end_matches(['\r', '\n']);
     trimmed.contains('\n') || trimmed.contains('\r')
+}
+
+fn apply_anchor_env_for_cwd(env: &mut HashMap<String, String>, cwd: &Path) -> Result<()> {
+    let resolved = resolve_world_root(None, None, None, cwd)
+        .context("resolve world root settings for session env")?;
+    env.insert(
+        "SUBSTRATE_ANCHOR_MODE".to_string(),
+        resolved.mode.as_str().to_string(),
+    );
+    env.insert(
+        "SUBSTRATE_ANCHOR_PATH".to_string(),
+        resolved.path.to_string_lossy().to_string(),
+    );
+    Ok(())
+}
+
+fn classify_world_restart_reason(
+    previous_snapshot_hash: &str,
+    previous_workspace_root: &Option<PathBuf>,
+    next_snapshot_hash: &str,
+    next_workspace_root: &Option<PathBuf>,
+) -> Option<WorldRestartReason> {
+    if previous_workspace_root != next_workspace_root {
+        Some(WorldRestartReason::WorkspaceRootChanged)
+    } else if previous_snapshot_hash != next_snapshot_hash {
+        Some(WorldRestartReason::PolicySnapshotChanged)
+    } else {
+        None
+    }
+}
+
+fn emit_world_restarted_alert(
+    previous_world_id: &str,
+    previous_world_generation: u64,
+    new_world_id: &str,
+    new_world_generation: u64,
+    reason: WorldRestartReason,
+) {
+    let mut event = AgentEvent::alert(
+        "shell",
+        orchestration_session_id(),
+        Uuid::now_v7().to_string(),
+        "world_restarted",
+        reason.message(),
+    );
+    event.role = Some("orchestrator".to_string());
+    event.backend_id = Some("shell:repl".to_string());
+    event.world_id = Some(previous_world_id.to_string());
+
+    if let Some(data) = event.data.as_object_mut() {
+        data.insert("reason".to_string(), serde_json::json!(reason.code()));
+        data.insert("on_drift".to_string(), serde_json::json!("auto_restart"));
+        data.insert(
+            "previous_world_id".to_string(),
+            serde_json::json!(previous_world_id),
+        );
+        data.insert("new_world_id".to_string(), serde_json::json!(new_world_id));
+        data.insert(
+            "previous_world_generation".to_string(),
+            serde_json::json!(previous_world_generation),
+        );
+        data.insert(
+            "new_world_generation".to_string(),
+            serde_json::json!(new_world_generation),
+        );
+    }
+
+    let _ = publish_agent_event(event);
+}
+
+async fn open_world_session(
+    requested_cwd: String,
+    requested_path: &Path,
+    resolved_policy_snapshot: agent_api_types::PolicySnapshotV3,
+    snapshot_hash: String,
+    workspace_root: Option<PathBuf>,
+    on_stdout: StdoutCallback,
+    agent_printer: &ReplPrinter,
+    world_generation: u64,
+    restarted: bool,
+) -> Result<WorldSession> {
+    let world_network_policy = policy_snapshot::resolve_world_network_policy_for_snapshot(
+        resolved_policy_snapshot,
+        requested_path,
+    )
+    .context("world network policy")?;
+    let world_network = policy_snapshot::request_world_network_routing(&world_network_policy);
+    let (mut start_params, inherit_from_host) = ReplSessionStartParams::for_cwd_and_snapshot(
+        requested_cwd.clone(),
+        requested_path,
+        world_network_policy.snapshot,
+        world_network,
+    )?;
+    if inherit_from_host {
+        agent_printer.print("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+    }
+    apply_anchor_env_for_cwd(&mut start_params.env, requested_path)?;
+    let client = ReplPersistentSessionClient::start_with(start_params, on_stdout.clone()).await?;
+    let ready = client.ready().clone();
+
+    if ready.cwd != requested_cwd {
+        let action = if restarted { "restarted" } else { "started" };
+        agent_printer.print(format!(
+            "substrate: note: world session {action} in {} (requested {})",
+            ready.cwd, requested_cwd
+        ));
+    }
+
+    Ok(WorldSession {
+        client,
+        world_id: ready.world_id,
+        world_generation,
+        world_cwd: ready.cwd,
+        snapshot_hash,
+        workspace_root,
+        on_stdout,
+    })
+}
+
+async fn restart_world_session(
+    old_session: WorldSession,
+    requested_cwd: String,
+    policy_snapshot: agent_api_types::PolicySnapshotV3,
+    snapshot_hash: String,
+    workspace_root: Option<PathBuf>,
+    agent_printer: &ReplPrinter,
+    reason: WorldRestartReason,
+) -> Result<WorldSession> {
+    let requested_path = PathBuf::from(&requested_cwd);
+    let on_stdout = old_session.on_stdout.clone();
+    let previous_world_id = old_session.world_id.clone();
+    let previous_world_generation = old_session.world_generation;
+
+    old_session.client.close().await?;
+
+    let new_session = open_world_session(
+        requested_cwd,
+        requested_path.as_path(),
+        policy_snapshot,
+        snapshot_hash,
+        workspace_root,
+        on_stdout,
+        agent_printer,
+        previous_world_generation.saturating_add(1),
+        true,
+    )
+    .await?;
+
+    emit_world_restarted_alert(
+        &previous_world_id,
+        previous_world_generation,
+        &new_session.world_id,
+        new_session.world_generation,
+        reason,
+    );
+
+    Ok(new_session)
 }
 
 fn is_exit_directive(trimmed: &str) -> bool {
@@ -1227,106 +1408,51 @@ async fn start_world_session(
     on_stdout: StdoutCallback,
     agent_printer: &ReplPrinter,
 ) -> Result<WorldSession> {
-    fn apply_anchor_env_for_cwd(env: &mut HashMap<String, String>, cwd: &Path) -> Result<()> {
-        let resolved = resolve_world_root(None, None, None, cwd)
-            .context("resolve world root settings for session env")?;
-        env.insert(
-            "SUBSTRATE_ANCHOR_MODE".to_string(),
-            resolved.mode.as_str().to_string(),
-        );
-        env.insert(
-            "SUBSTRATE_ANCHOR_PATH".to_string(),
-            resolved.path.to_string_lossy().to_string(),
-        );
-        Ok(())
-    }
-
     let requested_path = Path::new(&requested_cwd);
     let resolved_start = policy_snapshot::resolve_policy_snapshot_for_cwd(requested_path)
         .context("policy snapshot (start)")?;
     let start_hash = resolved_start.snapshot_hash.clone();
     let start_workspace_root = find_workspace_root(requested_path);
-    let start_network_policy = policy_snapshot::resolve_world_network_policy_for_snapshot(
-        resolved_start.snapshot,
-        requested_path,
-    )
-    .context("world network policy (start)")?;
-    let start_world_network = policy_snapshot::request_world_network_routing(&start_network_policy);
-
-    let (mut start_params, inherit_from_host) = ReplSessionStartParams::for_cwd_and_snapshot(
+    let session = open_world_session(
         requested_cwd.clone(),
         requested_path,
-        start_network_policy.snapshot,
-        start_world_network,
-    )?;
-    if inherit_from_host {
-        agent_printer.print("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
-    }
-    apply_anchor_env_for_cwd(&mut start_params.env, requested_path)?;
-    let client = ReplPersistentSessionClient::start_with(start_params, on_stdout.clone()).await?;
-    let ready = client.ready().clone();
+        resolved_start.snapshot,
+        start_hash.clone(),
+        start_workspace_root.clone(),
+        on_stdout,
+        agent_printer,
+        0,
+        false,
+    )
+    .await?;
 
-    if ready.cwd != requested_cwd {
-        agent_printer.print(format!(
-            "substrate: note: world session started in {} (requested {})",
-            ready.cwd, requested_cwd
-        ));
-    }
-
-    let ready_path = Path::new(&ready.cwd);
+    let ready_cwd = session.world_cwd.clone();
+    let ready_path = Path::new(&ready_cwd);
     let resolved_ready = policy_snapshot::resolve_policy_snapshot_for_cwd(ready_path)
         .context("policy snapshot (ready.cwd)")?;
     let ready_hash = resolved_ready.snapshot_hash.clone();
     let ready_workspace_root = find_workspace_root(ready_path);
 
-    if ready_hash != start_hash || ready_workspace_root != start_workspace_root {
+    if let Some(reason) = classify_world_restart_reason(
+        &start_hash,
+        &start_workspace_root,
+        &ready_hash,
+        &ready_workspace_root,
+    ) {
         agent_printer.print("substrate: note: world session restarting due to snapshot/workspace drift before first command");
-        client.close().await?;
-
-        let restart_network_policy = policy_snapshot::resolve_world_network_policy_for_snapshot(
+        return restart_world_session(
+            session,
+            ready_cwd,
             resolved_ready.snapshot,
-            Path::new(&ready.cwd),
+            ready_hash,
+            ready_workspace_root,
+            agent_printer,
+            reason,
         )
-        .context("world network policy (ready.cwd)")?;
-        let restart_world_network =
-            policy_snapshot::request_world_network_routing(&restart_network_policy);
-        let (mut restart_params, inherit_from_host) = ReplSessionStartParams::for_cwd_and_snapshot(
-            ready.cwd.clone(),
-            Path::new(&ready.cwd),
-            restart_network_policy.snapshot,
-            restart_world_network,
-        )?;
-        if inherit_from_host {
-            agent_printer.print("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
-        }
-        apply_anchor_env_for_cwd(&mut restart_params.env, Path::new(&ready.cwd))?;
-        let client =
-            ReplPersistentSessionClient::start_with(restart_params, on_stdout.clone()).await?;
-        let ready2 = client.ready().clone();
-
-        if ready2.cwd != ready.cwd {
-            agent_printer.print(format!(
-                "substrate: note: world session restarted in {} (requested {})",
-                ready2.cwd, ready.cwd
-            ));
-        }
-
-        return Ok(WorldSession {
-            client,
-            world_cwd: ready2.cwd,
-            snapshot_hash: ready_hash,
-            workspace_root: ready_workspace_root,
-            on_stdout,
-        });
+        .await;
     }
 
-    Ok(WorldSession {
-        client,
-        world_cwd: ready.cwd,
-        snapshot_hash: start_hash,
-        workspace_root: start_workspace_root,
-        on_stdout,
-    })
+    Ok(session)
 }
 
 async fn ensure_no_policy_drift(
@@ -1342,9 +1468,14 @@ async fn ensure_no_policy_drift(
         .context("policy snapshot (drift)")?;
     let workspace_root = find_workspace_root(path);
 
-    if resolved.snapshot_hash == session.snapshot_hash && workspace_root == session.workspace_root {
+    let Some(reason) = classify_world_restart_reason(
+        &session.snapshot_hash,
+        &session.workspace_root,
+        &resolved.snapshot_hash,
+        &workspace_root,
+    ) else {
         return Ok(());
-    }
+    };
 
     agent_printer
         .print("substrate: note: world session restarting due to snapshot/workspace drift");
@@ -1353,10 +1484,18 @@ async fn ensure_no_policy_drift(
         .take()
         .expect("world_session present if session was Some above");
     let requested = old.world_cwd.clone();
-    let on_stdout = old.on_stdout.clone();
-    old.client.close().await?;
-
-    *world_session = Some(start_world_session(requested, on_stdout, agent_printer).await?);
+    *world_session = Some(
+        restart_world_session(
+            old,
+            requested,
+            resolved.snapshot,
+            resolved.snapshot_hash,
+            workspace_root,
+            agent_printer,
+            reason,
+        )
+        .await?,
+    );
     Ok(())
 }
 

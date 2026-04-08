@@ -35,6 +35,28 @@ impl fmt::Display for AgentEventKind {
     }
 }
 
+/// Non-alert event kinds that use the shared `{ "message": ... }` payload shape.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MessageEventKind {
+    Registered,
+    Status,
+    TaskStart,
+    TaskProgress,
+    TaskEnd,
+}
+
+impl From<MessageEventKind> for AgentEventKind {
+    fn from(kind: MessageEventKind) -> Self {
+        match kind {
+            MessageEventKind::Registered => AgentEventKind::Registered,
+            MessageEventKind::Status => AgentEventKind::Status,
+            MessageEventKind::TaskStart => AgentEventKind::TaskStart,
+            MessageEventKind::TaskProgress => AgentEventKind::TaskProgress,
+            MessageEventKind::TaskEnd => AgentEventKind::TaskEnd,
+        }
+    }
+}
+
 /// Structured envelope for asynchronous agent updates.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct AgentEvent {
@@ -109,13 +131,12 @@ impl AgentEvent {
         self.channel = Self::sanitize_channel(raw);
     }
 
-    /// Build a message-style event with the provided payload text.
-    pub fn message(
+    fn new(
         agent_id: impl Into<String>,
         orchestration_session_id: impl Into<String>,
         run_id: impl Into<String>,
         kind: AgentEventKind,
-        message: impl Into<String>,
+        data: serde_json::Value,
     ) -> Self {
         let mut event = Self {
             ts: Utc::now(),
@@ -123,7 +144,7 @@ impl AgentEvent {
             kind,
             orchestration_session_id: orchestration_session_id.into(),
             run_id: run_id.into(),
-            data: serde_json::json!({ "message": message.into() }),
+            data,
             backend_id: None,
             thread_id: None,
             role: None,
@@ -138,10 +159,46 @@ impl AgentEvent {
             protocol: None,
             project: None,
         };
-        // Ensure any producer-provided value is secrets-safe.
         let channel = event.channel.take();
         event.set_channel(channel);
         event
+    }
+
+    /// Build a message-style event with the provided payload text.
+    pub fn message(
+        agent_id: impl Into<String>,
+        orchestration_session_id: impl Into<String>,
+        run_id: impl Into<String>,
+        kind: MessageEventKind,
+        message: impl Into<String>,
+    ) -> Self {
+        Self::new(
+            agent_id,
+            orchestration_session_id,
+            run_id,
+            kind.into(),
+            serde_json::json!({ "message": message.into() }),
+        )
+    }
+
+    /// Build an alert event with the required schema fields.
+    pub fn alert(
+        agent_id: impl Into<String>,
+        orchestration_session_id: impl Into<String>,
+        run_id: impl Into<String>,
+        code: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self::new(
+            agent_id,
+            orchestration_session_id,
+            run_id,
+            AgentEventKind::Alert,
+            serde_json::json!({
+                "code": code.into(),
+                "message": message.into(),
+            }),
+        )
     }
 
     /// Convenience helper for stdout/stderr stream chunks.
@@ -152,34 +209,16 @@ impl AgentEvent {
         is_stderr: bool,
         chunk: impl Into<String>,
     ) -> Self {
-        let kind = AgentEventKind::PtyData;
-        let mut event = Self {
-            ts: Utc::now(),
-            agent_id: agent_id.into(),
-            kind,
-            orchestration_session_id: orchestration_session_id.into(),
-            run_id: run_id.into(),
-            data: serde_json::json!({
+        Self::new(
+            agent_id,
+            orchestration_session_id,
+            run_id,
+            AgentEventKind::PtyData,
+            serde_json::json!({
                 "stream": if is_stderr { "stderr" } else { "stdout" },
                 "chunk": chunk.into(),
             }),
-            backend_id: None,
-            thread_id: None,
-            role: None,
-            world_id: None,
-            cmd_id: None,
-            span_id: None,
-            channel: None,
-            client: None,
-            router: None,
-            provider: None,
-            auth_authority: None,
-            protocol: None,
-            project: None,
-        };
-        let channel = event.channel.take();
-        event.set_channel(channel);
-        event
+        )
     }
 }
 

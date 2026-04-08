@@ -1,5 +1,5 @@
 use serde_json::{json, Value};
-use substrate_common::agent_events::AgentEvent;
+use substrate_common::agent_events::{AgentEvent, AgentEventKind, MessageEventKind};
 
 fn minimal_valid_envelope_json() -> Value {
     json!({
@@ -88,5 +88,77 @@ fn unsafe_channel_is_dropped_and_never_emitted() {
     assert!(
         !serialized.contains(unsafe_channel),
         "dropped channel value must never be emitted; got: {roundtrip}"
+    );
+}
+
+#[test]
+fn alert_envelope_roundtrips_with_required_code_and_message() {
+    let value = json!({
+        "ts": "2026-04-05T00:00:00Z",
+        "kind": "alert",
+        "agent_id": "demo-agent",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "data": {
+            "code": "world_restarted",
+            "message": "world restarted due to policy drift"
+        }
+    });
+
+    let event: AgentEvent = serde_json::from_value(value).expect("deserialize alert AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert_eq!(event.kind, AgentEventKind::Alert);
+    assert_eq!(
+        roundtrip.pointer("/data/code").and_then(Value::as_str),
+        Some("world_restarted")
+    );
+    assert_eq!(
+        roundtrip.pointer("/data/message").and_then(Value::as_str),
+        Some("world restarted due to policy drift")
+    );
+}
+
+#[test]
+fn message_constructor_emits_non_alert_message_event_shape() {
+    let event = AgentEvent::message(
+        "demo-agent",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        MessageEventKind::TaskEnd,
+        "command finished",
+    );
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert_eq!(event.kind, AgentEventKind::TaskEnd);
+    assert_eq!(
+        roundtrip.pointer("/data/message").and_then(Value::as_str),
+        Some("command finished")
+    );
+    assert!(
+        roundtrip.pointer("/data/code").is_none(),
+        "message constructor must not synthesize alert-style codes: {roundtrip}"
+    );
+}
+
+#[test]
+fn alert_constructor_emits_required_alert_fields() {
+    let event = AgentEvent::alert(
+        "demo-agent",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "world_restart_required",
+        "world restart required before continuing",
+    );
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert_eq!(event.kind, AgentEventKind::Alert);
+    assert_eq!(
+        roundtrip.pointer("/data/code").and_then(Value::as_str),
+        Some("world_restart_required")
+    );
+    assert_eq!(
+        roundtrip.pointer("/data/message").and_then(Value::as_str),
+        Some("world restart required before continuing")
     );
 }

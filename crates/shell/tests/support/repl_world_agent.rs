@@ -86,7 +86,7 @@ pub struct ReplWorldAgentStub {
 
 impl ReplWorldAgentStub {
     pub fn start(path: &Path, behavior: StreamBehavior) -> Self {
-        Self::start_with_override(path, behavior, None)
+        Self::start_with_overrides(path, behavior, None, None)
     }
 
     pub fn start_with_persistent_exec_stdout_override(
@@ -94,7 +94,7 @@ impl ReplWorldAgentStub {
         marker: impl Into<String>,
         bytes: Vec<u8>,
     ) -> Self {
-        Self::start_with_override(
+        Self::start_with_overrides(
             path,
             StreamBehavior::Normal,
             Some(PersistentExecStdoutOverride {
@@ -104,6 +104,7 @@ impl ReplWorldAgentStub {
                 delay_before_suffix_ms: None,
                 out_of_band_after_complete: None,
             }),
+            None,
         )
     }
 
@@ -111,13 +112,22 @@ impl ReplWorldAgentStub {
         path: &Path,
         script: PersistentExecStdoutOverride,
     ) -> Self {
-        Self::start_with_override(path, StreamBehavior::Normal, Some(script))
+        Self::start_with_overrides(path, StreamBehavior::Normal, Some(script), None)
     }
 
-    fn start_with_override(
+    pub fn start_with_first_ready_cwd_override(
+        path: &Path,
+        behavior: StreamBehavior,
+        ready_cwd: impl Into<String>,
+    ) -> Self {
+        Self::start_with_overrides(path, behavior, None, Some(ready_cwd.into()))
+    }
+
+    fn start_with_overrides(
         path: &Path,
         behavior: StreamBehavior,
         persistent_exec_stdout_override: Option<PersistentExecStdoutOverride>,
+        first_ready_cwd_override: Option<String>,
     ) -> Self {
         let _ = std::fs::remove_file(path);
         if let Some(parent) = path.parent() {
@@ -133,6 +143,7 @@ impl ReplWorldAgentStub {
         let records = Arc::new(Mutex::new(ReplWorldAgentRecords::default()));
         let records_for_thread = records.clone();
         let persistent_exec_stdout_override_for_thread = persistent_exec_stdout_override.clone();
+        let mut first_ready_cwd_override = first_ready_cwd_override;
 
         let handle = thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -272,6 +283,7 @@ impl ReplWorldAgentStub {
                 }
 
                 let listener = UnixListener::bind(&path_buf).expect("bind stub socket");
+                let mut next_world_id: u64 = 1;
 
                 while !shutdown_for_thread.load(Ordering::SeqCst) {
                     let accept = tokio::time::timeout(
@@ -599,16 +611,22 @@ impl ReplWorldAgentStub {
                         });
                     }
 
-                    let mut session_cwd = if cwd.trim().is_empty() {
+                    let mut session_cwd = if let Some(override_cwd) = first_ready_cwd_override.take()
+                    {
+                        override_cwd
+                    } else if cwd.trim().is_empty() {
                         "/".to_string()
                     } else {
                         cwd
                     };
 
                     // Respond with a deterministic ready.
+                    let world_id = format!("wld_stub_{next_world_id:04}");
+                    next_world_id = next_world_id.saturating_add(1);
                     let ready = serde_json::json!({
                         "type": "ready",
                         "session_nonce": "0123456789abcdef0123456789abcdef",
+                        "world_id": world_id,
                         "cwd": session_cwd,
                         "protocol_version": 1,
                     })
