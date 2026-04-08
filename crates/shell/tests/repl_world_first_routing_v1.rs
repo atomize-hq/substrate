@@ -460,6 +460,10 @@ impl PtyRepl {
         )
     }
 
+    fn wait_for_prompt(&self, timeout: Duration) -> anyhow::Result<()> {
+        self.wait_for_output("substrate> ", timeout)
+    }
+
     fn try_wait(&mut self) -> anyhow::Result<bool> {
         if self.waited.is_some() {
             return Ok(true);
@@ -525,6 +529,8 @@ fn c3_host_directive_is_gated_disabled_by_default() {
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt");
 
     repl.send_line(":host pwd");
     repl.send_line("exit");
@@ -566,6 +572,8 @@ fn c3_host_directive_executes_on_host_when_enabled() {
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt");
 
     repl.send_line(":host pwd");
     repl.send_line("exit");
