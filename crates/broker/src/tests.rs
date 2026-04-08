@@ -106,6 +106,36 @@ fn effective_policy_display_json_v3(policy: &Policy) -> serde_json::Value {
         "id": &policy.id,
         "name": &policy.name,
         "world_fs": serde_json::Value::Object(world_fs),
+        "llm": {
+            "fail_closed": {
+                "routing": policy.llm_fail_closed_routing,
+            },
+            "require_approval": policy.llm_require_approval,
+            "allowed_backends": &policy.llm_allowed_backends,
+            "secrets": {
+                "env_allowed": &policy.llm_secrets_env_allowed,
+            },
+        },
+        "agents": {
+            "allowed_backends": &policy.agents_allowed_backends,
+            "fail_closed": {
+                "routing": policy.agents_fail_closed_routing,
+            },
+            "host_credentials": {
+                "read": {
+                    "allowed_backends": &policy.agents_host_credentials_read_allowed_backends,
+                },
+            },
+        },
+        "workflow": {
+            "router": {
+                "enabled": policy.workflow_router_enabled,
+                "allow_cross_workspace": policy.workflow_router_allow_cross_workspace,
+                "allowed_rule_ids": &policy.workflow_router_allowed_rule_ids,
+                "allowed_workflow_ids": &policy.workflow_router_allowed_workflow_ids,
+                "allowed_target_workspace_ids": &policy.workflow_router_allowed_target_workspace_ids,
+            },
+        },
         "net_allowed": &policy.net_allowed,
         "cmd_allowed": &policy.cmd_allowed,
         "cmd_denied": &policy.cmd_denied,
