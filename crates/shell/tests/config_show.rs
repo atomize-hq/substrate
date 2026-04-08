@@ -380,6 +380,56 @@ fn config_show_strictly_rejects_type_mismatches() {
 }
 
 #[test]
+fn config_current_show_explain_includes_new_llm_and_agents_keys_with_provenance() {
+    let fixture = ConfigShowFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config(
+        "llm:\n  enabled: true\nagents:\n  enabled: true\n  defaults:\n    cli:\n      mode: per_request\n",
+    );
+    fixture.write_workspace_config(
+        "llm:\n  routing:\n    default_backend: cli:codex\nagents:\n  defaults:\n    execution:\n      scope: host\n",
+    );
+
+    let nested = fixture.workspace_root.join("nested").join("child");
+    fs::create_dir_all(&nested).expect("create nested cwd");
+
+    let current = fixture.current_show_json(&nested, true);
+    assert!(
+        current.status.success(),
+        "config current show should succeed: {current:?}"
+    );
+
+    let json: JsonValue = serde_json::from_slice(&current.stdout).expect("current JSON parse");
+    assert_json_bool(&json, "/llm/enabled", true);
+    assert_json_str(&json, "/llm/routing/default_backend", "cli:codex");
+    assert_json_bool(&json, "/agents/enabled", true);
+    assert_json_str(&json, "/agents/defaults/execution/scope", "host");
+    assert_json_bool(&json, "/agents/toolbox/enabled", false);
+
+    let explain = parse_explain(&current.stderr);
+    assert_eq!(
+        explain_layers(&explain, "llm.enabled"),
+        vec!["global_patch".to_string()]
+    );
+    assert_eq!(
+        explain_layers(&explain, "llm.routing.default_backend"),
+        vec!["workspace_patch".to_string()]
+    );
+    assert_eq!(
+        explain_layers(&explain, "agents.enabled"),
+        vec!["global_patch".to_string()]
+    );
+    assert_eq!(
+        explain_layers(&explain, "agents.defaults.execution.scope"),
+        vec!["workspace_patch".to_string()]
+    );
+    assert_eq!(
+        explain_layers(&explain, "agents.toolbox.enabled"),
+        vec!["default".to_string()]
+    );
+}
+
+#[test]
 fn config_current_show_reports_world_net_filter_precedence_and_explain_sources() {
     let fixture = ConfigShowFixture::new();
     fixture.init_workspace();

@@ -1069,6 +1069,24 @@ metadata: {{}}
         )
     }
 
+    fn explain_layers(explain: &serde_json::Value, key: &str) -> Vec<String> {
+        explain
+            .get("keys")
+            .and_then(|value| value.get(key))
+            .and_then(|value| value.get("sources"))
+            .and_then(|value| value.as_array())
+            .unwrap_or_else(|| panic!("missing explain sources for {key}: {explain}"))
+            .iter()
+            .map(|source| {
+                source
+                    .get("layer")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_else(|| panic!("missing explain layer for {key}: {source}"))
+                    .to_string()
+            })
+            .collect()
+    }
+
     #[test]
     #[serial]
     fn c0_invalid_world_fs_schema_exits_2() {
@@ -1122,6 +1140,318 @@ world_fs:
             explain.get("kind").and_then(|v| v.as_str()),
             Some("substrate.policy.explain.v1"),
             "unexpected explain kind: {explain}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn c0_policy_global_and_workspace_set_accepts_lacp0_keys() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+        fixture.write_workspace_policy("{}\n");
+        let cwd = fixture.child_dir();
+
+        let global = fixture.run_substrate(
+            &cwd,
+            &[
+                "policy",
+                "global",
+                "set",
+                "--json",
+                "llm.allowed_backends=[\"cli:codex\"]",
+                "agents.allowed_backends=[\"cli:codex\"]",
+                "workflow.router.enabled=true",
+                "workflow.router.allowed_rule_ids=[\"rule-global\"]",
+            ],
+        );
+        assert!(
+            global.status.success(),
+            "policy global set should accept LACP0 keys: {global:?}"
+        );
+        let global_json: serde_json::Value =
+            serde_json::from_slice(&global.stdout).expect("global set JSON parse");
+        assert_eq!(
+            global_json
+                .pointer("/llm/allowed_backends/0")
+                .and_then(|v| v.as_str()),
+            Some("cli:codex")
+        );
+        assert_eq!(
+            global_json
+                .pointer("/agents/allowed_backends/0")
+                .and_then(|v| v.as_str()),
+            Some("cli:codex")
+        );
+        assert_eq!(
+            global_json
+                .pointer("/workflow/router/enabled")
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
+
+        let workspace = fixture.run_substrate(
+            &cwd,
+            &[
+                "policy",
+                "workspace",
+                "set",
+                "--json",
+                "llm.fail_closed.routing=false",
+                "agents.host_credentials.read.allowed_backends=[\"cli:codex\"]",
+                "workflow.router.allowed_workflow_ids=[\"workflow-workspace\"]",
+            ],
+        );
+        assert!(
+            workspace.status.success(),
+            "policy workspace set should accept LACP0 keys: {workspace:?}"
+        );
+        let workspace_json: serde_json::Value =
+            serde_json::from_slice(&workspace.stdout).expect("workspace set JSON parse");
+        assert_eq!(
+            workspace_json
+                .pointer("/llm/fail_closed/routing")
+                .and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            workspace_json
+                .pointer("/agents/host_credentials/read/allowed_backends/0")
+                .and_then(|v| v.as_str()),
+            Some("cli:codex")
+        );
+        assert_eq!(
+            workspace_json
+                .pointer("/workflow/router/allowed_workflow_ids/0")
+                .and_then(|v| v.as_str()),
+            Some("workflow-workspace")
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn c0_policy_global_set_rejects_unknown_and_invalid_lacp0_updates_with_exit_2() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+        let cwd = fixture.child_dir();
+
+        let unknown = fixture.run_substrate(
+            &cwd,
+            &["policy", "global", "set", "--json", "llm.unknown_key=true"],
+        );
+        assert_eq!(
+            unknown.status.code(),
+            Some(2),
+            "unknown policy key should exit 2: {unknown:?}"
+        );
+
+        let invalid_value = fixture.run_substrate(
+            &cwd,
+            &[
+                "policy",
+                "global",
+                "set",
+                "--json",
+                "workflow.router.enabled=maybe",
+            ],
+        );
+        assert_eq!(
+            invalid_value.status.code(),
+            Some(2),
+            "invalid workflow.router.enabled value should exit 2: {invalid_value:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn c0_policy_global_set_rejects_malformed_backend_ids_for_lacp0_keys() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+        let cwd = fixture.child_dir();
+
+        for key in [
+            "llm.allowed_backends",
+            "agents.allowed_backends",
+            "agents.host_credentials.read.allowed_backends",
+        ] {
+            let update = format!("{key}=[\"CLI:Codex\"]");
+            let output =
+                fixture.run_substrate(&cwd, &["policy", "global", "set", "--json", &update]);
+            assert_eq!(
+                output.status.code(),
+                Some(2),
+                "malformed backend id for {key} should exit 2: {output:?}"
+            );
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains(key) || stderr.contains("invalid"),
+                "stderr should mention backend id validation for {key}\nstderr: {stderr}"
+            );
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn c0_policy_current_show_explain_includes_lacp0_keys_with_provenance() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+        fixture.write_global_policy(
+            r#"
+llm:
+  fail_closed:
+    routing: false
+  allowed_backends:
+    - cli:codex
+agents:
+  allowed_backends:
+    - cli:codex
+workflow:
+  router:
+    enabled: true
+"#,
+        );
+        fixture.write_workspace_policy(
+            r#"
+llm:
+  allowed_backends:
+    - api:openai
+agents:
+  host_credentials:
+    read:
+      allowed_backends:
+        - cli:codex
+workflow:
+  router:
+    allowed_rule_ids:
+      - rule-workspace
+"#,
+        );
+
+        let cwd = fixture.child_dir();
+        let output =
+            fixture.run_substrate(&cwd, &["policy", "current", "show", "--json", "--explain"]);
+        assert!(
+            output.status.success(),
+            "policy current show --explain should succeed: {output:?}"
+        );
+
+        let json: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("policy JSON parse");
+        assert_eq!(
+            json.pointer("/llm/fail_closed/routing")
+                .and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            json.pointer("/llm/allowed_backends/0")
+                .and_then(|v| v.as_str()),
+            Some("api:openai")
+        );
+        assert_eq!(
+            json.pointer("/agents/allowed_backends/0")
+                .and_then(|v| v.as_str()),
+            Some("cli:codex")
+        );
+        assert_eq!(
+            json.pointer("/agents/host_credentials/read/allowed_backends/0")
+                .and_then(|v| v.as_str()),
+            Some("cli:codex")
+        );
+        assert_eq!(
+            json.pointer("/workflow/router/enabled")
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert_eq!(
+            json.pointer("/workflow/router/allowed_rule_ids/0")
+                .and_then(|v| v.as_str()),
+            Some("rule-workspace")
+        );
+
+        let explain: serde_json::Value =
+            serde_json::from_slice(&output.stderr).expect("policy explain JSON parse");
+        assert_eq!(
+            explain_layers(&explain, "llm.fail_closed.routing"),
+            vec!["global_patch".to_string()]
+        );
+        assert_eq!(
+            explain_layers(&explain, "llm.allowed_backends"),
+            vec!["workspace_patch".to_string()]
+        );
+        assert_eq!(
+            explain_layers(&explain, "agents.allowed_backends"),
+            vec!["global_patch".to_string()]
+        );
+        assert_eq!(
+            explain_layers(&explain, "agents.host_credentials.read.allowed_backends"),
+            vec!["workspace_patch".to_string()]
+        );
+        assert_eq!(
+            explain_layers(&explain, "workflow.router.enabled"),
+            vec!["global_patch".to_string()]
+        );
+        assert_eq!(
+            explain_layers(&explain, "workflow.router.allowed_rule_ids"),
+            vec!["workspace_patch".to_string()]
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn c0_shell_side_policy_json_and_yaml_display_include_lacp0_sections() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+        let cwd = fixture.child_dir();
+
+        let show_json = fixture.run_substrate(&cwd, &["policy", "current", "show", "--json"]);
+        assert!(
+            show_json.status.success(),
+            "policy current show --json should succeed: {show_json:?}"
+        );
+        let json: serde_json::Value =
+            serde_json::from_slice(&show_json.stdout).expect("policy JSON parse");
+        assert!(
+            json.get("llm").is_some(),
+            "missing llm in policy JSON: {json}"
+        );
+        assert!(
+            json.get("agents").is_some(),
+            "missing agents in policy JSON: {json}"
+        );
+        assert!(
+            json.pointer("/workflow/router").is_some(),
+            "missing workflow.router in policy JSON: {json}"
+        );
+
+        let show_yaml = fixture.run_substrate(&cwd, &["policy", "current", "show"]);
+        assert!(
+            show_yaml.status.success(),
+            "policy current show (YAML) should succeed: {show_yaml:?}"
+        );
+        let yaml: serde_yaml::Value =
+            serde_yaml::from_slice(&show_yaml.stdout).expect("policy YAML parse");
+        let root = yaml.as_mapping().expect("policy YAML root mapping");
+        let llm = root
+            .get(serde_yaml::Value::String("llm".to_string()))
+            .and_then(|value| value.as_mapping());
+        let agents = root
+            .get(serde_yaml::Value::String("agents".to_string()))
+            .and_then(|value| value.as_mapping());
+        let workflow_router = root
+            .get(serde_yaml::Value::String("workflow".to_string()))
+            .and_then(|value| value.as_mapping())
+            .and_then(|workflow| workflow.get(serde_yaml::Value::String("router".to_string())))
+            .and_then(|value| value.as_mapping());
+        assert!(
+            llm.is_some(),
+            "missing llm mapping in policy YAML: {yaml:?}"
+        );
+        assert!(
+            agents.is_some(),
+            "missing agents mapping in policy YAML: {yaml:?}"
+        );
+        assert!(
+            workflow_router.is_some(),
+            "missing workflow.router mapping in policy YAML: {yaml:?}"
         );
     }
 
