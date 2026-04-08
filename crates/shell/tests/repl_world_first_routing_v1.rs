@@ -533,6 +533,8 @@ fn c3_host_directive_is_gated_disabled_by_default() {
         .expect("prompt");
 
     repl.send_line(":host pwd");
+    repl.wait_for_output("host escape", Duration::from_secs(2))
+        .expect("host-escape gating message");
     repl.send_line("exit");
 
     let (_code, out) = repl.shutdown_graceful(Duration::from_secs(2));
@@ -575,14 +577,16 @@ fn c3_host_directive_executes_on_host_when_enabled() {
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("prompt");
 
+    let project = fs::canonicalize(&project).unwrap_or(project);
+    let project_str = project.to_string_lossy().into_owned();
     repl.send_line(":host pwd");
+    repl.wait_for_output(project_str.as_ref(), Duration::from_secs(2))
+        .expect("host pwd output");
     repl.send_line("exit");
 
     let (_code, out) = repl.shutdown_graceful(Duration::from_secs(2));
-    let project = fs::canonicalize(&project).unwrap_or(project);
-    let project_str = project.to_string_lossy();
     assert!(
-        out.contains(project_str.as_ref()),
+        out.contains(project_str.as_str()),
         "expected :host pwd to print the host cwd ({project_str}), got output:\n{out}"
     );
 }
