@@ -110,22 +110,22 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 
 ### Relevant ADRs (queued/unimplemented)
 
-- ADR: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
-  - Overlap surfaces: config/policy key paths for gateway enablement/routing; secret sourcing allowlists.
-  - Conflict: no (dependent).
-  - Resolution (explicit): ADR-0023 must consume `llm.*` keys from ADR-0027 and must not define new config/policy file families.
-- ADR: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
-  - Overlap surfaces: backend id format; agent inventory file format for `cli:*` backends.
-  - Conflict: no (dependent).
-  - Resolution (explicit): ADR-0024 must not redefine backend id grammar or inventory directory layout.
-- ADR: `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
-  - Overlap surfaces: `agents.*` key paths, agent inventory parsing/selection, `policy_overlay` tightening.
-  - Conflict: no (dependent).
-  - Resolution (explicit): hub-core ADRs define runtime behavior but defer to ADR-0027 for config/policy storage surface and overlay rules.
-- ADR: `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
-  - Overlap surfaces: `agents.toolbox.*` config keys and policy gating expectations.
-  - Conflict: no (dependent).
-  - Resolution (explicit): toolbox ADR consumes key paths defined here and does not define new key roots.
+- ADR: `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - Overlap surfaces: gateway/world-boundary ownership, host-to-world secret-delivery ownership, and operator-visible gateway status/wiring posture.
+  - Conflict: no (successor dependency).
+  - Resolution (explicit): ADR-0040 owns the Substrate versus `substrate-gateway` runtime boundary, while this pack remains the source of truth for config/policy file families, allowlists, and fail-closed gates.
+- ADR: `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - Overlap surfaces: backend id stability, backend selection/allowlisting, and adapter-facing secret-read gates.
+  - Conflict: no (successor dependency).
+  - Resolution (explicit): ADR-0041 consumes the `<kind>:<name>` backend-id surface and agent inventory model from ADR-0027; it MUST NOT redefine backend id grammar or inventory directory layout.
+- ADR: `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+  - Overlap surfaces: `agents.*` key paths, agent inventory parsing/selection, backend-id semantics on the agent side, and `policy_overlay` tightening.
+  - Conflict: no (successor dependency).
+  - Resolution (explicit): ADR-0044 defines runtime Agent Hub behavior but defers to ADR-0027 for config/policy storage, inventory layout, and overlay-composition rules.
+- ADR: `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
+  - Overlap surfaces: `agents.toolbox.*` config keys, orchestrator-backend allowlisting, and toolbox-disabled fail-closed posture.
+  - Conflict: no (successor dependency).
+  - Resolution (explicit): ADR-0045 consumes the `agents.toolbox.*` key paths defined here and does not define new config/policy roots.
 - ADR: `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
   - Overlap surfaces: `workflow.router.*` policy gates.
   - Conflict: no (dependent; Phase 8 additive).
@@ -137,14 +137,26 @@ List every file expected to be created/edited/deprecated/removed. Use repo-relat
 - ADR: `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
   - Overlap surfaces: additive `llm.constraints.*` policy keys.
   - Conflict: no, if ownership stays split.
-  - Resolution (explicit): this pack should not absorb ADR-0043 implementation scope; it should only stay terminology-compatible and avoid implying backend ids carry tuple meaning by themselves.
+  - Resolution (explicit): this pack MUST NOT absorb ADR-0043 implementation scope; it only stays terminology-compatible and avoids implying backend ids carry tuple meaning by themselves.
+
+### Historical predecessor ADRs (origin context only; superseded semantically)
+
+- ADR: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
+  - Status in this cross-scan: historical predecessor; superseded semantically by ADR-0040.
+- ADR: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
+  - Status in this cross-scan: historical predecessor; superseded semantically by ADR-0041.
+- ADR: `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
+  - Status in this cross-scan: historical predecessor; superseded semantically by ADR-0044.
+- ADR: `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
+  - Status in this cross-scan: historical predecessor; superseded semantically by ADR-0045.
 
 ### Related Phase 8 tracks (cross-cutting; use ADRs/registry)
 
 - Phase 8 registry (cross-cutting lock): `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
-- LLM gateway: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
-- CLI backend engine: `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
-- Agent hub core: `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
+- Gateway boundary/runtime ownership: `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+- Gateway backend adapter contract: `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+- Agent hub successor: `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+- Orchestration toolbox successor: `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
 - Router daemon: `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
 - Identity tuple semantics: `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
 - Tuple-axis policy surface: `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`

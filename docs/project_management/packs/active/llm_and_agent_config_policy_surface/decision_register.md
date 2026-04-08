@@ -248,7 +248,7 @@ Scope:
 **Decision owner(s):** Broker + Engine + Security  
 **Date:** 2026-02-09  
 **Status:** Accepted  
-**Related docs:** ADR-0027, `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`, `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
+**Related docs:** ADR-0027, `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`, `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 
 **Problem / Context**
 
@@ -285,7 +285,7 @@ Scope:
 **Decision owner(s):** Broker + Gateway + Security  
 **Date:** 2026-02-09  
 **Status:** Accepted  
-**Related docs:** ADR-0027, `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`, `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
+**Related docs:** ADR-0027, `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`, `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 
 **Problem / Context**
 
@@ -419,7 +419,7 @@ Scope:
     - global inventory: `$SUBSTRATE_HOME/agents/` (default `~/.substrate/agents/`)
     - workspace inventory: `<workspace_root>/.substrate/agents/`
 - **Risks:**
-  - Slightly more discovery logic required; mitigated by `agents list` UX (ADR-0025).
+  - Slightly more discovery logic required; mitigated by `agents list` UX as defined by the Agent Hub successor track (ADR-0044).
 - **Unlocks:**
   - Clean expansion path for “one file per agent backend” across CLI and API agents.
 - **Quick wins / low-hanging fruit:**
@@ -433,7 +433,7 @@ Scope:
 **Follow-up tasks (explicit)**
 
 - Update ADR-0027 `SCHEMA.md` to include agent file locations and the filename/id match requirement.
-- Add an ADR-0025 discussion item to define how agent hub loads and reconciles inventory + defaults.
+- Add an ADR-0044 discussion item to define how Agent Hub loads and reconciles inventory + defaults.
 
 ---
 

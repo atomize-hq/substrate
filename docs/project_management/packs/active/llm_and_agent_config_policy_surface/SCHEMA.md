@@ -33,7 +33,7 @@ Examples:
 
 Notes:
 - This ADR does **not** enumerate the complete set of available backends. It only defines the id format and the config/policy key paths that select/allowlist them.
-- The authoritative “what backends exist and what they do” contracts live in the gateway/engine and agent hub ADRs (Phase 4/5), and can be referenced during the Phase 8 circle-back once those contracts are accepted.
+- The authoritative “what backends exist and what they do” contracts live in the successor gateway/backend and agent orchestration ADRs (`ADR-0041`, `ADR-0044`, `ADR-0045`), and can be referenced during the Phase 8 circle-back once those contracts are accepted.
 - Backend ids are selectors for adapters/runtime backends. They are not a substitute for the ADR-0042 identity tuple (`client`, `router`, `provider`, `auth_authority`, `protocol`).
 
 ## Agent inventory directory (new)
@@ -87,7 +87,7 @@ Merge strategy:
 - `agents.hub.orchestrator_agent_id: string`
   - Meaning: selects which agent inventory item id is assigned `role=orchestrator` for the current process/session.
   - Default (effective): empty string.
-  - Constraint: if `agents.enabled=true`, this key MUST be non-empty and MUST refer to an eligible, allowlisted agent inventory item (enforced by the Agent Hub; ADR-0025).
+  - Constraint: if `agents.enabled=true`, this key MUST be non-empty and MUST refer to an eligible, allowlisted agent inventory item (enforced by the Agent Hub successor contract in ADR-0044).
 - `agents.hub.world_restart.on_drift: auto_restart|fail_closed`
   - Meaning: how Agent Hub handles “world-relevant drift” during a long-running orchestration session.
   - Default (effective): `auto_restart`.
@@ -147,7 +147,7 @@ Phase 8 additive note:
 
 ### `workflow.router` (router daemon indirect execution)
 
-Phase 8 additive note: ADR-0029 introduces an indirect execution path (trace event → request → action). This path MUST be explicitly policy-gated and fail-closed by default.
+Phase 8 additive note: ADR-0029 introduces an indirect execution path (trace event -> request -> action). This path MUST be explicitly policy-gated and fail-closed by default.
 This `workflow.router` namespace is distinct from the LLM identity-tuple field `router` defined by ADR-0042. It governs workflow-router-daemon behavior only.
 
 - `workflow.router.enabled: bool`

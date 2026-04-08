@@ -39,7 +39,7 @@ underlying gateway capability.
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f05a9a857afd1d7bed8750aa0a1e5f314551574fc515e3f8d51a3473e76fb7cc
+ADR_BODY_SHA256: f912ab8be5245a70ba603bc6547c3b62e05c59492af2c7c9d27c3d898f664a50
 
 ### Changes (operator-facing)
 - Clarify the runtime boundary between Substrate and `substrate-gateway`

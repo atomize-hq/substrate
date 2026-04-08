@@ -18,8 +18,12 @@ Authoring standard:
   - `docs/project_management/adrs/implemented/ADR-0012-config-schema-per-key-merge-and-provenance.md`
   - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
   - `docs/project_management/adrs/draft/ADR-0020-profiles-config-policy-snapshots.md`
+  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md` (gateway/runtime ownership boundary)
+  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md` (backend adapter contract over stable backend ids)
   - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md` (operator-facing tuple semantics)
   - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md` (additive `llm.constraints.*` tuple-axis policy surface)
+  - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md` (agent hub successor semantics for `agents.hub.*`)
+  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md` (toolbox successor semantics for `agents.toolbox.*`)
   - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md` (Phase 8 additive keys: `workflow.router.*`)
 
 ## Required spec documents (authoritative)

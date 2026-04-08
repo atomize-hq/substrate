@@ -41,7 +41,7 @@ This ADR is a minimal additive follow-on to ADR-0027. It keeps the existing file
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: b34acee4a294d4a59e394e21151c91c1463d5011e4c865bf2deb4be28ac5de9f
+ADR_BODY_SHA256: cdbcd3b47a2dcc20fdce2662742614eb1a8484429895bd7d7052405de93b8cba
 ### Changes (operator-facing)
 - Add tuple-axis policy constraints without creating a new config system
   - Existing: `llm.allowed_backends` and `agents.allowed_backends` gate backend ids, but they do not let operators state router, provider, protocol, or auth-authority constraints independently.

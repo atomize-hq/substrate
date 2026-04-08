@@ -28,7 +28,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 5dfe844de3d4fc36e3bc0d9a4ae7c7f0b79dacfcb7dc8e918261738fc318ec83
+ADR_BODY_SHA256: 3b15c76f976661655bac13323eb5c21a8e7a4c8230bb1907a0f96fe90339d621
 
 Supersession note:
 - Read `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md` as the current architectural source of truth for Substrate versus `substrate-gateway` ownership. This ADR remains useful for the original gateway-capability shape and archived execution planning, but it no longer defines the runtime ownership boundary.

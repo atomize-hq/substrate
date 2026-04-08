@@ -324,3 +324,83 @@ PY
 
 - Summary: Mechanical gates are green and the remaining review findings are verified; platform-fix enforcement is now consistent with the documented kickoff prompts.
 - Next step: “Execution triads may begin.”
+
+---
+
+## Pass 4 — 2026-04-08 — Recommendation: ACCEPT (successor ADR alignment + lint blocker remediation)
+
+## Metadata
+
+- Feature directory: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/`
+- Reviewed workspace state: local documentation updates on top of current working tree
+- Reviewer: `Codex (cross-doc realignment pass)`
+- Date (UTC): `2026-04-08`
+- Recommendation: `ACCEPT`
+
+## Evidence: Commands Run (verbatim)
+
+```bash
+export FEATURE_DIR="docs/project_management/packs/active/llm_and_agent_config_policy_surface"
+
+# Planning lint (mechanical)
+make planning-lint FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+
+# Planning validate (mechanical)
+make planning-validate FEATURE_DIR="$FEATURE_DIR"
+# exit: 0
+```
+
+## Findings (must be exhaustive)
+
+### Finding 009 — Prior ambiguity-lint blocker in `impact_map.md` is resolved
+
+- Status: `VERIFIED`
+- Evidence: `make planning-lint FEATURE_DIR="$FEATURE_DIR"` exited `0` on 2026-04-08 after the remaining ambiguous guidance was rewritten as a singular, testable contract statement.
+- Impact: The active pack is mechanically lint-clean again and no longer blocks execution on the ambiguity gate.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+### Finding 010 — ADR-0027 now points at the active pack artifacts rather than archived paths
+
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - Active-pack links now point to `docs/project_management/packs/active/llm_and_agent_config_policy_surface/*`
+- Impact: The root ADR and the active pack now agree on the current source-of-truth document set.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+### Finding 011 — Successor ADR chain is reflected in the active pack’s dependency framing
+
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/spec_manifest.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/impact_map.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md`
+- Impact: The pack now treats ADR-0040/0041/0044/0045 as the current semantic successors while preserving ADR-0023/0024/0025/0026 only as historical predecessor context.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+### Finding 012 — Referenced ADR executive-summary hashes were refreshed to match current document bodies
+
+- Status: `VERIFIED`
+- Evidence:
+  - `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
+  - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
+  - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+- Impact: Planning lint no longer fails on ADR executive-summary drift while traversing the pack’s current reference graph.
+- Fix required (exact): none
+- If DEFECT: Alternative (one viable): none
+
+## Decision: ACCEPT or FLAG
+
+### If ACCEPT
+
+- Summary: The pack is mechanically valid after successor-ADR realignment and can proceed to execution.
+- Remaining warnings are advisory only:
+  - missing `pre-planning/workstream_triage.md`
+  - `impact_map` touch-set enforcement remains disabled because `meta.slice_spec_version < 2`

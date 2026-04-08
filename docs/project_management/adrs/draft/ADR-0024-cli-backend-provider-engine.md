@@ -24,7 +24,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: 638e918a8adc2e127758a2404181a9c63eb49b22933430ed892cec94d8ae48ee
+ADR_BODY_SHA256: 2d6a70cef4e8fe641fba8e9639f71fdde3d661b4eedcfaae9906851b58276b13
 ### Changes (operator-facing)
 - Treat subscription-authenticated CLIs (starting with Codex) as LLM “provider backends”
   - Existing: Cross-provider routing typically requires API keys or external proxies; subscription-authenticated CLIs cannot be used as provider backends in a controlled way.

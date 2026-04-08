@@ -6,7 +6,7 @@
 - Owner(s): Spenser McConnell (Substrate)
 
 ## Scope
-- Feature directory: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/`
+- Feature directory: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
   - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
@@ -18,18 +18,18 @@
   - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
-- Plan: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/plan.md`
-- Tasks: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/tasks.json`
-- CI checkpoints: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md`
-- Spec manifest: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/spec_manifest.md`
+- Plan: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/plan.md`
+- Tasks: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/tasks.json`
+- CI checkpoints: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/ci_checkpoint_plan.md`
+- Spec manifest: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/spec_manifest.md`
 - Specs:
-  - Contract: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/contract.md`
-  - Schema: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md`
-  - Phase 3a slice: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/LACP0-spec.md`
-  - Phase 3b slice: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/LACP1-spec.md`
-- Decision Register: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/decision_register.md`
-- Impact Map: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/impact_map.md`
-- Manual playbook: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
+  - Contract: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md`
+  - Schema: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - Phase 3a slice: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP0-spec.md`
+  - Phase 3b slice: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP1-spec.md`
+- Decision Register: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md`
+- Impact Map: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/impact_map.md`
+- Manual playbook: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
 - Existing config/policy layering model:
   - `docs/project_management/adrs/implemented/ADR-0008-workspace-config-policy-scope-and-dot-substrate-unification.md`
   - `docs/project_management/adrs/implemented/ADR-0005-workspace-config-precedence-over-env.md`
@@ -41,7 +41,12 @@
 - Identity / tuple follow-ons (additive; must remain compatible):
   - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
   - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
-- LLM + agents feature ADRs (draft; must defer to this ADR for config/policy shape):
+- Current successor ADRs that consume this surface:
+  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+  - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
+  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
+- Historical predecessor ADRs (superseded semantically; useful as origin context only):
   - `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
   - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
   - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
@@ -51,7 +56,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: bceb2cda66397248d4b6109f362435cfdc4241b28b1366e35ebedd7f881ffdcb
+ADR_BODY_SHA256: b8d8795cb2845c107fd4298604de8619bdba2224bc4e80140b8861fb93373b16
 ### Changes (operator-facing)
 - LLM + agent behavior is configured and governed via the existing config/policy files (new keys only)
   - Existing: There is no repo-wide, stable config/policy surface for LLM gateway routing, CLI agent backends, or agent role selection, which invites ad-hoc files/env vars and inconsistent enforcement boundaries.
@@ -62,9 +67,9 @@ ADR_BODY_SHA256: bceb2cda66397248d4b6109f362435cfdc4241b28b1366e35ebedd7f881ffdc
   - Why: Keep Substrate’s enforcement/audit claims accurate and avoid a “second config system” as LLM + agent features land (gateway, CLI backends, agent hub, orchestration toolbox).
   - Links:
     - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md#L1`
-    - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/contract.md#L1`
-    - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/SCHEMA.md#L1`
-    - `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/decision_register.md#L1`
+    - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md#L1`
+    - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md#L1`
+    - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md#L1`
 - Phase 8 additive clarification:
   - This ADR remains the source of truth for config/policy file families, precedence, fail-closed posture, backend allowlists, and host-side secret-read gates.
   - ADR-0042 defines the operator-facing identity tuple (`client`, `router`, `provider`, `auth_authority`, `protocol`).
@@ -178,19 +183,19 @@ Constraints:
 
 ##### `agents.hub` (additive; Phase 5 Agent Hub)
 - `agents.hub.orchestrator_agent_id: string`
-  - Meaning: selects the agent inventory item id assigned `role=orchestrator` for the current process/session (ADR-0025).
+  - Meaning: selects the agent inventory item id assigned `role=orchestrator` for the current process/session (Agent Hub successor semantics are defined by ADR-0044).
   - Default: empty string.
-  - Constraint: if `agents.enabled=true`, this key MUST be set and MUST refer to an eligible allowlisted agent inventory item (enforced by Agent Hub; ADR-0025).
+  - Constraint: if `agents.enabled=true`, this key MUST be set and MUST refer to an eligible allowlisted agent inventory item (enforced by Agent Hub; ADR-0044).
 - `agents.hub.world_restart.on_drift: auto_restart|fail_closed`
-  - Meaning: how Agent Hub handles “world-relevant drift” during a long-running orchestration session (ADR-0025).
+  - Meaning: how Agent Hub handles “world-relevant drift” during a long-running orchestration session (ADR-0044).
   - Default: `auto_restart`.
 
 ##### `agents.toolbox` (additive; Phase 5 internal toolbox; MCP protocol)
 - `agents.toolbox.enabled: bool`
-  - Meaning: whether the internal orchestration toolbox may run at all for the effective config (ADR-0026).
+  - Meaning: whether the internal orchestration toolbox may run at all for the effective config (toolbox successor semantics are defined by ADR-0045).
   - Default: `false`.
 - `agents.toolbox.bind.transport: uds|tcp`
-  - Meaning: preferred bind transport for the toolbox endpoint (ADR-0026).
+  - Meaning: preferred bind transport for the toolbox endpoint (ADR-0045).
   - Default: `uds`.
 
 Notes:
@@ -352,19 +357,19 @@ This `workflow.router` namespace is unrelated to the LLM identity-tuple field `r
   - fail-closed behavior: with defaults (config disabled + allowlists empty), LLM/agent entrypoints refuse to run (exact behavior defined in the feature ADRs)
 
 ### Manual validation
-- Manual playbook: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
+- Manual playbook: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/manual_testing_playbook.md`
 
 ### Smoke scripts
-- Linux: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/smoke/linux-smoke.sh`
-- macOS: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/smoke/macos-smoke.sh`
-- Windows: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/smoke/windows-smoke.ps1`
+- Linux: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/smoke/linux-smoke.sh`
+- macOS: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/smoke/macos-smoke.sh`
+- Windows: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/smoke/windows-smoke.ps1`
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
 - Compat work: none
 
 ## Decision Summary
-- Decision Register: `docs/project_management/_archived/next/llm_and_agent_config_policy_surface/decision_register.md`
+- Decision Register: `docs/project_management/packs/active/llm_and_agent_config_policy_surface/decision_register.md`
   - DR-0001: config/policy live in existing YAML patch files (new keys only)
   - DR-0002: backend ids use `<kind>:<name>` string format
   - DR-0004: policy expresses requirements + allowlists (no `policy.*.enabled`)
