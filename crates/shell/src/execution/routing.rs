@@ -377,6 +377,10 @@ pub fn run_shell_with_cli(cli: Cli) -> Result<i32> {
 
     match result {
         Ok(code) => Ok(code),
+        Err(err) if async_repl::is_world_restart_required_error(&err) => {
+            eprintln!("{err}");
+            Ok(3)
+        }
         Err(err) if config_model::is_user_error(&err) => {
             eprintln!("{err}");
             Ok(2)

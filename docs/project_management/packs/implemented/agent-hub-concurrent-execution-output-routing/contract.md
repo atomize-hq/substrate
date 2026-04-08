@@ -60,7 +60,7 @@ Rules:
 Current REPL runtime scope:
 
 - The REPL currently emits structured `kind="alert"` events with `data.code="world_restarted"` when it auto-restarts a persistent world session after snapshot/workspace drift.
-- `data.code="world_restart_required"` remains schema-reserved for a future fail-closed drift posture and is not emitted by today’s REPL runtime.
+- The REPL currently emits structured `kind="alert"` events with `data.code="world_restart_required"` when snapshot/workspace drift is detected under `agents.hub.world_restart.on_drift=fail_closed` (no implicit restart; operator restart required).
 
 ### REPL mode: PTY passthrough (TUI active)
 

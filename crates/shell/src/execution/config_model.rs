@@ -102,6 +102,7 @@ pub(crate) struct SubstrateConfig {
     pub policy: PolicyConfig,
     pub sync: SyncConfig,
     pub repl: ReplConfig,
+    pub agents: AgentsConfig,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
@@ -359,6 +360,55 @@ pub(crate) struct SyncConfig {
     pub exclude: Vec<String>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentsConfig {
+    pub hub: AgentHubConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentHubConfig {
+    pub world_restart: AgentHubWorldRestartConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentHubWorldRestartConfig {
+    pub on_drift: WorldRestartOnDriftMode,
+}
+
+impl Default for AgentHubWorldRestartConfig {
+    fn default() -> Self {
+        Self {
+            on_drift: WorldRestartOnDriftMode::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WorldRestartOnDriftMode {
+    AutoRestart,
+    FailClosed,
+}
+
+impl Default for WorldRestartOnDriftMode {
+    fn default() -> Self {
+        Self::AutoRestart
+    }
+}
+
+impl WorldRestartOnDriftMode {
+    pub(crate) fn parse_insensitive(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "auto_restart" => Some(Self::AutoRestart),
+            "fail_closed" => Some(Self::FailClosed),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub(crate) struct CliConfigOverrides {
     pub world_enabled: Option<bool>,
@@ -378,6 +428,8 @@ pub(crate) struct SubstrateConfigPatch {
     pub sync: SyncConfigPatch,
     #[serde(skip_serializing_if = "ReplConfigPatch::is_empty")]
     pub repl: ReplConfigPatch,
+    #[serde(skip_serializing_if = "AgentsConfigPatch::is_empty")]
+    pub agents: AgentsConfigPatch,
 }
 
 impl SubstrateConfigPatch {
@@ -386,6 +438,7 @@ impl SubstrateConfigPatch {
             && self.policy.is_empty()
             && self.sync.is_empty()
             && self.repl.is_empty()
+            && self.agents.is_empty()
     }
 }
 
@@ -501,6 +554,45 @@ pub(crate) struct ReplConfigPatch {
 impl ReplConfigPatch {
     fn is_empty(&self) -> bool {
         self.exit_cwd.is_none() && self.max_pty_buffered_lines.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentsConfigPatch {
+    #[serde(skip_serializing_if = "AgentHubConfigPatch::is_empty")]
+    pub hub: AgentHubConfigPatch,
+}
+
+impl AgentsConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.hub.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentHubConfigPatch {
+    #[serde(skip_serializing_if = "AgentHubWorldRestartConfigPatch::is_empty")]
+    pub world_restart: AgentHubWorldRestartConfigPatch,
+}
+
+impl AgentHubConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.world_restart.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct AgentHubWorldRestartConfigPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_drift: Option<WorldRestartOnDriftMode>,
+}
+
+impl AgentHubWorldRestartConfigPatch {
+    fn is_empty(&self) -> bool {
+        self.on_drift.is_none()
     }
 }
 
@@ -1225,6 +1317,32 @@ fn resolve_effective_from_layers(
         );
     }
 
+    // agents.hub.world_restart.on_drift
+    let (world_restart_on_drift, world_restart_on_drift_src) = resolve_replace(
+        effective.agents.hub.world_restart.on_drift,
+        global_patch.agents.hub.world_restart.on_drift,
+        workspace_patch
+            .map(|(p, _)| p.agents.hub.world_restart.on_drift)
+            .unwrap_or(None),
+        None,
+        None,
+        workspace_enabled,
+    );
+    effective.agents.hub.world_restart.on_drift = world_restart_on_drift;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "agents.hub.world_restart.on_drift".to_string(),
+            ConfigExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    world_restart_on_drift_src,
+                    global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
     // policy.mode (from config.yaml/workspace.yaml, not policy.yaml)
     let (policy_mode, policy_mode_src) = resolve_replace(
         effective.policy.mode,
@@ -1705,6 +1823,11 @@ fn apply_update_to_patch(patch: &mut SubstrateConfigPatch, update: &ConfigUpdate
             &update.op,
             &update.value,
         ),
+        "agents.hub.world_restart.on_drift" => apply_enum_world_restart_on_drift_opt(
+            &mut patch.agents.hub.world_restart.on_drift,
+            &update.op,
+            &update.value,
+        ),
 
         _ => Err(user_error(format!(
             "unsupported config key '{}'",
@@ -1735,6 +1858,9 @@ fn reset_patch_key(patch: &mut SubstrateConfigPatch, key: &str) -> Result<bool> 
 
         "repl.exit_cwd" => reset_opt(&mut patch.repl.exit_cwd),
         "repl.max_pty_buffered_lines" => reset_opt(&mut patch.repl.max_pty_buffered_lines),
+        "agents.hub.world_restart.on_drift" => {
+            reset_opt(&mut patch.agents.hub.world_restart.on_drift)
+        }
 
         _ => Err(user_error(format!("unsupported config key '{}'", key))),
     }
@@ -1829,6 +1955,25 @@ fn apply_enum_repl_exit_cwd_opt(
         ))
     })?;
     let changed = *target != Some(next);
+    *target = Some(next);
+    Ok(changed)
+}
+
+fn apply_enum_world_restart_on_drift_opt(
+    target: &mut Option<WorldRestartOnDriftMode>,
+    op: &UpdateOp,
+    raw: &str,
+) -> Result<bool> {
+    if *op != UpdateOp::Set {
+        return Err(user_error("unsupported operator for enum key"));
+    }
+    let next = WorldRestartOnDriftMode::parse_insensitive(raw).ok_or_else(|| {
+        user_error(format!(
+            "invalid agents.hub.world_restart.on_drift '{}'; expected auto_restart or fail_closed",
+            raw
+        ))
+    })?;
+    let changed = target.as_ref() != Some(&next);
     *target = Some(next);
     Ok(changed)
 }

@@ -94,6 +94,14 @@ metadata: {{}}
 }
 
 fn write_config(home_substrate: &Path, world_net_filter: bool) {
+    write_config_with_world_restart_on_drift(home_substrate, world_net_filter, "auto_restart");
+}
+
+fn write_config_with_world_restart_on_drift(
+    home_substrate: &Path,
+    world_net_filter: bool,
+    on_drift: &str,
+) {
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
     let config = format!(
         r#"world:
@@ -110,8 +118,13 @@ sync:
   direction: from_world
   conflict_policy: prefer_host
   exclude: []
+agents:
+  hub:
+    world_restart:
+      on_drift: {}
 "#,
-        if world_net_filter { "true" } else { "false" }
+        if world_net_filter { "true" } else { "false" },
+        on_drift,
     );
     fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
 }
@@ -916,6 +929,252 @@ fn c3_startup_drift_restart_emits_world_restarted_alert() {
             .and_then(Value::as_u64),
         Some(1),
         "startup drift alert must increment to generation 1: {alert:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn c3_drift_fail_closed_emits_world_restart_required_alert() {
+    let temp = temp_dir("substrate-c3-drift-fail-closed-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_profile(&project);
+    write_policy(&substrate_home, true);
+    write_config_with_world_restart_on_drift(&substrate_home, false, "fail_closed");
+
+    let sock_temp = short_socket_dir("sub-c3ws-drift-fail-closed-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+
+    repl.send_line("echo first");
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    write_policy(&substrate_home, false);
+    std::thread::sleep(Duration::from_millis(25));
+
+    repl.send_line("echo second");
+
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(3) {
+        if repl.try_wait().expect("try_wait") {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    let (code, out) = repl.shutdown();
+    assert_eq!(
+        code, 3,
+        "expected fail-closed drift exit code 3, got output:\n{out}"
+    );
+
+    let lower = out.to_ascii_lowercase();
+    assert!(
+        lower.contains("restart required"),
+        "expected operator-visible restart-required output, got:\n{out}"
+    );
+    assert!(
+        !lower.contains("second\n"),
+        "drift fail-closed must stop before executing the second command; output:\n{out}"
+    );
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.persistent_start_sessions.len(),
+        1,
+        "fail-closed drift must not auto-restart the world session; records: {guard:#?}"
+    );
+    assert_eq!(
+        guard.persistent_execs.len(),
+        1,
+        "fail-closed drift must stop before the second exec reaches world-agent; records: {guard:#?}"
+    );
+    drop(guard);
+
+    let events = read_trace(&trace_path);
+    let alerts: Vec<&Value> = events
+        .iter()
+        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
+        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("alert"))
+        .filter(|event| {
+            event.pointer("/data/code").and_then(Value::as_str) == Some("world_restart_required")
+        })
+        .collect();
+    assert_eq!(
+        alerts.len(),
+        1,
+        "expected exactly one world_restart_required alert record, got: {alerts:?}"
+    );
+
+    let alert = alerts[0];
+    assert_eq!(
+        alert.get("agent_id").and_then(Value::as_str),
+        Some("shell"),
+        "restart-required alert must attribute to shell: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("backend_id").and_then(Value::as_str),
+        Some("shell:repl"),
+        "restart-required alert must preserve backend attribution: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("role").and_then(Value::as_str),
+        Some("orchestrator"),
+        "restart-required alert must carry role=orchestrator: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("world_id").and_then(Value::as_str),
+        Some("wld_stub_0001"),
+        "top-level world_id must point at the current world: {alert:?}"
+    );
+    assert_eq!(
+        alert.pointer("/data/reason").and_then(Value::as_str),
+        Some("policy_snapshot_changed"),
+        "policy drift fail-closed alert should classify as policy_snapshot_changed: {alert:?}"
+    );
+    assert_eq!(
+        alert.pointer("/data/on_drift").and_then(Value::as_str),
+        Some("fail_closed"),
+        "restart-required alert must record on_drift=fail_closed: {alert:?}"
+    );
+    assert_eq!(
+        alert
+            .pointer("/data/required_action")
+            .and_then(Value::as_str),
+        Some("restart_world"),
+        "restart-required alert must record required_action=restart_world: {alert:?}"
+    );
+    assert_eq!(
+        alert.pointer("/data/world_id").and_then(Value::as_str),
+        Some("wld_stub_0001"),
+        "restart-required alert must capture the current world_id: {alert:?}"
+    );
+    assert_eq!(
+        alert
+            .pointer("/data/world_generation")
+            .and_then(Value::as_u64),
+        Some(0),
+        "restart-required alert must capture the current generation: {alert:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn c3_startup_drift_fail_closed_emits_world_restart_required_alert() {
+    let temp = temp_dir("substrate-c3-startup-drift-fail-closed-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let child = project.join("child");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&child).expect("create project child");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_workspace_marker(&project);
+    write_profile(&project);
+    write_policy(&substrate_home, true);
+    write_config_with_world_restart_on_drift(&substrate_home, false, "fail_closed");
+
+    let parent_cwd = temp.path().to_string_lossy().into_owned();
+
+    let sock_temp = short_socket_dir("sub-c3ws-startup-drift-fail-closed-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_first_ready_cwd_override(
+        &sock,
+        StreamBehavior::Normal,
+        parent_cwd,
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&child, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(3) {
+        if repl.try_wait().expect("try_wait") {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    let (code, out) = repl.shutdown();
+    assert_eq!(
+        code, 3,
+        "expected startup fail-closed drift exit code 3, got output:\n{out}"
+    );
+
+    let lower = out.to_ascii_lowercase();
+    assert!(
+        lower.contains("restart required"),
+        "expected startup restart-required output, got:\n{out}"
+    );
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.persistent_start_sessions.len(),
+        1,
+        "startup fail-closed drift must not auto-restart the world session; records: {guard:#?}"
+    );
+    drop(guard);
+
+    let events = read_trace(&trace_path);
+    let alerts: Vec<&Value> = events
+        .iter()
+        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
+        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("alert"))
+        .filter(|event| {
+            event.pointer("/data/code").and_then(Value::as_str) == Some("world_restart_required")
+        })
+        .collect();
+    assert_eq!(
+        alerts.len(),
+        1,
+        "expected exactly one startup world_restart_required alert record, got: {alerts:?}"
+    );
+
+    let alert = alerts[0];
+    assert_eq!(
+        alert.pointer("/data/reason").and_then(Value::as_str),
+        Some("workspace_root_changed"),
+        "startup fail-closed drift should classify as workspace_root_changed: {alert:?}"
+    );
+    assert_eq!(
+        alert.pointer("/data/on_drift").and_then(Value::as_str),
+        Some("fail_closed"),
+        "startup fail-closed alert must record on_drift=fail_closed: {alert:?}"
+    );
+    assert_eq!(
+        alert
+            .pointer("/data/required_action")
+            .and_then(Value::as_str),
+        Some("restart_world"),
+        "startup fail-closed alert must record required_action=restart_world: {alert:?}"
+    );
+    assert_eq!(
+        alert.pointer("/data/world_id").and_then(Value::as_str),
+        Some("wld_stub_0001"),
+        "startup fail-closed alert must capture the current world id: {alert:?}"
+    );
+    assert_eq!(
+        alert
+            .pointer("/data/world_generation")
+            .and_then(Value::as_u64),
+        Some(0),
+        "startup fail-closed alert must capture the current generation: {alert:?}"
     );
 }
 

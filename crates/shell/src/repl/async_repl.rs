@@ -270,18 +270,29 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                 .unwrap_or_else(|_| PathBuf::from("."))
                 .display()
                 .to_string();
-            match start_world_session(requested, stdout_cb.clone(), &agent_printer).await {
+            match start_world_session(requested, stdout_cb.clone(), &agent_printer, &mut telemetry)
+                .await
+            {
                 Ok(session) => Some(session),
                 Err(err) => {
-                    let message = format!(
-                        "substrate: error: failed to start persistent world session: {err:#}"
-                    );
+                    let exit_code = if is_world_restart_required_error(&err) {
+                        3
+                    } else {
+                        1
+                    };
+                    let message = if is_world_restart_required_error(&err) {
+                        err.to_string()
+                    } else {
+                        format!(
+                            "substrate: error: failed to start persistent world session: {err:#}"
+                        )
+                    };
                     agent_printer.print(message.clone());
                     eprintln!("{message}");
                     let _ = io::stdout().flush();
                     let _ = io::stderr().flush();
                     tokio::time::sleep(Duration::from_millis(100)).await;
-                    return Ok(1);
+                    return Ok(exit_code);
                 }
             }
         } else {
@@ -451,7 +462,12 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             }
 
                             if world_session.is_some() {
-                                ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
+                                ensure_no_policy_drift(
+                                    &mut world_session,
+                                    &agent_printer,
+                                    &mut telemetry,
+                                )
+                                .await?;
                                 let exit_code = {
                                     let session = world_session
                                         .as_mut()
@@ -466,7 +482,12 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     };
                                     exec_world_pty(session, pty_cmd, &cmd_id, &mut io_ctx).await?
                                 };
-                                ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
+                                ensure_no_policy_drift(
+                                    &mut world_session,
+                                    &agent_printer,
+                                    &mut telemetry,
+                                )
+                                .await?;
                                 let status = exit_status_from_code(exit_code);
                                 report_nonzero_status(&status);
                                 publish_command_completion(&trimmed_owned, &cmd_id, &status);
@@ -477,7 +498,12 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     }
 
                     if world_session.is_some() {
-                        ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
+                        ensure_no_policy_drift(
+                            &mut world_session,
+                            &agent_printer,
+                            &mut telemetry,
+                        )
+                        .await?;
                         let pty = needs_pty(trimmed);
                         let exit_code = {
                             let session = world_session
@@ -497,7 +523,12 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 exec_world_line(session, &command, &cmd_id, &mut io_ctx).await?
                             }
                         };
-                        ensure_no_policy_drift(&mut world_session, &agent_printer).await?;
+                        ensure_no_policy_drift(
+                            &mut world_session,
+                            &agent_printer,
+                            &mut telemetry,
+                        )
+                        .await?;
                         let status = exit_status_from_code(exit_code);
                         report_nonzero_status(&status);
                         publish_command_completion(&trimmed_owned, &cmd_id, &status);
@@ -1088,6 +1119,39 @@ impl WorldRestartReason {
             Self::WorkspaceRootChanged => "world restarted due to workspace root drift",
         }
     }
+
+    fn restart_required_message(self) -> &'static str {
+        match self {
+            Self::PolicySnapshotChanged => "world restart required due to policy snapshot drift",
+            Self::WorkspaceRootChanged => "world restart required due to workspace root drift",
+        }
+    }
+}
+
+#[derive(Debug)]
+struct WorldRestartRequiredError {
+    message: String,
+}
+
+impl WorldRestartRequiredError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for WorldRestartRequiredError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for WorldRestartRequiredError {}
+
+pub(crate) fn is_world_restart_required_error(err: &anyhow::Error) -> bool {
+    err.chain()
+        .any(|cause| cause.is::<WorldRestartRequiredError>())
 }
 
 struct ReplIo<'a> {
@@ -1173,6 +1237,96 @@ fn emit_world_restarted_alert(
     }
 
     let _ = publish_agent_event(event);
+}
+
+fn build_world_restart_required_alert(
+    current_world_id: &str,
+    current_world_generation: u64,
+    reason: WorldRestartReason,
+) -> AgentEvent {
+    let mut event = AgentEvent::alert(
+        "shell",
+        orchestration_session_id(),
+        Uuid::now_v7().to_string(),
+        "world_restart_required",
+        reason.restart_required_message(),
+    );
+    event.role = Some("orchestrator".to_string());
+    event.backend_id = Some("shell:repl".to_string());
+    event.world_id = Some(current_world_id.to_string());
+
+    if let Some(data) = event.data.as_object_mut() {
+        data.insert("reason".to_string(), serde_json::json!(reason.code()));
+        data.insert(
+            "required_action".to_string(),
+            serde_json::json!("restart_world"),
+        );
+        data.insert("on_drift".to_string(), serde_json::json!("fail_closed"));
+        data.insert("world_id".to_string(), serde_json::json!(current_world_id));
+        data.insert(
+            "world_generation".to_string(),
+            serde_json::json!(current_world_generation),
+        );
+    }
+
+    event
+}
+
+fn resolve_world_restart_on_drift(
+    cwd: &Path,
+) -> Result<crate::execution::config_model::WorldRestartOnDriftMode> {
+    Ok(crate::execution::config_model::resolve_effective_config(
+        cwd,
+        &crate::execution::config_model::CliConfigOverrides::default(),
+    )?
+    .agents
+    .hub
+    .world_restart
+    .on_drift)
+}
+
+async fn handle_detected_world_drift(
+    old_session: WorldSession,
+    requested_cwd: String,
+    policy_snapshot: agent_api_types::PolicySnapshotV3,
+    snapshot_hash: String,
+    workspace_root: Option<PathBuf>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+    reason: WorldRestartReason,
+) -> Result<WorldSession> {
+    let on_drift = resolve_world_restart_on_drift(Path::new(&requested_cwd))?;
+    match on_drift {
+        crate::execution::config_model::WorldRestartOnDriftMode::AutoRestart => {
+            restart_world_session(
+                old_session,
+                requested_cwd,
+                policy_snapshot,
+                snapshot_hash,
+                workspace_root,
+                agent_printer,
+                reason,
+            )
+            .await
+        }
+        crate::execution::config_model::WorldRestartOnDriftMode::FailClosed => {
+            let alert = build_world_restart_required_alert(
+                &old_session.world_id,
+                old_session.world_generation,
+                reason,
+            );
+            telemetry.persist_agent_event(&alert);
+            telemetry.record_agent_event();
+            agent_printer.print(format_event_line(&alert));
+            let _ = old_session.client.close().await;
+            Err(anyhow!(WorldRestartRequiredError::new(format!(
+                "substrate: error: world restart required before continuing ({}, world_id={}, generation={})",
+                reason.code(),
+                old_session.world_id,
+                old_session.world_generation,
+            ))))
+        }
+    }
 }
 
 async fn open_world_session(
@@ -1407,6 +1561,7 @@ async fn start_world_session(
     requested_cwd: String,
     on_stdout: StdoutCallback,
     agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
 ) -> Result<WorldSession> {
     let requested_path = Path::new(&requested_cwd);
     let resolved_start = policy_snapshot::resolve_policy_snapshot_for_cwd(requested_path)
@@ -1439,14 +1594,24 @@ async fn start_world_session(
         &ready_hash,
         &ready_workspace_root,
     ) {
-        agent_printer.print("substrate: note: world session restarting due to snapshot/workspace drift before first command");
-        return restart_world_session(
+        let on_drift = resolve_world_restart_on_drift(ready_path)?;
+        let note = match on_drift {
+            crate::execution::config_model::WorldRestartOnDriftMode::AutoRestart => {
+                "substrate: note: world session restarting due to snapshot/workspace drift before first command"
+            }
+            crate::execution::config_model::WorldRestartOnDriftMode::FailClosed => {
+                "substrate: note: world session detected snapshot/workspace drift before first command and requires operator restart"
+            }
+        };
+        agent_printer.print(note);
+        return handle_detected_world_drift(
             session,
             ready_cwd,
             resolved_ready.snapshot,
             ready_hash,
             ready_workspace_root,
             agent_printer,
+            telemetry,
             reason,
         )
         .await;
@@ -1458,15 +1623,17 @@ async fn start_world_session(
 async fn ensure_no_policy_drift(
     world_session: &mut Option<WorldSession>,
     agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
     let Some(session) = world_session.as_ref() else {
         return Ok(());
     };
 
-    let path = Path::new(&session.world_cwd);
-    let resolved = policy_snapshot::resolve_policy_snapshot_for_cwd(path)
+    let current_world_cwd = session.world_cwd.clone();
+    let current_world_path = PathBuf::from(&current_world_cwd);
+    let resolved = policy_snapshot::resolve_policy_snapshot_for_cwd(current_world_path.as_path())
         .context("policy snapshot (drift)")?;
-    let workspace_root = find_workspace_root(path);
+    let workspace_root = find_workspace_root(current_world_path.as_path());
 
     let Some(reason) = classify_world_restart_reason(
         &session.snapshot_hash,
@@ -1477,21 +1644,30 @@ async fn ensure_no_policy_drift(
         return Ok(());
     };
 
-    agent_printer
-        .print("substrate: note: world session restarting due to snapshot/workspace drift");
-
     let old = world_session
         .take()
         .expect("world_session present if session was Some above");
     let requested = old.world_cwd.clone();
+    let on_drift = resolve_world_restart_on_drift(current_world_path.as_path())?;
+    let note = match on_drift {
+        crate::execution::config_model::WorldRestartOnDriftMode::AutoRestart => {
+            "substrate: note: world session restarting due to snapshot/workspace drift"
+        }
+        crate::execution::config_model::WorldRestartOnDriftMode::FailClosed => {
+            "substrate: note: world session detected snapshot/workspace drift and requires operator restart"
+        }
+    };
+    agent_printer.print(note);
+
     *world_session = Some(
-        restart_world_session(
+        handle_detected_world_drift(
             old,
             requested,
             resolved.snapshot,
             resolved.snapshot_hash,
             workspace_root,
             agent_printer,
+            telemetry,
             reason,
         )
         .await?,
