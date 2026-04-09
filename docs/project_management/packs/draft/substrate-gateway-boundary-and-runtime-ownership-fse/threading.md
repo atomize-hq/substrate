@@ -97,10 +97,10 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-4`
   - **Carried contract IDs**: `C-04`
   - **Purpose**: publish the typed lifecycle/status transport and parity evidence contract that cross-doc validation and quality-gate work will lock in.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: typed world-agent endpoint shape, shell/client integration path, allowed divergence list, or Linux/macOS/Windows evidence requirements change.
-  - **Satisfied by**: the selected Option A in `pre-planning/impact_map.md`, the accepted `SGBRO-PWS-world_agent_profile` lane in `pre-planning/workstream_triage.md`, and the parity requirements in `pre-planning/ci_checkpoint_plan.md`.
-  - **Notes**: this thread deliberately excludes provisioning changes, which stay out of scope for this pack.
+  - **Satisfied by**: `governance/seam-3-closeout.md` records the landed `C-04` publication, the S1 typed runtime boundary in `8c0bd439`, the S2 parity evidence update in `4511b3a5`, the durable contract mirror in `docs/contracts/substrate-gateway-runtime-parity.md`, and the targeted verification reruns for the shared client, the `gateway_runtime_parity` target-local route-shape tests, and the shell gateway tests; host-local runtime-dependent `world-agent` cases self-skipped outside Linux/VM support.
+  - **Notes**: this thread now carries the published typed lifecycle/status and parity-evidence contract into `SEAM-4`. Provisioning changes remain out of scope for this pack and were not pulled into the published contract.
 
 ## Dependency graph
 
