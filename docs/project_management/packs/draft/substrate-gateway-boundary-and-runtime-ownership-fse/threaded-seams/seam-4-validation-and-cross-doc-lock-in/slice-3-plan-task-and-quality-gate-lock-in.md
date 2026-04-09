@@ -3,7 +3,7 @@ slice_id: S3
 seam_id: SEAM-4
 slice_kind: conformance
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
