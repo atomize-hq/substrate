@@ -27,7 +27,24 @@ This feature uses feature-derived slice ids per the triad setup standard.
 
 Canonical slice ids selected for this feature:
 - Slice prefix: `SGBRO`
-- `SGBRO0` — boundary ownership contract set, status schema, policy-evaluation rules, platform guarantees, and planning-pack alignment
+- `SGBRO0` — boundary ownership and contract authority lock
+- `SGBRO1` — status-schema and `client_wiring.*` lock
+- `SGBRO2` — policy-evaluation and trust-boundary lock
+- `SGBRO3` — typed runtime and parity lock
+- `SGBRO4` — docs-validation, task-graph, and checkpoint lock-in
+
+Planning-support artifacts required by the populated task graph:
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/kickoff_prompts/CP1-ci-checkpoint.md`
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO0/kickoff_prompts/`
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO1/kickoff_prompts/`
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO2/kickoff_prompts/`
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO3/kickoff_prompts/`
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO4/kickoff_prompts/`
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO0/SGBRO0-spec.md`
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO1/SGBRO1-spec.md`
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO2/SGBRO2-spec.md`
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO3/SGBRO3-spec.md`
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO4/SGBRO4-spec.md`
 
 ## Required spec documents (authoritative)
 
@@ -61,7 +78,7 @@ Each entry lists:
     - the checkpoint grouping for this cross-platform planning pack
     - the exact validation gates required before promotion and before execution triads
   - Must define:
-    - the checkpoint boundaries for `SGBRO0`
+    - the single checkpoint boundary after `SGBRO4`
     - the exact doc-validation gates, lint gates, and cross-platform parity review gates for this pack
 
 - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/plan.md`
@@ -70,15 +87,15 @@ Each entry lists:
     - slice ordering and feature-level guardrails
   - Must define:
     - the orchestration branch and task flow for this pack
-    - the single-slice execution order for `SGBRO0`
+    - the accepted five-slice execution order `SGBRO0` through `SGBRO4`
     - the validation evidence required at slice closeout
 
 - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/tasks.json`
   - Owns:
     - the task graph, dependencies, worktree metadata, and acceptance-criteria wiring
   - Must define:
-    - triad tasks for `SGBRO0`
-    - `ac_ids` wired to `SGBRO0`
+    - triad tasks for `SGBRO0` through `SGBRO4`
+    - `ac_ids` wired to the accepted slice specs
     - checkpoint metadata that matches `pre-planning/ci_checkpoint_plan.md`
 
 - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/session_log.md`
@@ -155,12 +172,33 @@ Each entry lists:
 
 - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO0/SGBRO0-spec.md`
   - Owns:
-    - the slice-local acceptance criteria for producing the feature-local authority set
-    - the acceptance criteria for reconciling external-owner references without redefining external contracts
+    - the boundary ownership contract set and canonical slice-order lock
   - Must define:
-    - `AC-SGBRO0-*` entries for `contract.md`, `gateway-status-schema-spec.md`, `policy-spec.md`, `platform-parity-spec.md`, and `manual_testing_playbook.md`
-    - the explicit no-duplication rule for surfaces already owned by ADR-0027, ADR-0017, ADR-0028, ADR-0041, and ADR-0042
-    - the pack-level validation evidence required before quality gate
+    - `AC-SGBRO0-*` entries for the accepted order, support-artifact presence, and task-graph coherence
+
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO1/SGBRO1-spec.md`
+  - Owns:
+    - the status-schema and `client_wiring.*` planning lock
+  - Must define:
+    - `AC-SGBRO1-*` entries for status-schema task wiring and prompt paths
+
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO2/SGBRO2-spec.md`
+  - Owns:
+    - the policy-evaluation and trust-boundary planning lock
+  - Must define:
+    - `AC-SGBRO2-*` entries for policy task wiring and prompt paths
+
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO3/SGBRO3-spec.md`
+  - Owns:
+    - the typed runtime and parity planning lock
+  - Must define:
+    - `AC-SGBRO3-*` entries for runtime/parity task wiring and prompt paths
+
+- `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO4/SGBRO4-spec.md`
+  - Owns:
+    - the docs-validation, task-graph, and checkpoint lock-in
+  - Must define:
+    - `AC-SGBRO4-*` entries for the final task graph, checkpoint boundary, and validator-backed support artifacts
 
 ## Coverage matrix (surface → authoritative doc)
 
@@ -184,7 +222,7 @@ Each entry lists:
 | Canonical trace vocabulary and correlation semantics | `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` | trace fields, correlation vocabulary, and trace authority |
 | Identity-tuple metadata and placement-posture semantics beyond `client_wiring.*` | `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md` | `client`, `router`, `provider`, `auth_authority`, `protocol`, and posture semantics |
 | Manual validation of one-owner-per-surface coverage | `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/manual_testing_playbook.md` | deterministic checklist and expected assertions |
-| Slice-local delivery and acceptance criteria | `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO0/SGBRO0-spec.md` | `AC-SGBRO0-*`, sequencing, and validation evidence |
+| Slice-local delivery and acceptance criteria | `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO0/SGBRO0-spec.md` through `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO4/SGBRO4-spec.md` | `AC-SGBRO0-*` through `AC-SGBRO4-*`, sequencing, checkpoint boundary, and validator-backed support artifacts |
 
 ## Explicitly unselected doc classes
 
