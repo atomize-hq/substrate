@@ -9,18 +9,44 @@ boundary, and the absence-semantics and non-secret posture that downstream slice
 The owned surface is the structured output contract for `substrate world gateway status --json`.
 
 Owned here:
-- the top-level envelope owned by Substrate for machine-readable gateway status
-- the `client_wiring.*` field family boundary
-- the rule that the JSON surface is the authoritative wiring discovery surface
+- the minimum owned portion of the top-level JSON object for machine-readable gateway status
+- the required `status` availability field
+- the `client_wiring` object and its `client_wiring.*` field family
+- the rule that `status --json` is the authoritative wiring discovery surface
 - the rule that status output must not expose secret material
 - the ownership of absence semantics for gateway status fields
 - the boundary against additive metadata that belongs outside `client_wiring.*`
 
 Not owned here:
-- a full field-by-field schema table
-- final JSON examples
-- transport details or world-agent endpoint shapes
+- policy-evaluation decisions or trust-boundary logic
+- a runtime transport protocol or endpoint framing contract
 - implementation-specific serialization code
+- additive identity-tuple or placement-posture metadata outside `client_wiring.*`
+
+## Concrete shape
+
+The top-level JSON object is:
+
+```text
+owned envelope portion:
+{
+  status: "available" | "unavailable"
+  client_wiring?: {
+    openai_base_url: string
+    anthropic_base_url: string
+  }
+}
+```
+
+Rules:
+- `status` is required and reports whether gateway wiring can be published for this entrypoint.
+- `client_wiring` is required when wiring can be published and omitted when the gateway/world component is unavailable.
+- `client_wiring.openai_base_url` and `client_wiring.anthropic_base_url` are the only owned wiring-discovery leaves in this contract.
+- The two wiring leaves are published together or omitted together; partial publication is not allowed.
+- When present, the wiring leaves are non-empty strings pointing to Substrate-managed gateway endpoints.
+- When omitted, the contract uses absence rather than placeholder values, nulls, or empty strings.
+- Additional top-level fields may coexist only when they are owned by another contract surface.
+- This contract does not define, version-control, or widen the meaning of those externally owned additive fields.
 
 ## Publication surface
 
@@ -37,11 +63,11 @@ This boundary must make the following statements explicit:
 - absence rules are contract behavior, not incidental implementation detail
 - the JSON output must remain non-secret
 - additive metadata outside `client_wiring.*` is not owned here
+- identity-tuple and placement-posture metadata beyond `client_wiring.*` remain outside this contract and belong to ADR-0042
 
 ## Deferred to later slices
 
 The later schema slice owns:
-- the complete top-level field inventory
-- exact field types and conditional presence rules
-- canonical examples
+- any expansion beyond the concrete top-level envelope and `client_wiring` leaves defined here
+- any per-field validation notes or examples beyond the minimal contract sketch
 - any expanded validation notes needed for implementation
