@@ -237,7 +237,9 @@ jq 'select(.kind == "alert" and .data.code? and (.data.code == "world_restarted"
 
 ### Policy Snapshot Metadata (No Raw Policy Content)
 
-Snapshot enforcement semantics and the authoritative definitions of `policy_resolution_mode` and related fields live in `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md`.
+The current field semantics for `policy_resolution_mode` and related snapshot metadata are defined in this document. The archived
+`docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md` is historical background only.
+See the field notes below for the current consumer-facing meaning.
 
 Command completion spans record snapshot metadata without logging raw policy contents:
 
