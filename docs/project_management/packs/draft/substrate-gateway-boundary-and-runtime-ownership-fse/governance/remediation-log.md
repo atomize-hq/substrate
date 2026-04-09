@@ -38,16 +38,16 @@ Additional remediation rules for this pack:
   related_thread: THR-04
   related_contract: C-04
   related_artifact: docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md
-  severity: blocking
+  severity: material
   status: open
   owner_seam: SEAM-3
-  blocked_targets:
-    - seam: SEAM-3
-      field: status
-      value: exec-ready
-  summary: typed runtime and platform parity lacks a concrete owned contract baseline
-  required_fix: create the runtime/parity contract baseline in seam-local planning and publish the paired feature-local parity spec before advancing the seam to exec-ready
-  resolution_evidence: []
+  blocked_targets: []
+  summary: typed runtime and platform parity now has a concrete owned contract baseline, but the SEAM-3 implementation and publication surfaces still need to land against it
+  required_fix: land the SEAM-3 owner execution surfaces attached to `threaded-seams/seam-3-typed-runtime-and-platform-parity/slice-00-runtime-parity-contract-definition.md`, `slice-1-typed-lifecycle-status-api-boundary.md`, and `slice-2-shell-consumption-and-platform-parity-evidence.md` so `C-04` and `THR-04` publish from runtime evidence without widening the contract
+  resolution_evidence:
+    - docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md now records the feature-local C-04 baseline, allowed divergences, and named verification surfaces
+    - docs/contracts/substrate-gateway-runtime-parity.md now holds the durable canonical C-04 contract without planning IDs
+    - threaded-seams/seam-3-typed-runtime-and-platform-parity/slice-00-runtime-parity-contract-definition.md now owns the concrete execution checklist, edge cases, and pass/fail conditions for the remaining SEAM-3 work
 ```
 
 ## Resolved remediations

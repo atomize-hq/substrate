@@ -2,7 +2,7 @@
 seam_id: SEAM-3
 seam_slug: typed-runtime-and-platform-parity
 type: platform
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v2
 basis:
@@ -26,7 +26,7 @@ basis:
 gates:
   pre_exec:
     review: passed
-    contract: failed
+    contract: passed
     revalidation: passed
   post_exec:
     landing: pending
@@ -94,7 +94,7 @@ open_remediations:
   - `docs/WORLD.md`
 - **Verification**:
   - This seam consumes upstream contracts `C-01`, `C-02`, and `C-03`; verification may depend on accepted upstream evidence for command behavior, status schema, and fail-closed policy rules.
-  - This seam produces owned contract `C-04`. At seam-brief depth, verification is the runtime/parity contract becoming concrete enough for seam-local planning and implementation: typed surface ownership, host/backend call path, parity guarantees, divergence list, and required evidence.
+  - This seam produces owned contract `C-04`. The contract baseline and owner execution checklist now live in `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`, `docs/contracts/substrate-gateway-runtime-parity.md`, and the threaded `S00` owner slice, so the remaining work is execution and publication rather than pre-exec contract discovery.
   - Later seam-local verification should prove:
     - the typed world-agent path is authoritative for lifecycle/status operations
     - shell and shared clients consume the same runtime contract
@@ -134,7 +134,7 @@ open_remediations:
     - allowed divergence list
     - parity evidence requirements
     - proof that provisioning stays out of scope
-    - whether the owned runtime/parity contract baseline is concrete enough to unblock `exec-ready`
+    - holding implementation and validation work to the published runtime/parity baseline without widening it
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - `C-04`

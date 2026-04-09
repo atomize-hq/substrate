@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-3
 seam_slug: typed-runtime-and-platform-parity
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
@@ -25,7 +25,7 @@ basis:
 gates:
   pre_exec:
     review: passed
-    contract: failed
+    contract: passed
     revalidation: passed
   post_exec:
     landing: pending
@@ -68,7 +68,7 @@ open_remediations:
   - `docs/WORLD.md`
 - **Verification**:
   - This seam consumes upstream contracts `C-01`, `C-02`, and `C-03`; those inputs are now published by `../../governance/seam-1-closeout.md` and `../../governance/seam-2-closeout.md`.
-  - This seam produces owned contract `C-04`. The current blocker is that the feature-local parity spec and durable runtime/parity contract baseline do not yet exist, so the seam remains `decomposed` rather than `exec-ready`.
+  - This seam produces owned contract `C-04`. The contract baseline and owner execution checklist now exist in `S00`, `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`, and `docs/contracts/substrate-gateway-runtime-parity.md`, so the remaining work is runtime implementation and publication evidence rather than pre-exec contract definition.
   - Later seam-local verification should prove:
     - the typed world-agent path is authoritative for lifecycle/status operations
     - shell and shared clients consume the same runtime contract
