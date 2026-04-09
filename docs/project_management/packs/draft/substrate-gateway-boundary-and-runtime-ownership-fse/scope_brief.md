@@ -4,8 +4,8 @@ pack_version: v1
 pack_status: extracted
 source_ref: docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/pre-planning/
 execution_horizon:
-  active_seam: SEAM-1
-  next_seam: SEAM-2
+  active_seam: SEAM-2
+  next_seam: SEAM-3
 ---
 
 # Scope Brief - substrate-gateway-boundary-and-runtime-ownership

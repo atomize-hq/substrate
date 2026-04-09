@@ -3,7 +3,7 @@ seam_id: SEAM-3
 seam_slug: typed-runtime-and-platform-parity
 type: platform
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v1
 basis:
   currentness: provisional
@@ -121,7 +121,7 @@ open_remediations: []
   - Safety depends on keeping fail-closed and non-trust boundaries inherited from upstream contracts rather than re-deciding them locally.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `future` because typed runtime/parity planning should consume published upstream contracts instead of turning current pre-planning assumptions into implementation commitments too early.
+    - `next` because typed runtime/parity planning is the immediate downstream consumer once `SEAM-2` publishes schema and policy truth, but it should still wait behind the active seam.
   - Which threads matter most
     - `THR-02`
     - `THR-03`

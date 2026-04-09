@@ -2,18 +2,20 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-  - This is inferred from the accepted planning spine: command boundary and ownership language must be fixed before schema, policy, runtime, or docs-validation seams can safely reuse it.
-- **Next seam**: `SEAM-2`
-  - This seam is the immediate downstream consumer because it turns the locked operator boundary into the authoritative machine-readable status and policy-evaluation surfaces.
-- **Future seams**: `SEAM-3`, `SEAM-4`
-  - Typed runtime/parity and validation lock-in remain future seams because they should consume published upstream contracts instead of carrying speculative detail now.
+- **Active seam**: `SEAM-2`
+  - This seam now consumes the published operator boundary from `SEAM-1` and turns it into the authoritative machine-readable status and policy-evaluation surfaces.
+- **Next seam**: `SEAM-3`
+  - This seam is the immediate downstream consumer because typed world-agent/runtime parity should be planned against published upstream status and policy truth.
+- **Future seams**: `SEAM-1`, `SEAM-4`
+  - `SEAM-1` has landed with a passed seam-exit gate and left the forward planning window.
+  - `SEAM-4` remains future because cross-doc validation should consume published upstream contracts rather than speculative planning.
 
 Horizon policy for this extracted pack:
 
 - only the active seam gets authoritative downstream deep planning by default
 - the next seam may later receive seam-local review and only provisional deeper planning
-- the future seams remain seam briefs only until upstream closeouts and published threads exist
+- `SEAM-1` has now landed with a passed seam-exit gate and left the forward planning window
+- the remaining future seams stay seam briefs until upstream closeouts and published threads exist
 
 ## Contract registry
 
@@ -64,10 +66,10 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`, `SEAM-4`
   - **Carried contract IDs**: `C-01`
   - **Purpose**: publish one operator boundary so every downstream seam inherits the same command family, ownership split, stable env names, and exit taxonomy.
-  - **State**: `defined`
+  - **State**: `revalidated`
   - **Revalidation trigger**: command spelling, absent-state wording, stable env names, exit-code boundaries, or the Substrate versus `substrate-gateway` ownership split changes.
-  - **Satisfied by**: ADR-0040 user contract language, `pre-planning/spec_manifest.md`, and `pre-planning/minimal_spec_draft.md` already define the intended boundary strongly enough for seam-local planning.
-  - **Notes**: this is the first critical-path handoff and the main protection against archived ADR-0023 command drift.
+  - **Satisfied by**: `governance/seam-1-closeout.md` records the landed operator contract, command-family proof, absent-state evidence, and stale triggers. `threaded-seams/seam-2-status-schema-and-policy-evaluation-surface/review.md` revalidates that handoff for the schema/policy seam.
+  - **Notes**: this is the first critical-path handoff and the main protection against archived ADR-0023 command drift. `SEAM-2` now consumes and revalidates it as the active downstream seam.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-2`
@@ -116,11 +118,11 @@ flowchart LR
 ## Critical path
 
 1. `SEAM-1` first:
-   - the operator boundary must be unambiguous before downstream schema, policy, runtime, or docs work can safely consume it
-   - this seam is the main guardrail against archived command spellings and ownership drift
+   - the operator boundary had to become unambiguous before downstream schema, policy, runtime, or docs work could safely consume it
+   - this seam published the main guardrail against archived command spellings and ownership drift
 2. `SEAM-2` second:
-   - once the operator boundary is fixed, the status schema and policy-evaluation surface can become the next authoritative contract layer
-   - this seam is the main guardrail against schema drift and fail-closed drift
+   - once the operator boundary was fixed and published, the status schema and policy-evaluation surface could become the active authoritative contract layer
+   - this seam is now the main guardrail against schema drift and fail-closed drift
 3. `SEAM-3` third:
    - runtime transport and platform parity should consume published status/policy truth rather than invent it
    - this seam is the main guardrail against shell-probe and platform-private behavior becoming contract

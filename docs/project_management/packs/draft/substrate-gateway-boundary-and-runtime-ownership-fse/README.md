@@ -24,22 +24,24 @@ Start here:
 
 Execution horizon:
 
-- Active seam: `SEAM-1`
-- Next seam: `SEAM-2`
+- Active seam: `SEAM-2`
+- Next seam: `SEAM-3`
+- Future seam(s): `SEAM-1`, `SEAM-4`
 
 Horizon inference:
 
-- `SEAM-1` is inferred as the active seam because every downstream surface depends on one authoritative operator boundary for command spelling, absent-state behavior, exit taxonomy, stable wiring semantics, and the Substrate versus `substrate-gateway` ownership split.
-- `SEAM-2` is inferred as the next seam because the status schema and policy-evaluation surface can be bounded immediately after the operator contract is locked, and the pre-planning pack already narrows that work to one schema/policy inventory seam.
-- `SEAM-3` and `SEAM-4` stay future seams because typed world-agent/runtime parity and cross-doc validation should consume published upstream contracts rather than force speculative deeper planning now.
+- `SEAM-1` has landed with a passed seam-exit gate and published the operator boundary for downstream consumers.
+- `SEAM-2` is now the active seam because the status schema and policy-evaluation surface can consume that published operator contract directly.
+- `SEAM-3` is now the next seam because typed world-agent/runtime parity is the immediate downstream consumer once the schema and policy surfaces are published.
+- `SEAM-4` remains future because cross-doc validation should consume published upstream contracts rather than force speculative deeper planning now.
 
 Policy:
 
 - only the active seam is eligible for authoritative downstream sub-slices by default
 - the next seam may later receive seam-local review + slices, and only provisional deeper planning
-- the next seam is likely to need only spike-grade provisional work around exact field tables and decision tables rather than another broad seam split
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that own undefined contract boundaries may reserve `S00` as a contract-definition boundary slice once seam-local planning begins
+- `SEAM-1` has now landed with a passed seam-exit gate and left the forward planning window
 - future seams remain seam briefs
 - canonical contract docs live in `docs/contracts/` and must remain descriptive-only
 
