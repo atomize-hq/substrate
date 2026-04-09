@@ -538,35 +538,41 @@ step_phase_a_required_outputs_exist() {
     local idx="$1"
     local step="${steps[$idx]}"
     local required_rel required_abs
+
+    phase_a_required_outputs_for_step() {
+        local step_name="$1"
+        case "${step_name}" in
+            spec-manifest)
+                printf '%s\n' "${FEATURE_DIR_REL}/logs/spec-manifest/handoff.md"
+                ;;
+            impact-map)
+                printf '%s\n' "${FEATURE_DIR_REL}/logs/impact-map/scratch.md"
+                printf '%s\n' "${FEATURE_DIR_REL}/logs/impact-map/handoff.md"
+                ;;
+            min-spec-draft)
+                printf '%s\n' "${FEATURE_DIR_REL}/logs/min-spec-draft/scratch.md"
+                printf '%s\n' "${FEATURE_DIR_REL}/logs/min-spec-draft/handoff.md"
+                ;;
+            CI-checkpoint)
+                printf '%s\n' "${FEATURE_DIR_REL}/logs/CI-checkpoint/scratch.md"
+                printf '%s\n' "${FEATURE_DIR_REL}/logs/CI-checkpoint/handoff.md"
+                ;;
+            workstream-triage)
+                printf '%s\n' "${FEATURE_DIR_REL}/logs/workstream-triage/workstream_triage_draft.md"
+                ;;
+            *)
+                die "unknown step: ${step_name}"
+                ;;
+        esac
+    }
+
     while IFS= read -r required_rel; do
         [[ -n "${required_rel}" ]] || continue
         required_abs="${REPO_ROOT}/${required_rel}"
         if [[ ! -f "${required_abs}" ]]; then
             return 1
         fi
-    done < <(case "${step}" in
-        spec-manifest)
-            printf '%s\n' "${FEATURE_DIR_REL}/logs/spec-manifest/handoff.md"
-            ;;
-        impact-map)
-            printf '%s\n' "${FEATURE_DIR_REL}/logs/impact-map/scratch.md"
-            printf '%s\n' "${FEATURE_DIR_REL}/logs/impact-map/handoff.md"
-            ;;
-        min-spec-draft)
-            printf '%s\n' "${FEATURE_DIR_REL}/logs/min-spec-draft/scratch.md"
-            printf '%s\n' "${FEATURE_DIR_REL}/logs/min-spec-draft/handoff.md"
-            ;;
-        CI-checkpoint)
-            printf '%s\n' "${FEATURE_DIR_REL}/logs/CI-checkpoint/scratch.md"
-            printf '%s\n' "${FEATURE_DIR_REL}/logs/CI-checkpoint/handoff.md"
-            ;;
-        workstream-triage)
-            printf '%s\n' "${FEATURE_DIR_REL}/logs/workstream-triage/workstream_triage_draft.md"
-            ;;
-        *)
-            die "unknown step: ${step}"
-            ;;
-    esac)
+    done < <(phase_a_required_outputs_for_step "${step}")
     return 0
 }
 
