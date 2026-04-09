@@ -57,18 +57,18 @@ fn world_gateway_rejects_archived_command_ordering() {
 fn world_gateway_absent_state_is_explicit_for_status_sync_and_restart() {
     assert_gateway_unavailable(
         &["world", "gateway", "status"],
-        "substrate world gateway status: unavailable",
+        "substrate world gateway status: unavailable (required gateway/world component unavailable)",
     );
     assert_gateway_unavailable(
         &["world", "gateway", "status", "--json"],
-        "substrate world gateway status --json: unavailable",
+        "substrate world gateway status --json: unavailable (required gateway/world component unavailable)",
     );
     assert_gateway_unavailable(
         &["world", "gateway", "sync"],
-        "substrate world gateway sync: unavailable",
+        "substrate world gateway sync: unavailable (required gateway/world component unavailable)",
     );
     assert_gateway_unavailable(
         &["world", "gateway", "restart"],
-        "substrate world gateway restart: unavailable",
+        "substrate world gateway restart: unavailable (required gateway/world component unavailable)",
     );
 }

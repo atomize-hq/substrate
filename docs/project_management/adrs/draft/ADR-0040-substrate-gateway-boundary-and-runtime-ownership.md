@@ -90,6 +90,7 @@ ADR_BODY_SHA256: f912ab8be5245a70ba603bc6547c3b62e05c59492af2c7c9d27c3d898f664a5
     - `SUBSTRATE_LLM_OPENAI_BASE_URL`
     - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`
   - These values point to Substrate-managed gateway endpoints, not upstream provider endpoints.
+  - Those env values are the only stable non-secret wiring exports in scope here, and they are intended for in-world clients rather than direct host reachability.
   - These base URLs are intended for in-world reachability (clients/backends executing inside the world boundary), not as a guarantee of direct host reachability.
 - Secret delivery contract boundary:
   - This ADR intentionally preserves only the ownership rule that Substrate owns policy-gated host secret sourcing and host-to-world secret delivery for integrated operation.
@@ -101,6 +102,7 @@ ADR_BODY_SHA256: f912ab8be5245a70ba603bc6547c3b62e05c59492af2c7c9d27c3d898f664a5
   - `3`: transient runtime failure
   - `4`: required gateway/world component unavailable
   - `5`: policy or safety failure
+  - Exit `4` is the absent-state result for the gateway entrypoints. Do not collapse it into invalid integration, transient failure, or policy/safety failure.
 
 ### Config
 - Files and locations (precedence):

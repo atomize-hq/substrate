@@ -20,6 +20,7 @@ Rules:
   - `SUBSTRATE_LLM_OPENAI_BASE_URL`
   - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`
 - Those env values point to Substrate-managed gateway endpoints, not upstream provider endpoints.
+- Those env values are the only stable non-secret wiring exports in scope here, and they are intended for in-world clients rather than direct host reachability.
 
 Exit codes:
 
@@ -28,6 +29,8 @@ Exit codes:
 - `3`: transient runtime failure
 - `4`: required gateway or world component unavailable
 - `5`: policy or safety failure
+
+Exit `4` is the absent-state result for the gateway entrypoints. Do not collapse it into invalid integration, transient failure, or policy/safety failure.
 
 Ownership split:
 
