@@ -1,7 +1,8 @@
 # substrate-gateway-boundary-and-runtime-ownership — contract surface
 
 This file mirrors the committed operator contract in `docs/contracts/substrate-gateway-operator-contract.md`
-and keeps the feature-local publication surface aligned to that live source of truth.
+and keeps the feature-local publication surface aligned to the live source of truth for the operator
+boundary and the owned contract refs for `C-02` and `C-03`.
 
 ## Contract
 
@@ -44,6 +45,8 @@ Publication surfaces:
 
 - this feature-local contract file
 - the durable operator contract reference under `docs/contracts/`
+- `docs/contracts/substrate-gateway-status-schema.md`
+- `docs/contracts/substrate-gateway-policy-evaluation.md`
 - later-slice publication and verification surfaces:
   - `crates/shell/src/execution/cli.rs`
   - `crates/shell/src/builtins/mod.rs`
@@ -56,7 +59,9 @@ Verification surfaces:
 
 - the operator contract must stay aligned with ADR-0040 and the committed operator contract reference
 - downstream implementation work must preserve the command family, JSON authority rule, stable env semantics, exit taxonomy, and ownership split without widening this contract into schema or runtime details
-- the later-slice proof surfaces listed above are publication and verification targets for subsequent slices, not implementation targets for S00
+- `C-02` is published through `docs/contracts/substrate-gateway-status-schema.md`
+- `C-03` is published through `docs/contracts/substrate-gateway-policy-evaluation.md`
+- the later-slice proof surfaces listed above are publication and verification targets for subsequent slices, not implementation targets for this slice
 
 ## Boundaries
 

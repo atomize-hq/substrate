@@ -2,6 +2,7 @@
 
 This document is the durable operator contract for the gateway boundary.
 It is the canonical descriptive reference for the named operator contract.
+It points at the owned contract refs for machine-readable status and policy evaluation.
 
 ## Contract
 
@@ -40,8 +41,8 @@ Ownership split:
 
 ## Boundaries
 
-- This document does not define the `status --json` field list.
-- This document does not define policy decision tables or trust-boundary logic.
+- This document does not define the `status --json` field list; that contract is owned by `docs/contracts/substrate-gateway-status-schema.md`.
+- This document does not define policy decision tables or trust-boundary logic; that contract is owned by `docs/contracts/substrate-gateway-policy-evaluation.md`.
 - This document does not define runtime transport, endpoint shapes, or parity details.
 - The later-slice proof surfaces for this contract are:
   - `crates/shell/src/execution/cli.rs`
@@ -49,4 +50,4 @@ Ownership split:
   - `crates/shell/src/builtins/world_gateway.rs`
   - `crates/shell/tests/world_gateway.rs`
   - `docs/USAGE.md`
-- Those surfaces are publication and verification targets for later slices, not implementation targets for S00.
+- Those surfaces are publication and verification targets for later work, not implementation targets for this contract.
