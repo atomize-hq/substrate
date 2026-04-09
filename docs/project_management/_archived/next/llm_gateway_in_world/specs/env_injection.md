@@ -1,6 +1,7 @@
 # spec — llm_gateway_in_world: secret delivery (v1 legacy env injection + v1.1 FD/pipe auth bundle)
 
-This spec defines how secret values (e.g., provider API keys) are delivered to the in-world gateway/engine for `api:*` backends, without storing secrets in Substrate YAML.
+Historical evidence only. This spec preserves ADR-0023-era secret delivery planning and does not define the current operator boundary.
+The live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
 
 Phase 8 additive upgrade: v1.1 introduces a preferred secret-channel payload + in-world FD/pipe delivery path so secret values do not live in in-world process environments by default (see DR-0018).
 
@@ -25,7 +26,7 @@ Authoritative inputs:
 
 ## Delivery mechanism (v1)
 - Note: v1.1 is the preferred mechanism once implemented; v1 remains documented as the legacy compatibility path.
-- Command surface (v1):
+- Historical command surface (v1):
   - `substrate world sync gateway`
   - `substrate world sync gateway --restart`
 - The sync/restart path collects secret values from the host process environment and passes them across the existing world-agent transport as part of the spawn request.
@@ -57,7 +58,7 @@ Even when secret values enter the in-world gateway/manager (via legacy env injec
   - and scoped to the smallest possible process tree.
 
 ## Env var naming (contract)
-- Client wiring env vars (non-secret; may be printed by `substrate world status gateway`):
+- Historical client wiring env vars (non-secret; may be printed by `substrate world status gateway`):
   - `SUBSTRATE_LLM_OPENAI_BASE_URL`
   - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`
 - Auth bundle pointer env vars (non-secret; safe to print):
@@ -78,7 +79,7 @@ Even when secret values enter the in-world gateway/manager (via legacy env injec
 In v1.1 (preferred), `SUBSTRATE_LLM_BACKEND_AUTH_*` are still the canonical **auth field names**, but their **values** are not carried in the in-world process environment by default. Instead, the auth bundle payload read from `SUBSTRATE_LLM_AUTH_BUNDLE_FD` MUST use those same keys so redaction/caps rules remain uniform across env-based and FD/pipe-based delivery.
 
 ## Rotation / updates
-- If a secret value changes, operators restart the gateway session (or re-run `substrate world sync gateway` if it is defined as idempotent with “replace env” semantics).
+- If a secret value changes, operators restart the gateway session (or re-run historical `substrate world sync gateway` if it is defined as idempotent with “replace env” semantics).
 - The exact idempotency/replace semantics are implementation-defined but MUST remain fail-closed and must not leak secrets in logs.
   - Note: in v1.1 (FD/pipe bundle), rotation still requires a restart or re-sync that re-delivers a fresh bundle; the FD/pipe payload is explicitly read-once.
 

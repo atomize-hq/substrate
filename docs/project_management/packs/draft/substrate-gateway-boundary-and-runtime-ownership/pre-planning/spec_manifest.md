@@ -15,6 +15,7 @@ Authoring standards:
 - Related authoritative contracts that remain external to this pack:
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/contracts/substrate-gateway-operator-contract.md`
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
@@ -215,5 +216,5 @@ Before quality gate, the selected docs must define:
 
 ## Follow-ups
 
-- ADR-0040 `Related Docs` still references `docs/project_management/packs/active/llm_and_agent_config_policy_surface/*`. The live repo path is `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/*`. Promote this correction when the ADR is next edited.
+- ADR-0040 `Related Docs` now references `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/*`. Keep that live path current if the external owner moves again.
 - `gateway-status-schema-spec.md` must state the hard boundary against ADR-0042: this pack owns gateway availability, policy posture, and `client_wiring.*`; ADR-0042 owns identity-tuple and placement-posture semantics beyond that field family.

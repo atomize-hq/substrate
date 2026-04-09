@@ -1,7 +1,7 @@
 # substrate-gateway-boundary-and-runtime-ownership — contract surface
 
-This file is the feature-local publication surface for the operator boundary contract defined by the gateway ownership work.
-It publishes the named operator contract for this seam.
+This file mirrors the committed operator contract in `docs/contracts/substrate-gateway-operator-contract.md`
+and keeps the feature-local publication surface aligned to that live source of truth.
 
 ## Contract
 
@@ -54,7 +54,7 @@ Publication surfaces:
 
 Verification surfaces:
 
-- the operator contract must stay aligned with ADR-0040 and the pre-planning authority set
+- the operator contract must stay aligned with ADR-0040 and the committed operator contract reference
 - downstream implementation work must preserve the command family, JSON authority rule, stable env semantics, exit taxonomy, and ownership split without widening this contract into schema or runtime details
 - the later-slice proof surfaces listed above are publication and verification targets for subsequent slices, not implementation targets for S00
 

@@ -1,8 +1,9 @@
 # spec — llm_gateway_in_world: HTTP surface (subset)
 
-This spec describes the minimum HTTP surfaces exposed by the in-world gateway in v1. It is intentionally a subset and is capability-gated.
+Historical evidence only. This spec preserves ADR-0023-era HTTP surface planning and does not define the current operator boundary.
+The live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
 
-Authoritative ADR: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
+Historical ADR: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
 
 ## Common requirements
 - The gateway MUST reject unknown/unsupported endpoints clearly (e.g., `404`/`501`) and MUST emit a trace/event record for the denial.
@@ -12,7 +13,7 @@ Authoritative ADR: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gat
   - `llm.allowed_backends` contains the selected backend id (policy)
   - `llm.fail_closed.routing` honored (policy)
   - `net_allowed` enforced at the world boundary for actual outbound egress
-- Client wiring note:
+- Historical client wiring note:
   - Base URLs exposed via `substrate world status gateway --json` are intended for in-world reachability (clients/backends executing inside the world boundary).
   - Host tooling should not assume a host-reachable gateway listener exists in v1.
 
