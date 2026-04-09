@@ -736,7 +736,7 @@
       "branch": "feat/agent-hub-concurrent-execution-output-routing",
       "directory": "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing",
       "plan": "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/plan.md",
-      "status": "not_started",
+      "status": "completed",
       "sequence": [
         {
           "id": "OR0",
@@ -760,7 +760,7 @@
       "branch": "feat/llm-and-agent-config-policy-surface",
       "directory": "docs/project_management/packs/active/llm_and_agent_config_policy_surface",
       "plan": "docs/project_management/packs/active/llm_and_agent_config_policy_surface/plan.md",
-      "status": "not_started",
+      "status": "completed",
       "sequence": [
         {
           "id": "LACP0",
@@ -783,7 +783,7 @@
       "branch": "feat/dev-install-world-agent-staging",
       "directory": "docs/project_management/packs/draft/dev-install-world-agent-staging",
       "plan": "docs/project_management/packs/draft/dev-install-world-agent-staging/plan.md",
-      "status": "not_started",
+      "status": "completed",
       "sequence": [
         {
           "id": "DIWAS0",
