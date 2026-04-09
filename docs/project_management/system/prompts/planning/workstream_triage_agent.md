@@ -9,6 +9,7 @@ Constraints (non-negotiable):
 - Do not write production code.
 - Do not edit ADR files.
 - Do not modify any tracked pack files *except* `<FEATURE_DIR>/pre-planning/workstream_triage.md`.
+- No ambiguous normative wording in authored markdown. Do not use `should`, `could`, `might`, or `maybe`; write direct actions, explicit decisions, or concrete follow-ups instead.
 - Do not call `update_plan` or include tool-meta commentary in your output; do the work.
 
 Required reading:
@@ -79,7 +80,7 @@ Overlap execution model (required):
   - Re-read `<FEATURE_DIR>/pre-planning/spec_manifest.md`, `<FEATURE_DIR>/pre-planning/impact_map.md`, `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md`, and `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md` when they are available canonically; otherwise use the best available upstream handoff/scratch artifacts and record the gap in Follow-ups.
   - Retry `pm-lift-pack` if earlier execution failed because `impact_map.md` was not ready, then fold that evidence into the final artifact.
   - Write/overwrite the staged candidate: `<FEATURE_DIR>/logs/workstream-triage/staged/pre-planning/workstream_triage.md`
-    - This should be a polished promotion candidate, not a raw scratchpad.
+    - This must be a polished promotion candidate, not a raw scratchpad.
     - Keep it concise and actionable (headings + bullets; no prose essays).
 
 Draft requirements (must be explicit and actionable):
@@ -96,7 +97,7 @@ Draft requirements (must be explicit and actionable):
      - `<SLICE_PREFIX>-PWS-tasks_checkpoints` (treat as the single writer for `tasks.json`)
    - `SLICE_PREFIX` source of truth:
      - Use the slice prefix explicitly stated in `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md` (Draft slice skeleton section).
-     - Treat the prefix as **stable once pre-planning is done**; if you believe it should change, record it as a gate/risk instead of renaming it.
+     - Treat the prefix as **stable once pre-planning is done**; if you believe it needs to change, record it as a gate/risk instead of renaming it.
    - `slug` rules:
      - `snake_case` (`[a-z0-9_]+`).
      - Prefer this canonical vocabulary:
@@ -170,7 +171,7 @@ Draft requirements (must be explicit and actionable):
    - CI checkpoint implications (if applicable).
 4) Risk + unknowns:
    - Explicit unknowns/follow-ups to resolve during full planning.
-   - Identify any “high-churn seams” that should become boundaries.
+   - Identify any “high-churn seams” that must become explicit boundaries in full planning.
 5) Evidence links:
    - Link to the stable step completion sentinels:
      - `<FEATURE_DIR>/logs/spec-manifest/last_message.md`
@@ -179,7 +180,7 @@ Draft requirements (must be explicit and actionable):
      - `<FEATURE_DIR>/logs/CI-checkpoint/last_message.md`
    - Reference the canonical artifacts you relied on (`pre-planning/spec_manifest.md`, `pre-planning/impact_map.md`, `pre-planning/minimal_spec_draft.md`).
 6) Slice skeleton recommendations (required):
-   - If lift/impact indicates the slice skeleton should change (more/fewer slices, split/merge, different seam boundaries):
+   - If lift/impact indicates the slice skeleton must change (more/fewer slices, split/merge, different seam boundaries):
     - Propose explicit edits as recommendations inside the staged candidate artifact (`<FEATURE_DIR>/logs/workstream-triage/staged/pre-planning/workstream_triage.md`), not by editing `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md`.
      - Be concrete: list `ADD`, `SPLIT`, `MERGE`, `RENAME` actions that refer to slice ids and describe the new boundaries.
      - Ensure `accepted_slice_order` reflects the post-triage slice inventory/order that full planning must honor, even when `minimal_spec_draft.md` remains unchanged.
@@ -189,6 +190,11 @@ Output:
 - Ensure `<FEATURE_DIR>/logs/workstream-triage/workstream_triage_draft.md` is readable and structured (headings + bullets; no prose essays).
 - Ensure `<FEATURE_DIR>/logs/workstream-triage/staged/pre-planning/workstream_triage.md` exists and is readable/structured.
 - During Phase A only, optionally write/overwrite: `<FEATURE_DIR>/logs/workstream-triage/handoff.md` as a short “executive summary” for the operator.
+
+Closeout micro-lint (required for `single` and `phase_b` runs):
+- After writing the staged candidate, run the hard-ban scan and ambiguity scan against the staged file before ending the run:
+  - `make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="logs/workstream-triage/staged/pre-planning/workstream_triage.md"`
+- If the scan fails, fix the staged candidate and rerun the command until it passes.
 
 Closeout validation:
 - Do not write `<FEATURE_DIR>/pre-planning/workstream_triage.md` directly.

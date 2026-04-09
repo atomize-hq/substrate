@@ -95,8 +95,13 @@ Content contract for `pre-planning/minimal_spec_draft.md` (keep short, concrete,
    - Include a line that records the chosen slice prefix (draft but intended to become stable), e.g.:
      - `Slice prefix (draft): ABC`
    - Note for downstream steps:
-     - CI-checkpoint should prefer this slice list when populating the machine-readable slices list in `pre-planning/ci_checkpoint_plan.md` (still do not validate mechanically until slice tasks exist in `tasks.json`).
+     - CI-checkpoint must prefer this slice list when populating the machine-readable slices list in `pre-planning/ci_checkpoint_plan.md` (still do not validate mechanically until slice tasks exist in `tasks.json`).
      - Workstream triage may propose edits to this slice skeleton as recommendations in `pre-planning/workstream_triage.md` (but must not edit this file).
+
+Closeout micro-lint (required for `single` and `phase_b` runs):
+- After writing the staged candidate, run the hard-ban scan and ambiguity scan against the staged file before ending the run:
+  - `make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="logs/min-spec-draft/staged/pre-planning/minimal_spec_draft.md"`
+- If the scan fails, fix the staged candidate and rerun the command until it passes.
 
 Closeout validation:
 - Do not write `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md` directly.

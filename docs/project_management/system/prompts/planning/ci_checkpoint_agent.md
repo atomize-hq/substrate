@@ -112,6 +112,12 @@ Follow-up checklist for making this plan mechanically valid (required when slice
 - Then run (must pass):
   - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "<FEATURE_DIR>"`
 
+Closeout micro-lint (required for `single` and `phase_b` runs):
+- After writing the staged plan candidate, run the hard-ban scan and ambiguity scan against the staged markdown file before ending the run:
+  - `make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="logs/CI-checkpoint/staged/pre-planning/ci_checkpoint_plan.md"`
+- If the scan fails, fix the staged candidate and rerun the command until it passes.
+- If you also stage `tasks.json`, keep using the existing JSON/schema validations above for that file; the micro-lint command is for the markdown plan artifact.
+
 Closeout validation:
 - Do not write `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md` or `<FEATURE_DIR>/tasks.json` directly.
 - The planning runner / wrapper will promote the staged candidate(s) into the canonical tracked path(s) and run any required validation after promotion.

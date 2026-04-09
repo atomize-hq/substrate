@@ -66,7 +66,12 @@ Output requirements:
      - Use feature-derived slice IDs per `TASK_TRIADS_AND_FEATURE_SETUP.md` (do not use generic `C0/C1/...`).
      - Canonical slice spec path: `<FEATURE_DIR>/slices/<SLICE_ID>/<SLICE_ID>-spec.md`.
      - If you require slice specs, `spec_manifest.md` must list them using the canonical path and consistent `<SLICE_ID>`s.
-3) If you discover missing/ambiguous ADR intent, record follow-ups inside `pre-planning/spec_manifest.md` under a “Follow-ups” section (not in ADRs).
+   3) If you discover missing/ambiguous ADR intent, record follow-ups inside `pre-planning/spec_manifest.md` under a “Follow-ups” section (not in ADRs).
+
+Closeout micro-lint (required for `single` and `phase_b` runs):
+- After writing the staged candidate, run the hard-ban scan and ambiguity scan against the staged file before ending the run:
+  - `make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="logs/spec-manifest/staged/pre-planning/spec_manifest.md"`
+- If the scan fails, fix the staged candidate and rerun the command until it passes.
 
 Closeout validation:
 - Do not write `<FEATURE_DIR>/pre-planning/spec_manifest.md` directly.

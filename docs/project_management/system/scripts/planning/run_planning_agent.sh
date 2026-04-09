@@ -680,6 +680,7 @@ fi
 	            done
 	        fi
 	    fi
+	    printf -- '- Closeout micro-lint bans ambiguous modal wording in authored markdown. Do not use `should`, `could`, `might`, or `maybe` in any artifact you write. Rewrite recommendations as direct actions, explicit decisions, or concrete follow-ups.\n'
 	    printf '\nOutput allowlist (non-negotiable):\n'
 	    if [[ "${PHASE}" = "phase_a" ]]; then
 	        printf -- '- Tracked outputs: (none; Phase A is logs-only)\n'

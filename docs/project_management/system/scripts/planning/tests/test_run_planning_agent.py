@@ -441,6 +441,9 @@ exec "${REAL_GIT}" "$@"
         run_state = json.loads((run_dir / "run_state.json").read_text(encoding="utf-8"))
         self.assertEqual(run_state["phase"], "phase_a")
         self.assertEqual(run_state["tool_error_count"], 0)
+        prompt_text = (run_dir / "prompt.md").read_text(encoding="utf-8")
+        self.assertIn("Closeout micro-lint bans ambiguous modal wording", prompt_text)
+        self.assertIn("Do not use `should`, `could`, `might`, or `maybe`", prompt_text)
 
     def test_impact_map_phase_b_rejects_logs_only_output(self) -> None:
         feature_dir, _ = self._make_feature_dir("impact_map_phase_b_requires_staged")

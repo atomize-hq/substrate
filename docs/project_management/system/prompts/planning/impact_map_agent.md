@@ -89,6 +89,10 @@ Output requirements:
        - the token MUST end with `/`,
        - and you MUST record a Follow-up to tighten it to exact file paths later.
 4) If you discover a missing surface or ownership gap, record follow-ups inside `impact_map.md` under a “Follow-ups” section (not in ADRs).
+5) Closeout micro-lint (required for `single` and `phase_b` runs):
+   - After writing the staged candidate, run the hard-ban scan and ambiguity scan against the staged file before ending the run:
+     - `make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="logs/impact-map/staged/pre-planning/impact_map.md"`
+   - If the scan fails, fix the staged candidate and rerun the command until it passes.
 5) Closeout validation:
    - Do not write `<FEATURE_DIR>/pre-planning/impact_map.md` directly.
    - The planning runner / wrapper validates the staged candidate before success; direct runs promote it only after that validation passes.
