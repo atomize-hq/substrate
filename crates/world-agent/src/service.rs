@@ -8,6 +8,7 @@ use agent_api_types::PendingDiffBucketV1;
 use agent_api_types::WorldFsEntryTypeV1;
 use agent_api_types::{
     Budget, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
+    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, GatewayStatusV1,
     PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
     PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, ProcessTelemetry,
     WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
@@ -1014,6 +1015,30 @@ impl WorldAgentService {
         }
     }
 
+    /// Return the typed gateway lifecycle/status surface.
+    pub async fn gateway_status(
+        &self,
+        _req: GatewayLifecycleRequestV1,
+    ) -> Result<GatewayLifecycleResponseV1> {
+        Ok(Self::gateway_unavailable_response())
+    }
+
+    /// Return the typed gateway lifecycle sync surface.
+    pub async fn gateway_sync(
+        &self,
+        _req: GatewayLifecycleRequestV1,
+    ) -> Result<GatewayLifecycleResponseV1> {
+        Ok(Self::gateway_unavailable_response())
+    }
+
+    /// Return the typed gateway lifecycle restart surface.
+    pub async fn gateway_restart(
+        &self,
+        _req: GatewayLifecycleRequestV1,
+    ) -> Result<GatewayLifecycleResponseV1> {
+        Ok(Self::gateway_unavailable_response())
+    }
+
     /// Execute a command and stream incremental output frames via NDJSON.
     #[cfg(target_os = "linux")]
     pub async fn execute_stream(&self, req: ExecuteRequest) -> Result<Response> {
@@ -1312,6 +1337,13 @@ impl WorldAgentService {
         Ok(serde_json::json!({
             "status": "not_implemented"
         }))
+    }
+
+    fn gateway_unavailable_response() -> GatewayLifecycleResponseV1 {
+        GatewayLifecycleResponseV1 {
+            status: GatewayStatusV1::Unavailable,
+            client_wiring: None,
+        }
     }
 }
 
