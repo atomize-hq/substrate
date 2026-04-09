@@ -2,11 +2,11 @@
 seam_id: SEAM-1
 seam_slug: operator-boundary-and-command-contract
 type: integration
-status: proposed
+status: exec-ready
 execution_horizon: active
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
@@ -19,9 +19,9 @@ basis:
     - Substrate versus `substrate-gateway` ownership split changes
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -80,13 +80,21 @@ open_remediations: []
     - shell builtins
     - quality-gate evidence
 - **Touch surface**:
-  - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/contract.md`
-  - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/pre-planning/spec_manifest.md`
-  - `docs/USAGE.md`
-  - `crates/shell/src/builtins/world_gateway.rs`
+  - Primary planning surfaces:
+    - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/contract.md`
+    - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/pre-planning/spec_manifest.md`
+    - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/pre-planning/impact_map.md`
+    - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/pre-planning/workstream_triage.md`
+    - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+  - Likely downstream code and operator-doc surfaces once execution starts:
+    - `crates/shell/src/execution/cli.rs`
+    - `crates/shell/src/builtins/mod.rs`
+    - `crates/shell/src/builtins/world_gateway.rs`
+    - `crates/shell/tests/world_gateway.rs`
+    - `docs/USAGE.md`
 - **Verification**:
-  - This seam produces owned contract `C-01`. At seam-brief depth, verification is the contract becoming concrete enough for seam-local planning and implementation: exact command spellings, absent-state rules, stable env semantics, exit-code split, and ownership table.
-  - Later seam-local verification should prove:
+  - This seam produces owned contract `C-01`. Pre-exec verification now passes because the seam-local contract-definition bundle makes the contract concrete enough for execution: exact command spellings, absent-state rules, stable env semantics, exit-code split, ownership table, and downstream publication surfaces.
+  - Execution must still prove:
     - the command family is singular and stable
     - archived command orderings are excluded from the current contract
     - exit `2`, `3`, `4`, and `5` are distinguished cleanly
@@ -120,7 +128,7 @@ open_remediations: []
     - stable env semantics
     - exit-code taxonomy
     - ownership split wording
-    - reserved `S00` need for any contract-definition boundary before implementation starts
+    - the `S00` contract-definition bundle that makes `C-01` concrete before implementation slices run
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - `C-01`
