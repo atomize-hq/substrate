@@ -3,7 +3,7 @@ seam_id: SEAM-4
 seam_slug: validation-and-cross-doc-lock-in
 type: conformance
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v1
 basis:
   currentness: provisional
@@ -123,7 +123,7 @@ open_remediations: []
   - Safety comes from making drift visible before promotion rather than after downstream packs inherit stale wording.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `future` because conformance only makes sense once upstream seams have published authoritative truth to compare against.
+    - `next` because conformance should now plan behind the active runtime/parity seam rather than ahead of it.
   - Which threads matter most
     - `THR-01`
     - `THR-02`

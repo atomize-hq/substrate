@@ -29,7 +29,26 @@ Additional remediation rules for this pack:
 
 ## Open remediations
 
-- None at extraction time.
+```yaml
+- remediation_id: REM-001
+  origin_phase: pre_exec
+  source_gate: contract
+  related_seam: SEAM-3
+  related_slice: S00
+  related_thread: THR-04
+  related_contract: C-04
+  related_artifact: docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md
+  severity: blocking
+  status: open
+  owner_seam: SEAM-3
+  blocked_targets:
+    - seam: SEAM-3
+      field: status
+      value: exec-ready
+  summary: typed runtime and platform parity lacks a concrete owned contract baseline
+  required_fix: create the runtime/parity contract baseline in seam-local planning and publish the paired feature-local parity spec before advancing the seam to exec-ready
+  resolution_evidence: []
+```
 
 ## Resolved remediations
 

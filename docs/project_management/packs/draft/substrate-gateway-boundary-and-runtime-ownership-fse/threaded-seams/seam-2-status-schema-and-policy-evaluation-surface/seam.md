@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-2
 seam_slug: status-schema-and-policy-evaluation-surface
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -23,12 +23,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-2 - Status schema and policy evaluation surface

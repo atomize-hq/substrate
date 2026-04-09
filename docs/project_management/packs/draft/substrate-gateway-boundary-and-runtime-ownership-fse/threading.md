@@ -2,19 +2,20 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-2`
-  - This seam now consumes the published operator boundary from `SEAM-1` and turns it into the authoritative machine-readable status and policy-evaluation surfaces.
-- **Next seam**: `SEAM-3`
-  - This seam is the immediate downstream consumer because typed world-agent/runtime parity should be planned against published upstream status and policy truth.
-- **Future seams**: `SEAM-1`, `SEAM-4`
+- **Active seam**: `SEAM-3`
+  - This seam now consumes the published operator, schema, and policy contracts from `SEAM-1` and `SEAM-2` and turns them into the typed runtime/parity planning surface.
+- **Next seam**: `SEAM-4`
+  - This seam is the immediate downstream consumer because cross-doc validation should plan behind the active runtime/parity seam once the upstream contracts are concrete.
+- **Future seams**: `SEAM-1`, `SEAM-2`
   - `SEAM-1` has landed with a passed seam-exit gate and left the forward planning window.
-  - `SEAM-4` remains future because cross-doc validation should consume published upstream contracts rather than speculative planning.
+  - `SEAM-2` has now landed with a passed seam-exit gate and left the forward planning window.
 
 Horizon policy for this extracted pack:
 
 - only the active seam gets authoritative downstream deep planning by default
 - the next seam may later receive seam-local review and only provisional deeper planning
 - `SEAM-1` has now landed with a passed seam-exit gate and left the forward planning window
+- `SEAM-2` has now landed with a passed seam-exit gate and left the forward planning window
 - the remaining future seams stay seam briefs until upstream closeouts and published threads exist
 
 ## Contract registry
@@ -76,20 +77,20 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-3`, `SEAM-4`
   - **Carried contract IDs**: `C-02`
   - **Purpose**: keep machine-readable status, wiring discovery, and ADR-0042 boundary semantics single-source before runtime and docs consume them.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: top-level JSON shape, `client_wiring.*` field family, omission rules, or the boundary against ADR-0042 additive metadata changes.
-  - **Satisfied by**: `pre-planning/spec_manifest.md`, `pre-planning/impact_map.md`, and the accepted `SGBRO-PWS-schema_inventory` lane in `pre-planning/workstream_triage.md`.
-  - **Notes**: this thread is where `status --json` becomes concrete enough for runtime and docs planning without yet fixing implementation-specific transport details.
+  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed schema contract, durable contract mirror, and downstream stale triggers for the status envelope and `client_wiring.*` family.
+  - **Notes**: this thread now carries the published machine-readable status and wiring contract into `SEAM-3` and `SEAM-4`.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-3`, `SEAM-4`
   - **Carried contract IDs**: `C-03`
   - **Purpose**: keep fail-closed placement, secret delivery, and gateway-local non-trust rules single-source across runtime and validation seams.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: reused ADR-0027 keys, no-host-fallback posture, exit boundary taxonomy, or trust-boundary rules change.
-  - **Satisfied by**: `pre-planning/spec_manifest.md`, `pre-planning/minimal_spec_draft.md`, and the policy/isolation section of `pre-planning/impact_map.md`.
-  - **Notes**: this thread keeps policy evaluation from drifting into a second control plane.
+  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed policy contract, durable contract mirror, and downstream stale triggers for fail-closed placement and non-trust rules.
+  - **Notes**: this thread now carries the published policy-evaluation and trust-boundary contract into `SEAM-3` and `SEAM-4`.
 
 - **Thread ID**: `THR-04`
   - **Producer seam**: `SEAM-3`

@@ -2,29 +2,32 @@
 seam_id: SEAM-3
 seam_slug: typed-runtime-and-platform-parity
 type: platform
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: decomposed
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
   required_threads:
     - THR-01
     - THR-02
     - THR-03
-    - THR-04
   stale_triggers:
     - typed world-agent endpoint ownership changes
+    - published `status --json` envelope or `client_wiring.*` semantics change
+    - published fail-closed policy or trust-boundary rules change
     - shell-side exec probing is reintroduced
     - Linux/macOS/Windows parity guarantees or allowed divergence list changes
     - provisioning is pulled back into this pack
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: failed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -32,7 +35,8 @@ seam_exit_gate:
   required: true
   planned_location: S99
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-001
 ---
 
 # SEAM-3 - Typed runtime and platform parity
@@ -70,9 +74,7 @@ open_remediations: []
   - parity docs may describe allowed divergence, but they must not turn those divergences into separate user contracts
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-2`
-    - `THR-02`
-    - `THR-03`
+    - none after `SEAM-2` closeout published `THR-02` and `THR-03`
   - Transitive blockers:
     - `SEAM-1`
     - `THR-01`
@@ -117,11 +119,11 @@ open_remediations: []
   - De-risk plan:
     - require parity evidence to be part of the seam-local review and closeout, not an afterthought
 - **Rollout / safety**:
-  - This seam should not activate until the upstream status and policy surfaces are published; otherwise runtime details will hard-code provisional semantics.
+  - This seam is now active because the upstream status and policy surfaces are published in closeout-backed form.
   - Safety depends on keeping fail-closed and non-trust boundaries inherited from upstream contracts rather than re-deciding them locally.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `next` because typed runtime/parity planning is the immediate downstream consumer once `SEAM-2` publishes schema and policy truth, but it should still wait behind the active seam.
+    - `active` because typed runtime/parity planning is the immediate downstream consumer now that `SEAM-2` has published schema and policy truth.
   - Which threads matter most
     - `THR-02`
     - `THR-03`
@@ -132,6 +134,7 @@ open_remediations: []
     - allowed divergence list
     - parity evidence requirements
     - proof that provisioning stays out of scope
+    - whether the owned runtime/parity contract baseline is concrete enough to unblock `exec-ready`
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - `C-04`

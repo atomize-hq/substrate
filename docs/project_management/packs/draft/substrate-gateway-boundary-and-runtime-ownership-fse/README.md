@@ -24,16 +24,16 @@ Start here:
 
 Execution horizon:
 
-- Active seam: `SEAM-2`
-- Next seam: `SEAM-3`
-- Future seam(s): `SEAM-1`, `SEAM-4`
+- Active seam: `SEAM-3`
+- Next seam: `SEAM-4`
+- Future seam(s): `SEAM-1`, `SEAM-2`
 
 Horizon inference:
 
-- `SEAM-1` has landed with a passed seam-exit gate and published the operator boundary for downstream consumers.
-- `SEAM-2` is now the active seam because the status schema and policy-evaluation surface can consume that published operator contract directly.
-- `SEAM-3` is now the next seam because typed world-agent/runtime parity is the immediate downstream consumer once the schema and policy surfaces are published.
-- `SEAM-4` remains future because cross-doc validation should consume published upstream contracts rather than force speculative deeper planning now.
+- `SEAM-1` has landed with a passed seam-exit gate and remains outside the forward planning window.
+- `SEAM-2` has now landed with a passed seam-exit gate and published the schema and policy handoff for downstream consumers.
+- `SEAM-3` is now the active seam because the typed runtime/parity work can consume the published operator, schema, and policy contracts directly.
+- `SEAM-4` is now the next seam because conformance and cross-doc lock-in should plan behind the active runtime/parity seam rather than ahead of it.
 
 Policy:
 
@@ -42,6 +42,7 @@ Policy:
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that own undefined contract boundaries may reserve `S00` as a contract-definition boundary slice once seam-local planning begins
 - `SEAM-1` has now landed with a passed seam-exit gate and left the forward planning window
+- `SEAM-2` has now landed with a passed seam-exit gate and left the forward planning window
 - future seams remain seam briefs
 - canonical contract docs live in `docs/contracts/` and must remain descriptive-only
 

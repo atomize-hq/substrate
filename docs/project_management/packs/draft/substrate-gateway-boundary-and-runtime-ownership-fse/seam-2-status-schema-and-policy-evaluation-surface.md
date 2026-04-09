@@ -2,8 +2,8 @@
 seam_id: SEAM-2
 seam_slug: status-schema-and-policy-evaluation-surface
 type: integration
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -24,12 +24,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -116,7 +116,7 @@ open_remediations: []
   - Safety depends on failing closed and preserving host-secret and gateway-local non-trust boundaries.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `active` because it is the immediate downstream consumer of the published operator boundary and now has seam-local planning and passed pre-exec gates.
+    - `future` because this seam has landed with a passed seam-exit gate and left the forward planning window.
   - Which threads matter most
     - `THR-01`
     - `THR-02`
