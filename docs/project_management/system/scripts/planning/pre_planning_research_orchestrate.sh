@@ -230,8 +230,6 @@ step_phase=()
 step_state=()
 step_ready_for_commit=()
 step_wait_reason=()
-step_failure_rc=()
-step_last_completed_phase=()
 step_retry_count=()
 
 launch_step() {
@@ -324,7 +322,7 @@ step_required_outputs() {
 step_staged_rel() {
     local step="$1"
     local repo_rel="$2"
-    local within_feature="${repo_rel#${FEATURE_DIR_REL}/}"
+    local within_feature="${repo_rel#"${FEATURE_DIR_REL}"/}"
     if [[ "${within_feature}" == "${repo_rel}" ]]; then
         die "cannot resolve staged path outside feature dir: ${repo_rel}"
     fi
@@ -404,7 +402,6 @@ retry_step_if_transient() {
     runner_pids[idx]=""
     runner_rcs[idx]=""
     runner_end_epoch[idx]=""
-    step_failure_rc[idx]=""
     step_state[idx]="retry_wait_${phase}"
     step_wait_reason[idx]="transient Codex capacity/overload"
 
@@ -458,7 +455,7 @@ commit_step_outputs() {
             continue
         fi
 
-        backup_abs="${backup_dir}/${target_rel#${FEATURE_DIR_REL}/}"
+        backup_abs="${backup_dir}/${target_rel#"${FEATURE_DIR_REL}"/}"
         mkdir -p "$(dirname "${backup_abs}")"
         if [[ -f "${target_abs}" ]]; then
             cp "${target_abs}" "${backup_abs}"
@@ -473,7 +470,7 @@ commit_step_outputs() {
     restore_failed_promotion() {
         local target_rel_local="$1"
         local target_abs_local="${REPO_ROOT}/${target_rel_local}"
-        local backup_base="${backup_dir}/${target_rel_local#${FEATURE_DIR_REL}/}"
+        local backup_base="${backup_dir}/${target_rel_local#"${FEATURE_DIR_REL}"/}"
         if [[ -f "${backup_base}.absent" ]]; then
             rm -f "${target_abs_local}"
         elif [[ -f "${backup_base}" ]]; then
@@ -929,13 +926,11 @@ while true; do
                     runner_rcs[i]="${rc}"
                     step_state[i]="ready_to_commit"
                     step_ready_for_commit[i]="1"
-                    step_last_completed_phase[i]="phase_a"
                     echo "Completed: ${step} [phase_a] (staged outputs ready)"
                 elif phase_a_can_advance_to_phase_b "${i}"; then
                     runner_rcs[i]="0"
                     step_state[i]="waiting_phase_b"
                     step_ready_for_commit[i]="0"
-                    step_last_completed_phase[i]="phase_a"
                     step_wait_reason[i]="$(phase_b_gate_reason "${i}")"
                     if [[ -n "${step_wait_reason[i]}" ]]; then
                         echo "Completed: ${step} [phase_a] (waiting for phase_b gate)"
@@ -949,7 +944,6 @@ while true; do
                         continue
                     fi
                     runner_rcs[i]="${rc}"
-                    step_failure_rc[i]="${rc}"
                     echo "FAILED: ${step} [${phase}] exited with ${rc} (see ${FEATURE_DIR_REL}/logs/${step}/stderr.log)" >&2
                     append_summary "- FAILED: \`${step}\` \`${phase}\` exited with \`${rc}\` — stopping"
                     kill_downstream "$((i + 1))"
@@ -961,7 +955,6 @@ while true; do
                     if retry_step_if_transient "${i}" "${phase}"; then
                         continue
                     fi
-                    step_failure_rc[i]="${rc}"
                     echo "FAILED: ${step} [${phase}] exited with ${rc} (see ${FEATURE_DIR_REL}/logs/${step}/stderr.log)" >&2
                     append_summary "- FAILED: \`${step}\` \`${phase}\` exited with \`${rc}\` — stopping"
                     kill_downstream "$((i + 1))"
@@ -975,7 +968,6 @@ while true; do
                 fi
                 step_state[i]="ready_to_commit"
                 step_ready_for_commit[i]="1"
-                step_last_completed_phase[i]="${phase}"
                 echo "Completed: ${step} [${phase}] (rc=0)"
             fi
         fi
