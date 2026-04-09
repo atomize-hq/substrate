@@ -24,6 +24,22 @@ Inputs:
 - ADR(s): <list exact paths>
 - Feature directory: `<FEATURE_DIR>/`
 
+Runner-injected phase directive (authoritative when present):
+<!-- PM_PHASE_DIRECTIVE:BEGIN -->
+- Default if no runner-injected directive is present: `single` mode.
+- `single` mode:
+  - Complete the full prompt in one run.
+  - Produce the required Phase A log artifacts first, then produce the staged candidate in the same run.
+  - Do not wait for `last_message.md`, canonical tracked files to appear, or git cleanliness. If an expected upstream artifact is unavailable, use the ADR(s) and any available log inputs, record the gap as a follow-up, and proceed.
+- `phase_a` mode:
+  - Produce only the Phase A logs/scratch/handoff artifacts listed below, then stop.
+  - Do not write staged candidates.
+- `phase_b` mode:
+  - Assume upstream authoritative inputs are ready.
+  - Write the staged candidate immediately using the latest authoritative inputs available to you.
+  - Do not wait for `last_message.md`, canonical tracked files to appear, or git cleanliness.
+<!-- PM_PHASE_DIRECTIVE:END -->
+
 Output requirements:
 0) Allowed writes:
    - Tracked (canonical): none. Do not write tracked files directly.

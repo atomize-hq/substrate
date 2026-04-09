@@ -32,6 +32,23 @@ Allowed writes:
 - Logs (untracked; scratch + orchestration handoff): you may write under `<FEATURE_DIR>/logs/CI-checkpoint/**` only.
 - Do not edit any other tracked files directly.
 
+Runner-injected phase directive (authoritative when present):
+<!-- PM_PHASE_DIRECTIVE:BEGIN -->
+- Default if no runner-injected directive is present: `single` mode.
+- `single` mode:
+  - Complete the full prompt in one run.
+  - Produce the required Phase A log artifacts first, then produce the staged candidate(s) in the same run.
+  - Do not wait for `last_message.md`, canonical tracked files to appear, or git cleanliness. If a canonical upstream artifact is unavailable, use the best available canonical/log inputs, record the gap as a follow-up, and proceed.
+- `phase_a` mode:
+  - Produce only the Phase A logs/scratch/handoff artifacts listed below, then stop.
+  - Do not write staged candidates.
+- `phase_b` mode:
+  - Assume upstream authoritative inputs are ready.
+  - Re-read the canonical tracked inputs listed in this prompt before writing the staged candidate(s).
+  - Write the staged candidate(s) immediately.
+  - Do not wait for `last_message.md`, canonical tracked files to appear, or git cleanliness.
+<!-- PM_PHASE_DIRECTIVE:END -->
+
 Preflight (required; do first):
 1) Read `<FEATURE_DIR>/tasks.json` and ensure the pack baseline is set for pre-planning:
    - `meta.schema_version = 4`
@@ -42,7 +59,7 @@ Preflight (required; do first):
    - `meta.behavior_platforms_required` (default: same as ci_parity)
    - If `spec_manifest.md` / `minimal_spec_draft.md` explicitly scopes the behavior delta to a subset of platforms (e.g., Linux-only behavior change), set `meta.behavior_platforms_required` to that subset while keeping `meta.ci_parity_platforms_required` unchanged unless explicitly justified.
 3) If any of the above is missing or wrong, prepare a staged candidate for `<FEATURE_DIR>/tasks.json` containing only those field changes.
-   - Overlap note: in orchestration overlap runs, Phase A is logs-only; if the Phase B gate has not cleared yet, record required `tasks.json` edits in scratch and write the staged candidate only after the Phase B gate clears.
+   - Overlap note: in orchestration overlap runs, Phase A is logs-only; record required `tasks.json` edits in scratch during Phase A and write the staged candidate only in `phase_b` (or `single`) mode.
 
 Overlap execution model (required):
 - Phase A (start immediately; logs only):
@@ -58,13 +75,9 @@ Overlap execution model (required):
       - proposed checkpoint groups (slice ranges),
       - proposed checkpoint task ids (e.g., `CP1-ci-checkpoint`),
       - the gates to run at each checkpoint (compile parity / smoke / CI testing).
-- Phase B (staged candidate write gate; required):
-  - Before writing staged candidates, poll until BOTH are true:
-    - `<FEATURE_DIR>/logs/min-spec-draft/last_message.md` exists, and
-    - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
-  - Default poll interval: `sleep 60` between checks.
-  - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
-  - After the gate clears, re-read `<FEATURE_DIR>/pre-planning/impact_map.md` (not just upstream handoff/scratch artifacts) before writing the staged candidates.
+- Phase B (staged candidate write; required):
+  - Re-read `<FEATURE_DIR>/pre-planning/impact_map.md`, `<FEATURE_DIR>/pre-planning/spec_manifest.md`, and `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md` when they are available canonically; otherwise use the best available upstream handoff/scratch artifacts and record the gap in Follow-ups.
+  - Reconcile the checkpoint boundaries and any staged `tasks.json` edits against those authoritative inputs before writing the staged candidates.
 
 Tracked output requirements (pre-planning first pass; required):
 1) Write/overwrite `<FEATURE_DIR>/logs/CI-checkpoint/staged/pre-planning/ci_checkpoint_plan.md` using the template:

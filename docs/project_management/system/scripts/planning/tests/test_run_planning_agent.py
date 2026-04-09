@@ -107,16 +107,21 @@ class TestRunPlanningAgent(unittest.TestCase):
 set -euo pipefail
 
 output_last=""
+emit_json=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --output-last-message)
       output_last="$2"
       shift 2
       ;;
+    --json)
+      emit_json=1
+      shift
+      ;;
     --cd|--config|--profile|--model)
       shift 2
       ;;
-    exec|--dangerously-bypass-approvals-and-sandbox|--json|-)
+    exec|--dangerously-bypass-approvals-and-sandbox|-)
       shift
       ;;
     *)
@@ -127,6 +132,16 @@ done
 
 cat >/dev/null
 write_mode="${TEST_RUNNER_WRITE_MODE:-staged}"
+
+if [[ "${emit_json}" == "1" ]]; then
+  printf '%s\n' '{"type":"thread.started","thread_id":"thread-test-123"}'
+  printf '%s\n' '{"type":"turn.started"}'
+  printf '%s\n' '{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"runner stub summary"}}'
+  if [[ "${TEST_RUNNER_EMIT_TOOL_FAILURE:-0}" == "1" ]]; then
+    printf '%s\n' '{"type":"item.completed","item":{"id":"item_2","type":"command_execution","command":"false","aggregated_output":"fixture failure","exit_code":1,"status":"failed"}}'
+  fi
+  printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1}}'
+fi
 
 if [[ -n "${TEST_RUNNER_PRIMARY_DEST:-}" ]]; then
   mkdir -p "$(dirname "${TEST_RUNNER_PRIMARY_DEST}")"
@@ -187,6 +202,23 @@ exec "${REAL_GIT}" "$@"
         )
         return feature_dir, adr_path
 
+    def _step_dir_name(self, agent: str) -> str:
+        return {
+            "spec_manifest": "spec-manifest",
+            "impact_map": "impact-map",
+            "min_spec_draft": "min-spec-draft",
+            "ci_checkpoint": "CI-checkpoint",
+            "workstream_triage": "workstream-triage",
+            "pre_planning_slice_reconcile": "pre-full-planning-convergence",
+            "post_full_planning_reconcile": "post-full-planning-convergence",
+        }[agent]
+
+    def _latest_run_dir(self, feature_dir: Path, agent: str) -> Path:
+        runs_dir = feature_dir / "logs" / self._step_dir_name(agent) / "runs"
+        runs = sorted(path for path in runs_dir.iterdir() if path.is_dir())
+        self.assertTrue(runs, msg=f"expected at least one run dir under {runs_dir}")
+        return runs[-1]
+
     def _run(
         self,
         feature_dir: Path,
@@ -198,6 +230,8 @@ exec "${REAL_GIT}" "$@"
         secondary_dest_rel: str | None = None,
         write_mode: str = "staged",
         orchestrated: bool = False,
+        phase: str = "single",
+        emit_tool_failure: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         bin_dir = feature_dir / "bin"
         codex_path = bin_dir / "codex"
@@ -220,9 +254,15 @@ exec "${REAL_GIT}" "$@"
             env["TEST_RUNNER_SECONDARY_DEST"] = str(feature_dir / secondary_dest_rel)
         if orchestrated:
             env["PM_PLANNING_ORCHESTRATED"] = "1"
+        if emit_tool_failure:
+            env["TEST_RUNNER_EMIT_TOOL_FAILURE"] = "1"
+
+        cmd = ["bash", str(self.script), "--feature-dir", str(feature_dir), "--agent", agent]
+        if phase != "single":
+            cmd.extend(["--phase", phase])
 
         return subprocess.run(
-            ["bash", str(self.script), "--feature-dir", str(feature_dir), "--agent", agent],
+            cmd,
             text=True,
             capture_output=True,
             check=False,
@@ -285,6 +325,24 @@ exec "${REAL_GIT}" "$@"
         self.assertFalse((feature_dir / "pre-planning" / "workstream_triage.md").exists())
         self.assertFalse((feature_dir / "logs" / "workstream-triage" / "last_message.md").exists())
         self.assertIn("OK: staged outputs within allowlist", res.stdout)
+
+        run_dir = self._latest_run_dir(feature_dir, "workstream_triage")
+        run_state = json.loads((run_dir / "run_state.json").read_text(encoding="utf-8"))
+        self.assertEqual(run_state["phase"], "single")
+        self.assertEqual(run_state["agent"], "workstream_triage")
+        self.assertEqual(run_state["exit_code"], 0)
+        self.assertTrue(run_state["turn_completed"])
+        self.assertTrue(run_state["assistant_message_present"])
+        self.assertEqual(run_state["tool_error_count"], 0)
+        self.assertEqual(run_state["thread_id"], "thread-test-123")
+        self.assertEqual(
+            run_state["events_path"],
+            str((run_dir / "events.jsonl").relative_to(self.repo_root)).replace(os.sep, "/"),
+        )
+        self.assertEqual(
+            run_state["last_message_run_path"],
+            str((run_dir / "last_message.run.md").relative_to(self.repo_root)).replace(os.sep, "/"),
+        )
 
     def test_workstream_triage_runner_orchestrated_rejects_direct_canonical_write(self) -> None:
         feature_dir, _ = self._make_feature_dir("orchestrated_direct_canonical_write")
@@ -355,6 +413,78 @@ exec "${REAL_GIT}" "$@"
         self.assertTrue((feature_dir / "pre-planning" / "ci_checkpoint_plan.md").is_file())
         tasks = json.loads((feature_dir / "tasks.json").read_text(encoding="utf-8"))
         self.assertEqual(tasks["meta"]["checkpoint_boundaries"], ["WDRA0"])
+
+    def test_impact_map_phase_a_requires_logs_only_outputs(self) -> None:
+        feature_dir, _ = self._make_feature_dir("impact_map_phase_a_logs_only")
+        scratch_source = feature_dir / "impact_map.scratch.md"
+        handoff_source = feature_dir / "impact_map.handoff.md"
+        _write_text(scratch_source, "# Scratch\n")
+        _write_text(handoff_source, "# Handoff\n")
+
+        res = self._run(
+            feature_dir,
+            agent="impact_map",
+            primary_source=scratch_source,
+            primary_dest_rel="logs/impact-map/scratch.md",
+            secondary_source=handoff_source,
+            secondary_dest_rel="logs/impact-map/handoff.md",
+            write_mode="staged_with_tasks",
+            phase="phase_a",
+        )
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        self.assertFalse((feature_dir / "pre-planning" / "impact_map.md").exists())
+        self.assertFalse((feature_dir / "logs" / "impact-map" / "last_message.md").exists())
+        self.assertIn("OK: phase_a log outputs within allowlist", res.stdout)
+
+        run_dir = self._latest_run_dir(feature_dir, "impact_map")
+        self.assertTrue((run_dir / "events.jsonl").is_file())
+        run_state = json.loads((run_dir / "run_state.json").read_text(encoding="utf-8"))
+        self.assertEqual(run_state["phase"], "phase_a")
+        self.assertEqual(run_state["tool_error_count"], 0)
+
+    def test_impact_map_phase_b_rejects_logs_only_output(self) -> None:
+        feature_dir, _ = self._make_feature_dir("impact_map_phase_b_requires_staged")
+        handoff_source = feature_dir / "impact_map.handoff.md"
+        _write_text(handoff_source, "# Handoff\n")
+
+        res = self._run(
+            feature_dir,
+            agent="impact_map",
+            primary_source=handoff_source,
+            primary_dest_rel="logs/impact-map/handoff.md",
+            phase="phase_b",
+        )
+        self.assertEqual(res.returncode, 2)
+        self.assertIn("unexpected untracked", res.stderr)
+        self.assertFalse((feature_dir / "logs" / "impact-map" / "last_message.md").exists())
+
+        run_dir = self._latest_run_dir(feature_dir, "impact_map")
+        run_state = json.loads((run_dir / "run_state.json").read_text(encoding="utf-8"))
+        self.assertEqual(run_state["phase"], "phase_b")
+
+    def test_orchestrated_single_forces_json_and_captures_tool_failures(self) -> None:
+        feature_dir, _ = self._make_feature_dir("orchestrated_single_json_run_state")
+        artifact_source = feature_dir / "orchestrated_workstream_triage.md"
+        _write_text(
+            artifact_source,
+            _triage_text(heading_tokens=["WDRA-PWS-contract", "WDRA-PWS-tasks_checkpoints"]),
+        )
+
+        res = self._run(
+            feature_dir,
+            agent="workstream_triage",
+            primary_source=artifact_source,
+            primary_dest_rel="logs/workstream-triage/staged/pre-planning/workstream_triage.md",
+            orchestrated=True,
+            emit_tool_failure=True,
+        )
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+
+        run_dir = self._latest_run_dir(feature_dir, "workstream_triage")
+        self.assertTrue((run_dir / "events.jsonl").is_file())
+        run_state = json.loads((run_dir / "run_state.json").read_text(encoding="utf-8"))
+        self.assertEqual(run_state["phase"], "single")
+        self.assertEqual(run_state["tool_error_count"], 1)
 
     def test_impact_map_runner_rejects_invalid_staged_candidate(self) -> None:
         feature_dir, _ = self._make_feature_dir("impact_map_invalid_staged")

@@ -26,6 +26,23 @@ Allowed writes:
 - Logs (untracked; scratch + orchestration handoff): you may write under `<FEATURE_DIR>/logs/min-spec-draft/**` only.
 - Do not edit any other tracked files directly.
 
+Runner-injected phase directive (authoritative when present):
+<!-- PM_PHASE_DIRECTIVE:BEGIN -->
+- Default if no runner-injected directive is present: `single` mode.
+- `single` mode:
+  - Complete the full prompt in one run.
+  - Produce the required Phase A log artifacts first, then produce the staged candidate in the same run.
+  - Do not wait for `last_message.md`, canonical tracked files to appear, or git cleanliness. If a canonical upstream artifact is unavailable, use the best available canonical/log inputs, record the gap as a follow-up, and proceed.
+- `phase_a` mode:
+  - Produce only the Phase A logs/scratch/handoff artifacts listed below, then stop.
+  - Do not write staged candidates.
+- `phase_b` mode:
+  - Assume upstream authoritative inputs are ready.
+  - Re-read the canonical tracked inputs listed in this prompt before writing the staged candidate.
+  - Write the staged candidate immediately.
+  - Do not wait for `last_message.md`, canonical tracked files to appear, or git cleanliness.
+<!-- PM_PHASE_DIRECTIVE:END -->
+
 Overlap execution model (required):
 - Phase A (start immediately; logs only):
   - Draft a coherent outline and key decisions as scratch:
@@ -36,13 +53,9 @@ Overlap execution model (required):
 - Emit an orchestration handoff signal once your outline is usable:
   - Write/overwrite: `<FEATURE_DIR>/logs/min-spec-draft/handoff.md`
   - Write it once you have a coherent section outline + the top cross-cutting decisions/invariants.
-- Phase B (staged candidate write gate; required):
-  - Before writing `<FEATURE_DIR>/logs/min-spec-draft/staged/pre-planning/minimal_spec_draft.md`, poll until BOTH are true:
-    - `<FEATURE_DIR>/logs/impact-map/last_message.md` exists, and
-    - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
-  - Default poll interval: `sleep 60` between checks.
-  - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
-  - After the gate clears, re-read `<FEATURE_DIR>/pre-planning/impact_map.md` (not just `logs/impact-map/handoff.md`) and reconcile your draft before writing the staged candidate.
+- Phase B (staged candidate write; required):
+  - Re-read `<FEATURE_DIR>/pre-planning/impact_map.md` and `<FEATURE_DIR>/pre-planning/spec_manifest.md` when they are available canonically; otherwise use the best available upstream handoff/scratch artifacts and record the gap in Follow-ups.
+  - Reconcile your draft against those authoritative inputs before writing the staged candidate.
 
 Content contract for `pre-planning/minimal_spec_draft.md` (keep short, concrete, and cross-cutting):
 1) Header:

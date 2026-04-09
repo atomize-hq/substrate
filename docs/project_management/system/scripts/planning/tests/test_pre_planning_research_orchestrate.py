@@ -65,6 +65,7 @@ set -euo pipefail
 
 feature_dir=""
 agent=""
+phase="${PM_PRE_PLANNING_WRAPPER_PHASE:-single}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --feature-dir)
@@ -94,6 +95,15 @@ write_doc() {
   cat > "${out}"
 }
 
+require_file() {
+  local path="$1"
+  local label="$2"
+  if [[ ! -f "${path}" ]]; then
+    echo "missing required prerequisite ${label}: ${path}" >&2
+    exit 9
+  fi
+}
+
 case "$agent" in
   spec_manifest) step="spec-manifest"; rel="pre-planning/spec_manifest.md" ;;
   impact_map)
@@ -116,9 +126,40 @@ esac
 step_dir="${feature_dir}/logs/${step}"
 run_dir="${step_dir}/runs/fixture-${agent}"
 mkdir -p "${run_dir}"
-printf 'runner summary for %s\\n' "$agent" > "${run_dir}/last_message.run.md"
-printf 'handoff for %s\\n' "$agent" > "${step_dir}/handoff.md"
-printf 'start %s\\n' "$agent" >> "${TRACE_PATH}"
+printf 'runner summary for %s %s\\n' "$agent" "$phase" > "${run_dir}/last_message.run.md"
+printf 'handoff for %s %s\\n' "$agent" "$phase" > "${step_dir}/handoff.md"
+printf 'start %s %s\\n' "$agent" "$phase" >> "${TRACE_PATH}"
+case "$agent" in
+  impact_map|min_spec_draft|ci_checkpoint)
+    write_doc "${step_dir}/scratch.md" <<'EOF'
+# scratch
+EOF
+    ;;
+esac
+if [[ "$agent" == "workstream_triage" ]]; then
+  write_doc "${step_dir}/workstream_triage_draft.md" <<'EOF'
+# workstream draft
+EOF
+fi
+
+if [[ "$phase" == "phase_a" ]]; then
+  case "$agent" in
+    ci_checkpoint)
+      if [[ "${SUCCESS_ONLY_CI_PHASE_A:-0}" == "1" ]]; then
+        exit 0
+      fi
+      if [[ "${EARLY_EXIT_CI_PHASE_A:-0}" == "1" ]]; then
+        exit 2
+      fi
+      ;;
+    workstream_triage)
+      if [[ "${EARLY_EXIT_WORKSTREAM_PHASE_A:-0}" == "1" ]]; then
+        exit 2
+      fi
+      ;;
+  esac
+fi
+
 staged="${step_dir}/staged/${rel}"
 case "$agent" in
   spec_manifest)
@@ -151,11 +192,17 @@ EOF
 EOF
     ;;
   ci_checkpoint)
+    if [[ "$phase" == "phase_b" || "$phase" == "single" ]]; then
+      require_file "${feature_dir}/pre-planning/minimal_spec_draft.md" "minimal_spec_draft.md"
+    fi
     write_doc "${staged}" <<'EOF'
 # checkpoint plan
 EOF
     ;;
   workstream_triage)
+    if [[ "$phase" == "phase_b" || "$phase" == "single" ]]; then
+      require_file "${feature_dir}/pre-planning/ci_checkpoint_plan.md" "ci_checkpoint_plan.md"
+    fi
     if [[ "${FAIL_WORKSTREAM:-0}" == "1" ]]; then
       write_doc "${staged}" <<'EOF'
 bad triage
@@ -219,7 +266,7 @@ fi
 if [[ "${sleep_s:-0}" != "0" ]]; then
   sleep "${sleep_s}"
 fi
-printf 'end %s\\n' "$agent" >> "${TRACE_PATH}"
+printf 'end %s %s\\n' "$agent" "$phase" >> "${TRACE_PATH}"
 """
         _write_text(path, script)
         os.chmod(path, 0o755)
@@ -263,7 +310,15 @@ exit 0
         _write_text(path, script)
         os.chmod(path, 0o755)
 
-    def _run(self, feature_dir: Path, *, fail_workstream: bool = False) -> tuple[subprocess.CompletedProcess[str], Path]:
+    def _run(
+        self,
+        feature_dir: Path,
+        *,
+        fail_workstream: bool = False,
+        early_exit_ci_phase_a: bool = False,
+        early_exit_workstream_phase_a: bool = False,
+        success_only_ci_phase_a: bool = False,
+    ) -> tuple[subprocess.CompletedProcess[str], Path]:
         tools_dir = feature_dir / "tools"
         runner = tools_dir / "fake_runner.sh"
         fake_git = tools_dir / "git"
@@ -283,6 +338,12 @@ exit 0
         env["TRACE_PATH"] = str(trace_path)
         if fail_workstream:
             env["FAIL_WORKSTREAM"] = "1"
+        if early_exit_ci_phase_a:
+            env["EARLY_EXIT_CI_PHASE_A"] = "1"
+        if early_exit_workstream_phase_a:
+            env["EARLY_EXIT_WORKSTREAM_PHASE_A"] = "1"
+        if success_only_ci_phase_a:
+            env["SUCCESS_ONLY_CI_PHASE_A"] = "1"
 
         res = subprocess.run(
             ["bash", str(self.script), "--feature-dir", str(feature_dir), "--poll-s", "1"],
@@ -296,7 +357,11 @@ exit 0
 
     def test_overlap_wrapper_promotes_staged_outputs_and_publishes_stable_last_messages(self) -> None:
         feature_dir = self._make_feature_dir("success_overlap")
-        res, trace_path = self._run(feature_dir)
+        res, trace_path = self._run(
+            feature_dir,
+            early_exit_ci_phase_a=True,
+            early_exit_workstream_phase_a=True,
+        )
 
         self.assertEqual(res.returncode, 0, msg=res.stderr)
         self.assertTrue((feature_dir / "pre-planning" / "spec_manifest.md").is_file())
@@ -308,18 +373,59 @@ exit 0
             self.assertTrue((feature_dir / "logs" / step / "last_message.md").is_file(), msg=step)
 
         trace = trace_path.read_text(encoding="utf-8")
-        self.assertIn("start impact_map", trace)
-        self.assertIn("start workstream_triage", trace)
-        self.assertLess(trace.index("start workstream_triage"), trace.index("end impact_map"))
+        self.assertIn("start impact_map phase_a", trace)
+        self.assertIn("start ci_checkpoint phase_a", trace)
+        self.assertIn("start ci_checkpoint phase_b", trace)
+        self.assertIn("start workstream_triage phase_a", trace)
+        self.assertIn("start workstream_triage phase_b", trace)
+        self.assertLess(trace.index("start workstream_triage phase_a"), trace.index("start ci_checkpoint phase_b"))
+        self.assertLess(trace.index("start ci_checkpoint phase_b"), trace.index("start workstream_triage phase_b"))
+
+    def test_overlap_wrapper_relaunches_ci_checkpoint_after_phase_a_early_exit(self) -> None:
+        feature_dir = self._make_feature_dir("ci_checkpoint_phase_b_resume")
+        res, trace_path = self._run(
+            feature_dir,
+            early_exit_ci_phase_a=True,
+        )
+
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        self.assertTrue((feature_dir / "pre-planning" / "ci_checkpoint_plan.md").is_file())
+
+        trace = trace_path.read_text(encoding="utf-8")
+        self.assertIn("start ci_checkpoint phase_a", trace)
+        self.assertIn("start ci_checkpoint phase_b", trace)
+        self.assertLess(trace.index("start ci_checkpoint phase_a"), trace.index("start ci_checkpoint phase_b"))
+
+    def test_overlap_wrapper_relaunches_ci_checkpoint_after_phase_a_success_without_staged_outputs(self) -> None:
+        feature_dir = self._make_feature_dir("ci_checkpoint_phase_a_success_waits")
+        res, trace_path = self._run(
+            feature_dir,
+            success_only_ci_phase_a=True,
+        )
+
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        self.assertTrue((feature_dir / "pre-planning" / "ci_checkpoint_plan.md").is_file())
+
+        trace = trace_path.read_text(encoding="utf-8")
+        self.assertIn("start ci_checkpoint phase_a", trace)
+        self.assertIn("start ci_checkpoint phase_b", trace)
+        self.assertLess(trace.index("start ci_checkpoint phase_a"), trace.index("start ci_checkpoint phase_b"))
 
     def test_overlap_wrapper_restores_failed_workstream_promotion(self) -> None:
         feature_dir = self._make_feature_dir("failed_overlap")
-        res, _ = self._run(feature_dir, fail_workstream=True)
+        res, trace_path = self._run(
+            feature_dir,
+            fail_workstream=True,
+            early_exit_ci_phase_a=True,
+            early_exit_workstream_phase_a=True,
+        )
 
         self.assertNotEqual(res.returncode, 0)
         self.assertFalse((feature_dir / "pre-planning" / "workstream_triage.md").exists())
         self.assertTrue((feature_dir / "logs" / "workstream-triage" / "staged" / "pre-planning" / "workstream_triage.md").is_file())
         self.assertFalse((feature_dir / "logs" / "workstream-triage" / "last_message.md").exists())
+        trace = trace_path.read_text(encoding="utf-8")
+        self.assertIn("start workstream_triage phase_b", trace)
 
 
 if __name__ == "__main__":

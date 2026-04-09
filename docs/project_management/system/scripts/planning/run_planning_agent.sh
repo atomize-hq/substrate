@@ -15,6 +15,8 @@ Required:
   --agent <id>                 Agent id: spec_manifest | impact_map | min_spec_draft | ci_checkpoint | workstream_triage | pre_planning_slice_reconcile | post_full_planning_reconcile
 
 Optional:
+  --phase <single|phase_a|phase_b>
+                              Execution phase. Defaults to `single`.
   --codex-profile <profile>    Passed to `codex exec --profile`
   --codex-model <model>        Passed to `codex exec --model`
   --codex-jsonl                Enable `codex exec --json` (stdout is events.jsonl)
@@ -38,6 +40,8 @@ Notes:
   - Enforces an output allowlist: only the intended tracked output(s) within FEATURE_DIR may change.
   - Writes run artifacts under: <FEATURE_DIR>/logs/<step>/runs/<YYYYMMDD-HHMMSS>/
   - Writes stable step artifacts under: <FEATURE_DIR>/logs/<step>/ (stderr.log, codex.pid, last_message.md)
+  - Orchestrated runs (`PM_PLANNING_ORCHESTRATED=1` or `--phase phase_a|phase_b`) force `codex exec --json`
+    and emit `<RUN_DIR>/run_state.json`.
 EOF
 }
 
@@ -210,6 +214,7 @@ resolve_adr_ref_to_path() {
 
 FEATURE_DIR_RAW=""
 AGENT=""
+PHASE="single"
 CODEX_PROFILE=""
 CODEX_MODEL=""
 CODEX_JSONL=0
@@ -222,6 +227,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --agent)
             AGENT="${2:-}"
+            shift 2
+            ;;
+        --phase)
+            PHASE="${2:-}"
             shift 2
             ;;
         --codex-profile)
@@ -248,6 +257,13 @@ done
 
 [[ -n "${FEATURE_DIR_RAW}" ]] || die "--feature-dir is required"
 [[ -n "${AGENT}" ]] || die "--agent is required"
+case "${PHASE}" in
+    single|phase_a|phase_b)
+        ;;
+    *)
+        die "unknown --phase: ${PHASE} (expected single|phase_a|phase_b)"
+        ;;
+esac
 
 need_cmd git
 need_cmd python3
@@ -275,6 +291,11 @@ PRE_PLANNING_DIR_REL="${FEATURE_DIR_REL}/pre-planning"
 PRE_PLANNING_DIR_ABS="${FEATURE_DIR_ABS}/pre-planning"
 mkdir -p "${PRE_PLANNING_DIR_ABS}"
 
+ORCHESTRATED_RUN=0
+if [[ "${PM_PLANNING_ORCHESTRATED:-0}" = "1" || "${PHASE}" != "single" ]]; then
+    ORCHESTRATED_RUN=1
+fi
+
 TASKS_JSON_ABS="${FEATURE_DIR_ABS}/tasks.json"
 [[ -f "${TASKS_JSON_ABS}" ]] || die "missing required tasks.json: ${FEATURE_DIR_REL}/tasks.json"
 
@@ -282,6 +303,8 @@ PROMPT_FILE_REL=""
 STEP_DIR_NAME=""
 ALLOWED_OUTPUTS_REL=()
 REQUIRED_OUTPUTS_REL=()
+PHASE_A_ALLOWED_OUTPUTS_REL=()
+PHASE_A_REQUIRED_OUTPUTS_REL=()
 USE_STAGED_OUTPUTS=0
 case "${AGENT}" in
     spec_manifest)
@@ -289,6 +312,11 @@ case "${AGENT}" in
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/spec_manifest_agent.md"
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/spec_manifest.md")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/spec_manifest.md")
+        PHASE_A_ALLOWED_OUTPUTS_REL=(
+            "${FEATURE_DIR_REL}/logs/spec-manifest/scratch.md"
+            "${FEATURE_DIR_REL}/logs/spec-manifest/handoff.md"
+        )
+        PHASE_A_REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/logs/spec-manifest/handoff.md")
         USE_STAGED_OUTPUTS=1
         ;;
     impact_map)
@@ -296,6 +324,14 @@ case "${AGENT}" in
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/impact_map_agent.md"
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/impact_map.md")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/impact_map.md")
+        PHASE_A_ALLOWED_OUTPUTS_REL=(
+            "${FEATURE_DIR_REL}/logs/impact-map/scratch.md"
+            "${FEATURE_DIR_REL}/logs/impact-map/handoff.md"
+        )
+        PHASE_A_REQUIRED_OUTPUTS_REL=(
+            "${FEATURE_DIR_REL}/logs/impact-map/scratch.md"
+            "${FEATURE_DIR_REL}/logs/impact-map/handoff.md"
+        )
         USE_STAGED_OUTPUTS=1
         ;;
     min_spec_draft)
@@ -303,6 +339,14 @@ case "${AGENT}" in
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/min_spec_draft_agent.md"
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md")
+        PHASE_A_ALLOWED_OUTPUTS_REL=(
+            "${FEATURE_DIR_REL}/logs/min-spec-draft/scratch.md"
+            "${FEATURE_DIR_REL}/logs/min-spec-draft/handoff.md"
+        )
+        PHASE_A_REQUIRED_OUTPUTS_REL=(
+            "${FEATURE_DIR_REL}/logs/min-spec-draft/scratch.md"
+            "${FEATURE_DIR_REL}/logs/min-spec-draft/handoff.md"
+        )
         USE_STAGED_OUTPUTS=1
         ;;
     ci_checkpoint)
@@ -310,6 +354,14 @@ case "${AGENT}" in
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/ci_checkpoint_agent.md"
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md" "${FEATURE_DIR_REL}/tasks.json")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md")
+        PHASE_A_ALLOWED_OUTPUTS_REL=(
+            "${FEATURE_DIR_REL}/logs/CI-checkpoint/scratch.md"
+            "${FEATURE_DIR_REL}/logs/CI-checkpoint/handoff.md"
+        )
+        PHASE_A_REQUIRED_OUTPUTS_REL=(
+            "${FEATURE_DIR_REL}/logs/CI-checkpoint/scratch.md"
+            "${FEATURE_DIR_REL}/logs/CI-checkpoint/handoff.md"
+        )
         USE_STAGED_OUTPUTS=1
         ;;
     workstream_triage)
@@ -317,6 +369,15 @@ case "${AGENT}" in
         PROMPT_FILE_REL="docs/project_management/system/prompts/planning/workstream_triage_agent.md"
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
+        PHASE_A_ALLOWED_OUTPUTS_REL=(
+            "${FEATURE_DIR_REL}/logs/workstream-triage/pm_lift_pack.txt"
+            "${FEATURE_DIR_REL}/logs/workstream-triage/pm_lift_pack.json"
+            "${FEATURE_DIR_REL}/logs/workstream-triage/pm_lift_intake.txt"
+            "${FEATURE_DIR_REL}/logs/workstream-triage/pm_lift_intake.json"
+            "${FEATURE_DIR_REL}/logs/workstream-triage/workstream_triage_draft.md"
+            "${FEATURE_DIR_REL}/logs/workstream-triage/handoff.md"
+        )
+        PHASE_A_REQUIRED_OUTPUTS_REL=("${FEATURE_DIR_REL}/logs/workstream-triage/workstream_triage_draft.md")
         USE_STAGED_OUTPUTS=1
         ;;
     pre_planning_slice_reconcile)
@@ -345,6 +406,10 @@ case "${AGENT}" in
         die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile|post_full_planning_reconcile)"
         ;;
 esac
+
+if [[ "${PHASE}" != "single" && "${USE_STAGED_OUTPUTS}" -ne 1 ]]; then
+    die "--phase ${PHASE} is supported only for pre-planning staged-output agents"
+fi
 
 [[ -f "${REPO_ROOT}/${PROMPT_FILE_REL}" ]] || die "missing prompt file: ${PROMPT_FILE_REL}"
 
@@ -562,6 +627,10 @@ fi
 
 PROMPT_OUT="${RUN_DIR_ABS}/prompt.md"
 CODEX_LAST_MESSAGE_RUN="${RUN_DIR_ABS}/last_message.run.md"
+RUN_STATE_PATH="${RUN_DIR_ABS}/run_state.json"
+if [[ "${ORCHESTRATED_RUN}" -eq 1 ]]; then
+    CODEX_JSONL=1
+fi
 if [[ "${CODEX_JSONL}" -eq 1 ]]; then
     CODEX_STDOUT="${RUN_DIR_ABS}/events.jsonl"
 else
@@ -581,11 +650,52 @@ fi
 	    for p in "${ADR_PATHS_UNIQ[@]}"; do
 	        printf '  - `%s`\n' "${p}"
 	    done
-	    if [[ "${PM_PLANNING_ORCHESTRATED:-0}" = "1" ]]; then
-	        printf -- '- Orchestration mode: `pre_planning_research_orchestrate.sh` overlap run (do not ask the operator to commit/stash/clean; if a Phase B gate is blocked by upstream uncommitted outputs, keep polling — orchestration will commit allowlisted outputs)\n'
+	    printf -- '- Run phase: `%s`\n' "${PHASE}"
+	    if [[ "${ORCHESTRATED_RUN}" -eq 1 ]]; then
+	        printf -- '- Orchestration mode: enabled\n'
+	    fi
+	    if [[ "${PM_PLANNING_ORCHESTRATED:-0}" = "1" && "${PHASE}" = "single" ]]; then
+	        printf -- '- Orchestration compatibility note: legacy wrapper-managed run (do not ask the operator to commit/stash/clean; orchestration will promote allowlisted outputs)\n'
+	    fi
+	    if [[ "${PHASE}" = "phase_a" ]]; then
+	        printf -- '- Runner phase contract (authoritative for this run): Phase A only. Produce logs-only overlap artifacts, do not write staged candidates, do not write canonical tracked files, and do not wait/poll for `last_message.md`, canonical tracked files, or git cleanliness. Stop after the Phase A artifacts below exist.\n'
+	        if [[ "${#PHASE_A_ALLOWED_OUTPUTS_REL[@]}" -gt 0 ]]; then
+	            printf -- '- Phase A allowed outputs:\n'
+	            for p in "${PHASE_A_ALLOWED_OUTPUTS_REL[@]}"; do
+	                printf '  - `%s`\n' "${p}"
+	            done
+	        fi
+	        if [[ "${#PHASE_A_REQUIRED_OUTPUTS_REL[@]}" -gt 0 ]]; then
+	            printf -- '- Phase A required outputs for success:\n'
+	            for p in "${PHASE_A_REQUIRED_OUTPUTS_REL[@]}"; do
+	                printf '  - `%s`\n' "${p}"
+	            done
+	        fi
+	    elif [[ "${PHASE}" = "phase_b" ]]; then
+	        printf -- '- Runner phase contract (authoritative for this run): Phase B only. Upstream authoritative inputs are already ready. Write staged outputs immediately, do not wait/poll for `last_message.md`, canonical tracked files, or git cleanliness, and do not write canonical tracked files directly.\n'
+	        if [[ "${#STAGED_OUTPUTS_REL[@]}" -gt 0 ]]; then
+	            printf -- '- Phase B staged outputs:\n'
+	            for p in "${STAGED_OUTPUTS_REL[@]}"; do
+	                printf '  - `%s`\n' "${p}"
+	            done
+	        fi
 	    fi
 	    printf '\nOutput allowlist (non-negotiable):\n'
-	    if [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
+	    if [[ "${PHASE}" = "phase_a" ]]; then
+	        printf -- '- Tracked outputs: (none; Phase A is logs-only)\n'
+	        printf -- '- Allowed Phase A log outputs:\n'
+	        if [[ "${#PHASE_A_ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
+	            printf '  - (none)\n'
+	        else
+	            for p in "${PHASE_A_ALLOWED_OUTPUTS_REL[@]}"; do
+	                printf '  - `%s`\n' "${p}"
+	            done
+	        fi
+	        printf -- '- Staged tracked-output candidates are forbidden in this Phase A invocation.\n'
+	        printf -- '- Direct writes to canonical tracked paths are forbidden.\n'
+	        printf -- '- Logs allowed (untracked only): `%s/logs/%s/`\n' "${FEATURE_DIR_REL}" "${STEP_DIR_NAME}"
+	        printf -- '- Do not edit any tracked files directly.\n'
+	    elif [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
 	        printf -- '- Tracked outputs: (none; wrapper/runner promotes staged candidates)\n'
 	        printf -- '- Staged tracked-output candidates (write only these under logs):\n'
 	        for p in ${STAGED_OUTPUTS_REL[@]+"${STAGED_OUTPUTS_REL[@]}"}; do
@@ -691,6 +801,20 @@ write_missing_last_message_stub() {
     } >"${CODEX_LAST_MESSAGE_RUN}" 2>/dev/null || true
 }
 
+write_run_state() {
+    if [[ "${ORCHESTRATED_RUN}" -ne 1 ]]; then
+        return 0
+    fi
+
+    python3 "${PLANNING_SCRIPTS_DIR}/codex_events_to_run_state.py" \
+        --phase "${PHASE}" \
+        --agent "${AGENT}" \
+        --events-path "$(relpath_in_repo "${REPO_ROOT}" "${CODEX_STDOUT}")" \
+        --last-message-run-path "$(relpath_in_repo "${REPO_ROOT}" "${CODEX_LAST_MESSAGE_RUN}")" \
+        --exit-code "${CODEX_EXIT}" \
+        --output "${RUN_STATE_PATH}"
+}
+
 path_fingerprint() {
     local repo_rel="$1"
     local abs_path="${REPO_ROOT}/${repo_rel}"
@@ -778,6 +902,7 @@ if [[ ! -s "${CODEX_LAST_MESSAGE_RUN}" ]]; then
     LAST_MESSAGE_WRITTEN_BY_CODEX=0
 fi
 write_missing_last_message_stub "${CODEX_EXIT}"
+write_run_state
 LAST_MESSAGE_OK=1
 if [[ ! -s "${CODEX_LAST_MESSAGE_RUN}" ]]; then
     LAST_MESSAGE_OK=0
@@ -803,7 +928,10 @@ done < <(git ls-files --others --exclude-standard -- "${FEATURE_DIR_REL}" | sed 
 
 ALLOWED_UNTRACKED_REL=()
 REQUIRED_OUTPUT_CHECK_REL=()
-if [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
+if [[ "${PHASE}" = "phase_a" ]]; then
+    ALLOWED_UNTRACKED_REL=(${PHASE_A_ALLOWED_OUTPUTS_REL[@]+"${PHASE_A_ALLOWED_OUTPUTS_REL[@]}"})
+    REQUIRED_OUTPUT_CHECK_REL=(${PHASE_A_REQUIRED_OUTPUTS_REL[@]+"${PHASE_A_REQUIRED_OUTPUTS_REL[@]}"})
+elif [[ "${USE_STAGED_OUTPUTS}" -eq 1 ]]; then
     ALLOWED_UNTRACKED_REL=(${STAGED_OUTPUTS_REL[@]+"${STAGED_OUTPUTS_REL[@]}"})
     REQUIRED_OUTPUT_CHECK_REL=(${REQUIRED_STAGED_OUTPUTS_REL[@]+"${REQUIRED_STAGED_OUTPUTS_REL[@]}"})
 else
@@ -856,7 +984,11 @@ done
 
 if [[ "${USE_STAGED_OUTPUTS}" -eq 1 && "${#CHANGED_TRACKED[@]}" -ne 0 ]]; then
     echo "ERROR: direct tracked writes are forbidden for staged-output planning agents (agent=${AGENT})" >&2
-    echo "  Write staged candidates under: ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}/staged/" >&2
+    if [[ "${PHASE}" = "phase_a" ]]; then
+        echo "  This run is Phase A only; write logs-only overlap artifacts under: ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}/" >&2
+    else
+        echo "  Write staged candidates under: ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}/staged/" >&2
+    fi
     echo "  Changed tracked files within feature dir:" >&2
     for p in "${CHANGED_TRACKED[@]}"; do
         echo "    - ${p}" >&2
@@ -964,11 +1096,13 @@ run_staged_candidate_validation() {
 }
 
 if [[ "${CODEX_EXIT}" -eq 0 && "${LAST_MESSAGE_OK}" -eq 1 && "${REQUIRED_OUTPUTS_OK}" -eq 1 ]]; then
-    run_staged_candidate_validation
-    if [[ "${USE_STAGED_OUTPUTS}" -eq 1 && "${PM_PLANNING_ORCHESTRATED:-0}" != "1" ]]; then
+    if [[ "${PHASE}" != "phase_a" ]]; then
+        run_staged_candidate_validation
+    fi
+    if [[ "${USE_STAGED_OUTPUTS}" -eq 1 && "${ORCHESTRATED_RUN}" -eq 0 ]]; then
         promote_staged_outputs
     fi
-    if [[ "${USE_STAGED_OUTPUTS}" -eq 0 || "${PM_PLANNING_ORCHESTRATED:-0}" != "1" ]]; then
+    if [[ "${USE_STAGED_OUTPUTS}" -eq 0 || "${ORCHESTRATED_RUN}" -eq 0 ]]; then
         run_closeout_validation
         if ! cp "${CODEX_LAST_MESSAGE_RUN}" "${STABLE_LAST_MESSAGE}"; then
             echo "ERROR: failed to promote stable last_message.md for step ${FEATURE_DIR_REL}/logs/${STEP_DIR_NAME}" >&2
@@ -991,7 +1125,11 @@ if [[ "${CODEX_EXIT}" -eq 0 && "${REQUIRED_OUTPUTS_OK}" -ne 1 ]]; then
     exit 2
 fi
 
-if [[ "${USE_STAGED_OUTPUTS}" -eq 1 && "${PM_PLANNING_ORCHESTRATED:-0}" = "1" ]]; then
+if [[ "${PHASE}" = "phase_a" ]]; then
+    echo "OK: phase_a log outputs within allowlist"
+elif [[ "${PHASE}" = "phase_b" ]]; then
+    echo "OK: phase_b staged outputs within allowlist"
+elif [[ "${USE_STAGED_OUTPUTS}" -eq 1 && "${ORCHESTRATED_RUN}" -eq 1 ]]; then
     echo "OK: staged outputs within allowlist"
 elif [[ "${#ALLOWED_OUTPUTS_REL[@]}" -eq 0 ]]; then
     echo "OK: logs-only step (no tracked changes)"

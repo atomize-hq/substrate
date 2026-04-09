@@ -26,6 +26,23 @@ Allowed writes:
 - Logs only (untracked): you may write under `<FEATURE_DIR>/logs/workstream-triage/**` only.
 - Do not edit any other tracked files directly.
 
+Runner-injected phase directive (authoritative when present):
+<!-- PM_PHASE_DIRECTIVE:BEGIN -->
+- Default if no runner-injected directive is present: `single` mode.
+- `single` mode:
+  - Complete the full prompt in one run.
+  - Produce the required Phase A log artifacts first, then produce the staged candidate in the same run.
+  - Do not wait for `last_message.md`, canonical tracked files to appear, or git cleanliness. If a canonical upstream artifact is unavailable, use the best available canonical/log inputs, record the gap as a follow-up, and proceed.
+- `phase_a` mode:
+  - Produce only the Phase A logs/scratch/handoff artifacts listed below, then stop.
+  - Do not write staged candidates.
+- `phase_b` mode:
+  - Assume upstream authoritative inputs are ready.
+  - Re-read the canonical tracked inputs listed in this prompt before writing the staged candidate.
+  - Write the staged candidate immediately.
+  - Do not wait for `last_message.md`, canonical tracked files to appear, or git cleanliness.
+<!-- PM_PHASE_DIRECTIVE:END -->
+
 Overlap execution model (required):
 - Phase A (start immediately; logs only):
   - Orchestration note:
@@ -43,7 +60,7 @@ Overlap execution model (required):
       - where to place boundaries (if any),
       - whether to recommend a split before full planning.
     - If the command fails, record the failure + reason in the draft and proceed using only the artifacts you can read.
-    - If the failure reason is that `impact_map.md` is not ready yet, retry `pm-lift-pack` once Phase B gate clears so the final artifact contains pack-derived lift evidence.
+    - If the failure reason is that `impact_map.md` is not ready yet, retry `pm-lift-pack` during `phase_b` (or later in `single` mode) so the final artifact contains pack-derived lift evidence.
   - Optional (recommended): capture discovery-time lift (vector-authored) from the ADR or intake:
     - Prefer ADR:
       - If exactly one ADR path exists in `<FEATURE_DIR>/tasks.json` (`meta.adr_paths`), run:
@@ -58,17 +75,12 @@ Overlap execution model (required):
     - `<FEATURE_DIR>/logs/impact-map/handoff.md`
     - `<FEATURE_DIR>/logs/min-spec-draft/handoff.md`
     - `<FEATURE_DIR>/logs/CI-checkpoint/handoff.md`
-- Phase B (finalization gate; still logs only):
-  - Before treating the draft as “final for pre-planning”, poll until BOTH are true:
-    - `<FEATURE_DIR>/logs/CI-checkpoint/last_message.md` exists, and
-    - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
-  - Default poll interval: `sleep 60` between checks.
-  - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
-  - After the gate clears, re-read `<FEATURE_DIR>/pre-planning/impact_map.md` (not just `logs/impact-map/handoff.md`) before finalizing the tracked artifact.
-  - Once the gate clears:
-    - Write/overwrite the staged candidate: `<FEATURE_DIR>/logs/workstream-triage/staged/pre-planning/workstream_triage.md`
-      - This should be a polished promotion candidate, not a raw scratchpad.
-      - Keep it concise and actionable (headings + bullets; no prose essays).
+- Phase B (finalization pass; staged candidate write):
+  - Re-read `<FEATURE_DIR>/pre-planning/spec_manifest.md`, `<FEATURE_DIR>/pre-planning/impact_map.md`, `<FEATURE_DIR>/pre-planning/minimal_spec_draft.md`, and `<FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md` when they are available canonically; otherwise use the best available upstream handoff/scratch artifacts and record the gap in Follow-ups.
+  - Retry `pm-lift-pack` if earlier execution failed because `impact_map.md` was not ready, then fold that evidence into the final artifact.
+  - Write/overwrite the staged candidate: `<FEATURE_DIR>/logs/workstream-triage/staged/pre-planning/workstream_triage.md`
+    - This should be a polished promotion candidate, not a raw scratchpad.
+    - Keep it concise and actionable (headings + bullets; no prose essays).
 
 Draft requirements (must be explicit and actionable):
 0) Planning workstream IDs (PWS) (required):
@@ -176,7 +188,7 @@ Draft requirements (must be explicit and actionable):
 Output:
 - Ensure `<FEATURE_DIR>/logs/workstream-triage/workstream_triage_draft.md` is readable and structured (headings + bullets; no prose essays).
 - Ensure `<FEATURE_DIR>/logs/workstream-triage/staged/pre-planning/workstream_triage.md` exists and is readable/structured.
-- Optionally write/overwrite: `<FEATURE_DIR>/logs/workstream-triage/handoff.md` as a short “executive summary” for the operator.
+- During Phase A only, optionally write/overwrite: `<FEATURE_DIR>/logs/workstream-triage/handoff.md` as a short “executive summary” for the operator.
 
 Closeout validation:
 - Do not write `<FEATURE_DIR>/pre-planning/workstream_triage.md` directly.

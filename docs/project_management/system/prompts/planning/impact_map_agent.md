@@ -26,6 +26,23 @@ Inputs:
 - Feature directory: `<FEATURE_DIR>/`
 - `spec_manifest.md`: `<FEATURE_DIR>/pre-planning/spec_manifest.md`
 
+Runner-injected phase directive (authoritative when present):
+<!-- PM_PHASE_DIRECTIVE:BEGIN -->
+- Default if no runner-injected directive is present: `single` mode.
+- `single` mode:
+  - Complete the full prompt in one run.
+  - Produce the required Phase A log artifacts first, then produce the staged candidate in the same run.
+  - Do not wait for `last_message.md`, canonical tracked files to appear, or git cleanliness. If a canonical upstream artifact is unavailable, use the ADR(s) plus any available handoff/scratch artifacts, record the gap as a follow-up, and proceed.
+- `phase_a` mode:
+  - Produce only the Phase A logs/scratch/handoff artifacts listed below, then stop.
+  - Do not write staged candidates.
+- `phase_b` mode:
+  - Assume upstream authoritative inputs are ready.
+  - Re-read the canonical tracked inputs listed in this prompt before writing the staged candidate.
+  - Write the staged candidate immediately.
+  - Do not wait for `last_message.md`, canonical tracked files to appear, or git cleanliness.
+<!-- PM_PHASE_DIRECTIVE:END -->
+
 Discovery requirements (must do):
 1) Repo-wide touch discovery:
    - Identify the exact crates/modules/scripts/config/docs that must change to implement the ADR.
@@ -59,12 +76,8 @@ Output requirements:
        - a concrete preliminary Touch Set (paths or directory prefixes), and
        - the main implication buckets.
       - Target: emit this handoff within the first 10 minutes (do not wait for cross-queue scan completion).
-2) Phase B (staged candidate write gate; required):
-   - Before writing `<FEATURE_DIR>/logs/impact-map/staged/pre-planning/impact_map.md`, poll until BOTH are true:
-     - `<FEATURE_DIR>/logs/spec-manifest/last_message.md` exists, and
-     - `git status --porcelain=v1 -- "<FEATURE_DIR>"` is empty.
-   - Default poll interval: `sleep 60` between checks.
-   - If the dispatcher context indicates an orchestration overlap run, **do not** ask the operator to commit/stash/clean upstream outputs; treat a dirty `git status` as transient and keep polling until the gate clears.
+2) Phase B (staged candidate write; required):
+   - Re-read `<FEATURE_DIR>/pre-planning/spec_manifest.md` when it is available canonically; otherwise use the best available upstream handoff/scratch artifacts and record the gap in Follow-ups.
 3) Then write/overwrite `<FEATURE_DIR>/logs/impact-map/staged/pre-planning/impact_map.md` using the template.
    - The Touch Set must be authored for triad execution compatibility, not just planning syntax.
    - The Touch Set must default to exact repo-relative file paths (no vague “update some files”).

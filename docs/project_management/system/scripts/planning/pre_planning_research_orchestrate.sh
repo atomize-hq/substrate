@@ -218,28 +218,40 @@ runner_start_epoch=()
 runner_end_epoch=()
 # First-seen handoff timestamp (stable even if handoff.md is later overwritten).
 handoff_seen_epoch=()
+step_phase=()
+step_state=()
+step_ready_for_commit=()
+step_wait_reason=()
+step_failure_rc=()
+step_last_completed_phase=()
 
 launch_step() {
     local idx="$1"
+    local phase="$2"
     local step="${steps[$idx]}"
     local agent="${agents[$idx]}"
 
     local log_path="${WRAPPER_DIR}/${step}.runner.log"
     # Launch the runner in the background; runner manages Codex child + codex.pid/stderr.log.
-    local -a args=("${RUNNER}" --feature-dir "${FEATURE_DIR_ABS}" --agent "${agent}")
+    local -a args=("${RUNNER}" --feature-dir "${FEATURE_DIR_ABS}" --agent "${agent}" --phase "${phase}")
     if [[ -n "${CODEX_PROFILE:-}" ]]; then args+=(--codex-profile "${CODEX_PROFILE}"); fi
     if [[ -n "${CODEX_MODEL:-}" ]]; then args+=(--codex-model "${CODEX_MODEL}"); fi
     if [[ "${CODEX_JSONL:-0}" = "1" ]]; then args+=(--codex-jsonl); fi
-    PM_PLANNING_ORCHESTRATED=1 "${args[@]}" >"${log_path}" 2>&1 &
+    PM_PLANNING_ORCHESTRATED=1 PM_PRE_PLANNING_WRAPPER_PHASE="${phase}" "${args[@]}" >"${log_path}" 2>&1 &
     local pid="$!"
     runner_pids[idx]="${pid}"
     runner_rcs[idx]=""
     commit_shas[idx]=""
-    runner_start_epoch[idx]="$(date -u +%s)"
+    if [[ -z "${runner_start_epoch[idx]:-}" ]]; then
+        runner_start_epoch[idx]="$(date -u +%s)"
+    fi
     runner_end_epoch[idx]=""
-    append_summary "- Started: \`${step}\` (agent=\`${agent}\`, pid=\`${pid}\`, runner_log=\`$(basename "${log_path}")\`)"
+    step_phase[idx]="${phase}"
+    step_state[idx]="running_${phase}"
+    step_wait_reason[idx]=""
+    append_summary "- Started: \`${step}\` \`${phase}\` (agent=\`${agent}\`, pid=\`${pid}\`, runner_log=\`$(basename "${log_path}")\`)"
 
-    echo "Started: ${step} (agent=${agent}, pid=${pid})"
+    echo "Started: ${step} [${phase}] (agent=${agent}, pid=${pid})"
     echo "  Runner log: ${FEATURE_DIR_REL}/logs/pre_planning_wrapper/${RUN_TS}/${step}.runner.log"
     echo "  Step stderr: ${FEATURE_DIR_REL}/logs/${step}/stderr.log"
     echo "  Tip: tail -f ${FEATURE_DIR_REL}/logs/${step}/stderr.log"
@@ -508,6 +520,140 @@ handoff_path_for() {
     printf '%s\n' "${LOGS_DIR}/${step}/handoff.md"
 }
 
+step_staged_required_outputs_exist() {
+    local step="$1"
+    local target_rel staged_rel staged_abs
+    while IFS= read -r target_rel; do
+        [[ -n "${target_rel}" ]] || continue
+        staged_rel="$(step_staged_rel "${step}" "${target_rel}")"
+        staged_abs="${REPO_ROOT}/${staged_rel}"
+        if [[ ! -f "${staged_abs}" ]]; then
+            return 1
+        fi
+    done < <(step_required_outputs "${step}")
+    return 0
+}
+
+step_phase_a_required_outputs_exist() {
+    local idx="$1"
+    local step="${steps[$idx]}"
+    local required_rel required_abs
+    while IFS= read -r required_rel; do
+        [[ -n "${required_rel}" ]] || continue
+        required_abs="${REPO_ROOT}/${required_rel}"
+        if [[ ! -f "${required_abs}" ]]; then
+            return 1
+        fi
+    done < <(case "${step}" in
+        spec-manifest)
+            printf '%s\n' "${FEATURE_DIR_REL}/logs/spec-manifest/handoff.md"
+            ;;
+        impact-map)
+            printf '%s\n' "${FEATURE_DIR_REL}/logs/impact-map/scratch.md"
+            printf '%s\n' "${FEATURE_DIR_REL}/logs/impact-map/handoff.md"
+            ;;
+        min-spec-draft)
+            printf '%s\n' "${FEATURE_DIR_REL}/logs/min-spec-draft/scratch.md"
+            printf '%s\n' "${FEATURE_DIR_REL}/logs/min-spec-draft/handoff.md"
+            ;;
+        CI-checkpoint)
+            printf '%s\n' "${FEATURE_DIR_REL}/logs/CI-checkpoint/scratch.md"
+            printf '%s\n' "${FEATURE_DIR_REL}/logs/CI-checkpoint/handoff.md"
+            ;;
+        workstream-triage)
+            printf '%s\n' "${FEATURE_DIR_REL}/logs/workstream-triage/workstream_triage_draft.md"
+            ;;
+        *)
+            die "unknown step: ${step}"
+            ;;
+    esac)
+    return 0
+}
+
+step_phase_b_dependency() {
+    local step="$1"
+    case "${step}" in
+        spec-manifest) printf '%s\n' "" ;;
+        impact-map) printf '%s\n' "spec-manifest" ;;
+        min-spec-draft) printf '%s\n' "impact-map" ;;
+        CI-checkpoint) printf '%s\n' "min-spec-draft" ;;
+        workstream-triage) printf '%s\n' "CI-checkpoint" ;;
+        *) die "unknown step: ${step}" ;;
+    esac
+}
+
+feature_dir_git_clean_for_phase_b() {
+    local line path
+    while IFS= read -r line; do
+        [[ -n "${line}" ]] || continue
+        path="${line:3}"
+        if [[ "${path}" == *" -> "* ]]; then
+            path="${path##* -> }"
+        fi
+        if [[ "${path}" == "${FEATURE_DIR_REL}/logs" ]] || [[ "${path}" == "${FEATURE_DIR_REL}/logs/"* ]]; then
+            continue
+        fi
+        return 1
+    done < <(git status --porcelain=v1 --untracked-files=all -- "${FEATURE_DIR_REL}")
+    return 0
+}
+
+phase_b_gate_reason() {
+    local idx="$1"
+    local step="${steps[$idx]}"
+    local dep_step
+    dep_step="$(step_phase_b_dependency "${step}")"
+    local reasons=()
+    local dep_output
+
+    if [[ -n "${dep_step}" ]]; then
+        while IFS= read -r dep_output; do
+            [[ -n "${dep_output}" ]] || continue
+            if [[ ! -f "${REPO_ROOT}/${dep_output}" ]]; then
+                reasons+=("missing canonical prerequisite ${dep_output}")
+            fi
+        done < <(step_required_outputs "${dep_step}")
+    fi
+
+    if ! feature_dir_git_clean_for_phase_b; then
+        reasons+=("feature-dir git state is not clean outside logs/")
+    fi
+
+    if [[ "${#reasons[@]}" -eq 0 ]]; then
+        printf '%s\n' ""
+    else
+        local joined=""
+        local reason
+        for reason in "${reasons[@]}"; do
+            if [[ -n "${joined}" ]]; then
+                joined="${joined}; "
+            fi
+            joined="${joined}${reason}"
+        done
+        printf '%s\n' "${joined}"
+    fi
+}
+
+phase_b_gate_ready() {
+    local idx="$1"
+    [[ -z "$(phase_b_gate_reason "${idx}")" ]]
+}
+
+phase_a_can_close_with_wait() {
+    local idx="$1"
+    local step="${steps[$idx]}"
+    if ! step_phase_a_required_outputs_exist "${idx}"; then
+        return 1
+    fi
+    if step_staged_required_outputs_exist "${step}"; then
+        return 1
+    fi
+    if phase_b_gate_ready "${idx}"; then
+        return 1
+    fi
+    return 0
+}
+
 cleanup_on_exit() {
     local rc="$?"
     # Best-effort cleanup: ensure we don't leave planning runners running on failure.
@@ -625,8 +771,11 @@ on_interrupt() {
 trap on_interrupt INT TERM
 
 append_summary "## Launch"
-
-launch_step "${start_index}"
+if [[ "${start_index}" -gt 0 ]] && phase_b_gate_ready "${start_index}"; then
+    launch_step "${start_index}" "phase_b"
+else
+    launch_step "${start_index}" "phase_a"
+fi
 
 append_summary ""
 append_summary "## Progress + commits"
@@ -640,12 +789,6 @@ commit_done=()
 all_steps_done() {
     local i
     for ((i = start_index; i <= last_index; i++)); do
-        if [[ -z "${runner_pids[i]:-}" ]]; then
-            return 1
-        fi
-        if [[ -z "${runner_rcs[i]:-}" ]]; then
-            return 1
-        fi
         if [[ "${commit_done[i]:-0}" != "1" ]]; then
             return 1
         fi
@@ -685,20 +828,58 @@ while true; do
             wait "${pid}"
             rc="$?"
             set -e
-            runner_rcs[i]="${rc}"
             runner_end_epoch[i]="$(date -u +%s)"
 
-            if [[ "${rc}" -ne 0 ]]; then
-                echo "FAILED: ${steps[$i]} exited with ${rc} (see ${FEATURE_DIR_REL}/logs/${steps[$i]}/stderr.log)" >&2
-                append_summary "- FAILED: \`${steps[$i]}\` exited with \`${rc}\` — stopping"
-                kill_downstream "$((i + 1))"
-                exit "${rc}"
+            phase="${step_phase[i]:-single}"
+            step="${steps[$i]}"
+
+            if [[ "${phase}" == "phase_a" ]]; then
+                if [[ "${rc}" -eq 0 ]] && step_staged_required_outputs_exist "${step}"; then
+                    runner_rcs[i]="${rc}"
+                    step_state[i]="ready_to_commit"
+                    step_ready_for_commit[i]="1"
+                    step_last_completed_phase[i]="phase_a"
+                    echo "Completed: ${step} [phase_a] (staged outputs ready)"
+                elif phase_a_can_close_with_wait "${i}"; then
+                    runner_rcs[i]="0"
+                    step_state[i]="waiting_phase_b"
+                    step_ready_for_commit[i]="0"
+                    step_last_completed_phase[i]="phase_a"
+                    step_wait_reason[i]="$(phase_b_gate_reason "${i}")"
+                    echo "Completed: ${step} [phase_a] (waiting for phase_b gate)"
+                    append_summary "- Waiting: \`${step}\` phase_b gate pending — ${step_wait_reason[i]}"
+                else
+                    runner_rcs[i]="${rc}"
+                    step_failure_rc[i]="${rc}"
+                    echo "FAILED: ${step} [${phase}] exited with ${rc} (see ${FEATURE_DIR_REL}/logs/${step}/stderr.log)" >&2
+                    append_summary "- FAILED: \`${step}\` \`${phase}\` exited with \`${rc}\` — stopping"
+                    kill_downstream "$((i + 1))"
+                    exit "${rc}"
+                fi
+            else
+                runner_rcs[i]="${rc}"
+                if [[ "${rc}" -ne 0 ]]; then
+                    step_failure_rc[i]="${rc}"
+                    echo "FAILED: ${step} [${phase}] exited with ${rc} (see ${FEATURE_DIR_REL}/logs/${step}/stderr.log)" >&2
+                    append_summary "- FAILED: \`${step}\` \`${phase}\` exited with \`${rc}\` — stopping"
+                    kill_downstream "$((i + 1))"
+                    exit "${rc}"
+                fi
+                if ! step_staged_required_outputs_exist "${step}"; then
+                    echo "FAILED: ${step} [${phase}] exited 0 but staged outputs are missing" >&2
+                    append_summary "- FAILED: \`${step}\` \`${phase}\` exited with \`0\` but staged outputs are missing — stopping"
+                    kill_downstream "$((i + 1))"
+                    exit 2
+                fi
+                step_state[i]="ready_to_commit"
+                step_ready_for_commit[i]="1"
+                step_last_completed_phase[i]="${phase}"
+                echo "Completed: ${step} [${phase}] (rc=0)"
             fi
-            echo "Completed: ${steps[$i]} (rc=0)"
         fi
     done
 
-    # 2) Launch downstream steps as soon as their upstream handoff is available.
+    # 2) Launch downstream phase_a steps as soon as their upstream handoff is available.
     #
     # Launch rules (overlap triggers):
     # - impact-map launches on spec-manifest handoff/exit.
@@ -711,7 +892,7 @@ while true; do
     idx_ci_checkpoint="$(step_index_of CI-checkpoint 2>/dev/null || true)"
 
     for ((next_idx = start_index + 1; next_idx <= last_index; next_idx++)); do
-        if [[ -n "${runner_pids[next_idx]:-}" ]]; then
+        if [[ -n "${runner_pids[next_idx]:-}" ]] || [[ -n "${step_state[next_idx]:-}" ]]; then
             continue
         fi
 
@@ -759,16 +940,30 @@ while true; do
         fi
 
         if [[ "${ready}" -eq 1 ]]; then
-            launch_step "${next_idx}"
+            launch_step "${next_idx}" "phase_a"
             if [[ "${next_idx}" -gt "${launched_upto}" ]]; then
                 launched_upto="${next_idx}"
             fi
         fi
     done
 
-    # 3) Commit allowlisted outputs in step order as soon as each step succeeds.
+    # 3) Launch phase_b once the host verifies canonical prerequisites + clean feature-dir status.
+    for ((i = start_index; i <= launched_upto; i++)); do
+        if [[ "${step_state[i]:-}" != "waiting_phase_b" ]]; then
+            continue
+        fi
+        if phase_b_gate_ready "${i}"; then
+            launch_step "${i}" "phase_b"
+        else
+            step_wait_reason[i]="$(phase_b_gate_reason "${i}")"
+            echo "Waiting: ${steps[$i]} [phase_b gate] ${step_wait_reason[i]}"
+            append_summary "- Waiting: \`${steps[$i]}\` phase_b gate pending — ${step_wait_reason[i]}"
+        fi
+    done
+
+    # 4) Commit allowlisted outputs in step order as soon as each step is ready.
     while [[ "${next_to_commit}" -le "${last_index}" ]]; do
-        if [[ -z "${runner_pids[next_to_commit]:-}" ]]; then
+        if [[ "${step_ready_for_commit[next_to_commit]:-0}" != "1" ]]; then
             break
         fi
         if [[ "${commit_done[next_to_commit]:-0}" = "1" ]]; then
@@ -776,20 +971,9 @@ while true; do
             continue
         fi
 
-        rc="${runner_rcs[next_to_commit]:-}"
-        if [[ -z "${rc}" ]]; then
-            break
-        fi
-        if [[ "${rc}" -ne 0 ]]; then
-            # Should be handled above, but keep this as a safety net.
-            echo "FAILED: ${steps[$next_to_commit]} exited with ${rc} (see ${FEATURE_DIR_REL}/logs/${steps[$next_to_commit]}/stderr.log)" >&2
-            append_summary "- FAILED: \`${steps[$next_to_commit]}\` exited with \`${rc}\` — stopping"
-            kill_downstream "$((next_to_commit + 1))"
-            exit "${rc}"
-        fi
-
         commit_step_outputs "${next_to_commit}"
         commit_done[next_to_commit]=1
+        step_state[next_to_commit]="committed"
         if [[ -n "${commit_shas[next_to_commit]:-}" ]]; then
             append_summary "- Committed \`${steps[$next_to_commit]}\`: \`${commit_shas[next_to_commit]}\`"
             echo "Committed: ${steps[$next_to_commit]} (${commit_shas[next_to_commit]})"
@@ -800,7 +984,7 @@ while true; do
         next_to_commit="$((next_to_commit + 1))"
     done
 
-    # 4) Exit once all steps are launched, completed, and commit-processed.
+    # 5) Exit once all steps are commit-processed.
     if [[ "${launched_upto}" -eq "${last_index}" ]] && all_steps_done; then
         exit 0
     fi
