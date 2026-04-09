@@ -2,8 +2,8 @@
 seam_id: SEAM-4
 seam_slug: validation-and-cross-doc-lock-in
 type: conformance
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -28,12 +28,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -118,11 +118,11 @@ open_remediations: []
   - De-risk plan:
     - track link normalization as explicit conformance evidence or carried-forward follow-up, not as an implicit cleanup hope
 - **Rollout / safety**:
-  - This seam is now active because the upstream contracts and runtime/parity expectations are concrete enough to verify directly.
-  - Safety comes from making drift visible before promotion rather than after downstream packs inherit stale wording.
+  - This seam has now landed and left the forward planning window after recording conformance evidence against the upstream contracts and runtime/parity expectations.
+  - Safety came from making drift visible before promotion rather than after downstream packs inherited stale wording.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `active` because conformance can now consume the landed operator, schema, policy, and runtime/parity truth directly.
+    - `future` because the seam has landed and no longer occupies the forward planning window.
   - Which threads matter most
     - `THR-01`
     - `THR-02`

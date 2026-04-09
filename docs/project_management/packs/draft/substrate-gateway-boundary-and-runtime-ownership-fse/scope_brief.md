@@ -4,7 +4,7 @@ pack_version: v1
 pack_status: extracted
 source_ref: docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/pre-planning/
 execution_horizon:
-  active_seam: SEAM-4
+  active_seam: null
   next_seam: null
 ---
 
@@ -30,7 +30,7 @@ execution_horizon:
   - New config families, new policy file families, or gateway-local config/admin/persistence as trusted Substrate inputs.
   - Redefining ADR-0027 schema ownership, ADR-0017 event routing, ADR-0028 trace vocabulary, ADR-0041 runtime internals, or ADR-0042 additive identity-tuple metadata outside `client_wiring.*`.
   - Provisioning-script changes, backend warm-flow changes, or a public remote or multi-tenant gateway design.
-  - Slice files, threaded seam reviews, or authoritative sub-slices for future seams.
+- Slice files, threaded seam reviews, or authoritative sub-slices for follow-on seams.
 - **Success criteria**:
   - One authoritative operator boundary exists for the command family, ownership split, stable wiring env semantics, and exit-code mapping.
   - `status --json` stays the single Substrate-owned machine-readable wiring authority, with a locked `client_wiring.*` family and explicit absence semantics.

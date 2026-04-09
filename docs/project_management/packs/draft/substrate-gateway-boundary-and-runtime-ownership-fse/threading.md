@@ -2,22 +2,24 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-4`
-  - This seam now consumes the published operator, schema, policy, and runtime/parity contracts and turns them into cross-doc validation and quality-gate lock-in.
+- **Active seam**: `null`
+  - No active seam remains inside this pack after `SEAM-4` landed and the seam-exit gate passed.
 - **Next seam**: `null`
-  - No additional safe queued seam remains inside this pack once `SEAM-4` becomes active.
-- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`
+  - No additional safe queued seam remains inside this pack.
+- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`, `SEAM-4`
   - `SEAM-1` has landed with a passed seam-exit gate and left the forward planning window.
   - `SEAM-2` has landed with a passed seam-exit gate and left the forward planning window.
   - `SEAM-3` has landed with a passed seam-exit gate and left the forward planning window.
+  - `SEAM-4` has landed with a passed seam-exit gate and left the forward planning window.
 
 Horizon policy for this extracted pack:
 
-- only the active seam gets authoritative downstream deep planning by default
-- there is no queued `next` seam because `SEAM-4` is the terminal seam in this pack
+- only an active seam gets authoritative downstream deep planning by default
+- there is no queued `next` seam because this pack has no remaining forward-window seam
 - `SEAM-1` has now landed with a passed seam-exit gate and left the forward planning window
 - `SEAM-2` has now landed with a passed seam-exit gate and left the forward planning window
 - `SEAM-3` has now landed with a passed seam-exit gate and left the forward planning window
+- `SEAM-4` has now landed with a passed seam-exit gate and left the forward planning window
 - the remaining future seams stay landed seam briefs unless a downstream pack explicitly reopens them
 
 ## Contract registry

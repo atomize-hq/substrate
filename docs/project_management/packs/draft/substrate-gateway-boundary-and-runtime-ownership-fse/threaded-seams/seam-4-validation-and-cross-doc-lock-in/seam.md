@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-4
 seam_slug: validation-and-cross-doc-lock-in
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -28,12 +28,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-4 - Validation and cross-doc lock-in
