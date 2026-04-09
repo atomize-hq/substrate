@@ -660,6 +660,18 @@ phase_a_can_close_with_wait() {
     return 0
 }
 
+phase_a_can_advance_to_phase_b() {
+    local idx="$1"
+    local step="${steps[$idx]}"
+    if ! step_phase_a_required_outputs_exist "${idx}"; then
+        return 1
+    fi
+    if step_staged_required_outputs_exist "${step}"; then
+        return 1
+    fi
+    return 0
+}
+
 cleanup_on_exit() {
     local rc="$?"
     # Best-effort cleanup: ensure we don't leave planning runners running on failure.
@@ -846,14 +858,19 @@ while true; do
                     step_ready_for_commit[i]="1"
                     step_last_completed_phase[i]="phase_a"
                     echo "Completed: ${step} [phase_a] (staged outputs ready)"
-                elif phase_a_can_close_with_wait "${i}"; then
+                elif phase_a_can_advance_to_phase_b "${i}"; then
                     runner_rcs[i]="0"
                     step_state[i]="waiting_phase_b"
                     step_ready_for_commit[i]="0"
                     step_last_completed_phase[i]="phase_a"
                     step_wait_reason[i]="$(phase_b_gate_reason "${i}")"
-                    echo "Completed: ${step} [phase_a] (waiting for phase_b gate)"
-                    append_summary "- Waiting: \`${step}\` phase_b gate pending — ${step_wait_reason[i]}"
+                    if [[ -n "${step_wait_reason[i]}" ]]; then
+                        echo "Completed: ${step} [phase_a] (waiting for phase_b gate)"
+                        append_summary "- Waiting: \`${step}\` phase_b gate pending — ${step_wait_reason[i]}"
+                    else
+                        echo "Completed: ${step} [phase_a] (ready for phase_b)"
+                        append_summary "- Ready: \`${step}\` phase_b gate cleared after phase_a"
+                    fi
                 else
                     runner_rcs[i]="${rc}"
                     step_failure_rc[i]="${rc}"
