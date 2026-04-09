@@ -2,8 +2,8 @@
 seam_id: SEAM-3
 seam_slug: typed-runtime-and-platform-parity
 type: platform
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -29,14 +29,13 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
-open_remediations:
-  - REM-001
+  status: passed
+open_remediations: []
 ---
 
 # SEAM-3 - Typed runtime and platform parity
@@ -119,11 +118,11 @@ open_remediations:
   - De-risk plan:
     - require parity evidence to be part of the seam-local review and closeout, not an afterthought
 - **Rollout / safety**:
-  - This seam is now active because the upstream status and policy surfaces are published in closeout-backed form.
+  - This seam has landed with a passed seam-exit gate and left the forward planning window.
   - Safety depends on keeping fail-closed and non-trust boundaries inherited from upstream contracts rather than re-deciding them locally.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `active` because typed runtime/parity planning is the immediate downstream consumer now that `SEAM-2` has published schema and policy truth.
+    - `future` because the seam has landed with a passed seam-exit gate and published `THR-04` for the terminal conformance seam.
   - Which threads matter most
     - `THR-02`
     - `THR-03`

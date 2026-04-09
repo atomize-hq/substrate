@@ -24,26 +24,28 @@ Start here:
 
 Execution horizon:
 
-- Active seam: `SEAM-3`
-- Next seam: `SEAM-4`
-- Future seam(s): `SEAM-1`, `SEAM-2`
+- Active seam: `SEAM-4`
+- Next seam: `null`
+- Future seam(s): `SEAM-1`, `SEAM-2`, `SEAM-3`
 
 Horizon inference:
 
 - `SEAM-1` has landed with a passed seam-exit gate and remains outside the forward planning window.
-- `SEAM-2` has now landed with a passed seam-exit gate and published the schema and policy handoff for downstream consumers.
-- `SEAM-3` is now the active seam because the typed runtime/parity work can consume the published operator, schema, and policy contracts directly.
-- `SEAM-4` is now the next seam because conformance and cross-doc lock-in should plan behind the active runtime/parity seam rather than ahead of it.
+- `SEAM-2` has landed with a passed seam-exit gate and published the schema and policy handoff for downstream consumers.
+- `SEAM-3` has now landed with a passed seam-exit gate and published the typed runtime/parity handoff for downstream consumers.
+- `SEAM-4` is now the active seam because conformance and cross-doc lock-in can consume the published operator, schema, policy, and runtime/parity contracts directly.
+- No additional safe `next` seam remains inside this pack, so the forward window now terminates at `SEAM-4`.
 
 Policy:
 
-- only the active seam is eligible for authoritative downstream sub-slices by default
-- the next seam may later receive seam-local review + slices, and only provisional deeper planning
+- only the active seam is eligible for authoritative downstream deep planning by default
+- there is no queued `next` seam because `SEAM-4` is the terminal seam in this pack
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that own undefined contract boundaries may reserve `S00` as a contract-definition boundary slice once seam-local planning begins
 - `SEAM-1` has now landed with a passed seam-exit gate and left the forward planning window
 - `SEAM-2` has now landed with a passed seam-exit gate and left the forward planning window
-- future seams remain seam briefs
+- `SEAM-3` has now landed with a passed seam-exit gate and left the forward planning window
+- future seams remain landed seam briefs unless a downstream pack explicitly reopens them
 - canonical contract docs live in `docs/contracts/` and must remain descriptive-only
 
 Source-pack crosswalk:

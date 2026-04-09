@@ -2,21 +2,23 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-3`
-  - This seam now consumes the published operator, schema, and policy contracts from `SEAM-1` and `SEAM-2` and turns them into the typed runtime/parity planning surface.
-- **Next seam**: `SEAM-4`
-  - This seam is the immediate downstream consumer because cross-doc validation should plan behind the active runtime/parity seam once the upstream contracts are concrete.
-- **Future seams**: `SEAM-1`, `SEAM-2`
+- **Active seam**: `SEAM-4`
+  - This seam now consumes the published operator, schema, policy, and runtime/parity contracts and turns them into cross-doc validation and quality-gate lock-in.
+- **Next seam**: `null`
+  - No additional safe queued seam remains inside this pack once `SEAM-4` becomes active.
+- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`
   - `SEAM-1` has landed with a passed seam-exit gate and left the forward planning window.
-  - `SEAM-2` has now landed with a passed seam-exit gate and left the forward planning window.
+  - `SEAM-2` has landed with a passed seam-exit gate and left the forward planning window.
+  - `SEAM-3` has landed with a passed seam-exit gate and left the forward planning window.
 
 Horizon policy for this extracted pack:
 
 - only the active seam gets authoritative downstream deep planning by default
-- the next seam may later receive seam-local review and only provisional deeper planning
+- there is no queued `next` seam because `SEAM-4` is the terminal seam in this pack
 - `SEAM-1` has now landed with a passed seam-exit gate and left the forward planning window
 - `SEAM-2` has now landed with a passed seam-exit gate and left the forward planning window
-- the remaining future seams stay seam briefs until upstream closeouts and published threads exist
+- `SEAM-3` has now landed with a passed seam-exit gate and left the forward planning window
+- the remaining future seams stay landed seam briefs unless a downstream pack explicitly reopens them
 
 ## Contract registry
 
@@ -69,38 +71,38 @@ Horizon policy for this extracted pack:
   - **Purpose**: publish one operator boundary so every downstream seam inherits the same command family, ownership split, stable env names, and exit taxonomy.
   - **State**: `revalidated`
   - **Revalidation trigger**: command spelling, absent-state wording, stable env names, exit-code boundaries, or the Substrate versus `substrate-gateway` ownership split changes.
-  - **Satisfied by**: `governance/seam-1-closeout.md` records the landed operator contract, command-family proof, absent-state evidence, and stale triggers. `threaded-seams/seam-2-status-schema-and-policy-evaluation-surface/review.md` revalidates that handoff for the schema/policy seam.
-  - **Notes**: this is the first critical-path handoff and the main protection against archived ADR-0023 command drift. `SEAM-2` now consumes and revalidates it as the active downstream seam.
+  - **Satisfied by**: `governance/seam-1-closeout.md` records the landed operator contract, command-family proof, absent-state evidence, and stale triggers. `threaded-seams/seam-2-status-schema-and-policy-evaluation-surface/review.md` first revalidated that handoff for downstream planning, and `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` now revalidates it again for the terminal conformance seam.
+  - **Notes**: this is the first critical-path handoff and the main protection against archived ADR-0023 command drift. The thread remains active because `SEAM-4` still needs the same operator boundary to stay visible in playbook, docs, and quality-gate evidence.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-3`, `SEAM-4`
   - **Carried contract IDs**: `C-02`
   - **Purpose**: keep machine-readable status, wiring discovery, and ADR-0042 boundary semantics single-source before runtime and docs consume them.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: top-level JSON shape, `client_wiring.*` field family, omission rules, or the boundary against ADR-0042 additive metadata changes.
-  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed schema contract, durable contract mirror, and downstream stale triggers for the status envelope and `client_wiring.*` family.
-  - **Notes**: this thread now carries the published machine-readable status and wiring contract into `SEAM-3` and `SEAM-4`.
+  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed schema contract, durable contract mirror, and downstream stale triggers for the status envelope and `client_wiring.*` family. `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` revalidates that handoff against the current manual-testing, docs, and quality-gate touch set.
+  - **Notes**: this thread now carries the revalidated machine-readable status and wiring contract into the active terminal conformance seam.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-3`, `SEAM-4`
   - **Carried contract IDs**: `C-03`
   - **Purpose**: keep fail-closed placement, secret delivery, and gateway-local non-trust rules single-source across runtime and validation seams.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: reused ADR-0027 keys, no-host-fallback posture, exit boundary taxonomy, or trust-boundary rules change.
-  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed policy contract, durable contract mirror, and downstream stale triggers for fail-closed placement and non-trust rules.
-  - **Notes**: this thread now carries the published policy-evaluation and trust-boundary contract into `SEAM-3` and `SEAM-4`.
+  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed policy contract, durable contract mirror, and downstream stale triggers for fail-closed placement and non-trust rules. `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` revalidates that handoff against the current validation and doc-lock-in scope.
+  - **Notes**: this thread now carries the revalidated policy-evaluation and trust-boundary contract into the active terminal conformance seam.
 
 - **Thread ID**: `THR-04`
   - **Producer seam**: `SEAM-3`
   - **Consumer seam(s)**: `SEAM-4`
   - **Carried contract IDs**: `C-04`
   - **Purpose**: publish the typed lifecycle/status transport and parity evidence contract that cross-doc validation and quality-gate work will lock in.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: typed world-agent endpoint shape, shell/client integration path, allowed divergence list, or Linux/macOS/Windows evidence requirements change.
-  - **Satisfied by**: `governance/seam-3-closeout.md` records the landed `C-04` publication, the S1 typed runtime boundary in `8c0bd439`, the S2 parity evidence update in `4511b3a5`, the durable contract mirror in `docs/contracts/substrate-gateway-runtime-parity.md`, and the targeted verification reruns for the shared client, the `gateway_runtime_parity` target-local route-shape tests, and the shell gateway tests; host-local runtime-dependent `world-agent` cases self-skipped outside Linux/VM support.
-  - **Notes**: this thread now carries the published typed lifecycle/status and parity-evidence contract into `SEAM-4`. Provisioning changes remain out of scope for this pack and were not pulled into the published contract.
+  - **Satisfied by**: `governance/seam-3-closeout.md` records the landed `C-04` publication, the S1 typed runtime boundary in `8c0bd439`, the S2 parity evidence update in `4511b3a5`, the durable contract mirror in `docs/contracts/substrate-gateway-runtime-parity.md`, and the targeted verification reruns for the shared client, the `gateway_runtime_parity` target-local route-shape tests, and the shell gateway tests; host-local runtime-dependent `world-agent` cases self-skipped outside Linux/VM support. `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` revalidates that handoff for the active conformance seam.
+  - **Notes**: this thread now carries the revalidated typed lifecycle/status and parity-evidence contract into `SEAM-4`. Provisioning changes remain out of scope for this pack and were not pulled into the published contract.
 
 ## Dependency graph
 

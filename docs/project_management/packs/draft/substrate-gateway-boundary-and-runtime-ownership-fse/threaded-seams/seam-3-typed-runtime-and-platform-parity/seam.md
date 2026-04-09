@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-3
 seam_slug: typed-runtime-and-platform-parity
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -28,14 +28,13 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
-open_remediations:
-  - REM-001
+  status: passed
+open_remediations: []
 ---
 # SEAM-3 - Typed runtime and platform parity
 
@@ -88,7 +87,7 @@ open_remediations:
   - Upstream blockers:
     - none after `SEAM-2` closeout published the schema and policy threads
   - Downstream blocked seams:
-    - `SEAM-4`
+    - none inside this pack; `SEAM-4` is now active and consumes the published handoff
   - Contracts produced:
     - `C-04`
   - Contracts consumed:
@@ -108,7 +107,7 @@ open_remediations:
 - **Expected contracts to publish**:
   - `C-04`
 - **Expected threads to publish / advance**:
-  - `THR-04`: `defined` -> `published`
+  - `THR-04`: `published`
 - **Likely downstream stale triggers**:
   - typed lifecycle/status contract shape changes
   - shell/client consumption path changes
