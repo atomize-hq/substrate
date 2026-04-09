@@ -127,8 +127,34 @@ step_dir="${feature_dir}/logs/${step}"
 run_dir="${step_dir}/runs/fixture-${agent}"
 mkdir -p "${run_dir}"
 printf 'runner summary for %s %s\\n' "$agent" "$phase" > "${run_dir}/last_message.run.md"
-printf 'handoff for %s %s\\n' "$agent" "$phase" > "${step_dir}/handoff.md"
 printf 'start %s %s\\n' "$agent" "$phase" >> "${TRACE_PATH}"
+
+if [[ "$agent" == "min_spec_draft" && "$phase" == "phase_a" && "${RETRYABLE_MIN_SPEC_PHASE_A:-0}" == "1" ]]; then
+  retry_flag="${step_dir}/.retryable_phase_a_once"
+  if [[ ! -f "${retry_flag}" ]]; then
+    printf '%s\n' '{"type":"thread.started","thread_id":"thread-retry-fixture"}' > "${run_dir}/events.jsonl"
+    printf '%s\n' '{"type":"turn.started"}' >> "${run_dir}/events.jsonl"
+    printf '%s\n' '{"type":"error","message":"Selected model is at capacity. Please try a different model."}' >> "${run_dir}/events.jsonl"
+    printf '%s\n' '{"type":"turn.failed","error":{"message":"Selected model is at capacity. Please try a different model."}}' >> "${run_dir}/events.jsonl"
+    cat > "${run_dir}/run_state.json" <<EOF
+{
+  "agent": "min_spec_draft",
+  "assistant_message_present": false,
+  "events_path": "${feature_dir}/logs/min-spec-draft/runs/fixture-min_spec_draft/events.jsonl",
+  "exit_code": 1,
+  "last_message_run_path": "${feature_dir}/logs/min-spec-draft/runs/fixture-min_spec_draft/last_message.run.md",
+  "phase": "phase_a",
+  "thread_id": "thread-retry-fixture",
+  "tool_error_count": 0,
+  "turn_completed": false
+}
+EOF
+    : > "${retry_flag}"
+    exit 1
+  fi
+fi
+
+printf 'handoff for %s %s\\n' "$agent" "$phase" > "${step_dir}/handoff.md"
 case "$agent" in
   impact_map|min_spec_draft|ci_checkpoint)
     write_doc "${step_dir}/scratch.md" <<'EOF'
@@ -318,6 +344,7 @@ exit 0
         early_exit_ci_phase_a: bool = False,
         early_exit_workstream_phase_a: bool = False,
         success_only_ci_phase_a: bool = False,
+        retryable_min_spec_phase_a: bool = False,
     ) -> tuple[subprocess.CompletedProcess[str], Path]:
         tools_dir = feature_dir / "tools"
         runner = tools_dir / "fake_runner.sh"
@@ -344,6 +371,9 @@ exit 0
             env["EARLY_EXIT_WORKSTREAM_PHASE_A"] = "1"
         if success_only_ci_phase_a:
             env["SUCCESS_ONLY_CI_PHASE_A"] = "1"
+        if retryable_min_spec_phase_a:
+            env["RETRYABLE_MIN_SPEC_PHASE_A"] = "1"
+        env["PM_PRE_PLANNING_TRANSIENT_RETRY_BACKOFF_S"] = "1"
 
         res = subprocess.run(
             ["bash", str(self.script), "--feature-dir", str(feature_dir), "--poll-s", "1"],
@@ -410,6 +440,20 @@ exit 0
         self.assertIn("start ci_checkpoint phase_a", trace)
         self.assertIn("start ci_checkpoint phase_b", trace)
         self.assertLess(trace.index("start ci_checkpoint phase_a"), trace.index("start ci_checkpoint phase_b"))
+
+    def test_overlap_wrapper_retries_transient_capacity_failure(self) -> None:
+        feature_dir = self._make_feature_dir("retry_transient_capacity")
+        res, trace_path = self._run(
+            feature_dir,
+            retryable_min_spec_phase_a=True,
+            early_exit_ci_phase_a=True,
+            early_exit_workstream_phase_a=True,
+        )
+
+        self.assertEqual(res.returncode, 0, msg=res.stderr)
+        self.assertTrue((feature_dir / "pre-planning" / "minimal_spec_draft.md").is_file())
+        trace = trace_path.read_text(encoding="utf-8")
+        self.assertGreaterEqual(trace.count("start min_spec_draft phase_a"), 2)
 
     def test_overlap_wrapper_restores_failed_workstream_promotion(self) -> None:
         feature_dir = self._make_feature_dir("failed_overlap")

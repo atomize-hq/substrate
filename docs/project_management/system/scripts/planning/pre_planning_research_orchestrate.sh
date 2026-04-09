@@ -44,6 +44,8 @@ need_cmd() {
 FEATURE_DIR_RAW=""
 START_AT="spec-manifest"
 POLL_S="30"
+TRANSIENT_RETRY_MAX="${PM_PRE_PLANNING_TRANSIENT_RETRY_MAX:-3}"
+TRANSIENT_RETRY_BACKOFF_S="${PM_PRE_PLANNING_TRANSIENT_RETRY_BACKOFF_S:-15}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -83,6 +85,12 @@ esac
 
 if [[ ! "${POLL_S}" =~ ^[0-9]+$ ]] || [[ "${POLL_S}" -lt 1 ]]; then
     die "invalid --poll-s: ${POLL_S} (expected integer seconds >= 1)"
+fi
+if [[ ! "${TRANSIENT_RETRY_MAX}" =~ ^[0-9]+$ ]] || [[ "${TRANSIENT_RETRY_MAX}" -lt 0 ]]; then
+    die "invalid PM_PRE_PLANNING_TRANSIENT_RETRY_MAX: ${TRANSIENT_RETRY_MAX} (expected integer >= 0)"
+fi
+if [[ ! "${TRANSIENT_RETRY_BACKOFF_S}" =~ ^[0-9]+$ ]] || [[ "${TRANSIENT_RETRY_BACKOFF_S}" -lt 1 ]]; then
+    die "invalid PM_PRE_PLANNING_TRANSIENT_RETRY_BACKOFF_S: ${TRANSIENT_RETRY_BACKOFF_S} (expected integer >= 1)"
 fi
 
 need_cmd git
@@ -224,6 +232,7 @@ step_ready_for_commit=()
 step_wait_reason=()
 step_failure_rc=()
 step_last_completed_phase=()
+step_retry_count=()
 
 launch_step() {
     local idx="$1"
@@ -342,6 +351,70 @@ latest_run_dir_for_step() {
     local runs_dir="${LOGS_DIR}/${step}/runs"
     [[ -d "${runs_dir}" ]] || return 1
     find "${runs_dir}" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1
+}
+
+step_latest_run_state_path() {
+    local step="$1"
+    local run_dir
+    run_dir="$(latest_run_dir_for_step "${step}")" || return 1
+    local run_state="${run_dir}/run_state.json"
+    [[ -f "${run_state}" ]] || return 1
+    printf '%s\n' "${run_state}"
+}
+
+step_run_is_retryable_transient() {
+    local step="$1"
+    local run_state
+    run_state="$(step_latest_run_state_path "${step}")" || return 1
+
+    local turn_completed assistant_message_present events_rel events_abs
+    turn_completed="$(jq -r '.turn_completed // false' "${run_state}" 2>/dev/null || printf 'false\n')"
+    assistant_message_present="$(jq -r '.assistant_message_present // false' "${run_state}" 2>/dev/null || printf 'false\n')"
+    if [[ "${turn_completed}" == "true" ]] || [[ "${assistant_message_present}" == "true" ]]; then
+        return 1
+    fi
+
+    events_rel="$(jq -r '.events_path // empty' "${run_state}" 2>/dev/null || true)"
+    [[ -n "${events_rel}" ]] || return 1
+    if [[ "${events_rel}" = /* ]]; then
+        events_abs="${events_rel}"
+    else
+        events_abs="${REPO_ROOT}/${events_rel}"
+    fi
+    [[ -f "${events_abs}" ]] || return 1
+
+    grep -Eqi 'at capacity|try a different model|overloaded|rate limit|temporarily unavailable' "${events_abs}"
+}
+
+retry_step_if_transient() {
+    local idx="$1"
+    local phase="$2"
+    local step="${steps[$idx]}"
+    local retries="${step_retry_count[idx]:-0}"
+
+    if [[ "${TRANSIENT_RETRY_MAX}" -eq 0 ]] || [[ "${retries}" -ge "${TRANSIENT_RETRY_MAX}" ]]; then
+        return 1
+    fi
+    if ! step_run_is_retryable_transient "${step}"; then
+        return 1
+    fi
+
+    retries="$((retries + 1))"
+    step_retry_count[idx]="${retries}"
+    runner_pids[idx]=""
+    runner_rcs[idx]=""
+    runner_end_epoch[idx]=""
+    step_failure_rc[idx]=""
+    step_state[idx]="retry_wait_${phase}"
+    step_wait_reason[idx]="transient Codex capacity/overload"
+
+    echo "Retrying: ${step} [${phase}] after transient Codex capacity error (attempt ${retries}/${TRANSIENT_RETRY_MAX})"
+    echo "  Backoff: ${TRANSIENT_RETRY_BACKOFF_S}s"
+    echo ""
+    append_summary "- Retrying: \`${step}\` \`${phase}\` after transient Codex capacity/overload error (attempt \`${retries}/${TRANSIENT_RETRY_MAX}\`)"
+    sleep "${TRANSIENT_RETRY_BACKOFF_S}"
+    launch_step "${idx}" "${phase}"
+    return 0
 }
 
 publish_stable_last_message() {
@@ -872,6 +945,9 @@ while true; do
                         append_summary "- Ready: \`${step}\` phase_b gate cleared after phase_a"
                     fi
                 else
+                    if retry_step_if_transient "${i}" "${phase}"; then
+                        continue
+                    fi
                     runner_rcs[i]="${rc}"
                     step_failure_rc[i]="${rc}"
                     echo "FAILED: ${step} [${phase}] exited with ${rc} (see ${FEATURE_DIR_REL}/logs/${step}/stderr.log)" >&2
@@ -882,6 +958,9 @@ while true; do
             else
                 runner_rcs[i]="${rc}"
                 if [[ "${rc}" -ne 0 ]]; then
+                    if retry_step_if_transient "${i}" "${phase}"; then
+                        continue
+                    fi
                     step_failure_rc[i]="${rc}"
                     echo "FAILED: ${step} [${phase}] exited with ${rc} (see ${FEATURE_DIR_REL}/logs/${step}/stderr.log)" >&2
                     append_summary "- FAILED: \`${step}\` \`${phase}\` exited with \`${rc}\` — stopping"
