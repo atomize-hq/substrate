@@ -21,7 +21,7 @@ HEADING_RE = re.compile(r"^###\s+(?P<id>\S+)\s+—\s+")
 FENCE_START_RE = re.compile(r"^```")
 JSON_FENCE_RE = re.compile(r"```json\s*\r?\n(?P<body>[\s\S]*?)\r?\n```")
 SLUG_RE = re.compile(r"^[a-z0-9_]+$")
-SLICE_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*\d+$")
+LEGACY_SLICE_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*\d+$")
 HEADING_WRAPPERS = ("***", "___", "**", "__", "`", "*", "_")
 ACCEPTED_ORDER_LINE_RE = re.compile(
     r"^\s*-\s+(?:Accepted slice order|Recommended candidate order)(?::|\b)",
@@ -185,7 +185,16 @@ def _extract_index_json(text: str) -> dict[str, Any]:
 
 
 def _is_fse_index(idx: dict[str, Any]) -> bool:
-    return any(key in idx for key in ("index_version", "candidate_prefix", "recommended_candidate_order", "workstreams"))
+    return any(
+        key in idx
+        for key in (
+            "index_version",
+            "candidate_prefix",
+            "recommended_workstream_order",
+            "recommended_candidate_order",
+            "workstreams",
+        )
+    )
 
 
 def _extract_markdown_accepted_slice_order(text: str) -> list[str]:
@@ -337,7 +346,7 @@ def _derive_v1_slice_order(idx: dict[str, Any]) -> list[str]:
 
 
 def _derive_fse_slice_order(idx: dict[str, Any]) -> list[str]:
-    ordered = _as_str_list(idx.get("recommended_candidate_order"))
+    ordered = _as_str_list(idx.get("draft_candidate_order"))
     if ordered is not None:
         return _normalize_slice_order(ordered)
 
@@ -352,10 +361,10 @@ def _derive_fse_slice_order(idx: dict[str, Any]) -> list[str]:
     return _normalize_slice_order(derived)
 
 
-def _validate_slice_order_field(
+def _validate_candidate_order_field(
     *,
     triage_path: Path,
-    slice_prefix: str,
+    candidate_prefix: str,
     field_name: str,
     value: Any,
     required: bool,
@@ -363,53 +372,109 @@ def _validate_slice_order_field(
     errors: list[ValidationError] = []
     if value is None:
         if required:
-            errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of non-empty slice ids"))
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of non-empty candidate ids"))
         return (None, errors)
 
     raw = _as_str_list(value)
     if raw is None:
-        errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of non-empty slice ids"))
+        errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of non-empty candidate ids"))
         return (None, errors)
 
     normalized: list[str] = []
     seen: set[str] = set()
     for item in raw:
-        slice_id = item.strip()
-        if not slice_id:
-            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains an empty slice id"))
+        candidate_id = item.strip()
+        if not candidate_id:
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains an empty candidate id"))
             continue
-        if slice_id in seen:
-            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains duplicate slice id: {slice_id!r}"))
+        if candidate_id in seen:
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains duplicate candidate id: {candidate_id!r}"))
             continue
-        seen.add(slice_id)
-        normalized.append(slice_id)
-        if not SLICE_ID_RE.match(slice_id):
-            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains invalid slice id: {slice_id!r}"))
-            continue
-        if slice_prefix and not slice_id.startswith(slice_prefix):
+        seen.add(candidate_id)
+        normalized.append(candidate_id)
+        if "-FWS-" in candidate_id:
             errors.append(
                 ValidationError(
                     message=(
-                        f"{triage_path}: {field_name} slice id {slice_id!r} must start with "
-                        f"slice_prefix {slice_prefix!r}"
+                        f"{triage_path}: {field_name} must contain candidate ids, not workstream ids "
+                        f"(got {candidate_id!r})"
+                    )
+                )
+            )
+            continue
+        if candidate_prefix and not candidate_id.startswith(f"{candidate_prefix}-"):
+            errors.append(
+                ValidationError(
+                    message=(
+                        f"{triage_path}: {field_name} candidate id {candidate_id!r} must start with "
+                        f"candidate_prefix {candidate_prefix!r}"
+                    )
+                )
+            )
+            continue
+        if candidate_prefix and LEGACY_SLICE_ID_RE.match(candidate_id):
+            continue
+
+    if required and not normalized:
+        errors.append(ValidationError(message=f"{triage_path}: {field_name} must contain at least one candidate id"))
+
+    return (normalized, errors)
+
+
+def _validate_workstream_order_field(
+    *,
+    triage_path: Path,
+    field_name: str,
+    value: Any,
+    known_workstream_ids: set[str],
+    required: bool,
+) -> tuple[list[str] | None, list[ValidationError]]:
+    errors: list[ValidationError] = []
+    if value is None:
+        if required:
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of workstream ids"))
+        return (None, errors)
+
+    raw = _as_str_list(value)
+    if raw is None:
+        errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of workstream ids"))
+        return (None, errors)
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        workstream_id = item.strip()
+        if not workstream_id:
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains an empty workstream id"))
+            continue
+        if workstream_id in seen:
+            errors.append(
+                ValidationError(message=f"{triage_path}: {field_name} contains duplicate workstream id: {workstream_id!r}")
+            )
+            continue
+        seen.add(workstream_id)
+        normalized.append(workstream_id)
+        if workstream_id not in known_workstream_ids:
+            errors.append(
+                ValidationError(
+                    message=(
+                        f"{triage_path}: {field_name} references unknown workstream id: {workstream_id!r}"
                     )
                 )
             )
 
     if required and not normalized:
-        errors.append(ValidationError(message=f"{triage_path}: {field_name} must contain at least one slice id"))
+        errors.append(ValidationError(message=f"{triage_path}: {field_name} must contain at least one workstream id"))
 
     return (normalized, errors)
 
 
 def _accepted_slice_order_from_index(idx: dict[str, Any]) -> list[str]:
     if _is_fse_index(idx):
-        accepted = _as_str_list(idx.get("recommended_candidate_order"))
+        accepted = _as_str_list(idx.get("draft_candidate_order"))
         if accepted is None:
-            raise ValueError("recommended_candidate_order must be an array of strings for index_version=1")
+            return []
         accepted = _normalize_slice_order(accepted)
-        if not accepted:
-            raise ValueError("recommended_candidate_order must contain at least one candidate id for index_version=1")
         return accepted
 
     version = idx.get("pws_index_version")
@@ -535,45 +600,27 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
 
     accepted_slice_order: list[str] | None = None
     if is_fse:
-        accepted_slice_order, field_errors = _validate_slice_order_field(
+        draft_slice_order, field_errors = _validate_candidate_order_field(
             triage_path=triage_path,
-            slice_prefix=slice_prefix,
-            field_name="recommended_candidate_order",
-            value=idx.get("recommended_candidate_order"),
-            required=True,
-        )
-        errors.extend(field_errors)
-        draft_slice_order, field_errors = _validate_slice_order_field(
-            triage_path=triage_path,
-            slice_prefix=slice_prefix,
+            candidate_prefix=slice_prefix,
             field_name="draft_candidate_order",
             value=idx.get("draft_candidate_order"),
             required=False,
         )
         errors.extend(field_errors)
-        if accepted_slice_order and draft_slice_order is not None:
-            extra = sorted(set(draft_slice_order) - set(accepted_slice_order))
-            if extra:
-                errors.append(
-                    ValidationError(
-                        message=(
-                            f"{triage_path}: draft_candidate_order must stay within recommended_candidate_order; "
-                            f"extra {extra}"
-                        )
-                    )
-                )
+        accepted_slice_order = draft_slice_order
     elif v == 2:
-        accepted_slice_order, field_errors = _validate_slice_order_field(
+        accepted_slice_order, field_errors = _validate_candidate_order_field(
             triage_path=triage_path,
-            slice_prefix=slice_prefix,
+            candidate_prefix=slice_prefix,
             field_name="accepted_slice_order",
             value=idx.get("accepted_slice_order"),
             required=True,
         )
         errors.extend(field_errors)
-        draft_slice_order, field_errors = _validate_slice_order_field(
+        draft_slice_order, field_errors = _validate_candidate_order_field(
             triage_path=triage_path,
-            slice_prefix=slice_prefix,
+            candidate_prefix=slice_prefix,
             field_name="draft_slice_order",
             value=idx.get("draft_slice_order"),
             required=False,
@@ -641,6 +688,42 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
         return errors
 
     id_set = set(pws_by_id.keys())
+
+    if is_fse:
+        workstream_order_value = idx.get("recommended_workstream_order")
+        workstream_order_field_name = "recommended_workstream_order"
+        if workstream_order_value is None and "recommended_candidate_order" in idx:
+            workstream_order_value = idx.get("recommended_candidate_order")
+            workstream_order_field_name = "recommended_candidate_order"
+        recommended_workstream_order, field_errors = _validate_workstream_order_field(
+            triage_path=triage_path,
+            field_name=workstream_order_field_name,
+            value=workstream_order_value,
+            known_workstream_ids=id_set,
+            required=True,
+        )
+        errors.extend(field_errors)
+        if recommended_workstream_order is not None:
+            missing = sorted(id_set - set(recommended_workstream_order))
+            extra = sorted(set(recommended_workstream_order) - id_set)
+            if missing:
+                errors.append(
+                    ValidationError(
+                        message=(
+                            f"{triage_path}: {workstream_order_field_name} must enumerate every workstream id exactly once; "
+                            f"missing {missing}"
+                        )
+                    )
+                )
+            if extra:
+                errors.append(
+                    ValidationError(
+                        message=(
+                            f"{triage_path}: {workstream_order_field_name} must stay within defined workstream ids; "
+                            f"extra {extra}"
+                        )
+                    )
+                )
 
     # ID format validation.
     if slice_prefix:

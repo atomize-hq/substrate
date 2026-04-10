@@ -90,6 +90,24 @@ def _resolve_impact_map_path(feature_dir: Path, raw_path: str | None) -> Path:
     return feature_dir / candidate
 
 
+def _is_expected_pack_local_create(feature_dir: Path, token: str) -> bool:
+    """
+    Suppress success-path noise for canonical pack-local pre-planning artifacts.
+
+    In the FSE lane, impact-map validation often runs after the agent has already
+    promoted the exact pre-planning artifact declared in the Create section. That
+    should not emit a warning for canonical pack-local paths, but non-pack-local
+    create collisions should still be surfaced.
+    """
+    normalized_feature = feature_dir.as_posix().rstrip("/")
+    candidate = token.rstrip("/")
+
+    if candidate == f"{normalized_feature}/fse_pre_planning.json":
+        return True
+
+    return candidate.startswith(f"{normalized_feature}/pre-planning/")
+
+
 def _iter_region_lines(lines: list[str], start_lineno: int, end_lineno: int) -> Iterable[tuple[int, str]]:
     for idx in range(start_lineno, end_lineno + 1):
         yield (idx, lines[idx - 1].rstrip("\r\n"))
@@ -222,7 +240,11 @@ def _parse_sections_strict(lines: list[str]) -> dict[str, list[tuple[int, str]]]
     return sections
 
 
-def _validate_sections_strict(sections: dict[str, list[tuple[int, str]]], repo_root: Path) -> dict[str, list[str]]:
+def _validate_sections_strict(
+    sections: dict[str, list[tuple[int, str]]],
+    repo_root: Path,
+    feature_dir: Path,
+) -> dict[str, list[str]]:
     normalized_by_section: dict[str, list[str]] = {k: [] for k in sections.keys()}
     occurrences_by_token: dict[str, list[Occurrence]] = {}
     any_non_none = False
@@ -274,7 +296,7 @@ def _validate_sections_strict(sections: dict[str, list[tuple[int, str]]], repo_r
                 if fs_path.exists():
                     if is_dir_entry and not fs_path.is_dir():
                         _eprint(f"WARN: create directory allow entry exists but is not a directory: {token!r} (impact_map.md:{lineno})")
-                    elif not is_dir_entry:
+                    elif not is_dir_entry and not _is_expected_pack_local_create(feature_dir, token):
                         _eprint(f"WARN: create entry already exists: {token!r} (impact_map.md:{lineno})")
 
     if not any_non_none:
@@ -350,7 +372,7 @@ def main(argv: list[str]) -> int:
     lines = impact_map.read_text(encoding="utf-8").splitlines(keepends=True)
 
     sections = _parse_sections_strict(lines)
-    normalized = _validate_sections_strict(sections, repo_root=repo_root)
+    normalized = _validate_sections_strict(sections, repo_root=repo_root, feature_dir=feature_dir)
 
     if args.emit_json:
         _emit_json(normalized)

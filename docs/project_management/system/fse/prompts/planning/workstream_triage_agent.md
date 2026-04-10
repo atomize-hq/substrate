@@ -88,7 +88,7 @@ Draft requirements:
    - The fenced JSON must be valid and include:
      - `index_version` (integer; set to `1`)
      - `candidate_prefix` (string)
-     - `recommended_candidate_order` (array of candidate ids; the recommended downstream order after triage)
+     - `recommended_workstream_order` (array of workstream ids; the recommended downstream order after triage)
      - `draft_candidate_order` (optional array copied from `minimal_spec_draft.md` when it materially differs)
      - `workstreams` (array of objects), where each object includes:
        - `id`
@@ -100,6 +100,8 @@ Draft requirements:
    - Semantics:
      - `depends_on` is the only hard scheduling signal.
      - `assumes` is soft-only. Do not place workstream IDs inside `assumes`.
+     - `recommended_workstream_order` must enumerate the same workstream ids defined in `workstreams`, in the recommended downstream planning order.
+     - `draft_candidate_order` stays in draft candidate-id space from `minimal_spec_draft.md`. Do not place workstream ids in `draft_candidate_order`.
      - `owns` must name pack-relative docs, directories, or contract surfaces that downstream planning work is expected to author or refine. Do not claim ownership of execution artifacts.
 2) Proposed downstream planning workstreams:
    - Propose 1-8 named workstreams, or fewer when the scope is small.

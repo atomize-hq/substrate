@@ -45,6 +45,19 @@ def read_lines(path: Path) -> Optional[list[str]]:
         return None
 
 
+def read_json(path: Path) -> Optional[dict]:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    if isinstance(data, dict):
+        return data
+    return None
+
+
 def resolve_pack_doc(feature_dir_abs: Path, feature_dir_rel: str, filename: str) -> tuple[Path, str]:
     """
     Resolve a canonical pack artifact path.
@@ -303,21 +316,74 @@ def find_first_line_containing(lines: list[str], needle: str) -> Optional[int]:
     return None
 
 
-def extract_adr_paths_from_docs(paths: list[tuple[Path, str]]) -> list[tuple[str, SourceRef]]:
+def extract_adr_paths_from_inputs(paths: list[tuple[Path, str]]) -> list[tuple[str, SourceRef]]:
     seen: set[str] = set()
     out: list[tuple[str, SourceRef]] = []
     for abs_path, rel_path in paths:
         lines = read_lines(abs_path)
         if lines is None:
             continue
-        for i, line in enumerate(lines):
-            for match in ADR_PATH_RE.finditer(line):
+        idx = find_heading(lines, lambda h: h == "Inputs")
+        if idx is None:
+            continue
+        start, end = section_slice(lines, idx)
+        for i in range(start, end):
+            for match in ADR_PATH_RE.finditer(lines[i]):
                 adr_path = match.group(0)
                 if adr_path in seen:
                     continue
                 seen.add(adr_path)
                 out.append((adr_path, SourceRef(rel_path, i + 1)))
     return out
+
+
+def extract_seed_adr_paths_from_metadata(
+    feature_dir_abs: Path, feature_dir_rel: str
+) -> list[tuple[str, SourceRef]]:
+    metadata_rel = f"{feature_dir_rel}fse_pre_planning.json"
+    metadata_abs = feature_dir_abs / "fse_pre_planning.json"
+    metadata = read_json(metadata_abs)
+    if metadata is None:
+        return []
+
+    adr_paths = metadata.get("adr_paths")
+    if not isinstance(adr_paths, list):
+        return []
+
+    lines = read_lines(metadata_abs) or []
+    out: list[tuple[str, SourceRef]] = []
+    seen: set[str] = set()
+    for adr_path in adr_paths:
+        if not isinstance(adr_path, str):
+            continue
+        adr_path = adr_path.strip()
+        if not adr_path or adr_path in seen:
+            continue
+        seen.add(adr_path)
+        line_no = find_first_line_containing(lines, adr_path) or 1
+        out.append((adr_path, SourceRef(metadata_rel, line_no)))
+    return out
+
+
+def authoritative_adr_paths(
+    feature_dir_abs: Path,
+    feature_dir_rel: str,
+    *,
+    spec_manifest_abs: Path,
+    spec_manifest_rel: str,
+    impact_map_abs: Path,
+    impact_map_rel: str,
+) -> list[tuple[str, SourceRef]]:
+    seeded = extract_seed_adr_paths_from_metadata(feature_dir_abs, feature_dir_rel)
+    if seeded:
+        return seeded
+
+    return extract_adr_paths_from_inputs(
+        [
+            (spec_manifest_abs, spec_manifest_rel),
+            (impact_map_abs, impact_map_rel),
+        ]
+    )
 
 
 def should_skip_legacy_followup(item: Item) -> bool:
@@ -356,14 +422,13 @@ def main() -> int:
     ci_plan_abs, ci_plan_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "ci_checkpoint_plan.md")
     triage_abs, triage_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "workstream_triage.md")
 
-    adr_paths = extract_adr_paths_from_docs(
-        [
-            (spec_manifest_abs, spec_manifest_rel),
-            (impact_map_abs, impact_map_rel),
-            (minimal_spec_abs, minimal_spec_rel),
-            (ci_plan_abs, ci_plan_rel),
-            (triage_abs, triage_rel),
-        ]
+    adr_paths = authoritative_adr_paths(
+        feature_dir_abs,
+        feature_dir_rel,
+        spec_manifest_abs=spec_manifest_abs,
+        spec_manifest_rel=spec_manifest_rel,
+        impact_map_abs=impact_map_abs,
+        impact_map_rel=impact_map_rel,
     )
 
     declared_dirs: list[tuple[str, SourceRef, SourceRef]] = []
