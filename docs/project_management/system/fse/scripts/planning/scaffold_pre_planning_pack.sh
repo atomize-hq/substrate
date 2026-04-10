@@ -20,20 +20,13 @@ Output contract:
 
 Behavior:
   - Creates/ensures <FEATURE_DIR>/ exists.
-  - Ensures <FEATURE_DIR>/tasks.json exists and includes meta.adr_paths containing the ADR path.
-  - Creates tasks.json if missing with minimal schema:
+  - Ensures <FEATURE_DIR>/fse_pre_planning.json exists and includes the ADR path.
+  - Creates fse_pre_planning.json if missing with minimal schema:
       {
-        "meta": {
-          "schema_version": 4,
-          "cross_platform": true,
-          "ci_parity_platforms_required": ["linux", "macos", "windows"],
-          "behavior_platforms_required": ["linux", "macos", "windows"],
-          "automation": { "enabled": true, "orchestration_branch": "feat/<feature>" },
-          "slice_spec_version": 2,
-          "feature": "<slug>",
-          "adr_paths": ["<adr>"]
-        },
-        "tasks": []
+        "schema_version": 1,
+        "feature": "<slug>",
+        "strict_touch_validation": true,
+        "adr_paths": ["<adr>"]
       }
 USAGE
 }
@@ -175,9 +168,9 @@ FEATURE_DIR_ABS="${REPO_ROOT}/${FEATURE_DIR_REL}"
 mkdir -p "${FEATURE_DIR_ABS}"
 mkdir -p "${FEATURE_DIR_ABS}/pre-planning"
 
-TASKS_JSON_ABS="${FEATURE_DIR_ABS}/tasks.json"
+FSE_PRE_PLANNING_METADATA_ABS="${FEATURE_DIR_ABS}/fse_pre_planning.json"
 
-python3 - "${TASKS_JSON_ABS}" "${FEATURE}" "${ADR_REL}" <<'PY'
+python3 - "${FSE_PRE_PLANNING_METADATA_ABS}" "${FEATURE}" "${ADR_REL}" <<'PY'
 from __future__ import annotations
 
 import json
@@ -205,17 +198,10 @@ def _write_json(dst: str, data: Dict[str, Any]) -> None:
 
 if not os.path.exists(path):
     data: Dict[str, Any] = {
-        "meta": {
-            "schema_version": 4,
-            "cross_platform": True,
-            "ci_parity_platforms_required": ["linux", "macos", "windows"],
-            "behavior_platforms_required": ["linux", "macos", "windows"],
-            "automation": {"enabled": True, "orchestration_branch": f"feat/{feature}"},
-            "slice_spec_version": 2,
-            "feature": feature,
-            "adr_paths": [adr_rel],
-        },
-        "tasks": [],
+        "schema_version": 1,
+        "feature": feature,
+        "strict_touch_validation": True,
+        "adr_paths": [adr_rel],
     }
     _write_json(path, data)
     raise SystemExit(0)
@@ -224,91 +210,47 @@ try:
     with open(path, "r", encoding="utf-8") as handle:
         data = json.load(handle)
 except Exception as exc:
-    _die(f"failed to parse tasks.json as JSON: {path} ({exc})")
+    _die(f"failed to parse fse_pre_planning.json as JSON: {path} ({exc})")
 
 if not isinstance(data, dict):
-    _die(f"tasks.json must be a JSON object: {path}")
+    _die(f"fse_pre_planning.json must be a JSON object: {path}")
 
 changed = False
-meta = data.get("meta")
-if meta is None:
-    meta = {}
-    data["meta"] = meta
-    changed = True
-if not isinstance(meta, dict):
-    _die(f"tasks.json meta must be an object when present: {path}")
 
-slice_spec_version = meta.get("slice_spec_version")
-if slice_spec_version is None:
-    meta["slice_spec_version"] = 2
-    changed = True
-elif not isinstance(slice_spec_version, int):
-    _die(f"tasks.json meta.slice_spec_version must be an integer when present: {path}")
-elif slice_spec_version < 2:
-    meta["slice_spec_version"] = 2
-    changed = True
-
-schema_version = meta.get("schema_version")
+schema_version = data.get("schema_version")
 if schema_version is None:
-    meta["schema_version"] = 4
+    data["schema_version"] = 1
     changed = True
 elif not isinstance(schema_version, int):
-    _die(f"tasks.json meta.schema_version must be an integer when present: {path}")
-elif schema_version < 4:
-    meta["schema_version"] = 4
+    _die(f"fse_pre_planning.json schema_version must be an integer when present: {path}")
+elif schema_version < 1:
+    data["schema_version"] = 1
     changed = True
 
-cross_platform = meta.get("cross_platform")
-if cross_platform is None:
-    meta["cross_platform"] = True
+feature_value = data.get("feature")
+if feature_value is None:
+    data["feature"] = feature
     changed = True
-elif not isinstance(cross_platform, bool):
-    _die(f"tasks.json meta.cross_platform must be a boolean when present: {path}")
-
-ci_parity = meta.get("ci_parity_platforms_required")
-if ci_parity is None:
-    meta["ci_parity_platforms_required"] = ["linux", "macos", "windows"]
+elif not isinstance(feature_value, str):
+    _die(f"fse_pre_planning.json feature must be a string when present: {path}")
+elif feature_value.strip() == "":
+    data["feature"] = feature
     changed = True
 
-behavior = meta.get("behavior_platforms_required")
-if behavior is None:
-    meta["behavior_platforms_required"] = ["linux", "macos", "windows"]
+strict_touch_validation = data.get("strict_touch_validation")
+if strict_touch_validation is None:
+    data["strict_touch_validation"] = True
     changed = True
+elif not isinstance(strict_touch_validation, bool):
+    _die(f"fse_pre_planning.json strict_touch_validation must be a boolean when present: {path}")
 
-automation = meta.get("automation")
-if automation is None:
-    meta["automation"] = {"enabled": True, "orchestration_branch": f"feat/{feature}"}
-    changed = True
-elif not isinstance(automation, dict):
-    _die(f"tasks.json meta.automation must be an object when present: {path}")
-else:
-    enabled = automation.get("enabled")
-    if enabled is None:
-        automation["enabled"] = True
-        changed = True
-    elif not isinstance(enabled, bool):
-        _die(f"tasks.json meta.automation.enabled must be a boolean when present: {path}")
-    elif enabled is not True:
-        automation["enabled"] = True
-        changed = True
-
-    orchestration_branch = automation.get("orchestration_branch")
-    if orchestration_branch is None:
-        automation["orchestration_branch"] = f"feat/{feature}"
-        changed = True
-    elif not isinstance(orchestration_branch, str):
-        _die(f"tasks.json meta.automation.orchestration_branch must be a string when present: {path}")
-    elif orchestration_branch.strip() == "":
-        automation["orchestration_branch"] = f"feat/{feature}"
-        changed = True
-
-adr_paths = meta.get("adr_paths")
+adr_paths = data.get("adr_paths")
 if adr_paths is None:
-    meta["adr_paths"] = [adr_rel]
+    data["adr_paths"] = [adr_rel]
     changed = True
 else:
     if not isinstance(adr_paths, list) or not all(isinstance(x, str) for x in adr_paths):
-        _die(f"tasks.json meta.adr_paths must be an array of strings when present: {path}")
+        _die(f"fse_pre_planning.json adr_paths must be an array of strings when present: {path}")
     if adr_rel not in adr_paths:
         adr_paths.append(adr_rel)
         changed = True

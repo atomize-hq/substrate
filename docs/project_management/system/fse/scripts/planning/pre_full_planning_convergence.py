@@ -8,6 +8,8 @@ from pathlib import Path
 
 import validate_slice_inventory_coherence as vsic
 
+# Legacy compatibility helper retained for older callers.
+# Inactive for the active FSE pre-planning lane.
 
 SAFE_REMEDIATION_SOURCES = {"spec_manifest", "impact_map", "ci_checkpoint_plan"}
 
@@ -23,13 +25,21 @@ def _fail(msg: str) -> None:
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(
-        description="Classify pre-full-planning slice convergence state (stdout JSON-only).",
+        description=(
+            "Legacy compatibility helper: classify downstream slice convergence state "
+            "from advisory workstream-triage authority (stdout JSON-only). "
+            "Inactive for the active FSE pre-planning lane."
+        ),
     )
-    ap.add_argument("--feature-dir", required=True, help="docs/project_management/packs/<bucket>/<feature>")
+    ap.add_argument(
+        "--feature-dir",
+        required=True,
+        help="Legacy feature pack dir (docs/project_management/packs/<bucket>/<feature>)",
+    )
     ap.add_argument(
         "--workstream-triage",
         default="pre-planning/workstream_triage.md",
-        help="Path to workstream_triage.md (absolute or feature-dir-relative).",
+        help="Legacy path to workstream_triage.md (absolute or feature-dir-relative).",
     )
     args = ap.parse_args(argv)
 

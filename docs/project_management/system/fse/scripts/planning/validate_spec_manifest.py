@@ -14,14 +14,10 @@ ROOT_LEVEL_FILENAMES = {
     "package-lock.json",
     "pnpm-lock.yaml",
     "yarn.lock",
-    "tasks.json",
-    "plan.md",
     "contract.md",
     "decision_register.md",
     "manual_testing_playbook.md",
-    "session_log.md",
-    "quality_gate_report.md",
-    "execution_preflight_report.md",
+    "alignment_report.md",
 }
 
 REPO_ROOT_PREFIXES = (
@@ -94,6 +90,18 @@ def _extract_required_doc_paths(spec_manifest_text: str) -> list[str]:
     return path_tokens
 
 
+def _is_future_pack_artifact(raw_norm: str, feature_dir: Path) -> bool:
+    feature_rel = feature_dir.as_posix().rstrip("/")
+    pack_relative = raw_norm
+    if raw_norm.startswith(feature_rel + "/"):
+        pack_relative = raw_norm[len(feature_rel) + 1 :]
+    elif raw_norm.startswith(REPO_ROOT_PREFIXES):
+        return False
+    if not pack_relative or pack_relative.startswith("pre-planning/"):
+        return False
+    return "/" in pack_relative or "." in Path(pack_relative).name or pack_relative in ROOT_LEVEL_FILENAMES
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Validate spec_manifest.md required docs exist.")
     ap.add_argument("--feature-dir", required=True, help="docs/project_management/packs/<bucket>/<feature>")
@@ -130,8 +138,8 @@ def main() -> int:
     feature_dir_prefix = feature_dir.as_posix().rstrip("/") + "/"
     for raw in raw_paths:
         p = Path(raw)
+        raw_norm = raw.replace("\\", "/").lstrip("./")
         if not p.is_absolute():
-            raw_norm = raw.replace("\\", "/").lstrip("./")
             # If the manifest lists repo-root-relative paths (common in this repo),
             # treat them as relative to CWD (repo root when invoked via make).
             if raw_norm.startswith(REPO_ROOT_PREFIXES) or raw_norm.startswith(feature_dir_prefix) or raw_norm == feature_dir.as_posix():
@@ -140,6 +148,8 @@ def main() -> int:
                 p = feature_dir / raw_norm
 
         if not p.exists():
+            if _is_future_pack_artifact(raw_norm, feature_dir):
+                continue
             missing.append(str(p.resolve() if not p.is_absolute() else p))
 
     if missing:

@@ -124,7 +124,8 @@ FEATURE_DIR_REL="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" resolve-feature
 FEATURE_DIR_REL="${FEATURE_DIR_REL%/}"
 FEATURE_DIR_ABS="${REPO_ROOT}/${FEATURE_DIR_REL}"
 [[ -d "${FEATURE_DIR_ABS}" ]] || die "FEATURE_DIR does not exist: ${FEATURE_DIR_RAW} (resolved to ${FEATURE_DIR_REL})"
-[[ -f "${FEATURE_DIR_ABS}/tasks.json" ]] || die "missing required tasks.json: ${FEATURE_DIR_REL}/tasks.json"
+FSE_PRE_PLANNING_METADATA_REL="${FEATURE_DIR_REL}/fse_pre_planning.json"
+FSE_PRE_PLANNING_METADATA_ABS="${FEATURE_DIR_ABS}/fse_pre_planning.json"
 
 PRE_PLANNING_DIR_REL="${FEATURE_DIR_REL}/pre-planning"
 PRE_PLANNING_DIR_ABS="${FEATURE_DIR_ABS}/pre-planning"
@@ -193,6 +194,7 @@ append_summary() {
 append_summary "# Pre-Planning Research Orchestration Summary"
 append_summary ""
 append_summary "- Feature dir: \`${FEATURE_DIR_REL}/\`"
+append_summary "- FSE metadata: \`${FSE_PRE_PLANNING_METADATA_REL}\`"
 append_summary "- Run (UTC): \`${RUN_TS}\`"
 append_summary "- Start at: \`${START_AT}\`"
 append_summary "- Poll interval: \`${POLL_S}s\`"
@@ -300,7 +302,6 @@ step_allowlist() {
         min-spec-draft) printf '%s\n' "${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md" ;;
         CI-checkpoint)
             printf '%s\n' "${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md"
-            printf '%s\n' "${FEATURE_DIR_REL}/tasks.json"
             ;;
         workstream-triage) printf '%s\n' "${PRE_PLANNING_DIR_REL}/workstream_triage.md" ;;
         *) die "unknown step: ${step}" ;;
@@ -826,6 +827,48 @@ cleanup_on_exit() {
 
             # On successful runs, also persist the report as a tracked pack artifact so it doesn't get lost in logs.
             # This is report-only (no rewriting of other pack docs) but is intentionally committed.
+            if [[ "${rc}" -eq 0 ]]; then
+                cp "${alignment_report_abs}" "${tracked_alignment_abs}"
+                if [[ -n "$(git status --porcelain=v1 -- "${tracked_alignment_rel}")" ]]; then
+                    git add -- "${tracked_alignment_rel}"
+                    if ! git diff --cached --quiet; then
+                        if git commit -m "docs: pre-planning alignment report" >/dev/null; then
+                            echo "Committed: wrapper alignment report"
+                        fi
+                    fi
+                fi
+            fi
+        elif [[ ! -f "${FEATURE_DIR_ABS}/tasks.json" && -f "${FSE_PRE_PLANNING_METADATA_ABS}" ]]; then
+            cat >"${alignment_report_abs}" <<EOF
+# Alignment Report
+
+## Status
+
+- Wrapper generated the fallback alignment report because the primary FSE alignment reporter failed during this run. Inspect \`${alignment_report_stderr_rel}\` for the concrete reporter error.
+
+## Current pack artifacts
+
+- Metadata: \`${FSE_PRE_PLANNING_METADATA_REL}\`
+- Spec manifest: \`${PRE_PLANNING_DIR_REL}/spec_manifest.md\`
+- Impact map: \`${PRE_PLANNING_DIR_REL}/impact_map.md\`
+- Minimal spec draft: \`${PRE_PLANNING_DIR_REL}/minimal_spec_draft.md\`
+- CI checkpoint plan: \`${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md\`
+- Workstream triage: \`${PRE_PLANNING_DIR_REL}/workstream_triage.md\`
+
+## Follow-ups
+
+1. Inspect \`${alignment_report_stderr_rel}\` and repair the failing reporter path.
+2. Re-run alignment reporting after the failing reporter path is fixed.
+EOF
+            append_summary "## Alignment triage (wrapper-compiled)"
+            append_summary ""
+            append_summary "- Fallback report: \`${alignment_report_rel}\`"
+            append_summary "- Tracked: \`${tracked_alignment_rel}\`"
+            append_summary "- Reporter stderr: \`${alignment_report_stderr_rel}\`"
+            append_summary ""
+            cat "${alignment_report_abs}" >>"${SUMMARY_PATH}"
+            append_summary ""
+
             if [[ "${rc}" -eq 0 ]]; then
                 cp "${alignment_report_abs}" "${tracked_alignment_abs}"
                 if [[ -n "$(git status --porcelain=v1 -- "${tracked_alignment_rel}")" ]]; then

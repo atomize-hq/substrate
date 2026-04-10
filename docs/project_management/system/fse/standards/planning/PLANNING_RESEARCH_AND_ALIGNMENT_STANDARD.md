@@ -1,385 +1,156 @@
-# Planning / Research / Documentation Standard (Docs-First)
+# FSE Planning / Research / Alignment Standard
 
-This document is the sister standard to:
-- `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-- `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (automation/worktree execution)
+Use this standard when the next unit of work is planning, research, documentation, or decomposition preparation rather than code execution.
 
-Use this standard when the next unit of work is **planning/research/documentation** (ADRs/specs/tasks/UX contracts),
-not execution (production code/tests/integration). The goal is to produce an implementation-ready plan with **zero
-ambiguity**, explicit tradeoffs, and cross-sprint alignment.
+Goal:
+- produce an FSE-native pre-planning pack with zero ambiguity about scope, contract surfaces, downstream seams, and alignment with adjacent work.
 
----
+## 1) When to use this standard
 
-## 1) When To Use This Standard
+Use an FSE pre-planning pass when one or more are true:
+- multiple subsystems interact,
+- cross-platform parity matters,
+- a stable user-facing contract must be defined,
+- the repo already contains partial plans that need alignment,
+- downstream decomposition needs a clean seam map before execution planning begins.
 
-Use a docs-first planning pass when one or more are true:
-- Multiple triads/sprints interact (e.g., config + policy + platform backends + installer).
-- Cross-platform parity is required (Linux/macOS/Windows).
-- You need a stable user-facing contract (CLI, config files, exit codes, filesystem semantics).
-- You are introducing a new configuration surface (file path, schema, precedence rules).
-- Security/isolation is part of the requirement (fail-closed, privilege posture, cage constraints).
-- The repo already contains partial plans and you must align/sequence them before execution.
+If you already have crisp downstream docs and only need execution-task authoring, use the downstream execution subsystem that owns that work instead of extending pre-planning.
 
-If you already have crisp specs and only need to implement them, use the execution standard:
-- `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-- `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md` (preferred when using triad automation)
+## 2) Core principles
 
----
+- Docs are the source of truth for planning.
+- Zero ambiguity. Behavior statements must be singular and testable.
+- Every major decision is explicit.
+- Cross-pack alignment is required.
+- Pre-planning stops before execution wiring.
+- This lane must not require `tasks.json`, `plan.md`, kickoff prompts, or legacy execution ownership artifacts.
+- This lane must not require pre-full-planning convergence, post-full-planning reconcile, or legacy full-planning follow-up artifacts.
 
-## 2) Core Principles (Non-Negotiable)
+## 3) Required outputs
 
-- **Docs are the single source of truth.** Execution reconciles to specs; specs are not retroactively “explained” by code.
-- **Zero ambiguity.** Any behavior-level statement must be singular and testable.
-- **Every architectural decision is explicit.** Do not leave open questions, TBDs, or “optional” behavior contracts.
-- **Exactly two options per decision.** Every decision must compare two viable solutions and pick one.
-- **Cross-sprint alignment is required.** Plans must reconcile with adjacent queued work and the repository’s sequencing spine.
-- **Greenfield by default.** Do not plan migrations/backwards-compat unless an ADR explicitly mandates it.
-- **Execution workflow stays strict.** This standard must never weaken or contradict:
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
-  - `docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md`
+When you run an FSE pre-planning pass for a feature, produce these artifacts under:
+- `docs/project_management/packs/<bucket>/<feature>/pre-planning/`
 
----
+Required:
+1. `spec_manifest.md`
+2. `impact_map.md`
+3. `minimal_spec_draft.md`
+4. `workstream_triage.md`
+5. `alignment_report.md`
 
-## 3) Required Outputs (The “Planning Pack”)
+Conditional:
+6. `ci_checkpoint_plan.md` when platform scope or verification cadence warrants explicit checkpoint intent
 
-When you run a docs-first planning pass for a feature/track, you must produce a Planning Pack under:
-`docs/project_management/packs/active/<feature>/`
+Supporting evidence lives under:
+- `docs/project_management/packs/<bucket>/<feature>/logs/`
 
-### 3.0 Supporting workflow docs (required references)
+Compatibility-only inactive surfaces:
+- legacy pre-full-planning convergence outputs,
+- legacy post-full-planning reconcile outputs,
+- legacy full-planning follow-up artifacts.
 
-Planning work must use these standards:
-- `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
-- `docs/project_management/system/templates/planning_pack/PLANNING_SESSION_LOG_TEMPLATE.md`
-- `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`
-- `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`
-- `docs/project_management/system/prompts/planning/quality_gate_reviewer.md`
+If these surfaces still exist in the repo or a feature pack, treat them as compatibility scaffolding outside the supported `pm-fse-pre-planning-from-adr` contract.
 
-### 3.1 Always required (minimum)
+### 3.1 `spec_manifest.md`
 
-1) `plan.md`
-- A runbook: scope boundaries, triad overview, invariants, and operator UX expectations.
-  - Include a short triad sizing plan: each slice should represent one behavior delta and avoid “grab bag” scope (see `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`).
+Purpose:
+- select required docs,
+- assign authoritative ownership,
+- distinguish pre-planning outputs from downstream deferred docs.
 
-2) `spec_manifest.md`
-- Deterministically selects the exact spec documents required by the ADR(s) and assigns each contract/protocol/schema/env-var surface to exactly one authoritative document.
-  - Standard: `docs/project_management/system/fse/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+Standard:
+- `docs/project_management/system/fse/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
-3) `tasks.json`
-- Triad tasks (code/test/integration) with explicit dependencies, references, and acceptance criteria.
+### 3.2 `impact_map.md`
 
-4) `session_log.md`
-- Append-only START/END entries for planning and (later) execution sessions.
-
-5) Specs (`<slice>-spec*.md`)
-- One or more spec slices with: scope, exact behavior, error handling, platform rules, acceptance criteria, out-of-scope.
-
-6) Kickoff prompts (one per task)
-- Source of truth: each task’s `kickoff_prompt` field in `tasks.json`.
-- Canonical locations:
-  - Slice tasks: `slices/<SLICE_ID>/kickoff_prompts/<task-id>.md`
-  - Feature/ops tasks: `kickoff_prompts/<task-id>.md`
-- Each prompt must clearly bound role responsibilities and required commands.
-
-### 3.1.1 Strict task-triad interoperability (required)
-
-Planning outputs must be directly executable under the triad workflow. Therefore:
-- `tasks.json` must conform to the required task shape defined in `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md` (including required fields, checklists, and conventions).
-- Docs discipline must match the triad standard:
-  - docs/tasks/session logs are edited only on the orchestration branch,
-  - docs/tasks/session logs are never edited from inside worktrees.
-
-### 3.1.2 Cross-platform parity planning (required when cross-platform)
-
-If the work requires cross-platform parity (Linux/macOS/Windows and optionally WSL):
-- The planning pack must explicitly state the required platform set and the parity guarantees (in ADR/specs/contract).
-- The planning pack must use the platform-fix integration task model (not optional; cross-platform drift is expected even for “platform-neutral” changes).
-- Encode the cross-platform task model mechanically in `tasks.json`:
-  - `meta.schema_version >= 2`
-  - `meta.cross_platform: true`
-  - Declare **both** platform sets (P3-008):
-    - `meta.behavior_platforms_required: [...]` (platforms with behavior guarantees; smoke scripts required here)
-    - `meta.ci_parity_platforms_required: [...]` (platforms that must be green in CI parity gates; platform-fix tasks required here)
-    - Legacy compatibility: `meta.platforms_required` is accepted as an alias for `meta.ci_parity_platforms_required`.
-  - If WSL coverage is required (behavioral), do not add `"wsl"` to either list; instead use `meta.wsl_required: true` and `meta.wsl_task_mode: "bundled"|"separate"`.
-  - Per slice: `X-integ-core`, `X-integ-<platform>`, and `X-integ` (final), where `<platform>` ranges over **CI parity platforms** (plus optional `wsl` task when `wsl_task_mode="separate"`).
-  - include platform smoke scripts under `smoke/` and reference them in integration tasks/end checklists.
-
-### 3.2 Required for “decision-heavy” or “cross-platform” work
-
-Add these files when the work introduces new user contracts, config, or platform behaviors:
-
-1) `decision_register.md`
-- A single source of truth for all architectural decisions.
-
-2) `impact_map.md`
-- An end-to-end impact analysis that enumerates the touch set (files/surfaces) and documents cascading behavioral/UX implications and contradiction risks across the product.
-  - Standard: `docs/project_management/system/fse/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
-  - Legacy: `integration_map.md` is deprecated and should not be created for new Planning Packs.
-
-3) `manual_testing_playbook.md`
-- A human-run checklist with explicit commands and expected exit codes/output. No “verify it works” steps.
-
-4) Playbook automation scripts (required alongside the manual playbook)
-- Every `manual_testing_playbook.md` must be paired with runnable smoke script(s) so agents can execute validation automatically and humans can re-run without typing every command.
-- Scripts must live inside the feature directory they validate (not in the repo root `scripts/` tree):
-  - Directory: `docs/project_management/packs/active/<feature>/smoke/`
-  - Linux: `docs/project_management/packs/active/<feature>/smoke/linux-smoke.sh`
-  - macOS: `docs/project_management/packs/active/<feature>/smoke/macos-smoke.sh`
-  - Windows: `docs/project_management/packs/active/<feature>/smoke/windows-smoke.ps1`
-- The manual playbook must reference the scripts and describe how to run them, plus how to manually run subsections.
-- Triad integration tasks must run the relevant smoke scripts (where applicable) and record results in `session_log.md`.
-
-### 3.3 Required for “multi-track alignment” work
-
-If the scope spans multiple tracks (or you are reconciling a backlog), produce:
-
-1) `docs/project_management/packs/final_alignment_report.md`
-- An auditable report of what was reviewed, what was changed, and what remains (must be “0 unresolved misalignments”).
-
-2) Update `docs/project_management/packs/sequencing.json` if needed
-- Sequencing is the execution spine; if tasks and sequencing disagree, fix one and record it.
-
----
-
-### 3.4 Quality gate artifact (required before execution triads begin)
-
-Before any execution triad begins, a third-party quality gate reviewer must review the Planning Pack and produce an auditable report.
-
-Required output:
-- `docs/project_management/packs/active/<feature>/quality_gate_report.md`
-  - must follow `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`
-  - must include evidence that `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md` was run
-
-Gating rule:
-- Execution triads must not begin unless the quality gate recommendation is `ACCEPT`.
-
-## 4) Decision Register Standard (Exact Format)
-
-Every decision must be recorded as a Decision Register entry. Each entry must:
-- present **exactly two** viable solutions (Option A / Option B),
-- include pros/cons/implications/risks/unlocks/quick wins for both,
-- end with one selected option and a crisp rationale,
-- list explicit follow-up tasks (no hand-waving).
-
-### 4.1 Required template
-
-```md
-### DR-XXXX — <Decision Title>
-
-**Decision owner(s):** <role/team>  
-**Date:** <YYYY-MM-DD>  
-**Status:** Accepted | Superseded  
-**Related docs:** <links>
-
-**Problem / Context**
-- <what is being decided and why now?>
-
-**Option A — <name>**
-- **Pros:** …
-- **Cons:** …
-- **Cascading implications:** …
-- **Risks:** …
-- **Unlocks:** …
-- **Quick wins / low-hanging fruit:** …
-
-**Option B — <name>**
-- **Pros:** …
-- **Cons:** …
-- **Cascading implications:** …
-- **Risks:** …
-- **Unlocks:** …
-- **Quick wins / low-hanging fruit:** …
-
-**Recommendation**
-- **Selected:** Option <A|B> — <name>
-- **Rationale (crisp):** <why this tradeoff wins>
-
-**Follow-up tasks (explicit)**
-- <concrete tasks/spec edits/tests/scripts>
-```
-
-### 4.2 Prohibited patterns
-- No “Option C”.
-- No “maybe”, “TBD”, “open question”.
-- No “A and B” selection; pick one.
-- No “or” in behavior statements outside the Option A/Option B comparison.
-
-### 4.3 Required traceability to execution tasks
-
-Every Decision Register entry must be executable, not just readable. Therefore:
-- Every decision must have follow-up tasks that map to concrete triad task IDs in `tasks.json`.
-- Every triad task that implements a decision must list that decision in its `references` (by file path and DR id), e.g.:
-  - `docs/project_management/packs/active/<feature>/decision_register.md (DR-00XX)`
-- The integration task for the slice must confirm (in its END session log entry) that all referenced DR items are implemented and tested.
-
----
-
-## 5) Impact Map Standard (replaces integration_map.md)
-
-The impact map must be end-to-end and must answer:
-- What files/surfaces change (create/edit/deprecate/delete), with concrete repo-relative paths?
-- What components change (CLI, policy, world backends, installer scripts, schemas)?
-- What externally-visible behavior/UX changes occur, and what second-order changes are required to keep the experience coherent?
-- What contradictions exist with current semantics, and how are they resolved deterministically?
-- What cross-track prerequisites exist and where they live in sequencing?
-- What overlaps/conflicts exist with queued/unimplemented ADRs and Planning Packs, and how are they resolved?
-
-Minimum sections:
-- Inputs (ADR(s) + spec_manifest)
-- Touch set (create/edit/deprecate/delete)
-- Cascading implications (behavior/UX) + contradiction risks
-- Cross-queue scan (ADRs + Planning Packs) and explicit resolutions
-- Sequencing alignment (final; no “placeholder” language)
+Purpose:
+- enumerate touched surfaces,
+- document cascading implications and contradiction risks,
+- align with queued work.
 
 Standard:
 - `docs/project_management/system/fse/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
 
----
+### 3.3 `minimal_spec_draft.md`
 
-## 6) Manual Testing Playbook Standard
-
-If the work affects UX or provisioning, the playbook must:
-- be runnable by a human without additional context,
-- include explicit commands and **expected exit codes/output**,
-- cover success + failure modes,
-- include cross-platform sections when applicable (Linux/macOS/WSL).
-
-### 6.1 Automation pairing (required)
-
-To make validation repeatable and auditable:
-- Every manual playbook must have one or more corresponding smoke scripts (see section 3.2).
-- Smoke scripts must:
-  - use temp workspaces/homes by default (no destructive behavior),
-  - accept env overrides (so CI or humans can point them at a specific prefix/version),
-  - exit non-zero on failure and print actionable diagnostics,
-  - be runnable without interactive prompts where possible.
-- The manual playbook must state:
-  - the exact command(s) to run the script(s),
-  - what success looks like (exit code and key expected output),
-  - how to run sections manually for debugging,
-  - if cross-platform validation is required:
-    - the CI cadence source of truth: `ci_checkpoint_plan.md`,
-    - how to run smoke scripts via GitHub Actions on self-hosted runners (preferred) against a specific commit:
-      - Preferred: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=behavior RUN_WSL=1 WORKFLOW_REF="feat/<feature>" SMOKE_CHECKOUT_REF="<sha>"`
-      - Debugging single-platform: `make feature-smoke FEATURE_DIR="$FEATURE_DIR" PLATFORM=linux RUN_WSL=1 WORKFLOW_REF="feat/<feature>" SMOKE_CHECKOUT_REF="<sha>"`
-      - Recommended: run the advisory CI audit before dispatch to avoid redundant CI (`scripts/ci-audit/ci_audit.sh`) and record evidence after dispatch (`scripts/ci-audit/ci_audit_record.sh`).
-
-Prohibited:
-- “Verify it works”
-- “Should”
-- “Depends on … once it lands”
-
-Encouraged:
-- Using temporary workspaces/homes to avoid polluting a real environment.
-- Including `jq -e` assertions for JSON outputs.
-
----
-
-## 7) Sequencing and Dependency Alignment
-
-You must reconcile three sources of truth:
-1) `docs/project_management/packs/sequencing.json` (macro-level order)
-2) each triad `tasks.json` (micro-level dependencies)
-3) the specs (prerequisites and invariants)
+Purpose:
+- provide cross-cutting defaults, invariants, and a draft seam or slice-candidate skeleton.
 
 Rules:
-- If sequencing.json says “X happens before Y”, tasks must not allow Y to start before X’s integration task.
-- If tasks create a dependency not reflected in sequencing.json, either:
-  - update sequencing.json, or
-  - remove the dependency and adjust specs accordingly.
-- Record the final aligned outcome in the alignment report or in the impact map.
+- it is pre-planning only,
+- it is superseded later by downstream planning or decomposition,
+- it does not create execution tasks.
 
----
+### 3.4 `ci_checkpoint_plan.md`
 
-## 8) Lint-Like Rubric (Enforceable Text Rules)
+Purpose:
+- capture advisory checkpoint intent for later multi-platform verification.
 
-You must scan the scoped planning docs and remove violations. These are enforcement rules for *planning outputs*.
+Rules:
+- it defines checkpoint groups, gates, and rationale,
+- it does not define task IDs or execution wiring.
 
-Scope note:
-- Apply this rubric to feature planning outputs (ADRs/specs/plan/tasks/prompts/playbooks/reports) under `docs/project_management/packs/…`, not to standards docs under `docs/project_management/system/standards/…`.
+Standard:
+- `docs/project_management/system/fse/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
 
-### 8.1 Hard bans (never allowed)
+### 3.5 `workstream_triage.md`
 
-Forbidden anywhere in scoped planning docs (except in a historical quote inside an alignment report where you are
-explicitly describing a removed violation):
+Purpose:
+- propose downstream planning workstreams,
+- recommend candidate ordering or restructuring,
+- capture sequencing risks and unknowns.
+
+Rules:
+- it is advisory,
+- it does not own execution artifacts,
+- it does not become a legacy execution registry.
+
+## 4) Alignment duties
+
+Every pre-planning pass must align against:
+- the ADR set,
+- the current repo state,
+- queued or draft ADRs,
+- active, draft, queued, and archived planning packs that touch the same surfaces.
+
+The result must make conflicts explicit and record resolutions or follow-ups.
+This alignment duty is satisfied by the active pre-planning artifacts above, not by legacy convergence or reconcile surfaces.
+
+## 5) Decision discipline
+
+Pre-planning may capture explicit follow-ups and A/B resolution notes inside the authored docs.
+
+Rules:
+- no unresolved `TBD`, `TODO`, or `open question` placeholders,
+- no vague “future work” language without a concrete follow-up,
+- no multiple contradictory contract options left implicit.
+
+## 6) Lint-like rules
+
+Run ambiguity and hard-ban scans over the authored pre-planning outputs.
+
+Forbidden in authored pre-planning docs:
 - `TBD`, `TODO`, `WIP`, `TBA`
 - `open question`
-- `etc.`, `and so on`
+- `etc.`
+- `should`, `could`, `might`, `maybe` in behavior or contract statements
 
-### 8.2 Ambiguity bans (not allowed in behavior/contracts)
-
-The following words must not appear in behavioral contracts (CLI semantics, configs, acceptance criteria, playbooks):
-- `should` (replace with `must` or specify the exact behavior)
-- `could`, `might`, `maybe`
-- `optional` / `optionally`
-- behavior-level “A or B” statements
-
-Allowed exception:
-- `optional` and “Option A/Option B” language is allowed only inside the explicit two-option decision comparisons in
-  `decision_register.md`, and must still end with a single selected option.
-
-### 8.3 Drift bans (names, paths, commands)
-
-Forbidden:
-- two different filenames for the same concept without explicit precedence rules,
-- inconsistent command spelling/flags in different docs,
-- inconsistent exit codes across specs/playbooks.
-
-### 8.4 Testability bans
-
-Forbidden in acceptance criteria and playbooks:
-- “verify it works”
-- “ensure it behaves correctly”
-- any check without a runnable command and a concrete expected output/exit code.
-
-### 8.5 Suggested grep/rg checks
-
-Run these against the scoped directories:
-
+Encouraged checks:
 ```bash
-rg -n "\\b(TBD|TODO|WIP|TBA)\\b" "$FEATURE_DIR"
-rg -n "open question" "$FEATURE_DIR"
-rg -n "\\betc\\.\\b|and so on" "$FEATURE_DIR"
-rg -n "\\b(should|could|might|maybe|optionally)\\b" "$FEATURE_DIR"
+rg -n "\\b(TBD|TODO|WIP|TBA)\\b" "$FEATURE_DIR/pre-planning"
+rg -n "open question" "$FEATURE_DIR/pre-planning"
+rg -n "\\betc\\.\\b|and so on" "$FEATURE_DIR/pre-planning"
+rg -n "\\b(should|could|might|maybe|optionally)\\b" "$FEATURE_DIR/pre-planning"
 ```
 
-For JSON validity:
+## 7) Ready for downstream planning or decomposition
 
-```bash
-jq . docs/project_management/packs/sequencing.json >/dev/null
-jq . "$FEATURE_DIR/tasks.json" >/dev/null
-```
-
----
-
-## 9) Standard Prompt Templates
-
-These templates are intended to be pasted into agent kickoff prompts.
-
-### 9.1 Research / Planning Prompt Template (feature-local)
-
-Canonical prompt: docs/project_management/system/prompts/planning/research_planning_prompt_template.md
-
-
-### 9.2 Final Alignment Pass Prompt Template (multi-track)
-
-Canonical prompt: docs/project_management/system/prompts/planning/final_alignment_pass_prompt_template.md
-
-
-### 9.3 Planning Quality Gate Prompt (third-party reviewer)
-
-See `docs/project_management/system/prompts/planning/quality_gate_reviewer.md`.
-
----
-
-## 10) “Ready For Implementation” Checklist (Planning Sign-Off)
-
-The Planning Pack is implementation-ready only when all are true:
-- Specs define exact behavior, defaults, error handling, exit codes, and out-of-scope boundaries.
-- Decision register exists and covers all major decisions (two options each, one selection).
-- Impact map exists and explicitly resolves cross-track dependencies and sequencing.
-- Manual testing playbook exists (if UX/provisioning) with runnable commands and expected results.
-- Smoke scripts exist (if UX/provisioning) for each required platform, and are referenced by the manual playbook.
-- `tasks.json` has code/test/integration tasks with dependencies aligned to `sequencing.json`.
-- Kickoff prompts exist for every task and reference the correct specs and required commands.
-- Rubric checks pass (no banned ambiguity language in behavioral contracts).
+The FSE pre-planning pack is ready to hand off when all are true:
+- `spec_manifest.md` defines required docs and ownership with no implicit surfaces,
+- `impact_map.md` defines explicit touched surfaces and conflict resolutions,
+- `minimal_spec_draft.md` defines cross-cutting invariants and a usable draft candidate skeleton,
+- `ci_checkpoint_plan.md` exists when needed and expresses checkpoint intent without task wiring,
+- `workstream_triage.md` proposes actionable downstream workstreams without legacy execution-registry semantics,
+- `alignment_report.md` summarizes remaining follow-ups and hard gates,
+- no compatibility-only convergence, reconcile, or legacy full-planning follow-up artifact is required for readiness,
+- ambiguity and hard-ban scans pass for the pre-planning outputs.

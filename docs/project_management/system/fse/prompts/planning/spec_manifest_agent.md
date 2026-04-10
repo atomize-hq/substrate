@@ -3,22 +3,22 @@ You are the Spec Determination agent for <FEATURE>.
 
 Goal:
 - Read the ADR(s) for <FEATURE>.
-- Produce `<FEATURE_DIR>/pre-planning/spec_manifest.md` that deterministically selects the exact spec documents required for this body of work.
+- Produce `<FEATURE_DIR>/pre-planning/spec_manifest.md` that deterministically selects the exact spec and planning documents required for this body of work.
 - Ensure every contract surface is explicitly owned by exactly one authoritative document.
 
 Constraints (non-negotiable):
 - Do not write production code.
 - Do not invent new scope; derive artifacts from the ADR and its stated goals/contract.
-- No ambiguous wording in normative statements (every behavior statement must be singular and testable).
-- No implied surfaces: every protocol/schema/env var/path/exit-code/log-field touched by the ADR must be enumerated and assigned to a doc.
-- Do not call `update_plan` or include tool-meta commentary in your output; do the work.
+- No ambiguous wording in normative statements. Every behavior statement must be singular and testable.
+- No implied surfaces. Every protocol/schema/env var/path/exit-code/log-field touched by the ADR must be enumerated and assigned to a doc.
+- Do not require legacy planning artifacts such as `plan.md`, `tasks.json`, kickoff prompts, or execution-ownership registries.
+- Do not call `update_plan` or include tool-meta commentary in your output.
 
 Required reading:
 - `docs/project_management/system/fse/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 - `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
 - `docs/project_management/system/standards/shared/CONTRACT_SURFACE_STANDARD.md`
 - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
-- `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
 
 Inputs:
 - ADR(s): <list exact paths>
@@ -48,29 +48,30 @@ Output requirements:
    - Do not edit ADRs or any other tracked files directly.
 1) Overlap execution model (required):
    - Phase A (start immediately; logs only):
-     - Rapidly read the ADR(s), select the required doc set, and draft an initial (not-yet-exhaustive) surface inventory + ownership notes.
-     - Write/overwrite: `<FEATURE_DIR>/logs/spec-manifest/handoff.md` within the first 5 minutes of the run (required).
-       - Do **not** wait for the required-doc list to be “stable”; if you are still uncertain, label assumptions as `DRAFT` and proceed.
+     - Rapidly read the ADR(s), select the required doc set, and draft an initial surface inventory + ownership notes.
+     - Write/overwrite: `<FEATURE_DIR>/logs/spec-manifest/handoff.md` within the first 5 minutes of the run.
+       - Do not wait for the required-doc list to be stable. If uncertain, label assumptions as `DRAFT` and proceed.
        - If you later change the required-doc list or ownership mapping, overwrite `handoff.md` and label it `UPDATED` at the top.
-       - `handoff.md` must be a short, high-signal summary (not a copy of `spec_manifest.md`) and must include:
-         - the required-doc list (filenames),
+       - `handoff.md` must be a short, high-signal summary and must include:
+         - the required-doc list,
          - the top surfaces and their intended owning docs,
          - any high-risk unknowns/follow-ups.
    - Phase B (staged candidate write):
      - Write/overwrite: `<FEATURE_DIR>/logs/spec-manifest/staged/pre-planning/spec_manifest.md` using the template structure, with an exhaustive surface inventory and a deterministic ownership matrix.
 2) In `pre-planning/spec_manifest.md`, include:
-   - The exact list of required spec docs (filenames under the feature dir).
+   - The exact list of required docs under the feature directory.
    - A coverage matrix mapping every surface to an authoritative doc.
-   - For each required spec doc, list the deterministic items it must define (schemas, defaults, precedence, error rules, invariants).
-   - Slice spec naming (non-negotiable when slice specs are required):
-     - Use feature-derived slice IDs per `TASK_TRIADS_AND_FEATURE_SETUP.md` (do not use generic `C0/C1/...`).
-     - Canonical slice spec path: `<FEATURE_DIR>/slices/<SLICE_ID>/<SLICE_ID>-spec.md`.
-     - If you require slice specs, `spec_manifest.md` must list them using the canonical path and consistent `<SLICE_ID>`s.
-   3) If you discover missing/ambiguous ADR intent, record follow-ups inside `pre-planning/spec_manifest.md` under a “Follow-ups” section (not in ADRs).
+   - For each required doc, the deterministic items it must define.
+   - Explicit categorization of docs by role:
+     - pre-planning artifacts produced in this lane,
+     - downstream FSE planning/decomposition artifacts that must exist later,
+     - topic-specific specs required by the ADR.
+   - If you identify draft seam or slice-candidate docs that downstream work will likely need, record them as candidate docs with intended ownership. Do not force legacy slice-spec paths or a `tasks.json`-driven ID scheme.
+3) If you discover missing or ambiguous ADR intent, record follow-ups inside `pre-planning/spec_manifest.md` under a `Follow-ups` section.
 
 Closeout micro-lint (required for `single` and `phase_b` runs):
 - After writing the staged candidate, run the hard-ban scan and ambiguity scan against the staged file before ending the run:
-  - `make planning-micro-lint FEATURE_DIR="<FEATURE_DIR>" OWNED_PATHS="logs/spec-manifest/staged/pre-planning/spec_manifest.md"`
+  - `bash docs/project_management/system/fse/scripts/planning/micro_lint.sh --feature-dir "<FEATURE_DIR>" --agent spec_manifest -- "logs/spec-manifest/staged/pre-planning/spec_manifest.md"`
 - If the scan fails, fix the staged candidate and rerun the command until it passes.
 
 Closeout validation:

@@ -8,11 +8,12 @@ usage() {
 Run a focused planning agent (output-allowlisted) via Codex.
 
 Usage:
-  run_planning_agent.sh --feature-dir <path> --agent <spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile|post_full_planning_reconcile> [options]
+  run_planning_agent.sh --feature-dir <path> --agent <spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage> [options]
 
 Required:
   --feature-dir <path>         Feature directory (relative or absolute)
-  --agent <id>                 Agent id: spec_manifest | impact_map | min_spec_draft | ci_checkpoint | workstream_triage | pre_planning_slice_reconcile | post_full_planning_reconcile
+  --agent <id>                 Supported FSE pre-planning agent id:
+                              spec_manifest | impact_map | min_spec_draft | ci_checkpoint | workstream_triage
 
 Optional:
   --phase <single|phase_a|phase_b>
@@ -30,10 +31,7 @@ Contract:
   - impact_map    -> staged candidate for <FEATURE_DIR>/pre-planning/impact_map.md
   - min_spec_draft -> staged candidate for <FEATURE_DIR>/pre-planning/minimal_spec_draft.md
   - ci_checkpoint  -> staged candidate for <FEATURE_DIR>/pre-planning/ci_checkpoint_plan.md
-                      and sometimes a staged candidate for <FEATURE_DIR>/tasks.json
   - workstream_triage -> staged candidate for <FEATURE_DIR>/pre-planning/workstream_triage.md
-  - pre_planning_slice_reconcile -> <FEATURE_DIR>/pre-planning/{spec_manifest,impact_map,ci_checkpoint_plan}.md
-  - post_full_planning_reconcile -> safe late-pack execution-readiness docs
 
 Notes:
   - Uses roots from: `pm_paths.py` (sibling in this directory)
@@ -42,6 +40,8 @@ Notes:
   - Writes stable step artifacts under: <FEATURE_DIR>/logs/<step>/ (stderr.log, codex.pid, last_message.md)
   - Orchestrated runs (`PM_PLANNING_ORCHESTRATED=1` or `--phase phase_a|phase_b`) force `codex exec --json`
     and emit `<RUN_DIR>/run_state.json`.
+  - Internal compatibility agents remain on disk but are unsupported for the FSE pre-planning lane.
+    They are blocked unless `PM_FSE_ALLOW_UNSUPPORTED_AGENTS=1` is set explicitly.
 EOF
 }
 
@@ -198,7 +198,7 @@ resolve_adr_ref_to_path() {
     done
 
     if [[ "${#matches[@]}" -eq 0 ]]; then
-        die "missing ADR for ref ${adr_ref} (no ${adr_ref}*.md found under ADR stores); use meta.adr_paths to specify an exact path"
+        die "missing ADR for ref ${adr_ref} (no ${adr_ref}*.md found under ADR stores); add an explicit path in ${FSE_PRE_PLANNING_METADATA_REL}"
     fi
     if [[ "${#matches[@]}" -gt 1 ]]; then
         echo "ERROR: ambiguous ADR ref ${adr_ref}; multiple matches found:" >&2
@@ -206,7 +206,7 @@ resolve_adr_ref_to_path() {
         for m in "${matches[@]}"; do
             echo "  - $(relpath_in_repo "${repo}" "${m}")" >&2
         done
-        die "ambiguous ADR ref ${adr_ref}; use meta.adr_paths to disambiguate"
+        die "ambiguous ADR ref ${adr_ref}; add an explicit path in ${FSE_PRE_PLANNING_METADATA_REL}"
     fi
 
     relpath_in_repo "${repo}" "${matches[0]}"
@@ -257,6 +257,39 @@ done
 
 [[ -n "${FEATURE_DIR_RAW}" ]] || die "--feature-dir is required"
 [[ -n "${AGENT}" ]] || die "--agent is required"
+
+SUPPORTED_FSE_AGENTS=(
+    spec_manifest
+    impact_map
+    min_spec_draft
+    ci_checkpoint
+    workstream_triage
+)
+UNSUPPORTED_COMPAT_AGENTS=(
+    pre_planning_slice_reconcile
+    post_full_planning_reconcile
+)
+
+is_in_list() {
+    local needle="$1"
+    shift
+    local item
+    for item in "$@"; do
+        if [[ "${item}" == "${needle}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+if ! is_in_list "${AGENT}" "${SUPPORTED_FSE_AGENTS[@]}"; then
+    if is_in_list "${AGENT}" "${UNSUPPORTED_COMPAT_AGENTS[@]}"; then
+        if [[ "${PM_FSE_ALLOW_UNSUPPORTED_AGENTS:-0}" != "1" ]]; then
+            die "unsupported --agent for the FSE pre-planning lane: ${AGENT} (supported: spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage; set PM_FSE_ALLOW_UNSUPPORTED_AGENTS=1 only for compat-only internal workflows)"
+        fi
+    fi
+fi
+
 case "${PHASE}" in
     single|phase_a|phase_b)
         ;;
@@ -286,6 +319,8 @@ FEATURE_DIR_REL="$(python3 "${PLANNING_SCRIPTS_DIR}/pm_paths.py" resolve-feature
 FEATURE_DIR_REL="${FEATURE_DIR_REL%/}"
 FEATURE_DIR_ABS="${REPO_ROOT}/${FEATURE_DIR_REL}"
 [[ -d "${FEATURE_DIR_ABS}" ]] || die "FEATURE_DIR does not exist or is not a directory: ${FEATURE_DIR_RAW} (resolved to ${FEATURE_DIR_REL})"
+FSE_PRE_PLANNING_METADATA_REL="${FEATURE_DIR_REL}/fse_pre_planning.json"
+FSE_PRE_PLANNING_METADATA_ABS="${FEATURE_DIR_ABS}/fse_pre_planning.json"
 
 PRE_PLANNING_DIR_REL="${FEATURE_DIR_REL}/pre-planning"
 PRE_PLANNING_DIR_ABS="${FEATURE_DIR_ABS}/pre-planning"
@@ -297,7 +332,10 @@ if [[ "${PM_PLANNING_ORCHESTRATED:-0}" = "1" || "${PHASE}" != "single" ]]; then
 fi
 
 TASKS_JSON_ABS="${FEATURE_DIR_ABS}/tasks.json"
-[[ -f "${TASKS_JSON_ABS}" ]] || die "missing required tasks.json: ${FEATURE_DIR_REL}/tasks.json"
+TASKS_JSON_PRESENT=0
+if [[ -f "${TASKS_JSON_ABS}" ]]; then
+    TASKS_JSON_PRESENT=1
+fi
 
 PROMPT_FILE_REL=""
 STEP_DIR_NAME=""
@@ -352,7 +390,7 @@ case "${AGENT}" in
     ci_checkpoint)
         STEP_DIR_NAME="CI-checkpoint"
         PROMPT_FILE_REL="docs/project_management/system/fse/prompts/planning/ci_checkpoint_agent.md"
-        ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md" "${FEATURE_DIR_REL}/tasks.json")
+        ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/ci_checkpoint_plan.md")
         PHASE_A_ALLOWED_OUTPUTS_REL=(
             "${FEATURE_DIR_REL}/logs/CI-checkpoint/scratch.md"
@@ -370,10 +408,6 @@ case "${AGENT}" in
         ALLOWED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
         REQUIRED_OUTPUTS_REL=("${PRE_PLANNING_DIR_REL}/workstream_triage.md")
         PHASE_A_ALLOWED_OUTPUTS_REL=(
-            "${FEATURE_DIR_REL}/logs/workstream-triage/pm_lift_pack.txt"
-            "${FEATURE_DIR_REL}/logs/workstream-triage/pm_lift_pack.json"
-            "${FEATURE_DIR_REL}/logs/workstream-triage/pm_lift_intake.txt"
-            "${FEATURE_DIR_REL}/logs/workstream-triage/pm_lift_intake.json"
             "${FEATURE_DIR_REL}/logs/workstream-triage/workstream_triage_draft.md"
             "${FEATURE_DIR_REL}/logs/workstream-triage/handoff.md"
         )
@@ -403,7 +437,7 @@ case "${AGENT}" in
         REQUIRED_OUTPUTS_REL=()
         ;;
     *)
-        die "unknown --agent: ${AGENT} (expected spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage|pre_planning_slice_reconcile|post_full_planning_reconcile)"
+        die "unknown --agent: ${AGENT} (supported: spec_manifest|impact_map|min_spec_draft|ci_checkpoint|workstream_triage)"
         ;;
 esac
 
@@ -414,6 +448,7 @@ fi
 [[ -f "${REPO_ROOT}/${PROMPT_FILE_REL}" ]] || die "missing prompt file: ${PROMPT_FILE_REL}"
 
 if [[ "${AGENT}" == "post_full_planning_reconcile" ]]; then
+    [[ "${TASKS_JSON_PRESENT}" -eq 1 ]] || die "post_full_planning_reconcile requires legacy tasks.json: ${FEATURE_DIR_REL}/tasks.json"
     while IFS= read -r kickoff_path; do
         [[ -n "${kickoff_path}" ]] || continue
         ALLOWED_OUTPUTS_REL+=("$(relpath_in_repo "${REPO_ROOT}" "${kickoff_path}")")
@@ -431,25 +466,47 @@ ROOTS_JSON="$(json_get_roots)"
 PM_ROOT_REL="$(printf '%s\n' "${ROOTS_JSON}" | jq -r '.pm_root')"
 PM_ADRS_ROOT_REL="$(printf '%s\n' "${ROOTS_JSON}" | jq -r '.pm_adrs_root')"
 
-SLICE_SPEC_VERSION_RAW="$(jq -r '.meta.slice_spec_version // empty' "${TASKS_JSON_ABS}" || true)"
 STRICT=0
-if [[ -n "${SLICE_SPEC_VERSION_RAW}" ]]; then
-    if [[ "${SLICE_SPEC_VERSION_RAW}" =~ ^[0-9]+$ ]] && [[ "${SLICE_SPEC_VERSION_RAW}" -ge 2 ]]; then
-        STRICT=1
+STRICT_TOUCH_VALIDATION_RAW=""
+if [[ -f "${FSE_PRE_PLANNING_METADATA_ABS}" ]]; then
+    STRICT_TOUCH_VALIDATION_RAW="$(jq -r '.strict_touch_validation // empty' "${FSE_PRE_PLANNING_METADATA_ABS}" 2>/dev/null || true)"
+fi
+if [[ "${STRICT_TOUCH_VALIDATION_RAW}" == "true" ]]; then
+    STRICT=1
+elif [[ "${STRICT_TOUCH_VALIDATION_RAW}" == "false" ]]; then
+    STRICT=0
+elif [[ "${TASKS_JSON_PRESENT}" -eq 1 ]]; then
+    SLICE_SPEC_VERSION_RAW="$(jq -r '.meta.slice_spec_version // empty' "${TASKS_JSON_ABS}" || true)"
+    if [[ -n "${SLICE_SPEC_VERSION_RAW}" ]]; then
+        if [[ "${SLICE_SPEC_VERSION_RAW}" =~ ^[0-9]+$ ]] && [[ "${SLICE_SPEC_VERSION_RAW}" -ge 2 ]]; then
+            STRICT=1
+        fi
     fi
 fi
 
+ADR_PATHS_META=()
+if [[ -f "${FSE_PRE_PLANNING_METADATA_ABS}" ]]; then
+    while IFS= read -r p; do
+        [[ -n "${p}" ]] || continue
+        ADR_PATHS_META+=("${p}")
+    done < <(jq -r '.adr_paths // [] | .[]' "${FSE_PRE_PLANNING_METADATA_ABS}" 2>/dev/null || true)
+fi
+
 ADR_PATHS_TASKS=()
-while IFS= read -r p; do
-    [[ -n "${p}" ]] || continue
-    ADR_PATHS_TASKS+=("${p}")
-done < <(jq -r '.meta.adr_paths // [] | .[]' "${TASKS_JSON_ABS}")
+if [[ "${TASKS_JSON_PRESENT}" -eq 1 ]]; then
+    while IFS= read -r p; do
+        [[ -n "${p}" ]] || continue
+        ADR_PATHS_TASKS+=("${p}")
+    done < <(jq -r '.meta.adr_paths // [] | .[]' "${TASKS_JSON_ABS}")
+fi
 
 ADR_REFS_TASKS=()
-while IFS= read -r r; do
-    [[ -n "${r}" ]] || continue
-    ADR_REFS_TASKS+=("${r}")
-done < <(jq -r '.meta.adr_refs // [] | .[]' "${TASKS_JSON_ABS}")
+if [[ "${TASKS_JSON_PRESENT}" -eq 1 ]]; then
+    while IFS= read -r r; do
+        [[ -n "${r}" ]] || continue
+        ADR_REFS_TASKS+=("${r}")
+    done < <(jq -r '.meta.adr_refs // [] | .[]' "${TASKS_JSON_ABS}")
+fi
 
 resolve_adr_paths_list() {
     local -a raw_paths=("$@")
@@ -479,10 +536,13 @@ resolve_adr_refs_list() {
 collect_adrs() {
     local -a out=()
 
-    if [[ "${STRICT}" -eq 1 ]]; then
-        if [[ "${#ADR_PATHS_TASKS[@]}" -eq 0 && "${#ADR_REFS_TASKS[@]}" -eq 0 ]]; then
-            die "strict pack (meta.slice_spec_version >= 2): add meta.adr_refs (or meta.adr_paths) to tasks.json to run the dispatcher"
-        fi
+    if [[ "${#ADR_PATHS_META[@]}" -gt 0 ]]; then
+        while IFS= read -r p; do
+            [[ -n "${p}" ]] || continue
+            out+=("${p}")
+        done < <(resolve_adr_paths_list "${ADR_PATHS_META[@]}")
+        printf '%s\n' "${out[@]}"
+        return 0
     fi
 
     if [[ "${#ADR_PATHS_TASKS[@]}" -gt 0 ]]; then
@@ -579,7 +639,12 @@ while IFS= read -r p; do
     ADR_PATHS+=("${p}")
 done < <(collect_adrs || true)
 if [[ "${#ADR_PATHS[@]}" -eq 0 ]]; then
-    die "unable to resolve ADR(s) for ${FEATURE_DIR_REL}; add meta.adr_refs or meta.adr_paths to ${FEATURE_DIR_REL}/tasks.json"
+    die "unable to resolve ADR(s) for ${FEATURE_DIR_REL}; add adr_paths to ${FSE_PRE_PLANNING_METADATA_REL}"
+fi
+
+IMPACT_MAP_VALIDATION_MODE="legacy"
+if [[ "${STRICT}" -eq 1 ]]; then
+    IMPACT_MAP_VALIDATION_MODE="strict"
 fi
 
 # De-duplicate ADR paths while preserving first occurrence order.
@@ -646,6 +711,9 @@ fi
 	{
 	    printf 'Dispatcher context (do not remove):\n'
 	    printf -- '- Resolved feature dir: `%s/`\n' "${FEATURE_DIR_REL}"
+	    if [[ -f "${FSE_PRE_PLANNING_METADATA_ABS}" ]]; then
+	        printf -- '- FSE pre-planning metadata: `%s`\n' "${FSE_PRE_PLANNING_METADATA_REL}"
+	    fi
 	    printf -- '- Resolved ADR paths:\n'
 	    for p in "${ADR_PATHS_UNIQ[@]}"; do
 	        printf '  - `%s`\n' "${p}"
@@ -1055,7 +1123,7 @@ run_closeout_validation() {
             owned_paths=("${PRE_PLANNING_DIR_ABS}/workstream_triage.md")
             label="workstream_triage"
             artifact="${PRE_PLANNING_DIR_REL}/workstream_triage.md"
-            hint="keep headings canonical (\`### <PWS_ID> — ...\`) and encode hard deps in depends_on."
+            hint="keep headings canonical (\`### <CANDIDATE_PREFIX>-FWS-<slug> — ...\`) and encode hard deps in depends_on."
             ;;
         *)
             return 0
@@ -1084,7 +1152,7 @@ run_staged_candidate_validation() {
     local staged_rel="${STAGED_OUTPUTS_REL[0]}"
     local staged_abs="${REPO_ROOT}/${staged_rel}"
 
-    if python3 "${PLANNING_SCRIPTS_DIR}/validate_impact_map.py" --feature-dir "${FEATURE_DIR_ABS}" --impact-map-path "${staged_abs}"; then
+    if python3 "${PLANNING_SCRIPTS_DIR}/validate_impact_map.py" --feature-dir "${FEATURE_DIR_ABS}" --impact-map-path "${staged_abs}" --mode "${IMPACT_MAP_VALIDATION_MODE}"; then
         return 0
     fi
 

@@ -125,7 +125,7 @@ if [[ -n "${AGENT}" ]]; then
     echo "-- Agent: ${AGENT}"
 fi
 
-PLANNING_SCRIPTS_DIR="${REPO_ROOT}/docs/project_management/system/scripts/planning"
+PLANNING_SCRIPTS_DIR="${SCRIPT_DIR}"
 
 slice_specs=()
 for rp in "${resolved[@]}"; do
@@ -191,10 +191,10 @@ run_agent_structural_validation() {
         workstream_triage)
             echo "-- Structural validation (workstream_triage)"
             if [[ "${PM_SKIP_PWS_INDEX_VALIDATE:-0}" = "1" ]]; then
-                echo "WARN: PM_SKIP_PWS_INDEX_VALIDATE=1; skipping PM_PWS_INDEX validation for ${FEATURE_DIR}" >&2
+                echo "WARN: PM_SKIP_PWS_INDEX_VALIDATE=1; skipping FSE workstream index validation for ${FEATURE_DIR}" >&2
                 return 0
             fi
-            python3 "${PLANNING_SCRIPTS_DIR}/validate_pws_index.py" --feature-dir "${FEATURE_DIR}"
+            python3 "${PLANNING_SCRIPTS_DIR}/validate_pws_index.py" --feature-dir "${FEATURE_DIR}" --advisory
             ;;
         *)
             ;;

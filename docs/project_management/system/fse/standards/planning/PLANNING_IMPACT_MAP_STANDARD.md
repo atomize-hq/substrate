@@ -1,144 +1,119 @@
-# Planning Impact Map Standard (ADR → Impact Map)
+# Planning Impact Map Standard
 
 This standard inserts a mandatory step between:
-- producing `spec_manifest.md`, and
-- running the full Planning Pack authoring workflow in `docs/project_management/system/standards/planning/PLANNING_README.md`.
-
-This step replaces the legacy `integration_map.md`.
+- producing `spec_manifest.md`,
+- and downstream FSE planning or decomposition.
 
 Goal:
-- Produce a deterministic, cross-cutting **impact map** that:
-  - enumerates the exact file/module surfaces that will be touched (create/edit/deprecate/delete),
-  - identifies cascading behavioral/UX implications and contradiction risks across the product,
-  - checks alignment/conflicts with queued/unimplemented ADRs and Planning Packs.
-
----
+- Produce a deterministic, cross-cutting impact map that:
+  - enumerates exact file and module surfaces to touch,
+  - identifies cascading behavioral and UX implications,
+  - checks alignment and conflict with queued or unimplemented ADRs and packs.
 
 ## When to run this step
 
-Run this immediately after `spec_manifest.md` exists for the feature:
-1) ADR drafted
-2) `spec_manifest.md` created (ADR → required specs)
-3) `impact_map.md` created (ADR + spec_manifest → global impacts)
-4) ADR iterated/accepted
-5) Planning Pack produced (plan/tasks/specs/kickoffs/etc.)
-
----
+Run this immediately after `spec_manifest.md` exists:
+1. ADR drafted or refined
+2. `spec_manifest.md` created
+3. `impact_map.md` created
+4. ADR iterated or accepted
+5. downstream FSE planning or decomposition begins
 
 ## Required output
 
 Create:
-- `docs/project_management/packs/active/<feature>/impact_map.md`
+- `docs/project_management/packs/<bucket>/<feature>/pre-planning/impact_map.md`
 
 Scaffolding:
-- `make planning-new-feature FEATURE=<feature>` creates `impact_map.md` from `docs/project_management/system/fse/templates/planning_pack/impact_map.md.tmpl`.
+- use `docs/project_management/system/fse/templates/planning_pack/impact_map.md.tmpl`
 
----
+## Rules
 
-## Rules (non-negotiable)
+1) Touch set is explicit.
+   - Every expected file creation, edit, deprecation, and removal must be listed.
+   - Use exact repo-relative paths by default.
+   - Directory-prefix entries are fallback-only and must be tightened later when exact files become defensible.
 
-1) **Touch set is explicit**
-   - Every expected file creation/edit/deprecation/removal must be listed (best-effort, but exhaustive for contract-bearing files).
-   - Use concrete repo-relative paths by default and name the responsible component/crate.
-   - Directory/prefix entries are fallback-only and must be tightened later when exact files become defensible.
-
-2) **Cascading implications are explicit**
-   - For every user-facing change (CLI/config/exit codes/paths/provisioning flows), state:
+2) Cascading implications are explicit.
+   - For every user-facing or operator-facing change, state:
      - direct impact,
-     - second-order impact (what else must change to keep the experience coherent),
-     - “contradiction risks” (where existing semantics would conflict).
+     - second-order impact,
+     - contradiction risks.
 
-3) **Cross-queue alignment is required**
-   - You must identify relevant ADRs and Planning Packs that are not implemented yet and document:
-     - whether they overlap the same surfaces,
-     - whether they conflict,
-     - how the conflict is resolved (Decision Register, sequencing, or explicit non-overlap boundary).
+3) Cross-queue alignment is required.
+   - Identify relevant ADRs and planning packs that are not implemented yet and document:
+     - overlap,
+     - conflict or non-conflict,
+     - explicit resolution.
 
-4) **No implied work**
-   - If the ADR implies a change that is not represented in the touch set and implications sections, the impact map is incomplete.
+4) No implied work.
+   - If the ADR implies a change that does not appear in the touch set or implications sections, the map is incomplete.
 
----
+5) The impact map is for planning truth, not task wiring.
+   - Do not define task IDs, kickoff ownership, or execution graph behavior here.
+   - Do not route alignment through pre-full-planning convergence, post-full-planning reconcile, or other legacy full-planning follow-up surfaces.
 
 ## Inputs
 
 The impact map is derived from:
-- ADR(s) (draft or accepted)
-- `spec_manifest.md` (authoritative spec selection + ownership map)
-- The repo’s current behavior and contracts (code + docs)
-- Queued/unimplemented ADRs and Planning Packs
+- ADR(s)
+- `spec_manifest.md`
+- the repo’s current code and docs
+- queued or unimplemented ADRs and planning packs
 
----
+## ADR locations for cross-queue discovery
 
-## Where ADRs live (for cross-queue discovery)
-
-Preferred ADR location (new):
+Preferred ADR location:
 - `docs/project_management/adrs/`
-  - `draft/` (not accepted)
-  - `queued/` (accepted or ready-for-planning; not implemented)
-  - `implemented/` (landed/merged)
-  - `superseded/` (obsolete; replaced by another ADR)
+  - `draft/`
+  - `queued/`
+  - `implemented/`
+  - `superseded/`
 
-Legacy ADR locations:
-- `docs/project_management/adrs/<bucket>/ADR-000X-*.md` (canonical ADR registry)
-  - If you find feature-local ADRs in legacy/archived material, migrate them into the ADR registry.
-
----
+Legacy ADR locations may still exist:
+- `docs/project_management/adrs/<bucket>/ADR-000X-*.md`
 
 ## Required structure for `impact_map.md`
 
-Use the template:
+Use:
 - `docs/project_management/system/fse/templates/planning_pack/impact_map.md.tmpl`
 
 The impact map must include:
-1) Inputs (ADR paths + spec_manifest path)
-2) Touch set (create/edit/deprecate/delete) with exact paths
-3) Cascading implications (behavior/UX) and contradiction risks
-4) Cross-queue scan (other ADRs + other Planning Packs) and conflict resolutions
-5) Concrete follow-ups (Decision Register entries and/or required spec updates)
+1. Inputs
+2. Touch set with exact paths
+3. Cascading implications and contradiction risks
+4. Cross-queue scan and conflict resolutions
+5. Concrete follow-ups
 
----
+## Touch-set validation
 
-## Touch set validation (gated strict)
-
-Planning-time validation of the Touch Set is gated by the Planning Pack version:
-- Read `<feature_dir>/tasks.json`
-- If `meta.slice_spec_version >= 2`: STRICT validation
-- Else: LEGACY (warn-only; never blocks)
-
-STRICT Touch Set rules (for `## Touch set (explicit)` only):
+FSE pre-planning uses strict touch-set expectations by default:
 - Required subsections: `### Create`, `### Edit`, `### Deprecate`, `### Delete`
 - Each subsection content is either:
-  - exactly `- None`, OR
-  - one or more top-level bullets (no indentation)
-- Each bullet must contain **exactly one** backticked repo-relative path token (`` `...` ``).
-- Placeholder tokens are forbidden (e.g., `<path>`, `TBD`, `TODO`, `WIP`, `None yet.`).
-- Path rules: POSIX `/` separators, no `..` segments, no globs, no backslashes, no absolute/`~`/drive-letter paths; leading `./` is allowed but normalized away; directory allow entries must end with `/`.
-- Strict Touch Set must include at least one non-None entry total across all sections.
-- Exact repo-relative file paths are the default expectation whenever they can be defended from ADR/spec-manifest/repo discovery.
-- `### Edit`, `### Deprecate`, and `### Delete` may reference only paths that exist at authoring time.
-- Non-existent paths belong under `### Create`, not under non-Create sections.
+  - exactly `- None`, or
+  - one or more top-level bullets
+- Each bullet should contain exactly one backticked repo-relative path token.
+- Placeholder tokens such as `<path>`, `TBD`, `TODO`, and `WIP` are forbidden.
+- Paths must use POSIX `/` separators, with no `..`, no globs, and no absolute paths.
+- `### Edit`, `### Deprecate`, and `### Delete` may reference only paths that already exist at authoring time.
+- Non-existent paths belong under `### Create`.
 
-### Directory/prefix entries (advisory lift semantics)
+Directory-prefix guidance:
+- A directory-prefix entry must end with `/`.
+- The directory must already exist.
+- The map must record a follow-up to tighten it to exact files later.
 
-- Directory/prefix allow entries MUST end with `/` (e.g., `` `crates/world-agent/` ``).
-- Directory/prefix entries are allowed for triad/task-finish strict packs as a fallback only; the directory MUST already exist and the impact map MUST record a follow-up to tighten the entry later.
-- Directory/prefix entries count as **1** Touch Set token for raw derived counts.
-- Directory/prefix presence is surfaced to downstream tooling via `validate_impact_map.py --emit-json` as:
-  - `dir_prefixes` (see `CONTRACT-4:impact_map_emit_json_v1`)
-- Prefix expansion (for lift estimation only) is advisory and deterministic:
-  - tooling MAY expand prefixes against the repo file list (e.g., `git ls-files <prefix>`),
-  - tooling MUST NOT rewrite `impact_map.md`,
-  - presence of prefixes typically degrades lift confidence (see SEAM-4 invariants / decision log).
+## Downstream consumers
 
-Downstream consumers:
-- Execution-time enforcement (triad `task_finish`) consumes the validator’s `--emit-json` output (see Initiative 2 S2).
-- The triad/task-finish strict contract still accepts exact paths plus existing directory-prefix fallback entries from `validate_impact_map.py --emit-json`.
-- This is intentionally different from the separate Work Lift strict wrapper, which may impose tighter prefix rules for lift calibration.
+The impact map is consumed by:
+- downstream workstream-pressure estimation and candidate restructuring analysis,
+- downstream FSE planning and decomposition,
+- human reviewers checking scope completeness.
 
----
+Legacy execution-time task-wiring semantics are not part of this contract.
+Legacy convergence or reconcile surfaces, if present, are compatibility scaffolding only and are outside the supported pre-planning lane.
 
-## Prompt (copy/paste)
+## Prompt
 
-Use this prompt to generate `impact_map.md`.
-
-Canonical prompt: docs/project_management/system/fse/prompts/planning/impact_map_agent.md
+Canonical prompt:
+- `docs/project_management/system/fse/prompts/planning/impact_map_agent.md`

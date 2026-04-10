@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-BEGIN_MARKER = "<!-- PM_PWS_INDEX:BEGIN -->"
-END_MARKER = "<!-- PM_PWS_INDEX:END -->"
+FSE_BEGIN_MARKER = "<!-- PM_FSE_WORKSTREAM_INDEX:BEGIN -->"
+FSE_END_MARKER = "<!-- PM_FSE_WORKSTREAM_INDEX:END -->"
+LEGACY_BEGIN_MARKER = "<!-- PM_PWS_INDEX:BEGIN -->"
+LEGACY_END_MARKER = "<!-- PM_PWS_INDEX:END -->"
 DEFAULT_TRIAGE_REL = "pre-planning/workstream_triage.md"
 LEGACY_TRIAGE_REL = "workstream_triage.md"
 
@@ -21,6 +23,11 @@ JSON_FENCE_RE = re.compile(r"```json\s*\r?\n(?P<body>[\s\S]*?)\r?\n```")
 SLUG_RE = re.compile(r"^[a-z0-9_]+$")
 SLICE_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*\d+$")
 HEADING_WRAPPERS = ("***", "___", "**", "__", "`", "*", "_")
+ACCEPTED_ORDER_LINE_RE = re.compile(
+    r"^\s*-\s+(?:Accepted slice order|Recommended candidate order)(?::|\b)",
+    re.IGNORECASE,
+)
+SLICE_BULLET_RE = re.compile(r"^\s*-\s+`?(?P<slice_id>[A-Za-z][A-Za-z0-9]*\d+)`?\s*$")
 
 
 @dataclass(frozen=True)
@@ -128,20 +135,41 @@ def _resolve_triage_path(feature_dir: Path, raw: str, *, advisory: bool) -> Path
     return None
 
 
-def _extract_pm_pws_index_json(text: str) -> dict[str, Any]:
-    begin_n = text.count(BEGIN_MARKER)
-    end_n = text.count(END_MARKER)
-    if begin_n != 1 or end_n != 1:
-        raise ValueError(
-            f"expected exactly one {BEGIN_MARKER!r} and one {END_MARKER!r} (found begin={begin_n}, end={end_n})"
-        )
+def _find_index_markers(text: str) -> tuple[str, str, str]:
+    marker_pairs = (
+        (FSE_BEGIN_MARKER, FSE_END_MARKER, "PM_FSE_WORKSTREAM_INDEX"),
+        (LEGACY_BEGIN_MARKER, LEGACY_END_MARKER, "PM_PWS_INDEX"),
+    )
 
-    begin_idx = text.find(BEGIN_MARKER)
-    end_idx = text.find(END_MARKER)
+    matches: list[tuple[str, str, str]] = []
+    for begin_marker, end_marker, label in marker_pairs:
+        begin_n = text.count(begin_marker)
+        end_n = text.count(end_marker)
+        if begin_n == 0 and end_n == 0:
+            continue
+        if begin_n != 1 or end_n != 1:
+            raise ValueError(
+                f"expected exactly one {begin_marker!r} and one {end_marker!r} "
+                f"(found begin={begin_n}, end={end_n})"
+            )
+        matches.append((begin_marker, end_marker, label))
+
+    if not matches:
+        raise ValueError("missing workstream index markers")
+    if len(matches) > 1:
+        raise ValueError("workstream triage contains both legacy and FSE workstream index markers")
+    return matches[0]
+
+
+def _extract_index_json(text: str) -> dict[str, Any]:
+    begin_marker, end_marker, label = _find_index_markers(text)
+
+    begin_idx = text.find(begin_marker)
+    end_idx = text.find(end_marker)
     if begin_idx < 0 or end_idx < 0 or begin_idx >= end_idx:
-        raise ValueError("PM_PWS_INDEX markers are malformed (BEGIN/END order)")
+        raise ValueError(f"{label} markers are malformed (BEGIN/END order)")
 
-    block = text[begin_idx + len(BEGIN_MARKER) : end_idx]
+    block = text[begin_idx + len(begin_marker) : end_idx]
     matches = list(JSON_FENCE_RE.finditer(block))
     if len(matches) != 1:
         raise ValueError(f"expected exactly one ```json fenced block inside markers (found {len(matches)})")
@@ -150,10 +178,62 @@ def _extract_pm_pws_index_json(text: str) -> dict[str, Any]:
     try:
         data = json.loads(body)
     except json.JSONDecodeError as e:
-        raise ValueError(f"PM_PWS_INDEX JSON is not valid JSON: {e}") from e
+        raise ValueError(f"{label} JSON is not valid JSON: {e}") from e
     if not isinstance(data, dict):
-        raise ValueError("PM_PWS_INDEX JSON must be a JSON object")
+        raise ValueError(f"{label} JSON must be a JSON object")
     return data
+
+
+def _is_fse_index(idx: dict[str, Any]) -> bool:
+    return any(key in idx for key in ("index_version", "candidate_prefix", "recommended_candidate_order", "workstreams"))
+
+
+def _extract_markdown_accepted_slice_order(text: str) -> list[str]:
+    lines = text.splitlines()
+    start: int | None = None
+    parent_indent = 0
+    for idx, line in enumerate(lines):
+        if ACCEPTED_ORDER_LINE_RE.match(line):
+            start = idx + 1
+            parent_indent = len(line) - len(line.lstrip())
+            break
+
+    if start is None:
+        return []
+
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for line in lines[start:]:
+        if not line.strip():
+            if ordered:
+                break
+            continue
+        indent = len(line) - len(line.lstrip())
+        if indent <= parent_indent:
+            break
+        match = SLICE_BULLET_RE.match(line)
+        if match is None:
+            if ordered:
+                break
+            continue
+        slice_id = match.group("slice_id")
+        if slice_id in seen:
+            continue
+        seen.add(slice_id)
+        ordered.append(slice_id)
+    return ordered
+
+
+def _derive_slice_prefix(slice_ids: list[str]) -> str:
+    prefixes: set[str] = set()
+    for slice_id in slice_ids:
+        match = re.match(r"^(?P<prefix>[A-Za-z][A-Za-z0-9]*?)(?P<num>\d+)$", slice_id)
+        if match is None:
+            continue
+        prefixes.add(match.group("prefix"))
+    if len(prefixes) == 1:
+        return next(iter(prefixes))
+    return ""
 
 
 def _topo_check_acyclic(edges: dict[str, set[str]]) -> None:
@@ -183,11 +263,13 @@ def _extract_heading_ids(markdown_text: str) -> dict[str, set[str]]:
     lines = markdown_text.splitlines()
     ids: dict[str, set[str]] = {}
     in_marker = False
+    begin_markers = (FSE_BEGIN_MARKER, LEGACY_BEGIN_MARKER)
+    end_markers = (FSE_END_MARKER, LEGACY_END_MARKER)
     for line in _iter_non_fenced_lines(lines):
-        if BEGIN_MARKER in line and not in_marker:
+        if any(marker in line for marker in begin_markers) and not in_marker:
             in_marker = True
             continue
-        if END_MARKER in line and in_marker:
+        if any(marker in line for marker in end_markers) and in_marker:
             in_marker = False
             continue
         if in_marker:
@@ -254,6 +336,22 @@ def _derive_v1_slice_order(idx: dict[str, Any]) -> list[str]:
     return _normalize_slice_order(ordered)
 
 
+def _derive_fse_slice_order(idx: dict[str, Any]) -> list[str]:
+    ordered = _as_str_list(idx.get("recommended_candidate_order"))
+    if ordered is not None:
+        return _normalize_slice_order(ordered)
+
+    derived: list[str] = []
+    for raw in idx.get("workstreams", []):
+        if not isinstance(raw, dict):
+            continue
+        owns = _as_str_list(raw.get("owns"))
+        if owns is None:
+            continue
+        derived.extend(_slice_order_from_owns_entries(_normalize_owns_path(x) for x in owns))
+    return _normalize_slice_order(derived)
+
+
 def _validate_slice_order_field(
     *,
     triage_path: Path,
@@ -305,6 +403,15 @@ def _validate_slice_order_field(
 
 
 def _accepted_slice_order_from_index(idx: dict[str, Any]) -> list[str]:
+    if _is_fse_index(idx):
+        accepted = _as_str_list(idx.get("recommended_candidate_order"))
+        if accepted is None:
+            raise ValueError("recommended_candidate_order must be an array of strings for index_version=1")
+        accepted = _normalize_slice_order(accepted)
+        if not accepted:
+            raise ValueError("recommended_candidate_order must contain at least one candidate id for index_version=1")
+        return accepted
+
     version = idx.get("pws_index_version")
     if version == 2:
         accepted = _as_str_list(idx.get("accepted_slice_order"))
@@ -320,8 +427,8 @@ def _accepted_slice_order_from_index(idx: dict[str, Any]) -> list[str]:
 def _explicit_v2_authority_error(triage_path: Path) -> ValidationError:
     return ValidationError(
         message=(
-            f"{triage_path}: full planning requires PM_PWS_INDEX v2 with explicit accepted_slice_order; "
-            "rerun pre-planning/workstream triage before retrying"
+            f"{triage_path}: downstream compatibility tooling requires an explicit ordered candidate list "
+            "in the workstream triage artifact; rerun workstream triage before retrying"
         )
     )
 
@@ -341,24 +448,45 @@ def _load_slice_authority(
     if errors:
         return (triage_path, None, errors)
 
+    text = triage_path.read_text(encoding="utf-8")
+    if FSE_BEGIN_MARKER not in text and LEGACY_BEGIN_MARKER not in text:
+        accepted_slice_order = _extract_markdown_accepted_slice_order(text)
+        if not accepted_slice_order:
+            return (
+                triage_path,
+                None,
+                [ValidationError(message=f"{triage_path}: missing ordered candidate list in workstream triage prose")],
+            )
+        slice_prefix = _derive_slice_prefix(accepted_slice_order)
+        return (
+            triage_path,
+            SliceAuthority(
+                triage_path=triage_path,
+                version=0,
+                slice_prefix=slice_prefix,
+                accepted_slice_order=accepted_slice_order,
+            ),
+            [],
+        )
+
     try:
-        idx = _extract_pm_pws_index_json(triage_path.read_text(encoding="utf-8"))
+        idx = _extract_index_json(text)
     except Exception as e:
         return (triage_path, None, [ValidationError(message=f"{triage_path}: {e}")])
 
-    version = idx.get("pws_index_version")
+    version = idx.get("index_version") if _is_fse_index(idx) else idx.get("pws_index_version")
     if require_v2 and version != 2:
         return (triage_path, None, [_explicit_v2_authority_error(triage_path)])
-
-    slice_prefix = idx.get("slice_prefix")
-    if not isinstance(slice_prefix, str):
-        slice_prefix = ""
-    slice_prefix = slice_prefix.strip()
 
     try:
         accepted_slice_order = _accepted_slice_order_from_index(idx)
     except Exception as e:
         return (triage_path, None, [ValidationError(message=f"{triage_path}: {e}")])
+
+    slice_prefix = idx.get("candidate_prefix") if _is_fse_index(idx) else idx.get("slice_prefix")
+    if not isinstance(slice_prefix, str):
+        slice_prefix = _derive_slice_prefix(accepted_slice_order)
+    slice_prefix = slice_prefix.strip()
 
     return (
         triage_path,
@@ -380,24 +508,61 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
     except Exception as e:
         return [ValidationError(message=f"unable to read triage artifact: {triage_path} ({e})")]
 
+    if FSE_BEGIN_MARKER not in text and LEGACY_BEGIN_MARKER not in text:
+        accepted_slice_order = _extract_markdown_accepted_slice_order(text)
+        if accepted_slice_order:
+            return []
+        return [ValidationError(message=f"{triage_path}: missing workstream index block and ordered candidate prose")]
+
     try:
-        idx = _extract_pm_pws_index_json(text)
+        idx = _extract_index_json(text)
     except Exception as e:
         return [ValidationError(message=f"{triage_path}: {e}")]
 
-    v = idx.get("pws_index_version")
-    if v not in (1, 2):
+    is_fse = _is_fse_index(idx)
+    v = idx.get("index_version") if is_fse else idx.get("pws_index_version")
+    if is_fse:
+        if v not in (1, None):
+            errors.append(ValidationError(message=f"{triage_path}: index_version must be 1 (found {v!r})"))
+    elif v not in (1, 2, None):
         errors.append(ValidationError(message=f"{triage_path}: pws_index_version must be 1 or 2 (found {v!r})"))
 
-    slice_prefix = idx.get("slice_prefix")
-    if not isinstance(slice_prefix, str) or not slice_prefix.strip():
-        errors.append(ValidationError(message=f"{triage_path}: slice_prefix must be a non-empty string"))
-        slice_prefix = ""
-    else:
+    slice_prefix = idx.get("candidate_prefix") if is_fse else idx.get("slice_prefix")
+    if isinstance(slice_prefix, str) and slice_prefix.strip():
         slice_prefix = slice_prefix.strip()
+    else:
+        slice_prefix = ""
 
     accepted_slice_order: list[str] | None = None
-    if v == 2:
+    if is_fse:
+        accepted_slice_order, field_errors = _validate_slice_order_field(
+            triage_path=triage_path,
+            slice_prefix=slice_prefix,
+            field_name="recommended_candidate_order",
+            value=idx.get("recommended_candidate_order"),
+            required=True,
+        )
+        errors.extend(field_errors)
+        draft_slice_order, field_errors = _validate_slice_order_field(
+            triage_path=triage_path,
+            slice_prefix=slice_prefix,
+            field_name="draft_candidate_order",
+            value=idx.get("draft_candidate_order"),
+            required=False,
+        )
+        errors.extend(field_errors)
+        if accepted_slice_order and draft_slice_order is not None:
+            extra = sorted(set(draft_slice_order) - set(accepted_slice_order))
+            if extra:
+                errors.append(
+                    ValidationError(
+                        message=(
+                            f"{triage_path}: draft_candidate_order must stay within recommended_candidate_order; "
+                            f"extra {extra}"
+                        )
+                    )
+                )
+    elif v == 2:
         accepted_slice_order, field_errors = _validate_slice_order_field(
             triage_path=triage_path,
             slice_prefix=slice_prefix,
@@ -406,7 +571,7 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
             required=True,
         )
         errors.extend(field_errors)
-        _, field_errors = _validate_slice_order_field(
+        draft_slice_order, field_errors = _validate_slice_order_field(
             triage_path=triage_path,
             slice_prefix=slice_prefix,
             field_name="draft_slice_order",
@@ -414,32 +579,59 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
             required=False,
         )
         errors.extend(field_errors)
+        if accepted_slice_order and draft_slice_order is not None:
+            extra = sorted(set(draft_slice_order) - set(accepted_slice_order))
+            if extra:
+                errors.append(
+                    ValidationError(
+                        message=(
+                            f"{triage_path}: draft_slice_order must stay within accepted_slice_order; "
+                            f"extra {extra}"
+                        )
+                    )
+                )
 
-    pws_raw = idx.get("pws")
+    if accepted_slice_order is None:
+        try:
+            accepted_slice_order = _accepted_slice_order_from_index(idx)
+        except Exception as e:
+            errors.append(ValidationError(message=f"{triage_path}: {e}"))
+
+    if accepted_slice_order and not slice_prefix:
+        slice_prefix = _derive_slice_prefix(accepted_slice_order)
+
+    entries_key = "workstreams" if is_fse else "pws"
+    entry_label = "workstream" if is_fse else "pws"
+    plural_label = "workstreams" if is_fse else "pws"
+    pws_raw = idx.get(entries_key)
+    if pws_raw is None:
+        return errors
     if not isinstance(pws_raw, list) or not pws_raw:
-        errors.append(ValidationError(message=f"{triage_path}: pws must be a non-empty array"))
+        errors.append(ValidationError(message=f"{triage_path}: {entries_key} must be an array when provided"))
         return errors
 
     required_keys = {"id", "role", "depends_on", "assumes", "owns"}
+    if is_fse:
+        required_keys.add("outcomes")
     pws_ids: list[str] = []
     pws_by_id: dict[str, dict[str, Any]] = {}
     for i, raw in enumerate(pws_raw):
         if not isinstance(raw, dict):
-            errors.append(ValidationError(message=f"{triage_path}: pws[{i}] must be an object"))
+            errors.append(ValidationError(message=f"{triage_path}: {entries_key}[{i}] must be an object"))
             continue
 
         missing = sorted(k for k in required_keys if k not in raw)
         if missing:
-            errors.append(ValidationError(message=f"{triage_path}: pws[{i}] missing keys: {', '.join(missing)}"))
+            errors.append(ValidationError(message=f"{triage_path}: {entries_key}[{i}] missing keys: {', '.join(missing)}"))
             continue
 
         pid = raw.get("id")
         if not isinstance(pid, str) or not pid.strip():
-            errors.append(ValidationError(message=f"{triage_path}: pws[{i}].id must be a non-empty string"))
+            errors.append(ValidationError(message=f"{triage_path}: {entries_key}[{i}].id must be a non-empty string"))
             continue
         pid = pid.strip()
         if pid in pws_by_id:
-            errors.append(ValidationError(message=f"{triage_path}: duplicate pws id: {pid!r}"))
+            errors.append(ValidationError(message=f"{triage_path}: duplicate {entry_label} id: {pid!r}"))
             continue
 
         pws_ids.append(pid)
@@ -452,12 +644,12 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
 
     # ID format validation.
     if slice_prefix:
-        expected_prefix = f"{slice_prefix}-PWS-"
+        expected_prefix = f"{slice_prefix}-FWS-" if is_fse else f"{slice_prefix}-PWS-"
         for pid in sorted(id_set):
             if not pid.startswith(expected_prefix):
                 errors.append(
                     ValidationError(
-                        message=f"{triage_path}: PWS id {pid!r} must start with {expected_prefix!r} (slice_prefix mismatch?)"
+                        message=f"{triage_path}: {entry_label} id {pid!r} must start with {expected_prefix!r} (prefix mismatch?)"
                     )
                 )
                 continue
@@ -465,15 +657,9 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
             if not SLUG_RE.match(slug):
                 errors.append(
                     ValidationError(
-                        message=f"{triage_path}: PWS id {pid!r} has invalid slug {slug!r} (expected [a-z0-9_]+)"
+                        message=f"{triage_path}: {entry_label} id {pid!r} has invalid slug {slug!r} (expected [a-z0-9_]+)"
                     )
                 )
-
-        required_contract = f"{slice_prefix}-PWS-contract"
-        required_tasks = f"{slice_prefix}-PWS-tasks_checkpoints"
-        for req in (required_contract, required_tasks):
-            if req not in id_set:
-                errors.append(ValidationError(message=f"{triage_path}: missing required PWS id: {req!r}"))
 
     # depends_on integrity + acyclic.
     edges: dict[str, set[str]] = {pid: set() for pid in id_set}
@@ -492,7 +678,7 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
                 errors.append(ValidationError(message=f"{triage_path}: {pid}.depends_on contains self-dependency"))
                 continue
             if dep not in id_set:
-                errors.append(ValidationError(message=f"{triage_path}: {pid}.depends_on references unknown PWS id: {dep!r}"))
+                errors.append(ValidationError(message=f"{triage_path}: {pid}.depends_on references unknown {entry_label} id: {dep!r}"))
                 continue
             if dep in dep_set:
                 errors.append(ValidationError(message=f"{triage_path}: {pid}.depends_on contains duplicate id: {dep!r}"))
@@ -519,14 +705,14 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
                     errors.append(
                         ValidationError(
                             message=(
-                                f"{triage_path}: {pid}.assumes must not contain PWS id strings; "
+                                f"{triage_path}: {pid}.assumes must not contain {entry_label} id strings; "
                                 f"found reference to {other_id!r} in {a!r} (promote to depends_on or rephrase)"
                             )
                         )
                     )
                     break
 
-    # owns: pack-relative + disjoint + tasks.json single-writer.
+    # owns: pack-relative + disjoint.
     owns_owner: dict[str, str] = {}
     owns_norm_by_id: dict[str, list[str]] = {}
     for pid, obj in pws_by_id.items():
@@ -574,56 +760,7 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
                     )
             )
 
-    # Step 3.5 triad alignment: tasks_checkpoints must own triad-critical surfaces.
-    if slice_prefix:
-        tasks_pws_id = f"{slice_prefix}-PWS-tasks_checkpoints"
-        if tasks_pws_id in id_set:
-            tasks_owns = set(owns_norm_by_id.get(tasks_pws_id, []))
-
-            if "session_log.md" not in tasks_owns:
-                errors.append(
-                    ValidationError(
-                        message=f"{triage_path}: {tasks_pws_id}.owns must include 'session_log.md' (triad execution surface)"
-                    )
-                )
-            if "kickoff_prompts/" not in tasks_owns:
-                errors.append(
-                    ValidationError(
-                        message=f"{triage_path}: {tasks_pws_id}.owns must include 'kickoff_prompts/' (prefix; triad kickoff prompts)"
-                    )
-                )
-
-            if v == 2 and accepted_slice_order is not None:
-                slice_ids = accepted_slice_order
-            else:
-                slice_ids = _derive_v1_slice_order(idx)
-
-            for slice_id in slice_ids:
-                required = f"slices/{slice_id}/kickoff_prompts/"
-                if required not in tasks_owns:
-                    errors.append(
-                        ValidationError(
-                            message=(
-                                f"{triage_path}: {tasks_pws_id}.owns must include {required!r} "
-                                f"(prefix; slice kickoff prompts)"
-                            )
-                        )
-                    )
-
-    if slice_prefix:
-        tasks_pws_id = f"{slice_prefix}-PWS-tasks_checkpoints"
-        tasks_owner = owns_owner.get("tasks.json")
-        if tasks_owner != tasks_pws_id:
-            errors.append(
-                ValidationError(
-                    message=(
-                        f"{triage_path}: tasks.json must be owned by {tasks_pws_id!r} only "
-                        f"(found owner={tasks_owner!r})"
-                    )
-                )
-            )
-
-    # Prose alignment: headings must match JSON pws ids.
+    # Prose alignment: headings must match JSON workstream ids.
     heading_ids = _extract_heading_ids(text)
     normalized_heading_ids = set(heading_ids.keys())
     missing_in_json = sorted(h for h in normalized_heading_ids if h not in id_set)
@@ -631,7 +768,7 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
         errors.append(
             ValidationError(
                 message=(
-                    f"{triage_path}: heading PWS id missing from PM_PWS_INDEX JSON: "
+                    f"{triage_path}: heading workstream id missing from workstream index JSON: "
                     f"{_describe_heading_id(heading_ids[hid], hid)}"
                 )
             )
@@ -639,13 +776,15 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
 
     missing_in_headings = sorted(pid for pid in id_set if pid not in normalized_heading_ids)
     for pid in missing_in_headings:
-        errors.append(ValidationError(message=f"{triage_path}: PM_PWS_INDEX JSON id missing corresponding '### {pid} —' heading"))
+        errors.append(ValidationError(message=f"{triage_path}: workstream index id missing corresponding '### {pid} —' heading"))
 
     return errors
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Validate PM_PWS_INDEX embedded JSON in pre-planning workstream triage.")
+    ap = argparse.ArgumentParser(
+        description="Validate workstream triage slice authority (FSE workstream index JSON when present, otherwise ordered-candidate prose)."
+    )
     ap.add_argument("--feature-dir", required=True, help="docs/project_management/packs/<bucket>/<feature> (absolute or relative)")
     ap.add_argument(
         "--workstream-triage",

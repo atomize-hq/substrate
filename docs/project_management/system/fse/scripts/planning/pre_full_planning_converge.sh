@@ -1,25 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Legacy compatibility wrapper retained for older callers.
+# Inactive for the active FSE pre-planning lane.
+
 usage() {
     cat <<'USAGE'
+Legacy compatibility utility. Inactive for the active FSE pre-planning lane.
+
 Usage:
   pre_full_planning_converge.sh --feature-dir <path> [--workstream-triage <path>] [--codex-profile <p>] [--codex-model <m>] [--codex-jsonl]
 
 Required:
-  --feature-dir <path>        Planning Pack dir (docs/project_management/packs/<bucket>/<feature>)
+  --feature-dir <path>        Legacy Planning Pack dir (docs/project_management/packs/<bucket>/<feature>)
 
 Options:
-  --workstream-triage <path>  Path to workstream_triage.md (absolute or feature-dir-relative).
+  --workstream-triage <path>  Legacy path to workstream_triage.md (absolute or feature-dir-relative).
                               Default: pre-planning/workstream_triage.md (legacy fallback: workstream_triage.md)
-  --codex-profile <p>         Forwarded to run_planning_agent.sh when remediation is needed.
-  --codex-model <m>           Forwarded to run_planning_agent.sh when remediation is needed.
-  --codex-jsonl               Forwarded to run_planning_agent.sh when remediation is needed.
+  --codex-profile <p>         Forwarded to run_planning_agent.sh for legacy remediation runs.
+  --codex-model <m>           Forwarded to run_planning_agent.sh for legacy remediation runs.
+  --codex-jsonl               Forwarded to run_planning_agent.sh for legacy remediation runs.
   -h, --help                  Show this help.
 
 Behavior:
+  - Retained for legacy callers; not used by the active FSE pre-planning lane.
   - Requires a clean checkout at start.
-  - Validates pre-full-planning slice coherence against the accepted triage slice order.
+  - Validates downstream slice coherence against the accepted slice order recorded in legacy workstream triage.
   - If safe slice drift is detected, runs the constrained slice-reconcile agent.
   - Regenerates pre-planning/alignment_report.md before successful exit.
 USAGE
@@ -140,7 +146,7 @@ append_summary() {
     printf '%s\n' "$*" >>"${SUMMARY_PATH}"
 }
 
-append_summary "# Pre-Full-Planning Convergence Summary"
+append_summary "# Pre-Full-Planning Convergence Summary (legacy compatibility utility)"
 append_summary ""
 append_summary "- Feature dir: \`${FEATURE_DIR_REL}/\`"
 append_summary "- Run (UTC): \`${RUN_TS}\`"

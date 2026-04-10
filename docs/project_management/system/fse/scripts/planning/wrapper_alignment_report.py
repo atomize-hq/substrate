@@ -9,6 +9,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional
 
+ADR_PATH_RE = re.compile(r"docs/project_management/adrs/[^\s`]+ADR-\d{4}[^\s`]*\.md")
+LEGACY_TRIAD_FOLLOWUP_RE = re.compile(
+    r"\b(tasks\.json|kickoff prompts?|task graph|checkpoint task|meta\.checkpoint_boundaries|full[- ]planning)\b",
+    re.IGNORECASE,
+)
+
 
 @dataclass(frozen=True)
 class SourceRef:
@@ -46,7 +52,7 @@ def resolve_pack_doc(feature_dir_abs: Path, feature_dir_rel: str, filename: str)
     Preferred location (new layout):
       <FEATURE_DIR>/pre-planning/<filename>
 
-    Legacy fallback (older packs):
+    Legacy fallback (older packs; compatibility only):
       <FEATURE_DIR>/<filename>
 
     Returns (absolute_path, repo_relative_path_str).
@@ -74,6 +80,11 @@ def find_heading(lines: list[str], predicate) -> Optional[int]:
     return None
 
 
+def find_heading_any(lines: list[str], headings: Iterable[str]) -> Optional[int]:
+    expected = set(headings)
+    return find_heading(lines, lambda h: h in expected)
+
+
 def section_slice(lines: list[str], heading_idx: int) -> tuple[int, int]:
     start = heading_idx + 1
     end = len(lines)
@@ -94,7 +105,7 @@ def normalize_key(text: str) -> str:
 
 def best_kind(kinds: Iterable[str]) -> str:
     # Highest wins.
-    order = ["misalignment", "gate", "ci", "risk", "followup"]
+    order = ["misalignment", "gate", "checkpoint", "ci", "risk", "followup"]
     for k in order:
         if k in kinds:
             return k
@@ -292,9 +303,42 @@ def find_first_line_containing(lines: list[str], needle: str) -> Optional[int]:
     return None
 
 
+def extract_adr_paths_from_docs(paths: list[tuple[Path, str]]) -> list[tuple[str, SourceRef]]:
+    seen: set[str] = set()
+    out: list[tuple[str, SourceRef]] = []
+    for abs_path, rel_path in paths:
+        lines = read_lines(abs_path)
+        if lines is None:
+            continue
+        for i, line in enumerate(lines):
+            for match in ADR_PATH_RE.finditer(line):
+                adr_path = match.group(0)
+                if adr_path in seen:
+                    continue
+                seen.add(adr_path)
+                out.append((adr_path, SourceRef(rel_path, i + 1)))
+    return out
+
+
+def should_skip_legacy_followup(item: Item) -> bool:
+    if item.kind in {"misalignment", "gate", "risk", "dr"}:
+        return False
+    return LEGACY_TRIAD_FOLLOWUP_RE.search(item.title) is not None
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--feature-dir", required=True, help="Pack dir (repo-relative)")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Generate the wrapper-compiled FSE pre-planning alignment report. "
+            "Pre-full/post-full convergence utilities remain compatibility-only and are not "
+            "part of the active FSE pre-planning lane."
+        )
+    )
+    parser.add_argument(
+        "--feature-dir",
+        required=True,
+        help="FSE feature pack dir (repo-relative)",
+    )
     args = parser.parse_args()
 
     root = repo_root()
@@ -306,20 +350,25 @@ def main() -> int:
     # Wrapper-detected misalignments.
     misalignments: list[Item] = []
 
-    # ADR feature-dir drift
-    tasks_path = feature_dir_abs / "tasks.json"
-    tasks_rel = f"{feature_dir_rel}tasks.json"
-    adr_paths: list[str] = []
-    try:
-        tasks_obj = json.loads(tasks_path.read_text(encoding="utf-8"))
-        adr_paths = (tasks_obj.get("meta") or {}).get("adr_paths") or []
-    except Exception:
-        adr_paths = []
+    spec_manifest_abs, spec_manifest_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "spec_manifest.md")
+    impact_map_abs, impact_map_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "impact_map.md")
+    minimal_spec_abs, minimal_spec_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "minimal_spec_draft.md")
+    ci_plan_abs, ci_plan_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "ci_checkpoint_plan.md")
+    triage_abs, triage_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "workstream_triage.md")
 
-    declared_dirs: list[tuple[str, SourceRef]] = []
+    adr_paths = extract_adr_paths_from_docs(
+        [
+            (spec_manifest_abs, spec_manifest_rel),
+            (impact_map_abs, impact_map_rel),
+            (minimal_spec_abs, minimal_spec_rel),
+            (ci_plan_abs, ci_plan_rel),
+            (triage_abs, triage_rel),
+        ]
+    )
+
+    declared_dirs: list[tuple[str, SourceRef, SourceRef]] = []
     adr_feature_dir_re = re.compile(r"Feature directory:\s*`([^`]+)`")
-    for adr_path in adr_paths:
-        adr_rel = adr_path
+    for adr_rel, discovered_from in adr_paths:
         adr_abs = (root / adr_rel).resolve()
         adr_lines = read_lines(adr_abs)
         if adr_lines is None:
@@ -329,28 +378,30 @@ def main() -> int:
             if not m:
                 continue
             declared = m.group(1).rstrip("/") + "/"
-            declared_dirs.append((declared, SourceRef(adr_rel, i + 1)))
+            declared_dirs.append((declared, SourceRef(adr_rel, i + 1), discovered_from))
             break
 
     if declared_dirs:
         # If multiple ADRs disagree, treat as drift too.
-        for declared, src in declared_dirs:
+        for declared, src, discovered_from in declared_dirs:
             if declared != feature_dir_rel:
                 title = f"ADR feature-dir drift: ADR declares `{declared}` but pack dir is `{feature_dir_rel}` (hard gate: reconcile to avoid dual-authority docs)."
-                drift_item = Item(kind="misalignment", title=title, sources=[src, SourceRef(tasks_rel, 1)])
+                drift_item = Item(kind="misalignment", title=title, sources=[src, discovered_from])
 
                 # Handoff-only critical heuristic for this drift: check if spec_manifest.md follow-ups mention it.
-                spec_manifest_abs, spec_manifest_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "spec_manifest.md")
                 spec_manifest_lines = read_lines(spec_manifest_abs) or []
-                minimal_spec_abs, minimal_spec_rel = resolve_pack_doc(
-                    feature_dir_abs, feature_dir_rel, "minimal_spec_draft.md"
-                )
                 minimal_spec_lines = read_lines(minimal_spec_abs) or []
 
                 drift_token = declared.rstrip("/")
                 # Heuristic: track whether drift is called out in canonical follow-ups sections.
                 spec_fu_idx = find_heading(spec_manifest_lines, lambda h: h == "Follow-ups")
-                min_fu_idx = find_heading(minimal_spec_lines, lambda h: h == "Follow-ups for full planning")
+                min_fu_idx = find_heading_any(
+                    minimal_spec_lines,
+                    (
+                        "Follow-ups for full planning",
+                        "Follow-ups for downstream FSE planning and decomposition",
+                    ),
+                )
                 in_spec_followups = False
                 in_min_followups = False
                 if spec_fu_idx is not None:
@@ -374,7 +425,7 @@ def main() -> int:
                         drift_item.sources.append(SourceRef(minimal_spec_rel, ln))
 
                 if not in_spec_followups:
-                    drift_item.title += " (note: missing from spec_manifest.md follow-ups; ensure it’s tracked in full planning)"
+                    drift_item.title += " (note: missing from spec_manifest.md follow-ups; ensure it stays tracked in later FSE planning)"
 
                 if spec_handoff_lines and (not in_spec_followups and not in_min_followups):
                     drift_item.title += " (handoff-only critical)"
@@ -404,12 +455,6 @@ def main() -> int:
             misalignments.append(Item(kind="misalignment", title=title, sources=[src, other_src]))
 
     # Consolidated follow-ups across canonical artifacts.
-    spec_manifest_abs, spec_manifest_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "spec_manifest.md")
-    impact_map_abs, impact_map_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "impact_map.md")
-    minimal_spec_abs, minimal_spec_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "minimal_spec_draft.md")
-    ci_plan_abs, ci_plan_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "ci_checkpoint_plan.md")
-    triage_abs, triage_rel = resolve_pack_doc(feature_dir_abs, feature_dir_rel, "workstream_triage.md")
-
     spec_manifest_lines = read_lines(spec_manifest_abs) or []
     impact_map_lines = read_lines(impact_map_abs) or []
     minimal_spec_lines = read_lines(minimal_spec_abs) or []
@@ -433,7 +478,7 @@ def main() -> int:
             ci_plan_lines,
             lambda h: h == "Follow-ups",
             re.compile(r"^\s*(\d+)\)\s+(.+?)\s*$"),
-            kind_default="ci",
+            kind_default="checkpoint",
             dr_prefix_ok=False,
         )
     )
@@ -441,7 +486,10 @@ def main() -> int:
         extract_numbered_items_typed(
             minimal_spec_rel,
             minimal_spec_lines,
-            lambda h: h == "Follow-ups for full planning",
+            lambda h: h in {
+                "Follow-ups for full planning",
+                "Follow-ups for downstream FSE planning and decomposition",
+            },
             re.compile(r"^\s*(\d+)[\.\)]\s+(.+?)\s*$"),
             kind_default="followup",
             dr_prefix_ok=True,
@@ -451,7 +499,7 @@ def main() -> int:
         extract_triage_bullets(
             triage_rel,
             triage_lines,
-            "Risks + unknowns (must resolve during full planning)",
+            "Risk and unknowns",
             "risk",
         )
     )
@@ -475,6 +523,8 @@ def main() -> int:
     dr_items: dict[str, Item] = {}
 
     for it in items:
+        if should_skip_legacy_followup(it):
+            continue
         if it.kind == "dr":
             dr_id = (it.title.split("—", 1)[0]).strip()
             if dr_id not in dr_items:
@@ -506,10 +556,10 @@ def main() -> int:
             print(f"- {mi.title} (sources: {srcs})")
     print("")
 
-    print("## Consolidated full-planning follow-ups (wrapper-compiled)")
+    print("## Consolidated FSE pre-planning follow-ups (wrapper-compiled)")
 
     gates = [it for it in consolidated if it.kind in ("misalignment", "gate")]
-    cis = [it for it in consolidated if it.kind == "ci"]
+    checkpoints = [it for it in consolidated if it.kind == "checkpoint"]
     risks = [it for it in consolidated if it.kind == "risk"]
     followups = [it for it in consolidated if it.kind == "followup"]
 
@@ -546,7 +596,7 @@ def main() -> int:
             print(f"- {it.title} (sources: {srcs})")
         print("")
 
-    render_list("CI/checkpoint wiring gaps", cis)
+    render_list("Checkpoint intent follow-ups", checkpoints)
     render_list("Risks + unknowns", risks)
     render_list("Other follow-ups", followups)
 

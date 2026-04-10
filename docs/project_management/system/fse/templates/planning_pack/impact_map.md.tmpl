@@ -1,7 +1,5 @@
 # {{FEATURE}} — impact map
 
-This file replaces the legacy `integration_map.md`.
-
 Authoring standards:
 - `docs/project_management/system/fse/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
 - `docs/project_management/system/fse/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
@@ -11,17 +9,18 @@ Authoring standards:
 - ADR(s):
   - <add exact ADR path(s)>
 - Spec manifest:
-  - `{{FEATURE_DIR}}/spec_manifest.md`
+  - `{{FEATURE_DIR}}/pre-planning/spec_manifest.md`
 
 ## Touch set (explicit)
 
-List every file expected to be created/edited/deprecated/removed. Use repo-relative paths.
+List every file expected to be created, edited, deprecated, or removed. Use repo-relative paths.
 
-Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
-- Each entry is a top-level bullet containing exactly one backticked path token.
-- Empty section is exactly `- None` (case-sensitive, no extra text).
-- The Touch Set must include at least one non-None entry total across all sections.
-- To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="{{FEATURE_DIR}}"` (strict packs only).
+FSE pre-planning touch-set rules:
+- each entry is a top-level bullet containing exactly one backticked path token
+- an empty section is exactly `- None`
+- the touch set must include at least one non-None entry total across all sections
+- exact file paths are the default expectation
+- directory-prefix entries are fallback-only and must end with `/`
 
 ### Create
 - None
@@ -35,12 +34,12 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 ### Delete
 - None
 
-## Cascading implications (behavior/UX)
+## Cascading implications (behavior and UX)
 
 For each externally visible change, list:
-- direct impact (what the operator experiences),
-- cascading impact (what else must change to stay coherent),
-- contradiction risks (what existing semantics would conflict).
+- direct impact,
+- cascading impact,
+- contradiction risks.
 
 ### CLI / UX
 - Change:
@@ -62,24 +61,23 @@ For each externally visible change, list:
 
 ## Cross-queue scan (ADRs + Planning Packs)
 
-List overlaps/conflicts with other in-flight work and resolve them deterministically.
+List overlaps or conflicts with other in-flight work and resolve them deterministically.
 
-### Relevant ADRs (queued/unimplemented)
+### Relevant ADRs
 - ADR:
   - Overlap surfaces:
   - Conflict: yes/no
-  - Resolution (explicit):
+  - Resolution:
 
-### Relevant Planning Packs (queued/unimplemented)
+### Relevant Planning Packs
 - Planning Pack:
   - Overlap surfaces:
   - Conflict: yes/no
-  - Resolution (explicit):
+  - Resolution:
 
-## Follow-ups (explicit)
+## Follow-ups
 
-- Decision Register entries required:
-  - <DR id/title> — <what it decides>
-- Spec updates required (if any):
-  - `{{FEATURE_DIR}}/spec_manifest.md` — <change>
-  - <spec doc> — <change>
+- Decision or clarification follow-ups:
+  - <item>
+- Spec updates required:
+  - `<doc>` — <change>

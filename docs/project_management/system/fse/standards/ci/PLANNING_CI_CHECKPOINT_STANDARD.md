@@ -1,98 +1,94 @@
 # Planning CI Checkpoint Standard
 
 Goal:
-- Reduce redundant multi-OS CI by moving cross-platform validation to **bounded CI checkpoints** between groups of triads, while preserving deterministic, code-grounded safety.
+- reduce redundant multi-platform verification by identifying bounded checkpoint seams during FSE pre-planning,
+- while keeping the pre-planning artifact advisory rather than execution-wired.
 
 This standard defines:
 - the required planning artifact `ci_checkpoint_plan.md`,
-- the default min/max triads per checkpoint,
+- the default bounds for candidate groups per checkpoint,
 - how to select code-grounded boundaries,
-- and the required `tasks.json` wiring so execution is deterministic.
+- and what the artifact must say before downstream planning turns it into concrete execution behavior.
 
 ## When this applies
 
-This standard is required for:
-- automation-enabled Planning Packs (`tasks.json` meta.schema_version >= 3 and meta.automation.enabled=true), and
-- cross-platform packs (`tasks.json` meta.cross_platform=true).
+This standard is required when:
+- the feature has cross-platform behavior,
+- verification is expensive enough that explicit cadence matters,
+- or the impact map identifies high-risk seams that need deliberate multi-platform sync points.
 
-## Why checkpoints (not per-slice CI)
+## Why checkpoints
 
-Running full cross-platform CI on every slice tends to be the dominant cost for long features, and often produces redundant “still green” signal.
+Running the heaviest verification after every future slice or seam is usually wasteful.
 
-Checkpoints preserve safety by:
-- keeping local integration gates per slice (fmt/clippy/tests + `make integ-checks`),
-- and adding explicit, documented “multi-OS sync points” at bounded, code-grounded seams.
+Checkpoint planning preserves safety by:
+- identifying where multi-platform confirmation will matter later,
+- recording why those boundaries exist,
+- and keeping the checkpoint contract visible before downstream execution planning starts.
 
 ## Required artifact
 
 Create:
-- `docs/project_management/packs/active/<feature>/ci_checkpoint_plan.md`
+- `docs/project_management/packs/<bucket>/<feature>/pre-planning/ci_checkpoint_plan.md`
 
 Rules:
-- Must include a **machine-readable JSON section** that is linted.
-- Must partition slices into checkpoint groups with **no overlaps** and **no missing slices**.
-- Must name the checkpoint task ids that exist in `tasks.json`.
-- Must state which CI gates run at each checkpoint (compile parity vs smoke vs CI testing).
+- Must include a machine-readable JSON section.
+- Must partition draft candidates into checkpoint groups with no overlaps and no unexplained omissions.
+- Must state which verification gates are intended at each checkpoint.
+- Must remain advisory at the pre-planning stage. It does not name task IDs or execution ownership.
 
 Template:
 - `docs/project_management/system/fse/templates/planning_pack/ci_checkpoint_plan.md.tmpl`
 
-## Default bounds (required unless explicitly justified)
+## Default bounds
 
 Defaults:
-- `min_triads_per_checkpoint = 4`
-- `max_triads_per_checkpoint = 8`
+- `min_candidates_per_checkpoint = 2`
+- `max_candidates_per_checkpoint = 6`
 
 Exceptions:
-- If the total slice count is `< min_triads_per_checkpoint`, a single checkpoint may cover the entire feature.
-- If a slice is “high risk” (protocol/schema/FS semantics/platform guards/policy enforcement), a smaller group is allowed **only** when explicitly justified in `ci_checkpoint_plan.md`.
+- If the total candidate count is below the minimum, a single checkpoint may cover the whole feature.
+- If a candidate is high-risk, a smaller group is allowed when explicitly justified in `ci_checkpoint_plan.md`.
 
-## Selecting checkpoint boundaries (code-grounded)
+## Selecting checkpoint boundaries
 
-Use `impact_map.md`, `spec_manifest.md`, and the slice specs to choose boundaries that minimize churn and maximize safety.
+Use `impact_map.md`, `spec_manifest.md`, and `minimal_spec_draft.md` to choose boundaries that minimize churn and maximize safety.
 
 Prefer boundaries at:
-- **Contract completion seams**: after an end-to-end contract surface is fully defined + implemented + tested (CLI/config/env vars/schema/protocol).
-- **Subsystem seams**: before crossing into a new major subsystem (shim ↔ broker ↔ world-agent ↔ world backend).
-- **Enabling refactor seams**: after “refactor enabling change” lands, before “new behavior” starts.
-- **UX seams**: after a user-visible workflow becomes coherent enough to be validated.
+- contract completion seams,
+- subsystem seams,
+- enabling-refactor seams,
+- operator-UX seams,
+- platform-divergence seams.
 
 Avoid boundaries that:
-- split “schema change” and “schema consumption” across different sides of a checkpoint unless that reduces risk,
-- mix multiple unrelated behavioral deltas in the same checkpoint group.
+- separate a schema change from the first place that consumes it unless the risk reduction is explicit,
+- mix unrelated behavioral deltas into one checkpoint without a reason.
 
-## Execution rules
+## Expected contents
 
-1) **Per-slice local integration is always required**
-   - Integration tasks always run: `cargo fmt`, `cargo clippy ... -D warnings`, relevant tests, and `make integ-checks`.
+Each checkpoint must state:
+- the draft candidates it covers,
+- the intended verification gates,
+- the reason that boundary is code-grounded,
+- what surfaces are stabilized by the checkpoint,
+- what uncertainty still remains for downstream planning.
 
-2) **Cross-platform CI runs only at checkpoints (default)**
-   - CI checkpoints run:
-     - `make ci-compile-parity ...` (GitHub-hosted cross-platform parity)
-     - `make feature-smoke ... PLATFORM=behavior` (self-hosted behavior smoke)
-     - CI Testing (`scripts/ci/dispatch_ci_testing.sh`) in `quick` or `full` mode (per plan)
+Typical gates:
+- compile parity,
+- feature smoke,
+- deeper CI testing,
+- targeted platform validation.
 
-3) **ci_audit remains in use (checkpoint tool)**
-   - Run `scripts/ci-audit/ci_audit.sh` inside checkpoint tasks to recommend skip/run and to record evidence.
-   - Do not require running `ci_audit` on every slice by default.
+## Downstream handoff
 
-## Required `tasks.json` wiring
+The checkpoint plan feeds downstream planning and decomposition by:
+- giving a first-pass cadence,
+- highlighting where platform confirmation matters,
+- surfacing unresolved platform-scope questions.
 
-For each checkpoint group `CPk`:
-- Create an ops task `CPk-ci-checkpoint` (or similar) that:
-  - depends on the **core integration task** of the checkpoint group’s ending slice (e.g., `WCU3-integ-core`),
-  - has a kickoff prompt under `kickoff_prompts/`,
-  - references `ci_checkpoint_plan.md`.
-- The first slice of the next group must depend on `CPk-ci-checkpoint` (so work cannot proceed past the checkpoint without completing the CI gate).
-
-Kickoff template:
-- `docs/project_management/system/templates/kickoff/kickoff_ci_checkpoint.md.tmpl`
-
-## Boundary-only platform-fix (schema v4+; recommended)
-
-To avoid per-slice platform-fix task explosions, schema v4 cross-platform automation packs add:
-- `tasks.json` `meta.checkpoint_boundaries`: the slice ids that are the **last slice** in each checkpoint group.
-
-Rules:
-- `meta.checkpoint_boundaries` must match the checkpoint group boundaries defined in `ci_checkpoint_plan.md` (mechanically validated by planning lint).
-- Only slices listed in `meta.checkpoint_boundaries` may define `*-integ-core` / `*-integ-<platform>` tasks; normal slices use only `X-integ` as their integration merge task.
+It does not by itself:
+- create tasks,
+- create kickoff prompts,
+- define checkpoint task IDs,
+- or assign execution ownership.

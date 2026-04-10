@@ -53,27 +53,15 @@ def _usage_error(msg: str) -> None:
     raise SystemExit(2)
 
 
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        _usage_error(f"missing required path: {path}")
-    except json.JSONDecodeError as e:
-        _usage_error(f"invalid JSON: {path}: {e}")
-    return {}
-
-
-def _derive_mode(feature_dir: Path, mode_override: str | None) -> str:
+def _derive_mode(impact_map_path: Path, mode_override: str | None) -> str:
     if mode_override is not None:
         return mode_override
 
-    tasks = _read_json(feature_dir / "tasks.json")
-    meta = tasks.get("meta")
-    if isinstance(meta, dict):
-        slice_spec_version = meta.get("slice_spec_version")
-        if isinstance(slice_spec_version, int) and slice_spec_version >= 2:
-            return "strict"
-    return "legacy"
+    try:
+        text = impact_map_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return "strict"
+    return "strict" if "## Touch set (explicit)" in text else "legacy"
 
 
 def _repo_root_strict() -> Path:
@@ -342,15 +330,6 @@ def main(argv: list[str]) -> int:
     if not feature_dir.exists() or not feature_dir.is_dir():
         _usage_error(f"--feature-dir must be an existing directory: {feature_dir}")
 
-    mode = _derive_mode(feature_dir, args.mode)
-
-    if mode == "legacy":
-        if args.emit_json:
-            _emit_json({"create": [], "edit": [], "deprecate": [], "delete": []})
-        else:
-            _eprint("WARN: impact_map touch-set enforcement disabled (meta.slice_spec_version < 2).")
-        return 0
-
     preferred = feature_dir / "pre-planning" / "impact_map.md"
     legacy = feature_dir / "impact_map.md"
     impact_map = _resolve_impact_map_path(feature_dir, args.impact_map_path)
@@ -358,6 +337,14 @@ def main(argv: list[str]) -> int:
         if args.impact_map_path is not None:
             _fail(f"missing required path: {impact_map}")
         _fail(f"missing required path: {preferred} (also missing legacy: {legacy})")
+
+    mode = _derive_mode(impact_map, args.mode)
+    if mode == "legacy":
+        if args.emit_json:
+            _emit_json({"create": [], "edit": [], "deprecate": [], "delete": []})
+        else:
+            _eprint("WARN: impact_map touch-set enforcement disabled (explicit touch-set section not present).")
+        return 0
 
     repo_root = _repo_root_strict()
     lines = impact_map.read_text(encoding="utf-8").splitlines(keepends=True)

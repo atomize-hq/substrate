@@ -15,7 +15,7 @@ import validate_pws_index as vpi
 @dataclass(frozen=True)
 class Checkpoint:
     checkpoint_id: str
-    task_id: str
+    task_id: str | None
     slices: list[str]
     gates: dict[str, Any]
     rationale: str
@@ -26,17 +26,6 @@ def _fail(msg: str) -> None:
     raise SystemExit(1)
 
 
-def _read_tasks_json(feature_dir: Path) -> dict[str, Any]:
-    tasks_path = feature_dir / "tasks.json"
-    if not tasks_path.exists():
-        _fail(f"missing tasks.json: {tasks_path}")
-    try:
-        return json.loads(tasks_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        _fail(f"tasks.json is not valid JSON: {e}")
-    return {}
-
-
 LINTED_HEADER = "## Machine-readable plan (linted)"
 DRAFT_HEADER = "## Machine-readable plan (draft; not yet mechanically validated)"
 
@@ -45,9 +34,8 @@ def _extract_json_block(text: str, *, accept_draft_header: bool = False) -> dict
     """
     Extract the single JSON code block under the machine-readable plan section.
 
-    The dedicated mechanical validator remains strict by default and requires the
-    linted header. Some pre-full-planning readers need to inspect the same JSON
-    while the plan is still explicitly marked as a draft first pass.
+    The FSE lane accepts either a linted or draft header because the checkpoint
+    plan is advisory during pre-planning.
     """
     headers = [LINTED_HEADER]
     if accept_draft_header:
@@ -82,71 +70,38 @@ def _extract_json_block(text: str, *, accept_draft_header: bool = False) -> dict
     return data
 
 
-def _slice_ids_from_tasks(tasks_data: dict[str, Any]) -> list[str]:
-    tasks = tasks_data.get("tasks")
-    if not isinstance(tasks, list):
-        _fail("tasks.json must contain top-level tasks[] array")
-
-    slice_ids: set[str] = set()
-    for t in tasks:
-        if not isinstance(t, dict):
-            continue
-        task_id = t.get("id")
-        task_type = t.get("type")
-        if task_type != "integration":
-            continue
-        if isinstance(task_id, str) and task_id.endswith("-integ") and not task_id.endswith("-integ-core"):
-            slice_ids.add(task_id[: -len("-integ")])
-
-    return sorted(slice_ids, key=_slice_sort_key)
-
-
 def _slice_sort_key(slice_id: str) -> tuple[str, int, str]:
-    """
-    Deterministic slice ordering.
-
-    Typical slice ids are PREFIX + NUMBER (e.g. WCU0, WCU10). Lexicographic sorting breaks that.
-    """
-    m = re.match(r"^(?P<prefix>[A-Za-z][A-Za-z0-9]*?)(?P<num>\d+)$", slice_id)
-    if not m:
+    match = re.match(r"^(?P<prefix>[A-Za-z][A-Za-z0-9]*?)(?P<num>\d+)$", slice_id)
+    if match is None:
         return (slice_id, 0, slice_id)
-    return (m.group("prefix"), int(m.group("num")), slice_id)
+    return (match.group("prefix"), int(match.group("num")), slice_id)
 
 
-def _expected_slice_order_from_authority(
-    feature_dir: Path,
-    tasks_data: dict[str, Any],
-    workstream_triage: str,
-) -> tuple[list[str], list[str], str | None]:
-    task_slice_ids = _slice_ids_from_tasks(tasks_data)
-    triage_path, authority, errors = vpi._load_slice_authority(
-        feature_dir,
-        workstream_triage,
-        advisory=True,
-        require_v2=False,
-    )
-    if triage_path is not None and errors:
-        _fail(f"invalid workstream triage slice authority: {errors[0].message}")
+def _parse_defaults(defaults: dict[str, Any]) -> dict[str, int]:
+    min_slices = defaults.get("min_candidates_per_checkpoint")
+    max_slices = defaults.get("max_candidates_per_checkpoint")
 
-    if authority is not None and authority.version == 2:
-        accepted_slice_order = authority.accepted_slice_order
-        expected_set = set(accepted_slice_order)
-        task_set = set(task_slice_ids)
-        if task_set != expected_set:
-            missing = sorted(expected_set - task_set, key=_slice_sort_key)
-            extra = sorted(task_set - expected_set, key=_slice_sort_key)
-            parts: list[str] = []
-            if missing:
-                parts.append(f"missing {missing}")
-            if extra:
-                parts.append(f"extra {extra}")
-            _fail(
-                f"tasks.json slice set disagrees with accepted slice order from {triage_path}: "
-                + "; ".join(parts)
-            )
-        return (task_slice_ids, accepted_slice_order, str(triage_path))
+    if min_slices is None:
+        min_slices = defaults.get("min_slices_per_checkpoint")
+    if max_slices is None:
+        max_slices = defaults.get("max_slices_per_checkpoint")
 
-    return (task_slice_ids, task_slice_ids, None)
+    if min_slices is None:
+        min_slices = defaults.get("min_triads_per_checkpoint")
+    if max_slices is None:
+        max_slices = defaults.get("max_triads_per_checkpoint")
+
+    if not isinstance(min_slices, int) or min_slices < 1:
+        _fail(
+            "ci_checkpoint_plan.md JSON: defaults.min_candidates_per_checkpoint "
+            "(or legacy min_slices_per_checkpoint / min_triads_per_checkpoint) must be an int >= 1"
+        )
+    if not isinstance(max_slices, int) or max_slices < min_slices:
+        _fail(
+            "ci_checkpoint_plan.md JSON: defaults.max_candidates_per_checkpoint "
+            "(or legacy max_slices_per_checkpoint / max_triads_per_checkpoint) must be an int >= min"
+        )
+    return {"min": min_slices, "max": max_slices}
 
 
 def _parse_checkpoints(plan: dict[str, Any]) -> tuple[dict[str, int], list[Checkpoint]]:
@@ -157,179 +112,141 @@ def _parse_checkpoints(plan: dict[str, Any]) -> tuple[dict[str, int], list[Check
     defaults = plan.get("defaults")
     if not isinstance(defaults, dict):
         _fail("ci_checkpoint_plan.md JSON: defaults must be an object")
-    min_n = defaults.get("min_triads_per_checkpoint")
-    max_n = defaults.get("max_triads_per_checkpoint")
-    if not isinstance(min_n, int) or min_n < 1:
-        _fail("ci_checkpoint_plan.md JSON: defaults.min_triads_per_checkpoint must be an int >= 1")
-    if not isinstance(max_n, int) or max_n < min_n:
-        _fail("ci_checkpoint_plan.md JSON: defaults.max_triads_per_checkpoint must be an int >= min")
+    parsed_defaults = _parse_defaults(defaults)
 
     checkpoints_raw = plan.get("checkpoints")
     if not isinstance(checkpoints_raw, list) or not checkpoints_raw:
         _fail("ci_checkpoint_plan.md JSON: checkpoints must be a non-empty array")
 
     checkpoints: list[Checkpoint] = []
+    checkpoint_ids: set[str] = set()
+    task_ids: set[str] = set()
     for i, raw in enumerate(checkpoints_raw):
         if not isinstance(raw, dict):
             _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}] must be an object")
-        cid = raw.get("id")
+
+        checkpoint_id = raw.get("checkpoint_id")
+        if checkpoint_id is None:
+            checkpoint_id = raw.get("id")
         task_id = raw.get("task_id")
-        slices = raw.get("slices")
+        slices = raw.get("candidate_ids")
+        if slices is None:
+            slices = raw.get("slices")
         gates = raw.get("gates")
         rationale = raw.get("rationale")
-        if not isinstance(cid, str) or not cid:
-            _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].id must be a non-empty string")
-        if not isinstance(task_id, str) or not task_id:
-            _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].task_id must be a non-empty string")
-        if not isinstance(slices, list) or not all(isinstance(s, str) and s for s in slices):
-            _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].slices must be an array of non-empty strings")
-        if len(set(slices)) != len(slices):
-            _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].slices contains duplicates")
+
+        if not isinstance(checkpoint_id, str) or not checkpoint_id.strip():
+            _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].checkpoint_id must be a non-empty string")
+        checkpoint_id = checkpoint_id.strip()
+        if checkpoint_id in checkpoint_ids:
+            _fail(f"ci_checkpoint_plan.md JSON: duplicate checkpoint id {checkpoint_id!r}")
+        checkpoint_ids.add(checkpoint_id)
+
+        if task_id is not None:
+            if not isinstance(task_id, str) or not task_id.strip():
+                _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].task_id must be a non-empty string when present")
+            task_id = task_id.strip()
+            if task_id in task_ids:
+                _fail(f"ci_checkpoint_plan.md JSON: checkpoints[].task_id must be unique ({task_id!r})")
+            task_ids.add(task_id)
+
+        if not isinstance(slices, list) or not all(isinstance(s, str) and s.strip() for s in slices):
+            _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].candidate_ids must be an array of non-empty strings")
+        normalized_slices = [s.strip() for s in slices]
+        if len(set(normalized_slices)) != len(normalized_slices):
+            _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].candidate_ids contains duplicates")
+
         if not isinstance(gates, dict):
             _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].gates must be an object")
+        for key, value in gates.items():
+            if key in {"compile_parity", "feature_smoke"} and not isinstance(value, bool):
+                _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].gates.{key} must be a boolean")
+            if key == "ci_testing" and (not isinstance(value, str) or not value.strip()):
+                _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].gates.ci_testing must be a non-empty string")
+
         if not isinstance(rationale, str) or not rationale.strip():
             _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].rationale must be a non-empty string")
 
         checkpoints.append(
             Checkpoint(
-                checkpoint_id=cid,
+                checkpoint_id=checkpoint_id,
                 task_id=task_id,
-                slices=slices,
+                slices=normalized_slices,
                 gates=gates,
                 rationale=rationale.strip(),
             )
         )
 
-    # Ensure task ids are unique (no ambiguity).
-    task_ids = [c.task_id for c in checkpoints]
-    if len(set(task_ids)) != len(task_ids):
-        _fail("ci_checkpoint_plan.md JSON: checkpoints[].task_id must be unique")
-
-    return {"min": min_n, "max": max_n}, checkpoints
+    return parsed_defaults, checkpoints
 
 
-def _validate_against_tasks(
+def _expected_slice_order_from_authority(
     feature_dir: Path,
-    tasks_data: dict[str, Any],
+    workstream_triage: str,
+) -> tuple[list[str], str | None]:
+    triage_path, authority, errors = vpi._load_slice_authority(
+        feature_dir,
+        workstream_triage,
+        advisory=True,
+        require_v2=False,
+    )
+    if triage_path is not None and errors:
+        _fail(f"invalid workstream triage slice authority: {errors[0].message}")
+    if authority is None:
+        return ([], None)
+    return (authority.accepted_slice_order, str(triage_path))
+
+
+def _validate_against_authority(
+    feature_dir: Path,
     defaults: dict[str, int],
     checkpoints: list[Checkpoint],
     workstream_triage: str,
 ) -> None:
-    task_slice_ids, expected_slice_order, authority_path = _expected_slice_order_from_authority(
-        feature_dir,
-        tasks_data,
-        workstream_triage,
-    )
-    if not task_slice_ids:
-        _fail("tasks.json does not contain any slice final integration tasks (*-integ); cannot validate checkpoint coverage")
+    flattened_slices: list[str] = []
+    for checkpoint in checkpoints:
+        flattened_slices.extend(checkpoint.slices)
 
-    meta = tasks_data.get("meta") if isinstance(tasks_data, dict) else None
-    if not isinstance(meta, dict):
-        meta = {}
-    schema_version = meta.get("schema_version", 1)
-    cross_platform = meta.get("cross_platform") is True
-
-    slices_in_plan: list[str] = []
-    for c in checkpoints:
-        slices_in_plan.extend(c.slices)
-
-    # Ordering / contiguity: the plan must define a single ordered partition of the slice list.
-    # This removes ambiguity and enables mechanical gating checks between checkpoint groups.
-    if slices_in_plan != expected_slice_order:
-        authority_note = f" from accepted slice order {authority_path}" if authority_path else ""
-        _fail(
-            "ci_checkpoint_plan.md must assign slices in deterministic order and as contiguous groups; "
-            f"expected slice order{authority_note} {expected_slice_order}, got {slices_in_plan}"
-        )
-
-    # Coverage: every slice must belong to exactly one checkpoint.
-    duplicates = sorted({s for s in slices_in_plan if slices_in_plan.count(s) > 1})
+    duplicates = sorted({slice_id for slice_id in flattened_slices if flattened_slices.count(slice_id) > 1}, key=_slice_sort_key)
     if duplicates:
         _fail(f"ci_checkpoint_plan.md assigns slices to multiple checkpoints: {', '.join(duplicates)}")
 
-    missing = sorted(set(task_slice_ids) - set(slices_in_plan))
-    extra = sorted(set(slices_in_plan) - set(task_slice_ids))
-    if missing:
-        _fail(f"ci_checkpoint_plan.md missing slices present in tasks.json: {', '.join(missing)}")
-    if extra:
-        _fail(f"ci_checkpoint_plan.md references slices not present in tasks.json: {', '.join(extra)}")
-
-    # Schema v4 cross-platform packs require tasks.json meta.checkpoint_boundaries to match the
-    # checkpoint boundaries (the last slice of each checkpoint group) exactly.
-    if cross_platform and isinstance(schema_version, int) and schema_version >= 4:
-        boundaries = meta.get("checkpoint_boundaries")
-        if not isinstance(boundaries, list) or not all(isinstance(x, str) and x for x in boundaries):
-            _fail("tasks.json meta.checkpoint_boundaries must be an array of non-empty strings for schema v4 cross-platform packs")
-        if len(set(boundaries)) != len(boundaries):
-            _fail("tasks.json meta.checkpoint_boundaries contains duplicates")
-        expected_boundaries = [c.slices[-1] for c in checkpoints]
-        if boundaries != expected_boundaries:
+    expected_slice_order, authority_path = _expected_slice_order_from_authority(feature_dir, workstream_triage)
+    if expected_slice_order:
+        expected_index = {slice_id: idx for idx, slice_id in enumerate(expected_slice_order)}
+        extra = sorted(set(flattened_slices) - set(expected_slice_order), key=_slice_sort_key)
+        if extra:
+            authority_note = f" from accepted slice order {authority_path}" if authority_path else ""
             _fail(
-                "tasks.json meta.checkpoint_boundaries must match the checkpoint group boundaries in ci_checkpoint_plan.md "
-                f"(expected {expected_boundaries}, got {boundaries})"
+                "ci_checkpoint_plan.md references slices outside the accepted slice authority"
+                f"{authority_note}: {extra}"
+            )
+        actual_positions = [expected_index[slice_id] for slice_id in flattened_slices]
+        if actual_positions != sorted(actual_positions):
+            authority_note = f" from accepted slice order {authority_path}" if authority_path else ""
+            _fail(
+                "ci_checkpoint_plan.md must preserve the relative order of slices from accepted slice authority"
+                f"{authority_note}; got {flattened_slices}"
             )
 
-    # Bounds (default): enforce min/max per checkpoint, except when total slices < min.
-    total = len(task_slice_ids)
+    total = len(flattened_slices)
     min_n = defaults["min"]
     max_n = defaults["max"]
-    for c in checkpoints:
-        n = len(c.slices)
-        if n > max_n:
-            _fail(f"ci_checkpoint_plan.md checkpoint {c.checkpoint_id!r} has {n} slices; max is {max_n}")
-        if total >= min_n and n < min_n:
-            _fail(f"ci_checkpoint_plan.md checkpoint {c.checkpoint_id!r} has {n} slices; min is {min_n} (total slices={total})")
-
-    # Task existence and shape.
-    tasks = tasks_data.get("tasks")
-    tasks_by_id = {t.get("id"): t for t in tasks if isinstance(t, dict) and isinstance(t.get("id"), str)}
-    feature_dir_prefix = feature_dir.as_posix().rstrip("/") + "/"
-    for c in checkpoints:
-        t = tasks_by_id.get(c.task_id)
-        if t is None:
-            _fail(f"ci_checkpoint_plan.md references missing checkpoint task id in tasks.json: {c.task_id!r}")
-        if t.get("type") != "ops":
-            _fail(f"checkpoint task {c.task_id!r} must have type='ops'")
-        kickoff = t.get("kickoff_prompt")
-        if not isinstance(kickoff, str) or not kickoff:
-            _fail(f"checkpoint task {c.task_id!r} must have kickoff_prompt set")
-        kickoff_path = Path(kickoff)
-        if not kickoff_path.is_absolute():
-            kickoff_norm = kickoff.replace("\\", "/").lstrip("./")
-            # tasks.json commonly stores repo-root-relative paths (e.g., docs/...).
-            if kickoff_norm.startswith("docs/") or kickoff_norm.startswith(feature_dir_prefix):
-                kickoff_path = Path(kickoff_norm)
-            else:
-                kickoff_path = feature_dir / kickoff_norm
-        if not kickoff_path.exists():
-            _fail(f"checkpoint task {c.task_id!r} kickoff_prompt file does not exist: {kickoff_path}")
-
-        # Dependency wiring: checkpoint must depend on the core integration task of its ending slice.
-        last_slice = c.slices[-1]
-        expected_dep = f"{last_slice}-integ-core"
-        deps = t.get("depends_on")
-        if not isinstance(deps, list) or expected_dep not in deps:
-            _fail(f"checkpoint task {c.task_id!r} must depend_on {expected_dep!r}")
-
-    # Gating: the first slice of the next checkpoint group must depend on the prior checkpoint task.
-    # This prevents starting work past a checkpoint until the cross-platform CI gate is complete.
-    for i in range(len(checkpoints) - 1):
-        cp = checkpoints[i]
-        next_cp = checkpoints[i + 1]
-        next_first_slice = next_cp.slices[0]
-
-        for task_suffix in ("code", "test"):
-            tid = f"{next_first_slice}-{task_suffix}"
-            t = tasks_by_id.get(tid)
-            if t is None:
-                _fail(f"tasks.json missing required task for gating check: {tid!r}")
-            deps = t.get("depends_on")
-            if not isinstance(deps, list) or cp.task_id not in deps:
-                _fail(f"{tid!r} must depend_on prior checkpoint task {cp.task_id!r}")
+    for checkpoint in checkpoints:
+        count = len(checkpoint.slices)
+        if count > max_n:
+            _fail(f"ci_checkpoint_plan.md checkpoint {checkpoint.checkpoint_id!r} has {count} slices; max is {max_n}")
+        if total >= min_n and count < min_n:
+            _fail(
+                f"ci_checkpoint_plan.md checkpoint {checkpoint.checkpoint_id!r} has {count} slices; "
+                f"min is {min_n} (total slices={total})"
+            )
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Validate ci_checkpoint_plan.md against tasks.json.")
+    ap = argparse.ArgumentParser(
+        description="Validate ci_checkpoint_plan.md as advisory FSE checkpoint intent.",
+    )
     ap.add_argument("--feature-dir", required=True, help="docs/project_management/packs/<bucket>/<feature>")
     ap.add_argument(
         "--workstream-triage",
@@ -354,7 +271,6 @@ def main() -> int:
     if not plan_path.is_absolute():
         plan_path = feature_dir / plan_path
     if not plan_path.exists():
-        # Legacy fallback for older packs that store artifacts at the feature-dir root.
         if args.ci_checkpoint_plan == "pre-planning/ci_checkpoint_plan.md":
             legacy = feature_dir / "ci_checkpoint_plan.md"
             if legacy.exists():
@@ -365,10 +281,9 @@ def main() -> int:
             _fail(f"missing ci checkpoint plan: {plan_path}")
 
     text = plan_path.read_text(encoding="utf-8")
-    plan = _extract_json_block(text)
+    plan = _extract_json_block(text, accept_draft_header=True)
     defaults, checkpoints = _parse_checkpoints(plan)
-    tasks_data = _read_tasks_json(feature_dir)
-    _validate_against_tasks(feature_dir, tasks_data, defaults, checkpoints, args.workstream_triage)
+    _validate_against_authority(feature_dir, defaults, checkpoints, args.workstream_triage)
     print(f"OK: ci_checkpoint_plan validation passed: {plan_path}")
     return 0
 

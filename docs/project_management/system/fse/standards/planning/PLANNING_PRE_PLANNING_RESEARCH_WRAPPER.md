@@ -1,129 +1,136 @@
-# Planning Pre-Planning Research Wrapper (Standard)
+# Planning Pre-Planning Research Wrapper Standard
 
-This standard describes the **Pre-Planning Research** orchestration workflow and the intended contracts between:
-- the scripted orchestrator (automation),
-- the focused planning agents (headless Codex runs), and
-- the wrapper/orchestrator agent (operator).
+This standard describes the FSE pre-planning orchestration workflow and the intended contracts between:
+- the scripted orchestrator,
+- the focused planning agents,
+- and the wrapper or operator.
 
 Canonical wrapper prompt:
 - `docs/project_management/system/fse/prompts/planning/pre_planning_wrapper.md`
 
 Canonical automation entrypoint:
-- Start from ADR-only (no pack yet):
-  - `make pm-pre-planning-from-adr ADR="docs/project_management/adrs/draft/ADR-000X-<kebab-title>.md" [FEATURE="<feature>"] [BUCKET=draft]`
+- Start from ADR-only:
+  - `make pm-fse-pre-planning-from-adr ADR="docs/project_management/adrs/draft/ADR-000X-<kebab-title>.md" [FEATURE="<feature>"] [BUCKET=draft]`
 - Start from an existing pack:
-  - `make pm-pre-planning-research FEATURE_DIR="docs/project_management/packs/<bucket>/<feature>"`
-
----
+  - `docs/project_management/system/fse/scripts/planning/pre_planning_research_orchestrate.sh --feature-dir "docs/project_management/packs/<bucket>/<feature>"`
 
 ## Goal
 
-Produce the minimal, high-signal pre-planning artifacts needed to reduce thrash before full planning:
+Produce the minimal, high-signal FSE pre-planning artifacts needed to ground downstream planning and decomposition:
 
-Tracked (canonical; pack root):
-- `spec_manifest.md` (deterministic spec selection + ownership map)
-- `impact_map.md` (touch set + cascading implications + cross-queue scan)
-- `minimal_spec_draft.md` (**Pre‑Planning Only** alignment backbone; must be deleted/retired during full planning)
-- `ci_checkpoint_plan.md` (cross-platform automation packs only; provisional until slice boundaries stabilize)
-- `workstream_triage.md` (**Pre‑Planning Only**; proposed parallelizable workstreams + gates for full planning)
+Tracked under `<FEATURE_DIR>/pre-planning/`:
+- `spec_manifest.md`
+- `impact_map.md`
+- `minimal_spec_draft.md`
+- `ci_checkpoint_plan.md`
+- `workstream_triage.md`
+- `alignment_report.md`
 
-Untracked (logs-only):
-- workstream triage evidence + drafts under `<FEATURE_DIR>/logs/workstream-triage/`
+Untracked evidence under `<FEATURE_DIR>/logs/`:
+- per-step scratch, handoff, staged candidates, stderr, and wrapper summaries
 
 Non-goals:
-- Completing slice specs or passing `make planning-lint` on a newly scaffolded pack.
-  - New packs scaffold Slice Spec v2 placeholders, and v2 lint forbids placeholders until full planning fills them.
-
----
+- creating `tasks.json`,
+- creating `plan.md`,
+- creating kickoff prompts,
+- creating legacy execution ownership surfaces,
+- creating or depending on pre-full-planning convergence outputs,
+- creating or depending on post-full-planning reconcile outputs,
+- creating or depending on legacy full-planning follow-up artifacts,
+- authoring execution-valid task graphs.
 
 ## Preconditions
 
 1) One of:
-   - ADR-only start (recommended for pre-planning): run:
-     - `make pm-pre-planning-from-adr ADR="docs/project_management/adrs/draft/ADR-000X-<kebab-title>.md" [FEATURE="<feature>"] [BUCKET=draft]`
-     - This scaffolds a minimal pack (creates/patches `tasks.json` with `meta.adr_paths`) and auto-commits it before launching pre-planning.
-   - Existing Planning Pack under `docs/project_management/packs/<bucket>/<feature>/`:
-     - Recommended full scaffold: `make planning-new-feature FEATURE=<feature> ...`
+   - ADR-only start via `make pm-fse-pre-planning-from-adr ...`
+   - existing feature pack under `docs/project_management/packs/<bucket>/<feature>/`
 
-2) The pack’s `tasks.json` can resolve ADR inputs for focused agents.
-   - Strict packs (`meta.slice_spec_version >= 2`) must set at least one of:
-     - `meta.adr_refs` (preferred), or
-     - `meta.adr_paths` (use when refs are ambiguous).
+2) ADR inputs are resolvable for the feature.
+   - The wrapper or operator must know which ADRs seed the run.
+   - ADR resolution must not depend on `tasks.json`.
 
 3) Orchestration runs from a clean orchestration checkout.
    - `git status --porcelain=v1` must be empty before starting the orchestrator.
 
----
+## Stable step logs
 
-## Stable step logs (sentinels + streaming)
-
-Pre-planning research uses stable, pack-local (gitignored) step log dirs under `<FEATURE_DIR>/logs/`:
+Pre-planning research uses stable, pack-local step log directories under `<FEATURE_DIR>/logs/`:
 - `spec-manifest/`
 - `impact-map/`
 - `min-spec-draft/`
 - `CI-checkpoint/`
 - `workstream-triage/`
 
-Each step dir contains stable orchestration artifacts:
-- `stderr.log` (streams while Codex runs; created/truncated at start)
-- `codex.pid` (exists while Codex runs; removed at exit)
-- `handoff.md` (mid-run “start downstream now” signal)
-- `last_message.md` (stable completion sentinel; exists **only when the step successfully completes**)
+Each step directory contains:
+- `stderr.log`
+- `codex.pid`
+- `handoff.md`
+- `last_message.md`
 
 Rationale:
-- `docs/project_management/packs/**/logs/` is gitignored, so these artifacts do not affect canonical docs or quality gates.
-- Stable sentinels allow downstream steps to self-gate without relying on “latest” pointers.
+- `docs/project_management/packs/**/logs/` is gitignored.
+- Stable sentinels let downstream steps self-gate without relying on latest-pointer files.
 
----
-
-## Orchestration pattern (staggered overlap + sentinel-gated writes)
+## Orchestration pattern
 
 Pre-planning research is a 5-step chain:
-1) `spec_manifest`
-2) `impact_map`
-3) `min_spec_draft`
-4) `ci_checkpoint`
-5) `workstream_triage`
+1. `spec_manifest`
+2. `impact_map`
+3. `min_spec_draft`
+4. `ci_checkpoint`
+5. `workstream_triage`
 
 Overlap model:
-- The orchestrator starts steps in a staggered, overlapped manner (triggered by upstream `handoff.md`).
+- The orchestrator starts steps in a staggered, overlapped manner, triggered by upstream `handoff.md`.
 - Downstream agents may start early, but must:
-  - write to their own step `logs/` only while upstream is still running, and
-  - delay tracked (canonical) writes until upstream has completed successfully (`last_message.md` exists) and the pack is clean.
+  - write to their own step `logs/` only while upstream is still running,
+  - delay tracked writes until the upstream step completes successfully.
 
-Default poll interval for sentinel gating: 60s.
+Default poll interval for sentinel gating: 60 seconds.
 
 Hard rules:
-- Stop-on-failure: if any step fails, do not proceed to downstream steps.
-- Avoid unbounded recursion: reruns are explicit and bounded via `START_AT=<step>`.
+- Stop on failure. If any step fails, do not proceed to later steps.
+- Keep reruns explicit and bounded via `START_AT=<step>`.
+- The active lane ends at the tracked `pre-planning/` artifacts listed above.
+- Legacy convergence or reconcile surfaces are compatibility scaffolding only and are not part of the supported `pm-fse-pre-planning-from-adr` contract.
 
----
+## Reruns
 
-## Reruns (archive instead of delete)
+When rerunning from a mid-chain step, existing stable step log dirs are archived by renaming:
+- `<FEATURE_DIR>/logs/<step>/` → `<FEATURE_DIR>/logs/<step>_run_N/`
 
-When rerunning from a mid-chain step, existing stable step log dirs are not deleted. They are archived by renaming:
-- `<FEATURE_DIR>/logs/<step>/` → `<FEATURE_DIR>/logs/<step>_run_N/` (per-step sequential numbering)
-
-This prevents stale stable sentinels from being reused and preserves audit history.
-
----
+This prevents stale sentinels from being reused and preserves audit history.
 
 ## Validation guidance
 
-During pre-planning research, prefer focused validation:
-- `make planning-validate FEATURE_DIR="<FEATURE_DIR>"`
+During FSE pre-planning, prefer focused validation:
+- `bash docs/project_management/system/fse/scripts/planning/micro_lint.sh --feature-dir "<FEATURE_DIR>" --agent <agent> -- <owned-paths...>`
+- `python3 docs/project_management/system/fse/scripts/planning/validate_spec_manifest.py --feature-dir "<FEATURE_DIR>"`
+- `python3 docs/project_management/system/fse/scripts/planning/validate_impact_map.py --feature-dir "<FEATURE_DIR>"`
 
-If `ci_checkpoint_plan.md` is applicable and touched:
-- `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "<FEATURE_DIR>"`
+If `ci_checkpoint_plan.md` is present, validate it against the FSE-native checkpoint contract rather than legacy task wiring.
 
-Avoid assuming `make planning-lint` is green during pre-planning.
+Avoid assuming the broader legacy planning lint is green during pre-planning.
 
----
+## Compatibility-only inactive surfaces
 
-## Work Lift evidence (optional)
+If the repo or a feature pack still contains legacy pre-full-planning convergence, post-full-planning reconcile, or other full-planning follow-up surfaces:
+- treat them as compatibility scaffolding only,
+- treat them as inactive for the active pre-planning lane,
+- do not require them for `pm-fse-pre-planning-from-adr`,
+- do not block pre-planning completion on their absence or staleness.
 
-If the Touch Set is materially filled in (strict packs), the wrapper may compute pack-derived lift:
-- `make pm-lift-pack PACK="<FEATURE_DIR>"`
-- `make pm-lift-pack PACK="<FEATURE_DIR>" EMIT_JSON=1`
+## Workstream sizing evidence
 
-Store outputs under `<FEATURE_DIR>/logs/` to keep them as evidence without impacting canonical docs.
+During FSE pre-planning, derive downstream sizing from the authored FSE artifacts themselves:
+- `spec_manifest.md` for contract and surface breadth,
+- `impact_map.md` for dependency density and boundary crossings,
+- `minimal_spec_draft.md` for candidate ordering and split pressure,
+- `ci_checkpoint_plan.md` for checkpoint grouping pressure.
+
+Do not invoke legacy lift or intake commands during this lane:
+- `make pm-lift-pack ...`
+- `make pm-lift-intake ...`
+
+If triage needs a durable evidence artifact, store it under:
+- `<FEATURE_DIR>/logs/workstream-triage/planning_pressure_assessment.md`

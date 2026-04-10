@@ -12,6 +12,8 @@ from typing import Any
 import validate_ci_checkpoint_plan as vccp
 import validate_pws_index as vpi
 
+# Legacy compatibility validator retained for older planning/reporting callers.
+# The active FSE pre-planning lane should not treat this as an active-lane gate.
 
 PHASE_PRE_TASKS = "pre_tasks_checkpoints"
 PHASE_PRE_FULL_PLANNING = "pre_full_planning"
@@ -244,8 +246,8 @@ def _extract_tasks_slice_ids(feature_dir: Path) -> SliceSource:
 
 
 def _choose_baseline(sources: list[SliceSource]) -> SliceSource:
-    # minimal_spec_draft is a draft starting point; workstream_triage may adopt a
-    # different accepted slice skeleton without mutating the draft file.
+    # minimal_spec_draft is a draft starting point; legacy workstream_triage may
+    # adopt a different accepted slice skeleton without mutating the draft file.
     for preferred in ("workstream_triage", "plan", "slice_specs", "ci_checkpoint_plan", "minimal_spec_draft"):
         for source in sources:
             if source.name == preferred and source.ordered:
@@ -439,14 +441,28 @@ def validate(feature_dir: Path, phase: str, workstream_triage: str = vpi.DEFAULT
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(description="Validate accepted slice inventory coherence across planning surfaces.")
-    ap.add_argument("--feature-dir", required=True, help="docs/project_management/packs/<bucket>/<feature>")
-    ap.add_argument("--phase", choices=[PHASE_PRE_TASKS, PHASE_PRE_FULL_PLANNING, PHASE_EXECUTION_READY], required=True)
+    ap = argparse.ArgumentParser(
+        description=(
+            "Legacy compatibility validator for accepted slice inventory coherence across "
+            "planning surfaces. Inactive for the active FSE pre-planning lane."
+        )
+    )
+    ap.add_argument(
+        "--feature-dir",
+        required=True,
+        help="Legacy feature pack dir (docs/project_management/packs/<bucket>/<feature>)",
+    )
+    ap.add_argument(
+        "--phase",
+        choices=[PHASE_PRE_TASKS, PHASE_PRE_FULL_PLANNING, PHASE_EXECUTION_READY],
+        required=True,
+        help="Legacy compatibility validation phase.",
+    )
     ap.add_argument(
         "--workstream-triage",
         default=vpi.DEFAULT_TRIAGE_REL,
         help=(
-            "Path to workstream_triage.md (absolute or feature-dir-relative). "
+            "Legacy path to workstream_triage.md (absolute or feature-dir-relative). "
             f"Default: {vpi.DEFAULT_TRIAGE_REL} (legacy fallback: {vpi.LEGACY_TRIAGE_REL})"
         ),
     )
