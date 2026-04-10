@@ -87,6 +87,7 @@ pre-ci:
 
 # Canonical Project Management system scripts root
 PM_SYSTEM_SCRIPTS := docs/project_management/system/scripts
+FSE_SYSTEM_SCRIPTS := docs/project_management/system/fse/scripts
 
 # Feature directory under docs/project_management/packs/<bucket>/<feature>
 FEATURE_DIR ?=
@@ -243,6 +244,28 @@ pm-pre-planning-from-adr:
 	else \
 	  $(MAKE) pm-pre-planning-research FEATURE_DIR="$$feature_dir" START_AT="$(START_AT)" POLL_S="$(POLL_S)" CODEX_PROFILE="$(CODEX_PROFILE)" CODEX_MODEL="$(CODEX_MODEL)" CODEX_JSONL="$(CODEX_JSONL)"; \
 	fi
+
+.PHONY: pm-fse-pre-planning-from-adr
+pm-fse-pre-planning-from-adr:
+	@if [ -z "$(ADR)" ]; then echo "ERROR: set ADR=docs/project_management/adrs/<bucket>/ADR-XXXX-....md"; exit 2; fi
+	@set -euo pipefail; \
+	if [ -n "$$(git status --porcelain=v1)" ]; then echo "ERROR: orchestration checkout is dirty; commit or stash before running"; exit 2; fi; \
+	bucket="$(BUCKET)"; \
+	if [ -z "$$bucket" ]; then bucket="$${PM_DEFAULT_PACK_BUCKET:-}"; fi; \
+	if [ -z "$$bucket" ]; then bucket="draft"; fi; \
+	cmd="$(FSE_SYSTEM_SCRIPTS)/planning/scaffold_pre_planning_pack.sh --adr \"$(ADR)\" --bucket \"$$bucket\""; \
+	if [ -n "$(FEATURE)" ]; then cmd="$$cmd --feature \"$(FEATURE)\""; fi; \
+	feature_dir="$$(eval "$$cmd")"; \
+	if [ -z "$$feature_dir" ]; then echo "ERROR: scaffold_pre_planning_pack.sh returned empty feature dir"; exit 2; fi; \
+	tasks_path="$$feature_dir/tasks.json"; \
+	if [ -n "$$(git status --porcelain=v1 -- "$$tasks_path")" ]; then \
+	  git add -- "$$tasks_path"; \
+	  if ! git diff --cached --quiet; then git commit -m "docs: bootstrap fse pre-planning pack"; fi; \
+	fi; \
+	cmd="$(FSE_SYSTEM_SCRIPTS)/planning/pre_planning_research_orchestrate.sh --feature-dir \"$$feature_dir\""; \
+	if [ -n "$(START_AT)" ]; then cmd="$$cmd --start-at \"$(START_AT)\""; fi; \
+	if [ -n "$(POLL_S)" ]; then cmd="$$cmd --poll-s \"$(POLL_S)\""; fi; \
+	CODEX_PROFILE="$(CODEX_PROFILE)" CODEX_MODEL="$(CODEX_MODEL)" CODEX_JSONL="$(CODEX_JSONL)" eval "$$cmd"
 
 .PHONY: planning-lint-ps
 planning-lint-ps:
