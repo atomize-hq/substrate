@@ -6,7 +6,7 @@ Goal:
 
 This standard defines:
 - the required planning artifact `ci_checkpoint_plan.md`,
-- the default bounds for candidate groups per checkpoint,
+- the default bounds for seam groups per checkpoint,
 - how to select code-grounded boundaries,
 - and what the artifact must say before downstream planning turns it into concrete execution behavior.
 
@@ -19,7 +19,7 @@ This standard is required when:
 
 ## Why checkpoints
 
-Running the heaviest verification after every future slice or seam is usually wasteful.
+Running the heaviest verification after every future seam is usually wasteful.
 
 Checkpoint planning preserves safety by:
 - identifying where multi-platform confirmation will matter later,
@@ -33,7 +33,7 @@ Create:
 
 Rules:
 - Must include a machine-readable JSON section.
-- Must partition draft candidates into checkpoint groups with no overlaps and no unexplained omissions.
+- Must partition draft seams into checkpoint groups with no overlaps and no unexplained omissions.
 - Must state which verification gates are intended at each checkpoint.
 - Must remain advisory at the pre-planning stage. It does not name task IDs or execution ownership.
 
@@ -43,12 +43,12 @@ Template:
 ## Default bounds
 
 Defaults:
-- `min_candidates_per_checkpoint = 2`
-- `max_candidates_per_checkpoint = 6`
+- `min_draft_seams_per_checkpoint = 2`
+- `max_draft_seams_per_checkpoint = 6`
 
 Exceptions:
-- If the total candidate count is below the minimum, a single checkpoint may cover the whole feature.
-- If a candidate is high-risk, a smaller group is allowed when explicitly justified in `ci_checkpoint_plan.md`.
+- If the total draft seam count is below the minimum, a single checkpoint may cover the whole feature.
+- If a seam is high-risk, a smaller group is allowed when explicitly justified in `ci_checkpoint_plan.md`.
 
 ## Selecting checkpoint boundaries
 
@@ -68,7 +68,7 @@ Avoid boundaries that:
 ## Expected contents
 
 Each checkpoint must state:
-- the draft candidates it covers,
+- the draft seam IDs it covers,
 - the intended verification gates,
 - the reason that boundary is code-grounded,
 - what surfaces are stabilized by the checkpoint,

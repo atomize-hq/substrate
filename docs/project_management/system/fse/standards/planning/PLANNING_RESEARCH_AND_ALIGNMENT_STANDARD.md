@@ -74,7 +74,7 @@ Standard:
 ### 3.3 `minimal_spec_draft.md`
 
 Purpose:
-- provide cross-cutting defaults, invariants, and a draft seam or slice-candidate skeleton.
+- provide cross-cutting defaults, invariants, and a draft downstream seam skeleton.
 
 Rules:
 - it is pre-planning only,
@@ -97,7 +97,7 @@ Standard:
 
 Purpose:
 - propose downstream planning workstreams,
-- recommend candidate ordering or restructuring,
+- recommend seam-oriented sequencing or restructuring,
 - capture sequencing risks and unknowns.
 
 Rules:
@@ -148,7 +148,7 @@ rg -n "\\b(should|could|might|maybe|optionally)\\b" "$FEATURE_DIR/pre-planning"
 The FSE pre-planning pack is ready to hand off when all are true:
 - `spec_manifest.md` defines required docs and ownership with no implicit surfaces,
 - `impact_map.md` defines explicit touched surfaces and conflict resolutions,
-- `minimal_spec_draft.md` defines cross-cutting invariants and a usable draft candidate skeleton,
+- `minimal_spec_draft.md` defines cross-cutting invariants and a usable draft downstream seam skeleton,
 - `ci_checkpoint_plan.md` exists when needed and expresses checkpoint intent without task wiring,
 - `workstream_triage.md` proposes actionable downstream workstreams without legacy execution-registry semantics,
 - `alignment_report.md` summarizes remaining follow-ups and hard gates,

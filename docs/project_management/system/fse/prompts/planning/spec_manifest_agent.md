@@ -64,9 +64,9 @@ Output requirements:
    - For each required doc, the deterministic items it must define.
    - Explicit categorization of docs by role:
      - pre-planning artifacts produced in this lane,
-     - downstream FSE planning/decomposition artifacts that must exist later,
+     - downstream seam-planning/decomposition artifacts that must exist later,
      - topic-specific specs required by the ADR.
-   - If you identify draft seam or slice-candidate docs that downstream work will likely need, record them as candidate docs with intended ownership. Do not force legacy slice-spec paths or a `tasks.json`-driven ID scheme.
+   - If you identify draft seams or downstream seam-planning docs that later work will likely need, record them with intended ownership and draft scope. Do not force legacy per-unit planning path conventions or a `tasks.json`-driven ID scheme.
 3) If you discover missing or ambiguous ADR intent, record follow-ups inside `pre-planning/spec_manifest.md` under a `Follow-ups` section.
 
 Closeout micro-lint (required for `single` and `phase_b` runs):

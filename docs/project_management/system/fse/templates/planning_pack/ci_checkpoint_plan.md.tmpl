@@ -22,19 +22,19 @@ Standard:
 {
   "version": 1,
   "defaults": {
-    "min_candidates_per_checkpoint": 2,
-    "max_candidates_per_checkpoint": 6
+    "min_draft_seams_per_checkpoint": 2,
+    "max_draft_seams_per_checkpoint": 6
   },
   "checkpoints": [
     {
       "checkpoint_id": "CP1",
-      "candidate_ids": ["{{SLICE_ID}}"],
+      "draft_seam_ids": ["{{SEAM_ID}}"],
       "gates": {
         "compile_parity": true,
         "feature_smoke": true,
         "ci_testing": "targeted"
       },
-      "rationale": "Initial checkpoint scaffold. Regroup draft candidates into larger or smaller checkpoints only when the impact map and candidate skeleton justify a different boundary."
+      "rationale": "Initial checkpoint scaffold. Regroup draft seam groups into larger or smaller checkpoints only when the impact map and draft seam skeleton justify a different boundary."
     }
   ]
 }

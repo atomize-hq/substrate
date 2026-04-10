@@ -24,10 +24,10 @@ SLUG_RE = re.compile(r"^[a-z0-9_]+$")
 LEGACY_SLICE_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*\d+$")
 HEADING_WRAPPERS = ("***", "___", "**", "__", "`", "*", "_")
 ACCEPTED_ORDER_LINE_RE = re.compile(
-    r"^\s*-\s+(?:Accepted slice order|Recommended candidate order)(?::|\b)",
+    r"^\s*-\s+(?:Accepted seam order|Accepted slice order|Draft seam order|Draft slice order|Recommended seam order|Recommended candidate order)(?::|\b)",
     re.IGNORECASE,
 )
-SLICE_BULLET_RE = re.compile(r"^\s*-\s+`?(?P<slice_id>[A-Za-z][A-Za-z0-9]*\d+)`?\s*$")
+SLICE_BULLET_RE = re.compile(r"^\s*-\s+`?(?P<slice_id>[A-Za-z][A-Za-z0-9-]*\d+)`?\s*$")
 
 
 @dataclass(frozen=True)
@@ -72,6 +72,37 @@ def _normalize_slice_order(raw: list[str]) -> list[str]:
         seen.add(value)
         out.append(value)
     return out
+
+
+def _as_non_empty_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    return value
+
+
+def _extract_prefix(value: str) -> str:
+    token = value.strip()
+    if not token:
+        return ""
+    if "-" in token:
+        first, _, remainder = token.partition("-")
+        if first and remainder and first[0].isalpha() and all(ch.isalnum() for ch in first):
+            return first
+    match = re.match(r"^(?P<prefix>[A-Za-z][A-Za-z0-9]*?)(?P<num>\d+)$", token)
+    if match is not None:
+        return match.group("prefix")
+    return ""
+
+
+def _matches_declared_prefix(candidate_id: str, candidate_prefix: str) -> bool:
+    if not candidate_prefix:
+        return True
+    if candidate_id.startswith(f"{candidate_prefix}-"):
+        return True
+    return _extract_prefix(candidate_id) == candidate_prefix
 
 
 def _normalize_owns_path(raw: str) -> str:
@@ -189,8 +220,12 @@ def _is_fse_index(idx: dict[str, Any]) -> bool:
         key in idx
         for key in (
             "index_version",
+            "draft_seam_prefix",
+            "seam_prefix",
             "candidate_prefix",
             "recommended_workstream_order",
+            "baseline_draft_seam_order",
+            "draft_seam_order",
             "recommended_candidate_order",
             "workstreams",
         )
@@ -199,47 +234,45 @@ def _is_fse_index(idx: dict[str, Any]) -> bool:
 
 def _extract_markdown_accepted_slice_order(text: str) -> list[str]:
     lines = text.splitlines()
-    start: int | None = None
-    parent_indent = 0
     for idx, line in enumerate(lines):
-        if ACCEPTED_ORDER_LINE_RE.match(line):
-            start = idx + 1
-            parent_indent = len(line) - len(line.lstrip())
-            break
+        if not ACCEPTED_ORDER_LINE_RE.match(line):
+            continue
 
-    if start is None:
-        return []
+        start = idx + 1
+        parent_indent = len(line) - len(line.lstrip())
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for nested_line in lines[start:]:
+            if not nested_line.strip():
+                if ordered:
+                    break
+                continue
+            indent = len(nested_line) - len(nested_line.lstrip())
+            if indent <= parent_indent:
+                break
+            match = SLICE_BULLET_RE.match(nested_line)
+            if match is None:
+                if ordered:
+                    break
+                continue
+            slice_id = match.group("slice_id")
+            if slice_id in seen:
+                continue
+            seen.add(slice_id)
+            ordered.append(slice_id)
 
-    ordered: list[str] = []
-    seen: set[str] = set()
-    for line in lines[start:]:
-        if not line.strip():
-            if ordered:
-                break
-            continue
-        indent = len(line) - len(line.lstrip())
-        if indent <= parent_indent:
-            break
-        match = SLICE_BULLET_RE.match(line)
-        if match is None:
-            if ordered:
-                break
-            continue
-        slice_id = match.group("slice_id")
-        if slice_id in seen:
-            continue
-        seen.add(slice_id)
-        ordered.append(slice_id)
-    return ordered
+        if ordered:
+            return ordered
+
+    return []
 
 
 def _derive_slice_prefix(slice_ids: list[str]) -> str:
     prefixes: set[str] = set()
     for slice_id in slice_ids:
-        match = re.match(r"^(?P<prefix>[A-Za-z][A-Za-z0-9]*?)(?P<num>\d+)$", slice_id)
-        if match is None:
-            continue
-        prefixes.add(match.group("prefix"))
+        prefix = _extract_prefix(slice_id)
+        if prefix:
+            prefixes.add(prefix)
     if len(prefixes) == 1:
         return next(iter(prefixes))
     return ""
@@ -346,7 +379,9 @@ def _derive_v1_slice_order(idx: dict[str, Any]) -> list[str]:
 
 
 def _derive_fse_slice_order(idx: dict[str, Any]) -> list[str]:
-    ordered = _as_str_list(idx.get("draft_candidate_order"))
+    ordered = _as_str_list(idx.get("draft_seam_order"))
+    if ordered is None:
+        ordered = _as_str_list(idx.get("draft_candidate_order"))
     if ordered is not None:
         return _normalize_slice_order(ordered)
 
@@ -368,16 +403,19 @@ def _validate_candidate_order_field(
     field_name: str,
     value: Any,
     required: bool,
+    item_label: str = "candidate ids",
+    singular_label: str = "candidate id",
+    prefix_label: str = "candidate_prefix",
 ) -> tuple[list[str] | None, list[ValidationError]]:
     errors: list[ValidationError] = []
     if value is None:
         if required:
-            errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of non-empty candidate ids"))
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of non-empty {item_label}"))
         return (None, errors)
 
     raw = _as_str_list(value)
     if raw is None:
-        errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of non-empty candidate ids"))
+        errors.append(ValidationError(message=f"{triage_path}: {field_name} must be an array of non-empty {item_label}"))
         return (None, errors)
 
     normalized: list[str] = []
@@ -385,10 +423,10 @@ def _validate_candidate_order_field(
     for item in raw:
         candidate_id = item.strip()
         if not candidate_id:
-            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains an empty candidate id"))
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains an empty {singular_label}"))
             continue
         if candidate_id in seen:
-            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains duplicate candidate id: {candidate_id!r}"))
+            errors.append(ValidationError(message=f"{triage_path}: {field_name} contains duplicate {singular_label}: {candidate_id!r}"))
             continue
         seen.add(candidate_id)
         normalized.append(candidate_id)
@@ -396,18 +434,18 @@ def _validate_candidate_order_field(
             errors.append(
                 ValidationError(
                     message=(
-                        f"{triage_path}: {field_name} must contain candidate ids, not workstream ids "
+                        f"{triage_path}: {field_name} must contain {item_label}, not workstream ids "
                         f"(got {candidate_id!r})"
                     )
                 )
             )
             continue
-        if candidate_prefix and not candidate_id.startswith(f"{candidate_prefix}-"):
+        if candidate_prefix and not _matches_declared_prefix(candidate_id, candidate_prefix):
             errors.append(
                 ValidationError(
                     message=(
-                        f"{triage_path}: {field_name} candidate id {candidate_id!r} must start with "
-                        f"candidate_prefix {candidate_prefix!r}"
+                        f"{triage_path}: {field_name} {singular_label} {candidate_id!r} must start with "
+                        f"{prefix_label} {candidate_prefix!r}"
                     )
                 )
             )
@@ -416,9 +454,88 @@ def _validate_candidate_order_field(
             continue
 
     if required and not normalized:
-        errors.append(ValidationError(message=f"{triage_path}: {field_name} must contain at least one candidate id"))
+        errors.append(ValidationError(message=f"{triage_path}: {field_name} must contain at least one {singular_label}"))
 
     return (normalized, errors)
+
+
+def _resolve_prefix_field(
+    idx: dict[str, Any],
+    *,
+    triage_path: Path,
+    is_fse: bool,
+) -> tuple[str, list[ValidationError]]:
+    if not is_fse:
+        raw_prefix = idx.get("slice_prefix")
+        if isinstance(raw_prefix, str) and raw_prefix.strip():
+            return (raw_prefix.strip(), [])
+        return ("", [])
+
+    candidate_prefix = _as_non_empty_str(idx.get("candidate_prefix"))
+    if candidate_prefix is None:
+        return ("", [])
+    return (candidate_prefix, [])
+
+
+def _resolve_fse_order_prefix(idx: dict[str, Any]) -> str:
+    for field_name in ("draft_seam_prefix", "seam_prefix", "candidate_prefix"):
+        prefix = _as_non_empty_str(idx.get(field_name))
+        if prefix is not None:
+            return prefix
+    return ""
+
+
+def _validate_fse_order_aliases(
+    *,
+    triage_path: Path,
+    order_prefix: str,
+    idx: dict[str, Any],
+    required: bool,
+) -> tuple[list[str] | None, list[ValidationError]]:
+    errors: list[ValidationError] = []
+    alias_values: list[tuple[str, list[str]]] = []
+    alias_names = ("draft_seam_order", "baseline_draft_seam_order", "draft_candidate_order")
+    for field_name in alias_names:
+        if field_name not in idx:
+            continue
+        normalized, field_errors = _validate_candidate_order_field(
+            triage_path=triage_path,
+            candidate_prefix=order_prefix,
+            field_name=field_name,
+            value=idx.get(field_name),
+            required=False,
+            item_label="seam ids (legacy candidate ids accepted)",
+            singular_label="seam id",
+            prefix_label="seam_prefix / legacy candidate_prefix",
+        )
+        errors.extend(field_errors)
+        if normalized is not None:
+            alias_values.append((field_name, normalized))
+
+    if not alias_values:
+        if required:
+            errors.append(
+                ValidationError(
+                    message=(
+                        f"{triage_path}: draft_seam_order must be an array of non-empty seam ids "
+                        "(legacy draft_candidate_order still accepted)"
+                    )
+                )
+            )
+        return (None, errors)
+
+    resolved_field, resolved_order = alias_values[0]
+    for field_name, order in alias_values[1:]:
+        if order != resolved_order:
+            errors.append(
+                ValidationError(
+                    message=(
+                        f"{triage_path}: draft_seam_order aliases must agree; "
+                        f"{resolved_field}={resolved_order!r} but {field_name}={order!r}"
+                    )
+                )
+            )
+    return (resolved_order, errors)
 
 
 def _validate_workstream_order_field(
@@ -471,7 +588,11 @@ def _validate_workstream_order_field(
 
 def _accepted_slice_order_from_index(idx: dict[str, Any]) -> list[str]:
     if _is_fse_index(idx):
-        accepted = _as_str_list(idx.get("draft_candidate_order"))
+        accepted = _as_str_list(idx.get("draft_seam_order"))
+        if accepted is None:
+            accepted = _as_str_list(idx.get("baseline_draft_seam_order"))
+        if accepted is None:
+            accepted = _as_str_list(idx.get("draft_candidate_order"))
         if accepted is None:
             return []
         accepted = _normalize_slice_order(accepted)
@@ -492,7 +613,8 @@ def _accepted_slice_order_from_index(idx: dict[str, Any]) -> list[str]:
 def _explicit_v2_authority_error(triage_path: Path) -> ValidationError:
     return ValidationError(
         message=(
-            f"{triage_path}: downstream compatibility tooling requires an explicit ordered candidate list "
+            f"{triage_path}: downstream compatibility tooling requires an explicit ordered seam list "
+            "(legacy candidate list still accepted) "
             "in the workstream triage artifact; rerun workstream triage before retrying"
         )
     )
@@ -520,7 +642,7 @@ def _load_slice_authority(
             return (
                 triage_path,
                 None,
-                [ValidationError(message=f"{triage_path}: missing ordered candidate list in workstream triage prose")],
+                [ValidationError(message=f"{triage_path}: missing ordered seam/candidate list in workstream triage prose")],
             )
         slice_prefix = _derive_slice_prefix(accepted_slice_order)
         return (
@@ -548,10 +670,11 @@ def _load_slice_authority(
     except Exception as e:
         return (triage_path, None, [ValidationError(message=f"{triage_path}: {e}")])
 
-    slice_prefix = idx.get("candidate_prefix") if _is_fse_index(idx) else idx.get("slice_prefix")
-    if not isinstance(slice_prefix, str):
+    slice_prefix, prefix_errors = _resolve_prefix_field(idx, triage_path=triage_path, is_fse=_is_fse_index(idx))
+    if prefix_errors:
+        return (triage_path, None, prefix_errors)
+    if not slice_prefix:
         slice_prefix = _derive_slice_prefix(accepted_slice_order)
-    slice_prefix = slice_prefix.strip()
 
     return (
         triage_path,
@@ -577,7 +700,7 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
         accepted_slice_order = _extract_markdown_accepted_slice_order(text)
         if accepted_slice_order:
             return []
-        return [ValidationError(message=f"{triage_path}: missing workstream index block and ordered candidate prose")]
+        return [ValidationError(message=f"{triage_path}: missing workstream index block and ordered seam/candidate prose")]
 
     try:
         idx = _extract_index_json(text)
@@ -592,19 +715,16 @@ def _validate_doc(feature_dir: Path, triage_path: Path, advisory: bool) -> list[
     elif v not in (1, 2, None):
         errors.append(ValidationError(message=f"{triage_path}: pws_index_version must be 1 or 2 (found {v!r})"))
 
-    slice_prefix = idx.get("candidate_prefix") if is_fse else idx.get("slice_prefix")
-    if isinstance(slice_prefix, str) and slice_prefix.strip():
-        slice_prefix = slice_prefix.strip()
-    else:
-        slice_prefix = ""
+    slice_prefix, prefix_errors = _resolve_prefix_field(idx, triage_path=triage_path, is_fse=is_fse)
+    errors.extend(prefix_errors)
 
     accepted_slice_order: list[str] | None = None
     if is_fse:
-        draft_slice_order, field_errors = _validate_candidate_order_field(
+        order_prefix = _resolve_fse_order_prefix(idx)
+        draft_slice_order, field_errors = _validate_fse_order_aliases(
             triage_path=triage_path,
-            candidate_prefix=slice_prefix,
-            field_name="draft_candidate_order",
-            value=idx.get("draft_candidate_order"),
+            order_prefix=order_prefix,
+            idx=idx,
             required=False,
         )
         errors.extend(field_errors)

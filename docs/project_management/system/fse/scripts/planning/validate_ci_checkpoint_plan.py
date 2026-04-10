@@ -28,6 +28,29 @@ def _fail(msg: str) -> None:
 
 LINTED_HEADER = "## Machine-readable plan (linted)"
 DRAFT_HEADER = "## Machine-readable plan (draft; not yet mechanically validated)"
+PLAIN_HEADER = "## Machine-readable plan"
+
+DEFAULT_MIN_FIELD_ALIASES = (
+    "min_draft_seams_per_checkpoint",
+    "min_seams_per_checkpoint",
+    "min_candidates_per_checkpoint",
+    "min_slices_per_checkpoint",
+    "min_triads_per_checkpoint",
+)
+DEFAULT_MAX_FIELD_ALIASES = (
+    "max_draft_seams_per_checkpoint",
+    "max_seams_per_checkpoint",
+    "max_candidates_per_checkpoint",
+    "max_slices_per_checkpoint",
+    "max_triads_per_checkpoint",
+)
+CHECKPOINT_ID_FIELD_ALIASES = (
+    "draft_seam_ids",
+    "seam_ids",
+    "candidate_ids",
+    "slices",
+    "triad_ids",
+)
 
 
 def _extract_json_block(text: str, *, accept_draft_header: bool = False) -> dict[str, Any]:
@@ -37,7 +60,7 @@ def _extract_json_block(text: str, *, accept_draft_header: bool = False) -> dict
     The FSE lane accepts either a linted or draft header because the checkpoint
     plan is advisory during pre-planning.
     """
-    headers = [LINTED_HEADER]
+    headers = [LINTED_HEADER, PLAIN_HEADER]
     if accept_draft_header:
         headers.append(DRAFT_HEADER)
 
@@ -49,10 +72,8 @@ def _extract_json_block(text: str, *, accept_draft_header: bool = False) -> dict
             start = header_start
             matched_header = header
     if start < 0:
-        if accept_draft_header:
-            allowed = " or ".join(repr(header) for header in headers)
-            _fail(f"ci_checkpoint_plan.md missing required header: {allowed}")
-        _fail(f"ci_checkpoint_plan.md missing required header: {LINTED_HEADER!r}")
+        allowed = " or ".join(repr(header) for header in headers)
+        _fail(f"ci_checkpoint_plan.md missing required header: {allowed}")
 
     remainder = text[start:]
     m = re.search(r"```json\s*\n(?P<body>[\s\S]*?)\n```", remainder)
@@ -77,29 +98,94 @@ def _slice_sort_key(slice_id: str) -> tuple[str, int, str]:
     return (match.group("prefix"), int(match.group("num")), slice_id)
 
 
+def _resolve_int_alias(
+    defaults: dict[str, Any],
+    aliases: tuple[str, ...],
+) -> tuple[Any, list[str]]:
+    present: list[str] = []
+    value: Any = None
+    seen_value = False
+    for field_name in aliases:
+        if field_name not in defaults:
+            continue
+        field_value = defaults.get(field_name)
+        if field_value is None:
+            continue
+        present.append(field_name)
+        if not seen_value:
+            value = field_value
+            seen_value = True
+            continue
+        if field_value != value:
+            joined = ", ".join(present)
+            _fail(
+                "ci_checkpoint_plan.md JSON: conflicting checkpoint-size defaults across aliases "
+                f"({joined}); got {value!r} vs {field_value!r}"
+            )
+    return (value, present)
+
+
+def _resolve_checkpoint_id_alias(
+    raw: dict[str, Any],
+    *,
+    checkpoint_index: int,
+) -> list[str]:
+    selected: list[str] | None = None
+    selected_field: str | None = None
+    present_fields: list[str] = []
+
+    for field_name in CHECKPOINT_ID_FIELD_ALIASES:
+        if field_name not in raw:
+            continue
+        value = raw.get(field_name)
+        if value is None:
+            continue
+        present_fields.append(field_name)
+        if not isinstance(value, list) or not all(isinstance(s, str) and s.strip() for s in value):
+            _fail(
+                "ci_checkpoint_plan.md JSON: "
+                f"checkpoints[{checkpoint_index}].{field_name} must be an array of non-empty seam ids "
+                "(legacy candidate_ids / slices / triad_ids still accepted)"
+            )
+        normalized = [s.strip() for s in value]
+        if selected is None:
+            selected = normalized
+            selected_field = field_name
+            continue
+        if normalized != selected:
+            joined = ", ".join(present_fields)
+            _fail(
+                "ci_checkpoint_plan.md JSON: "
+                f"checkpoints[{checkpoint_index}] defines conflicting seam-group aliases ({joined}); "
+                f"{selected_field}={selected!r} but {field_name}={normalized!r}"
+            )
+
+    if selected is None:
+        preferred = CHECKPOINT_ID_FIELD_ALIASES[0]
+        _fail(
+            "ci_checkpoint_plan.md JSON: "
+            f"checkpoints[{checkpoint_index}].{preferred} must be an array of non-empty seam ids "
+            "(legacy seam_ids / candidate_ids / slices / triad_ids still accepted)"
+        )
+
+    return selected
+
+
 def _parse_defaults(defaults: dict[str, Any]) -> dict[str, int]:
-    min_slices = defaults.get("min_candidates_per_checkpoint")
-    max_slices = defaults.get("max_candidates_per_checkpoint")
-
-    if min_slices is None:
-        min_slices = defaults.get("min_slices_per_checkpoint")
-    if max_slices is None:
-        max_slices = defaults.get("max_slices_per_checkpoint")
-
-    if min_slices is None:
-        min_slices = defaults.get("min_triads_per_checkpoint")
-    if max_slices is None:
-        max_slices = defaults.get("max_triads_per_checkpoint")
+    min_slices, _ = _resolve_int_alias(defaults, DEFAULT_MIN_FIELD_ALIASES)
+    max_slices, _ = _resolve_int_alias(defaults, DEFAULT_MAX_FIELD_ALIASES)
 
     if not isinstance(min_slices, int) or min_slices < 1:
         _fail(
-            "ci_checkpoint_plan.md JSON: defaults.min_candidates_per_checkpoint "
-            "(or legacy min_slices_per_checkpoint / min_triads_per_checkpoint) must be an int >= 1"
+            "ci_checkpoint_plan.md JSON: defaults.min_draft_seams_per_checkpoint "
+            "(or defaults.min_seams_per_checkpoint; legacy min_candidates_per_checkpoint / "
+            "min_slices_per_checkpoint / min_triads_per_checkpoint) must be an int >= 1"
         )
     if not isinstance(max_slices, int) or max_slices < min_slices:
         _fail(
-            "ci_checkpoint_plan.md JSON: defaults.max_candidates_per_checkpoint "
-            "(or legacy max_slices_per_checkpoint / max_triads_per_checkpoint) must be an int >= min"
+            "ci_checkpoint_plan.md JSON: defaults.max_draft_seams_per_checkpoint "
+            "(or defaults.max_seams_per_checkpoint; legacy max_candidates_per_checkpoint / "
+            "max_slices_per_checkpoint / max_triads_per_checkpoint) must be an int >= min"
         )
     return {"min": min_slices, "max": max_slices}
 
@@ -129,9 +215,6 @@ def _parse_checkpoints(plan: dict[str, Any]) -> tuple[dict[str, int], list[Check
         if checkpoint_id is None:
             checkpoint_id = raw.get("id")
         task_id = raw.get("task_id")
-        slices = raw.get("candidate_ids")
-        if slices is None:
-            slices = raw.get("slices")
         gates = raw.get("gates")
         rationale = raw.get("rationale")
 
@@ -150,11 +233,13 @@ def _parse_checkpoints(plan: dict[str, Any]) -> tuple[dict[str, int], list[Check
                 _fail(f"ci_checkpoint_plan.md JSON: checkpoints[].task_id must be unique ({task_id!r})")
             task_ids.add(task_id)
 
-        if not isinstance(slices, list) or not all(isinstance(s, str) and s.strip() for s in slices):
-            _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].candidate_ids must be an array of non-empty strings")
-        normalized_slices = [s.strip() for s in slices]
+        normalized_slices = _resolve_checkpoint_id_alias(raw, checkpoint_index=i)
         if len(set(normalized_slices)) != len(normalized_slices):
-            _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].candidate_ids contains duplicates")
+            _fail(
+                "ci_checkpoint_plan.md JSON: "
+                f"checkpoints[{i}] seam ids contain duplicates "
+                "(preferred draft_seam_ids; legacy candidate_ids / slices / triad_ids also accepted)"
+            )
 
         if not isinstance(gates, dict):
             _fail(f"ci_checkpoint_plan.md JSON: checkpoints[{i}].gates must be an object")
@@ -209,23 +294,23 @@ def _validate_against_authority(
 
     duplicates = sorted({slice_id for slice_id in flattened_slices if flattened_slices.count(slice_id) > 1}, key=_slice_sort_key)
     if duplicates:
-        _fail(f"ci_checkpoint_plan.md assigns slices to multiple checkpoints: {', '.join(duplicates)}")
+        _fail(f"ci_checkpoint_plan.md assigns seam ids to multiple checkpoints: {', '.join(duplicates)}")
 
     expected_slice_order, authority_path = _expected_slice_order_from_authority(feature_dir, workstream_triage)
     if expected_slice_order:
         expected_index = {slice_id: idx for idx, slice_id in enumerate(expected_slice_order)}
         extra = sorted(set(flattened_slices) - set(expected_slice_order), key=_slice_sort_key)
         if extra:
-            authority_note = f" from accepted slice order {authority_path}" if authority_path else ""
+            authority_note = f" from accepted seam/slice order {authority_path}" if authority_path else ""
             _fail(
-                "ci_checkpoint_plan.md references slices outside the accepted slice authority"
+                "ci_checkpoint_plan.md references seam ids outside the accepted seam/slice authority"
                 f"{authority_note}: {extra}"
             )
         actual_positions = [expected_index[slice_id] for slice_id in flattened_slices]
         if actual_positions != sorted(actual_positions):
-            authority_note = f" from accepted slice order {authority_path}" if authority_path else ""
+            authority_note = f" from accepted seam/slice order {authority_path}" if authority_path else ""
             _fail(
-                "ci_checkpoint_plan.md must preserve the relative order of slices from accepted slice authority"
+                "ci_checkpoint_plan.md must preserve the relative order of seam ids from accepted seam/slice authority"
                 f"{authority_note}; got {flattened_slices}"
             )
 
@@ -235,11 +320,11 @@ def _validate_against_authority(
     for checkpoint in checkpoints:
         count = len(checkpoint.slices)
         if count > max_n:
-            _fail(f"ci_checkpoint_plan.md checkpoint {checkpoint.checkpoint_id!r} has {count} slices; max is {max_n}")
+            _fail(f"ci_checkpoint_plan.md checkpoint {checkpoint.checkpoint_id!r} has {count} seam ids; max is {max_n}")
         if total >= min_n and count < min_n:
             _fail(
-                f"ci_checkpoint_plan.md checkpoint {checkpoint.checkpoint_id!r} has {count} slices; "
-                f"min is {min_n} (total slices={total})"
+                f"ci_checkpoint_plan.md checkpoint {checkpoint.checkpoint_id!r} has {count} seam ids; "
+                f"min is {min_n} (total seam ids={total})"
             )
 
 

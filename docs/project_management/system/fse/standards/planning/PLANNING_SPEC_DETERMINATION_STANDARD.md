@@ -109,9 +109,9 @@ Create downstream topic-focused specs when the ADR introduces or changes any of 
    - create `compatibility-spec.md`
    - must define compatibility policy, end condition, and validation evidence
 
-10) Downstream decomposition candidates
-   - when the ADR clearly implies multiple seams, record draft seam or slice-candidate docs in the manifest
-   - these are candidate downstream docs, not execution tasks
+10) Downstream seam-planning scaffolds
+   - when the ADR clearly implies multiple seams, record draft downstream seam skeletons or seam-planning docs in the manifest
+   - these are downstream planning docs, not execution tasks
 
 ## Required structure for `spec_manifest.md`
 

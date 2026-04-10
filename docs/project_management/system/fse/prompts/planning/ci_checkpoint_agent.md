@@ -55,14 +55,14 @@ Preflight (required; do first):
 
 Overlap execution model (required):
 - Phase A (start immediately; logs only):
-  - Draft checkpoint grouping and gates as scratch at `<FEATURE_DIR>/logs/CI-checkpoint/scratch.md`.
+  - Draft checkpoint seam grouping and gates as scratch at `<FEATURE_DIR>/logs/CI-checkpoint/scratch.md`.
   - Emit an orchestration handoff signal once you have a usable checkpoint outline:
     - Write or overwrite `<FEATURE_DIR>/logs/CI-checkpoint/handoff.md`.
     - Emit the initial handoff within the first 5 minutes of the run.
     - If canonical inputs are not ready yet, base the handoff on upstream handoff or scratch artifacts and clearly label assumptions as `DRAFT`.
-    - If you later change checkpoint grouping, gates, or candidate IDs, overwrite `handoff.md` and label it `UPDATED` at the top.
+    - If you later change checkpoint seam grouping, gates, or seam IDs, overwrite `handoff.md` and label it `UPDATED` at the top.
     - Include:
-      - proposed checkpoint groups,
+      - proposed checkpoint seam groups,
       - the gates to run at each checkpoint,
       - the main rationale for each boundary.
 - Phase B (staged candidate write; required):
@@ -72,16 +72,17 @@ Overlap execution model (required):
 Tracked output requirements:
 1) Write or overwrite `<FEATURE_DIR>/logs/CI-checkpoint/staged/pre-planning/ci_checkpoint_plan.md` using the template:
    - `docs/project_management/system/fse/templates/planning_pack/ci_checkpoint_plan.md.tmpl`
-2) Candidate-awareness rule:
-   - Prefer the candidate IDs from `minimal_spec_draft.md` when populating machine-readable checkpoint groups.
-   - Treat those IDs as draft planning identifiers, not execution-task identifiers.
-   - If no candidate list exists yet, you may use temporary placeholders only when clearly labeled as provisional.
+2) Draft seam-awareness rule:
+   - Prefer the draft seam IDs from `minimal_spec_draft.md` when populating machine-readable checkpoint seam groups.
+   - Prefer seam-oriented checkpoint JSON keys such as `draft_seam_ids` and `min_draft_seams_per_checkpoint` during this transitional phase. Legacy candidate and triad field names remain compatibility-only fallback behavior.
+   - Treat those seam IDs as advisory pre-planning identifiers, not execution-task identifiers.
+   - If no draft seam list exists yet, you may use temporary placeholders only when clearly labeled as provisional.
 3) Follow-ups:
    - If the pack lacks enough information to choose code-grounded boundaries, record follow-ups in:
      - the staged `ci_checkpoint_plan.md` under a `Follow-ups` section,
      - and `<FEATURE_DIR>/logs/CI-checkpoint/scratch.md` with evidence and rationale.
 4) Follow-up checklist for downstream FSE planning or decomposition:
-   - Replace provisional candidate IDs with the final downstream identifiers once they exist.
+   - Replace provisional seam IDs with the final downstream identifiers once they exist.
    - Confirm the exact platform scope and verification cadence once downstream planning stabilizes the touched surfaces.
    - Convert checkpoint intent into concrete execution wiring only in the downstream subsystem that owns execution.
 

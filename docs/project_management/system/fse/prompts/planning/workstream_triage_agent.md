@@ -48,14 +48,14 @@ Overlap execution model (required):
   - Derive an advisory planning-pressure assessment from the available FSE inputs:
     - spec breadth and contract inventory in `spec_manifest.md` or its handoff,
     - boundary count and dependency density in `impact_map.md` or its handoff,
-    - candidate skeleton shape in `minimal_spec_draft.md` or its handoff,
+    - draft seam skeleton shape in `minimal_spec_draft.md` or its handoff,
     - checkpoint grouping pressure in `ci_checkpoint_plan.md` when present.
   - Write or overwrite:
     - `<FEATURE_DIR>/logs/workstream-triage/planning_pressure_assessment.md`
   - Use that planning-pressure assessment, impact breadth, and seam boundaries to inform:
     - how many workstreams to propose,
     - where to place boundaries,
-    - whether to recommend a split or merge in the draft candidate skeleton.
+    - whether to recommend a split or merge in the draft seam skeleton.
   - Create and iteratively refine:
     - `<FEATURE_DIR>/logs/workstream-triage/workstream_triage_draft.md`
   - If present, read upstream handoff notes:
@@ -69,14 +69,14 @@ Overlap execution model (required):
   - Write or overwrite the staged candidate at `<FEATURE_DIR>/logs/workstream-triage/staged/pre-planning/workstream_triage.md`.
 
 Draft requirements:
-0) FSE workstream IDs (required):
+0) Seam-first FSE workstream IDs (required):
    - You are defining pack-internal downstream planning workstreams for FSE.
    - Every proposed workstream must have a stable ID in the heading:
-     - Format: `<CANDIDATE_PREFIX>-FWS-<slug>`
-     - Example: `WDAP-FWS-contract_surface`
-     - Canonical heading style: `### <CANDIDATE_PREFIX>-FWS-<slug> — <title>`
-   - `CANDIDATE_PREFIX` source of truth:
-     - Use the candidate prefix explicitly stated in `minimal_spec_draft.md`.
+     - Format: `<SEAM_PREFIX>-FWS-<slug>`
+     - Example: `WDAP-SEAM-FWS-contract_surface`
+     - Canonical heading style: `### <SEAM_PREFIX>-FWS-<slug> — <title>`
+   - `SEAM_PREFIX` source of truth:
+     - Use the shared feature prefix explicitly stated in `minimal_spec_draft.md`.
      - Treat the prefix as stable for the rest of pre-planning. If you believe it must change, record that as a risk or follow-up instead of renaming it.
    - `slug` rules:
      - `snake_case` only.
@@ -87,9 +87,9 @@ Draft requirements:
      - `<!-- PM_FSE_WORKSTREAM_INDEX:END -->`
    - The fenced JSON must be valid and include:
      - `index_version` (integer; set to `1`)
-     - `candidate_prefix` (string)
+     - `seam_prefix` (string; preferred machine-readable key carrying the shared feature prefix used by both draft seam IDs and workstream IDs)
      - `recommended_workstream_order` (array of workstream ids; the recommended downstream order after triage)
-     - `draft_candidate_order` (optional array copied from `minimal_spec_draft.md` when it materially differs)
+     - `draft_seam_order` (optional array copied from `minimal_spec_draft.md` when it materially differs)
      - `workstreams` (array of objects), where each object includes:
        - `id`
        - `role`
@@ -101,7 +101,8 @@ Draft requirements:
      - `depends_on` is the only hard scheduling signal.
      - `assumes` is soft-only. Do not place workstream IDs inside `assumes`.
      - `recommended_workstream_order` must enumerate the same workstream ids defined in `workstreams`, in the recommended downstream planning order.
-     - `draft_candidate_order` stays in draft candidate-id space from `minimal_spec_draft.md`. Do not place workstream ids in `draft_candidate_order`.
+     - `draft_seam_order` remains in draft seam-id space from `minimal_spec_draft.md`. Do not place workstream ids in `draft_seam_order`.
+     - Legacy compatibility keys such as `candidate_prefix` and `draft_candidate_order` may still appear in older packs, but they are no longer the preferred contract.
      - `owns` must name pack-relative docs, directories, or contract surfaces that downstream planning work is expected to author or refine. Do not claim ownership of execution artifacts.
 2) Proposed downstream planning workstreams:
    - Propose 1-8 named workstreams, or fewer when the scope is small.
@@ -124,9 +125,9 @@ Draft requirements:
     - `<FEATURE_DIR>/logs/CI-checkpoint/last_message.md`
     - `<FEATURE_DIR>/logs/workstream-triage/planning_pressure_assessment.md`
   - Reference the canonical artifacts you relied on.
-6) Candidate skeleton recommendations (required):
-   - If planning pressure, impact breadth, or seam boundaries indicate the candidate skeleton must change, propose explicit `ADD`, `SPLIT`, `MERGE`, `RENAME`, or `REORDER` recommendations in the staged candidate.
-   - Keep those recommendations advisory. This file does not become the sole authority for candidate truth.
+6) Draft seam skeleton recommendations (required):
+   - If planning pressure, impact breadth, or seam boundaries indicate the draft seam skeleton must change, propose explicit `ADD`, `SPLIT`, `MERGE`, `RENAME`, or `REORDER` recommendations in the staged candidate.
+   - Keep those recommendations advisory. This file does not become the sole authority for draft seam truth.
    - If you recommend no change, say so explicitly.
 
 Output:

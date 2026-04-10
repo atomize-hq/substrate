@@ -71,27 +71,27 @@ Content contract for `pre-planning/minimal_spec_draft.md`:
    - Reference `EXIT_CODE_TAXONOMY` and state whether this work appears to require new exit codes. Default to `no` unless the ADR compels a change.
 6) Cross-cutting seams and constraints:
    - Anything that multiple downstream docs or seams must align on, such as naming, field lists, path invariants, or ordering rules.
-7) Follow-ups for downstream FSE planning and decomposition:
+7) Follow-ups for downstream seam planning and decomposition:
    - Concrete questions to resolve, each actionable and scoped.
-8) Draft seam and slice-candidate skeleton (required):
-   - Add a section titled `## Draft seam and slice-candidate skeleton (pre-planning only)`.
+8) Draft downstream seam skeleton (required):
+   - Add a section titled `## Draft downstream seam skeleton (pre-planning only)`.
    - Purpose:
-     - Provide a draft decomposition outline that downstream FSE planning and decomposition steps can refine.
+     - Provide a draft seam outline that downstream seam planning and decomposition steps can refine.
      - Keep it intentionally minimal. Splits, merges, and boundary adjustments remain allowed later.
    - Hard rules:
-     - If `spec_manifest.md` already identifies draft seam or slice-candidate docs, reuse those IDs and names.
-     - If `spec_manifest.md` implies a baseline candidate count, treat that as the starting point and record any proposed deviation as an explicit follow-up.
-     - Use a stable, feature-derived prefix. Do not use generic `C0/C1/...`.
+     - If `spec_manifest.md` already identifies draft seams or draft seam-planning docs, reuse those IDs and names.
+     - If `spec_manifest.md` implies a baseline seam count, treat that as the starting point and record any proposed deviation as an explicit follow-up.
+     - Use a stable, feature-derived prefix. Do not use generic placeholder seam IDs.
      - Include an explicit disclaimer: `draft; may split/merge during downstream FSE planning or decomposition`.
-     - Keep it small by default. If you must choose the count yourself, target 3-8 candidates total unless the impact map clearly justifies a different size.
-   - Required fields per candidate entry:
-     - `candidate_id`
+     - Keep it small by default. If you must choose the count yourself, target 3-8 draft seams total unless the impact map clearly justifies a different size.
+   - Required fields per seam entry:
+     - `draft_seam_id`
      - `name`
      - `intent`
-     - `likely touch surfaces`
-   - Include a line that records the chosen prefix, for example `Candidate prefix (draft): ABC`.
+     - `likely owned or touched surfaces`
+   - Include a line that records the chosen shared feature prefix, for example `Draft seam prefix: ABC`.
    - Note for downstream steps:
-     - `ci_checkpoint_plan.md` may use this candidate list when proposing checkpoint groups.
+     - `ci_checkpoint_plan.md` may use this draft seam list when proposing checkpoint groups.
      - `workstream_triage.md` may recommend edits to this skeleton, but it does not own this file.
 
 Closeout micro-lint (required for `single` and `phase_b` runs):
