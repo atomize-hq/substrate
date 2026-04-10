@@ -1,0 +1,85 @@
+# {{FEATURE}} — impact map
+
+This file replaces the legacy `integration_map.md`.
+
+Authoring standards:
+- `docs/project_management/system/fse/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
+- `docs/project_management/system/fse/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
+
+## Inputs
+- Feature directory: `{{FEATURE_DIR}}`
+- ADR(s):
+  - <add exact ADR path(s)>
+- Spec manifest:
+  - `{{FEATURE_DIR}}/spec_manifest.md`
+
+## Touch set (explicit)
+
+List every file expected to be created/edited/deprecated/removed. Use repo-relative paths.
+
+Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
+- Each entry is a top-level bullet containing exactly one backticked path token.
+- Empty section is exactly `- None` (case-sensitive, no extra text).
+- The Touch Set must include at least one non-None entry total across all sections.
+- To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="{{FEATURE_DIR}}"` (strict packs only).
+
+### Create
+- None
+
+### Edit
+- None
+
+### Deprecate
+- None
+
+### Delete
+- None
+
+## Cascading implications (behavior/UX)
+
+For each externally visible change, list:
+- direct impact (what the operator experiences),
+- cascading impact (what else must change to stay coherent),
+- contradiction risks (what existing semantics would conflict).
+
+### CLI / UX
+- Change:
+  - Direct impact:
+  - Cascading impact:
+  - Contradiction risks:
+
+### Config / env vars / paths
+- Change:
+  - Direct impact:
+  - Cascading impact:
+  - Contradiction risks:
+
+### Policy / isolation / security posture
+- Change:
+  - Direct impact:
+  - Cascading impact:
+  - Contradiction risks:
+
+## Cross-queue scan (ADRs + Planning Packs)
+
+List overlaps/conflicts with other in-flight work and resolve them deterministically.
+
+### Relevant ADRs (queued/unimplemented)
+- ADR:
+  - Overlap surfaces:
+  - Conflict: yes/no
+  - Resolution (explicit):
+
+### Relevant Planning Packs (queued/unimplemented)
+- Planning Pack:
+  - Overlap surfaces:
+  - Conflict: yes/no
+  - Resolution (explicit):
+
+## Follow-ups (explicit)
+
+- Decision Register entries required:
+  - <DR id/title> — <what it decides>
+- Spec updates required (if any):
+  - `{{FEATURE_DIR}}/spec_manifest.md` — <change>
+  - <spec doc> — <change>
