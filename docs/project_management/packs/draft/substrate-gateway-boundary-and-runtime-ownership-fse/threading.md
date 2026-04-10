@@ -2,18 +2,25 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-  - This is inferred from the accepted planning spine: command boundary and ownership language must be fixed before schema, policy, runtime, or docs-validation seams can safely reuse it.
-- **Next seam**: `SEAM-2`
-  - This seam is the immediate downstream consumer because it turns the locked operator boundary into the authoritative machine-readable status and policy-evaluation surfaces.
-- **Future seams**: `SEAM-3`, `SEAM-4`
-  - Typed runtime/parity and validation lock-in remain future seams because they should consume published upstream contracts instead of carrying speculative detail now.
+- **Active seam**: `null`
+  - No active seam remains inside this pack after `SEAM-4` landed and the seam-exit gate passed.
+- **Next seam**: `null`
+  - No additional safe queued seam remains inside this pack.
+- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`, `SEAM-4`
+  - `SEAM-1` has landed with a passed seam-exit gate and left the forward planning window.
+  - `SEAM-2` has landed with a passed seam-exit gate and left the forward planning window.
+  - `SEAM-3` has landed with a passed seam-exit gate and left the forward planning window.
+  - `SEAM-4` has landed with a passed seam-exit gate and left the forward planning window.
 
 Horizon policy for this extracted pack:
 
-- only the active seam gets authoritative downstream deep planning by default
-- the next seam may later receive seam-local review and only provisional deeper planning
-- the future seams remain seam briefs only until upstream closeouts and published threads exist
+- only an active seam gets authoritative downstream deep planning by default
+- there is no queued `next` seam because this pack has no remaining forward-window seam
+- `SEAM-1` has now landed with a passed seam-exit gate and left the forward planning window
+- `SEAM-2` has now landed with a passed seam-exit gate and left the forward planning window
+- `SEAM-3` has now landed with a passed seam-exit gate and left the forward planning window
+- `SEAM-4` has now landed with a passed seam-exit gate and left the forward planning window
+- the remaining future seams stay landed seam briefs unless a downstream pack explicitly reopens them
 
 ## Contract registry
 
@@ -64,40 +71,40 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`, `SEAM-4`
   - **Carried contract IDs**: `C-01`
   - **Purpose**: publish one operator boundary so every downstream seam inherits the same command family, ownership split, stable env names, and exit taxonomy.
-  - **State**: `defined`
+  - **State**: `revalidated`
   - **Revalidation trigger**: command spelling, absent-state wording, stable env names, exit-code boundaries, or the Substrate versus `substrate-gateway` ownership split changes.
-  - **Satisfied by**: ADR-0040 user contract language, `pre-planning/spec_manifest.md`, and `pre-planning/minimal_spec_draft.md` already define the intended boundary strongly enough for seam-local planning.
-  - **Notes**: this is the first critical-path handoff and the main protection against archived ADR-0023 command drift.
+  - **Satisfied by**: `governance/seam-1-closeout.md` records the landed operator contract, command-family proof, absent-state evidence, and stale triggers. `threaded-seams/seam-2-status-schema-and-policy-evaluation-surface/review.md` first revalidated that handoff for downstream planning, and `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` now revalidates it again for the terminal conformance seam.
+  - **Notes**: this is the first critical-path handoff and the main protection against archived ADR-0023 command drift. The thread remains active because `SEAM-4` still needs the same operator boundary to stay visible in playbook, docs, and quality-gate evidence.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-3`, `SEAM-4`
   - **Carried contract IDs**: `C-02`
   - **Purpose**: keep machine-readable status, wiring discovery, and ADR-0042 boundary semantics single-source before runtime and docs consume them.
-  - **State**: `defined`
+  - **State**: `revalidated`
   - **Revalidation trigger**: top-level JSON shape, `client_wiring.*` field family, omission rules, or the boundary against ADR-0042 additive metadata changes.
-  - **Satisfied by**: `pre-planning/spec_manifest.md`, `pre-planning/impact_map.md`, and the accepted `SGBRO-PWS-schema_inventory` lane in `pre-planning/workstream_triage.md`.
-  - **Notes**: this thread is where `status --json` becomes concrete enough for runtime and docs planning without yet fixing implementation-specific transport details.
+  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed schema contract, durable contract mirror, and downstream stale triggers for the status envelope and `client_wiring.*` family. `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` revalidates that handoff against the current manual-testing, docs, and quality-gate touch set.
+  - **Notes**: this thread now carries the revalidated machine-readable status and wiring contract into the active terminal conformance seam.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-3`, `SEAM-4`
   - **Carried contract IDs**: `C-03`
   - **Purpose**: keep fail-closed placement, secret delivery, and gateway-local non-trust rules single-source across runtime and validation seams.
-  - **State**: `defined`
+  - **State**: `revalidated`
   - **Revalidation trigger**: reused ADR-0027 keys, no-host-fallback posture, exit boundary taxonomy, or trust-boundary rules change.
-  - **Satisfied by**: `pre-planning/spec_manifest.md`, `pre-planning/minimal_spec_draft.md`, and the policy/isolation section of `pre-planning/impact_map.md`.
-  - **Notes**: this thread keeps policy evaluation from drifting into a second control plane.
+  - **Satisfied by**: `governance/seam-2-closeout.md` records the landed policy contract, durable contract mirror, and downstream stale triggers for fail-closed placement and non-trust rules. `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` revalidates that handoff against the current validation and doc-lock-in scope.
+  - **Notes**: this thread now carries the revalidated policy-evaluation and trust-boundary contract into the active terminal conformance seam.
 
 - **Thread ID**: `THR-04`
   - **Producer seam**: `SEAM-3`
   - **Consumer seam(s)**: `SEAM-4`
   - **Carried contract IDs**: `C-04`
   - **Purpose**: publish the typed lifecycle/status transport and parity evidence contract that cross-doc validation and quality-gate work will lock in.
-  - **State**: `defined`
+  - **State**: `revalidated`
   - **Revalidation trigger**: typed world-agent endpoint shape, shell/client integration path, allowed divergence list, or Linux/macOS/Windows evidence requirements change.
-  - **Satisfied by**: the selected Option A in `pre-planning/impact_map.md`, the accepted `SGBRO-PWS-world_agent_profile` lane in `pre-planning/workstream_triage.md`, and the parity requirements in `pre-planning/ci_checkpoint_plan.md`.
-  - **Notes**: this thread deliberately excludes provisioning changes, which stay out of scope for this pack.
+  - **Satisfied by**: `governance/seam-3-closeout.md` records the landed `C-04` publication, the S1 typed runtime boundary in `8c0bd439`, the S2 parity evidence update in `4511b3a5`, the durable contract mirror in `docs/contracts/substrate-gateway-runtime-parity.md`, and the targeted verification reruns for the shared client, the `gateway_runtime_parity` target-local route-shape tests, and the shell gateway tests; host-local runtime-dependent `world-agent` cases self-skipped outside Linux/VM support. `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` revalidates that handoff for the active conformance seam.
+  - **Notes**: this thread now carries the revalidated typed lifecycle/status and parity-evidence contract into `SEAM-4`. Provisioning changes remain out of scope for this pack and were not pulled into the published contract.
 
 ## Dependency graph
 
@@ -116,11 +123,11 @@ flowchart LR
 ## Critical path
 
 1. `SEAM-1` first:
-   - the operator boundary must be unambiguous before downstream schema, policy, runtime, or docs work can safely consume it
-   - this seam is the main guardrail against archived command spellings and ownership drift
+   - the operator boundary had to become unambiguous before downstream schema, policy, runtime, or docs work could safely consume it
+   - this seam published the main guardrail against archived command spellings and ownership drift
 2. `SEAM-2` second:
-   - once the operator boundary is fixed, the status schema and policy-evaluation surface can become the next authoritative contract layer
-   - this seam is the main guardrail against schema drift and fail-closed drift
+   - once the operator boundary was fixed and published, the status schema and policy-evaluation surface could become the active authoritative contract layer
+   - this seam is now the main guardrail against schema drift and fail-closed drift
 3. `SEAM-3` third:
    - runtime transport and platform parity should consume published status/policy truth rather than invent it
    - this seam is the main guardrail against shell-probe and platform-private behavior becoming contract

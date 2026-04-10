@@ -16,13 +16,17 @@
 
 This ADR is a successor to ADR-0023 and should be read as an ownership clarification, not a rewrite of the
 underlying gateway capability.
+The committed operator contract that downstream slices should treat as live source of truth is
+`docs/contracts/substrate-gateway-operator-contract.md`.
 
 - Superseded intent:
   - `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
 - Foundational config/policy surface:
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md`
-  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
+  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
+- Committed operator contract:
+  - `docs/contracts/substrate-gateway-operator-contract.md`
 - Foundational output/routing and trace contracts:
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
@@ -90,6 +94,7 @@ ADR_BODY_SHA256: f912ab8be5245a70ba603bc6547c3b62e05c59492af2c7c9d27c3d898f664a5
     - `SUBSTRATE_LLM_OPENAI_BASE_URL`
     - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`
   - These values point to Substrate-managed gateway endpoints, not upstream provider endpoints.
+  - Those env values are the only stable non-secret wiring exports in scope here, and they are intended for in-world clients rather than direct host reachability.
   - These base URLs are intended for in-world reachability (clients/backends executing inside the world boundary), not as a guarantee of direct host reachability.
 - Secret delivery contract boundary:
   - This ADR intentionally preserves only the ownership rule that Substrate owns policy-gated host secret sourcing and host-to-world secret delivery for integrated operation.
@@ -101,6 +106,7 @@ ADR_BODY_SHA256: f912ab8be5245a70ba603bc6547c3b62e05c59492af2c7c9d27c3d898f664a5
   - `3`: transient runtime failure
   - `4`: required gateway/world component unavailable
   - `5`: policy or safety failure
+  - Exit `4` is the absent-state result for the gateway entrypoints. Do not collapse it into invalid integration, transient failure, or policy/safety failure.
 
 ### Config
 - Files and locations (precedence):

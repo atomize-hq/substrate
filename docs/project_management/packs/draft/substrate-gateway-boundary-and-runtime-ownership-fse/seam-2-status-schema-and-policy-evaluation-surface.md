@@ -2,18 +2,17 @@
 seam_id: SEAM-2
 seam_slug: status-schema-and-policy-evaluation-surface
 type: integration
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: landed
+execution_horizon: future
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads:
     - THR-01
-    - THR-02
-    - THR-03
   stale_triggers:
     - `status --json` top-level shape changes
     - `client_wiring.*` family or absence semantics change
@@ -21,16 +20,16 @@ basis:
     - fail-closed placement or secret-delivery trust-boundary rules change
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -72,8 +71,7 @@ open_remediations: []
   - gateway-local config/admin/persistence cannot become trusted policy inputs
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-1`
-    - `THR-01`
+    - `THR-01` must remain published and revalidated from `SEAM-1`
   - Transitive blockers:
     - stale link corrections in ADR-0040 and adjacent docs may still be needed to keep downstream schema/policy docs aligned
   - Direct consumers:
@@ -118,7 +116,7 @@ open_remediations: []
   - Safety depends on failing closed and preserving host-secret and gateway-local non-trust boundaries.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `next` because it is the immediate downstream consumer of the operator boundary and the last seam that should receive provisional deeper planning before future seams stay brief-only.
+    - `future` because this seam has landed with a passed seam-exit gate and left the forward planning window.
   - Which threads matter most
     - `THR-01`
     - `THR-02`

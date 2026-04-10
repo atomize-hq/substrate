@@ -3,10 +3,10 @@
 use crate::service::WorldAgentService;
 use agent_api_types::{
     ApiError, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
-    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
-    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1,
-    WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1, WorldDoctorReportV1,
-    WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
+    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, PendingDiffClearRequestV1,
+    PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
+    PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1,
+    WorldDoctorReportV1, WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
     WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1, WorldFsReadRequestV1,
     WorldFsReadResponseV1,
 };
@@ -276,6 +276,57 @@ pub async fn world_fs_read(
             ApiErrorResponse(ApiError::Internal(e.to_string()))
         }
     })?;
+
+    Ok(ResponseJson(response))
+}
+
+/// Return the typed gateway lifecycle/status surface.
+pub async fn gateway_status(
+    State(service): State<WorldAgentService>,
+    body: Bytes,
+) -> Result<ResponseJson<GatewayLifecycleResponseV1>, ApiErrorResponse> {
+    let payload: Value = serde_json::from_slice(&body)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let req: GatewayLifecycleRequestV1 = serde_json::from_value(payload)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let response = service
+        .gateway_status(req)
+        .await
+        .map_err(|e| ApiErrorResponse(ApiError::Internal(e.to_string())))?;
+
+    Ok(ResponseJson(response))
+}
+
+/// Return the typed gateway lifecycle sync surface.
+pub async fn gateway_sync(
+    State(service): State<WorldAgentService>,
+    body: Bytes,
+) -> Result<ResponseJson<GatewayLifecycleResponseV1>, ApiErrorResponse> {
+    let payload: Value = serde_json::from_slice(&body)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let req: GatewayLifecycleRequestV1 = serde_json::from_value(payload)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let response = service
+        .gateway_sync(req)
+        .await
+        .map_err(|e| ApiErrorResponse(ApiError::Internal(e.to_string())))?;
+
+    Ok(ResponseJson(response))
+}
+
+/// Return the typed gateway lifecycle restart surface.
+pub async fn gateway_restart(
+    State(service): State<WorldAgentService>,
+    body: Bytes,
+) -> Result<ResponseJson<GatewayLifecycleResponseV1>, ApiErrorResponse> {
+    let payload: Value = serde_json::from_slice(&body)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let req: GatewayLifecycleRequestV1 = serde_json::from_value(payload)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let response = service
+        .gateway_restart(req)
+        .await
+        .map_err(|e| ApiErrorResponse(ApiError::Internal(e.to_string())))?;
 
     Ok(ResponseJson(response))
 }

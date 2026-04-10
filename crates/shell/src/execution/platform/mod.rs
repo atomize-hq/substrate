@@ -203,6 +203,10 @@ pub(crate) fn handle_world_command(cmd: &WorldCmd, cli: &Cli) -> Result<()> {
             );
             std::process::exit(code);
         }
+        WorldAction::Gateway(opts) => {
+            let code = commands::world_gateway::run(opts);
+            std::process::exit(code);
+        }
         WorldAction::Enable(opts) => {
             commands::world_enable::run_enable(opts)?;
         }

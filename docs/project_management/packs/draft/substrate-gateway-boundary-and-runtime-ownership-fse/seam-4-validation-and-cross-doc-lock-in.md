@@ -2,14 +2,17 @@
 seam_id: SEAM-4
 seam_slug: validation-and-cross-doc-lock-in
 type: conformance
-status: proposed
+status: landed
 execution_horizon: future
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
+    - governance/seam-3-closeout.md
   required_threads:
     - THR-01
     - THR-02
@@ -21,16 +24,16 @@ basis:
     - docs/CONFIGURATION, docs/USAGE, docs/WORLD, or docs/TRACE restate stale ownership or schema wording
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -71,11 +74,7 @@ open_remediations: []
   - this seam does not redefine upstream contracts; it locks conformance around them
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-3`
-    - `THR-01`
-    - `THR-02`
-    - `THR-03`
-    - `THR-04`
+    - none after the seam-1, seam-2, and seam-3 closeouts published the contracts this seam consumes
   - Transitive blockers:
     - none beyond the upstream contract and runtime seams
   - Direct consumers:
@@ -94,7 +93,7 @@ open_remediations: []
   - `docs/TRACE.md`
 - **Verification**:
   - This seam consumes upstream contracts `C-01`, `C-02`, `C-03`, and `C-04`; verification may depend on accepted upstream evidence for command semantics, schema ownership, policy boundaries, and parity guarantees.
-  - This seam does not introduce a new durable contract surface. At seam-brief depth, verification is the conformance plan becoming concrete enough for seam-local planning and implementation: review checklist, doc touch set, checkpoint wiring, and quality-gate evidence shape.
+  - This seam does not introduce a new durable contract surface. Pre-exec verification now passes because the upstream closeouts are landed, all required threads are revalidated, and the seam-local review and slices make the conformance touch set concrete enough for execution without redefining upstream contracts.
   - Later seam-local verification should prove:
     - every ADR-0040 surface has one and only one owner
     - manual playbook assertions match the landed contracts
@@ -119,11 +118,11 @@ open_remediations: []
   - De-risk plan:
     - track link normalization as explicit conformance evidence or carried-forward follow-up, not as an implicit cleanup hope
 - **Rollout / safety**:
-  - This seam should only activate after the upstream contracts and runtime/parity expectations are concrete enough to verify directly.
-  - Safety comes from making drift visible before promotion rather than after downstream packs inherit stale wording.
+  - This seam has now landed and left the forward planning window after recording conformance evidence against the upstream contracts and runtime/parity expectations.
+  - Safety came from making drift visible before promotion rather than after downstream packs inherited stale wording.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `future` because conformance only makes sense once upstream seams have published authoritative truth to compare against.
+    - `future` because the seam has landed and no longer occupies the forward planning window.
   - Which threads matter most
     - `THR-01`
     - `THR-02`

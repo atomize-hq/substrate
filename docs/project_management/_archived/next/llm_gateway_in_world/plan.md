@@ -1,5 +1,8 @@
 # plan — llm_gateway_in_world
 
+Historical evidence only. This plan captures ADR-0023-era implementation intent and does not define the current operator boundary.
+The live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
+
 Goal: Make ADR-0023 execution-ready by defining the minimal, explicit contracts required to implement an in-world LLM gateway without reshaping config/policy surfaces beyond ADR-0027.
 
 Scope:
@@ -18,4 +21,3 @@ Steps:
 3. Specify request/response redaction + logging defaults.
 4. Specify attribution fields and trace event family naming (with Phase 8 circle-back note).
 5. Draft manual testing playbook + smoke expectations (later; once code exists).
-

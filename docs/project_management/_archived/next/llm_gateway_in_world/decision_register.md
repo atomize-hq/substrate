@@ -4,7 +4,8 @@ Standard:
 - `docs/project_management/standards/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md` (Decision Register Standard)
 
 Scope:
-- This decision register supports `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`.
+- Historical evidence only. This decision register supported `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md` and does not define the current operator boundary.
+- The live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
 - Each decision is recorded as exactly two viable options (A/B) with explicit tradeoffs and a single selection.
 
 ---

@@ -260,6 +260,9 @@ fn build_router(service: WorldAgentService) -> Router {
             post(handlers::pending_diff_reconcile),
         )
         .route("/v1/world_fs/read", post(handlers::world_fs_read))
+        .route("/v1/gateway/status", post(handlers::gateway_status))
+        .route("/v1/gateway/sync", post(handlers::gateway_sync))
+        .route("/v1/gateway/restart", post(handlers::gateway_restart))
         .route("/v1/execute/stream", post(handlers::execute_stream))
         .route("/v1/stream", get(handlers::stream))
         .route("/v1/trace/:span_id", get(handlers::get_trace))

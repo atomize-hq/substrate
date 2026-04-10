@@ -95,6 +95,14 @@ pub enum SocketResponse {
         scopes: Vec<String>,
         records: Arc<Mutex<Vec<JsonValue>>>,
     },
+    /// Responds to the typed gateway lifecycle routes.
+    GatewayLifecycle {
+        status: JsonValue,
+        sync: JsonValue,
+        restart: JsonValue,
+    },
+    /// Responds to the typed gateway lifecycle routes with an HTTP error.
+    GatewayLifecycleHttpError { status: u16, body: String },
     /// Accepts connections but never returns a response (simulates a stuck
     /// systemd-managed socket where the service failed to start).
     Silent,
@@ -559,6 +567,36 @@ impl AgentSocket {
                                             );
                                         }
                                     }
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
+                                }
+                            }
+                            SocketResponse::GatewayLifecycle {
+                                status,
+                                sync,
+                                restart,
+                            } => {
+                                if first_line.starts_with("POST /v1/gateway/status") {
+                                    write_response(&mut stream, &status.to_string());
+                                } else if first_line.starts_with("POST /v1/gateway/sync") {
+                                    write_response(&mut stream, &sync.to_string());
+                                } else if first_line.starts_with("POST /v1/gateway/restart") {
+                                    write_response(&mut stream, &restart.to_string());
+                                } else {
+                                    let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
+                                }
+                            }
+                            SocketResponse::GatewayLifecycleHttpError { status, body } => {
+                                if first_line.starts_with("POST /v1/gateway/status")
+                                    || first_line.starts_with("POST /v1/gateway/sync")
+                                    || first_line.starts_with("POST /v1/gateway/restart")
+                                {
+                                    write_status_response(
+                                        &mut stream,
+                                        *status,
+                                        http_reason_phrase(*status),
+                                        body,
+                                    );
                                 } else {
                                     let _ = stream.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
                                 }

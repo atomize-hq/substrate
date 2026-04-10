@@ -4,8 +4,8 @@ pack_version: v1
 pack_status: extracted
 source_ref: docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/pre-planning/
 execution_horizon:
-  active_seam: SEAM-1
-  next_seam: SEAM-2
+  active_seam: null
+  next_seam: null
 ---
 
 # Scope Brief - substrate-gateway-boundary-and-runtime-ownership
@@ -30,7 +30,7 @@ execution_horizon:
   - New config families, new policy file families, or gateway-local config/admin/persistence as trusted Substrate inputs.
   - Redefining ADR-0027 schema ownership, ADR-0017 event routing, ADR-0028 trace vocabulary, ADR-0041 runtime internals, or ADR-0042 additive identity-tuple metadata outside `client_wiring.*`.
   - Provisioning-script changes, backend warm-flow changes, or a public remote or multi-tenant gateway design.
-  - Slice files, threaded seam reviews, or authoritative sub-slices for future seams.
+- Slice files, threaded seam reviews, or authoritative sub-slices for follow-on seams.
 - **Success criteria**:
   - One authoritative operator boundary exists for the command family, ownership split, stable wiring env semantics, and exit-code mapping.
   - `status --json` stays the single Substrate-owned machine-readable wiring authority, with a locked `client_wiring.*` family and explicit absence semantics.
@@ -56,9 +56,9 @@ execution_horizon:
   - `crates/shell`, `crates/world-agent`, `crates/agent-api-types`, `crates/agent-api-client`
   - `docs/CONFIGURATION.md`, `docs/USAGE.md`, `docs/WORLD.md`, `docs/TRACE.md`
 - **Known unknowns / risks**:
-  - The exact typed world-agent lifecycle/status endpoint surface is still only bounded by pre-planning selection of Option A and needs seam-local review later.
+  - Manual validation, docs, and quality-gate artifacts can still drift from the now-landed operator, schema, policy, and runtime/parity contracts.
   - The exact additive-field boundary between `client_wiring.*` and ADR-0042 metadata must stay explicit or later docs will drift.
-  - Provisioning remains deliberately out of scope for this pack; later runtime work must consume this pack’s contract before changing platform scripts.
+  - Provisioning remains deliberately out of scope for this pack; later runtime work must continue consuming this pack’s landed contract set before changing platform scripts.
   - ADR-0040 and adjacent docs still carry stale `packs/active/...` references that can reintroduce ambiguity during downstream planning.
   - The ADR-0040 lift vector still has an invalid `risk.unknowns_high` field type, so intake-derived sizing remains unavailable until corrected.
 - **Assumptions**:
@@ -66,4 +66,4 @@ execution_horizon:
   - The accepted five-slice spine in `pre-planning/workstream_triage.md` is the best proxy for the feature’s critical path, even though this seam pack intentionally stays one level above slice planning.
   - Linux, macOS, and Windows remain the required parity platforms.
   - No hidden requirements require a separate provisioning seam inside this pack.
-  - Canonical contract references can be reserved under `docs/contracts/` even though this extraction does not create or populate those descriptive documents.
+  - Canonical contract references now live under `docs/contracts/` and remain the descriptive durable contract surfaces for this pack.

@@ -13,6 +13,7 @@
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/slices/SGBRO0/SGBRO0-spec.md`
 - External source-of-truth ownership remains with:
   - ADR-0027 and `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/*` for config and policy schema ownership
+  - `docs/contracts/substrate-gateway-operator-contract.md` for the committed operator boundary wording
   - ADR-0017 for structured event routing and output-class separation
   - ADR-0028 for canonical trace vocabulary and correlation semantics
   - ADR-0041 for gateway runtime internals and backend-adapter identity
@@ -60,7 +61,7 @@
 - Pin the exact field list and absence semantics for `status --json`, including the hard boundary between `client_wiring.*` and ADR-0042 metadata.
 - Pin the exact CLI text-output posture for `status`, `sync`, and `restart`, including the rule for abbreviated human-readable wiring versus full JSON wiring.
 - Pin the exact world-agent/runtime transport decision for lifecycle and status operations and place the contract wording in the owning spec.
-- Correct ADR-0040 related-doc references from `packs/active/llm_and_agent_config_policy_surface/*` to `packs/implemented/llm_and_agent_config_policy_surface/*`.
+- ADR-0040 related-doc references now point at `packs/implemented/llm_and_agent_config_policy_surface/*`; keep them aligned if the external owner moves again.
 - Decide whether provisioning evidence remains deferred to a later runtime pack or enters this pack as explicit planning scope.
 
 ## Draft slice skeleton (pre-planning only)

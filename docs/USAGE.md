@@ -232,6 +232,12 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 
 - `substrate host doctor [--json]` – host readiness for world routing (host prerequisites + transport readiness)
 - `substrate world doctor [--json]` – world readiness report (includes host doctor + world-agent facts)
+- `substrate world gateway sync|status|restart` – operator gateway lifecycle/status entrypoints.
+- `substrate world gateway status` is the stable operator entrypoint for gateway availability and discovery.
+- `substrate world gateway status --json` is the authoritative machine-readable status surface for that entrypoint.
+- Human-readable `substrate world gateway status` may abbreviate, but it does not redefine the machine-readable meaning.
+- `SUBSTRATE_LLM_OPENAI_BASE_URL` and `SUBSTRATE_LLM_ANTHROPIC_BASE_URL` are the stable non-secret wiring exports; they point to Substrate-managed gateway endpoints for in-world clients, not upstream provider endpoints or a direct-host reachability guarantee.
+- Exit `4` is the absent-state result for these gateway entrypoints; `2`, `3`, and `5` keep their distinct meanings for invalid integration, transient runtime failure, and policy/safety failure.
 - `substrate --no-world ...` – run commands directly on the host (no isolation)
 - `substrate --world ...` – force world isolation for a single invocation even
   when install/config/env disables it (metadata remains unchanged)

@@ -1,10 +1,11 @@
 # impact_map — llm_gateway_in_world
 
-Placeholder impact map for ADR-0023. Will be expanded when Phase 4 planning is hardened.
+Historical evidence only. This placeholder impact map preserves ADR-0023-era planning and does not define the current operator boundary.
+The live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
 
 Primary components (anticipated):
 - `crates/world-agent` (supervision/transport to in-world gateway)
-- `crates/shell` (CLI: `substrate world status|sync gateway`, client wiring output, explain surfaces)
+- `crates/shell` (CLI: historical `substrate world status|sync gateway`, client wiring output, explain surfaces)
 - `crates/broker` (policy gates: allowlist + fail-closed routing + require-approval)
 - `crates/trace` / `crates/common` (structured events/spans)
 - new gateway/manager crates (TBD by implementation plan)

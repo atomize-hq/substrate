@@ -1,8 +1,9 @@
 # contract — llm_gateway_in_world
 
-This document is the operator-facing contract summary for ADR-0023.
+Historical evidence only. This document preserves the ADR-0023-era operator contract and does not define the current operator boundary.
+The live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
 
-Authoritative inputs:
+Historical inputs:
 - ADR: `docs/project_management/adrs/draft/ADR-0023-in-world-llm-gateway-front-door.md`
 - Config/policy surface: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
 - Output/event routing contract: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
@@ -22,7 +23,7 @@ Authoritative inputs:
 - Secrets are provided via environment-variable injection (see `docs/project_management/_archived/next/llm_gateway_in_world/decision_register.md` DR-0007).
 - Inventory/config MAY reference env var *names* only (e.g., `OPENAI_API_KEY`), never values.
 - Delivery mechanism:
-  - The gateway lifecycle is owned by the world subsystem. v1 command surface:
+  - The gateway lifecycle is owned by the world subsystem. Historical v1 command surface:
     - `substrate world sync gateway`
     - `substrate world sync gateway --restart`
   - The sync/restart path gathers the required env var values from the host process environment and passes them to the world-agent as part of the in-world spawn request for the gateway/engine.
@@ -43,7 +44,7 @@ Authoritative inputs:
   - `net_allowed` (egress allowlist; still authoritative)
 
 ## Client wiring
-- `substrate world status gateway` is the authoritative client wiring surface.
+- `substrate world status gateway` is the historical client wiring surface for ADR-0023-era planning.
   - Default output: status/health (no wiring exports).
   - `--debug`: prints the required exports (base URLs) to route OpenAI/Anthropic-compatible clients through Substrate.
   - `--json`: always includes non-secret `client_wiring.*` fields.

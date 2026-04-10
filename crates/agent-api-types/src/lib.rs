@@ -823,6 +823,37 @@ fn world_fs_read_response_v1_default_schema_version() -> u32 {
     1
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GatewayLifecycleRequestV1 {
+    pub profile: Option<String>,
+    pub cwd: Option<String>,
+    pub env: Option<HashMap<String, String>>,
+    pub agent_id: String,
+    pub policy_snapshot: PolicySnapshotV3,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_network: Option<WorldNetworkRoutingV1>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GatewayStatusV1 {
+    Available,
+    Unavailable,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GatewayClientWiringV1 {
+    pub openai_base_url: String,
+    pub anthropic_base_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GatewayLifecycleResponseV1 {
+    pub status: GatewayStatusV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_wiring: Option<GatewayClientWiringV1>,
+}
+
 /// Streaming frame describing incremental execution output.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::large_enum_variant)]

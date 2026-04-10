@@ -24,23 +24,29 @@ Start here:
 
 Execution horizon:
 
-- Active seam: `SEAM-1`
-- Next seam: `SEAM-2`
+- Active seam: `null`
+- Next seam: `null`
+- Future seam(s): `SEAM-1`, `SEAM-2`, `SEAM-3`, `SEAM-4`
 
 Horizon inference:
 
-- `SEAM-1` is inferred as the active seam because every downstream surface depends on one authoritative operator boundary for command spelling, absent-state behavior, exit taxonomy, stable wiring semantics, and the Substrate versus `substrate-gateway` ownership split.
-- `SEAM-2` is inferred as the next seam because the status schema and policy-evaluation surface can be bounded immediately after the operator contract is locked, and the pre-planning pack already narrows that work to one schema/policy inventory seam.
-- `SEAM-3` and `SEAM-4` stay future seams because typed world-agent/runtime parity and cross-doc validation should consume published upstream contracts rather than force speculative deeper planning now.
+- `SEAM-1` has landed with a passed seam-exit gate and remains outside the forward planning window.
+- `SEAM-2` has landed with a passed seam-exit gate and published the schema and policy handoff for downstream consumers.
+- `SEAM-3` has now landed with a passed seam-exit gate and published the typed runtime/parity handoff for downstream consumers.
+- `SEAM-4` has now landed with a passed seam-exit gate and left the forward planning window.
+- No additional safe `next` seam remains inside this pack, so the forward window is now closed.
 
 Policy:
 
-- only the active seam is eligible for authoritative downstream sub-slices by default
-- the next seam may later receive seam-local review + slices, and only provisional deeper planning
-- the next seam is likely to need only spike-grade provisional work around exact field tables and decision tables rather than another broad seam split
+- only an active seam is eligible for authoritative downstream deep planning by default
+- there is no queued `next` seam because this pack has no remaining forward-window target
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that own undefined contract boundaries may reserve `S00` as a contract-definition boundary slice once seam-local planning begins
-- future seams remain seam briefs
+- `SEAM-1` has now landed with a passed seam-exit gate and left the forward planning window
+- `SEAM-2` has now landed with a passed seam-exit gate and left the forward planning window
+- `SEAM-3` has now landed with a passed seam-exit gate and left the forward planning window
+- `SEAM-4` has now landed with a passed seam-exit gate and left the forward planning window
+- future seams remain landed seam briefs unless a downstream pack explicitly reopens them
 - canonical contract docs live in `docs/contracts/` and must remain descriptive-only
 
 Source-pack crosswalk:

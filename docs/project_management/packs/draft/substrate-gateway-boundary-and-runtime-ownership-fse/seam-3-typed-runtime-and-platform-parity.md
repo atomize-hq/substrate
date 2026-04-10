@@ -2,36 +2,39 @@
 seam_id: SEAM-3
 seam_slug: typed-runtime-and-platform-parity
 type: platform
-status: proposed
+status: landed
 execution_horizon: future
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
   required_threads:
     - THR-01
     - THR-02
     - THR-03
-    - THR-04
   stale_triggers:
     - typed world-agent endpoint ownership changes
+    - published `status --json` envelope or `client_wiring.*` semantics change
+    - published fail-closed policy or trust-boundary rules change
     - shell-side exec probing is reintroduced
     - Linux/macOS/Windows parity guarantees or allowed divergence list changes
     - provisioning is pulled back into this pack
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -70,9 +73,7 @@ open_remediations: []
   - parity docs may describe allowed divergence, but they must not turn those divergences into separate user contracts
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-2`
-    - `THR-02`
-    - `THR-03`
+    - none after `SEAM-2` closeout published `THR-02` and `THR-03`
   - Transitive blockers:
     - `SEAM-1`
     - `THR-01`
@@ -92,7 +93,7 @@ open_remediations: []
   - `docs/WORLD.md`
 - **Verification**:
   - This seam consumes upstream contracts `C-01`, `C-02`, and `C-03`; verification may depend on accepted upstream evidence for command behavior, status schema, and fail-closed policy rules.
-  - This seam produces owned contract `C-04`. At seam-brief depth, verification is the runtime/parity contract becoming concrete enough for seam-local planning and implementation: typed surface ownership, host/backend call path, parity guarantees, divergence list, and required evidence.
+  - This seam produces owned contract `C-04`. The contract baseline and owner execution checklist now live in `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`, `docs/contracts/substrate-gateway-runtime-parity.md`, and the threaded `S00` owner slice, so the remaining work is execution and publication rather than pre-exec contract discovery.
   - Later seam-local verification should prove:
     - the typed world-agent path is authoritative for lifecycle/status operations
     - shell and shared clients consume the same runtime contract
@@ -117,11 +118,11 @@ open_remediations: []
   - De-risk plan:
     - require parity evidence to be part of the seam-local review and closeout, not an afterthought
 - **Rollout / safety**:
-  - This seam should not activate until the upstream status and policy surfaces are published; otherwise runtime details will hard-code provisional semantics.
+  - This seam has landed with a passed seam-exit gate and left the forward planning window.
   - Safety depends on keeping fail-closed and non-trust boundaries inherited from upstream contracts rather than re-deciding them locally.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `future` because typed runtime/parity planning should consume published upstream contracts instead of turning current pre-planning assumptions into implementation commitments too early.
+    - `future` because the seam has landed with a passed seam-exit gate and published `THR-04` for the terminal conformance seam.
   - Which threads matter most
     - `THR-02`
     - `THR-03`
@@ -132,6 +133,7 @@ open_remediations: []
     - allowed divergence list
     - parity evidence requirements
     - proof that provisioning stays out of scope
+    - holding implementation and validation work to the published runtime/parity baseline without widening it
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - `C-04`

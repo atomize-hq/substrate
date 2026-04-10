@@ -1,6 +1,7 @@
 # spec_manifest — llm_gateway_in_world
 
-This is a lightweight placeholder manifest for ADR-0023 planning outputs. It will be expanded during planning pack hardening.
+Historical evidence only. This is a lightweight placeholder manifest for ADR-0023 planning outputs and does not define the current operator boundary.
+The live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
 
 Required (v1):
 - `contract.md` (operator-facing)

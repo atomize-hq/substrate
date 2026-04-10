@@ -1,8 +1,8 @@
 # Substrate World: Architecture, Behavior, and Operations (Linux & macOS)
 
-This document describes the “world” execution model in Substrate — what it is, how the shell and world‑agent cooperate, isolation boundaries (netns/cgroup/overlay), protocols, environment toggles, validation, troubleshooting, and planned housekeeping (netns GC).
+This document describes the world execution model, transport topology, and validation evidence used by Substrate. It is descriptive context for `docs/contracts/substrate-gateway-runtime-parity.md`, `docs/contracts/substrate-gateway-operator-contract.md`, and `docs/contracts/substrate-gateway-status-schema.md`; it does not redefine those operator contracts.
 
-Status: Linux and macOS default to “always‑in‑world” execution. Windows degrades gracefully.
+Status: Linux and macOS default to "always-in-world" execution. Windows uses the same gateway semantics through WSL-backed transport, with permitted backend divergence in the hidden transport layer.
 
 ---
 
@@ -24,12 +24,15 @@ Helper scripts (`scripts/mac/lima-*.sh`, `scripts/mac/smoke.sh`) keep the Lima e
 
 `/tmp` is included in the guest unit’s `ReadWritePaths` list so replay and shim flows can surface temp‑file diffs on both platforms. The provisioning script embeds this setting in the unit automatically—no manual tuning needed.
 
-### Authorization boundary and multi-user posture (operator contract)
+### Transport boundary and multi-user posture
+
+These socket ACL details are runtime transport facts, not a second operator contract.
 
 - The authorization boundary for world-agent requests is the OS-level transport ACL (Linux: Unix socket ownership/mode for `/run/substrate.sock`).
 - On Linux, `/run/substrate.sock` MUST be owned by `root:substrate` with mode `0660` (`srw-rw----`).
 - Access to the socket is granted by membership in the `substrate` group; verify with `id -nG "$USER"`, grant with `sudo usermod -aG substrate <user>`, and re-login so the new group membership takes effect.
 - On multi-user hosts, operators MUST ensure only intended users are members of the `substrate` group.
+- Platform-specific transport differences stay confined to the hidden backend layer; this section records the socket ACL and reachability facts that support the runtime parity contract.
 
 ---
 
@@ -52,7 +55,7 @@ Always-on by default (unless disabled via `SUBSTRATE_WORLD=disabled`):
   - If `world_fs.require_world=false` and the agent/socket is unavailable (or a transport handshake fails), the shell prints exactly one warning and runs on the host path for that command. Subsequent commands continue to attempt world routing.
   - If `world_fs.require_world=true`, Substrate fails closed when the world backend is unavailable (or disabled via `--no-world`/`SUBSTRATE_WORLD=disabled`) instead of falling back to host execution.
 
-Windows (WSL backend) is functional but experimental. When the world backend is unavailable, the same `world_fs.require_world` rules apply (fallback only when `false`).
+Windows (WSL backend) follows the same operator-facing lifecycle/status meaning; only the transport/bootstrap implementation differs. When the world backend is unavailable, the same `world_fs.require_world` rules apply (fallback only when `false`).
 
 ---
 
@@ -213,6 +216,7 @@ Notes
   - On startup, the shell ensures a session world and sets `SUBSTRATE_WORLD=enabled` plus `SUBSTRATE_WORLD_ID`.
   - macOS builds warm the Lima VM, establish forwarding, and reuse the same backend factory used on Linux.
   - Windows hosts call `platform_world::windows::ensure_world_ready`, which provisions/warms the `substrate-wsl` distro (via the PowerShell helpers) and keeps the world agent reachable through the forwarder named pipe.
+  - The gateway lifecycle/status meaning is owned by the runtime parity contract; this section only records how the shell reaches the agent on each platform.
 - Routing
   - Non‑PTY: POST to `/v1/execute` over UDS (Linux) or the forwarded socket/port (macOS/Windows).
   - PTY: use WS to `/v1/stream` over the active transport; host fallback only occurs when `world_fs.require_world=false`.
@@ -253,7 +257,8 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
 
 ## 7) Logging & Telemetry
 
-- Policy snapshot behavior and the trace fields `policy_resolution_mode`, `policy_snapshot_schema`, and `policy_snapshot_hash` are specified in `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md`.
+- Policy snapshot behavior and the trace fields `policy_resolution_mode`, `policy_snapshot_schema`, and `policy_snapshot_hash` are documented in `docs/TRACE.md`.
+- The archived `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md` remains historical background only.
 - Windows spans include an optional `fs_diff.display_path` map pairing canonical WSL paths with native Windows paths for telemetry consumers.
 
 - world-agent (PTY)

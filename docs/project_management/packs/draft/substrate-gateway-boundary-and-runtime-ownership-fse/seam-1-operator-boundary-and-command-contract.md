@@ -2,9 +2,9 @@
 seam_id: SEAM-1
 seam_slug: operator-boundary-and-command-contract
 type: integration
-status: exec-ready
-execution_horizon: active
-plan_version: v2
+status: landed
+execution_horizon: future
+plan_version: v3
 basis:
   currentness: current
   source_scope_ref: scope_brief.md
@@ -23,12 +23,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -119,7 +119,7 @@ open_remediations: []
   - Safety depends on preventing gateway-internal surfaces from becoming required operator inputs.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `active` because every downstream seam depends on a single trusted operator boundary before it can plan schema, policy, runtime, or docs work authoritatively.
+    - `future` because this seam has landed with a passed seam-exit gate and left the forward planning window.
   - Which threads matter most
     - `THR-01`
   - What the first seam-local review should focus on

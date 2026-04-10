@@ -8,9 +8,10 @@ use std::sync::Arc;
 
 use agent_api_types::{
     ApiError, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
-    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
-    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1,
-    WorldFsReadRequestV1, WorldFsReadResponseV1,
+    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, PendingDiffClearRequestV1,
+    PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
+    PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1, WorldFsReadRequestV1,
+    WorldFsReadResponseV1,
 };
 use anyhow::{anyhow, Context, Result};
 use http_body_util::{BodyExt, Full};
@@ -207,6 +208,45 @@ impl AgentClient {
             .get("/v1/doctor/world")
             .await
             .context("Failed to get world doctor report")?;
+
+        self.parse_response(response).await
+    }
+
+    /// Get the typed gateway lifecycle/status surface (`POST /v1/gateway/status`).
+    pub async fn gateway_status(
+        &self,
+        request: GatewayLifecycleRequestV1,
+    ) -> Result<GatewayLifecycleResponseV1> {
+        let response = self
+            .post("/v1/gateway/status", &request)
+            .await
+            .context("Failed to get gateway status")?;
+
+        self.parse_response(response).await
+    }
+
+    /// Ensure the gateway lifecycle path is wired (`POST /v1/gateway/sync`).
+    pub async fn gateway_sync(
+        &self,
+        request: GatewayLifecycleRequestV1,
+    ) -> Result<GatewayLifecycleResponseV1> {
+        let response = self
+            .post("/v1/gateway/sync", &request)
+            .await
+            .context("Failed to sync gateway lifecycle")?;
+
+        self.parse_response(response).await
+    }
+
+    /// Restart the gateway lifecycle path (`POST /v1/gateway/restart`).
+    pub async fn gateway_restart(
+        &self,
+        request: GatewayLifecycleRequestV1,
+    ) -> Result<GatewayLifecycleResponseV1> {
+        let response = self
+            .post("/v1/gateway/restart", &request)
+            .await
+            .context("Failed to restart gateway lifecycle")?;
 
         self.parse_response(response).await
     }

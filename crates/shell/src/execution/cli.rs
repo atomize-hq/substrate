@@ -189,6 +189,12 @@ pub struct WorldCmd {
 }
 
 #[derive(Args, Debug)]
+pub struct WorldGatewayCmd {
+    #[command(subcommand)]
+    pub action: WorldGatewayAction,
+}
+
+#[derive(Args, Debug)]
 pub struct HostCmd {
     #[command(subcommand)]
     pub action: HostAction,
@@ -538,6 +544,8 @@ pub enum WorldAction {
         #[arg(long)]
         json: bool,
     },
+    /// Gateway lifecycle and status commands.
+    Gateway(WorldGatewayCmd),
     Enable(WorldEnableArgs),
     Deps(WorldDepsCmd),
     Cleanup(WorldCleanupArgs),
@@ -577,6 +585,23 @@ pub struct WorldEnableArgs {
     /// Seconds to wait for the world socket/doctor health checks
     #[arg(long = "timeout", value_name = "SECONDS", default_value_t = 120)]
     pub timeout: u64,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum WorldGatewayAction {
+    /// Ensure the gateway command family is wired and report its status entrypoint.
+    Sync,
+    /// Report gateway status.
+    Status(WorldGatewayStatusArgs),
+    /// Restart the gateway lifecycle.
+    Restart,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WorldGatewayStatusArgs {
+    /// Output machine-readable JSON for the status leaf entry surface.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Args, Debug)]

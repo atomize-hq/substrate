@@ -77,7 +77,7 @@ For each externally visible change, list:
     - `crates/shell/src/execution/cli.rs`, `crates/shell/src/execution/platform/mod.rs`, `crates/shell/src/builtins/world_gateway.rs`, `docs/USAGE.md`, and `crates/shell/tests/world_gateway.rs` must land together.
     - `sync` and `status --json` must share one `client_wiring.*` vocabulary so text and JSON surfaces never diverge.
   - Contradiction risks:
-    - `docs/project_management/_archived/next/llm_gateway_in_world/contract.md` still publishes `substrate world status gateway` and `substrate world sync gateway`; leaving both command orders in circulation creates two operator contracts.
+    - `docs/project_management/_archived/next/llm_gateway_in_world/contract.md` still publishes `substrate world status gateway` and `substrate world sync gateway`; without a historical-evidence-only banner, the archive can read like a second operator contract.
     - Backend-specific status text from ADR-0041 cannot leak into the base gateway status surface before this pack locks the base envelope.
 
 - Change: gateway lifecycle and status transport runs through a dedicated world-agent surface instead of raw exec probing.
@@ -241,7 +241,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
     - status JSON ownership
   - Conflict: yes
   - Resolution (explicit):
-    - Treat the archived pack as historical evidence only.
+    - Treat the archived pack as historical evidence only; the live operator contract is `docs/contracts/substrate-gateway-operator-contract.md`.
     - Carry forward only the stable wiring env names and the in-world gateway intent.
     - Do not carry forward Substrate-owned gateway runtime crates, archived command ordering, or archived transport details as current contract.
 
@@ -264,8 +264,8 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/contract.md` — lock the exact command spelling, the exit `2|3|4|5` split, and the rule that `status --json` is the operator wiring authority.
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/gateway-status-schema-spec.md` — lock the `client_wiring.*` field family and the additive ownership boundary against ADR-0042 tuple metadata.
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md` — state that provisioning is outside this pack and list the evidence required before any platform script or backend change lands.
-  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md` — replace stale `packs/active/llm_and_agent_config_policy_surface/*` links with `packs/implemented/...` when cross-ADR alignment work opens.
-  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md` — replace stale `packs/active/llm_and_agent_config_policy_surface/*` links with `packs/implemented/...` when cross-ADR alignment work opens.
-  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md` — replace stale `packs/active/llm_and_agent_config_policy_surface/*` links with `packs/implemented/...` when cross-ADR alignment work opens.
+  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md` — keep related-doc links aligned with `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/*` when cross-ADR alignment work opens.
+  - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md` — keep related-doc links aligned with `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/*` when cross-ADR alignment work opens.
+  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md` — keep related-doc links aligned with `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/*` when cross-ADR alignment work opens.
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md` — normalize self-links away from `packs/active/...` so downstream ADRs stop copying stale pack paths.
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/spec_manifest.md` — normalize self-links away from `packs/active/...` so downstream ADRs stop copying stale pack paths.
