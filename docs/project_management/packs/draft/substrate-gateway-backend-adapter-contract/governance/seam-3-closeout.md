@@ -1,13 +1,13 @@
 ---
 seam_id: SEAM-3
-status: proposed
+status: closed
 closeout_version: v1
 seam_exit_gate:
   source_ref: ../threaded-seams/seam-3-parity-and-validation/slice-99-seam-exit-gate.md
-  status: pending
-  promotion_readiness: blocked
+  status: passed
+  promotion_readiness: ready
 basis:
-  currentness: provisional
+  currentness: current
   upstream_closeouts:
     - ./seam-1-closeout.md
     - ./seam-2-closeout.md
@@ -20,31 +20,39 @@ basis:
     - ADR-0024 supersession posture or ADR-0040 alignment posture changes after landing
 gates:
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 open_remediations: []
 ---
 
 # Closeout - SEAM-3 Parity and validation
 
-This is a post-exec scaffold. Populate it only after `SEAM-3` lands and the dedicated `S99` seam-exit slice records the realized handoff.
+This closeout records the realized `SEAM-3` handoff after the dedicated `S99` seam-exit slice captured the parity, compatibility, and validation proof.
 
 ## Seam-exit gate record
 
 - **Source artifact**: `../threaded-seams/seam-3-parity-and-validation/slice-99-seam-exit-gate.md`
-- **Landed evidence**: pending
-- **Contracts published or changed**: expected parity, compatibility, and validation proof surfaces only
-- **Threads revalidated**: expected `THR-01`, `THR-02`
-- **Review-surface delta**: pending
-- **Planned-vs-landed delta**: pending
-- **Downstream stale triggers raised**: pending
-- **Remediation disposition**: current pre-exec items live in `governance/remediation-log.md`
-- **Promotion blockers**: pending until post-exec closeout resolves the realized seam-exit state
-- **Promotion readiness**: blocked
+- **Landed evidence**:
+  - `../platform-parity-spec.md`
+  - `../compatibility-spec.md`
+  - `../manual_testing_playbook.md`
+  - `../pre-planning/ci_checkpoint_plan.md`
+  - `../threaded-seams/seam-3-parity-and-validation/slice-99-seam-exit-gate.md`
+- **Contracts published or changed**: none; this seam records validation proof for already accepted upstream contract truth
+- **Threads revalidated**: `THR-01`, `THR-02`
+- **Review-surface delta**: the pack now has a landed parity matrix, compatibility posture, manual validation checklist, and checkpoint plan, without widening the adapter contract or introducing a second control plane
+- **Planned-vs-landed delta**: none material; the seam-exit record lands the proof surfaces already planned for `SEAM-3`
+- **Downstream stale triggers raised**: none beyond the inherited `SEAM-3` basis triggers
+- **Remediation disposition**:
+  - `REM-004`: resolved
+  - `REM-002`: carried forward in `governance/remediation-log.md`
+  - `REM-003`: carried forward in `governance/remediation-log.md`
+- **Promotion blockers**: none for the `SEAM-3` exit gate
+- **Promotion readiness**: ready
 
 ## Post-exec gate disposition
 
-- **Landing gate**: pending
-- **Closeout gate**: pending
-- **Unresolved remediations**: pending
-- **Carried-forward remediations**: pending
+- **Landing gate**: passed
+- **Closeout gate**: passed
+- **Unresolved remediations**: none for the `SEAM-3` exit gate
+- **Carried-forward remediations**: `REM-002`, `REM-003`
