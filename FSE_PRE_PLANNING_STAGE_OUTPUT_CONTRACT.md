@@ -29,6 +29,7 @@ The control-plane target for one feature is:
 
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/<bucket>/<feature>/README.md`
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/<bucket>/<feature>/scope_brief.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/<bucket>/<feature>/spec_manifest.md`
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/<bucket>/<feature>/seam_map.md`
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/<bucket>/<feature>/threading.md`
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/<bucket>/<feature>/review_surfaces.md`
@@ -116,12 +117,11 @@ Notes:
 
 - PP0 exists so later stages do not infer a moving input set.
 
-### PP1 - Scope Brief and Surface Inventory
+### PP1 - Scope Brief
 
 Purpose:
 
 - convert ADR intent into the canonical feature brief expected by the extractor contract
-- absorb the current `spec_manifest.md` role into a v2.5-native file
 - merge the outputs of the optional `pp1a-scope-intake` and `pp1b-surface-authority` helper stages into one canonical pack brief
 
 Owned canonical outputs:
@@ -151,26 +151,84 @@ Required `scope_brief.md` sections:
 - success criteria
 - hard constraints
 - external systems and stakeholders
-- contract surface inventory
-- downstream canonical-doc obligations under `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/` or other descriptive doc paths when applicable
 - known unknowns and risks
+- explicit note that `spec_manifest.md` is the authoritative authored-doc-class inventory and surface-ownership register for the feature
 
 Gate to promote canonical output:
 
-- no externally visible surface remains implicit
-- every durable contract surface has one intended canonical home
+- feature scope, goals, constraints, and risks are concrete enough to support authored-doc selection
 - no task graph, kickoff prompt, or execution ownership surface is introduced
 
 Downstream handoff:
 
+- PP1.5 may begin research when `pp1-scope/handoff.md` exists
 - PP2 may begin research when `pp1-scope/handoff.md` exists
-- PP2 may not write canonical seam files until `scope_brief.md` is present
+- PP2 may not write canonical seam files until both `scope_brief.md` and `spec_manifest.md` are present
 
 Optional helper-stage split:
 
 - `pp1a-scope-intake` may draft user/job/success/constraint sections early
 - `pp1b-surface-authority` may run in parallel to derive exact contract homes and surface inventory
 - PP1 owns the canonical merge and resolves any mismatch between those helper outputs
+
+### PP1.5 - Spec Manifest and Surface Authority
+
+Purpose:
+
+- keep the current `spec_manifest.md` responsibility as a first-class canonical output
+- define the authored spec, contract, schema, policy, parity, compatibility, and validation document classes the feature requires before seam extraction locks the downstream planning shape
+- give seam extraction an explicit domain-completeness input instead of forcing seam briefs or `threading.md` to infer missing document classes later
+
+Owned canonical outputs:
+
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/<bucket>/<feature>/spec_manifest.md`
+
+Owned research-only outputs:
+
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/<bucket>/<feature>/logs/pre-planning-v2_5/pp1_5-spec-manifest/scratch.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/<bucket>/<feature>/logs/pre-planning-v2_5/pp1_5-spec-manifest/handoff.md`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/<bucket>/<feature>/logs/pre-planning-v2_5/pp1_5-spec-manifest/staged/spec_manifest.md`
+
+Non-owned outputs:
+
+- `scope_brief.md`
+- `seam_map.md`
+- `threading.md`
+- `review_surfaces.md`
+- every `seam-<n>-<slug>.md`
+- every governance file
+
+Required `spec_manifest.md` content:
+
+- exact list of required authored docs for the feature
+- explicit doc classes required by the feature, such as:
+  - contract
+  - protocol
+  - schema
+  - policy
+  - telemetry
+  - filesystem semantics
+  - platform parity
+  - compatibility
+  - validation playbook
+- one-owner-per-surface mapping
+- distinction between:
+  - canonical descriptive docs under `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/`
+  - pack-local planning docs
+  - deferred downstream docs that must exist later
+- absence semantics and determinism obligations for each selected doc class
+
+Gate to promote canonical output:
+
+- no required spec class remains implicit
+- every durable contract surface has one intended canonical home
+- seam extraction can proceed without inventing missing spec families later
+- no task graph, kickoff prompt, or execution ownership surface is introduced
+
+Downstream handoff:
+
+- PP2 may begin research when `pp1_5-spec-manifest/handoff.md` exists
+- PP2 may not write canonical seam files until `spec_manifest.md` is present
 
 ### PP2 - Seam Map and Seam Briefs
 
@@ -194,6 +252,7 @@ Owned research-only outputs:
 Non-owned outputs:
 
 - `scope_brief.md`
+- `spec_manifest.md`
 - `threading.md`
 - `review_surfaces.md`
 - `README.md`
@@ -223,6 +282,7 @@ Gate to promote canonical outputs:
 - seam IDs and slugs are stable
 - every seam has value, touch surface, and verification intent
 - horizon policy is explicit and matches the v2.5 extractor contract
+- seam boundaries are consistent with the authored-doc classes and ownership rules declared in `spec_manifest.md`
 - no slices or subslices are created
 
 Downstream handoff:
@@ -236,7 +296,7 @@ Downstream handoff:
 Purpose:
 
 - replace `workstream_triage.md` with the v2.5 canonical thread and dependency control plane
-- absorb the durable parts of `spec_manifest.md`, `impact_map.md`, and `ci_checkpoint_plan.md`
+- absorb the durable parts of `impact_map.md`, `ci_checkpoint_plan.md`, and the dependency-heavy parts of the old triage surface
 - merge the outputs of the optional `pp3a-threading` and `pp3b-verification-cadence` helper stages into one canonical dependency surface
 
 Owned canonical outputs:
@@ -252,6 +312,7 @@ Owned research-only outputs:
 Non-owned outputs:
 
 - `scope_brief.md`
+- `spec_manifest.md`
 - `seam_map.md`
 - every seam brief
 - `review_surfaces.md`
@@ -270,6 +331,7 @@ Required `threading.md` content:
 - revalidation triggers
 - `satisfied_by` posture for each thread
 - verification cadence and checkpoint intent when platform scope warrants it
+- references back to `spec_manifest.md` when a thread carries a contract or doc obligation that depends on a specific authored spec class
 
 Gate to promote canonical output:
 
@@ -402,8 +464,8 @@ Required `README.md` content:
 - active seam and next seam
 - pack file inventory
 - downstream entry points:
-  - threaded seam decomposition consumes `scope_brief.md`, `seam_map.md`, `threading.md`, `review_surfaces.md`, seam briefs, and governance docs
-  - seam promotion consumes `README.md`, `scope_brief.md`, `threading.md`, `review_surfaces.md`, seam briefs, and governance docs
+  - threaded seam decomposition consumes `scope_brief.md`, `spec_manifest.md`, `seam_map.md`, `threading.md`, `review_surfaces.md`, seam briefs, and governance docs
+  - seam promotion consumes `README.md`, `scope_brief.md`, `spec_manifest.md`, `threading.md`, `review_surfaces.md`, seam briefs, and governance docs
 - explicit note that this pack ends before `threaded-seams/` planning and execution artifacts
 
 Gate to promote canonical output:
@@ -426,12 +488,15 @@ Current role:
 
 New canonical home:
 
-- `scope_brief.md` owns the feature-level contract surface inventory and canonical-doc obligations
-- `threading.md` owns the cross-seam contract registry and producer ownership
+- remain canonical as `spec_manifest.md`
+- feed seam extraction rather than being replaced by it
+- provide the domain-completeness and authored-doc-class inventory that seam briefs and `threading.md` must respect
 
-Research-only carry-forward:
+Why it stays canonical:
 
-- any migration-era spec-manifest rendering stays under `logs/pre-planning-v2_5/compat/spec_manifest.md`
+- it answers a different question than `scope_brief.md`, `seam_map.md`, or `threading.md`
+- it defines which spec, contract, schema, policy, parity, compatibility, and validation artifacts must exist at all
+- without it, seam extraction can succeed while still omitting a required document family
 
 ### 2. `impact_map.md`
 
@@ -530,4 +595,5 @@ The revised pre-planning lane is complete only when all are true:
 - the pack contains no execution-ready slices, subslices, or seam-local `review.md`
 - every canonical file has a single owning stage
 - all overlapping work is confined to research-only outputs
-- the six legacy artifacts are either retired or rendered as research-only compatibility views, not canonical truth
+- `spec_manifest.md` remains canonical
+- the remaining five legacy artifacts are either retired or rendered as research-only compatibility views, not canonical truth
