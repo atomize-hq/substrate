@@ -70,12 +70,13 @@ The checkpoint cadence stays lightweight during pre-planning:
         "targeted_platform_validation": ["linux", "macos", "windows"]
       },
       "stabilized_surfaces": [
-        "platform parity guarantees",
+        "compile-parity intent for the final parity and validation seam",
+        "feature-smoke intent for the final parity and validation seam",
+        "Linux, macOS, and Windows validation intent for the final parity and validation seam",
         "ADR-0024 compatibility and supersession proof",
-        "manual validation evidence for operator, policy, event, and trace ownership",
-        "final checkpoint intent for downstream execution wiring"
+        "manual validation evidence for operator/status, policy, event, and trace ownership"
       ],
-      "rationale": "This boundary aligns with the dedicated parity-and-validation seam in the draft skeleton. Verification here confirms the feature-level guarantees after all contract and protocol semantics are fixed and ready for cross-platform evidence collection."
+      "rationale": "This boundary aligns with the dedicated parity-and-validation seam in the draft skeleton. Verification here confirms the compile-parity, feature-smoke, and platform-validation intent after all contract and protocol semantics are fixed and ready for cross-platform evidence collection."
     }
   ]
 }
@@ -118,7 +119,9 @@ Why this boundary is code-grounded:
 - `impact_map.md` identifies cross-platform parity evidence and runtime-parity alignment as explicit downstream implications.
 
 What this checkpoint stabilizes:
-- Linux, macOS, and Windows parity guarantees for adapter-backed execution,
+- compile-parity intent for the final parity and validation seam,
+- feature-smoke intent for the final parity and validation seam,
+- Linux, macOS, and Windows validation intent for adapter-backed execution,
 - compatibility proof that ADR-0024 remains historical evidence and no second Substrate control plane exists,
 - document-validation evidence against ADR-0040, ADR-0027, ADR-0017, and ADR-0028,
 - the final advisory checkpoint boundary that downstream execution wiring can consume.
