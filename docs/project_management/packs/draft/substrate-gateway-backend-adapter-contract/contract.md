@@ -16,10 +16,15 @@ Canonical references:
 - One stable backend id maps to one adapter identity at the Substrate boundary.
 - Backend ids stay in `<kind>:<name>` form and remain selectors only; they do not encode
   provider, router, auth-authority, protocol, planner, or wrapper identity.
-- Selection stays fail-closed and uses the existing ADR-0027 config, policy, and inventory surfaces.
-- Invalid selection, dependency unavailability, and policy denial remain separate outcomes.
+- Selection consumes existing config, policy, and inventory inputs in this order:
+  1. resolve the requested or default backend id from config
+  2. validate backend-id grammar and inventory identity consistency
+  3. apply deny-by-default allowlist policy before adapter dispatch
+  4. hand the allowed backend id to the gateway adapter/runtime boundary
+- Selection stays fail-closed and uses only the existing ADR-0027 config, policy, and inventory surfaces.
+- Invalid selection, dependency unavailability, and policy denial remain the only failure outcomes.
 - Gateway-local config, admin mutation surfaces, persistence, and session state do not become
-  Substrate authorization inputs.
+  Substrate authorization inputs or selection inputs.
 - No additive adapter-visible `status --json` field family is published by this seam in v1.
   The currently published machine-readable surface remains the existing `status` plus
   `client_wiring.*` schema owned by `docs/contracts/substrate-gateway-status-schema.md`.

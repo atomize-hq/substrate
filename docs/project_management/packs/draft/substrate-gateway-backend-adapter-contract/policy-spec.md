@@ -30,7 +30,7 @@ Trusted selection inputs:
 - `llm.routing.default_backend`
 - `llm.allowed_backends`
 - the existing backend inventory files governed by ADR-0027
-- existing world-placement and fail-closed policy inputs owned by the gateway policy-evaluation contract
+- the existing policy inputs owned by the gateway policy-evaluation contract
 
 Explicit non-inputs:
 
@@ -39,6 +39,7 @@ Explicit non-inputs:
 - gateway-local token persistence
 - adapter session state or session handles
 - provider- or wrapper-private routing hints
+- any gateway-local authorization source
 
 ## Failure classification
 
