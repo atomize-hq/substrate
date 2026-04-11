@@ -1,9 +1,9 @@
 ---
 seam_id: SEAM-3
 seam_slug: parity-and-validation
-status: exec-ready
-execution_horizon: active
-plan_version: v1
+status: closed
+execution_horizon: future
+plan_version: v2
 basis:
   currentness: current
   source_seam_brief: ../../seam-3-parity-and-validation.md
@@ -26,15 +26,18 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
+  promotion_readiness: ready
 open_remediations: []
 ---
 # SEAM-3 - Parity and validation
+
+This seam is closed. Its authoritative exit-gate record lives in `../../governance/seam-3-closeout.md`.
 
 ## Seam Brief (Restated)
 
@@ -74,7 +77,7 @@ open_remediations: []
 ## Review bundle
 
 - `review.md` is the authoritative artifact for the current pre-exec posture.
-- The current review passes the falsifiability, contract-consumption, and revalidation checks, so this seam may proceed at `status: exec-ready`.
+- The pre-exec review passed the falsifiability, contract-consumption, and revalidation checks that allowed this seam to reach `status: exec-ready` before landing.
 
 ## Seam-exit gate plan
 
@@ -104,5 +107,7 @@ open_remediations: []
 - Upstream closeouts consumed here:
   - `../../governance/seam-1-closeout.md`
   - `../../governance/seam-2-closeout.md`
+- Seam closeout:
+  - `../../governance/seam-3-closeout.md`
 - Current blocking remediation:
   - none at pre-exec; `REM-004` is resolved in `../../governance/remediation-log.md`

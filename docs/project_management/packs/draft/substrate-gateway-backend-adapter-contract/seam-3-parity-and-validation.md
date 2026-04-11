@@ -2,9 +2,9 @@
 seam_id: SEAM-3
 seam_slug: parity-and-validation
 type: conformance
-status: exec-ready
-execution_horizon: active
-plan_version: v2
+status: closed
+execution_horizon: future
+plan_version: v3
 basis:
   currentness: current
   source_scope_ref: scope_brief.md
@@ -27,16 +27,19 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
+  promotion_readiness: ready
 open_remediations: []
 ---
 
 # SEAM-3 - Parity and validation
+
+This seam is closed. Its authoritative exit-gate record lives in `./governance/seam-3-closeout.md`.
 
 - **Goal / value**:
   - Prove the adapter contract is additive, cross-platform, and compatible with the already accepted ownership split once the upstream contract seams have published concrete truth.
@@ -116,7 +119,7 @@ open_remediations: []
   - safety depends on keeping compatibility proof additive and refusing any hidden second control plane
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `active` because `SEAM-2` is now closed and `THR-02` is published, so parity and compatibility planning can consume landed upstream truth
+    - `future` because the seam has now closed and left the forward planning window; downstream work should consume `governance/seam-3-closeout.md`
   - Which threads matter most
     - `THR-01`
     - `THR-02`
