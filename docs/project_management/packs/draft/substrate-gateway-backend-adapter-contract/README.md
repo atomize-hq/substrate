@@ -14,13 +14,13 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-2`
-- Next seam: `SEAM-3`
+- Active seam: `SEAM-3`
+- Next seam: none
 
 Policy:
 
 - only the active seam is eligible for authoritative downstream deep planning by default
-- the next seam may later receive seam-local review and slices, and only provisional deeper planning
+- the next seam may later receive seam-local review and slices, and only provisional deeper planning when a next seam exists
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that own undefined contracts may reserve `S00` as a contract-definition boundary slice once seam-local planning begins
 - future seams remain seam briefs
@@ -29,5 +29,6 @@ Policy:
 Current promotion state:
 
 - `SEAM-1` is closed and no longer in the forward planning window because its closeout published `THR-01` and recorded a passed seam-exit gate.
-- `SEAM-2` is the active seam because the `SEAM-1` closeout published the stable selection and status-boundary handoff needed to begin seam-local protocol/schema planning.
-- `SEAM-3` is now the queued next seam because it remains the direct downstream consumer of `SEAM-2` and still depends on `THR-02` publication before it can become active.
+- `SEAM-2` is closed and no longer in the forward planning window because its closeout published `THR-02` and recorded a passed seam-exit gate.
+- `SEAM-3` is now the active seam because the `SEAM-2` closeout published the protocol and schema handoff it depends on.
+- No later seam remains in this pack, so there is no queued `next` seam after `SEAM-3`.

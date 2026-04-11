@@ -2,15 +2,16 @@
 seam_id: SEAM-3
 seam_slug: parity-and-validation
 type: conformance
-status: proposed
-execution_horizon: next
+status: decomposed
+execution_horizon: active
 plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts:
     - ./governance/seam-1-closeout.md
+    - ./governance/seam-2-closeout.md
   required_threads:
     - THR-01
     - THR-02
@@ -22,8 +23,8 @@ basis:
     - ADR-0040 alignment stops being evidence-only or widens into direct touch surfaces
 gates:
   pre_exec:
-    review: pending
-    contract: pending
+    review: passed
+    contract: passed
     revalidation: pending
   post_exec:
     landing: pending
@@ -32,7 +33,8 @@ seam_exit_gate:
   required: true
   planned_location: S99
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-004
 ---
 
 # SEAM-3 - Parity and validation
@@ -75,7 +77,7 @@ open_remediations: []
   - manual validation assertions must stay downstream of the already published upstream contracts
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-2` must publish the adapter protocol and schema boundary
+    - none for activation; `SEAM-2` has published the adapter protocol and schema boundary
   - Transitive blockers:
     - ADR-0040 alignment may need direct edits if evidence-only status proves insufficient
     - platform parity proof may expand if the upstream protocol/schema seam widens the runtime blast radius
@@ -95,6 +97,7 @@ open_remediations: []
   - This seam consumes upstream contracts `C-01` through `C-04`, so verification may depend on accepted upstream evidence for the landed selection, publication, protocol, and schema contracts.
   - At seam-brief depth, readiness is that the parity matrix, compatibility proof, and validation assertions are concrete enough for seam-local planning and implementation.
   - Downstream seam-local review should prove that cross-platform guarantees remain compatible with ADR-0040 and that the compatibility proof keeps ADR-0024 historical rather than active.
+  - The seam is now active and decomposed because `THR-02` is published, but `REM-004` still blocks `exec-ready` until ADR-0040 alignment is explicitly confirmed as evidence-only or promoted into the touch set.
 - **Canonical contract refs**:
   - `docs/contracts/substrate-gateway-runtime-parity.md`
   - `docs/contracts/substrate-gateway-operator-contract.md`
@@ -113,7 +116,7 @@ open_remediations: []
   - safety depends on keeping compatibility proof additive and refusing any hidden second control plane
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `next` because `SEAM-1` is closed and `SEAM-2` is now active, but parity and compatibility proof still must wait for `THR-02` publication
+    - `active` because `SEAM-2` is now closed and `THR-02` is published, so parity and compatibility planning can consume landed upstream truth
   - Which threads matter most
     - `THR-01`
     - `THR-02`

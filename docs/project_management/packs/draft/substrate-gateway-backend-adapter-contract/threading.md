@@ -2,18 +2,18 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-2`
-  - `SEAM-2` is active because `SEAM-1` has closed, `THR-01` is published, and the protocol/schema seam can now consume the landed selection and status-boundary truth.
-- **Next seam**: `SEAM-3`
-  - `SEAM-3` is next because it is the nearest downstream consumer behind `SEAM-2` and should stay queued until `THR-02` is published.
+- **Active seam**: `SEAM-3`
+  - `SEAM-3` is active because `SEAM-2` has closed, `THR-02` is published, and the parity/validation seam can now consume the landed protocol/schema truth.
+- **Next seam**: none
+  - no downstream seam remains in this pack after `SEAM-3`.
 - **Future seams**: none
-  - no remaining seam stays outside the forward window after `SEAM-2` activation.
+  - no remaining seam stays outside the forward window after `SEAM-3` activation.
 
 Horizon policy for this extracted pack:
 
 - only an active seam gets authoritative downstream deep planning by default
 - the next seam may later receive seam-local review and slices, but only provisional deeper planning until upstream contract truth is published
-- `SEAM-3` remains seam-brief only in this pack
+- `SEAM-3` now has seam-local review and slices because the upstream protocol/schema handoff is published
 - active and next seams must reserve `S99` seam-exit intent, and seams that own undefined contracts may later reserve `S00` for contract definition
 
 ## Contract registry
@@ -75,9 +75,9 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-03`, `C-04`
   - **Purpose**: publish one deterministic adapter protocol and one bounded schema inventory before parity, compatibility, and validation proof rely on them.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: capability ids change, extension-key subset changes, request/response or error fields change, session-handle facets change, or ADR-0017 / ADR-0028 handoff wording changes.
-  - **Satisfied by**: `governance/seam-2-closeout.md` recording the landed protocol/schema contract and `SEAM-3` seam-local review revalidating the published handoff against parity and compatibility proof.
+  - **Satisfied by**: `governance/seam-2-closeout.md` recording the landed protocol/schema contract and publication of `THR-02`, followed by `SEAM-3` seam-local review revalidating the published handoff against parity and compatibility proof.
   - **Notes**: this thread protects the pack from hiding unresolved event/trace ownership questions inside implementation-specific adapter behavior.
 
 ## Dependency graph
