@@ -1,8 +1,8 @@
 # Substrate Gateway Backend Adapter Contract
 
-This document is the feature-local contract baseline for the adapter-selection boundary in
-ADR-0041. It mirrors the durable contract docs while keeping the seam-local execution checklist
-close to the pack.
+This document is the feature-local mirror of the S00 contract baseline for the adapter-selection
+boundary in ADR-0041. It keeps the owned baseline close to the pack without expanding into
+protocol, payload, or parity detail.
 
 Canonical references:
 

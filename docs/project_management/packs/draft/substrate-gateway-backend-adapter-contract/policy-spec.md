@@ -1,8 +1,8 @@
 # Substrate Gateway Backend Adapter Policy Spec
 
-This document is the feature-local selection-policy baseline for ADR-0041. It records the
-ordered evaluation inputs, fail-closed posture, and trusted-input boundary for backend
-selection before protocol/schema work begins.
+This document is the feature-local mirror of the S00 selection-policy baseline for ADR-0041.
+It records only the minimum ordered-input, fail-closed, and trusted-input wording needed to
+keep the C-01 baseline internally consistent.
 
 Canonical references:
 
