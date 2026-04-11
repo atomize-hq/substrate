@@ -3,7 +3,7 @@ slice_id: S3
 seam_id: SEAM-2
 slice_kind: adoption
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
@@ -14,7 +14,7 @@ basis:
 gates:
   pre_exec:
     review: inherited
-    contract: pending
+    contract: passed
     revalidation: inherited
   post_exec:
     landing: pending

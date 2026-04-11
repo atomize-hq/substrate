@@ -2,7 +2,7 @@
 seam_id: SEAM-2
 seam_slug: adapter-protocol-and-schema
 type: integration
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v2
 basis:
@@ -22,7 +22,7 @@ basis:
 gates:
   pre_exec:
     review: passed
-    contract: pending
+    contract: passed
     revalidation: passed
   post_exec:
     landing: pending
@@ -96,20 +96,24 @@ open_remediations:
   - This seam consumes upstream contracts `C-01` and `C-02`, so verification may depend on accepted upstream evidence for the stable selection and publication boundary.
   - This seam produces owned contracts `C-03` and `C-04`.
   - At seam-brief depth, readiness is that the dispatch lifecycle, field inventory, fail-closed capability rules, and ADR-0017 / ADR-0028 handoff lines are concrete enough for seam-local planning and implementation.
-  - `SEAM-2` is active and decomposed because `THR-01` is now published, but readiness remains blocked until `REM-002` and `REM-003` resolve the `C-04` schema subset and the `C-03` owner-line boundary.
+  - `SEAM-2` is active and `exec-ready` because `THR-01` is now published and the seam-local contract baseline is concrete in:
+    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+    - `gateway-backend-adapter-protocol-spec.md`
+    - `gateway-backend-adapter-schema-spec.md`
 - **Canonical contract refs**:
   - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
   - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
   - `docs/contracts/substrate-gateway-status-schema.md`
 - **Risks / unknowns**:
   - Risk:
-    - the adopted Universal Agent API subset remains under-specified for capability ids, extension keys, session-handle facets, and bounded adapter error detail
+    - landing could drift away from the now-pinned adopted capability subset, extension-key subset, bounded error shape, or session-handle bounds
   - De-risk plan:
-    - keep that gap as a blocking remediation and resolve it before the seam can become `exec-ready`
+    - keep `REM-002` open as non-blocking landing and closeout tracking tied to the canonical contract docs and schema spec
   - Risk:
-    - event and trace owner-line ambiguity lets local adapter docs silently redefine ADR-0017 or ADR-0028 semantics
+    - landing could blur the local-to-external owner line and silently reopen ADR-0017 or ADR-0028 semantics
   - De-risk plan:
-    - require explicit local-to-external handoff wording and seam-local review against both ADR owners before protocol slices can execute
+    - keep `REM-003` open as non-blocking landing and closeout tracking tied to the canonical protocol doc and seam-local protocol spec
 - **Rollout / safety**:
   - this seam should only activate after the upstream selection contract is fixed
   - safety depends on failing closed for unsupported capabilities and keeping gateway-private mechanics out of Substrate policy surfaces

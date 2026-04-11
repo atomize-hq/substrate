@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-2
 seam_slug: adapter-protocol-and-schema
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
@@ -21,7 +21,7 @@ basis:
 gates:
   pre_exec:
     review: passed
-    contract: pending
+    contract: passed
     revalidation: passed
   post_exec:
     landing: pending
@@ -70,7 +70,13 @@ open_remediations:
 - **Verification**:
   - This seam **consumes** `C-01` and `C-02` from `../../governance/seam-1-closeout.md`.
   - This seam **produces** `C-03` and `C-04`.
-  - Readiness remains blocked until the exact adopted Universal Agent API subset and the local-to-external ADR-0017 / ADR-0028 owner line are concrete enough to implement without post-exec invention.
+  - The exact adopted Universal Agent API subset and the local-to-external ADR-0017 / ADR-0028 owner line are now concrete enough to execute without post-exec invention.
+  - The durable contract baselines now live at:
+    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - The seam-local execution baselines now live at:
+    - `../../gateway-backend-adapter-protocol-spec.md`
+    - `../../gateway-backend-adapter-schema-spec.md`
 - **Basis posture**:
   - Currentness:
     - `current` because `SEAM-1` closeout is landed, `THR-01` is published, and the upstream handoff is now authoritative for this seam.
@@ -86,8 +92,7 @@ open_remediations:
   - Upstream blockers:
     - none for activation; `THR-01` is already published
   - Current readiness blockers:
-    - `REM-002`
-    - `REM-003`
+    - none at pre-exec; `REM-002` and `REM-003` remain open as non-blocking landing and closeout tracking
   - Downstream blocked seams:
     - `SEAM-3`
   - Contracts produced:
@@ -100,7 +105,7 @@ open_remediations:
 ## Review bundle
 
 - `review.md` is the authoritative artifact for `gates.pre_exec.review`.
-- The current pre-exec record supports `execution_horizon: active` and `basis.currentness: current`, but readiness remains blocked on the open schema-subset and owner-line remediations.
+- The current pre-exec record supports `status: exec-ready`; the seam-local contract baseline and owner line are concrete, and the remaining remediations track landing and closeout follow-through rather than blocking execution readiness.
 
 ## Seam-exit gate plan
 
@@ -144,8 +149,8 @@ open_remediations:
   - `SEAM-1` -> `SEAM-2` via `THR-01` carrying `C-01` and `C-02`
   - `SEAM-2` -> `SEAM-3` via `THR-02` carrying `C-03` and `C-04`
 - **Parallelization notes**:
-  - `S00` starts first because the owned protocol/schema baseline is still blocking readiness.
-  - `S1` and `S2` may refine in parallel later, but execution readiness depends on both the lifecycle owner line and the adopted schema subset becoming concrete.
+  - `S00` established the protocol/schema baseline and clears the seam for execution.
+  - `S1` and `S2` now execute against the pinned lifecycle owner line and adopted schema subset rather than inventing them during landing.
   - `S3` and `S99` wait for landed contract evidence and the realized `THR-02` publication record.
 
 ## Governance pointers

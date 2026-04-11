@@ -3,7 +3,7 @@ slice_id: S1
 seam_id: SEAM-2
 slice_kind: implementation
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
@@ -15,7 +15,7 @@ basis:
 gates:
   pre_exec:
     review: inherited
-    contract: pending
+    contract: passed
     revalidation: inherited
   post_exec:
     landing: pending
@@ -64,7 +64,8 @@ Turn the protocol boundary into one deterministic lifecycle that consumes the pu
 
 Checklist:
 - Implement:
-  - document the ordered lifecycle and fail-closed checkpoints
+  - document the ordered lifecycle and fail-closed checkpoints in `../../gateway-backend-adapter-protocol-spec.md`
+  - keep `docs/contracts/substrate-gateway-backend-adapter-protocol.md` as the durable owner of the lifecycle boundary
   - document which upstream selection outputs are consumed as fixed inputs
 - Test:
   - compare the order against the seam review diagrams and pre-planning alignment notes
@@ -92,7 +93,10 @@ Checklist:
 - Implement:
   - write the exact local-to-external owner boundary
   - map each owned protocol surface to the correct upstream authority
+  - record that repository packaging changes for the standalone gateway or UAA repos do not change this owner line by themselves
 - Test:
-  - verify each lifecycle stage has one owner
+  - verify each lifecycle stage has one owner against:
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/backend_contract.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/backend_contract.rs`
 - Validate:
   - confirm `REM-003` can resolve without widening other seams

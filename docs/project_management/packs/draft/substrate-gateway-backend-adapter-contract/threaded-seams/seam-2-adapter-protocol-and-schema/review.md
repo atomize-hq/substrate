@@ -45,8 +45,8 @@ flowchart TB
 
 ## Likely mismatch hotspots
 
-- `REM-002` is still open because the adopted Universal Agent API subset is not yet pinned for capability ids, extension keys, session-handle facets, and bounded adapter error detail.
-- `REM-003` is still open because the seam has not yet fixed the local-to-external owner line between adapter translation and ADR-0017 / ADR-0028.
+- `REM-002` stays open only as post-baseline execution and closeout tracking for the adopted Universal Agent API subset.
+- `REM-003` stays open only as post-baseline execution and closeout tracking for the local-to-external owner line.
 - Any seam-local draft that treats `THR-02` as required inbound state would falsely block activation and invert producer/consumer ownership.
 
 ## Pre-exec findings
@@ -54,23 +54,23 @@ flowchart TB
 - Upstream revalidation is satisfied: `../../governance/seam-1-closeout.md` records `seam_exit_gate.status: passed`, `promotion_readiness: ready`, and `THR-01` as published.
 - The seam is safe to activate and decompose because the consumed upstream contract truth is now landed and current.
 - Review is concrete enough to falsify the intended lifecycle, schema, and owner-line shape.
-- Readiness remains blocked:
-  - `REM-002` blocks the contract gate until the exact adopted Universal Agent API subset is pinned for `C-04`.
-  - `REM-003` blocks the contract gate until the local adapter translation boundary versus ADR-0017 / ADR-0028 is pinned for `C-03`.
-- No additional remediation entry is needed at promotion time because the existing blockers already name the correct owner seam and blocked transition.
+- The contract gate is now satisfied:
+  - `C-03` is pinned by `docs/contracts/substrate-gateway-backend-adapter-protocol.md` and `../../gateway-backend-adapter-protocol-spec.md`.
+  - `C-04` is pinned by `docs/contracts/substrate-gateway-backend-adapter-schema.md` and `../../gateway-backend-adapter-schema-spec.md`.
+- `REM-002` and `REM-003` remain open only as non-blocking execution and closeout tracking; they no longer block `status: exec-ready`.
 
 ## Pre-exec gate disposition
 
 - **Review gate**: passed
   - the seam-local review now makes the dispatch lifecycle, schema inventory, and owner-line risks falsifiable.
-- **Contract gate**: pending
-  - blocked by `REM-002` and `REM-003`.
+- **Contract gate**: passed
+  - the adopted schema subset and owner line are now concrete in owner artifacts.
 - **Revalidation gate**: passed
   - `SEAM-1` closeout is landed and still matches the seam brief basis.
 - **Opened remediations**:
-  - none; existing blocker entries remain authoritative.
+  - none; existing remediation entries remain authoritative.
 - **Current readiness posture**:
-  - `SEAM-2` is active but remains `status: decomposed`.
+  - `SEAM-2` is active and `status: exec-ready`.
   - `THR-02` stays `defined` until this seam lands and closes out its owned contracts.
 
 ## Planned seam-exit gate focus

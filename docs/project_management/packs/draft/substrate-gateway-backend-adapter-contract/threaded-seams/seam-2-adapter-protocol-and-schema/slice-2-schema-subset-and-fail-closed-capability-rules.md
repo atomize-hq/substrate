@@ -3,7 +3,7 @@ slice_id: S2
 seam_id: SEAM-2
 slice_kind: implementation
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
@@ -15,7 +15,7 @@ basis:
 gates:
   pre_exec:
     review: inherited
-    contract: pending
+    contract: passed
     revalidation: inherited
   post_exec:
     landing: pending
@@ -62,10 +62,14 @@ Define one bounded schema inventory for adapter-visible protocol data so later i
 
 Checklist:
 - Implement:
-  - record the supported capability and extension-key inventory
+  - record the supported capability and extension-key inventory in `../../gateway-backend-adapter-schema-spec.md`
+  - keep `docs/contracts/substrate-gateway-backend-adapter-schema.md` as the durable owner of the adopted subset
   - record the fail-closed rules for unsupported requests
 - Test:
-  - verify every supported item is named explicitly
+  - verify every supported item is named explicitly against:
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/capabilities.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/capabilities.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/session_selectors.rs`
 - Validate:
   - confirm downstream consumers can distinguish supported versus rejected schema features
 
@@ -90,7 +94,14 @@ Checklist:
 - Implement:
   - write the concrete payload, error, and session-handle subset
   - record omission rules and additive constraints
+  - keep bounded adapter error detail limited to the adopted safe UAA error classes and safe reserved messages
 - Test:
-  - verify every field family has one owner and one bounded purpose
+  - verify every field family has one owner and one bounded purpose against:
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/session_handle.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/session_handle.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c1_codex_exec_policy.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c5_claude_add_dirs_runtime_rejection.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c3_explicit_cancellation.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c3_explicit_cancellation_claude_code.rs`
 - Validate:
   - confirm `REM-002` can resolve without leaking policy or operator state into the schema

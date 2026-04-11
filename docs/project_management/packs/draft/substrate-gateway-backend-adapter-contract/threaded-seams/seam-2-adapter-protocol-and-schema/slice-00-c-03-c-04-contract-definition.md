@@ -3,7 +3,7 @@ slice_id: S00
 seam_id: SEAM-2
 slice_kind: contract_definition
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
@@ -15,7 +15,7 @@ basis:
 gates:
   pre_exec:
     review: inherited
-    contract: pending
+    contract: passed
     revalidation: inherited
   post_exec:
     landing: pending
@@ -53,6 +53,7 @@ Make the owned protocol/schema bundle concrete enough that downstream seams can 
 - **Outcome**:
   - the seam-owned protocol surfaces state the deterministic adapter-dispatch lifecycle, fail-closed order, and the exact handoff boundary to ADR-0017 and ADR-0028.
 - **Files**:
+  - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
   - `../../gateway-backend-adapter-protocol-spec.md`
   - `../../pre-planning/spec_manifest.md`
 - **Thread/contract refs**:
@@ -68,10 +69,14 @@ Make the owned protocol/schema bundle concrete enough that downstream seams can 
 
 Checklist:
 - Implement:
-  - author the deterministic dispatch-lifecycle baseline
-  - pin the exact owner-line handoff to ADR-0017 and ADR-0028
+  - author the deterministic dispatch-lifecycle baseline in `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+  - mirror the execution baseline and owner checklist in `../../gateway-backend-adapter-protocol-spec.md`
+  - pin the exact owner-line handoff to ADR-0017 and ADR-0028 without widening those external owners
 - Test:
   - compare the lifecycle against the published `SEAM-1` handoff and current ADR basis
+  - keep the backend-harness owner-line regression coverage aligned in:
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/backend_contract.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/backend_contract.rs`
 - Validate:
   - confirm downstream parity work can consume `C-03` without reopening selection-boundary ownership
 
@@ -80,6 +85,7 @@ Checklist:
 - **Outcome**:
   - the seam-owned schema surfaces state the exact adopted Universal Agent API subset for capability advertisement, extension keys, request/response payloads, bounded adapter errors, and session-handle facets.
 - **Files**:
+  - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
   - `../../gateway-backend-adapter-schema-spec.md`
   - `../../pre-planning/spec_manifest.md`
 - **Thread/contract refs**:
@@ -95,9 +101,15 @@ Checklist:
 
 Checklist:
 - Implement:
-  - record the adopted schema subset and omission rules
-  - record the bounded session-handle and adapter-error shape
+  - record the adopted schema subset and omission rules in `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - mirror the exact adopted capability ids, extension keys, bounded error shape, and session-handle facet in `../../gateway-backend-adapter-schema-spec.md`
 - Test:
   - compare the proposed subset against the Universal Agent API evidence set and current gateway docs
+  - keep the capability and session-handle regression coverage aligned in:
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/capabilities.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/capabilities.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/session_handle.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/session_handle.rs`
+    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/session_selectors.rs`
 - Validate:
   - confirm `SEAM-3` can consume the schema without inventing new protocol ambiguity

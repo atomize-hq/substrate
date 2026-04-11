@@ -32,17 +32,23 @@ related_seam: SEAM-2
 related_slice: null
 related_thread: THR-02
 related_contract: C-04
-related_artifact: docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/impact_map.md
-severity: blocking
+related_artifact: docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md
+severity: material
 status: open
 owner_seam: SEAM-2
-blocked_targets:
-  - seam: SEAM-2
-    field: status
-    value: exec-ready
-summary: the adopted Universal Agent API subset is unresolved for capability ids, extension keys, session-handle facets, and bounded adapter error detail.
-required_fix: pin the exact adopted Universal Agent API subset in the seam-local protocol/schema contract-definition bundle before `SEAM-2` can become `exec-ready`.
-resolution_evidence: []
+blocked_targets: []
+summary: the adopted Universal Agent API subset is now pinned to a bounded cross-backend execution baseline, but landing and closeout still need to keep the capability set, extension-key subset, session-handle facet, and bounded adapter error detail aligned with that baseline.
+required_fix: keep `docs/contracts/substrate-gateway-backend-adapter-schema.md` and `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md` aligned as implementation lands, and verify the codex-wrapper capability, session-handle, selector-validation, cancellation, and runtime-rejection suites still match the adopted subset before closeout publishes `THR-02`.
+resolution_evidence:
+  - docs/contracts/substrate-gateway-backend-adapter-schema.md
+  - docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md
+  - docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/threaded-seams/seam-2-adapter-protocol-and-schema/slice-00-c-03-c-04-contract-definition.md
+  - /Users/spensermcconnell/__Active_Code/codex-wrapper/docs/specs/universal-agent-api/capability-matrix.md
+  - /Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/capabilities.rs
+  - /Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/capabilities.rs
+  - /Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/session_handle.rs
+  - /Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/session_handle.rs
+  - /Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/session_selectors.rs
 ```
 
 ```yaml
@@ -53,17 +59,22 @@ related_seam: SEAM-2
 related_slice: null
 related_thread: THR-02
 related_contract: C-03
-related_artifact: docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/alignment_report.md
-severity: blocking
+related_artifact: docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-protocol-spec.md
+severity: material
 status: open
 owner_seam: SEAM-2
-blocked_targets:
-  - seam: SEAM-2
-    field: status
-    value: exec-ready
-summary: the local-to-external owner line for adapter translation versus ADR-0017 and ADR-0028 remains unresolved.
-required_fix: record the exact handoff boundary between local adapter translation and the externally owned event-envelope and trace semantics before `SEAM-2` publishes `C-03`.
-resolution_evidence: []
+blocked_targets: []
+summary: the local-to-external owner line is now pinned: gateway-local adapter translation stops at bounded gateway-local event and completion shapes, while ADR-0017 and ADR-0028 remain the external owners of structured-event envelope and canonical trace semantics.
+required_fix: keep `docs/contracts/substrate-gateway-backend-adapter-protocol.md` and `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-protocol-spec.md` aligned as implementation lands, and verify the codex-wrapper harness ownership tests plus the standalone gateway normalized-event surfaces still respect that owner line before closeout publishes `THR-02`.
+resolution_evidence:
+  - docs/contracts/substrate-gateway-backend-adapter-protocol.md
+  - docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-protocol-spec.md
+  - docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/threaded-seams/seam-2-adapter-protocol-and-schema/slice-00-c-03-c-04-contract-definition.md
+  - /Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/backend_contract.rs
+  - /Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/backend_contract.rs
+  - /Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/src/structured_events.rs
+  - docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md
+  - docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md
 ```
 
 ```yaml
