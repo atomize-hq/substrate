@@ -97,12 +97,15 @@ related_thread: null
 related_contract: null
 related_artifact: docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md
 severity: material
-status: open
+status: resolved
 owner_seam: SEAM-1
 blocked_targets: []
-summary: ADR-0041 still points at `packs/active/llm_and_agent_config_policy_surface/*` even though this checkout uses `packs/implemented/...`, which creates authority-path drift during downstream planning.
-required_fix: replace the stale `packs/active/...` references with the current `packs/implemented/...` paths or record an explicit evidence-only reason for leaving the links unchanged.
-resolution_evidence: []
+summary: ADR-0041 now points at the implemented `packs/implemented/llm_and_agent_config_policy_surface/*` paths, resolving the authority-path drift that previously confused downstream planning.
+required_fix: replaced the stale `packs/active/...` references with the current `packs/implemented/...` paths and recorded the exit-gate evidence.
+resolution_evidence:
+  - docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md
+  - docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/governance/seam-1-closeout.md
+  - docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/threading.md
 ```
 
 ```yaml
@@ -129,4 +132,6 @@ resolution_evidence:
 
 ## Resolved remediations
 
-- None.
+- `REM-001`
+- `REM-005`
+- `REM-006`

@@ -65,7 +65,7 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: publish the stable backend-id selection contract and the adapter-visible status publication boundary before protocol/schema or parity work consumes them.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: backend-id grammar changes, allowlist semantics change, selection failure buckets change, or the adapter-visible `status --json` owner line changes.
   - **Satisfied by**: `governance/seam-1-closeout.md` recording the landed selection contract and publication boundary, followed by seam-local review in `SEAM-2` and `SEAM-3` that revalidates the upstream handoff.
   - **Notes**: this is the pack's main guardrail against reintroducing provider-specific sub-identities or widening the status schema without an owner.
