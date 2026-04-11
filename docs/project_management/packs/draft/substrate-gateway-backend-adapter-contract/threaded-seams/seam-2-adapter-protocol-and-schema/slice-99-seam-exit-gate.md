@@ -30,14 +30,14 @@ open_remediations: []
 ---
 ### S99 - Seam-exit gate
 
-This slice plans the closeout-backed handoff that `SEAM-3` must consume before parity and validation work can rely on `THR-02`.
+This slice plans the closeout-backed handoff that `SEAM-3` must consume before parity and validation work can rely on `THR-02`. It defines the evidence model only; it does not publish `THR-02`.
 
 #### Required closeout records
 
 - Update `../../governance/seam-2-closeout.md` with:
   - landed evidence for `C-03` and `C-04`
-  - the canonical protocol and schema artifact paths
-  - `THR-02` published-state evidence
+  - canonical artifact paths for `docs/contracts/substrate-gateway-backend-adapter-protocol.md` and `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - a `THR-02` publication-state entry captured at closeout time
   - the final local-to-external owner line for ADR-0017 and ADR-0028
   - the adopted capability, extension-key, payload, error, and session-handle schema subset
   - any review-surface delta or stale triggers discovered during landing
@@ -55,7 +55,8 @@ This slice plans the closeout-backed handoff that `SEAM-3` must consume before p
 
 #### Evidence checklist
 
-- One canonical `C-03` protocol artifact path
-- One canonical `C-04` schema artifact path
+- One canonical `C-03` protocol artifact path and one canonical `C-04` schema artifact path
 - A short planned-versus-landed delta note confirming no second Substrate control plane was introduced
-- Thread publication accounting for `THR-02`
+- A closeout record field for `THR-02` publication state, even if the state remains pending until closeout completes
+- A stale-trigger note covering lifecycle owner line changes, capability subset changes, schema inventory changes, and external ADR ownership wording changes
+- Remediation disposition notes for `REM-002` and `REM-003`

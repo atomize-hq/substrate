@@ -73,6 +73,13 @@ flowchart TB
   - `SEAM-2` is active and `status: exec-ready`.
   - `THR-02` stays `defined` until this seam lands and closes out its owned contracts.
 
+## Verification evidence model
+
+- `C-03` evidence should anchor to the protocol spec sections that define the deterministic lifecycle, local-to-external owner line, and runtime-adjacent adoption surfaces.
+- `C-04` evidence should anchor to the schema spec sections that define the adopted capability ids, extension-key subset, bounded payload inventory, adapter error payload, and session-handle facet.
+- `THR-02` evidence should anchor to the seam-2 closeout record fields for canonical artifact paths, landed delta, stale triggers, remediation disposition, and recorded publication state.
+- `SEAM-3` should consume the recorded evidence model, not new contract prose, when it performs downstream parity and validation review.
+
 ## Planned seam-exit gate focus
 
 - **What must be true before downstream promotion is legal**:

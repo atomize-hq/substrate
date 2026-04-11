@@ -69,7 +69,9 @@ topology, not contract truth.
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-protocol-spec.md`
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 
-### Code surfaces that will need to match this baseline when implementation lands
+### Runtime-adjacent adoption surfaces to verify against when implementation lands
+
+These are planning and verification anchors only. They describe where later implementation must align with `C-03`; they do not widen this slice into implementation work.
 
 - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/lib.rs`
 - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/session_selectors.rs`
