@@ -36,7 +36,7 @@ The checkpoint cadence stays lightweight during pre-planning:
   "platform_scope": {
     "ci_parity_platforms": ["linux", "macos", "windows"],
     "behavior_platforms": ["linux", "macos", "windows"],
-    "wsl_scope": "not_explicit_in_authoritative_inputs"
+    "wsl_scope": "bundled_with_windows_hidden_transport_mechanics"
   },
   "defaults": {
     "min_draft_seams_per_checkpoint": 2,
@@ -130,7 +130,7 @@ Risk reduced at this checkpoint:
 
 Downstream confirmation still required:
 - exact runner selection and workflow mode for compile parity, feature smoke, and deeper CI testing,
-- whether WSL remains outside the checkpoint scope or enters the final checkpoint as bundled Linux validation because downstream touched surfaces expand into WSL-specific code.
+- how the Windows validation runner should exercise WSL-backed hidden transport mechanics while keeping them out of the operator-facing contract.
 
 ## Follow-ups
 
@@ -138,4 +138,4 @@ Downstream confirmation still required:
 - Confirm the exact platform scope and verification cadence once downstream planning stabilizes the touched surfaces.
 - Convert checkpoint intent into concrete execution wiring only in the downstream subsystem that owns execution.
 - Confirm the exact compile-parity workflow mode and the exact feature-smoke slice scope for `CP1` and `CP2` after downstream seam planning fixes the implementation scope.
-- Confirm whether WSL stays outside this feature’s checkpoint scope or joins `CP2` as bundled Linux validation if downstream planning adds WSL-specific touched surfaces.
+- Confirm the Windows validation runner details for WSL-backed hidden transport mechanics once downstream seam planning fixes the implementation scope.
