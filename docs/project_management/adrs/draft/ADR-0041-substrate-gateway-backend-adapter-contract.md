@@ -20,8 +20,8 @@ This ADR is a successor to ADR-0024 and should be read as a contract clarificati
   - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - Config / policy source of truth:
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md`
-  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
+  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 - Output / event / trace foundations:
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
