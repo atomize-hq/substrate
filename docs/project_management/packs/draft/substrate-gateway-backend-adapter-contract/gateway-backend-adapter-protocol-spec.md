@@ -21,8 +21,8 @@ The adopted lifecycle is:
 2. resolve exactly one adapter for that backend id
 3. load the adopted capability advertisement subset
 4. apply fail-closed required-capability and extension-key gating before any value validation
-5. validate adopted extension payloads and selector contradictions only after the capability gate passes
-6. normalize request metadata (`working_dir`, `timeout`, `env`, adopted extension payloads)
+5. validate adopted extension payloads and session-selector contradictions only after the capability gate passes
+6. normalize request metadata (`working_dir`, `timeout_ms`, `env`, adopted extension payloads)
 7. start adapter execution
 8. emit normalized events in backend order
 9. surface exactly one completion result with bounded completion metadata
@@ -34,7 +34,7 @@ Local adapter protocol ownership stops at:
 - adapter lookup and dispatch
 - adopted capability and extension validation
 - request normalization
-- mapping typed backend events into gateway-local `kind/channel/text/message/data` items
+- mapping typed backend events into gateway-local event and completion payloads
 - attaching bounded session-handle metadata and bounded adapter failure detail
 
 ADR-0017 remains the owner of:

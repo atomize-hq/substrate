@@ -204,8 +204,7 @@
   - extension keys
   - session-handle facet fields
   - bounded adapter error detail
-- The exact owner line between local adapter translation rules and ADR-0017 event-envelope ownership remains open.
-- The exact owner line between local adapter diagnostics and ADR-0028 trace vocabulary remains open.
+- The local-to-external owner line is now pinned by `C-03`; the remaining open items are the schema subset bullets above, while the follow-ups below are unrelated packaging or evidence decisions.
 - ADR-0041 still carries `packs/active/...` path references while this checkout uses `packs/implemented/...`.
 - ADR-0040 alignment stays in evidence-only status until downstream planning records a direct edit or confirms no direct edit.
 
@@ -228,6 +227,4 @@
 ## Follow-ups
 - Fix one explicit published backend-visibility subset for `status --json`.
 - Fix one explicit Universal Agent API subset for capability ids, extension keys, session-handle facets, and bounded adapter error detail.
-- Fix one explicit owner line for local adapter translation versus ADR-0017 event-envelope ownership.
-- Fix one explicit owner line for local adapter diagnostics versus ADR-0028 trace vocabulary.
 - Confirm whether ADR-0040 planning-pack docs stay evidence-only or enter the downstream touch set as direct alignment edits.
