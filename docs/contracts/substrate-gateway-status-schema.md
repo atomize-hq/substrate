@@ -38,6 +38,9 @@ Rules:
 - The two wiring leaves are published together or omitted together; partial publication is not allowed.
 - When present, the wiring leaves are non-empty strings pointing to Substrate-managed gateway endpoints.
 - When omitted, the contract uses absence rather than placeholder values, nulls, or empty strings.
+- No additive adapter-visible field family is currently published beyond `status` and `client_wiring.*`.
+- Any future additive adapter-visible status metadata requires an explicit update to this document before code,
+  tests, or typed runtime models widen the JSON shape.
 - Additional top-level fields may coexist only when they are owned by another contract surface.
 - This contract does not define, version-control, or widen the meaning of those externally owned additive fields.
 
@@ -53,5 +56,7 @@ Not defined here:
 - `client_wiring.*` is the only owned gateway-wiring field family in this contract.
 - absence semantics are part of the contract and must remain stable.
 - the surface must not emit secrets.
+- adapter-visible status metadata beyond the current envelope must not ship by implication; it needs an explicit
+  schema-owner update here first.
 - additive metadata outside `client_wiring.*` is outside this contract.
 - identity-tuple and placement-posture metadata beyond `client_wiring.*` belong to ADR-0042, not this schema contract.

@@ -2,11 +2,11 @@
 seam_id: SEAM-1
 seam_slug: adapter-selection-boundary
 type: integration
-status: proposed
+status: exec-ready
 execution_horizon: active
-plan_version: v1
+plan_version: v4
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
@@ -20,9 +20,9 @@ basis:
     - ADR-0041 path cleanup changes the cited authority set
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -30,7 +30,8 @@ seam_exit_gate:
   required: true
   planned_location: S99
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-005
 ---
 
 # SEAM-1 - Adapter selection boundary
@@ -91,7 +92,10 @@ open_remediations: []
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - **Verification**:
   - This seam produces owned contracts `C-01` and `C-02`.
-  - At seam-brief depth, readiness is that the stable backend-id semantics, ordered selection inputs, failure buckets, and `status --json` publication boundary are concrete enough for seam-local planning and implementation.
+  - At seam-brief depth, readiness means the stable backend-id semantics, ordered selection inputs, failure buckets, and `status --json` publication boundary are concrete enough for execution without inventing a second owner.
+  - `docs/contracts/substrate-gateway-backend-adapter-selection.md` is now the canonical `C-01` baseline.
+  - `C-02` now resolves to a narrower v1 decision: no additive adapter-visible `status --json` field family is currently published beyond the existing `status` plus `client_wiring.*` schema, and any future additive family requires an explicit status-schema owner update before code changes.
+  - With all three pre-exec gates passed, `basis.currentness: current`, and no blocking pre-exec remediations open, this seam is ready to execute while `REM-005` remains tracked as non-blocking cleanup.
   - Downstream seam-local review should verify that one selected backend id maps to one adapter identity, that the failure buckets stay fail-closed, and that any adapter-visible status subset stays inside a single explicit owner line.
 - **Canonical contract refs**:
   - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
@@ -99,9 +103,9 @@ open_remediations: []
   - `docs/contracts/substrate-gateway-policy-evaluation.md`
 - **Risks / unknowns**:
   - Risk:
-    - the exact adapter-visible `status --json` subset remains unresolved and could force drift between local docs and the external status schema owner
+    - a future attempt to publish adapter-visible `status --json` metadata could drift from the current v1 boundary if it widens the schema without an explicit status-schema owner update
   - De-risk plan:
-    - carry that question as a blocking remediation and force an explicit owner-line decision during seam-local planning
+    - keep the current v1 boundary explicit in the canonical status schema and require a schema-owner update before any additive field family ships
   - Risk:
     - stale `packs/active/...` references in ADR-0041 could leak incorrect authority paths into downstream docs
   - De-risk plan:
