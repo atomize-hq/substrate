@@ -3,7 +3,7 @@ slice_id: S99
 seam_id: SEAM-3
 slice_kind: seam_exit_gate
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current

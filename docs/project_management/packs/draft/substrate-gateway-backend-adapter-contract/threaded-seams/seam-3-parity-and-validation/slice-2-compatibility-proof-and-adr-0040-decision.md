@@ -3,7 +3,7 @@ slice_id: S2
 seam_id: SEAM-3
 slice_kind: conformance
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
@@ -27,14 +27,13 @@ contracts_consumed:
   - C-02
   - C-03
   - C-04
-open_remediations:
-  - REM-004
+open_remediations: []
 ---
 ### S2 - Compatibility proof and ADR-0040 decision
 
 #### Goal
 
-Lock the additive compatibility proof and resolve whether ADR-0040 remains evidence-only or must enter the direct touch set before this seam can become `exec-ready`.
+Lock the additive compatibility proof and record the explicit ADR-0040 evidence-only posture that allows this seam to execute without reopening the runtime-ownership ADR text.
 
 #### Dependencies
 
@@ -56,11 +55,13 @@ Lock the additive compatibility proof and resolve whether ADR-0040 remains evide
 #### S2.T2 - Resolve ADR-0040 alignment posture
 
 - **Outcome**:
-  - `REM-004` is either resolved by confirming ADR-0040 is evidence-only or converted into a direct touch-surface decision captured in seam-local planning.
+  - `REM-004` resolves by confirming ADR-0040 remains evidence-only basis for this seam.
+  - Direct ADR-0040 edits stay out of scope unless downstream parity or compatibility proof discovers a concrete runtime-ownership drift that the existing owner line no longer explains.
 - **Files**:
   - `../../compatibility-spec.md`
   - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
   - `../../governance/remediation-log.md`
 - **Acceptance criteria**:
   - the decision is explicit and no longer implied
-  - `SEAM-3` can explain whether ADR-0040 remains evidence-only before `exec-ready` is claimed
+  - `SEAM-3` can explain why ADR-0040 remains evidence-only before `exec-ready` is claimed
+  - the seam does not treat ADR-0040 as a direct touch surface unless landing evidence exposes a concrete owner-line mismatch

@@ -1,7 +1,7 @@
 # Substrate Gateway Backend Adapter Protocol
 
-This document is the durable canonical contract reference for `C-03` at the gateway adapter
-protocol boundary. It defines the deterministic lifecycle from a selected stable backend id to
+This document is the durable canonical contract reference for the gateway adapter protocol
+boundary. It defines the deterministic lifecycle from a selected stable backend id to
 adapter execution, normalized event emission, and completion without widening external ownership.
 
 ## Contract

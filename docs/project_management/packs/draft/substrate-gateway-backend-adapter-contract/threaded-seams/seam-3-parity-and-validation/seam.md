@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-3
 seam_slug: parity-and-validation
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
@@ -24,7 +24,7 @@ gates:
   pre_exec:
     review: passed
     contract: passed
-    revalidation: pending
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -32,8 +32,7 @@ seam_exit_gate:
   required: true
   planned_location: S99
   status: pending
-open_remediations:
-  - REM-004
+open_remediations: []
 ---
 # SEAM-3 - Parity and validation
 
@@ -64,16 +63,18 @@ open_remediations:
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/manual_testing_playbook.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/ci_checkpoint_plan.md`
   - `docs/contracts/substrate-gateway-runtime-parity.md`
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - **Verification**:
   - This seam consumes `C-01` through `C-04` from `../../governance/seam-1-closeout.md` and `../../governance/seam-2-closeout.md`.
   - `THR-01` and `THR-02` are now published inbound threads for this seam.
-  - The seam-local review is concrete enough to activate decomposition, but `REM-004` still blocks `exec-ready` until ADR-0040 alignment is explicitly confirmed as evidence-only or promoted into the touch set.
+  - ADR-0040 now stays explicit evidence-only basis for this seam:
+    - ADR-0040 remains the owner of the Substrate versus `substrate-gateway` runtime boundary.
+    - ADR-0041 and `docs/contracts/substrate-gateway-runtime-parity.md` carry the downstream consequences that this seam must prove.
+    - direct ADR-0040 edits stay out of scope unless landing evidence uncovers a concrete owner-line mismatch.
 
 ## Review bundle
 
 - `review.md` is the authoritative artifact for the current pre-exec posture.
-- The current review passes the falsifiability and contract-consumption checks, but revalidation remains blocked on `REM-004`.
+- The current review passes the falsifiability, contract-consumption, and revalidation checks, so this seam may proceed at `status: exec-ready`.
 
 ## Seam-exit gate plan
 
@@ -104,4 +105,4 @@ open_remediations:
   - `../../governance/seam-1-closeout.md`
   - `../../governance/seam-2-closeout.md`
 - Current blocking remediation:
-  - `REM-004`
+  - none at pre-exec; `REM-004` is resolved in `../../governance/remediation-log.md`

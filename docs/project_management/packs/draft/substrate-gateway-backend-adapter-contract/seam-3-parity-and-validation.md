@@ -2,7 +2,7 @@
 seam_id: SEAM-3
 seam_slug: parity-and-validation
 type: conformance
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v2
 basis:
@@ -25,7 +25,7 @@ gates:
   pre_exec:
     review: passed
     contract: passed
-    revalidation: pending
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -33,8 +33,7 @@ seam_exit_gate:
   required: true
   planned_location: S99
   status: pending
-open_remediations:
-  - REM-004
+open_remediations: []
 ---
 
 # SEAM-3 - Parity and validation
@@ -77,9 +76,8 @@ open_remediations:
   - manual validation assertions must stay downstream of the already published upstream contracts
 - **Dependencies**
   - Direct blockers:
-    - none for activation; `SEAM-2` has published the adapter protocol and schema boundary
+    - none at pre-exec; `SEAM-2` has published the adapter protocol and schema boundary and ADR-0040 remains settled basis evidence
   - Transitive blockers:
-    - ADR-0040 alignment may need direct edits if evidence-only status proves insufficient
     - platform parity proof may expand if the upstream protocol/schema seam widens the runtime blast radius
   - Direct consumers:
     - pack closeout
@@ -92,21 +90,23 @@ open_remediations:
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/manual_testing_playbook.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/ci_checkpoint_plan.md`
   - `docs/contracts/substrate-gateway-runtime-parity.md`
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
 - **Verification**:
   - This seam consumes upstream contracts `C-01` through `C-04`, so verification may depend on accepted upstream evidence for the landed selection, publication, protocol, and schema contracts.
   - At seam-brief depth, readiness is that the parity matrix, compatibility proof, and validation assertions are concrete enough for seam-local planning and implementation.
   - Downstream seam-local review should prove that cross-platform guarantees remain compatible with ADR-0040 and that the compatibility proof keeps ADR-0024 historical rather than active.
-  - The seam is now active and decomposed because `THR-02` is published, but `REM-004` still blocks `exec-ready` until ADR-0040 alignment is explicitly confirmed as evidence-only or promoted into the touch set.
+  - ADR-0040 is now explicitly confirmed as evidence-only basis for this seam:
+    - ADR-0040 remains the owner of the Substrate versus `substrate-gateway` runtime boundary.
+    - ADR-0041 and `docs/contracts/substrate-gateway-runtime-parity.md` carry the downstream consequences this seam must prove.
+    - direct ADR-0040 edits stay out of scope unless landing evidence discovers a concrete runtime-ownership drift.
 - **Canonical contract refs**:
   - `docs/contracts/substrate-gateway-runtime-parity.md`
   - `docs/contracts/substrate-gateway-operator-contract.md`
   - `docs/contracts/substrate-gateway-status-schema.md`
 - **Risks / unknowns**:
   - Risk:
-    - ADR-0040 evidence-only alignment may prove insufficient once parity proof gets specific about touched surfaces
+    - landing evidence could still expose a concrete runtime-ownership drift that ADR-0040 and the current runtime-parity contract no longer explain
   - De-risk plan:
-    - carry that question as a blocking remediation for this seam and force an explicit decision before `SEAM-3` can become `exec-ready`
+    - reopen ADR-0040 alignment only if parity or compatibility proof surfaces a concrete mismatch during landing or closeout
   - Risk:
     - platform proof could accidentally restate or widen upstream contracts instead of validating them
   - De-risk plan:

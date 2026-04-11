@@ -18,7 +18,6 @@ This artifact feeds `gates.pre_exec.review`.
 
 ## Likely mismatch hotspots
 
-- `REM-004` remains open and blocks `exec-ready` until ADR-0040 is explicitly confirmed as evidence-only or promoted into the seam touch set.
 - The seam brief references `platform-parity-spec.md`, `compatibility-spec.md`, and `manual_testing_playbook.md`, but those proof surfaces still need seam-local execution to become landed evidence.
 - The checkpoint plan is concrete enough to decompose, but its compile-parity mode, feature-smoke depth, and WSL scope remain downstream decisions rather than accepted proof today.
 
@@ -28,7 +27,11 @@ This artifact feeds `gates.pre_exec.review`.
 - The seam is safe to activate and decompose because the consumed upstream handoff is now landed and current.
 - Review is concrete enough to falsify the parity, compatibility, and validation proof shape before implementation starts.
 - Contract consumption is concrete enough to plan because the seam consumes accepted upstream truth rather than owning a new public contract baseline.
-- `REM-004` remains the only active blocker: ADR-0040 alignment is still evidence-only and must be made explicit before `SEAM-3` can become `exec-ready`.
+- ADR-0040 posture is now explicit:
+  - ADR-0040 remains the prerequisite boundary owner for Substrate versus `substrate-gateway` runtime ownership.
+  - `SEAM-3` consumes that owner line through ADR-0041 and `docs/contracts/substrate-gateway-runtime-parity.md` instead of reopening ADR-0040 as a direct touch surface.
+  - The seam should reopen ADR-0040 only if landing evidence uncovers a concrete ownership drift that the current owner line no longer explains.
+- `REM-004` is resolved by recording that evidence-only posture in seam-local planning, so it no longer blocks `status: exec-ready`.
 
 ## Pre-exec gate disposition
 
@@ -36,12 +39,12 @@ This artifact feeds `gates.pre_exec.review`.
   - the parity, compatibility, and validation proof surfaces are concrete enough to review and falsify.
 - **Contract gate**: passed
   - consumed upstream contracts `C-01` through `C-04` are published and the seam does not own a new public contract baseline.
-- **Revalidation gate**: pending
-  - `REM-004` must be resolved before the seam can claim `exec-ready`.
+- **Revalidation gate**: passed
+  - upstream closeouts still publish `THR-01` and `THR-02`, and ADR-0040 is now explicitly recorded as evidence-only basis rather than as an implied direct edit surface.
 - **Opened remediations**:
-  - none; `REM-004` remains authoritative.
+  - none; existing remediation entries remain authoritative.
 - **Current readiness posture**:
-  - `SEAM-3` is active and `status: decomposed`.
+  - `SEAM-3` is active and `status: exec-ready`.
   - `THR-01` and `THR-02` are published inputs, but they are not yet revalidated by this seam.
 
 ## Planned seam-exit gate focus
