@@ -199,12 +199,12 @@
 
 ## Risks and unknowns
 - The exact published `status --json` subset for backend capability visibility remains open.
-- The exact adopted Universal Agent API subset remains open:
+- The schema subset is now pinned by `C-04`:
   - capability ids
   - extension keys
   - session-handle facet fields
   - bounded adapter error detail
-- The local-to-external owner line is now pinned by `C-03`; the remaining open items are the schema subset bullets above, while the follow-ups below are unrelated packaging or evidence decisions.
+- The remaining open item in the pack is the published `status --json` subset; the follow-ups below are unrelated packaging or evidence decisions.
 - ADR-0041 still carries `packs/active/...` path references while this checkout uses `packs/implemented/...`.
 - ADR-0040 alignment stays in evidence-only status until downstream planning records a direct edit or confirms no direct edit.
 
@@ -226,5 +226,4 @@
 
 ## Follow-ups
 - Fix one explicit published backend-visibility subset for `status --json`.
-- Fix one explicit Universal Agent API subset for capability ids, extension keys, session-handle facets, and bounded adapter error detail.
 - Confirm whether ADR-0040 planning-pack docs stay evidence-only or enter the downstream touch set as direct alignment edits.

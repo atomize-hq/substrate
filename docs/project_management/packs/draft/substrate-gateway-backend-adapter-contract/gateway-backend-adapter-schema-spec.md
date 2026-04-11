@@ -22,6 +22,13 @@ The adopted cross-backend capability subset is:
 - `agent_api.tools.results.v1`
 - `agent_api.artifacts.final_text.v1`
 
+Rules:
+
+- the adopted capability ids above are the only gateway-facing capability ids in this baseline
+- backend-specific capability ids remain implementation detail and must not widen the contract
+- unsupported capability requirements fail closed before adapter execution starts
+- capability validation uses the adopted subset above as closed contract truth rather than an inferred backend surface
+
 ### Explicitly deferred capability ids
 
 These remain outside the current adapter contract baseline:
@@ -49,6 +56,7 @@ The adopted run-extension subset is:
 
 Closed-schema rules:
 
+- unsupported extension keys fail closed before adapter execution starts
 - `agent_api.exec.add_dirs.v1`
   - object with required `dirs: string[]`
   - unknown keys are invalid
@@ -127,8 +135,8 @@ Allowed completion metadata in the adopted baseline:
 
 Pinned rules:
 
-- `unsupported_capability` keeps the rejected capability id bounded in `capability`
-- `invalid_request` covers adopted extension schema and contradiction failures
+- `unsupported_capability` keeps the rejected capability id bounded in `capability` and applies when a capability outside the adopted subset is requested or advertised
+- `invalid_request` covers adopted extension-schema and contradiction failures
 - `backend` covers safe runtime rejection messages, including:
   - `"cancelled"`
   - `"no session found"`
