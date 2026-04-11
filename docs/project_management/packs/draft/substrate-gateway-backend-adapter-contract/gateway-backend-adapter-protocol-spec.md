@@ -1,7 +1,7 @@
 # Gateway Backend Adapter Protocol Spec
 
-This spec is the seam-local execution baseline for the adapter protocol. The durable contract text
-for this surface lives in `docs/contracts/substrate-gateway-backend-adapter-protocol.md`.
+This spec is the seam-local execution baseline for `C-03`. The durable contract text for this
+surface lives in `docs/contracts/substrate-gateway-backend-adapter-protocol.md`.
 
 ## Scope
 

@@ -288,6 +288,4 @@ Before promotion, the selected docs must define:
 ## Follow-ups
 
 - Edit ADR-0041 `Related Docs` to use `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/*`. The staged manifest uses the implemented path because that is the live repo path in this checkout.
-- Pin the exact adopted Universal Agent API subset in `gateway-backend-adapter-schema-spec.md`: capability ids, extension keys, session-handle facet fields, and selection-failure messages.
-- Pin the exact handoff boundary between local adapter event-translation rules and ADR-0017 event-envelope ownership before downstream seam planning starts.
-- Pin the exact request, response, and error object names that the adapter contract publishes before downstream seam planning starts.
+- The S00 protocol/schema baselines are now pinned in `gateway-backend-adapter-protocol-spec.md` and `gateway-backend-adapter-schema-spec.md`; downstream planning should treat `C-03` and `C-04` as concrete, with no additional pre-planning ambiguity remaining for the adopted capability subset, event handoff boundary, or request/response/error object naming.

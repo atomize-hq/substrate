@@ -1,9 +1,9 @@
 # Substrate Gateway Backend Adapter Schema
 
-This document is the durable canonical contract reference for the gateway adapter schema at the
-Substrate boundary. It defines the adopted capability advertisement subset, the adopted run
-extension subset, the bounded event/completion payload shapes, the bounded adapter error shape, and
-the bounded session-handle facet.
+This document is the durable canonical contract reference for `C-04` at the gateway adapter schema
+boundary. It defines the adopted capability advertisement subset, the adopted run extension
+subset, the bounded event/completion payload shapes, the bounded adapter error shape, and the
+bounded session-handle facet.
 
 ## Contract
 
