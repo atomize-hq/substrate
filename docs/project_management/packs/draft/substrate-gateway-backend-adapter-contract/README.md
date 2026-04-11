@@ -14,8 +14,8 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-1`
-- Next seam: `SEAM-2`
+- Active seam: `SEAM-2`
+- Next seam: `SEAM-3`
 
 Policy:
 
@@ -26,8 +26,8 @@ Policy:
 - future seams remain seam briefs
 - canonical contract docs live in `docs/contracts/` and must remain descriptive-only
 
-Assumptions carried by this extraction:
+Current promotion state:
 
-- `SEAM-1` is the critical-path active seam because backend-id semantics, allowlist evaluation, failure taxonomy, and the published adapter-visible status boundary must be concrete before protocol or parity work can safely narrow.
-- `SEAM-2` is the queued next seam because it consumes `SEAM-1` contract truth and is likely to need only provisional deeper planning until the status subset and owner lines are fixed.
-- `SEAM-3` stays future because parity, compatibility, and validation proof are downstream conformance work that depends on the first two seams landing their contract truth first.
+- `SEAM-1` is closed and no longer in the forward planning window because its closeout published `THR-01` and recorded a passed seam-exit gate.
+- `SEAM-2` is the active seam because the `SEAM-1` closeout published the stable selection and status-boundary handoff needed to begin seam-local protocol/schema planning.
+- `SEAM-3` is now the queued next seam because it remains the direct downstream consumer of `SEAM-2` and still depends on `THR-02` publication before it can become active.

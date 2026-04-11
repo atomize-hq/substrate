@@ -2,12 +2,12 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-  - `SEAM-1` is active because every downstream seam depends on stable backend-id semantics, selection failure taxonomy, and the published owner line for any additive adapter-visible status data.
-- **Next seam**: `SEAM-2`
-  - `SEAM-2` is next because it is the first consumer of `SEAM-1` contract truth and is the only seam likely to benefit from later provisional deeper planning once `SEAM-1` lands.
-- **Future seams**: `SEAM-3`
-  - `SEAM-3` stays future because parity and validation proof should consume published upstream truth rather than help invent it.
+- **Active seam**: `SEAM-2`
+  - `SEAM-2` is active because `SEAM-1` has closed, `THR-01` is published, and the protocol/schema seam can now consume the landed selection and status-boundary truth.
+- **Next seam**: `SEAM-3`
+  - `SEAM-3` is next because it is the nearest downstream consumer behind `SEAM-2` and should stay queued until `THR-02` is published.
+- **Future seams**: none
+  - no remaining seam stays outside the forward window after `SEAM-2` activation.
 
 Horizon policy for this extracted pack:
 

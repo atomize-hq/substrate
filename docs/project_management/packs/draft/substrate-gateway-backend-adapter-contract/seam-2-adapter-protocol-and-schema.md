@@ -2,17 +2,17 @@
 seam_id: SEAM-2
 seam_slug: adapter-protocol-and-schema
 type: integration
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: decomposed
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads:
     - THR-01
-    - THR-02
   stale_triggers:
     - backend-id selection semantics or the published status subset change upstream
     - adopted capability ids or extension keys change
@@ -21,9 +21,9 @@ basis:
     - ADR-0028 trace owner wording changes
 gates:
   pre_exec:
-    review: pending
+    review: passed
     contract: pending
-    revalidation: pending
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -31,7 +31,9 @@ seam_exit_gate:
   required: true
   planned_location: S99
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-002
+  - REM-003
 ---
 
 # SEAM-2 - Adapter protocol and schema
@@ -71,7 +73,7 @@ open_remediations: []
   - future `cli:*` and `api:*` adapters extend this contract additively under the same stable identity model
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-1` must publish the stable selection contract and the adapter-visible status publication boundary
+    - `SEAM-1` closeout must remain the current published source for the stable selection contract and the adapter-visible status publication boundary
   - Transitive blockers:
     - ADR-0017 or ADR-0028 wording drift could collapse the intended local-to-external handoff line
     - unresolved Universal Agent API subset choices could force a schema split or resequencing
@@ -94,6 +96,7 @@ open_remediations: []
   - This seam consumes upstream contracts `C-01` and `C-02`, so verification may depend on accepted upstream evidence for the stable selection and publication boundary.
   - This seam produces owned contracts `C-03` and `C-04`.
   - At seam-brief depth, readiness is that the dispatch lifecycle, field inventory, fail-closed capability rules, and ADR-0017 / ADR-0028 handoff lines are concrete enough for seam-local planning and implementation.
+  - `SEAM-2` is active and decomposed because `THR-01` is now published, but readiness remains blocked until `REM-002` and `REM-003` resolve the `C-04` schema subset and the `C-03` owner-line boundary.
 - **Canonical contract refs**:
   - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
   - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
@@ -112,10 +115,10 @@ open_remediations: []
   - safety depends on failing closed for unsupported capabilities and keeping gateway-private mechanics out of Substrate policy surfaces
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `next` because it directly follows the selection contract on the critical path and is the best candidate for later provisional deeper planning once `SEAM-1` publishes `THR-01`
+    - `active` because `SEAM-1` published `THR-01`, making seam-local planning and revalidation against landed upstream truth safe
   - Which threads matter most
     - `THR-01`
-    - `THR-02`
+    - `THR-02` as outbound work to publish after this seam lands
   - What the first seam-local review should focus on
     - dispatch lifecycle
     - fail-closed capability order

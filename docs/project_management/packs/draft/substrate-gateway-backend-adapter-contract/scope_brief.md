@@ -4,8 +4,8 @@ pack_version: v1
 pack_status: extracted
 source_ref: docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md + docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/
 execution_horizon:
-  active_seam: SEAM-1
-  next_seam: SEAM-2
+  active_seam: SEAM-2
+  next_seam: SEAM-3
 ---
 
 # Scope Brief - Substrate gateway backend adapter contract
@@ -49,13 +49,12 @@ execution_horizon:
   - Universal Agent API evidence from `codex-wrapper`
   - gateway boundary evidence from `kimi-claude-adapter`
 - **Known unknowns / risks**:
-  - the exact published adapter-visible subset for `substrate world gateway status --json` remains unresolved
   - the exact adopted Universal Agent API subset remains unresolved for capability ids, extension keys, session-handle facets, and bounded adapter error detail
   - the exact owner line between local adapter translation and ADR-0017 / ADR-0028 remains unresolved
   - ADR-0040 alignment is still evidence-only until downstream planning decides whether direct edits are required
-  - ADR-0041 still carries stale `packs/active/...` references in this checkout
 - **Assumptions**:
   - the existing feature directory `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/` is the correct pack root to reuse
-  - `SEAM-1` is the active seam by inference from the pre-planning critical path, not because the ADR explicitly labels it active
-  - `SEAM-2` is the next seam by inference because it depends on `SEAM-1` and remains the most likely seam to benefit from later provisional deeper planning
-  - future durable contract publications for the adapter contract may land under descriptive `docs/contracts/` paths, but this extractor does not create those canonical docs
+  - `SEAM-1` has now closed with `THR-01` published, so the forward planning window has moved to `SEAM-2` and `SEAM-3`
+  - `SEAM-2` is the active seam because it directly consumes the landed `SEAM-1` handoff and is now eligible for seam-local planning
+  - `SEAM-3` is the next seam because it remains the nearest downstream consumer on the critical path after `SEAM-2`
+  - future durable contract publications for the adapter contract may land under descriptive `docs/contracts/` paths, but this pack still keeps those canonical docs outside the planning control plane

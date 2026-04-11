@@ -3,13 +3,14 @@ seam_id: SEAM-3
 seam_slug: parity-and-validation
 type: conformance
 status: proposed
-execution_horizon: future
-plan_version: v1
+execution_horizon: next
+plan_version: v2
 basis:
   currentness: provisional
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - ./governance/seam-1-closeout.md
   required_threads:
     - THR-01
     - THR-02
@@ -74,7 +75,6 @@ open_remediations: []
   - manual validation assertions must stay downstream of the already published upstream contracts
 - **Dependencies**
   - Direct blockers:
-    - `SEAM-1` must publish the selection and status publication boundary
     - `SEAM-2` must publish the adapter protocol and schema boundary
   - Transitive blockers:
     - ADR-0040 alignment may need direct edits if evidence-only status proves insufficient
@@ -113,7 +113,7 @@ open_remediations: []
   - safety depends on keeping compatibility proof additive and refusing any hidden second control plane
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `future` because parity and compatibility proof are downstream conformance work that only becomes safe after the first two seams publish their contract truth
+    - `next` because `SEAM-1` is closed and `SEAM-2` is now active, but parity and compatibility proof still must wait for `THR-02` publication
   - Which threads matter most
     - `THR-01`
     - `THR-02`

@@ -2,9 +2,9 @@
 seam_id: SEAM-1
 seam_slug: adapter-selection-boundary
 type: integration
-status: exec-ready
-execution_horizon: active
-plan_version: v4
+status: closed
+execution_horizon: future
+plan_version: v5
 basis:
   currentness: current
   source_scope_ref: scope_brief.md
@@ -24,14 +24,13 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
-open_remediations:
-  - REM-005
+  status: passed
+open_remediations: []
 ---
 
 # SEAM-1 - Adapter selection boundary
@@ -76,7 +75,7 @@ open_remediations:
   - Direct blockers:
     - none inside this extracted pack; this seam is the prerequisite contract-definition seam
   - Transitive blockers:
-    - stale ADR path references and archived ADR-0024 assumptions can still confuse downstream planning until this seam publishes the accepted owner line
+    - downstream consumers must still revalidate if backend-id semantics, failure buckets, or the published status boundary drift after `THR-01` publication
   - Direct consumers:
     - `SEAM-2`
     - `SEAM-3`
@@ -95,7 +94,7 @@ open_remediations:
   - At seam-brief depth, readiness means the stable backend-id semantics, ordered selection inputs, failure buckets, and `status --json` publication boundary are concrete enough for execution without inventing a second owner.
   - `docs/contracts/substrate-gateway-backend-adapter-selection.md` is now the canonical `C-01` baseline.
   - `C-02` now resolves to a narrower v1 decision: no additive adapter-visible `status --json` field family is currently published beyond the existing `status` plus `client_wiring.*` schema, and any future additive family requires an explicit status-schema owner update before code changes.
-  - With all three pre-exec gates passed, `basis.currentness: current`, and no blocking pre-exec remediations open, this seam is ready to execute while `REM-005` remains tracked as non-blocking cleanup.
+  - With the seam exit now closed and `THR-01` published from closeout, this seam no longer sits in the forward planning window.
   - Downstream seam-local review should verify that one selected backend id maps to one adapter identity, that the failure buckets stay fail-closed, and that any adapter-visible status subset stays inside a single explicit owner line.
 - **Canonical contract refs**:
   - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
@@ -107,15 +106,15 @@ open_remediations:
   - De-risk plan:
     - keep the current v1 boundary explicit in the canonical status schema and require a schema-owner update before any additive field family ships
   - Risk:
-    - stale `packs/active/...` references in ADR-0041 could leak incorrect authority paths into downstream docs
+    - downstream seams may become stale if backend-id semantics, failure buckets, or the status owner line drift after `THR-01` publication
   - De-risk plan:
-    - correct the path drift as part of the seam-local contract-definition bundle or record it as carried-forward evidence if an upstream ADR edit is intentionally deferred
+    - force downstream review and revalidation against `governance/seam-1-closeout.md` before consumers advance to `exec-ready`
 - **Rollout / safety**:
-  - this seam is safe to land first because it is contract-definition work that narrows trust boundaries without depending on runtime transport or platform-specific behavior
-  - safety depends on keeping gateway-local control surfaces out of the authorization path
+  - this seam landed first because it narrowed trust boundaries without depending on runtime transport or platform-specific behavior
+  - downstream safety now depends on consuming the published closeout rather than inferring authority from old planning prose
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `active` because every other seam depends on the stable backend-id contract, the failure taxonomy, and the publication boundary for adapter-visible status data
+    - `future` because the seam is closed and no longer part of the active planning horizon
   - Which threads matter most
     - `THR-01`
   - What the first seam-local review should focus on
@@ -125,11 +124,11 @@ open_remediations:
     - `status --json` owner line
     - non-trust boundary for gateway-local state
 - **Expected seam-exit concerns**:
-  - Contracts likely to publish:
+  - Contracts published:
     - `C-01`
     - `C-02`
-  - Threads likely to advance:
-    - `THR-01`
+  - Threads advanced:
+    - `THR-01` to `published`
   - Review-surface areas likely to shift after landing:
     - backend selection flow
     - status publication boundary
@@ -137,4 +136,4 @@ open_remediations:
   - Downstream seams most likely to require revalidation:
     - `SEAM-2`
     - `SEAM-3`
-  - Accepted or published owned-contract artifacts belong here and in closeout evidence, not in pre-exec verification for the producing seam.
+  - Closeout authority now lives in `governance/seam-1-closeout.md`.
