@@ -46,11 +46,86 @@ impl ReplPrinter {
                 let _ = printer.print(line.into());
             }
             ReplPrinter::Stdout => {
-                println!("{}", line.into());
-                let _ = io::stdout().flush();
+                write_locked_stdout_line(&line.into());
             }
         }
     }
+}
+
+fn write_locked_stdout(bytes: &[u8]) {
+    let stdout = io::stdout();
+    let mut lock = stdout.lock();
+    let _ = lock.write_all(bytes);
+    let _ = lock.flush();
+}
+
+fn write_locked_stdout_line(line: &str) {
+    let stdout = io::stdout();
+    let mut lock = stdout.lock();
+    let _ = lock.write_all(line.as_bytes());
+    let _ = lock.write_all(b"\n");
+    let _ = lock.flush();
+}
+
+fn write_best_effort_stdout_line(line: &str) {
+    write_best_effort_stdout(format!("{line}\n").as_bytes());
+}
+
+fn write_best_effort_stderr_line(line: &str) {
+    write_best_effort_stderr(format!("{line}\n").as_bytes());
+}
+
+#[cfg(unix)]
+fn write_best_effort_unix<F>(bytes: &[u8], mut write_once: F) -> usize
+where
+    F: FnMut(&[u8]) -> io::Result<usize>,
+{
+    let mut offset = 0usize;
+    while offset < bytes.len() {
+        match write_once(&bytes[offset..]) {
+            Ok(0) => break,
+            Ok(written) => {
+                offset += written.min(bytes.len() - offset);
+            }
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        }
+    }
+    offset
+}
+
+#[cfg(unix)]
+fn write_best_effort_fd(fd: libc::c_int, bytes: &[u8]) {
+    let _ = write_best_effort_unix(bytes, |remaining| {
+        let written = unsafe { libc::write(fd, remaining.as_ptr().cast(), remaining.len()) };
+        if written < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(written as usize)
+        }
+    });
+}
+
+#[cfg(unix)]
+fn write_best_effort_stdout(bytes: &[u8]) {
+    write_best_effort_fd(libc::STDOUT_FILENO, bytes);
+}
+
+#[cfg(not(unix))]
+fn write_best_effort_stdout(bytes: &[u8]) {
+    let _ = io::stdout().write_all(bytes);
+    let _ = io::stdout().flush();
+}
+
+#[cfg(unix)]
+fn write_best_effort_stderr(bytes: &[u8]) {
+    write_best_effort_fd(libc::STDERR_FILENO, bytes);
+}
+
+#[cfg(not(unix))]
+fn write_best_effort_stderr(bytes: &[u8]) {
+    let _ = io::stderr().write_all(bytes);
+    let _ = io::stderr().flush();
 }
 
 fn is_cursor_position_timeout_error(err: &anyhow::Error) -> bool {
@@ -122,23 +197,7 @@ fn detect_terminal_loss_while_prompting() -> Option<anyhow::Error> {
 
 fn emit_best_effort_terminal_loss_diagnostic(err: &anyhow::Error) {
     let message = format!("substrate: error: abnormal terminal loss: {err:#}\n");
-
-    #[cfg(unix)]
-    {
-        unsafe {
-            let _ = libc::write(
-                libc::STDERR_FILENO,
-                message.as_bytes().as_ptr().cast(),
-                message.len(),
-            );
-        }
-    }
-
-    #[cfg(not(unix))]
-    {
-        let _ = io::stderr().write_all(message.as_bytes());
-        let _ = io::stderr().flush();
-    }
+    write_best_effort_stderr(message.as_bytes());
 }
 
 fn spawn_prompt_terminal_loss_monitor(
@@ -165,6 +224,22 @@ fn spawn_prompt_terminal_loss_monitor(
             thread::sleep(Duration::from_millis(100));
         }
     });
+}
+
+fn consume_terminal_loss_message(
+    terminal_loss_detected: &AtomicBool,
+    terminal_loss_message: &Mutex<Option<String>>,
+) -> Option<anyhow::Error> {
+    if terminal_loss_detected.load(Ordering::SeqCst) {
+        let message = terminal_loss_message
+            .lock()
+            .expect("terminal loss message mutex poisoned")
+            .take()
+            .unwrap_or_else(|| "controlling terminal became invalid".to_string());
+        return Some(anyhow!(message));
+    }
+
+    detect_terminal_loss_while_prompting()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -217,9 +292,9 @@ struct ReplPreflight {
 
 pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
     let preflight = preflight_caging_required(config)?;
-    println!("Substrate v{}", env!("CARGO_PKG_VERSION"));
-    println!("Session ID: {}", config.session_id);
-    println!("Logging to: {}", config.trace_log_file.display());
+    write_best_effort_stdout_line(&format!("Substrate v{}", env!("CARGO_PKG_VERSION")));
+    write_best_effort_stdout_line(&format!("Session ID: {}", config.session_id));
+    write_best_effort_stdout_line(&format!("Logging to: {}", config.trace_log_file.display()));
 
     let running_child_pid = Arc::new(AtomicI32::new(0));
     setup_signal_handlers(running_child_pid.clone())?;
@@ -288,9 +363,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         )
                     };
                     agent_printer.print(message.clone());
-                    eprintln!("{message}");
-                    let _ = io::stdout().flush();
-                    let _ = io::stderr().flush();
+                    write_best_effort_stderr_line(&message);
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     return Ok(exit_code);
                 }
@@ -367,6 +440,20 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                 }
             };
             prompt_active.store(false, Ordering::SeqCst);
+            let prompt_response = match prompt_response {
+                PromptWorkerResponse::CtrlD if prompt_worker.is_reedline() => {
+                    if let Some(err) = consume_terminal_loss_message(
+                        terminal_loss_detected.as_ref(),
+                        terminal_loss_message.as_ref(),
+                    ) {
+                        termination_cause = ReplTerminationCause::AbnormalTerminalLoss;
+                        PromptWorkerResponse::AbnormalTerminalLoss(err)
+                    } else {
+                        PromptWorkerResponse::CtrlD
+                    }
+                }
+                other => other,
+            };
 
             match prompt_response {
                 PromptWorkerResponse::Line(command) => {
@@ -396,10 +483,10 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                     if let Some((agents, events, delay_ms)) = parse_demo_burst(trimmed) {
                         schedule_demo_burst(agents, events, Duration::from_millis(delay_ms));
-                        println!(
+                        write_best_effort_stdout_line(&format!(
                             "[demo] scheduled burst: agents={}, events_per_agent={}, delay_ms={}",
                             agents, events, delay_ms
-                        );
+                        ));
                         continue;
                     }
 
@@ -609,10 +696,10 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     telemetry.record_command();
                 }
                 PromptWorkerResponse::CtrlC => {
-                    println!("^C");
+                    write_best_effort_stdout_line("^C");
                 }
                 PromptWorkerResponse::CtrlD => {
-                    println!("^D");
+                    write_best_effort_stdout_line("^D");
                     should_exit = true;
                 }
                 PromptWorkerResponse::AbnormalTerminalLoss(err) => {
@@ -623,7 +710,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                 PromptWorkerResponse::Error(err) => {
                     match classify_prompt_worker_error(prompt_worker.is_reedline(), &err) {
                         PromptWorkerErrorDisposition::FallbackToStdio => {
-                            eprintln!(
+                            write_best_effort_stderr_line(
                                 "substrate: warning: prompt backend degraded (cursor query timeout); falling back to plain stdin reader"
                             );
                             prompt_worker = PromptWorker::spawn_stdio(shared_config.clone())
@@ -638,7 +725,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             emit_best_effort_terminal_loss_diagnostic(&err);
                         }
                         PromptWorkerErrorDisposition::GenericError => {
-                            eprintln!("prompt error: {err}");
+                            write_best_effort_stderr_line(&format!("prompt error: {err}"));
                             should_exit = true;
                         }
                     }
@@ -740,7 +827,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
         if let Some(lines) = note_lines {
             for line in lines {
-                println!("{line}");
+                write_best_effort_stdout_line(&line);
             }
         }
 
@@ -977,9 +1064,7 @@ fn run_prompt_worker_stdio(
     while let Some(cmd) = command_rx.blocking_recv() {
         match cmd {
             PromptWorkerCommand::StartPrompt => {
-                let _ = io::stdout()
-                    .write_all(prompt.render_prompt_left().as_bytes())
-                    .and_then(|_| io::stdout().flush());
+                write_locked_stdout(prompt.render_prompt_left().as_bytes());
 
                 let mut line = String::new();
                 let read = stdin.read_line(&mut line);
@@ -1039,15 +1124,15 @@ fn report_nonzero_status(status: &ExitStatus) {
     {
         use std::os::unix::process::ExitStatusExt;
         if let Some(sig) = status.signal() {
-            eprintln!("Command terminated by signal {sig}");
+            write_best_effort_stderr_line(&format!("Command terminated by signal {sig}"));
             return;
         }
     }
 
-    eprintln!(
+    write_best_effort_stderr_line(&format!(
         "Command failed with status: {}",
         status.code().unwrap_or(-1)
-    );
+    ));
 }
 
 fn parse_demo_burst(input: &str) -> Option<(usize, usize, u64)> {
@@ -2293,6 +2378,8 @@ fn exit_status_from_code(code: i32) -> ExitStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::cell::{Cell, RefCell};
 
     #[cfg(unix)]
     fn reedline_terminal_loss_error() -> anyhow::Error {
@@ -2385,6 +2472,118 @@ mod tests {
         assert_eq!(
             shutdown_disposition_for_termination_cause(ReplTerminationCause::AbnormalTerminalLoss),
             PromptWorkerShutdownDisposition::Abandon
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_best_effort_unix_completes_after_single_full_write() {
+        let payload = b"abcdef";
+        let calls = Cell::new(0usize);
+
+        let written = write_best_effort_unix(payload, |remaining| {
+            calls.set(calls.get() + 1);
+            assert_eq!(remaining, payload);
+            Ok(remaining.len())
+        });
+
+        assert_eq!(written, payload.len());
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_best_effort_unix_drains_partial_writes() {
+        let payload = b"abcdef";
+        let calls = RefCell::new(Vec::<Vec<u8>>::new());
+
+        let written = write_best_effort_unix(payload, |remaining| {
+            calls.borrow_mut().push(remaining.to_vec());
+            Ok(match remaining.len() {
+                6 => 2,
+                4 => 1,
+                3 => 3,
+                other => other,
+            })
+        });
+
+        assert_eq!(written, payload.len());
+        assert_eq!(
+            calls.into_inner(),
+            vec![b"abcdef".to_vec(), b"cdef".to_vec(), b"def".to_vec()]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_best_effort_unix_retries_interrupted_writes() {
+        let payload = b"abcdef";
+        let calls = RefCell::new(Vec::<Vec<u8>>::new());
+        let stage = Cell::new(0usize);
+
+        let written = write_best_effort_unix(payload, |remaining| {
+            calls.borrow_mut().push(remaining.to_vec());
+            let next = stage.get();
+            stage.set(next + 1);
+            match next {
+                0 => Err(io::Error::new(io::ErrorKind::Interrupted, "signal")),
+                1 => Ok(2),
+                2 => Err(io::Error::new(io::ErrorKind::Interrupted, "signal")),
+                _ => Ok(remaining.len()),
+            }
+        });
+
+        assert_eq!(written, payload.len());
+        assert_eq!(
+            calls.into_inner(),
+            vec![
+                b"abcdef".to_vec(),
+                b"abcdef".to_vec(),
+                b"cdef".to_vec(),
+                b"cdef".to_vec()
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_best_effort_unix_stops_on_nonretryable_error() {
+        let payload = b"abcdef";
+        let calls = RefCell::new(Vec::<Vec<u8>>::new());
+
+        let written = write_best_effort_unix(payload, |remaining| {
+            calls.borrow_mut().push(remaining.to_vec());
+            match remaining.len() {
+                6 => Ok(2),
+                _ => Err(io::Error::new(io::ErrorKind::BrokenPipe, "closed")),
+            }
+        });
+
+        assert_eq!(written, 2);
+        assert_eq!(
+            calls.into_inner(),
+            vec![b"abcdef".to_vec(), b"cdef".to_vec()]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_best_effort_unix_stops_on_zero_byte_write() {
+        let payload = b"abcdef";
+        let calls = RefCell::new(Vec::<Vec<u8>>::new());
+
+        let written = write_best_effort_unix(payload, |remaining| {
+            calls.borrow_mut().push(remaining.to_vec());
+            match remaining.len() {
+                6 => Ok(2),
+                _ => Ok(0),
+            }
+        });
+
+        assert_eq!(written, 2);
+        assert_eq!(
+            calls.into_inner(),
+            vec![b"abcdef".to_vec(), b"cdef".to_vec()]
         );
     }
 
