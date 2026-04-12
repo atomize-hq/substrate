@@ -2560,7 +2560,10 @@ mod tests {
         });
 
         assert_eq!(written, 2);
-        assert_eq!(calls.into_inner(), vec![b"abcdef".to_vec(), b"cdef".to_vec()]);
+        assert_eq!(
+            calls.into_inner(),
+            vec![b"abcdef".to_vec(), b"cdef".to_vec()]
+        );
     }
 
     #[cfg(unix)]
@@ -2578,7 +2581,10 @@ mod tests {
         });
 
         assert_eq!(written, 2);
-        assert_eq!(calls.into_inner(), vec![b"abcdef".to_vec(), b"cdef".to_vec()]);
+        assert_eq!(
+            calls.into_inner(),
+            vec![b"abcdef".to_vec(), b"cdef".to_vec()]
+        );
     }
 
     #[test]
