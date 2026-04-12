@@ -46,10 +46,25 @@ impl ReplPrinter {
                 let _ = printer.print(line.into());
             }
             ReplPrinter::Stdout => {
-                write_best_effort_stdout_line(&line.into());
+                write_locked_stdout_line(&line.into());
             }
         }
     }
+}
+
+fn write_locked_stdout(bytes: &[u8]) {
+    let stdout = io::stdout();
+    let mut lock = stdout.lock();
+    let _ = lock.write_all(bytes);
+    let _ = lock.flush();
+}
+
+fn write_locked_stdout_line(line: &str) {
+    let stdout = io::stdout();
+    let mut lock = stdout.lock();
+    let _ = lock.write_all(line.as_bytes());
+    let _ = lock.write_all(b"\n");
+    let _ = lock.flush();
 }
 
 fn write_best_effort_stdout_line(line: &str) {
@@ -1022,9 +1037,7 @@ fn run_prompt_worker_stdio(
     while let Some(cmd) = command_rx.blocking_recv() {
         match cmd {
             PromptWorkerCommand::StartPrompt => {
-                let _ = io::stdout()
-                    .write_all(prompt.render_prompt_left().as_bytes())
-                    .and_then(|_| io::stdout().flush());
+                write_locked_stdout(prompt.render_prompt_left().as_bytes());
 
                 let mut line = String::new();
                 let read = stdin.read_line(&mut line);

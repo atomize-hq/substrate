@@ -21,6 +21,7 @@ const PTY_MARKER: &str = "OR1_PTY_MARKER";
 const PTY_START: &str = "__OR1_PTY_START__";
 const PTY_END: &str = "__OR1_PTY_END__";
 const DEMO_BURST_ACK: &str = "scheduled burst: agents=1, events_per_agent=3, delay_ms=1000";
+const CI_DEMO_BURST_ACK: &str = "scheduled burst: agents=1, events_per_agent=60, delay_ms=5";
 const DEMO_BURST_EVENT_1: &str = "chunk #00001";
 const DEMO_BURST_EVENT_2: &str = "chunk #00002";
 
@@ -148,6 +149,16 @@ impl PtyRepl {
         substrate_home: &Path,
         socket_path: &Path,
     ) -> Self {
+        Self::spawn_with_args(project_dir, home_dir, substrate_home, socket_path, &[])
+    }
+
+    fn spawn_with_args(
+        project_dir: &Path,
+        home_dir: &Path,
+        substrate_home: &Path,
+        socket_path: &Path,
+        extra_args: &[&str],
+    ) -> Self {
         ensure_substrate_built();
 
         let pty_system = native_pty_system();
@@ -189,6 +200,9 @@ impl PtyRepl {
         cmd.arg("--async-repl");
         cmd.arg("--world");
         cmd.arg("--shim-skip");
+        for arg in extra_args {
+            cmd.arg(arg);
+        }
 
         let child = pair.slave.spawn_command(cmd).expect("spawn substrate");
         let writer: Arc<Mutex<Box<dyn Write + Send>>> =
@@ -530,4 +544,76 @@ fn max_pty_buffered_lines_zero_drops_structured_lines_and_emits_one_warning_reco
         Some(2),
         "warning record must report dropped_structured_event_lines=2 (chunk #00001/#00002): {warning:?}"
     );
+}
+
+#[test]
+#[serial]
+fn ci_stdio_prompt_keeps_structured_event_markers_intact() {
+    let temp = temp_dir("substrate-or1-output-routing-ci-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(substrate_home.join("shims")).expect("create shims dir");
+    fs::create_dir_all(&project).expect("create project dir");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    write_policy(&substrate_home);
+    write_workspace_marker(&project, None);
+
+    let sock_temp = short_socket_dir("sub-or1-routing-ci-");
+    let sock = sock_temp.path().join("world.sock");
+    let _server = ReplWorldAgentStub::start(&sock, support::StreamBehavior::Normal);
+
+    let mut repl = PtyRepl::spawn_with_args(&project, &home, &substrate_home, &sock, &["--ci"]);
+    repl.wait_for_output_or_exit("Substrate v", Duration::from_secs(3))
+        .expect("banner");
+    repl.wait_for_output_or_exit("> ", Duration::from_secs(3))
+        .expect("ci prompt");
+
+    repl.send_line(":demo-burst 1 60 5");
+    repl.wait_for_output_or_exit(CI_DEMO_BURST_ACK, Duration::from_secs(3))
+        .expect("demo burst scheduled");
+
+    // Force repeated prompt redraws while burst events are streaming through the stdio prompt
+    // worker. The event markers must still arrive as intact substrings.
+    for _ in 0..8 {
+        std::thread::sleep(Duration::from_millis(20));
+        repl.send_line("");
+    }
+
+    repl.wait_for_output_or_exit("chunk #00040", Duration::from_secs(5))
+        .expect("later burst event");
+
+    repl.send_line("echo __CI_STDIO_OK__");
+    repl.wait_for_output_or_exit("__CI_STDIO_OK__", Duration::from_secs(3))
+        .expect("stdio prompt remained usable");
+
+    repl.send_line("exit");
+    let (code, out) = repl.shutdown_graceful(Duration::from_secs(3));
+    assert_eq!(code, 0, "expected clean exit; output:\n{out}");
+
+    for marker in [
+        "chunk #00010",
+        "chunk #00020",
+        "chunk #00030",
+        "chunk #00040",
+    ] {
+        assert!(
+            out.contains(marker),
+            "expected intact burst marker `{marker}` in ci stdio output; output:\n{out}"
+        );
+    }
+
+    for corruption in [
+        "chunk #0001> ",
+        "chunk #0002> ",
+        "chunk #0003> ",
+        "chunk #0004> ",
+    ] {
+        assert!(
+            !out.contains(corruption),
+            "expected ci stdio prompt bytes not to split burst markers via `{corruption}`; output:\n{out}"
+        );
+    }
 }
