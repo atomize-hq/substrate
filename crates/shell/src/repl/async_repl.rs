@@ -76,10 +76,39 @@ fn write_best_effort_stderr_line(line: &str) {
 }
 
 #[cfg(unix)]
-fn write_best_effort_stdout(bytes: &[u8]) {
-    unsafe {
-        let _ = libc::write(libc::STDOUT_FILENO, bytes.as_ptr().cast(), bytes.len());
+fn write_best_effort_unix<F>(bytes: &[u8], mut write_once: F) -> usize
+where
+    F: FnMut(&[u8]) -> io::Result<usize>,
+{
+    let mut offset = 0usize;
+    while offset < bytes.len() {
+        match write_once(&bytes[offset..]) {
+            Ok(0) => break,
+            Ok(written) => {
+                offset += written.min(bytes.len() - offset);
+            }
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        }
     }
+    offset
+}
+
+#[cfg(unix)]
+fn write_best_effort_fd(fd: libc::c_int, bytes: &[u8]) {
+    let _ = write_best_effort_unix(bytes, |remaining| {
+        let written = unsafe { libc::write(fd, remaining.as_ptr().cast(), remaining.len()) };
+        if written < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(written as usize)
+        }
+    });
+}
+
+#[cfg(unix)]
+fn write_best_effort_stdout(bytes: &[u8]) {
+    write_best_effort_fd(libc::STDOUT_FILENO, bytes);
 }
 
 #[cfg(not(unix))]
@@ -90,9 +119,7 @@ fn write_best_effort_stdout(bytes: &[u8]) {
 
 #[cfg(unix)]
 fn write_best_effort_stderr(bytes: &[u8]) {
-    unsafe {
-        let _ = libc::write(libc::STDERR_FILENO, bytes.as_ptr().cast(), bytes.len());
-    }
+    write_best_effort_fd(libc::STDERR_FILENO, bytes);
 }
 
 #[cfg(not(unix))]
@@ -2351,6 +2378,8 @@ fn exit_status_from_code(code: i32) -> ExitStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::cell::{Cell, RefCell};
 
     #[cfg(unix)]
     fn reedline_terminal_loss_error() -> anyhow::Error {
@@ -2444,6 +2473,112 @@ mod tests {
             shutdown_disposition_for_termination_cause(ReplTerminationCause::AbnormalTerminalLoss),
             PromptWorkerShutdownDisposition::Abandon
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_best_effort_unix_completes_after_single_full_write() {
+        let payload = b"abcdef";
+        let calls = Cell::new(0usize);
+
+        let written = write_best_effort_unix(payload, |remaining| {
+            calls.set(calls.get() + 1);
+            assert_eq!(remaining, payload);
+            Ok(remaining.len())
+        });
+
+        assert_eq!(written, payload.len());
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_best_effort_unix_drains_partial_writes() {
+        let payload = b"abcdef";
+        let calls = RefCell::new(Vec::<Vec<u8>>::new());
+
+        let written = write_best_effort_unix(payload, |remaining| {
+            calls.borrow_mut().push(remaining.to_vec());
+            Ok(match remaining.len() {
+                6 => 2,
+                4 => 1,
+                3 => 3,
+                other => other,
+            })
+        });
+
+        assert_eq!(written, payload.len());
+        assert_eq!(
+            calls.into_inner(),
+            vec![b"abcdef".to_vec(), b"cdef".to_vec(), b"def".to_vec()]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_best_effort_unix_retries_interrupted_writes() {
+        let payload = b"abcdef";
+        let calls = RefCell::new(Vec::<Vec<u8>>::new());
+        let stage = Cell::new(0usize);
+
+        let written = write_best_effort_unix(payload, |remaining| {
+            calls.borrow_mut().push(remaining.to_vec());
+            let next = stage.get();
+            stage.set(next + 1);
+            match next {
+                0 => Err(io::Error::new(io::ErrorKind::Interrupted, "signal")),
+                1 => Ok(2),
+                2 => Err(io::Error::new(io::ErrorKind::Interrupted, "signal")),
+                _ => Ok(remaining.len()),
+            }
+        });
+
+        assert_eq!(written, payload.len());
+        assert_eq!(
+            calls.into_inner(),
+            vec![
+                b"abcdef".to_vec(),
+                b"abcdef".to_vec(),
+                b"cdef".to_vec(),
+                b"cdef".to_vec()
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_best_effort_unix_stops_on_nonretryable_error() {
+        let payload = b"abcdef";
+        let calls = RefCell::new(Vec::<Vec<u8>>::new());
+
+        let written = write_best_effort_unix(payload, |remaining| {
+            calls.borrow_mut().push(remaining.to_vec());
+            match remaining.len() {
+                6 => Ok(2),
+                _ => Err(io::Error::new(io::ErrorKind::BrokenPipe, "closed")),
+            }
+        });
+
+        assert_eq!(written, 2);
+        assert_eq!(calls.into_inner(), vec![b"abcdef".to_vec(), b"cdef".to_vec()]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_best_effort_unix_stops_on_zero_byte_write() {
+        let payload = b"abcdef";
+        let calls = RefCell::new(Vec::<Vec<u8>>::new());
+
+        let written = write_best_effort_unix(payload, |remaining| {
+            calls.borrow_mut().push(remaining.to_vec());
+            match remaining.len() {
+                6 => Ok(2),
+                _ => Ok(0),
+            }
+        });
+
+        assert_eq!(written, 2);
+        assert_eq!(calls.into_inner(), vec![b"abcdef".to_vec(), b"cdef".to_vec()]);
     }
 
     #[test]
