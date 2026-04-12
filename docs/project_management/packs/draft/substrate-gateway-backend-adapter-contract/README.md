@@ -14,20 +14,21 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-2`
-- Next seam: `SEAM-3`
+- Active seam: none
+- Next seam: none
+- Future seam(s): `SEAM-1`, `SEAM-2`, `SEAM-3`
 
 Policy:
 
-- only the active seam is eligible for authoritative downstream deep planning by default
-- the next seam may later receive seam-local review and slices, and only provisional deeper planning
-- active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
-- seams that own undefined contracts may reserve `S00` as a contract-definition boundary slice once seam-local planning begins
-- future seams remain seam briefs
+- no active seam remains in the forward planning window because all three seams are now closed
+- no next seam remains in the forward planning window; any new next seam requires an explicit horizon decision
+- `SEAM-3` has closed with a passed seam-exit gate and left the forward planning window
+- downstream planning now binds to closeout-backed truth from `SEAM-1`, `SEAM-2`, and `SEAM-3`
 - canonical contract docs live in `docs/contracts/` and must remain descriptive-only
 
 Current promotion state:
 
 - `SEAM-1` is closed and no longer in the forward planning window because its closeout published `THR-01` and recorded a passed seam-exit gate.
-- `SEAM-2` is the active seam because the `SEAM-1` closeout published the stable selection and status-boundary handoff needed to begin seam-local protocol/schema planning.
-- `SEAM-3` is now the queued next seam because it remains the direct downstream consumer of `SEAM-2` and still depends on `THR-02` publication before it can become active.
+- `SEAM-2` is closed and no longer in the forward planning window because its closeout published `THR-02` and recorded a passed seam-exit gate.
+- `SEAM-3` is closed and no longer in the forward planning window because its closeout recorded a passed seam-exit gate and revalidated `THR-01` and `THR-02`.
+- No active seam remains in this pack after the `SEAM-3` closeout.

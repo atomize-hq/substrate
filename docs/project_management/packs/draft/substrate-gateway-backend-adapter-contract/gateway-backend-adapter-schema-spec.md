@@ -1,7 +1,7 @@
 # Gateway Backend Adapter Schema Spec
 
-This spec is the seam-local execution baseline for the adapter schema. The durable contract text
-for this surface lives in `docs/contracts/substrate-gateway-backend-adapter-schema.md`.
+This spec is the seam-local execution baseline for `C-04`. The durable contract text for this
+surface lives in `docs/contracts/substrate-gateway-backend-adapter-schema.md`.
 
 ## Adopted Universal Agent API Subset
 
@@ -21,6 +21,13 @@ The adopted cross-backend capability subset is:
 - `agent_api.tools.structured.v1`
 - `agent_api.tools.results.v1`
 - `agent_api.artifacts.final_text.v1`
+
+Rules:
+
+- the adopted capability ids above are the only gateway-facing capability ids in this baseline
+- backend-specific capability ids remain implementation detail and must not widen the contract
+- unsupported capability requirements fail closed before adapter execution starts
+- capability validation uses the adopted subset above as closed contract truth rather than an inferred backend surface
 
 ### Explicitly deferred capability ids
 
@@ -49,6 +56,7 @@ The adopted run-extension subset is:
 
 Closed-schema rules:
 
+- unsupported extension keys fail closed before adapter execution starts
 - `agent_api.exec.add_dirs.v1`
   - object with required `dirs: string[]`
   - unknown keys are invalid
@@ -127,8 +135,8 @@ Allowed completion metadata in the adopted baseline:
 
 Pinned rules:
 
-- `unsupported_capability` keeps the rejected capability id bounded in `capability`
-- `invalid_request` covers adopted extension schema and contradiction failures
+- `unsupported_capability` keeps the rejected capability id bounded in `capability` and applies when a capability outside the adopted subset is requested or advertised
+- `invalid_request` covers adopted extension-schema and contradiction failures
 - `backend` covers safe runtime rejection messages, including:
   - `"cancelled"`
   - `"no session found"`
@@ -160,7 +168,9 @@ Pinned rules:
 - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md`
 
-### Code surfaces that will need to match this baseline when implementation lands
+### Runtime-adjacent adoption surfaces to verify against when implementation lands
+
+These are planning and verification anchors only. They describe where later implementation must align with `C-04`; they do not widen this slice into implementation work.
 
 - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/lib.rs`
 - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/session_selectors.rs`

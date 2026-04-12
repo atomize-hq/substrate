@@ -2,19 +2,18 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-2`
-  - `SEAM-2` is active because `SEAM-1` has closed, `THR-01` is published, and the protocol/schema seam can now consume the landed selection and status-boundary truth.
-- **Next seam**: `SEAM-3`
-  - `SEAM-3` is next because it is the nearest downstream consumer behind `SEAM-2` and should stay queued until `THR-02` is published.
-- **Future seams**: none
-  - no remaining seam stays outside the forward window after `SEAM-2` activation.
+- **Active seam**: none
+- **Next seam**: none
+  - no downstream seam remains in this pack after the `SEAM-3` closeout.
+- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`
+  - no active seam remains in the forward window because all three seams are now closed.
 
 Horizon policy for this extracted pack:
 
-- only an active seam gets authoritative downstream deep planning by default
-- the next seam may later receive seam-local review and slices, but only provisional deeper planning until upstream contract truth is published
-- `SEAM-3` remains seam-brief only in this pack
-- active and next seams must reserve `S99` seam-exit intent, and seams that own undefined contracts may later reserve `S00` for contract definition
+- no active seam remains in the forward window because all three seams are now closed
+- no next seam remains in the forward window; any new next seam requires an explicit horizon decision
+- `SEAM-3` has landed with a passed seam-exit gate and left the forward planning window
+- downstream planning now binds to closeout-backed truth from `SEAM-1`, `SEAM-2`, and `SEAM-3`
 
 ## Contract registry
 
@@ -65,20 +64,20 @@ Horizon policy for this extracted pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: publish the stable backend-id selection contract and the adapter-visible status publication boundary before protocol/schema or parity work consumes them.
-  - **State**: `published`
+  - **State**: `closed`
   - **Revalidation trigger**: backend-id grammar changes, allowlist semantics change, selection failure buckets change, or the adapter-visible `status --json` owner line changes.
-  - **Satisfied by**: `governance/seam-1-closeout.md` recording the landed selection contract and publication boundary, followed by seam-local review in `SEAM-2` and `SEAM-3` that revalidates the upstream handoff.
-  - **Notes**: this is the pack's main guardrail against reintroducing provider-specific sub-identities or widening the status schema without an owner.
+  - **Satisfied by**: `governance/seam-1-closeout.md` recording the landed selection contract and publication boundary, followed by `governance/seam-3-closeout.md` recording the final parity/validation evidence that revalidated the same closeout-backed truth.
+  - **Notes**: this thread is now closed pending any future stale trigger on backend-id semantics or adapter-visible status ownership.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-03`, `C-04`
   - **Purpose**: publish one deterministic adapter protocol and one bounded schema inventory before parity, compatibility, and validation proof rely on them.
-  - **State**: `defined`
+  - **State**: `closed`
   - **Revalidation trigger**: capability ids change, extension-key subset changes, request/response or error fields change, session-handle facets change, or ADR-0017 / ADR-0028 handoff wording changes.
-  - **Satisfied by**: `governance/seam-2-closeout.md` recording the landed protocol/schema contract and `SEAM-3` seam-local review revalidating the published handoff against parity and compatibility proof.
-  - **Notes**: this thread protects the pack from hiding unresolved event/trace ownership questions inside implementation-specific adapter behavior.
+  - **Satisfied by**: `governance/seam-2-closeout.md` recording the landed protocol/schema contract and publication of `THR-02`, followed by `governance/seam-3-closeout.md` recording the parity, compatibility, and validation evidence that revalidated the same handoff.
+  - **Notes**: this thread is now closed pending any future stale trigger on adapter protocol/schema or ADR-0017 / ADR-0028 handoff wording.
 
 ## Dependency graph
 

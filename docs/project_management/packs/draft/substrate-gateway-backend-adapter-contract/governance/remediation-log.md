@@ -34,7 +34,7 @@ related_thread: THR-02
 related_contract: C-04
 related_artifact: docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md
 severity: material
-status: open
+status: carried_forward
 owner_seam: SEAM-2
 blocked_targets: []
 summary: the adopted Universal Agent API subset is now pinned to a bounded cross-backend execution baseline, but landing and closeout still need to keep the capability set, extension-key subset, session-handle facet, and bounded adapter error detail aligned with that baseline.
@@ -61,7 +61,7 @@ related_thread: THR-02
 related_contract: C-03
 related_artifact: docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-protocol-spec.md
 severity: material
-status: open
+status: carried_forward
 owner_seam: SEAM-2
 blocked_targets: []
 summary: the local-to-external owner line is now pinned: gateway-local adapter translation stops at bounded gateway-local event and completion shapes, while ADR-0017 and ADR-0028 remain the external owners of structured-event envelope and canonical trace semantics.
@@ -87,15 +87,18 @@ related_thread: null
 related_contract: null
 related_artifact: docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md
 severity: blocking
-status: open
+status: resolved
 owner_seam: SEAM-3
-blocked_targets:
-  - seam: SEAM-3
-    field: status
-    value: exec-ready
-summary: parity and compatibility proof cannot finalize until ADR-0040 alignment is explicitly confirmed as evidence-only or promoted into the downstream touch set.
-required_fix: decide whether ADR-0040 planning-pack docs remain evidence-only or require direct alignment edits, then record that decision in the seam-local parity and compatibility review.
-resolution_evidence: []
+blocked_targets: []
+summary: ADR-0040 is now explicitly confirmed as prerequisite boundary evidence for SEAM-3 rather than as a direct touch surface, so parity and compatibility work can execute against the existing runtime-ownership owner line without reopening the ADR text.
+required_fix: keep ADR-0040 as evidence-only basis for runtime ownership and reopen it only if downstream parity or compatibility proof discovers a concrete ownership drift that the current owner line no longer explains.
+resolution_evidence:
+  - docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md
+  - docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md
+  - docs/contracts/substrate-gateway-runtime-parity.md
+  - docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/threaded-seams/seam-3-parity-and-validation/review.md
+  - docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/threaded-seams/seam-3-parity-and-validation/seam.md
+  - docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/threaded-seams/seam-3-parity-and-validation/slice-2-compatibility-proof-and-adr-0040-decision.md
 ```
 
 ```yaml
@@ -144,5 +147,6 @@ resolution_evidence:
 ## Resolved remediations
 
 - `REM-001`
+- `REM-004`
 - `REM-005`
 - `REM-006`

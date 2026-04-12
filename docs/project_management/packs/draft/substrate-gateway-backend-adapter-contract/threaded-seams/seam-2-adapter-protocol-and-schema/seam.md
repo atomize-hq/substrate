@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-2
 seam_slug: adapter-protocol-and-schema
-status: exec-ready
-execution_horizon: active
+status: closed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -24,12 +24,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations:
   - REM-002
   - REM-003
@@ -105,7 +105,7 @@ open_remediations:
 ## Review bundle
 
 - `review.md` is the authoritative artifact for `gates.pre_exec.review`.
-- The current pre-exec record supports `status: exec-ready`; the seam-local contract baseline and owner line are concrete, and the remaining remediations track landing and closeout follow-through rather than blocking execution readiness.
+- The seam is now closed; the realized handoff is recorded in `../../governance/seam-2-closeout.md`, and `THR-02` is published for `SEAM-3`.
 
 ## Seam-exit gate plan
 
@@ -118,6 +118,7 @@ open_remediations:
   - `C-04`
 - **Expected threads to publish / advance**:
   - `THR-02`: `defined` -> `published`
+  - realized as `published` in `../../governance/seam-2-closeout.md`
 - **Likely downstream stale triggers**:
   - capability or extension-key subset changes
   - request/response/error or session-handle schema changes
