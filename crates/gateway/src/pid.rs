@@ -58,7 +58,7 @@ pub fn is_process_running(pid: u32) -> bool {
     use std::process::Command;
 
     Command::new("tasklist")
-        .args(&["/FI", &format!("PID eq {}", pid)])
+        .args(["/FI", &format!("PID eq {}", pid)])
         .output()
         .ok()
         .and_then(|output| {
