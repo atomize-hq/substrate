@@ -4058,7 +4058,7 @@ dependencies = [
 
 [[package]]
 name = "substrate-gateway"
-version = "0.6.3-eli.1"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "async-trait",
