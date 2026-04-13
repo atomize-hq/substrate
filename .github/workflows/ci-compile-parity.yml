@@ -26,6 +26,10 @@ jobs:
           - windows-2022
 
     steps:
+      - name: Enable Windows longpaths
+        if: runner.os == 'Windows'
+        run: git config --global core.longpaths true
+
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
         uses: actions/checkout@v5

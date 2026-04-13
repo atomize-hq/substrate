@@ -590,6 +590,9 @@ jobs:
     if: needs.feature_meta.outputs.run_windows == '1' && inputs.runner_kind == 'github-hosted'
     runs-on: windows-2022
     steps:
+      - name: Enable Windows longpaths
+        run: git config --global core.longpaths true
+
       - name: Checkout repository (override ref)
         if: inputs.checkout_ref != ''
         uses: actions/checkout@v5
@@ -636,6 +639,9 @@ jobs:
     if: needs.feature_meta.outputs.run_windows == '1' && inputs.runner_kind == 'self-hosted'
     runs-on: [self-hosted, Windows]
     steps:
+      - name: Enable Windows longpaths
+        run: git config --global core.longpaths true
+
       - name: Checkout repository (workflow ref)
         uses: actions/checkout@v5
         with:
