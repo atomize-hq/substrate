@@ -26,13 +26,15 @@ substrate/
 ### Development Build
 
 ```bash
-cargo build
+cargo build                    # Root package only
+cargo build --workspace        # All workspace members, including gateway
 ```
 
 ### Release Build
 
 ```bash
-cargo build --release
+cargo build --release          # Root package only
+cargo build --workspace --release
 ```
 
 ### Specific Components
@@ -51,7 +53,8 @@ cargo build --release --features production
 ### Complete Test Suite
 
 ```bash
-cargo test
+cargo test                     # Root package only
+cargo test --workspace --all-targets
 ```
 
 ### Specific Test Types
@@ -73,7 +76,8 @@ cargo test -- --nocapture
 ### Performance Benchmarks
 
 ```bash
-cargo bench
+cargo bench                    # Root package only
+cargo bench -p substrate-gateway
 ```
 
 ## Code Quality
@@ -88,9 +92,10 @@ cargo fmt -- --check  # Check without changes
 ### Linting
 
 ```bash
-cargo clippy
+cargo clippy                   # Root package only
 cargo clippy -- -D warnings  # Fail on warnings
 cargo clippy --fix           # Auto-fix issues
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
 ### Feature flags and heavy backends (Kuzu)
@@ -120,8 +125,9 @@ Use `cargo tree -p substrate-graph -e features` to inspect which features are ac
 ### Documentation
 
 ```bash
-cargo doc --open
-cargo doc --no-deps  # Skip dependencies
+cargo doc --open                 # Root package only
+cargo doc --no-deps              # Root package only, skip dependencies
+cargo doc -p substrate-gateway --no-deps
 ```
 
 ## Architecture

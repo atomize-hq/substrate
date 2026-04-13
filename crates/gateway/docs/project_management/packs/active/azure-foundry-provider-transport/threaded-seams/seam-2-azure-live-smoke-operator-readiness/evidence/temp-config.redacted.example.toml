@@ -1,0 +1,45 @@
+## Redacted temp config shape used for the live SEAM-2 smoke run.
+## The successful run sourced `gateway/.env`, resolved `api_key` from
+## `$AZURE_KIMI_API_KEY`, and derived `base_url` by trimming
+## `/chat/completions` from `AZURE_KIMI_ENDPOINT`.
+## Raw Azure hostnames and deployment identifiers stay redacted here.
+
+[[models]]
+name = "Kimi-K2-Thinking"
+
+[[models.mappings]]
+actual_model = "<redacted-thinking-deployment>"
+priority = 1
+provider = "azure-kimi"
+
+[[models]]
+name = "Kimi-K2.5"
+
+[[models.mappings]]
+actual_model = "<redacted-default-deployment>"
+priority = 1
+provider = "azure-kimi"
+
+[[providers]]
+api_key = "$AZURE_KIMI_API_KEY"
+auth_type = "apikey"
+base_url = "https://<redacted-host>/openai/v1"
+enabled = true
+models = []
+name = "azure-kimi"
+provider_type = "azure-openai"
+
+[router]
+background = "Kimi-K2.5"
+default = "Kimi-K2.5"
+think = "Kimi-K2-Thinking"
+websearch = "Kimi-K2.5"
+
+[server]
+host = "127.0.0.1"
+log_level = "info"
+port = 14567
+
+[server.timeouts]
+api_timeout_ms = 600000
+connect_timeout_ms = 10000

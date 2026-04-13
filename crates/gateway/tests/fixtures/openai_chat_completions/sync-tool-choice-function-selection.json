@@ -1,0 +1,79 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Use the selected tool."
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "alpha",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "beta",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "tool_choice": {
+      "type": "function",
+      "function": {
+        "name": "beta"
+      }
+    },
+    "stream": false
+  },
+  "provider_response": {
+    "id": "resp_sync_tool_choice",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Boundary text from fixture."
+      }
+    ],
+    "model": "primary-actual",
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 8,
+      "output_tokens": 3
+    }
+  },
+  "expected": {
+    "object": "chat.completion",
+    "finish_reason": "stop",
+    "texts": [
+      "Boundary text from fixture."
+    ],
+    "tool_call_ids": [],
+    "usage": {
+      "prompt_tokens": 8,
+      "completion_tokens": 3,
+      "total_tokens": 11
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "case_id": "explicit-tool-calls-k2-thinking-stream",
+  "contract_ref": "docs/foundation/azure-kimi-c02-normalized-event-contract.md",
+  "raw_artifact_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/explicit-tool-calls-k2-thinking-stream/raw-response.json",
+  "normalized_events": [
+    {
+      "event_kind": "action",
+      "summary_text": "I'll explore the repository structure and then use the startup skill to analyze it.",
+      "source_origin": "assistant_progress",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "delta.content",
+        "req_id": "req-9"
+      }
+    },
+    {
+      "event_kind": "tool_intent",
+      "tool_name": "Bash",
+      "tool_id": "functions.Bash:0",
+      "tool_arguments": {
+        "command": "ls -la",
+        "description": "List repository contents"
+      },
+      "source_origin": "tool_request",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "delta.tool_calls",
+        "call_index": 0,
+        "req_id": "req-9"
+      }
+    },
+    {
+      "event_kind": "tool_intent",
+      "tool_name": "Read",
+      "tool_id": "functions.Read:1",
+      "tool_arguments": {
+        "file_path": "/Users/spensermcconnell/__Active_Code/forked/README.md"
+      },
+      "source_origin": "tool_request",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "delta.tool_calls",
+        "call_index": 1,
+        "req_id": "req-9"
+      }
+    }
+  ]
+}

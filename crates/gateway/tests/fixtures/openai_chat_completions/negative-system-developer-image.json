@@ -1,0 +1,25 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "messages": [
+      {
+        "role": "system",
+        "content": [
+          {
+            "type": "text",
+            "text": "system"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "https://example.com/system.png"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "expected_status": 400,
+  "expected_class": "route",
+  "expected_message": "Route selection failed"
+}

@@ -1,0 +1,41 @@
+{
+  "source_log": {
+    "path": "~/.claude-code-router/logs/ccr-20260326143921.log",
+    "req_id": "req-x",
+    "selected_response_lines": [
+      4319,
+      4325,
+      4447
+    ]
+  },
+  "response": {
+    "model": "Kimi-K2-Thinking",
+    "stream": true,
+    "reconstructed_reasoning_content": "Good, now I have a much better understanding. Let me explore a bit more to understand the market and competitive landscape before running the startup evaluation. <|tool_calls_section_begin|> <|tool_call_begin|> functions.Read:21 <|tool_call_argument_begin|> {\"file_path\": \"/Users/spensermcconnell/__Active_Code/forked/docs/README.md\"} <|tool_call_end|> <|tool_call_begin|> functions.Skill:22 <|tool_call_argument_begin|> {\"skill\": \"startup:startup-competitors\", \"args\": \"git workflow automation tools fork management\"} <|tool_call_end|> <|tool_calls_section_end|>",
+    "tool_calls": [],
+    "hidden_tool_calls": [
+      {
+        "id": "functions.Read:21",
+        "name": "Read",
+        "arguments": {
+          "file_path": "/Users/spensermcconnell/__Active_Code/forked/docs/README.md"
+        }
+      },
+      {
+        "id": "functions.Skill:22",
+        "name": "Skill",
+        "arguments": {
+          "skill": "startup:startup-competitors",
+          "args": "git workflow automation tools fork management"
+        }
+      }
+    ],
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 92,
+      "prompt_tokens": 56258,
+      "reasoning_tokens": 0,
+      "total_tokens": 56350
+    }
+  }
+}

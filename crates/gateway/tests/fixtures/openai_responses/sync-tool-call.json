@@ -1,0 +1,43 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "stream": false
+  },
+  "request_model": "gateway-default",
+  "provider_response": {
+    "id": "resp_sync_tool",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "tool_use",
+        "id": "call_fixture_tool",
+        "name": "lookup",
+        "input": {
+          "path": "README.md"
+        }
+      }
+    ],
+    "model": "primary-actual",
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 6,
+      "output_tokens": 3
+    }
+  },
+  "expected": {
+    "status": "completed",
+    "item_types": [
+      "function_call"
+    ],
+    "texts": [],
+    "call_ids": ["call_fixture_tool"],
+    "usage": {
+      "input_tokens": 6,
+      "output_tokens": 3,
+      "total_tokens": 9
+    }
+  }
+}

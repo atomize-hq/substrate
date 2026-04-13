@@ -1,0 +1,65 @@
+{
+  "seam_id": "SEAM-2",
+  "generated_on": "2026-03-29T01:25:36Z",
+  "contract_ref": "docs/foundation/azure-foundry-c08-operator-verification-contract.md",
+  "runbook_ref": "gateway/README.md",
+  "env_source_ref": "gateway/.env",
+  "smoke_config_ref": "docs/project_management/packs/active/azure-foundry-provider-transport/threaded-seams/seam-2-azure-live-smoke-operator-readiness/evidence/temp-config.redacted.example.toml",
+  "gateway_base_url_shape": "https://<redacted-host>/openai/v1",
+  "config_notes": [
+    "the live run used a temporary config outside the repo",
+    "api_key resolved from $AZURE_KIMI_API_KEY",
+    "base_url was derived from AZURE_KIMI_ENDPOINT by trimming /chat/completions",
+    "raw Azure deployment identifiers remain redacted in the tracked example"
+  ],
+  "redactions": [
+    "api keys and bearer tokens omitted",
+    "gateway host and Azure endpoint hostname redacted",
+    "raw Azure deployment identifiers omitted"
+  ],
+  "health_check": {
+    "path": "/health",
+    "http_status": 200,
+    "response_summary": "gateway returned service ok before the live smoke"
+  },
+  "cases": [
+    {
+      "case_id": "think-route-v1-messages-smoke",
+      "route_label": "think",
+      "public_path": "/v1/messages",
+      "request_intent": "Reply with exactly: OK",
+      "requested_model": "Kimi-K2-Thinking",
+      "http_status": 200,
+      "observed_at_utc": "2026-03-29T01:25:34Z",
+      "observed_response_model": "Kimi-K2-Thinking",
+      "stop_reason": "end_turn",
+      "content_types": [
+        "text"
+      ],
+      "response_summary": "OK",
+      "usage": {
+        "input_tokens": 30,
+        "output_tokens": 120
+      }
+    },
+    {
+      "case_id": "default-route-v1-messages-smoke",
+      "route_label": "default",
+      "public_path": "/v1/messages",
+      "request_intent": "Reply with exactly: OK",
+      "requested_model": "Kimi-K2.5",
+      "http_status": 200,
+      "observed_at_utc": "2026-03-29T01:25:36Z",
+      "observed_response_model": "Kimi-K2.5",
+      "stop_reason": "end_turn",
+      "content_types": [
+        "text"
+      ],
+      "response_summary": "OK",
+      "usage": {
+        "input_tokens": 13,
+        "output_tokens": 132
+      }
+    }
+  ]
+}

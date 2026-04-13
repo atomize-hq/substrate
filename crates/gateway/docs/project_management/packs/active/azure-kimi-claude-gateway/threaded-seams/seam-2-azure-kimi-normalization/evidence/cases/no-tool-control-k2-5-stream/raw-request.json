@@ -1,0 +1,19 @@
+{
+  "source_log": {
+    "path": "~/.claude-code-router/logs/ccr-20260327000000_1.log",
+    "req_id": "req-3",
+    "final_request_line": 33
+  },
+  "request": {
+    "model": "Kimi-K2.5",
+    "stream": true,
+    "max_tokens": 32000,
+    "temperature": 1,
+    "message_roles": [
+      "system",
+      "user"
+    ],
+    "tool_catalog_present": false,
+    "prompt_excerpt": "Hello there bud"
+  }
+}

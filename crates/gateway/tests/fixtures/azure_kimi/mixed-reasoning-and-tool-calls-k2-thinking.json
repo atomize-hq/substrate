@@ -1,0 +1,63 @@
+{
+  "case_id": "mixed-reasoning-and-tool-calls-k2-thinking",
+  "contract_ref": "docs/foundation/azure-kimi-c02-normalized-event-contract.md",
+  "raw_artifact_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/mixed-reasoning-and-tool-calls-k2-thinking/raw-response.json",
+  "normalized_events": [
+    {
+      "event_kind": "action",
+      "summary_text": "I'll first explore this repository to understand what it does, then evaluate it using the startup skill.",
+      "source_origin": "assistant_progress",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "message.content",
+        "req_id": "req-a"
+      }
+    },
+    {
+      "event_kind": "tool_intent",
+      "tool_name": "Bash",
+      "tool_id": "functions.Bash:0",
+      "tool_arguments": {
+        "command": "ls -la",
+        "description": "List repository contents"
+      },
+      "source_origin": "tool_request",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "message.tool_calls",
+        "req_id": "req-a",
+        "reasoning_present": true
+      }
+    },
+    {
+      "event_kind": "tool_intent",
+      "tool_name": "Read",
+      "tool_id": "functions.Read:1",
+      "tool_arguments": {
+        "file_path": "/Users/spensermcconnell/__Active_Code/forked/README.md"
+      },
+      "source_origin": "tool_request",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "message.tool_calls",
+        "req_id": "req-a",
+        "reasoning_present": true
+      }
+    },
+    {
+      "event_kind": "tool_intent",
+      "tool_name": "Read",
+      "tool_id": "functions.Read:2",
+      "tool_arguments": {
+        "file_path": "/Users/spensermcconnell/__Active_Code/forked/package.json"
+      },
+      "source_origin": "tool_request",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "message.tool_calls",
+        "req_id": "req-a",
+        "reasoning_present": true
+      }
+    }
+  ]
+}

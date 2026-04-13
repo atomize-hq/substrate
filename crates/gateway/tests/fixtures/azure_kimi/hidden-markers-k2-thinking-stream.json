@@ -1,0 +1,46 @@
+{
+  "case_id": "hidden-markers-k2-thinking-stream",
+  "contract_ref": "docs/foundation/azure-kimi-c02-normalized-event-contract.md",
+  "raw_artifact_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-stream/raw-response.json",
+  "normalized_events": [
+    {
+      "event_kind": "action",
+      "summary_text": "Good, now I have a much better understanding. Let me explore a bit more to understand the market and competitive landscape before running the startup evaluation.",
+      "source_origin": "assistant_progress",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "delta.reasoning_content_prefix",
+        "req_id": "req-x"
+      }
+    },
+    {
+      "event_kind": "tool_intent",
+      "tool_name": "Read",
+      "tool_id": "functions.Read:21",
+      "tool_arguments": {
+        "file_path": "/Users/spensermcconnell/__Active_Code/forked/docs/README.md"
+      },
+      "source_origin": "tool_request",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "delta.reasoning_content_markers",
+        "req_id": "req-x"
+      }
+    },
+    {
+      "event_kind": "tool_intent",
+      "tool_name": "Skill",
+      "tool_id": "functions.Skill:22",
+      "tool_arguments": {
+        "skill": "startup:startup-competitors",
+        "args": "git workflow automation tools fork management"
+      },
+      "source_origin": "tool_request",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "delta.reasoning_content_markers",
+        "req_id": "req-x"
+      }
+    }
+  ]
+}

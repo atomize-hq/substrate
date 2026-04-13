@@ -1,0 +1,59 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "stream": true
+  },
+  "provider_stream_chunks": [
+    "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_stream\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"primary-actual\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":0}}}\n\n",
+    "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n",
+    "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+    "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_fixture_stream\",\"name\":\"lookup\",\"input\":{}}}\n\n",
+    "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\":\\\"README.md\\\"}\"}}\n\n",
+    "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\n",
+    "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":10,\"output_tokens\":3}}\n\n",
+    "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+  ],
+  "required_events": [
+    "response.created",
+    "response.output_item.added",
+    "response.content_part.added",
+    "response.output_text.delta",
+    "response.output_text.done",
+    "response.content_part.done",
+    "response.output_item.done",
+    "response.output_item.added",
+    "response.function_call_arguments.delta",
+    "response.function_call_arguments.done",
+    "response.output_item.done",
+    "response.completed"
+  ],
+  "expected_fragments": [
+    "\"call_id\":\"call_fixture_stream\"",
+    "\"model\":\"gateway-default\"",
+    "\"type\":\"response.completed\""
+  ],
+  "expected": {
+    "status": "completed",
+    "item_types": [
+      "message",
+      "function_call"
+    ],
+    "texts": [
+      "Hello"
+    ],
+    "call_ids": [
+      "call_fixture_stream"
+    ],
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 3,
+      "total_tokens": 13
+    }
+  },
+  "forbidden_fragments": [
+    "event: content_block_",
+    "\"type\":\"message_delta\"",
+    "\"event_kind\":\"tool_intent\""
+  ]
+}

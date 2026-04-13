@@ -1,0 +1,15 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "text": {
+      "format": {
+        "type": "json_schema"
+      }
+    }
+  },
+  "expected_error_contains": "Unsupported text.format.type",
+  "expected_status": 400,
+  "expected_error_class": "route",
+  "expected_error_message": "Route selection failed"
+}
