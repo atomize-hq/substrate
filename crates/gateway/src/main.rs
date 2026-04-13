@@ -27,7 +27,7 @@ async fn stop_service(pid: u32) -> anyhow::Result<()> {
     #[cfg(windows)]
     {
         let output = Command::new("taskkill")
-            .args(&["/PID", &pid.to_string(), "/F"])
+            .args(["/PID", &pid.to_string(), "/F"])
             .output()
             .map_err(|e| anyhow::anyhow!("Failed to execute taskkill: {}", e))?;
         if !output.status.success() {
