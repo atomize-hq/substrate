@@ -148,7 +148,6 @@ impl ConformanceHarness {
                 provider_registry: Arc::new(provider_registry),
             })),
             token_store,
-            config_path: workspace.join("config.toml"),
             message_tracer,
         });
 

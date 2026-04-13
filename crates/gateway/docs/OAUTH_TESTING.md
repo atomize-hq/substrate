@@ -222,7 +222,7 @@ After successful authentication:
 1. ✅ Token saved to `~/.substrate-gateway/oauth_tokens.json`
 2. ✅ Configure provider with `auth_type = "oauth"`
 3. ✅ **Phase 3 Complete**: Bearer token injection works automatically!
-4. 🚧 **Phase 4**: Add OAuth UI to admin panel (in progress)
+4. ✅ OAuth HTTP endpoints remain available without the retired admin UI
 
 ## Security Notes
 

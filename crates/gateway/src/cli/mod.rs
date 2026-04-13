@@ -262,7 +262,7 @@ impl AppConfig {
             eprintln!(
                 "Then start the gateway, install the Claude Code statusline, and enable tracing only if needed."
             );
-            eprintln!("You can also configure via the web UI at http://127.0.0.1:13456 (development convenience).");
+            eprintln!("The retired admin UI is archived under crates/gateway/archived/admin_ui/ for reference.");
         }
 
         Ok(())
@@ -274,8 +274,8 @@ impl AppConfig {
 #
 # This is a minimal default configuration for local development.
 # The loopback host is a convenience, not the architecture contract.
-# Configure your providers and models via the web UI at http://127.0.0.1:13456
-# or edit this file directly.
+# Configure your providers and models by editing this file directly.
+# The retired admin UI is archived under crates/gateway/archived/admin_ui/.
 
 [server]
 # Loopback is the default development host, not the only deployment boundary.
@@ -322,7 +322,7 @@ default = "placeholder-model"
 # strip_match = false               # Strip matched phrase from prompt (default: false)
 
 # Providers configuration
-# Add providers via the web UI or edit this section
+# Add providers in this file.
 # Example:
 # [[providers]]
 # name = "my-provider"
@@ -333,7 +333,7 @@ default = "placeholder-model"
 # models = []
 
 # Models configuration
-# Add models via the web UI or edit this section
+# Add models in this file.
 # Example:
 # [[models]]
 # name = "my-model"

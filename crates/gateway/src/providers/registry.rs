@@ -151,7 +151,8 @@ impl ProviderRegistry {
 
                 // Deprecated aliases for OpenAI-compatible providers
                 // These will be removed in a future version
-                // NOTE: Preset URLs/headers here must match OPENAI_PRESETS in admin.html
+                // NOTE: Keep these preset URLs/headers aligned with the archived admin UI
+                // reference in crates/gateway/archived/admin_ui/admin.html.
                 provider @ ("deepinfra" | "novita" | "baseten" | "together" | "fireworks"
                 | "groq" | "nebius" | "cerebras" | "moonshot") => {
                     tracing::warn!(

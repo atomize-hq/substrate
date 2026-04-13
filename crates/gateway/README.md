@@ -266,9 +266,9 @@ Related docs:
 
 Useful local conveniences:
 
-- local admin UI at `http://127.0.0.1:13456`
 - local config under `~/.substrate-gateway/`
 - statusline and routing-history files under `~/.substrate-gateway/`
+- legacy admin UI source archived under `crates/gateway/archived/admin_ui/`
 
 These are convenience surfaces for development and smoke, not architectural commitments.
 

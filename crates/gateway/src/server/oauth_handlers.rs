@@ -460,7 +460,7 @@ pub async fn oauth_callback(Query(params): Query<OAuthCallbackQuery>) -> Html<St
     <div class="container">
         <div class="success-icon">✅</div>
         <h1>Authorization Successful!</h1>
-        <p>Copy the code below and paste it in the admin panel:</p>
+        <p>Copy the authorization code below and use it with the gateway OAuth exchange flow:</p>
 
         <div class="code-box">
             <div class="code" id="authCode">{code}</div>
@@ -473,9 +473,9 @@ pub async fn oauth_callback(Query(params): Query<OAuthCallbackQuery>) -> Html<St
             <strong>Next steps:</strong>
             <ol>
                 <li>Click "Copy Code" button above</li>
-                <li>Return to the admin panel</li>
-                <li>Paste the code in the authorization field</li>
-                <li>Click "Complete OAuth" to finish</li>
+                <li>Use the copied code with <code>POST /api/oauth/exchange</code></li>
+                <li>Provide the matching PKCE verifier from the authorization step</li>
+                <li>Store the returned tokens in the configured gateway token store</li>
             </ol>
         </div>
         

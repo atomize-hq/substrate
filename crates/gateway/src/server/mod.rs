@@ -19,7 +19,7 @@ use axum::{
     body::Body,
     extract::State,
     http::{HeaderMap, StatusCode},
-    response::{Html, IntoResponse, Response},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router as AxumRouter,
 };
@@ -44,7 +44,6 @@ pub struct AppState {
 
     /// Persistent state - NOT reloaded
     pub token_store: TokenStore,
-    pub config_path: std::path::PathBuf,
     pub message_tracer: Arc<MessageTracer>,
 }
 
@@ -53,6 +52,36 @@ impl AppState {
     pub fn snapshot(&self) -> Arc<ReloadableState> {
         self.inner.read().unwrap().clone()
     }
+}
+
+fn build_app(state: Arc<AppState>) -> AxumRouter {
+    AxumRouter::new()
+        .route("/v1/messages", post(handle_messages))
+        .route("/v1/structured-events", post(handle_structured_events))
+        .route("/v1/messages/count_tokens", post(handle_count_tokens))
+        .route("/v1/chat/completions", post(handle_openai_chat_completions))
+        .route(
+            "/v1/responses",
+            post(openai_responses::handle_openai_responses),
+        )
+        .route("/health", get(health_check))
+        .route(
+            "/api/oauth/authorize",
+            post(oauth_handlers::oauth_authorize),
+        )
+        .route("/api/oauth/exchange", post(oauth_handlers::oauth_exchange))
+        .route("/api/oauth/callback", get(oauth_handlers::oauth_callback))
+        .route("/auth/callback", get(oauth_handlers::oauth_callback))
+        .route("/api/oauth/tokens", get(oauth_handlers::oauth_list_tokens))
+        .route(
+            "/api/oauth/tokens/delete",
+            post(oauth_handlers::oauth_delete_token),
+        )
+        .route(
+            "/api/oauth/tokens/refresh",
+            post(oauth_handlers::oauth_refresh_token),
+        )
+        .with_state(state)
 }
 
 const RECENT_REQUESTS_WINDOW: usize = 20;
@@ -198,7 +227,7 @@ fn write_routing_info(model: &str, provider: &str, route_type: &RouteType) {
 /// Start the HTTP server
 pub async fn start_server(
     config: AppConfig,
-    config_path: std::path::PathBuf,
+    _config_path: std::path::PathBuf,
 ) -> anyhow::Result<()> {
     let router = Router::new(config.clone());
 
@@ -243,46 +272,12 @@ pub async fn start_server(
     let state = Arc::new(AppState {
         inner: std::sync::RwLock::new(reloadable),
         token_store,
-        config_path,
         message_tracer,
     });
 
-    // Build router
-    let app = AxumRouter::new()
-        .route("/", get(serve_admin))
-        .route("/v1/messages", post(handle_messages))
-        .route("/v1/structured-events", post(handle_structured_events))
-        .route("/v1/messages/count_tokens", post(handle_count_tokens))
-        .route("/v1/chat/completions", post(handle_openai_chat_completions))
-        .route(
-            "/v1/responses",
-            post(openai_responses::handle_openai_responses),
-        )
-        .route("/health", get(health_check))
-        .route("/api/config/json", get(get_config_json))
-        .route("/api/config/json", post(update_config_json))
-        .route("/api/reload", post(reload_config))
-        // OAuth endpoints
-        .route(
-            "/api/oauth/authorize",
-            post(oauth_handlers::oauth_authorize),
-        )
-        .route("/api/oauth/exchange", post(oauth_handlers::oauth_exchange))
-        .route("/api/oauth/callback", get(oauth_handlers::oauth_callback))
-        .route("/auth/callback", get(oauth_handlers::oauth_callback)) // OpenAI Codex uses this path
-        .route("/api/oauth/tokens", get(oauth_handlers::oauth_list_tokens))
-        .route(
-            "/api/oauth/tokens/delete",
-            post(oauth_handlers::oauth_delete_token),
-        )
-        .route(
-            "/api/oauth/tokens/refresh",
-            post(oauth_handlers::oauth_refresh_token),
-        );
-
     // Clone state before moving it
     let oauth_state = state.clone();
-    let app = app.with_state(state);
+    let app = build_app(state);
 
     // Bind to main address
     let addr = format!("{}:{}", config.server.host, config.server.port);
@@ -377,200 +372,12 @@ impl futures::stream::Stream for StructuredEventTracingStream {
     }
 }
 
-/// Serve Admin UI
-async fn serve_admin() -> impl IntoResponse {
-    Html(include_str!("admin.html"))
-}
-
 /// Health check endpoint
 async fn health_check() -> impl IntoResponse {
     Json(serde_json::json!({
         "status": "ok",
         "service": "substrate-gateway"
     }))
-}
-
-/// Get full configuration as JSON (for admin UI)
-async fn get_config_json(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    let inner = state.snapshot();
-    Json(serde_json::json!({
-        "server": {
-            "host": inner.config.server.host,
-            "port": inner.config.server.port,
-        },
-        "router": {
-            "default": inner.config.router.default,
-            "background": inner.config.router.background,
-            "think": inner.config.router.think,
-            "websearch": inner.config.router.websearch,
-            "auto_map_regex": inner.config.router.auto_map_regex,
-            "background_regex": inner.config.router.background_regex,
-            "prompt_rules": inner.config.router.prompt_rules,
-        },
-        "providers": inner.config.providers,
-        "models": inner.config.models,
-    }))
-}
-
-/// Remove null values from JSON (TOML doesn't support null)
-fn remove_null_values(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Object(map) => {
-            map.retain(|_, v| !v.is_null());
-            for (_, v) in map.iter_mut() {
-                remove_null_values(v);
-            }
-        }
-        serde_json::Value::Array(arr) => {
-            for item in arr.iter_mut() {
-                remove_null_values(item);
-            }
-        }
-        _ => {}
-    }
-}
-
-/// Update configuration via JSON (for admin UI)
-async fn update_config_json(
-    State(state): State<Arc<AppState>>,
-    Json(mut new_config): Json<serde_json::Value>,
-) -> Result<Json<serde_json::Value>, AppError> {
-    // Remove null values (TOML doesn't support null)
-    remove_null_values(&mut new_config);
-
-    // Write back to config file
-    let config_path = &state.config_path;
-
-    // Read current config
-    let config_str = std::fs::read_to_string(config_path)
-        .map_err(|e| AppError::Parse(format!("Failed to read config: {}", e)))?;
-
-    let mut config: toml::Value = toml::from_str(&config_str)
-        .map_err(|e| AppError::Parse(format!("Failed to parse config: {}", e)))?;
-
-    // Update providers section
-    if let Some(providers) = new_config.get("providers") {
-        // Convert from serde_json::Value to toml::Value
-        let providers_toml: toml::Value = serde_json::from_str(&providers.to_string())
-            .map_err(|e| AppError::Parse(format!("Failed to convert providers: {}", e)))?;
-
-        if let Some(table) = config.as_table_mut() {
-            table.insert("providers".to_string(), providers_toml);
-        }
-    }
-
-    // Update models section
-    if let Some(models) = new_config.get("models") {
-        // Convert from serde_json::Value to toml::Value
-        let models_toml: toml::Value = serde_json::from_str(&models.to_string())
-            .map_err(|e| AppError::Parse(format!("Failed to convert models: {}", e)))?;
-
-        if let Some(table) = config.as_table_mut() {
-            table.insert("models".to_string(), models_toml);
-        }
-    }
-
-    // Update router section if provided
-    if let Some(router) = new_config.get("router") {
-        if let Some(router_table) = config.get_mut("router").and_then(|v| v.as_table_mut()) {
-            // Helper to update or remove a router field
-            let update_field = |table: &mut toml::map::Map<String, toml::Value>,
-                                key: &str,
-                                value: Option<&serde_json::Value>| {
-                if let Some(val) = value {
-                    if let Some(s) = val.as_str() {
-                        table.insert(key.to_string(), toml::Value::String(s.to_string()));
-                    }
-                } else {
-                    // Remove field if not present in incoming config
-                    table.remove(key);
-                }
-            };
-
-            // Default is required, always update if present
-            if let Some(default) = router.get("default") {
-                if let Some(s) = default.as_str() {
-                    router_table.insert("default".to_string(), toml::Value::String(s.to_string()));
-                }
-            }
-
-            // Optional fields - remove if not present
-            update_field(router_table, "think", router.get("think"));
-            update_field(router_table, "websearch", router.get("websearch"));
-            update_field(router_table, "background", router.get("background"));
-            update_field(router_table, "auto_map_regex", router.get("auto_map_regex"));
-            update_field(
-                router_table,
-                "background_regex",
-                router.get("background_regex"),
-            );
-        }
-    }
-
-    // Write back to file
-    let new_config_str = toml::to_string_pretty(&config)
-        .map_err(|e| AppError::Parse(format!("Failed to serialize config: {}", e)))?;
-
-    std::fs::write(config_path, new_config_str)
-        .map_err(|e| AppError::Parse(format!("Failed to write config: {}", e)))?;
-
-    info!("✅ Configuration updated successfully via admin UI");
-
-    Ok(Json(serde_json::json!({
-        "status": "success",
-        "message": "Configuration saved successfully"
-    })))
-}
-
-/// Reload configuration without restarting the server
-async fn reload_config(State(state): State<Arc<AppState>>) -> Response {
-    info!("🔄 Configuration reload requested via UI");
-
-    // 1. Read and parse new config (all sync, no locks held)
-    let config_str = match std::fs::read_to_string(&state.config_path) {
-        Ok(s) => s,
-        Err(e) => {
-            error!("Failed to read config: {}", e);
-            return Html(format!("<div class='px-4 py-3 rounded-xl bg-red-500/20 border border-red-500/50 text-foreground text-sm'><strong>❌ Reload failed</strong><br/>Failed to read config: {}</div>", e)).into_response();
-        }
-    };
-
-    let new_config: AppConfig = match toml::from_str(&config_str) {
-        Ok(c) => c,
-        Err(e) => {
-            error!("Failed to parse config: {}", e);
-            return Html(format!("<div class='px-4 py-3 rounded-xl bg-red-500/20 border border-red-500/50 text-foreground text-sm'><strong>❌ Reload failed</strong><br/>Failed to parse config: {}</div>", e)).into_response();
-        }
-    };
-
-    // 2. Build new router (compiles regexes)
-    let new_router = Router::new(new_config.clone());
-
-    // 3. Build new provider registry (reuse existing token_store)
-    let new_registry = match ProviderRegistry::from_configs_with_models(
-        &new_config.providers,
-        Some(state.token_store.clone()),
-        &new_config.models,
-    ) {
-        Ok(r) => Arc::new(r),
-        Err(e) => {
-            error!("Failed to init providers: {}", e);
-            return Html(format!("<div class='px-4 py-3 rounded-xl bg-red-500/20 border border-red-500/50 text-foreground text-sm'><strong>❌ Reload failed</strong><br/>Failed to init providers: {}</div>", e)).into_response();
-        }
-    };
-
-    // 4. Create new reloadable state
-    let new_inner = Arc::new(ReloadableState {
-        config: new_config,
-        router: new_router,
-        provider_registry: new_registry,
-    });
-
-    // 5. Atomic swap (write lock held for microseconds)
-    *state.inner.write().unwrap() = new_inner;
-
-    info!("✅ Configuration reloaded successfully");
-    Html("<div class='px-4 py-3 rounded-xl bg-green-500/20 border border-green-500/50 text-foreground text-sm'><strong>✅ Configuration reloaded</strong><br/>New settings are now active.</div>").into_response()
 }
 
 /// Handle /v1/chat/completions requests (OpenAI-compatible endpoint)
@@ -961,10 +768,12 @@ mod tests {
     use axum::http::HeaderMap;
     use bytes::Bytes;
     use futures::stream;
+    use reqwest::Client;
     use serde_json::json;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
+    use tokio::net::TcpListener;
 
     fn tool_result_message(content: ToolResultContent) -> Message {
         Message {
@@ -1314,7 +1123,6 @@ mod tests {
         let state = Arc::new(AppState {
             inner: std::sync::RwLock::new(reloadable),
             token_store,
-            config_path: temp_dir.path().join("config.toml"),
             message_tracer: Arc::new(MessageTracer::new(config.server.tracing.clone())),
         });
 
@@ -1414,11 +1222,88 @@ mod tests {
         let state = Arc::new(AppState {
             inner: std::sync::RwLock::new(reloadable),
             token_store,
-            config_path: temp_dir.path().join("config.toml"),
             message_tracer: Arc::new(MessageTracer::new(config.server.tracing.clone())),
         });
 
         (state, captured_requests)
+    }
+
+    #[tokio::test]
+    async fn admin_ui_routes_are_not_registered() {
+        let temp_dir = TempDir::new().unwrap();
+        let provider = StubProvider::new(
+            final_only_response("unused", "kimi-k2-actual", "end_turn"),
+            vec![],
+        );
+        let (state, _) = create_test_state(&temp_dir, provider, false);
+        let app = build_app(state);
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let client = Client::new();
+
+        for (method, uri) in [
+            ("GET", "/"),
+            ("GET", "/api/config/json"),
+            ("POST", "/api/config/json"),
+            ("POST", "/api/reload"),
+        ] {
+            let url = format!("http://{}{}", addr, uri);
+            let response = match method {
+                "GET" => client.get(&url).send().await.unwrap(),
+                "POST" => client.post(&url).send().await.unwrap(),
+                _ => unreachable!("unexpected method"),
+            };
+            assert_eq!(
+                response.status(),
+                StatusCode::NOT_FOUND,
+                "expected {method} {uri} to be absent",
+            );
+        }
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn health_and_oauth_routes_remain_registered() {
+        let temp_dir = TempDir::new().unwrap();
+        let provider = StubProvider::new(
+            final_only_response("unused", "kimi-k2-actual", "end_turn"),
+            vec![],
+        );
+        let (state, _) = create_test_state(&temp_dir, provider, false);
+        let app = build_app(state);
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let client = Client::new();
+
+        let health_response = client
+            .get(format!("http://{}/health", addr))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(health_response.status(), StatusCode::OK);
+
+        let tokens_response = client
+            .get(format!("http://{}/api/oauth/tokens", addr))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(tokens_response.status(), StatusCode::OK);
+
+        let callback_response = client
+            .get(format!("http://{}/api/oauth/callback?code=test-code", addr))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(callback_response.status(), StatusCode::OK);
+
+        server.abort();
     }
 
     fn final_only_response(text: &str, model: &str, stop_reason: &str) -> GatewayResponse {
@@ -1938,7 +1823,6 @@ mod tests {
         Arc::new(AppState {
             inner: std::sync::RwLock::new(reloadable),
             token_store,
-            config_path: temp_dir.path().join("config.toml"),
             message_tracer: Arc::new(MessageTracer::new(config.server.tracing.clone())),
         })
     }

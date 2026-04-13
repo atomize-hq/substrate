@@ -123,9 +123,9 @@ Tokens are stored in JSON format at `~/.substrate-gateway/oauth_tokens.json`:
 
 File permissions are automatically set to `0600` (owner read/write only) for security.
 
-## API Endpoints (Future)
+## HTTP Endpoints
 
-The following API endpoints will be added to the admin server:
+The gateway exposes these OAuth HTTP endpoints directly:
 
 - `POST /api/oauth/authorize` - Get authorization URL
 - `POST /api/oauth/exchange` - Exchange authorization code for tokens
