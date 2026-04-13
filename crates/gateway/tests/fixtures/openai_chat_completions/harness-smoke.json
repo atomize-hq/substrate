@@ -1,0 +1,37 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Give me the offline smoke response."
+      }
+    ],
+    "max_tokens": 64,
+    "stream": false
+  },
+  "provider_response": {
+    "id": "resp_smoke",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Boundary text from fixture."
+      }
+    ],
+    "model": "primary-actual",
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 8,
+      "output_tokens": 3,
+      "cache_creation_input_tokens": null,
+      "cache_read_input_tokens": null
+    }
+  },
+  "provider_stream_chunks": [
+    "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_stream\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"primary-actual\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":0}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Boun",
+    "dary\"}}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":8,\"output_tokens\":2}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+  ]
+}

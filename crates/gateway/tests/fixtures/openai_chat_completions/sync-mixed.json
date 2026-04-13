@@ -1,0 +1,59 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Inspect the repository and call tools if useful."
+      }
+    ],
+    "max_tokens": 64,
+    "stream": false
+  },
+  "provider_response": {
+    "id": "resp_sync_mixed",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Before tool"
+      },
+      {
+        "type": "tool_use",
+        "id": "call_fixture_mixed",
+        "name": "lookup",
+        "input": {
+          "path": "Cargo.toml"
+        }
+      },
+      {
+        "type": "text",
+        "text": "After tool"
+      }
+    ],
+    "model": "primary-actual",
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 8,
+      "output_tokens": 5
+    }
+  },
+  "expected": {
+    "object": "chat.completion",
+    "finish_reason": "tool_calls",
+    "texts": [
+      "Before tool",
+      "After tool"
+    ],
+    "tool_call_ids": [
+      "call_fixture_mixed"
+    ],
+    "usage": {
+      "prompt_tokens": 8,
+      "completion_tokens": 5,
+      "total_tokens": 13
+    }
+  }
+}

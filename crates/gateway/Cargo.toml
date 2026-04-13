@@ -1,0 +1,84 @@
+[package]
+name = "substrate-gateway"
+version = "0.6.3-eli.1"
+edition = "2021"
+rust-version = "1.89"
+authors = ["Atomize"]
+license = "MIT"
+publish = false
+description = "High-performance gateway built in Rust"
+repository = "https://github.com/atomize-hq/substrate"
+keywords = ["claude", "code", "router", "llm", "ai"]
+categories = ["command-line-utilities", "web-programming"]
+readme = "README.md"
+
+[[bin]]
+name = "substrate-gateway"
+path = "src/main.rs"
+
+[dependencies]
+# Web Framework
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs", "trace", "cors"] }
+
+# Async Runtime
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["io-util"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = { workspace = true, features = ["preserve_order"] }
+
+# HTTP Client
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "native-tls", "native-tls-vendored"] }
+bytes = "1"
+pin-project = "1"
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Configuration
+config = "0.14"
+toml = "0.8"
+
+# Token Counting
+tiktoken-rs = "0.5"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error Handling
+anyhow = { workspace = true }
+thiserror = "1"
+
+# Utilities
+dashmap = "5"              # Concurrent HashMap
+once_cell = { workspace = true }            # Lazy statics
+async-trait = "0.1"        # Async trait support
+dirs = "5"                 # User directories
+regex = "1"                # Regular expressions
+uuid = { workspace = true, features = ["v4", "serde"] }  # UUID generation for streaming
+
+# OAuth & Auth
+oauth2 = "4"               # OAuth 2.0 client
+base64 = "0.22"            # Base64 encoding
+sha2 = { workspace = true }              # SHA-256 for PKCE
+rand = "0.8"               # Random generation for PKCE
+chrono = { workspace = true }  # Timestamps
+url = "2"                  # URL parsing
+secrecy = "0.8"            # Secure secret handling
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["signal"] }  # Unix signals
+
+[dev-dependencies]
+# Testing
+tokio-test = "0.4"
+mockito = "1"
+tempfile = "3"             # Temporary directory testing
+
+# Property Testing
+proptest = "1"

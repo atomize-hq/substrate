@@ -1,0 +1,59 @@
+{
+  "seam_id": "SEAM-2",
+  "slice_id": "S2",
+  "generated_on": "2026-03-27",
+  "contract_ref": "docs/foundation/azure-kimi-c02-normalized-event-contract.md",
+  "variant_notes_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/variant-notes.md",
+  "cases": [
+    {
+      "case_id": "explicit-tool-calls-k2-thinking-stream",
+      "classification": "explicit_tool_calls",
+      "model": "Kimi-K2-Thinking",
+      "stream": true,
+      "raw_request_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/explicit-tool-calls-k2-thinking-stream/raw-request.json",
+      "raw_response_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/explicit-tool-calls-k2-thinking-stream/raw-response.json",
+      "notes_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/explicit-tool-calls-k2-thinking-stream/notes.md",
+      "fixture_ref": "gateway/tests/fixtures/azure_kimi/explicit-tool-calls-k2-thinking-stream.json"
+    },
+    {
+      "case_id": "hidden-markers-k2-thinking-stream",
+      "classification": "hidden_marker_tool_calls",
+      "model": "Kimi-K2-Thinking",
+      "stream": true,
+      "raw_request_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-stream/raw-request.json",
+      "raw_response_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-stream/raw-response.json",
+      "notes_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-stream/notes.md",
+      "fixture_ref": "gateway/tests/fixtures/azure_kimi/hidden-markers-k2-thinking-stream.json"
+    },
+    {
+      "case_id": "hidden-markers-k2-thinking-nonstream",
+      "classification": "hidden_marker_tool_calls",
+      "model": "Kimi-K2-Thinking",
+      "stream": false,
+      "raw_request_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-nonstream/raw-request.json",
+      "raw_response_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-nonstream/raw-response.json",
+      "notes_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-nonstream/notes.md",
+      "fixture_ref": "gateway/tests/fixtures/azure_kimi/hidden-markers-k2-thinking-nonstream.json"
+    },
+    {
+      "case_id": "mixed-reasoning-and-tool-calls-k2-thinking",
+      "classification": "mixed_reasoning_and_tool_calls",
+      "model": "Kimi-K2-Thinking",
+      "stream": false,
+      "raw_request_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/mixed-reasoning-and-tool-calls-k2-thinking/raw-request.json",
+      "raw_response_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/mixed-reasoning-and-tool-calls-k2-thinking/raw-response.json",
+      "notes_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/mixed-reasoning-and-tool-calls-k2-thinking/notes.md",
+      "fixture_ref": "gateway/tests/fixtures/azure_kimi/mixed-reasoning-and-tool-calls-k2-thinking.json"
+    },
+    {
+      "case_id": "no-tool-control-k2-5-stream",
+      "classification": "no_tool_control",
+      "model": "Kimi-K2.5",
+      "stream": true,
+      "raw_request_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/no-tool-control-k2-5-stream/raw-request.json",
+      "raw_response_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/no-tool-control-k2-5-stream/raw-response.json",
+      "notes_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/no-tool-control-k2-5-stream/notes.md",
+      "fixture_ref": "gateway/tests/fixtures/azure_kimi/no-tool-control-k2-5-stream.json"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "source_log": {
+    "path": "~/.claude-code-router/logs/ccr-20260326143921.log",
+    "req_id": "req-a",
+    "final_request_line": 762
+  },
+  "request": {
+    "model": "Kimi-K2-Thinking",
+    "stream": false,
+    "max_tokens": 32000,
+    "temperature": null,
+    "message_roles": [
+      "system",
+      "user"
+    ],
+    "tool_catalog_present": true,
+    "prompt_excerpt": "Read the details about this repo and then run it through the startup skill to evaluate whether it is worth building as a useful dev tool."
+  }
+}

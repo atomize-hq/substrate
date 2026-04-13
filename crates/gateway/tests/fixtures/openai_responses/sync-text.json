@@ -1,0 +1,40 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "stream": false,
+    "ignored_top_level": "ignored"
+  },
+  "request_model": "gateway-default",
+  "provider_response": {
+    "id": "resp_sync_text",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Hello from text"
+      }
+    ],
+    "model": "primary-actual",
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 5,
+      "output_tokens": 2
+    }
+  },
+  "expected": {
+    "status": "completed",
+    "item_types": [
+      "message"
+    ],
+    "texts": ["Hello from text"],
+    "call_ids": [],
+    "usage": {
+      "input_tokens": 5,
+      "output_tokens": 2,
+      "total_tokens": 7
+    }
+  }
+}

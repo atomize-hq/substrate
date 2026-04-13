@@ -1,0 +1,71 @@
+## Canonical local bootstrap config for Azure OpenAI v1 / Azure Foundry routing.
+## Operators smoke the public `/v1/messages` path with capability-oriented
+## model labels `substrate-think` and `substrate-default`.
+## Loopback is the development default, not the architecture contract.
+## Install `substrate-gateway install-statusline` before smoke so the required
+## evidence surface can read `~/.substrate-gateway/last_routing.json`.
+## Enable `[server.tracing]` only when you need optional redacted debugging
+## evidence.
+## The external model names stay capability-oriented; Azure deployment names
+## live in `actual_model` below.
+##
+## Note: external model names are arbitrary strings. This example standardizes
+## on `substrate-*` labels to keep public docs and configs capability-oriented.
+
+[[models]]
+name = "substrate-think"
+
+[[models.mappings]]
+actual_model = "kimi-k2-thinking-deployment"
+priority = 1
+provider = "azure-kimi"
+
+[[models]]
+name = "substrate-default"
+
+[[models.mappings]]
+actual_model = "kimi-k2-5-deployment"
+priority = 1
+provider = "azure-kimi"
+
+[[providers]]
+# Standard 2026 Azure AI Foundry / OpenAI v1 env posture:
+# export AZURE_KIMI_API_KEY="..."
+# export AZURE_KIMI_ENDPOINT="https://<resource>.openai.azure.com/openai/v1"
+#
+# Compatibility note: if `AZURE_KIMI_ENDPOINT` still points at the full
+# `/openai/v1/chat/completions` URL, the Azure transport normalizes it back to
+# the `/openai/v1` base before appending request paths.
+api_key = "$AZURE_KIMI_API_KEY"
+auth_type = "apikey"
+base_url = "$AZURE_KIMI_ENDPOINT"
+enabled = true
+models = []
+name = "azure-kimi"
+provider_type = "azure-openai"
+
+[router]
+# `think` and `default` point at the capability-oriented model labels used in smoke checks.
+# `auto_map_regex` is explicitly set here to match the README narrative; it is also the
+# runtime default if omitted.
+auto_map_regex = "^claude-"
+background = "substrate-default"
+default = "substrate-default"
+think = "substrate-think"
+websearch = "substrate-default"
+
+# Prompt-based routing rules (first match wins)
+# Routes to specific models when patterns match user prompt content.
+[[router.prompt_rules]]
+pattern = "(?i)(plan|think|reason)"
+model = "substrate-think"
+
+[server]
+# Default development host. Transport and deployment boundaries remain replaceable.
+host = "127.0.0.1"
+log_level = "info"
+port = 13456
+
+[server.timeouts]
+api_timeout_ms = 600000
+connect_timeout_ms = 10000

@@ -43,6 +43,7 @@ members = [
     "crates/common",
     "crates/shim", 
     "crates/shell",
+    "crates/gateway",
     # New Phase 4 crates
     "crates/world-api",
     "crates/world",

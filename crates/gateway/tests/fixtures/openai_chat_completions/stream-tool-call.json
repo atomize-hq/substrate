@@ -1,0 +1,32 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Call a tool while streaming."
+      }
+    ],
+    "max_tokens": 64,
+    "stream": true
+  },
+  "provider_stream_chunks": [
+    "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_fixture_stream_tool\",\"name\":\"lookup\",\"input\":{}}}\n\n",
+    "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\":\\\"README.md\\\"}\"}}\n\n",
+    "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+    "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":6,\"output_tokens\":3}}\n\n",
+    "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+  ],
+  "expected_contains": [
+    "\"object\":\"chat.completion.chunk\"",
+    "\"tool_calls\"",
+    "\"id\":\"call_fixture_stream_tool\"",
+    "data: [DONE]"
+  ],
+  "expected_not_contains": [
+    "event: ",
+    "content_block_start",
+    "\"type\":\"message_delta\""
+  ],
+  "expect_usage_chunk": false
+}

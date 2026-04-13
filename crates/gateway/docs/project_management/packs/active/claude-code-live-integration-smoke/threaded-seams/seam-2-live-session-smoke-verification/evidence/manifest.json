@@ -1,0 +1,209 @@
+{
+  "seam_id": "SEAM-2",
+  "thread_id": "THR-09",
+  "generated_on": "2026-03-29T13:51:36Z",
+  "evidence_kind": "repo_backed_and_operator_run_governance_proof",
+  "contract_ref": "docs/foundation/claude-code-c10-live-session-smoke-verification-contract.md",
+  "procedure_ref": "docs/foundation/claude-code-c10-live-session-smoke-procedure.md",
+  "closeout_ref": "docs/project_management/packs/active/claude-code-live-integration-smoke/governance/seam-2-closeout.md",
+  "runbook_ref": "gateway/README.md",
+  "limitations": [
+    "The tracked trace file preserves the route evidence for the three-branch Claude Code smoke, but the matching last_routing.json from that run is not preserved as a tracked repo artifact.",
+    "Secret-bearing statusline, routing-history, and trace outputs remain operator-captured evidence surfaces rather than tracked artifacts.",
+    "The surviving /tmp trace file is for the later Azure direct-endpoint compatibility validation, not the earlier full three-branch smoke bundle."
+  ],
+  "landed_commits": [
+    {
+      "sha": "8a8f33e",
+      "summary": "SEAM-2: complete slice-1-freeze-live-session-smoke-contract-and-coverage"
+    },
+    {
+      "sha": "51f2a08",
+      "summary": "SEAM-2: deliver smoke procedure and evidence manifest"
+    },
+    {
+      "sha": "7f1ad33",
+      "summary": "SEAM-2: complete slice-3-seam-exit-gate"
+    },
+    {
+      "sha": "ce52dba",
+      "summary": "SEAM-2: align closeout and thread publication state"
+    },
+    {
+      "sha": "d4a6e72",
+      "summary": "Resolve Azure endpoint env vars and normalize chat URL"
+    }
+  ],
+  "runtime_anchors": [
+    {
+      "path": "gateway/README.md",
+      "proof": "publishes the operator procedure, required evidence surfaces, and the normal / think / tool-loop continuation branch set"
+    },
+    {
+      "path": "gateway/src/router/mod.rs",
+      "proof": "routes plan-mode tool-result continuations back to the default execution path before think routing"
+    },
+    {
+      "path": "gateway/src/server/mod.rs",
+      "proof": "writes routing history, injects continuation reminders for tool-result follow-ups, and classifies/redacts operator-facing failures"
+    }
+  ],
+  "verification_commands": [
+    {
+      "command": "cargo test --manifest-path gateway/Cargo.toml claude_code_live_smoke_exercises_normal_think_and_tool_continuation_branches -- --nocapture",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test --manifest-path gateway/Cargo.toml test_tool_result_continuation_hands_off_from_think_mode -- --nocapture",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test --manifest-path gateway/Cargo.toml handle_messages_injects_continuation_for_tool_result_follow_up -- --nocapture",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test --manifest-path gateway/Cargo.toml failure_classification_covers_operator_taxonomy -- --nocapture",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test --manifest-path gateway/Cargo.toml app_error_response_is_redacted_and_classified -- --nocapture",
+      "result": "passed"
+    },
+    {
+      "command": "cargo test --manifest-path gateway/Cargo.toml app_error_route_responses_use_route_class -- --nocapture",
+      "result": "passed"
+    }
+  ],
+  "operator_run_evidence": [
+    {
+      "run_id": "real-client-three-branch-smoke",
+      "source": "tracked trace file plus session summary provided in the current thread",
+      "observed_on_local_date": "2026-03-29",
+      "client_path": "real claude binary via ANTHROPIC_BASE_URL=http://127.0.0.1:13456",
+      "gateway_path": "real substrate-gateway binary via public /v1/messages ingress",
+      "provider_posture": "live provider through a temporary OpenAI-backed mapping; the path remained Claude Code -> gateway -> live provider",
+      "statusline": {
+        "installed_path": "/Users/spensermcconnell/.substrate-gateway/statusline.sh",
+        "observed": "rendered routing history during the run"
+      },
+      "artifacts": [
+        "docs/kimi-claude-live-smoke-trace.jsonl",
+        "/Users/spensermcconnell/.substrate-gateway/statusline.sh"
+      ],
+      "cases": [
+        {
+          "case_id": "normal-default-branch-live-smoke",
+          "branch": "normal",
+          "operator_prompt": "Reply with DEFAULT_OK only.",
+          "outcome": "passed",
+          "session_result": "DEFAULT_OK",
+          "trace_evidence": "docs/kimi-claude-live-smoke-trace.jsonl line 7 recorded route_type:\"default\""
+        },
+        {
+          "case_id": "think-branch-live-smoke",
+          "branch": "think",
+          "operator_prompt": "Reply with THINK_OK only.",
+          "outcome": "passed",
+          "session_result": "THINK_OK",
+          "trace_evidence": "docs/kimi-claude-live-smoke-trace.jsonl line 8 recorded route_type:\"think\""
+        },
+        {
+          "case_id": "tool-loop-continuation-live-smoke",
+          "branch": "tool_loop_continuation",
+          "outcome": "passed",
+          "session_result": "TOOL_OK",
+          "trace_evidence": "docs/kimi-claude-live-smoke-trace.jsonl line 5 recorded the initial think request and line 6 recorded the follow-up default request containing assistant tool_use, user tool_result, and the injected continuation reminder"
+        }
+      ],
+      "cleanup": "the gateway was shut back down and the temp repo-local config used for the run was removed",
+      "notes": [
+        "docs/kimi-claude-live-smoke-trace.jsonl also contains earlier exploratory route checks on lines 1 through 4, but lines 5 through 8 are the authoritative SEAM-2 proof bundle",
+        "the current /Users/spensermcconnell/.substrate-gateway/last_routing.json has been overwritten by later test activity and is therefore not used as the primary artifact for this smoke"
+      ]
+    },
+    {
+      "run_id": "azure-direct-endpoint-compatibility-smoke",
+      "source": "surviving local artifacts plus the session transcript provided by the user in the current thread",
+      "observed_at_utc": "2026-03-29T12:52:16Z",
+      "purpose": "prove that base_url = \"$AZURE_KIMI_ENDPOINT\" works when the env var contains a full .../openai/v1/chat/completions URL",
+      "provider_posture": "azure-kimi-live through env-backed base_url normalization",
+      "statusline": {
+        "installed_path": "/Users/spensermcconnell/.substrate-gateway/statusline.sh",
+        "observed": "installed on disk"
+      },
+      "artifacts": [
+        "/tmp/kimi-claude-live-smoke-azure-direct-trace.jsonl",
+        "/tmp/substrate-gateway-live-smoke-azure-direct.log",
+        "/Users/spensermcconnell/.substrate-gateway/last_routing.json"
+      ],
+      "notes": [
+        "the surviving trace file contains a real Claude prompt requesting DIRECT_ENDPOINT_OK only",
+        "the trace recorded provider azure-kimi-live and route_type default for model Kimi-K2.5",
+        "the current last_routing.json was later overwritten by tests and therefore is only partial supporting evidence for this run"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "case_id": "normal-branch-deterministic-smoke",
+      "evidence_source": "server::tests::claude_code_live_smoke_exercises_normal_think_and_tool_continuation_branches",
+      "public_path": "/v1/messages",
+      "branch": "normal",
+      "request_shape": "single user text turn without thinking",
+      "assertions": [
+        "HTTP 200 is returned",
+        "the first captured provider request uses model kimi-k2-actual",
+        "the first captured provider request keeps thinking unset"
+      ]
+    },
+    {
+      "case_id": "think-branch-deterministic-smoke",
+      "evidence_source": "server::tests::claude_code_live_smoke_exercises_normal_think_and_tool_continuation_branches",
+      "public_path": "/v1/messages",
+      "branch": "think",
+      "request_shape": "single user text turn with thinking enabled",
+      "assertions": [
+        "HTTP 200 is returned",
+        "the second captured provider request uses model kimi-k2-thinking-actual",
+        "the second captured provider request preserves thinking"
+      ]
+    },
+    {
+      "case_id": "tool-continuation-deterministic-smoke",
+      "evidence_source": "server::tests::claude_code_live_smoke_exercises_normal_think_and_tool_continuation_branches",
+      "public_path": "/v1/messages",
+      "branch": "tool_loop_continuation",
+      "request_shape": "plan-mode follow-up containing only tool results",
+      "assertions": [
+        "HTTP 200 is returned",
+        "the third captured provider request uses model kimi-k2-actual instead of the think model",
+        "the third captured provider request preserves thinking while remaining on the default execution route",
+        "the last user message is converted to blocks and prepended with the internal continuation reminder"
+      ]
+    }
+  ],
+  "taxonomy_proof": [
+    {
+      "test": "failure_classification_covers_operator_taxonomy",
+      "coverage": [
+        "auth",
+        "url",
+        "deployment",
+        "transport_drift"
+      ]
+    },
+    {
+      "test": "app_error_response_is_redacted_and_classified",
+      "coverage": [
+        "redacted provider-facing error bodies",
+        "public error messages for auth, url, deployment, and transport drift"
+      ]
+    },
+    {
+      "test": "app_error_route_responses_use_route_class",
+      "coverage": [
+        "route failure classification remains distinct from transport failures"
+      ]
+    }
+  ]
+}

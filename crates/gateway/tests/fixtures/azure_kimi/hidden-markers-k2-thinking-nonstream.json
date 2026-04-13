@@ -1,0 +1,45 @@
+{
+  "case_id": "hidden-markers-k2-thinking-nonstream",
+  "contract_ref": "docs/foundation/azure-kimi-c02-normalized-event-contract.md",
+  "raw_artifact_ref": "docs/project_management/packs/active/azure-kimi-claude-gateway/threaded-seams/seam-2-azure-kimi-normalization/evidence/cases/hidden-markers-k2-thinking-nonstream/raw-response.json",
+  "normalized_events": [
+    {
+      "event_kind": "action",
+      "summary_text": "Let me look for the Python package configuration to understand the project structure better.",
+      "source_origin": "assistant_progress",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "reasoning_content_prefix",
+        "req_id": "req-k"
+      }
+    },
+    {
+      "event_kind": "tool_intent",
+      "tool_name": "Read",
+      "tool_id": "functions.Read:3",
+      "tool_arguments": {
+        "file_path": "/Users/spensermcconnell/__Active_Code/forked/pyproject.toml"
+      },
+      "source_origin": "tool_request",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "reasoning_content_markers",
+        "req_id": "req-k"
+      }
+    },
+    {
+      "event_kind": "tool_intent",
+      "tool_name": "Read",
+      "tool_id": "functions.Read:4",
+      "tool_arguments": {
+        "file_path": "/Users/spensermcconnell/__Active_Code/forked/src"
+      },
+      "source_origin": "tool_request",
+      "debug_provenance": {
+        "provider_model": "Kimi-K2-Thinking",
+        "raw_signal": "reasoning_content_markers",
+        "req_id": "req-k"
+      }
+    }
+  ]
+}

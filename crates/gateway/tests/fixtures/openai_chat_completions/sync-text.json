@@ -1,0 +1,44 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Give me the offline smoke response."
+      }
+    ],
+    "max_tokens": 64,
+    "stream": false
+  },
+  "provider_response": {
+    "id": "resp_sync_text",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Boundary text from fixture."
+      }
+    ],
+    "model": "primary-actual",
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 8,
+      "output_tokens": 3
+    }
+  },
+  "expected": {
+    "object": "chat.completion",
+    "finish_reason": "stop",
+    "texts": [
+      "Boundary text from fixture."
+    ],
+    "tool_call_ids": [],
+    "usage": {
+      "prompt_tokens": 8,
+      "completion_tokens": 3,
+      "total_tokens": 11
+    }
+  }
+}

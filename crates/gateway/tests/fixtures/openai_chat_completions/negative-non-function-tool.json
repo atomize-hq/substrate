@@ -1,0 +1,22 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "messages": [
+      {
+        "role": "user",
+        "content": "hello"
+      }
+    ],
+    "tools": [
+      {
+        "type": "web_search",
+        "function": {
+          "name": "ignored"
+        }
+      }
+    ]
+  },
+  "expected_status": 400,
+  "expected_class": "route",
+  "expected_message": "Route selection failed"
+}

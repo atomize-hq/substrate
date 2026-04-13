@@ -1,0 +1,20 @@
+{
+  "source_log": {
+    "path": "~/.claude-code-router/logs/ccr-20260326143921.log",
+    "req_id": "req-k",
+    "final_request_line": 1687
+  },
+  "request": {
+    "model": "Kimi-K2-Thinking",
+    "stream": false,
+    "max_tokens": 32000,
+    "temperature": null,
+    "message_roles": [
+      "system",
+      "user",
+      "assistant"
+    ],
+    "tool_catalog_present": true,
+    "prompt_excerpt": "Follow-on request after the initial repository read, still under the startup-evaluation workflow."
+  }
+}
