@@ -2,7 +2,7 @@
 seam_id: SEAM-2
 seam_slug: substrate-auth-handoff-and-account-id-provenance
 type: integration
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v2
 basis:
@@ -20,7 +20,7 @@ basis:
 gates:
   pre_exec:
     review: passed
-    contract: failed
+    contract: passed
     revalidation: passed
   post_exec:
     landing: pending
@@ -65,7 +65,7 @@ open_remediations:
   - if no valid account identity can be resolved for the selected mode, the gateway fails before the upstream call using the normal error envelope
 - **Dependencies**
   - Direct blockers:
-    - the owned auth-handoff contract baseline is not yet written into the canonical contract path
+    - none at pre-exec; the owned auth-handoff contract baseline and execution checklist now exist, and the remaining open work is the landing-phase checklist tracked by `REM-001`
   - Transitive blockers:
     - any later conformance work depends on this seam freezing integrated-versus-standalone ownership and failure posture
   - Direct consumers:
@@ -87,7 +87,7 @@ open_remediations:
   - Verify the gateway-side resolution path can distinguish integrated and standalone mode without letting gateway-local persistence become a required integrated trust input.
   - Verify the provider path can inject `ChatGPT-Account-ID` from resolved auth context first and use JWT parsing only as bounded fallback.
 - **Canonical contract refs**:
-  - `docs/contracts/chatgpt-codex-auth-handoff-contract.md`
+  - `crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md`
 - **Risks / unknowns**:
   - Risk: the current token store schema lacks explicit `account_id`, making it easy for standalone compatibility to leak into integrated architecture.
   - De-risk plan: freeze the owner line and field set before seam-local implementation work starts.
@@ -100,7 +100,7 @@ open_remediations:
   - fail before the upstream call when account identity is unresolved or inconsistent
   - keep secret-bearing data out of public docs and non-secret pointer semantics only in process env
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is `active` because the route contract is now landed and the remaining blocker is the auth-handoff contract baseline
+  - Why this seam is `active`, `next`, or `future`: it is `active` because the route contract is landed and the auth-handoff contract baseline is now concrete enough for execution-grade slices
   - Which threads matter most: `THR-14`, `THR-15`
   - What the first seam-local review should focus on: integrated-versus-standalone mode selection, field IDs, resolution precedence, provider injection ownership, and failure classification
 - **Expected seam-exit concerns**:

@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-2
 seam_slug: substrate-auth-handoff-and-account-id-provenance
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
@@ -19,7 +19,7 @@ basis:
 gates:
   pre_exec:
     review: passed
-    contract: failed
+    contract: passed
     revalidation: passed
   post_exec:
     landing: pending
@@ -53,16 +53,17 @@ open_remediations:
   - `crates/gateway/src/auth/token_store.rs`
   - `crates/gateway/src/server/oauth_handlers.rs`
   - `crates/gateway/src/providers/openai.rs`
+  - `crates/gateway/src/server/mod.rs`
   - `crates/gateway/docs/OAUTH_SETUP.md`
   - `crates/gateway/docs/OAUTH_TESTING.md`
-  - `docs/contracts/chatgpt-codex-auth-handoff-contract.md`
+  - `crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md`
 - **Verification**:
   - For owned contracts, describe what must be concrete in seam-local planning before execution.
   - Reserve accepted or published contract artifact evidence for seam exit and closeout.
-  - The canonical contract text for an owned contract must live in `docs/contracts/chatgpt-codex-auth-handoff-contract.md`; seam-local planning may reference that path, but may not treat planning-pack docs as canonical.
+  - The canonical contract text for an owned contract must live in `crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md`; seam-local planning may reference that path, but may not treat planning-pack docs as canonical.
   - Verify the owner line, field precedence, delivery posture, and failure envelope without depending on gateway-local auth-file reads inside the in-world runtime.
 - **Basis posture**:
-  - **Currentness**: `current`
+  - **Currentness**: `current` (revalidated against `THR-14` publication and the landed seam-1 closeout-backed route contract)
   - **Upstream closeouts assumed**: `../../governance/seam-1-closeout.md`
   - **Required threads**: `THR-14`
   - **Stale triggers**:
@@ -70,7 +71,7 @@ open_remediations:
     - Substrate delivery posture changes for auth bundles, secret-channel transport, or in-world consumption
     - standalone compatibility sources differ from the current ADR assumptions about `~/.codex/auth.json` and JWT fallback
 - **Threading constraints**
-  - **Upstream blockers**: `THR-14` is published and provides the route basis this seam consumes
+  - **Upstream blockers**: none at pre-exec; `THR-14` is published by `SEAM-1` and has now been revalidated against the landed route contract and current provider/auth evidence anchors
   - **Downstream blocked seams**: `SEAM-3`
   - **Contracts produced**: `C-15`
   - **Contracts consumed**: `C-14`

@@ -11,17 +11,19 @@ related_seam: SEAM-2
 related_slice: S00
 related_thread: THR-15
 related_contract: C-15
-related_artifact: crates/gateway/docs/project_management/packs/active/chatgpt-codex-oauth-backend-api-responses/threaded-seams/seam-2-substrate-auth-handoff-and-account-id-provenance/review.md
+related_artifact: crates/gateway/docs/project_management/packs/active/chatgpt-codex-oauth-backend-api-responses/threaded-seams/seam-2-substrate-auth-handoff-and-account-id-provenance/slice-00-freeze-auth-handoff-contract.md
 severity: blocking
 status: open
 owner_seam: SEAM-2
 blocked_targets:
   - seam: SEAM-2
     field: status
-    value: exec-ready
-summary: The owned auth-handoff contract baseline is not yet written into the canonical contract path, so SEAM-2 cannot become exec-ready.
-required_fix: Author docs/contracts/chatgpt-codex-auth-handoff-contract.md and mirror the owner line, field precedence, and fallback rules into the seam-local planning artifacts.
-resolution_evidence: []
+    value: landed
+summary: The auth-handoff owner line is now fixed, but SEAM-2 still needs landed auth-context resolution, provider injection, and verification evidence before the contract can publish.
+required_fix: Land the S1/S2/S3 checklist so `crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md`, resolved auth-context wiring, explicit-over-JWT precedence, and `THR-15` publication are all backed by code and verification evidence.
+resolution_evidence:
+  - crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md
+  - crates/gateway/docs/project_management/packs/active/chatgpt-codex-oauth-backend-api-responses/threaded-seams/seam-2-substrate-auth-handoff-and-account-id-provenance/slice-00-freeze-auth-handoff-contract.md
 
 When a remediation is opened, append it here using the canonical schema:
 

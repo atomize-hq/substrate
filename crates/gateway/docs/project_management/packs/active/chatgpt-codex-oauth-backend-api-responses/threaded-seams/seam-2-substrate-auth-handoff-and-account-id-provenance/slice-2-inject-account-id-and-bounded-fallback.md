@@ -3,7 +3,7 @@ slice_id: S2
 seam_id: SEAM-2
 slice_kind: implementation
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
@@ -13,9 +13,9 @@ basis:
     - auth-context resolution changes in a way that alters account-id precedence
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending

@@ -48,10 +48,10 @@
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-14`
   - **Purpose**: publish the route contract and stream-native transport truth so auth ownership and conformance work can build on named, reviewable route behavior instead of ADR prose alone
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: the upstream endpoint path, minimal header contract, accepted-field subset, continuation legality rules, or authoritative semantic event family changes
   - **Satisfied by**: the canonical route contract note plus deterministic provider-focused verification that proves sync and streaming share the same upstream event source and compatibility overlay
-  - **Notes**: this thread must preserve thin public ingress by keeping route-specific logic below the normalized-core boundary
+  - **Notes**: this thread was published by the `SEAM-1` closeout record and has now been revalidated by `SEAM-2` pre-exec review against the landed route contract, the seam-1 seam-exit record, and the current provider/auth evidence anchors; later consumers still rerun promotion-time revalidation if a stale trigger fires
 
 - **Thread ID**: `THR-15`
   - **Producer seam**: `SEAM-2`

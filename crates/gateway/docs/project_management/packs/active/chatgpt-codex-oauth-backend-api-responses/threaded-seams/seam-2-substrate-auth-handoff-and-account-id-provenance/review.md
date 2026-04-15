@@ -42,21 +42,20 @@ flowchart LR
 
 - The current token store schema still lacks a first-class `account_id` field, which makes it easy for fallback behavior to masquerade as integrated ownership.
 - The provider path already extracts account identity in `openai.rs`, but this seam must keep that as a consumer action rather than a trust-boundary decision.
-- The canonical auth-handoff contract doc is not written yet, so contract readiness remains blocked until the owner line and fallback rules are made concrete in `docs/contracts/`.
+- The current provider path still derives `ChatGPT-Account-ID` from JWT fallback only, so execution must land a resolved-auth-context carrier before the owner line is true in code.
 
 ## Pre-exec findings
 
-- `THR-14` is already published, so the route basis for `ChatGPT-Account-ID` injection is now current.
-- The seam now has enough input detail to plan integration and verification, but the owned canonical contract artifact is still missing from `docs/contracts/chatgpt-codex-auth-handoff-contract.md`.
-- No blocking remediation existed before this promotion run, so `REM-001` is being opened to track the missing canonical contract baseline.
+- `THR-14` was published by the seam-1 closeout and is now revalidated here against the landed route contract, the seam-1 closeout seam-exit record, and the current provider/auth evidence anchors.
+- The owned canonical contract artifact now exists at `crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md`, and `S00` records the integrated owner line, field identifiers, fallback order, and execution checklist concretely enough for implementation.
+- `REM-001` remains open only as a landing-phase owner checklist for the S1/S2/S3 code and verification work that must publish `THR-15`; it no longer blocks `status: exec-ready`.
 
 ## Pre-exec gate disposition
 
 - **Review gate**: `passed`
-- **Contract gate**: `failed`
-  - the owned auth-handoff contract baseline is not yet written into the canonical contract path
-- **Revalidation gate**: `passed`
-- **Opened remediations**: `REM-001`
+- **Contract gate**: `passed`; the owned auth-handoff baseline and execution checklist are now concrete in the canonical contract note plus `S00`
+- **Revalidation gate**: `passed`; the seam was rechecked against `../../governance/seam-1-closeout.md`, `crates/gateway/docs/contracts/chatgpt-codex-route-contract.md`, `crates/gateway/src/providers/openai.rs`, `crates/gateway/src/auth/token_store.rs`, and `crates/gateway/src/server/mod.rs`
+- **Open remediations**: `REM-001` remains open for landing and thread publication only
 
 ## Planned seam-exit gate focus
 
