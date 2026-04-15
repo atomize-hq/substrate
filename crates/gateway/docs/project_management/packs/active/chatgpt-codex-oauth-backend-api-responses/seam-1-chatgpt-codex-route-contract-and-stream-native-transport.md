@@ -2,16 +2,16 @@
 seam_id: SEAM-1
 seam_slug: chatgpt-codex-route-contract-and-stream-native-transport
 type: integration
-status: proposed
+status: exec-ready
 execution_horizon: active
-plan_version: v1
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts:
-    - docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md
-    - docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-3-closeout.md
+    - crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-2-closeout.md
+    - crates/gateway/docs/project_management/packs/active/openai-side-chat-completions-and-responses/governance/seam-3-closeout.md
   required_threads: []
   stale_triggers:
     - the live ChatGPT Codex backend changes accepted fields, required headers, or semantic event ordering relative to the 2026-04-11 probe evidence captured in ADR 0010
@@ -19,9 +19,9 @@ basis:
     - public OpenAI-side contracts widen or tighten supported controls in a way that forces this route to reinterpret `pass`, `translate`, `force`, or `reject`
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -80,7 +80,7 @@ open_remediations: []
   - `crates/gateway/src/models/mod.rs`
   - `crates/gateway/tests/openai_responses_conformance.rs`
   - `crates/gateway/tests/openai_shared_parity.rs`
-  - route-specific contract docs reserved under `docs/contracts/`
+  - route-specific contract docs reserved under `crates/gateway/docs/contracts/`
 - **Verification**:
   - If this seam **consumes** an upstream contract, verification may depend on accepted upstream evidence.
   - If this seam **produces** an owned contract, verification should describe the contract becoming concrete enough for seam-local planning and implementation rather than requiring the final accepted artifact to exist already.
@@ -88,7 +88,7 @@ open_remediations: []
   - Verify deterministic provider-focused tests can prove endpoint parity, field allowlist/reject posture, reasoning gating, continuation ordering, and semantic assembly from the stream event family.
   - Verify unsupported caller-visible controls fail explicitly rather than being silently stripped or degraded on this route.
 - **Canonical contract refs**:
-  - `docs/contracts/chatgpt-codex-route-contract.md`
+  - `crates/gateway/docs/contracts/chatgpt-codex-route-contract.md`
 - **Risks / unknowns**:
   - Risk: the undocumented upstream backend drifts after the probes captured in ADR 0010.
   - De-risk plan: freeze the route contract and bind it to deterministic request/stream fixtures instead of leaving behavior implicit in provider code.

@@ -39,7 +39,7 @@ execution_horizon:
   - `docs/IMPORTANT_SUBSTRATE_ALIGNMENT.md` still forbids a second backend identity, host-local architectural assumptions, and raw-provider-stream coupling
   - the landed OpenAI-side public contracts under `docs/foundation/openai-side-*.md` remain upstream basis for public ingress behavior; this pack changes provider-side route handling only
   - the ChatGPT Codex upstream is undocumented and drift-prone, so new compatibility only lands when explicitly verified
-  - canonical contract docs are reserved under `docs/contracts/` for this pack even though that tree does not yet exist in the repo
+  - canonical contract docs are reserved under `crates/gateway/docs/contracts/` for this pack and must remain descriptive-only
 - **External systems / dependencies**:
   - `https://chatgpt.com/backend-api/codex/responses`
   - ChatGPT Codex OAuth auth material and account identity

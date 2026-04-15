@@ -8,7 +8,7 @@ None.
 
 When a remediation is opened, append it here using the canonical schema:
 
-```yaml
+```text
 remediation_id: REM-<nnn>
 origin_phase: pre_exec | post_exec
 source_gate: review | contract | revalidation | landing | closeout

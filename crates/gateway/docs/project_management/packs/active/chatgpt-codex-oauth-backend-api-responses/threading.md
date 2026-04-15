@@ -8,7 +8,7 @@
   - only `SEAM-1` is eligible for authoritative downstream decomposition by default
   - `SEAM-2` may later receive seam-local review and slices, but only after `THR-14` is published
   - `SEAM-3` remains seam-brief depth only until both `THR-14` and `THR-15` are published
-  - canonical contract refs for this pack are reserved under `docs/contracts/`
+  - canonical contract refs for this pack are reserved under `crates/gateway/docs/contracts/`
 
 ## Contract registry
 
@@ -19,7 +19,7 @@
   - **Derived consumers**: future Codex-route maintenance and any later provider-side work that must preserve public ingress semantics while changing the routed upstream transport
   - **Thread IDs**: `THR-14`
   - **Definition**: the dedicated ChatGPT Codex OAuth route contract for `https://chatgpt.com/backend-api/codex/responses`, including endpoint parity for sync and streaming, the `pass | translate | force | reject` compatibility overlay, typed `message` item emission, flat function tool/tool-choice shapes, semantic stream assembly, sync-drain failure behavior, and the non-public reasoning visibility rule
-  - **Canonical contract ref**: `docs/contracts/chatgpt-codex-route-contract.md`
+  - **Canonical contract ref**: `crates/gateway/docs/contracts/chatgpt-codex-route-contract.md`
   - **Versioning / compat**: route compatibility widens only through explicit route-specific revalidation; unsupported caller-visible controls must fail explicitly rather than being silently stripped or degraded
 
 - **Contract ID**: `C-15`
@@ -29,7 +29,7 @@
   - **Derived consumers**: future Substrate integration and standalone-compat maintenance work
   - **Thread IDs**: `THR-15`
   - **Definition**: the ChatGPT Codex auth-handoff contract for integrated and standalone mode, including authoritative account-id ownership, auth field identifiers, delivery posture, explicit `account_id` precedence over JWT fallback, and pre-upstream failure behavior when no valid account identity exists
-  - **Canonical contract ref**: `docs/contracts/chatgpt-codex-auth-handoff-contract.md`
+  - **Canonical contract ref**: `crates/gateway/docs/contracts/chatgpt-codex-auth-handoff-contract.md`
   - **Versioning / compat**: integrated mode keeps Substrate as the owner of host credential reads and secret delivery; standalone mode remains a bounded fallback and must not redefine that owner line
 
 - **Contract ID**: `C-16`
@@ -39,7 +39,7 @@
   - **Derived consumers**: future Codex-route changes that need drift-guard evidence before they land
   - **Thread IDs**: `THR-16`
   - **Definition**: deterministic conformance and drift-guard suite for the ChatGPT Codex route, covering accepted vs rejected request controls, sync/stream parity, continuation synthesis/order rules, reasoning gating, auth-source rules, and the route's no-silent-degradation posture
-  - **Canonical contract ref**: `docs/contracts/chatgpt-codex-conformance-and-drift-guard.md`
+  - **Canonical contract ref**: `crates/gateway/docs/contracts/chatgpt-codex-conformance-and-drift-guard.md`
   - **Versioning / compat**: the suite should stay offline and deterministic where possible, using captured probe evidence and fixture-backed expectations instead of live upstream network dependence in the core regression path
 
 ## Thread registry
