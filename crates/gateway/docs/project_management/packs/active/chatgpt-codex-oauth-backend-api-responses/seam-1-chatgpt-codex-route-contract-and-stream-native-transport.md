@@ -2,7 +2,7 @@
 seam_id: SEAM-1
 seam_slug: chatgpt-codex-route-contract-and-stream-native-transport
 type: integration
-status: exec-ready
+status: landed
 execution_horizon: active
 plan_version: v2
 basis:
@@ -23,12 +23,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -101,7 +101,7 @@ open_remediations: []
   - preserve explicit request rejection for unsupported controls
   - keep reasoning payloads internal and non-public on this route
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is `active` because both auth ownership and conformance need the route contract to exist as published basis first
+  - Why this seam is `active`, `next`, or `future`: it is `landed` because both auth ownership and conformance now consume the published route contract as basis
   - Which threads matter most: `THR-14`
   - What the first seam-local review should focus on: route-local control classification, serializer legality, semantic event assembly, sync-drain failure posture, and keeping public ingress thin
 - **Expected seam-exit concerns**:
