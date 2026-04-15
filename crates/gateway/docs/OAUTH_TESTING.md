@@ -134,6 +134,12 @@ curl -X POST http://localhost:13456/api/oauth/tokens/delete \
   -d '{"provider_id": "anthropic-max"}'
 ```
 
+## ChatGPT Codex Handoff Boundary
+
+The Codex auth-handoff contract lives in [`docs/contracts/chatgpt-codex-auth-handoff-contract.md`](contracts/chatgpt-codex-auth-handoff-contract.md). For integrated Substrate-managed Codex runs, local OAuth artifacts such as `~/.substrate-gateway/oauth_tokens.json` are compatibility-only and do not define the account-id trust boundary.
+
+If you are validating standalone gateway-local behavior, local auth files remain part of the compatibility path, but the gateway must still resolve a concrete `account_id` before any upstream request is sent.
+
 ## Using OAuth with Providers
 
 ### 1. Configure provider
@@ -223,6 +229,7 @@ After successful authentication:
 2. ✅ Configure provider with `auth_type = "oauth"`
 3. ✅ **Phase 3 Complete**: Bearer token injection works automatically!
 4. ✅ OAuth HTTP endpoints remain available without the retired admin UI
+5. ✅ For Codex integrated mode, follow the auth-handoff contract instead of treating local token storage as authoritative
 
 ## Security Notes
 

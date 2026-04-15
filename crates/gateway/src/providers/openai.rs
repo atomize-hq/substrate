@@ -1,7 +1,5 @@
 use super::{error::ProviderError, OpenAITransport};
-use crate::auth::{
-    CodexAuthState, OAuthClient, OAuthConfig, ResolvedCodexAuthContext, TokenStore,
-};
+use crate::auth::{CodexAuthState, OAuthClient, OAuthConfig, ResolvedCodexAuthContext, TokenStore};
 use crate::core::{GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage};
 use crate::models::{
     ContentBlock, CountTokensRequest, CountTokensResponse, ImageSource, KnownContentBlock,
@@ -1466,28 +1464,24 @@ impl OpenAIProvider {
         req_builder: reqwest::RequestBuilder,
         auth_context: &ResolvedCodexAuthContext,
     ) -> Result<reqwest::RequestBuilder, ProviderError> {
-        Ok(req_builder.header(
-            "ChatGPT-Account-ID",
-            auth_context.account_id.clone(),
-        ))
+        Ok(req_builder.header("ChatGPT-Account-ID", auth_context.account_id.clone()))
     }
 
     fn resolve_codex_auth_context(&self) -> Result<ResolvedCodexAuthContext, ProviderError> {
-        if let Some(handoff) = crate::auth::codex_auth_context::CodexIntegratedAuthHandoff::from_env(
-        )
-        .map_err(|e| {
-            ProviderError::AuthError(format!(
-                "Failed to resolve Codex integrated handoff: {}",
-                e
-            ))
-        })? {
+        if let Some(handoff) =
+            crate::auth::codex_auth_context::CodexIntegratedAuthHandoff::from_env().map_err(
+                |e| {
+                    ProviderError::AuthError(format!(
+                        "Failed to resolve Codex integrated handoff: {}",
+                        e
+                    ))
+                },
+            )?
+        {
             return crate::auth::codex_auth_context::CodexAuthSelection::Integrated(handoff)
                 .resolve()
                 .map_err(|e| {
-                    ProviderError::AuthError(format!(
-                        "Failed to resolve Codex auth context: {}",
-                        e
-                    ))
+                    ProviderError::AuthError(format!("Failed to resolve Codex auth context: {}", e))
                 });
         }
 
@@ -3046,7 +3040,9 @@ impl super::GatewayProvider for OpenAIProvider {
 
         // For OAuth (ChatGPT Codex), add Codex-specific headers
         if self.is_oauth() && use_responses_api {
-            let auth_context = codex_auth_context.as_ref().expect("Codex auth context missing");
+            let auth_context = codex_auth_context
+                .as_ref()
+                .expect("Codex auth context missing");
             req_builder = self.codex_oauth_request_builder(req_builder, auth_context)?;
             tracing::debug!(
                 "🔐 Using OAuth Bearer token for ChatGPT Codex streaming on {}",
@@ -3351,13 +3347,11 @@ impl super::GatewayProvider for OpenAIProvider {
 mod tests {
     use super::*;
     use crate::auth::codex_auth_context::CodexAuthSelection;
-    use crate::auth::codex_auth_context::{
-        CodexAccountIdSource, CodexIntegratedAuthHandoff,
-    };
+    use crate::auth::codex_auth_context::{CodexAccountIdSource, CodexIntegratedAuthHandoff};
     use crate::models::SystemPrompt;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-    use serde::Deserialize;
     use secrecy::SecretString;
+    use serde::Deserialize;
     use std::{env, fs, sync::Mutex};
     use tempfile::TempDir;
 
@@ -3518,10 +3512,12 @@ mod tests {
         fs::write(&bogus_home, "not a directory").unwrap();
 
         let original_home = env::var_os("HOME");
-        let original_account_id =
-            env::var_os(crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
-        let original_access_token =
-            env::var_os(crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
+        let original_account_id = env::var_os(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+        );
+        let original_access_token = env::var_os(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+        );
 
         env::set_var("HOME", &bogus_home);
         env::set_var(
@@ -4086,8 +4082,8 @@ mod tests {
         let provider = test_oauth_provider();
         let auth_context = codex_resolved_context("acct_123");
         let expected_auth = format!("Bearer {}", auth_context.access_token.expose_secret());
-        let (auth_header_name, auth_header_value) = provider
-            .auth_header_parts(auth_context.access_token.expose_secret(), true);
+        let (auth_header_name, auth_header_value) =
+            provider.auth_header_parts(auth_context.access_token.expose_secret(), true);
         let request = provider
             .codex_oauth_request_builder(
                 provider
@@ -4149,8 +4145,8 @@ mod tests {
         );
 
         let expected_auth = format!("Bearer {}", auth_context.access_token.expose_secret());
-        let (auth_header_name, auth_header_value) = provider
-            .auth_header_parts(auth_context.access_token.expose_secret(), true);
+        let (auth_header_name, auth_header_value) =
+            provider.auth_header_parts(auth_context.access_token.expose_secret(), true);
         let request = provider
             .codex_oauth_request_builder(
                 provider
@@ -4194,8 +4190,8 @@ mod tests {
         );
 
         let expected_auth = format!("Bearer {}", auth_context.access_token.expose_secret());
-        let (auth_header_name, auth_header_value) = provider
-            .auth_header_parts(auth_context.access_token.expose_secret(), true);
+        let (auth_header_name, auth_header_value) =
+            provider.auth_header_parts(auth_context.access_token.expose_secret(), true);
         let request = provider
             .codex_oauth_request_builder(
                 provider

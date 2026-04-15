@@ -123,6 +123,12 @@ Tokens are stored in JSON format at `~/.substrate-gateway/oauth_tokens.json`:
 
 File permissions are automatically set to `0600` (owner read/write only) for security.
 
+### ChatGPT Codex handoff note
+
+For integrated ChatGPT Codex deployments, the gateway does not treat local token files as the trust boundary for account identity. The authoritative handoff contract is documented in [`docs/contracts/chatgpt-codex-auth-handoff-contract.md`](contracts/chatgpt-codex-auth-handoff-contract.md).
+
+Standalone local token material, including `~/.substrate-gateway/oauth_tokens.json`, remains a compatibility path only. It is useful for gateway-local OAuth operation, but it must not be read as proof of the integrated Substrate-owned auth boundary.
+
 ## HTTP Endpoints
 
 The gateway exposes these OAuth HTTP endpoints directly:

@@ -138,6 +138,13 @@ fn make_failure_provider() -> FailingProvider {
     }
 }
 
+fn make_auth_failure_provider() -> FailingProvider {
+    FailingProvider {
+        api_status: 401,
+        message: "unauthorized".to_string(),
+    }
+}
+
 fn reasoning_sync_response() -> GatewayResponse {
     GatewayResponse {
         id: "resp_reasoning_sync".to_string(),
@@ -716,6 +723,40 @@ async fn provider_failure_maps_to_shared_502_envelope() {
         chat_json["error"]["message"],
         responses_json["error"]["message"]
     );
+}
+
+#[tokio::test]
+async fn provider_auth_failure_maps_to_shared_auth_envelope() {
+    let harness = ConformanceHarness::with_registry(
+        "gateway-default",
+        {
+            let mut registry = ProviderRegistry::new();
+            registry
+                .insert_provider_for_tests("test-provider", Box::new(make_auth_failure_provider()));
+            registry
+        },
+        vec![substrate_gateway::cli::ModelMapping {
+            priority: 1,
+            provider: "test-provider".to_string(),
+            actual_model: "primary-actual".to_string(),
+            inject_continuation_prompt: false,
+        }],
+    );
+
+    let response = harness
+        .invoke_responses(HeaderMap::new(), responses_sync_request())
+        .await;
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+
+    let body = response_text(response).await;
+    assert!(
+        !body.contains("unauthorized"),
+        "auth failures should remain redacted"
+    );
+
+    let json: Value = serde_json::from_str(&body).expect("auth failure response body must be JSON");
+    assert_provider_error_shape(&json, "auth", "Authentication failed");
 }
 
 #[tokio::test]
