@@ -143,6 +143,7 @@ Implementation and regression evidence for this contract should land against:
 - `crates/gateway/src/models/mod.rs`
 - `crates/gateway/tests/openai_responses_conformance.rs`
 - `crates/gateway/tests/openai_shared_parity.rs`
+- `crates/gateway/tests/fixtures/openai_responses/codex-*.json`
 
 Verification must prove:
 

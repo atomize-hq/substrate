@@ -1,0 +1,24 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": [
+      {
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Need tool output."
+          }
+        ]
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "call_fixture_1",
+        "output": "{\"ok\":true}"
+      }
+    ]
+  },
+  "expected_tool_use_id": "call_fixture_1",
+  "expected_output": "{\"ok\":true}"
+}

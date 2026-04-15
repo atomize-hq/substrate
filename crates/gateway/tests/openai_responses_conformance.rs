@@ -188,7 +188,11 @@ fn responses_api_sync_body(model: &str, text: &str) -> String {
 
 #[tokio::test]
 async fn sync_responses_conformance_cases_cover_shape_order_and_ignore_posture() {
-    for fixture_name in ["sync-text.json", "sync-tool-call.json", "sync-mixed.json"] {
+    for fixture_name in [
+        "codex-sync-text.json",
+        "codex-sync-tool-call.json",
+        "codex-sync-mixed.json",
+    ] {
         let fixture: SyncFixture =
             read_json_fixture(FixtureNamespace::OpenAiResponses, fixture_name);
         let harness = build_sync_harness(&fixture.provider_response);
@@ -271,7 +275,7 @@ async fn sync_responses_conformance_keeps_reasoning_internal() {
 async fn tool_loop_continuation_preserves_call_id_through_the_public_route() {
     let fixture: ToolLoopFixture = read_json_fixture(
         FixtureNamespace::OpenAiResponses,
-        "request-tool-loop-function-call-output.json",
+        "codex-request-tool-loop-function-call-output.json",
     );
     let provider = StubProvider::new(
         substrate_gateway::server::openai_conformance_test_support::response_text_response(
@@ -318,7 +322,7 @@ async fn tool_loop_continuation_uses_upstream_responses_api_and_preserves_functi
 ) {
     let fixture: ToolLoopFixture = read_json_fixture(
         FixtureNamespace::OpenAiResponses,
-        "request-tool-loop-function-call-output.json",
+        "codex-request-tool-loop-function-call-output.json",
     );
     let mut server = Server::new_async().await;
     let responses_mock = server
@@ -489,10 +493,10 @@ async fn explicit_tool_choice_is_preserved_in_metadata_and_flat_tools() {
 #[tokio::test]
 async fn streaming_responses_conformance_cases_cover_event_order_and_completed_payload() {
     for fixture_name in [
-        "stream-text.json",
-        "stream-tool-call.json",
-        "stream-mixed.json",
-        "stream-with-usage.json",
+        "codex-stream-text.json",
+        "codex-stream-tool-call.json",
+        "codex-stream-mixed.json",
+        "codex-stream-with-usage.json",
     ] {
         let fixture: StreamFixture =
             read_json_fixture(FixtureNamespace::OpenAiResponses, fixture_name);
@@ -563,10 +567,10 @@ async fn streaming_responses_conformance_cases_cover_event_order_and_completed_p
 #[tokio::test]
 async fn negative_responses_requests_return_redacted_gateway_envelopes() {
     for fixture_name in [
-        "negative-built-in-tool.json",
-        "negative-non-function-tool.json",
-        "negative-unsupported-text-format.json",
-        "negative-invalid-call-id.json",
+        "codex-negative-built-in-tool.json",
+        "codex-negative-non-function-tool.json",
+        "codex-negative-unsupported-text-format.json",
+        "codex-negative-invalid-call-id.json",
     ] {
         let fixture: NegativeFixture =
             read_json_fixture(FixtureNamespace::OpenAiResponses, fixture_name);

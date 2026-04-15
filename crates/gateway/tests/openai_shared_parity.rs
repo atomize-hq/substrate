@@ -39,7 +39,7 @@ fn chat_sync_fixture() -> ChatSyncFixture {
 }
 
 fn responses_sync_fixture() -> ResponsesSyncFixture {
-    read_json_fixture(FixtureNamespace::OpenAiResponses, "sync-text.json")
+    read_json_fixture(FixtureNamespace::OpenAiResponses, "codex-sync-text.json")
 }
 
 fn chat_stream_fixture() -> ChatStreamFixture {
@@ -47,7 +47,8 @@ fn chat_stream_fixture() -> ChatStreamFixture {
 }
 
 fn responses_stream_fixture_request() -> Value {
-    read_json_fixture::<Value>(FixtureNamespace::OpenAiResponses, "stream-mixed.json")["request"]
+    read_json_fixture::<Value>(FixtureNamespace::OpenAiResponses, "codex-stream-mixed.json")
+        ["request"]
         .clone()
 }
 
