@@ -4,14 +4,14 @@ pack_version: v1
 pack_status: extracted
 source_ref: docs/adr/0010-route-chatgpt-codex-oauth-via-backend-api-codex-responses.md plus current gateway OAuth/provider/auth surfaces in crates/gateway/src/
 execution_horizon:
-  active_seam: SEAM-2
+  active_seam: SEAM-3
   next_seam: null
 ---
 
 # Scope Brief - ChatGPT Codex OAuth Backend-API Responses
 
 - **Goal**: route ChatGPT Codex OAuth traffic through a dedicated `backend-api/codex/responses` transport contract that preserves the gateway's normalized-core architecture, assembles results from semantic stream events, and keeps Substrate as the authoritative owner of integrated auth-state delivery.
-- **Why now**: the current gateway is close enough to route ChatGPT Codex OAuth traffic, but still has material drift from the live upstream contract: sync and streaming hit different endpoints, the serializer still emits unsupported generic Responses fields/shapes, the sync parser trusts the wrong terminal envelope, and account identity still depends on JWT parsing instead of an explicit owner line.
+- **Why now**: the route and auth ownership seams are now landed, so the remaining gap is to turn that published truth into deterministic conformance and drift guards before future edits can silently reopen route or auth regressions.
 - **Primary user(s) + JTBD**:
   - Gateway callers using `/v1/messages`, `/v1/chat/completions`, or `/v1/responses` want the selected ChatGPT Codex OAuth route to behave predictably for streaming, tool continuation, and image-bearing message turns without exposing route-specific quirks at public ingress.
   - Gateway and Substrate operators want an integrated deployment posture where account identity and access-token delivery stay policy-gated and in-world-compatible, rather than depending on host-local auth file reads inside the gateway runtime.

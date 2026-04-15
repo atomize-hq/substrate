@@ -2,8 +2,8 @@
 seam_id: SEAM-2
 seam_slug: substrate-auth-handoff-and-account-id-provenance
 type: integration
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -23,14 +23,13 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
-open_remediations:
-  - REM-001
+  status: passed
+open_remediations: []
 ---
 
 # SEAM-2 - Substrate Auth Handoff And Account-Id Provenance
@@ -65,7 +64,7 @@ open_remediations:
   - if no valid account identity can be resolved for the selected mode, the gateway fails before the upstream call using the normal error envelope
 - **Dependencies**
   - Direct blockers:
-    - none at pre-exec; the owned auth-handoff contract baseline and execution checklist now exist, and the remaining open work is the landing-phase checklist tracked by `REM-001`
+    - none; the auth-handoff owner line, provider consumption path, and verification evidence are landed and published
   - Transitive blockers:
     - any later conformance work depends on this seam freezing integrated-versus-standalone ownership and failure posture
   - Direct consumers:
@@ -100,7 +99,7 @@ open_remediations:
   - fail before the upstream call when account identity is unresolved or inconsistent
   - keep secret-bearing data out of public docs and non-secret pointer semantics only in process env
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is `active` because the route contract is landed and the auth-handoff contract baseline is now concrete enough for execution-grade slices
+  - Why this seam is `active`, `next`, or `future`: it is `future` because the auth-handoff seam is landed and now lives outside the forward planning window
   - Which threads matter most: `THR-14`, `THR-15`
   - What the first seam-local review should focus on: integrated-versus-standalone mode selection, field IDs, resolution precedence, provider injection ownership, and failure classification
 - **Expected seam-exit concerns**:

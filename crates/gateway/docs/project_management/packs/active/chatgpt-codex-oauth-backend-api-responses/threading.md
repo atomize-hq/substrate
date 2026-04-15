@@ -2,11 +2,11 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-2`
+- **Active seam**: `SEAM-3`
 - **Next seam**: none yet
 - **Policy**:
-  - `SEAM-3` remains seam-brief depth only until both `THR-14` and `THR-15` are published
-  - only `SEAM-2` is eligible for authoritative downstream decomposition by default
+  - `SEAM-3` is now eligible for authoritative downstream decomposition because both `THR-14` and `THR-15` are published and closeout-backed
+  - only `SEAM-3` is eligible for authoritative downstream decomposition by default
   - canonical contract refs for this pack are reserved under `crates/gateway/docs/contracts/`
 
 ## Contract registry
@@ -58,10 +58,10 @@
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-15`
   - **Purpose**: publish the integrated-versus-standalone auth owner line so conformance work can prove account-id sourcing, failure posture, and header injection without rediscovering trust-boundary assumptions
-  - **State**: `defined`
+  - **State**: `revalidated`
   - **Revalidation trigger**: Substrate auth-bundle delivery semantics, the closed `cli:codex` field set, standalone compatibility inputs, or provider auth-context resolution rules change materially
   - **Satisfied by**: the canonical auth-handoff contract plus verification surfaces that prove integrated mode does not require host-local auth-file reads while standalone mode remains bounded
-  - **Notes**: the current gateway token store does not carry explicit `account_id`, so this thread must make the standalone compatibility story explicit instead of letting provider code infer ownership ad hoc
+  - **Notes**: this thread was published by the `SEAM-2` closeout record and is now revalidated for `SEAM-3` against the landed auth-handoff contract, auth-context resolution, provider injection proof, and OAuth doc alignment
 
 - **Thread ID**: `THR-16`
   - **Producer seam**: `SEAM-3`

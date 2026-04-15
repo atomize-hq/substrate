@@ -2,14 +2,16 @@
 seam_id: SEAM-3
 seam_slug: codex-route-conformance-and-drift-guards
 type: conformance
-status: proposed
-execution_horizon: future
+status: exec-ready
+execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
   required_threads:
     - THR-14
     - THR-15
@@ -19,9 +21,9 @@ basis:
     - public normalized-core behavior changes in a way that invalidates the route-local fixture expectations
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -63,8 +65,7 @@ open_remediations: []
   - the suite must prove encrypted reasoning remains non-public on this route
 - **Dependencies**
   - Direct blockers:
-    - `THR-14`
-    - `THR-15`
+    - none at pre-exec; `THR-14` and `THR-15` are published and revalidated against the landed closeouts
   - Transitive blockers:
     - any auth or route ambiguity left open by earlier seams will invalidate conformance expectations
   - Direct consumers:
@@ -99,7 +100,7 @@ open_remediations: []
   - keep route-specific docs aligned with the same contract terms the tests assert
   - record clear stale triggers so future changes reopen the right seam instead of patching around drift
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is `future` because conformance only has stable truth to encode after route and auth ownership are both published
+  - Why this seam is `active`, `next`, or `future`: it is `active` because route and auth ownership are now published, giving the conformance seam a current basis for deterministic execution planning
   - Which threads matter most: `THR-14`, `THR-15`, `THR-16`
   - What the first seam-local review should focus on: fixture boundaries, deterministic coverage strategy, integrated-versus-standalone assertions, and doc/test ownership
 - **Expected seam-exit concerns**:

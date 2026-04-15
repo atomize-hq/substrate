@@ -12,10 +12,10 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-2`
+- Active seam: `SEAM-3`
 - Next seam: none yet
 
-`SEAM-1` is landed and has moved out of the forward window. `SEAM-3` remains future until `THR-15` is published.
+`SEAM-1` and `SEAM-2` are landed and have moved out of the forward window. `SEAM-3` is now active because both route and auth ownership are published.
 
 Policy:
 
@@ -23,7 +23,7 @@ Policy:
 - the next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that own undefined contracts may reserve `S00` as a contract-definition boundary slice once seam-local planning begins
-- `SEAM-3` remains a seam brief only until `SEAM-1` and `SEAM-2` publish route and auth truth
+- `SEAM-3` now owns the forward planning window because `THR-14` and `THR-15` are published and closeout-backed
 - canonical contract docs are reserved under `crates/gateway/docs/contracts/` for this pack and must remain descriptive-only
 
 Scope and assumptions restated before extraction:
