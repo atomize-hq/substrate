@@ -4120,7 +4120,12 @@ dependencies = [
 
 [[package]]
 name = "substrate-lift"
-version = "0.2.6"
+version = "0.1.0"
+dependencies = [
+ "assert_cmd",
+ "clap",
+ "predicates",
+]
 
 [[package]]
 name = "substrate-replay"
