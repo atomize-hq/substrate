@@ -4,7 +4,24 @@ No remediations are opened during extraction by default. Risks and unknowns are 
 
 ## Open remediations
 
-None.
+remediation_id: REM-001
+origin_phase: pre_exec
+source_gate: contract
+related_seam: SEAM-2
+related_slice: S00
+related_thread: THR-15
+related_contract: C-15
+related_artifact: crates/gateway/docs/project_management/packs/active/chatgpt-codex-oauth-backend-api-responses/threaded-seams/seam-2-substrate-auth-handoff-and-account-id-provenance/review.md
+severity: blocking
+status: open
+owner_seam: SEAM-2
+blocked_targets:
+  - seam: SEAM-2
+    field: status
+    value: exec-ready
+summary: The owned auth-handoff contract baseline is not yet written into the canonical contract path, so SEAM-2 cannot become exec-ready.
+required_fix: Author docs/contracts/chatgpt-codex-auth-handoff-contract.md and mirror the owner line, field precedence, and fallback rules into the seam-local planning artifacts.
+resolution_evidence: []
 
 When a remediation is opened, append it here using the canonical schema:
 

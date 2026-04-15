@@ -12,8 +12,10 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-1`
-- Next seam: `SEAM-2`
+- Active seam: `SEAM-2`
+- Next seam: none yet
+
+`SEAM-1` is landed and has moved out of the forward window. `SEAM-3` remains future until `THR-15` is published.
 
 Policy:
 

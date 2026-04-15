@@ -11,29 +11,29 @@ Constraint posture:
 
 ## Horizon summary
 
-- **Active seam**: `SEAM-1`
-- **Next seam**: `SEAM-2`
-- **Future seams**: `SEAM-3`
+- **Active seam**: `SEAM-2`
+- **Next seam**: none yet
+- **Future seams**: `SEAM-1`, `SEAM-3`
 
 The default v2.5 horizon policy is explicit here:
 
-- only `SEAM-1` is eligible for authoritative downstream deep planning by default
-- `SEAM-2` may later receive seam-local review and slices, but only after `SEAM-1` publishes the route contract and stream-native transport truth it depends on
+- only `SEAM-2` is eligible for authoritative downstream deep planning by default
 - `SEAM-3` remains a seam brief only and should not receive deep planning until both route and auth ownership are published
+- `SEAM-1` is landed and lives outside the forward window
 
 ## Seam roster
 
 | Seam | Horizon / state | Type | Why this is a seam | Likely value | Touch surface | Verification path |
 | --- | --- | --- | --- | --- | --- | --- |
-| `SEAM-1` `chatgpt-codex-route-contract-and-stream-native-transport` | `active` / `proposed` | `integration` | it owns the provider-side route contract, compatibility overlay, stream-native endpoint selection, and semantic event assembly as one coherent upstream boundary instead of scattering those decisions across parser, serializer, and SSE handling | ChatGPT Codex OAuth stops being a near-match and becomes a deterministic upstream transport the gateway can trust for sync, streaming, tools, images, and reasoning gating | `crates/gateway/src/providers/openai.rs`, route-facing docs under `crates/gateway/docs/`, conformance harness anchors in `crates/gateway/tests/` | seam-local review can freeze the contract, prove endpoint/header/body rules, and make sync/stream share one semantic event source |
-| `SEAM-2` `substrate-auth-handoff-and-account-id-provenance` | `next` / `proposed` | `integration` | it owns the trust boundary for `ChatGPT-Account-ID` and access-token delivery, separating integrated Substrate ownership from standalone compatibility fallback instead of leaving account identity implicit inside provider code | in-world deployments can consume delivered auth material without gateway-local host reads, while standalone mode remains a bounded fallback instead of the architectural truth | `crates/gateway/src/auth/*`, `crates/gateway/src/server/oauth_handlers.rs`, `crates/gateway/src/providers/openai.rs`, OAuth docs, and Substrate-facing contract notes | seam-local review can freeze field IDs, resolution order, failure posture, and verification surfaces for both integrated and standalone mode |
+| `SEAM-1` `chatgpt-codex-route-contract-and-stream-native-transport` | `future` / `landed` | `integration` | it owns the provider-side route contract, compatibility overlay, stream-native endpoint selection, and semantic event assembly as one coherent upstream boundary instead of scattering those decisions across parser, serializer, and SSE handling | ChatGPT Codex OAuth stops being a near-match and becomes a deterministic upstream transport the gateway can trust for sync, streaming, tools, images, and reasoning gating | `crates/gateway/src/providers/openai.rs`, route-facing docs under `crates/gateway/docs/`, conformance harness anchors in `crates/gateway/tests/` | seam-local review can freeze the contract, prove endpoint/header/body rules, and make sync/stream share one semantic event source |
+| `SEAM-2` `substrate-auth-handoff-and-account-id-provenance` | `active` / `decomposed` | `integration` | it owns the trust boundary for `ChatGPT-Account-ID` and access-token delivery, separating integrated Substrate ownership from standalone compatibility fallback instead of leaving account identity implicit inside provider code | in-world deployments can consume delivered auth material without gateway-local host reads, while standalone mode remains a bounded fallback instead of the architectural truth | `crates/gateway/src/auth/*`, `crates/gateway/src/server/oauth_handlers.rs`, `crates/gateway/src/providers/openai.rs`, OAuth docs, and Substrate-facing contract notes | seam-local review can freeze field IDs, resolution order, failure posture, and verification surfaces for both integrated and standalone mode |
 | `SEAM-3` `codex-route-conformance-and-drift-guards` | `future` / `proposed` | `conformance` | it turns the route and auth decisions into durable deterministic evidence instead of relying on ADR prose or live one-off probes | future edits fail against fixtures and route-local regressions before caller-visible drift ships | `crates/gateway/tests/*`, `crates/gateway/src/server/openai_conformance_test_support.rs`, `crates/gateway/docs/openai-compatibility.md`, and route-specific contract notes | closeout-backed tests and docs prove the route matrix, sync/stream parity, auth-source rules, and no-silent-degradation posture |
 
 ## Ordering rationale
 
-1. `SEAM-1` is active because the ADR says the pack is not extractor-ready until the dedicated route contract exists; auth and conformance both depend on that published route truth.
-2. `SEAM-2` is next because auth-handoff ownership is the next hard blocker after the route contract: integrated-mode trust boundaries must be explicit before downstream execution can claim Substrate compatibility.
-3. `SEAM-3` stays future because conformance can only lock in what `SEAM-1` and `SEAM-2` first make canonical.
+1. `SEAM-2` is active because the route contract is landed and the remaining blocker is the auth-handoff contract baseline.
+2. `SEAM-3` stays future because conformance can only lock in what route and auth ownership first make canonical.
+3. `SEAM-1` is future because it is already landed and now sits outside the forward window.
 
 ## Non-seams and pruned candidates
 

@@ -2,14 +2,15 @@
 seam_id: SEAM-2
 seam_slug: substrate-auth-handoff-and-account-id-provenance
 type: integration
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: decomposed
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads:
     - THR-14
   stale_triggers:
@@ -18,9 +19,9 @@ basis:
     - standalone compatibility sources differ from the current ADR assumptions about `~/.codex/auth.json` and JWT fallback
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: failed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -28,7 +29,8 @@ seam_exit_gate:
   required: true
   planned_location: S99
   status: pending
-open_remediations: []
+open_remediations:
+  - REM-001
 ---
 
 # SEAM-2 - Substrate Auth Handoff And Account-Id Provenance
@@ -63,7 +65,7 @@ open_remediations: []
   - if no valid account identity can be resolved for the selected mode, the gateway fails before the upstream call using the normal error envelope
 - **Dependencies**
   - Direct blockers:
-    - `THR-14` must publish the route contract so this seam knows the exact auth inputs and minimal header set it is serving
+    - the owned auth-handoff contract baseline is not yet written into the canonical contract path
   - Transitive blockers:
     - any later conformance work depends on this seam freezing integrated-versus-standalone ownership and failure posture
   - Direct consumers:
@@ -98,7 +100,7 @@ open_remediations: []
   - fail before the upstream call when account identity is unresolved or inconsistent
   - keep secret-bearing data out of public docs and non-secret pointer semantics only in process env
 - **Downstream decomposition context**:
-  - Why this seam is `active`, `next`, or `future`: it is `next` because auth ownership is the next critical blocker after the route contract and must publish before deterministic conformance can close the pack
+  - Why this seam is `active`, `next`, or `future`: it is `active` because the route contract is now landed and the remaining blocker is the auth-handoff contract baseline
   - Which threads matter most: `THR-14`, `THR-15`
   - What the first seam-local review should focus on: integrated-versus-standalone mode selection, field IDs, resolution precedence, provider injection ownership, and failure classification
 - **Expected seam-exit concerns**:

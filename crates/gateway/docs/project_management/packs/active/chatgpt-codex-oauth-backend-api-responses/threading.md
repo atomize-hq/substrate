@@ -2,12 +2,11 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-- **Next seam**: `SEAM-2`
+- **Active seam**: `SEAM-2`
+- **Next seam**: none yet
 - **Policy**:
-  - only `SEAM-1` is eligible for authoritative downstream decomposition by default
-  - `SEAM-2` may later receive seam-local review and slices, but only after `THR-14` is published
   - `SEAM-3` remains seam-brief depth only until both `THR-14` and `THR-15` are published
+  - only `SEAM-2` is eligible for authoritative downstream decomposition by default
   - canonical contract refs for this pack are reserved under `crates/gateway/docs/contracts/`
 
 ## Contract registry
