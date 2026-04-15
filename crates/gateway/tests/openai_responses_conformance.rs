@@ -225,6 +225,49 @@ async fn sync_responses_conformance_cases_cover_shape_order_and_ignore_posture()
 }
 
 #[tokio::test]
+async fn sync_responses_conformance_keeps_reasoning_internal() {
+    let provider_response = GatewayResponse {
+        id: "resp_reasoning_internal".to_string(),
+        r#type: "message".to_string(),
+        role: "assistant".to_string(),
+        content: vec![
+            substrate_gateway::models::ContentBlock::thinking(serde_json::json!({
+                "thinking": "secret reasoning"
+            })),
+            substrate_gateway::models::ContentBlock::text("Visible answer".to_string(), None),
+        ],
+        model: "primary-actual".to_string(),
+        stop_reason: Some("end_turn".to_string()),
+        stop_sequence: None,
+        usage: substrate_gateway::core::GatewayUsage {
+            input_tokens: 3,
+            output_tokens: 2,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+        },
+    };
+
+    let harness = build_sync_harness(&provider_response);
+    let request = json!({
+        "model": "gateway-default",
+        "input": "hello",
+        "stream": false
+    });
+    let response = harness.invoke_responses(HeaderMap::new(), request).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_body_text(response).await;
+    assert!(!body.contains("secret reasoning"));
+    assert!(body.contains("Visible answer"));
+
+    let json: Value = serde_json::from_str(&body).expect("sync response body must be JSON");
+    let (item_types, texts, call_ids) = collect_output_summary(&json["output"]);
+    assert_eq!(item_types, vec!["message"]);
+    assert_eq!(texts, vec!["Visible answer"]);
+    assert!(call_ids.is_empty());
+}
+
+#[tokio::test]
 async fn tool_loop_continuation_preserves_call_id_through_the_public_route() {
     let fixture: ToolLoopFixture = read_json_fixture(
         FixtureNamespace::OpenAiResponses,
