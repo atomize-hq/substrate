@@ -1,0 +1,29 @@
+[package]
+name = "substrate-lift"
+version = "0.2.6"
+edition = "2021"
+rust-version = "1.89"
+authors = ["Atomize"]
+description = "Work lift analysis and scoring engine for Substrate"
+license = "MIT"
+repository = "https://github.com/atomize-hq/substrate"
+readme = "README.md"
+
+[lib]
+name = "substrate_lift"
+
+[[bin]]
+name = "lift"
+path = "src/bin/lift.rs"
+
+[features]
+default = ["cli", "compat-v1", "rust-lang", "config-lang"]
+
+cli = []
+compat-v1 = []
+config-lang = []
+rust-lang = []
+python-lang = []
+javascript-lang = []
+typescript-lang = []
+substrate-profile = []
