@@ -17,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 
 const OPENAI_PARALLEL_TOOL_CALLS_METADATA_KEY: &str = "parallel_tool_calls";
 const OPENAI_PUBLIC_RESPONSES_METADATA_KEY: &str = "openai_public_responses";
+const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
 
 /// Official Codex instructions from OpenAI
 /// Source: https://github.com/openai/codex (rust-v0.58.0)
@@ -72,6 +73,8 @@ struct OpenAIResponsesRequest {
     max_output_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
     // Note: ChatGPT Codex does NOT support max_output_tokens, max_tokens, temperature, top_p, stop
 }
 
@@ -612,6 +615,10 @@ impl OpenAIProvider {
         )
     }
 
+    fn codex_responses_endpoint(&self) -> &'static str {
+        "/codex/responses"
+    }
+
     fn auth_header_parts(&self, auth_value: &str, is_oauth: bool) -> (&'static str, String) {
         if is_oauth {
             ("Authorization", format!("Bearer {}", auth_value))
@@ -620,6 +627,20 @@ impl OpenAIProvider {
         } else {
             ("Authorization", format!("Bearer {}", auth_value))
         }
+    }
+
+    fn codex_oauth_request_builder(
+        &self,
+        req_builder: reqwest::RequestBuilder,
+        auth_value: &str,
+    ) -> Result<reqwest::RequestBuilder, ProviderError> {
+        let account_id = Self::extract_account_id(auth_value).ok_or_else(|| {
+            ProviderError::AuthError(
+                "OAuth token missing ChatGPT account ID for Codex route".to_string(),
+            )
+        })?;
+
+        Ok(req_builder.header("ChatGPT-Account-ID", account_id))
     }
 
     fn extract_text_content(content: Option<&OpenAIContent>) -> String {
@@ -983,6 +1004,24 @@ impl OpenAIProvider {
         &self,
         request: &GatewayRequest,
     ) -> Result<OpenAIResponsesRequest, ProviderError> {
+        if self.is_oauth() {
+            if request.temperature.is_some() {
+                return Err(ProviderError::ConfigError(
+                    "temperature is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.top_p.is_some() {
+                return Err(ProviderError::ConfigError(
+                    "top_p is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.stop_sequences.is_some() {
+                return Err(ProviderError::ConfigError(
+                    "stop_sequences is not supported on the Codex route".to_string(),
+                ));
+            }
+        }
+
         let mut items = Vec::new();
         let mut synthesized_call_ids = HashSet::new();
 
@@ -1090,6 +1129,12 @@ impl OpenAIProvider {
                 .collect()
         });
 
+        let tool_choice = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY))
+            .cloned();
+
         Ok(OpenAIResponsesRequest {
             model: request.model.clone(),
             input: OpenAIResponsesInput::Items(items),
@@ -1103,6 +1148,7 @@ impl OpenAIProvider {
                 .and_then(|value| value.as_bool()),
             max_output_tokens: (!self.is_oauth()).then_some(request.max_output_tokens),
             tools,
+            tool_choice,
         })
     }
 
@@ -1882,7 +1928,7 @@ impl super::GatewayProvider for OpenAIProvider {
 
             // OAuth (ChatGPT Codex) uses /codex/responses, API Key uses /responses
             let endpoint = if self.is_oauth() {
-                "/codex/responses"
+                self.codex_responses_endpoint()
             } else {
                 "/responses"
             };
@@ -1896,36 +1942,22 @@ impl super::GatewayProvider for OpenAIProvider {
                 .client
                 .post(&url)
                 .header(auth_header_name, auth_header_value)
-                .header("Content-Type", "application/json")
-                .header("accept", "text/event-stream");
+                .header("Content-Type", "application/json");
 
             // For OAuth (ChatGPT Codex), add Codex-specific headers
             if self.is_oauth() {
-                if let Some(account_id) = Self::extract_account_id(&auth_value) {
-                    req_builder = req_builder
-                        .header("chatgpt-account-id", account_id)
-                        .header("OpenAI-Beta", "responses=experimental")
-                        .header("originator", "codex_cli_rs")
-                        // Browser-like headers to avoid Cloudflare bot detection
-                        .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-                        .header("Origin", "https://chatgpt.com")
-                        .header("Referer", "https://chatgpt.com/")
-                        .header("sec-ch-ua", "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"")
-                        .header("sec-ch-ua-mobile", "?0")
-                        .header("sec-ch-ua-platform", "\"macOS\"")
-                        .header("sec-fetch-dest", "empty")
-                        .header("sec-fetch-mode", "cors")
-                        .header("sec-fetch-site", "same-origin");
-                    tracing::debug!(
-                        "🔐 Using OAuth Bearer token for ChatGPT Codex on {}",
-                        self.name
-                    );
-                }
+                req_builder = self.codex_oauth_request_builder(req_builder, &auth_value)?;
+                tracing::debug!(
+                    "🔐 Using OAuth Bearer token for ChatGPT Codex on {}",
+                    self.name
+                );
             }
 
-            // Add custom headers
-            for (key, value) in &self.custom_headers {
-                req_builder = req_builder.header(key, value);
+            if !(self.is_oauth() && use_responses_api) {
+                // Add custom headers for non-Codex routes only.
+                for (key, value) in &self.custom_headers {
+                    req_builder = req_builder.header(key, value);
+                }
             }
 
             let response = req_builder.json(&responses_request).send().await?;
@@ -2101,7 +2133,12 @@ impl super::GatewayProvider for OpenAIProvider {
             let responses_request = self.transform_to_responses_request(&request)?;
             let body = serde_json::to_value(&responses_request)
                 .map_err(ProviderError::SerializationError)?;
-            (self.endpoint_url("/responses"), body)
+            let endpoint = if self.is_oauth() {
+                self.codex_responses_endpoint()
+            } else {
+                "/responses"
+            };
+            (self.endpoint_url(endpoint), body)
         } else {
             // Use standard /v1/chat/completions endpoint
             let openai_request = self.transform_request(&request)?;
@@ -2117,21 +2154,15 @@ impl super::GatewayProvider for OpenAIProvider {
             .client
             .post(&url)
             .header(auth_header_name, auth_header_value)
-            .header("Content-Type", "application/json")
-            .header("accept", "text/event-stream");
+            .header("Content-Type", "application/json");
 
         // For OAuth (ChatGPT Codex), add Codex-specific headers
         if self.is_oauth() && use_responses_api {
-            if let Some(account_id) = Self::extract_account_id(&auth_value) {
-                req_builder = req_builder
-                    .header("chatgpt-account-id", account_id)
-                    .header("OpenAI-Beta", "responses=experimental")
-                    .header("originator", "codex_cli_rs");
-                tracing::debug!(
-                    "🔐 Using OAuth Bearer token for ChatGPT Codex streaming on {}",
-                    self.name
-                );
-            }
+            req_builder = self.codex_oauth_request_builder(req_builder, &auth_value)?;
+            tracing::debug!(
+                "🔐 Using OAuth Bearer token for ChatGPT Codex streaming on {}",
+                self.name
+            );
         } else if self.is_oauth() {
             // For non-Codex OAuth (if needed in the future)
             if let Some(account_id) = Self::extract_account_id(&auth_value) {
@@ -2140,9 +2171,11 @@ impl super::GatewayProvider for OpenAIProvider {
             }
         }
 
-        // Add custom headers (for OpenRouter, NovitaAI, etc.)
-        for (key, value) in &self.custom_headers {
-            req_builder = req_builder.header(key, value);
+        if !(self.is_oauth() && use_responses_api) {
+            // Add custom headers for non-Codex routes only.
+            for (key, value) in &self.custom_headers {
+                req_builder = req_builder.header(key, value);
+            }
         }
 
         let response = req_builder.json(&request_body).send().await?;
@@ -2367,6 +2400,7 @@ impl super::GatewayProvider for OpenAIProvider {
 mod tests {
     use super::*;
     use crate::models::SystemPrompt;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use serde::Deserialize;
 
     #[derive(Debug, Deserialize)]
@@ -2485,6 +2519,49 @@ mod tests {
             custom_headers: Vec::new(),
             oauth_provider: Some("test-oauth-provider".to_string()),
             token_store: Some(token_store),
+        }
+    }
+
+    fn codex_access_token(account_id: &str) -> String {
+        let header = base64::Engine::encode(&URL_SAFE_NO_PAD, r#"{"alg":"none","typ":"JWT"}"#);
+        let payload = base64::Engine::encode(
+            &URL_SAFE_NO_PAD,
+            format!(
+                r#"{{"https://api.openai.com/auth":{{"chatgpt_account_id":"{}"}}}}"#,
+                account_id
+            ),
+        );
+        format!("{header}.{payload}.signature")
+    }
+
+    fn codex_request_with_tool_choice(tool_choice: serde_json::Value) -> GatewayRequest {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY.to_string(),
+            tool_choice,
+        );
+
+        GatewayRequest {
+            model: "gpt-test".to_string(),
+            messages: vec![crate::models::Message {
+                role: "user".to_string(),
+                content: crate::models::MessageContent::Text("hello".to_string()),
+            }],
+            max_output_tokens: 32,
+            reasoning: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: Some(vec![crate::models::Tool {
+                r#type: Some("function".to_string()),
+                name: Some("lookup".to_string()),
+                description: None,
+                input_schema: None,
+            }]),
         }
     }
 
@@ -2670,6 +2747,17 @@ mod tests {
         assert_eq!(
             provider.endpoint_url("/chat/completions"),
             "https://chatgpt.com/backend-api/chat/completions"
+        );
+    }
+
+    #[test]
+    fn codex_oauth_routes_share_the_codex_responses_endpoint() {
+        let provider = test_oauth_provider();
+
+        assert_eq!(provider.codex_responses_endpoint(), "/codex/responses");
+        assert_eq!(
+            provider.endpoint_url(provider.codex_responses_endpoint()),
+            "https://chatgpt.com/backend-api/codex/responses"
         );
     }
 
@@ -2938,6 +3026,132 @@ mod tests {
         assert_eq!(input[2]["output"], serde_json::json!("{\"ok\":true}"));
         assert!(serialized.get("instructions").is_none());
         assert!(serialized.get("store").is_none());
+    }
+
+    #[test]
+    fn transform_to_responses_request_carries_explicit_tool_choice_from_metadata() {
+        let provider = test_oauth_provider();
+        let request = codex_request_with_tool_choice(serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": "lookup"
+            }
+        }));
+
+        let openai_request = provider.transform_to_responses_request(&request).unwrap();
+        let serialized = serde_json::to_value(openai_request).unwrap();
+
+        assert_eq!(
+            serialized["tool_choice"],
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "lookup"
+                }
+            })
+        );
+    }
+
+    #[test]
+    fn codex_oauth_request_builder_emits_only_the_minimal_header_contract() {
+        let provider = test_oauth_provider();
+        let auth_value = codex_access_token("acct_123");
+        let expected_auth = format!("Bearer {auth_value}");
+        let (auth_header_name, auth_header_value) = provider.auth_header_parts(&auth_value, true);
+        let request = provider
+            .codex_oauth_request_builder(
+                provider
+                    .client
+                    .post("https://example.invalid/v1/responses")
+                    .header(auth_header_name, auth_header_value)
+                    .header("Content-Type", "application/json"),
+                &auth_value,
+            )
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let headers = request.headers();
+        assert_eq!(
+            headers
+                .get("authorization")
+                .and_then(|value| value.to_str().ok()),
+            Some(expected_auth.as_str())
+        );
+        assert_eq!(
+            headers
+                .get("chatgpt-account-id")
+                .and_then(|value| value.to_str().ok()),
+            Some("acct_123")
+        );
+        assert_eq!(
+            headers
+                .get("content-type")
+                .and_then(|value| value.to_str().ok()),
+            Some("application/json")
+        );
+        assert!(headers.get("accept").is_none());
+        assert!(headers.get("openai-beta").is_none());
+        assert!(headers.get("originator").is_none());
+        assert!(headers.get("user-agent").is_none());
+        assert!(headers.get("origin").is_none());
+        assert!(headers.get("referer").is_none());
+        assert!(headers.get("sec-ch-ua").is_none());
+        assert!(headers.get("sec-ch-ua-mobile").is_none());
+        assert!(headers.get("sec-ch-ua-platform").is_none());
+        assert!(headers.get("sec-fetch-dest").is_none());
+        assert!(headers.get("sec-fetch-mode").is_none());
+        assert!(headers.get("sec-fetch-site").is_none());
+    }
+
+    #[test]
+    fn transform_to_responses_request_rejects_unsupported_codex_controls() {
+        let provider = test_oauth_provider();
+        for (field, request) in [
+            (
+                "temperature",
+                GatewayRequest {
+                    temperature: Some(0.2),
+                    ..codex_request_with_tool_choice(serde_json::json!({
+                        "type": "function",
+                        "function": { "name": "lookup" }
+                    }))
+                },
+            ),
+            (
+                "top_p",
+                GatewayRequest {
+                    top_p: Some(0.5),
+                    ..codex_request_with_tool_choice(serde_json::json!({
+                        "type": "function",
+                        "function": { "name": "lookup" }
+                    }))
+                },
+            ),
+            (
+                "stop_sequences",
+                GatewayRequest {
+                    stop_sequences: Some(vec!["done".to_string()]),
+                    ..codex_request_with_tool_choice(serde_json::json!({
+                        "type": "function",
+                        "function": { "name": "lookup" }
+                    }))
+                },
+            ),
+        ] {
+            let err = provider
+                .transform_to_responses_request(&request)
+                .unwrap_err();
+            match err {
+                ProviderError::ConfigError(message) => {
+                    assert!(
+                        message.contains(field),
+                        "expected reject message to mention {field}, got {message}"
+                    );
+                }
+                other => panic!("expected config error for {field}, got {other:?}"),
+            }
+        }
     }
 
     #[test]

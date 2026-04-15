@@ -28,6 +28,7 @@ use super::{
 };
 
 const OPENAI_PUBLIC_RESPONSES_METADATA_KEY: &str = "openai_public_responses";
+const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -113,21 +114,21 @@ struct OpenAIResponsesToolFunction {
     parameters: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 enum OpenAIResponsesToolChoice {
     String(String),
     Object(OpenAIResponsesToolChoiceObject),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct OpenAIResponsesToolChoiceObject {
     #[serde(rename = "type")]
     r#type: String,
     function: OpenAIResponsesToolChoiceFunction,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct OpenAIResponsesToolChoiceFunction {
     name: String,
 }
@@ -198,7 +199,8 @@ fn transform_openai_to_gateway_request(
     reject_known_unsupported_request_state(&openai_req)?;
 
     let (tools, tool_names) = parse_function_tools(openai_req.tools.as_ref())?;
-    let tools = apply_tool_choice(tools, &tool_names, openai_req.tool_choice.as_ref())?;
+    let tool_choice = openai_req.tool_choice.as_ref();
+    let tools = apply_tool_choice(tools, &tool_names, tool_choice)?;
 
     let mut messages = Vec::new();
 
@@ -257,6 +259,12 @@ fn transform_openai_to_gateway_request(
         metadata.insert(
             "parallel_tool_calls".to_string(),
             serde_json::Value::Bool(parallel_tool_calls),
+        );
+    }
+    if let Some(tool_choice) = tool_choice {
+        metadata.insert(
+            OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY.to_string(),
+            serde_json::to_value(tool_choice).map_err(|err| err.to_string())?,
         );
     }
 
@@ -1413,6 +1421,34 @@ mod tests {
         }))
         .unwrap();
         assert!(transform_openai_to_gateway_request(rejected).is_err());
+    }
+
+    #[test]
+    fn generic_public_responses_controls_remain_accepted_at_ingress() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "input": "hello",
+            "max_output_tokens": 128,
+            "temperature": 0.2,
+            "top_p": 0.8,
+            "stop": ["halt"],
+            "stream_options": { "include_obfuscation": true },
+            "tools": [
+                { "type": "function", "function": { "name": "lookup", "parameters": {"type":"object"} } }
+            ],
+            "tool_choice": {"type":"function","function":{"name":"lookup"}}
+        }))
+        .unwrap();
+
+        let gateway_request = transform_openai_to_gateway_request(request).unwrap();
+        assert_eq!(gateway_request.max_output_tokens, 128);
+        assert_eq!(gateway_request.temperature, Some(0.2));
+        assert_eq!(gateway_request.top_p, Some(0.8));
+        assert_eq!(
+            gateway_request.stop_sequences,
+            Some(vec!["halt".to_string()])
+        );
+        assert_eq!(gateway_request.tools.as_ref().unwrap().len(), 1);
     }
 
     #[test]

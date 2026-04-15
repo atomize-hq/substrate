@@ -11,6 +11,8 @@ use substrate_gateway::server::openai_conformance_test_support::{
     StubProvider,
 };
 
+const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
+
 #[derive(Debug, Deserialize)]
 struct UsageExpected {
     input_tokens: u32,
@@ -388,6 +390,56 @@ async fn parallel_tool_calls_is_preserved_on_the_public_responses_route() {
             .as_ref()
             .and_then(|metadata| metadata.get("parallel_tool_calls")),
         Some(&serde_json::json!(false))
+    );
+}
+
+#[tokio::test]
+async fn explicit_tool_choice_is_preserved_in_metadata_and_flat_tools() {
+    let provider = StubProvider::new(
+        substrate_gateway::server::openai_conformance_test_support::response_text_response(
+            "tool-choice-ok",
+            "primary-actual",
+        ),
+        vec![],
+    );
+    let harness = ConformanceHarness::single_provider(provider, "primary-actual", false);
+
+    let request = serde_json::json!({
+        "model": "gateway-default",
+        "input": "hello",
+        "stream": false,
+        "tools": [
+            { "type": "function", "function": { "name": "alpha", "parameters": {"type":"object"} } },
+            { "type": "function", "function": { "name": "beta", "parameters": {"type":"object"} } }
+        ],
+        "tool_choice": { "type": "function", "function": { "name": "beta" } }
+    });
+
+    let response = harness.invoke_responses(HeaderMap::new(), request).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let captured_requests = harness.captured_requests();
+    let captured_requests = captured_requests.lock().unwrap();
+    assert_eq!(captured_requests.len(), 1);
+    let captured = &captured_requests[0];
+
+    assert_eq!(
+        captured
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY)),
+        Some(&serde_json::json!({
+            "type": "function",
+            "function": { "name": "beta" }
+        }))
+    );
+    assert_eq!(captured.tools.as_ref().map(|tools| tools.len()), Some(1));
+    assert_eq!(
+        captured
+            .tools
+            .as_ref()
+            .and_then(|tools| tools[0].name.as_deref()),
+        Some("beta")
     );
 }
 

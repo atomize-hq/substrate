@@ -12,6 +12,8 @@ use substrate_gateway::server::openai_conformance_test_support::{
     read_json_fixture, response_text, ConformanceHarness, FixtureNamespace, StubProvider,
 };
 
+const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
+
 type CapturedRequests = std::sync::Arc<std::sync::Mutex<Vec<GatewayRequest>>>;
 
 #[derive(Debug, Deserialize)]
@@ -231,6 +233,67 @@ async fn model_echo_is_shared_across_endpoints() {
         let responses_requests = responses_requests.lock().unwrap();
         assert_eq!(responses_requests.len(), 1);
         assert_eq!(responses_requests[0].model, "primary-actual");
+    }
+}
+
+#[tokio::test]
+async fn responses_sync_and_stream_requests_preserve_explicit_tool_choice_metadata() {
+    let harness = build_single_provider_harness(StubProvider::new(
+        reasoning_sync_response(),
+        reasoning_stream_chunks(),
+    ));
+
+    let base_request = serde_json::json!({
+        "model": "gateway-default",
+        "input": "hello",
+        "tools": [
+            { "type": "function", "function": { "name": "alpha", "parameters": {"type":"object"} } },
+            { "type": "function", "function": { "name": "beta", "parameters": {"type":"object"} } }
+        ],
+        "tool_choice": { "type": "function", "function": { "name": "beta" } }
+    });
+
+    let sync_response = harness
+        .invoke_responses(HeaderMap::new(), {
+            let mut request = base_request.clone();
+            request["stream"] = serde_json::json!(false);
+            request
+        })
+        .await;
+    assert_eq!(sync_response.status(), StatusCode::OK);
+
+    let stream_response = harness
+        .invoke_responses(HeaderMap::new(), {
+            let mut request = base_request;
+            request["stream"] = serde_json::json!(true);
+            request
+        })
+        .await;
+    assert_eq!(stream_response.status(), StatusCode::OK);
+
+    let captured_requests = harness.captured_requests();
+    let captured_requests = captured_requests.lock().unwrap();
+    assert_eq!(captured_requests.len(), 2);
+
+    for captured in captured_requests.iter() {
+        assert_eq!(
+            captured
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY)),
+            Some(&serde_json::json!({
+                "type": "function",
+                "function": { "name": "beta" }
+            }))
+        );
+        assert_eq!(captured.tools.as_ref().map(|tools| tools.len()), Some(1));
+        assert_eq!(
+            captured
+                .tools
+                .as_ref()
+                .and_then(|tools| tools[0].name.as_deref()),
+            Some("beta")
+        );
     }
 }
 
