@@ -393,7 +393,7 @@ async fn responses_direct_fallback_streaming_preserves_sse_contract() {
             "unused",
             "gateway-direct",
         ),
-        read_json_fixture::<Value>(FixtureNamespace::OpenAiResponses, "stream-text.json")
+        read_json_fixture::<Value>(FixtureNamespace::OpenAiResponses, "codex-stream-text.json")
             ["provider_stream_chunks"]
             .as_array()
             .expect("stream fixture chunks")

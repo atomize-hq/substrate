@@ -20,6 +20,19 @@ use crate::providers::streaming::{parse_sse_events, SseEvent, SseStream};
 const OPENAI_PARALLEL_TOOL_CALLS_METADATA_KEY: &str = "parallel_tool_calls";
 const OPENAI_PUBLIC_RESPONSES_METADATA_KEY: &str = "openai_public_responses";
 const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
+const OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY: &str = "openai_responses_reasoning_effort";
+const OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY: &str = "openai_responses_reasoning_summary";
+const OPENAI_RESPONSES_INCLUDE_METADATA_KEY: &str = "openai_responses_include";
+const OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY: &str = "openai_responses_text_verbosity";
+const OPENAI_RESPONSES_EXPLICIT_MAX_OUTPUT_TOKENS_METADATA_KEY: &str =
+    "openai_responses_explicit_max_output_tokens";
+const OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY: &str = "openai_responses_input_metadata";
+const OPENAI_RESPONSES_TRUNCATION_METADATA_KEY: &str = "openai_responses_truncation";
+const OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY: &str =
+    "openai_responses_previous_response_id";
+const OPENAI_RESPONSES_USER_METADATA_KEY: &str = "openai_responses_user";
+const OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY: &str = "openai_responses_stream_options";
+const OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY: &str = "openai_responses_service_tier";
 
 /// Official Codex instructions from OpenAI
 /// Source: https://github.com/openai/codex (rust-v0.58.0)
@@ -73,6 +86,12 @@ struct OpenAIResponsesRequest {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    include: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -556,6 +575,27 @@ fn codex_transport_drift(message: impl Into<String>) -> ProviderError {
         status: 502,
         message: message.into(),
     }
+}
+
+fn flatten_responses_tool_choice(tool_choice: &serde_json::Value) -> serde_json::Value {
+    let Some(obj) = tool_choice.as_object() else {
+        return tool_choice.clone();
+    };
+    if obj.get("type").and_then(|value| value.as_str()) != Some("function") {
+        return tool_choice.clone();
+    }
+    let Some(name) = obj
+        .get("function")
+        .and_then(|value| value.get("name"))
+        .and_then(|value| value.as_str())
+    else {
+        return tool_choice.clone();
+    };
+
+    serde_json::json!({
+        "type": "function",
+        "name": name
+    })
 }
 
 fn codex_semantic_output_index(json: &serde_json::Value) -> Result<usize, ProviderError> {
@@ -1877,6 +1917,153 @@ impl OpenAIProvider {
                     "stop_sequences is not supported on the Codex route".to_string(),
                 ));
             }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_EXPLICIT_MAX_OUTPUT_TOKENS_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "max_output_tokens is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "metadata is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_TRUNCATION_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "truncation is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "previous_response_id is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request
+                .metadata
+                .as_ref()
+                .is_some_and(|metadata| metadata.contains_key(OPENAI_RESPONSES_USER_METADATA_KEY))
+            {
+                return Err(ProviderError::ConfigError(
+                    "user is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "stream_options is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "service_tier is not supported on the Codex route".to_string(),
+                ));
+            }
+            if let Some(tool_choice) = request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY))
+                .and_then(|value| value.as_str())
+            {
+                if tool_choice == "required" {
+                    return Err(ProviderError::ConfigError(
+                        "tool_choice=\"required\" is not supported on the Codex route".to_string(),
+                    ));
+                }
+            }
+            if let Some(reasoning_effort) = request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY))
+                .and_then(|value| value.as_str())
+            {
+                if !matches!(
+                    reasoning_effort,
+                    "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
+                ) {
+                    return Err(ProviderError::ConfigError(
+                        "Unsupported reasoning.effort on the Codex route".to_string(),
+                    ));
+                }
+            }
+            if let Some(reasoning_summary) = request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY))
+                .and_then(|value| value.as_str())
+            {
+                if !matches!(reasoning_summary, "auto" | "concise" | "detailed" | "none") {
+                    return Err(ProviderError::ConfigError(
+                        "Unsupported reasoning.summary on the Codex route".to_string(),
+                    ));
+                }
+                let reasoning_enabled = request
+                    .metadata
+                    .as_ref()
+                    .and_then(|metadata| {
+                        metadata.get(OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY)
+                    })
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|effort| effort != "none");
+                if reasoning_summary != "none" && !reasoning_enabled {
+                    return Err(ProviderError::ConfigError(
+                        "reasoning.summary requires reasoning.effort to be enabled on the Codex route"
+                            .to_string(),
+                    ));
+                }
+            }
+            if let Some(include) = request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_INCLUDE_METADATA_KEY))
+                .and_then(|value| value.as_array())
+            {
+                let include_values: Vec<&str> =
+                    include.iter().filter_map(|value| value.as_str()).collect();
+                if !(include_values.is_empty()
+                    || (include_values.len() == 1
+                        && include_values[0] == "reasoning.encrypted_content"))
+                {
+                    return Err(ProviderError::ConfigError(
+                        "Unsupported include value on the Codex route".to_string(),
+                    ));
+                }
+                let reasoning_enabled = request
+                    .metadata
+                    .as_ref()
+                    .and_then(|metadata| {
+                        metadata.get(OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY)
+                    })
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|effort| effort != "none");
+                if !include_values.is_empty() && !reasoning_enabled {
+                    return Err(ProviderError::ConfigError(
+                        "include reasoning.encrypted_content requires reasoning.effort to be enabled on the Codex route"
+                            .to_string(),
+                    ));
+                }
+            }
+            if let Some(verbosity) = request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY))
+                .and_then(|value| value.as_str())
+            {
+                if !matches!(verbosity, "low" | "medium" | "high") {
+                    return Err(ProviderError::ConfigError(
+                        "Unsupported text.verbosity on the Codex route".to_string(),
+                    ));
+                }
+            }
         }
 
         let mut items = Vec::new();
@@ -1990,7 +2177,60 @@ impl OpenAIProvider {
             .metadata
             .as_ref()
             .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY))
-            .cloned();
+            .map(flatten_responses_tool_choice);
+
+        let reasoning_effort = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY))
+            .and_then(|value| value.as_str());
+        let reasoning_summary = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY))
+            .and_then(|value| value.as_str());
+        let reasoning = reasoning_effort.map(|effort| {
+            let mut reasoning = serde_json::Map::new();
+            reasoning.insert(
+                "effort".to_string(),
+                serde_json::Value::String(effort.to_string()),
+            );
+            if let Some(summary) = reasoning_summary {
+                reasoning.insert(
+                    "summary".to_string(),
+                    serde_json::Value::String(summary.to_string()),
+                );
+            }
+            serde_json::Value::Object(reasoning)
+        });
+
+        let include = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_INCLUDE_METADATA_KEY))
+            .and_then(|value| value.as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|value| value.as_str().map(ToString::to_string))
+                    .collect::<Vec<_>>()
+            });
+
+        let text = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY))
+            .and_then(|value| value.as_str())
+            .map(|verbosity| {
+                serde_json::json!({
+                    "format": { "type": "text" },
+                    "verbosity": verbosity
+                })
+            })
+            .or_else(|| {
+                self.is_oauth()
+                    .then_some(serde_json::json!({ "format": { "type": "text" } }))
+            });
 
         Ok(OpenAIResponsesRequest {
             model: request.model.clone(),
@@ -2004,6 +2244,9 @@ impl OpenAIProvider {
                 .and_then(|metadata| metadata.get(OPENAI_PARALLEL_TOOL_CALLS_METADATA_KEY))
                 .and_then(|value| value.as_bool()),
             max_output_tokens: (!self.is_oauth()).then_some(request.max_output_tokens),
+            reasoning,
+            include,
+            text,
             tools,
             tool_choice,
         })
@@ -3662,6 +3905,77 @@ mod tests {
         }
     }
 
+    fn codex_request_with_route_matrix_controls() -> GatewayRequest {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_PARALLEL_TOOL_CALLS_METADATA_KEY.to_string(),
+            serde_json::Value::Bool(false),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY.to_string(),
+            serde_json::json!({
+                "type": "function",
+                "function": { "name": "lookup" }
+            }),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY.to_string(),
+            serde_json::Value::String("low".to_string()),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY.to_string(),
+            serde_json::Value::String("concise".to_string()),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_INCLUDE_METADATA_KEY.to_string(),
+            serde_json::json!(["reasoning.encrypted_content"]),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY.to_string(),
+            serde_json::Value::String("low".to_string()),
+        );
+
+        GatewayRequest {
+            model: "gpt-4.1-mini".to_string(),
+            messages: vec![crate::models::Message {
+                role: "user".to_string(),
+                content: crate::models::MessageContent::Blocks(vec![
+                    ContentBlock::text("Describe this image".to_string(), None),
+                    ContentBlock::Known(KnownContentBlock::Image {
+                        source: crate::models::ImageSource {
+                            r#type: "url".to_string(),
+                            media_type: None,
+                            data: None,
+                            url: Some("https://example.com/image.png".to_string()),
+                        },
+                    }),
+                ]),
+            }],
+            max_output_tokens: 32,
+            reasoning: Some(crate::core::ReasoningConfig {
+                r#type: "enabled".to_string(),
+                budget_tokens: None,
+            }),
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: Some(vec![crate::models::Tool {
+                r#type: Some("function".to_string()),
+                name: Some("lookup".to_string()),
+                description: Some("Look something up".to_string()),
+                input_schema: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": { "query": { "type": "string" } },
+                    "required": ["query"]
+                })),
+            }]),
+        }
+    }
+
     fn public_responses_continuation_request() -> GatewayRequest {
         let mut metadata = HashMap::new();
         metadata.insert(
@@ -4070,11 +4384,64 @@ mod tests {
             serialized["tool_choice"],
             serde_json::json!({
                 "type": "function",
-                "function": {
-                    "name": "lookup"
-                }
+                "name": "lookup"
             })
         );
+    }
+
+    #[test]
+    fn transform_to_responses_request_preserves_codex_route_matrix_controls() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        let request = codex_request_with_route_matrix_controls();
+
+        let serialized =
+            serde_json::to_value(provider.transform_to_responses_request(&request).unwrap())
+                .unwrap();
+
+        assert_eq!(serialized["stream"], serde_json::json!(true));
+        assert_eq!(serialized["parallel_tool_calls"], serde_json::json!(false));
+        assert_eq!(
+            serialized["tool_choice"],
+            serde_json::json!({
+                "type": "function",
+                "name": "lookup"
+            })
+        );
+        assert_eq!(
+            serialized["reasoning"],
+            serde_json::json!({
+                "effort": "low",
+                "summary": "concise"
+            })
+        );
+        assert_eq!(
+            serialized["include"],
+            serde_json::json!(["reasoning.encrypted_content"])
+        );
+        assert_eq!(
+            serialized["text"],
+            serde_json::json!({
+                "format": { "type": "text" },
+                "verbosity": "low"
+            })
+        );
+        assert_eq!(
+            serialized["input"][0]["content"][0],
+            serde_json::json!({
+                "type": "input_text",
+                "text": "Describe this image"
+            })
+        );
+        assert_eq!(
+            serialized["input"][0]["content"][1],
+            serde_json::json!({
+                "type": "input_image",
+                "image_url": "https://example.com/image.png"
+            })
+        );
+        let tools = serialized["tools"].as_array().expect("tools array");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0]["function"]["name"], serde_json::json!("lookup"));
     }
 
     #[test]

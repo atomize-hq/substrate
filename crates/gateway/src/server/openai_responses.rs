@@ -29,6 +29,19 @@ use super::{
 
 const OPENAI_PUBLIC_RESPONSES_METADATA_KEY: &str = "openai_public_responses";
 const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
+const OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY: &str = "openai_responses_reasoning_effort";
+const OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY: &str = "openai_responses_reasoning_summary";
+const OPENAI_RESPONSES_INCLUDE_METADATA_KEY: &str = "openai_responses_include";
+const OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY: &str = "openai_responses_text_verbosity";
+const OPENAI_RESPONSES_EXPLICIT_MAX_OUTPUT_TOKENS_METADATA_KEY: &str =
+    "openai_responses_explicit_max_output_tokens";
+const OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY: &str = "openai_responses_input_metadata";
+const OPENAI_RESPONSES_TRUNCATION_METADATA_KEY: &str = "openai_responses_truncation";
+const OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY: &str =
+    "openai_responses_previous_response_id";
+const OPENAI_RESPONSES_USER_METADATA_KEY: &str = "openai_responses_user";
+const OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY: &str = "openai_responses_stream_options";
+const OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY: &str = "openai_responses_service_tier";
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -44,7 +57,13 @@ struct OpenAIResponsesRequest {
     #[serde(default)]
     text: Option<OpenAIResponsesText>,
     #[serde(default)]
+    include: Option<Vec<String>>,
+    #[serde(default)]
+    reasoning: Option<OpenAIResponsesReasoning>,
+    #[serde(default)]
     max_output_tokens: Option<u32>,
+    #[serde(default)]
+    metadata: Option<HashMap<String, serde_json::Value>>,
     #[serde(default)]
     temperature: Option<f32>,
     #[serde(default)]
@@ -52,9 +71,17 @@ struct OpenAIResponsesRequest {
     #[serde(default)]
     stop: Option<Vec<String>>,
     #[serde(default)]
+    truncation: Option<serde_json::Value>,
+    #[serde(default)]
+    previous_response_id: Option<String>,
+    #[serde(default)]
+    user: Option<String>,
+    #[serde(default)]
     stream: Option<bool>,
     #[serde(default)]
     stream_options: Option<OpenAIResponsesStreamOptions>,
+    #[serde(default)]
+    service_tier: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,7 +162,10 @@ struct OpenAIResponsesToolChoiceFunction {
 
 #[derive(Debug, Deserialize)]
 struct OpenAIResponsesText {
+    #[serde(default)]
     format: Option<OpenAIResponsesTextFormat>,
+    #[serde(default)]
+    verbosity: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -145,6 +175,13 @@ struct OpenAIResponsesTextFormat {
 }
 
 #[derive(Debug, Deserialize)]
+struct OpenAIResponsesReasoning {
+    effort: String,
+    #[serde(default)]
+    summary: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 struct OpenAIResponsesStreamOptions {
     #[allow(dead_code)]
     #[serde(default)]
@@ -267,12 +304,96 @@ fn transform_openai_to_gateway_request(
             serde_json::to_value(tool_choice).map_err(|err| err.to_string())?,
         );
     }
+    if let Some(max_output_tokens) = openai_req.max_output_tokens {
+        metadata.insert(
+            OPENAI_RESPONSES_EXPLICIT_MAX_OUTPUT_TOKENS_METADATA_KEY.to_string(),
+            serde_json::Value::from(max_output_tokens),
+        );
+    }
+    if let Some(request_metadata) = &openai_req.metadata {
+        metadata.insert(
+            OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY.to_string(),
+            serde_json::to_value(request_metadata).map_err(|err| err.to_string())?,
+        );
+    }
+    if let Some(truncation) = &openai_req.truncation {
+        metadata.insert(
+            OPENAI_RESPONSES_TRUNCATION_METADATA_KEY.to_string(),
+            truncation.clone(),
+        );
+    }
+    if let Some(previous_response_id) = &openai_req.previous_response_id {
+        metadata.insert(
+            OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY.to_string(),
+            serde_json::Value::String(previous_response_id.clone()),
+        );
+    }
+    if let Some(user) = &openai_req.user {
+        metadata.insert(
+            OPENAI_RESPONSES_USER_METADATA_KEY.to_string(),
+            serde_json::Value::String(user.clone()),
+        );
+    }
+    if let Some(stream_options) = &openai_req.stream_options {
+        metadata.insert(
+            OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY.to_string(),
+            serde_json::to_value(stream_options).map_err(|err| err.to_string())?,
+        );
+    }
+    if let Some(service_tier) = &openai_req.service_tier {
+        metadata.insert(
+            OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY.to_string(),
+            service_tier.clone(),
+        );
+    }
+    if let Some(reasoning) = &openai_req.reasoning {
+        metadata.insert(
+            OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY.to_string(),
+            serde_json::Value::String(reasoning.effort.clone()),
+        );
+        if let Some(summary) = &reasoning.summary {
+            metadata.insert(
+                OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY.to_string(),
+                serde_json::Value::String(summary.clone()),
+            );
+        }
+    }
+    if let Some(include) = &openai_req.include {
+        metadata.insert(
+            OPENAI_RESPONSES_INCLUDE_METADATA_KEY.to_string(),
+            serde_json::Value::Array(
+                include
+                    .iter()
+                    .cloned()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ),
+        );
+    }
+    if let Some(text) = &openai_req.text {
+        if let Some(verbosity) = &text.verbosity {
+            metadata.insert(
+                OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY.to_string(),
+                serde_json::Value::String(verbosity.clone()),
+            );
+        }
+    }
 
     Ok(GatewayRequest {
         model: openai_req.model,
         messages,
         max_output_tokens: openai_req.max_output_tokens.unwrap_or(4096),
-        reasoning: None,
+        reasoning: openai_req
+            .reasoning
+            .as_ref()
+            .map(|reasoning| crate::core::ReasoningConfig {
+                r#type: if reasoning.effort == "none" {
+                    "disabled".to_string()
+                } else {
+                    "enabled".to_string()
+                },
+                budget_tokens: None,
+            }),
         temperature: openai_req.temperature,
         top_p: openai_req.top_p,
         top_k: None,

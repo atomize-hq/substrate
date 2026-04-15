@@ -1,0 +1,13 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "stream_options": {
+      "include_obfuscation": true
+    }
+  },
+  "expected_error_contains": "stream_options is not supported on the Codex route",
+  "expected_status": 502,
+  "expected_error_class": "route",
+  "expected_error_message": "Route selection failed"
+}

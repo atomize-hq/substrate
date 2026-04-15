@@ -115,6 +115,8 @@ fn classify_provider_error(error: &ProviderError) -> FailureClass {
             let lowered = message.to_ascii_lowercase();
             if lowered.contains("url") || lowered.contains("base_url") {
                 FailureClass::Url
+            } else if lowered.contains("codex route") {
+                FailureClass::Route
             } else {
                 FailureClass::TransportDrift
             }
