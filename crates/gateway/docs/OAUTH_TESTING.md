@@ -148,6 +148,35 @@ Route-boundary validation for Codex should check all three rules explicitly:
 
 Integrated-mode validation should also prove that canonical Substrate env handoff is sufficient on its own and does not require gateway-local reads of `~/.codex/auth.json` or other local auth files.
 
+Codex maintenance work should read the auth boundary together with the route and conformance contracts:
+
+- [`chatgpt-codex-auth-handoff-contract.md`](contracts/chatgpt-codex-auth-handoff-contract.md)
+- [`chatgpt-codex-route-contract.md`](contracts/chatgpt-codex-route-contract.md)
+- [`chatgpt-codex-conformance-and-drift-guard.md`](contracts/chatgpt-codex-conformance-and-drift-guard.md)
+
+The owned evidence anchors for deterministic Codex revalidation are:
+
+- `crates/gateway/tests/openai_responses_conformance.rs`
+- `crates/gateway/tests/openai_shared_parity.rs`
+- `crates/gateway/src/server/openai_conformance_test_support.rs`
+- `crates/gateway/tests/fixtures/openai_responses/codex-*.json`
+- `crates/gateway/src/providers/openai.rs`
+
+Maintenance checks should explicitly preserve these Codex-route truths:
+
+- integrated mode resolves `ChatGPT-Account-ID` from Substrate-delivered auth context first
+- explicit `account_id` remains authoritative over JWT fallback
+- unresolved account identity fails before any upstream call
+- integrated mode does not depend on gateway-local auth-file reads
+- standalone local auth state remains compatibility-only and must not be described as the integrated trust boundary
+
+Reopen Codex-route review when any of the following drift materially:
+
+- auth-handoff ownership, field identifiers, precedence rules, or bounded fallback behavior change
+- the Codex route compatibility matrix, semantic SSE assembly, or sync-drain failure posture changes
+- fixture namespaces or evidence anchors move in a way that makes deterministic revalidation ambiguous
+- normalized-core behavior changes in a way that invalidates Codex-route fixture expectations
+
 ## Using OAuth with Providers
 
 ### 1. Configure provider

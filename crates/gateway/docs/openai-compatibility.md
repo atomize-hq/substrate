@@ -204,6 +204,25 @@ The route rejects these cases with `400`:
 
 JSON schema output, built-in tools, and non-function tool calls are not implemented on this public surface.
 
+### ChatGPT Codex route maintenance note
+
+This page describes the generic public `/v1/responses` surface. When that surface routes through the ChatGPT Codex OAuth backend, maintainers must revalidate against the Codex route contracts instead of assuming the generic route description applies unchanged.
+
+On the Codex route specifically:
+
+- `stream = true` is forced upstream
+- `store = false` is forced upstream
+- `text.format.type = "text"` is forced on the route
+- bare messages, supported image inputs, flat function tools, explicit function `tool_choice`, and sync-drain execution follow route-specific translate rules
+- `reasoning.effort`, `reasoning.summary`, `parallel_tool_calls`, `text.verbosity`, `include = []`, `include = ["reasoning.encrypted_content"]`, `tool_choice = "none"`, and `tool_choice = "auto"` are route-specific pass cases subject to the published constraints
+- `max_output_tokens`, `metadata`, `truncation`, `previous_response_id`, `temperature`, `top_p`, `user`, unverified `service_tier` overrides, nested Chat Completions-style tool definitions, nested Chat Completions-style `tool_choice`, `tool_choice = "required"`, and `stream_options` are explicit Codex-route rejects
+
+Codex route maintenance should use these canonical references:
+
+- [`chatgpt-codex-route-contract.md`](contracts/chatgpt-codex-route-contract.md)
+- [`chatgpt-codex-auth-handoff-contract.md`](contracts/chatgpt-codex-auth-handoff-contract.md)
+- [`chatgpt-codex-conformance-and-drift-guard.md`](contracts/chatgpt-codex-conformance-and-drift-guard.md)
+
 ### Minimal example
 
 ```json
@@ -232,6 +251,21 @@ Those tests cover, among other things:
 - `X-Provider` forcing
 - reasoning suppression
 - shared error-envelope behavior
+
+For ChatGPT Codex route maintenance, the owned deterministic evidence anchors are:
+
+- [gateway/tests/openai_responses_conformance.rs](../tests/openai_responses_conformance.rs)
+- [gateway/tests/openai_shared_parity.rs](../tests/openai_shared_parity.rs)
+- [gateway/src/server/openai_conformance_test_support.rs](../src/server/openai_conformance_test_support.rs)
+- `gateway/tests/fixtures/openai_responses/codex-*.json`
+
+Reopen Codex-route review when any of the following drift materially:
+
+- the Codex route compatibility matrix or supported-control classification changes
+- the semantic SSE event family, assembly rules, or sync-drain terminal requirements change
+- auth-handoff ownership, field identifiers, precedence rules, or fallback constraints change
+- normalized-core behavior changes in a way that invalidates Codex fixture expectations
+- fixture namespaces or maintenance-doc evidence anchors move in a way that obscures what the route is proving
 
 ## What Changed From The Old Doc
 

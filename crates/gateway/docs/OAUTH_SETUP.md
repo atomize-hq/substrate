@@ -137,6 +137,36 @@ For the Codex route, account resolution follows a strict order:
 
 The JWT claim path is bounded compatibility fallback only. It does not redefine ownership, and the gateway must fail before any upstream Codex request when neither explicit nor JWT-derived `account_id` can be resolved.
 
+For maintenance purposes, keep the Codex auth owner line explicit:
+
+- integrated mode consumes Substrate-delivered auth context first
+- explicit `account_id` remains authoritative over JWT-derived fallback
+- JWT-derived account identity is bounded compatibility fallback only
+- unresolved account identity must fail before any upstream request is sent
+- integrated mode must not require direct reads of host-local auth files inside the gateway runtime
+
+Codex auth or route drift should be revalidated against:
+
+- [`chatgpt-codex-auth-handoff-contract.md`](contracts/chatgpt-codex-auth-handoff-contract.md)
+- [`chatgpt-codex-route-contract.md`](contracts/chatgpt-codex-route-contract.md)
+- [`chatgpt-codex-conformance-and-drift-guard.md`](contracts/chatgpt-codex-conformance-and-drift-guard.md)
+
+The maintenance evidence anchors for that revalidation are:
+
+- `crates/gateway/src/providers/openai.rs`
+- `crates/gateway/tests/openai_responses_conformance.rs`
+- `crates/gateway/tests/openai_shared_parity.rs`
+- `crates/gateway/src/server/openai_conformance_test_support.rs`
+- `crates/gateway/tests/fixtures/openai_responses/codex-*.json`
+- this guide and `docs/OAUTH_TESTING.md`
+
+Treat the Codex auth guidance as stale and reopen route-specific review when any of the following drift materially:
+
+- Substrate auth-bundle delivery posture, secret-channel semantics, or integrated owner-line assumptions change
+- auth field identifiers, `account_id` precedence rules, or JWT fallback constraints change
+- the Codex route header contract or pre-upstream auth failure posture changes
+- local OAuth or token-storage guidance starts implying integrated trust-boundary authority
+
 ## HTTP Endpoints
 
 The gateway exposes these OAuth HTTP endpoints directly:
