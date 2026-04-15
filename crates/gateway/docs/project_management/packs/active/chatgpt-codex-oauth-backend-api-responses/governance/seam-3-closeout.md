@@ -4,7 +4,7 @@ status: landed
 closeout_version: v1
 seam_exit_gate:
   source_ref: docs/project_management/packs/active/chatgpt-codex-oauth-backend-api-responses/threaded-seams/seam-3-codex-route-conformance-and-drift-guards/slice-99-seam-exit-gate.md
-  status: completed
+  status: passed
   promotion_readiness: ready
 basis:
   currentness: current

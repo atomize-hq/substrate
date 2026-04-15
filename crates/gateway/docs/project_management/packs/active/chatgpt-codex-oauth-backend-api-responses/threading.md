@@ -2,11 +2,11 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-3`
-- **Next seam**: none yet
+- **Active seam**: none
+- **Next seam**: none
 - **Policy**:
-  - `SEAM-3` is now eligible for authoritative downstream decomposition because both `THR-14` and `THR-15` are published and closeout-backed
-  - only `SEAM-3` is eligible for authoritative downstream decomposition by default
+  - no seam is currently eligible for authoritative downstream decomposition because the forward planning window is empty
+  - future Codex-route maintenance should consume `THR-16` as the published drift-guard baseline instead of reopening `SEAM-3`
   - canonical contract refs for this pack are reserved under `crates/gateway/docs/contracts/`
 
 ## Contract registry
@@ -68,10 +68,10 @@
   - **Consumer seam(s)**: future maintenance work outside this pack
   - **Carried contract IDs**: `C-16`
   - **Purpose**: publish the drift-guard baseline so future route changes cannot silently regress request shaping, semantic event assembly, or auth provenance
-  - **State**: `identified`
+  - **State**: `published`
   - **Revalidation trigger**: new route-specific controls are added, upstream behavior drifts, or auth/normalized-core changes require fixture updates
   - **Satisfied by**: deterministic fixtures, route-local regression tests, and documentation that explicitly names what the Codex route preserves, forces, translates, and rejects
-  - **Notes**: this thread should remain the maintenance and revalidation surface for future Codex-route work rather than turning every drift fix into a fresh discovery cycle
+  - **Notes**: this thread was published by the `SEAM-3` closeout record and should remain the maintenance and revalidation surface for future Codex-route work rather than turning every drift fix into a fresh discovery cycle
 
 ## Dependency graph
 

@@ -2,8 +2,8 @@
 seam_id: SEAM-3
 seam_slug: codex-route-conformance-and-drift-guards
 type: conformance
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -25,12 +25,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -87,7 +87,7 @@ open_remediations: []
   - Verify the test plan can cover sync/stream parity, `stream = true`, `store = false`, reasoning gates, continuation legality/order, and the integrated-mode no-local-read posture.
   - Verify docs and test surfaces line up so route-specific maintenance does not depend on re-reading the ADR to know what drift matters.
 - **Canonical contract refs**:
-  - `docs/contracts/chatgpt-codex-conformance-and-drift-guard.md`
+  - `crates/gateway/docs/contracts/chatgpt-codex-conformance-and-drift-guard.md`
 - **Risks / unknowns**:
   - Risk: fixture coverage misses an upstream semantic event or rejected-field edge and gives false confidence.
   - De-risk plan: derive the suite directly from the published route and auth contracts, not from current implementation quirks alone.

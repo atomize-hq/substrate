@@ -12,18 +12,18 @@ This pack captures seam briefs, authoritative threading, pack-level review surfa
 
 Execution horizon:
 
-- Active seam: `SEAM-3`
-- Next seam: none yet
+- Active seam: none
+- Next seam: none
 
-`SEAM-1` and `SEAM-2` are landed and have moved out of the forward window. `SEAM-3` is now active because both route and auth ownership are published.
+`SEAM-1`, `SEAM-2`, and `SEAM-3` are landed and have moved out of the forward window. `THR-16` is now published as the maintenance-facing drift-guard baseline, and the pack currently has no active or next seam.
 
 Policy:
 
-- only the active seam is eligible for authoritative downstream sub-slices by default
-- the next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
+- no seam is currently eligible for authoritative downstream sub-slices because the forward planning window is empty
+- a future next seam may later receive seam-local review + slices, and only provisional candidate-subslice hints
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that own undefined contracts may reserve `S00` as a contract-definition boundary slice once seam-local planning begins
-- `SEAM-3` now owns the forward planning window because `THR-14` and `THR-15` are published and closeout-backed
+- future Codex-route maintenance should consume `THR-16` instead of reopening this pack's completed conformance seam
 - canonical contract docs are reserved under `crates/gateway/docs/contracts/` for this pack and must remain descriptive-only
 
 Scope and assumptions restated before extraction:

@@ -4,7 +4,7 @@ pack_version: v1
 pack_status: extracted
 source_ref: docs/adr/0010-route-chatgpt-codex-oauth-via-backend-api-codex-responses.md plus current gateway OAuth/provider/auth surfaces in crates/gateway/src/
 execution_horizon:
-  active_seam: SEAM-3
+  active_seam: null
   next_seam: null
 ---
 
