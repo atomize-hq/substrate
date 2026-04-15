@@ -13,6 +13,12 @@
         ]
       },
       {
+        "type": "function_call",
+        "call_id": "call_fixture_1",
+        "name": "lookup",
+        "arguments": "{\"query\":\"x\"}"
+      },
+      {
         "type": "function_call_output",
         "call_id": "call_fixture_1",
         "output": "{\"ok\":true}"
@@ -20,5 +26,9 @@
     ]
   },
   "expected_tool_use_id": "call_fixture_1",
+  "expected_tool_name": "lookup",
+  "expected_arguments": {
+    "query": "x"
+  },
   "expected_output": "{\"ok\":true}"
 }

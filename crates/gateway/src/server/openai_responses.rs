@@ -96,6 +96,8 @@ enum OpenAIResponsesInput {
 enum OpenAIResponsesInputItem {
     #[serde(rename = "message")]
     Message(OpenAIResponsesMessageItem),
+    #[serde(rename = "function_call")]
+    FunctionCall(OpenAIResponsesFunctionCallItem),
     #[serde(rename = "function_call_output")]
     FunctionCallOutput(OpenAIResponsesFunctionCallOutputItem),
 }
@@ -123,6 +125,13 @@ enum OpenAIResponsesMessageContentPart {
 struct OpenAIResponsesFunctionCallOutputItem {
     call_id: String,
     output: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIResponsesFunctionCallItem {
+    call_id: String,
+    name: String,
+    arguments: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -249,6 +258,8 @@ fn transform_openai_to_gateway_request(
             });
         }
         OpenAIResponsesInput::Items(items) => {
+            let mut prior_function_call_ids = HashSet::new();
+
             for item in items {
                 match item {
                     OpenAIResponsesInputItem::Message(message) => {
@@ -263,10 +274,41 @@ fn transform_openai_to_gateway_request(
                             other => return Err(format!("Unsupported message role: {other}")),
                         }
                     }
+                    OpenAIResponsesInputItem::FunctionCall(function_call) => {
+                        let call_id = function_call.call_id.trim();
+                        if call_id.is_empty() {
+                            return Err("function_call.call_id must not be empty".to_string());
+                        }
+                        let name = function_call.name.trim();
+                        if name.is_empty() {
+                            return Err("function_call.name must not be empty".to_string());
+                        }
+
+                        let arguments =
+                            parse_responses_function_call_arguments(&function_call.arguments)?;
+                        prior_function_call_ids.insert(call_id.to_string());
+
+                        messages.push(Message {
+                            role: "assistant".to_string(),
+                            content: MessageContent::Blocks(vec![ContentBlock::Known(
+                                KnownContentBlock::ToolUse {
+                                    id: call_id.to_string(),
+                                    name: name.to_string(),
+                                    input: arguments,
+                                },
+                            )]),
+                        });
+                    }
                     OpenAIResponsesInputItem::FunctionCallOutput(function_call_output) => {
                         if function_call_output.call_id.trim().is_empty() {
                             return Err(
                                 "function_call_output.call_id must not be empty".to_string()
+                            );
+                        }
+                        if !prior_function_call_ids.contains(function_call_output.call_id.trim()) {
+                            return Err(
+                                "function_call_output.call_id must reference a prior function_call item"
+                                    .to_string(),
                             );
                         }
 
@@ -1332,6 +1374,11 @@ fn responses_message_content_to_message_content(
     }
 }
 
+fn parse_responses_function_call_arguments(arguments: &str) -> Result<serde_json::Value, String> {
+    serde_json::from_str(arguments)
+        .map_err(|_| "function_call.arguments must be a JSON string".to_string())
+}
+
 fn image_source_from_url(image_url: &str) -> Result<ImageSource, String> {
     if image_url.starts_with("data:") {
         if let Some(comma_idx) = image_url.find(',') {
@@ -1416,7 +1463,7 @@ mod tests {
     }
 
     #[test]
-    fn message_items_and_function_call_outputs_map_into_the_normalized_core() {
+    fn message_items_function_calls_and_outputs_map_into_the_normalized_core() {
         let request: OpenAIResponsesRequest = serde_json::from_value(json!({
             "model": "gpt-test",
             "input": [
@@ -1446,6 +1493,12 @@ mod tests {
                     ]
                 },
                 {
+                    "type": "function_call",
+                    "call_id": "call_123",
+                    "name": "lookup",
+                    "arguments": "{\"query\":\"question\"}"
+                },
+                {
                     "type": "function_call_output",
                     "call_id": "call_123",
                     "output": "tool-output"
@@ -1456,7 +1509,7 @@ mod tests {
 
         let gateway_request = transform_openai_to_gateway_request(request).unwrap();
         assert!(gateway_request.system.is_none());
-        assert_eq!(gateway_request.messages.len(), 4);
+        assert_eq!(gateway_request.messages.len(), 5);
 
         assert_eq!(gateway_request.messages[0].role, "system");
         match &gateway_request.messages[0].content {
@@ -1500,9 +1553,22 @@ mod tests {
             _ => panic!("expected blocks"),
         }
 
-        assert_eq!(gateway_request.messages[3].role, "user");
+        assert_eq!(gateway_request.messages[3].role, "assistant");
         assert!(matches!(
             gateway_request.messages[3].content,
+            MessageContent::Blocks(ref blocks)
+                if matches!(
+                    &blocks[0],
+                    ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input })
+                    if id == "call_123"
+                        && name == "lookup"
+                        && input == &serde_json::json!({"query":"question"})
+                )
+        ));
+
+        assert_eq!(gateway_request.messages[4].role, "user");
+        assert!(matches!(
+            gateway_request.messages[4].content,
             MessageContent::Blocks(ref blocks)
                 if matches!(
                     &blocks[0],
@@ -1510,6 +1576,63 @@ mod tests {
                     if tool_use_id == "call_123" && matches!(content, ToolResultContent::Text(text) if text == "tool-output")
                 )
         ));
+    }
+
+    #[test]
+    fn invalid_function_call_call_id_is_rejected() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "",
+                    "name": "lookup",
+                    "arguments": "{}"
+                }
+            ]
+        }))
+        .unwrap();
+
+        let err = transform_openai_to_gateway_request(request).unwrap_err();
+        assert_eq!(err, "function_call.call_id must not be empty");
+    }
+
+    #[test]
+    fn invalid_function_call_name_is_rejected() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_123",
+                    "name": "",
+                    "arguments": "{}"
+                }
+            ]
+        }))
+        .unwrap();
+
+        let err = transform_openai_to_gateway_request(request).unwrap_err();
+        assert_eq!(err, "function_call.name must not be empty");
+    }
+
+    #[test]
+    fn invalid_function_call_arguments_are_rejected() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_123",
+                    "name": "lookup",
+                    "arguments": "not-json"
+                }
+            ]
+        }))
+        .unwrap();
+
+        let err = transform_openai_to_gateway_request(request).unwrap_err();
+        assert_eq!(err, "function_call.arguments must be a JSON string");
     }
 
     #[test]
@@ -1683,6 +1806,8 @@ mod tests {
     struct ToolLoopRequestFixture {
         request: serde_json::Value,
         expected_tool_use_id: String,
+        expected_tool_name: String,
+        expected_arguments: serde_json::Value,
         expected_output: String,
     }
 
@@ -1862,6 +1987,17 @@ mod tests {
         let request: OpenAIResponsesRequest = serde_json::from_value(fixture.request).unwrap();
         let gateway_request = transform_openai_to_gateway_request(request).unwrap();
 
+        assert!(matches!(
+            gateway_request.messages[1].content,
+            MessageContent::Blocks(ref blocks)
+                if matches!(
+                    &blocks[0],
+                    ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input })
+                    if id == &fixture.expected_tool_use_id
+                        && name == &fixture.expected_tool_name
+                        && input == &fixture.expected_arguments
+                )
+        ));
         assert!(matches!(
             gateway_request.messages.last().unwrap().content,
             MessageContent::Blocks(ref blocks)

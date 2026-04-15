@@ -2067,7 +2067,8 @@ impl OpenAIProvider {
         }
 
         let mut items = Vec::new();
-        let mut synthesized_call_ids = HashSet::new();
+        let mut emitted_call_ids = HashSet::new();
+        let mut authoritative_provenance = HashMap::new();
 
         if let Some(ref system) = request.system {
             let mut content = system_prompt_to_responses_parts(system);
@@ -2104,12 +2105,15 @@ impl OpenAIProvider {
                                     &msg.role,
                                     &mut content_parts,
                                 );
-                                synthesized_call_ids.insert(id.clone());
+                                let arguments = serde_json::to_string(input)
+                                    .unwrap_or_else(|_| "{}".to_string());
+                                authoritative_provenance
+                                    .insert(id.clone(), (name.clone(), arguments.clone()));
+                                emitted_call_ids.insert(id.clone());
                                 items.push(OpenAIResponsesInputItem::FunctionCall {
                                     call_id: id.clone(),
                                     name: name.clone(),
-                                    arguments: serde_json::to_string(input)
-                                        .unwrap_or_else(|_| "{}".to_string()),
+                                    arguments,
                                 });
                             }
                             ContentBlock::Known(KnownContentBlock::ToolResult {
@@ -2123,11 +2127,20 @@ impl OpenAIProvider {
                                     &msg.role,
                                     &mut content_parts,
                                 );
-                                if synthesized_call_ids.insert(tool_use_id.clone()) {
+                                if !emitted_call_ids.contains(tool_use_id) {
+                                    let Some((name, arguments)) =
+                                        authoritative_provenance.get(tool_use_id).cloned()
+                                    else {
+                                        return Err(ProviderError::ConfigError(
+                                            "Responses continuation requires authoritative provenance for each function_call_output"
+                                                .to_string(),
+                                        ));
+                                    };
+                                    emitted_call_ids.insert(tool_use_id.clone());
                                     items.push(OpenAIResponsesInputItem::FunctionCall {
                                         call_id: tool_use_id.clone(),
-                                        name: "tool_call".to_string(),
-                                        arguments: "{}".to_string(),
+                                        name,
+                                        arguments,
                                     });
                                 }
                                 let output = if *is_error {
@@ -3991,6 +4004,18 @@ mod tests {
                     content: crate::models::MessageContent::Text("Need tool output.".to_string()),
                 },
                 crate::models::Message {
+                    role: "assistant".to_string(),
+                    content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                        KnownContentBlock::ToolUse {
+                            id: "call_fixture_1".to_string(),
+                            name: "lookup".to_string(),
+                            input: serde_json::json!({
+                                "query": "x"
+                            }),
+                        },
+                    )]),
+                },
+                crate::models::Message {
                     role: "user".to_string(),
                     content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
                         KnownContentBlock::ToolResult {
@@ -4004,6 +4029,41 @@ mod tests {
                     )]),
                 },
             ],
+            max_output_tokens: 32,
+            reasoning: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: None,
+        }
+    }
+
+    fn orphaned_public_responses_continuation_request() -> GatewayRequest {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_PUBLIC_RESPONSES_METADATA_KEY.to_string(),
+            serde_json::Value::Bool(true),
+        );
+
+        GatewayRequest {
+            model: "gpt-4.1-mini".to_string(),
+            messages: vec![crate::models::Message {
+                role: "user".to_string(),
+                content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                    KnownContentBlock::ToolResult {
+                        tool_use_id: "call_fixture_1".to_string(),
+                        content: crate::models::ToolResultContent::Text(
+                            "{\"ok\":true}".to_string(),
+                        ),
+                        is_error: false,
+                        cache_control: None,
+                    },
+                )]),
+            }],
             max_output_tokens: 32,
             reasoning: None,
             temperature: None,
@@ -4359,12 +4419,133 @@ mod tests {
         );
         assert_eq!(input[1]["type"], serde_json::json!("function_call"));
         assert_eq!(input[1]["call_id"], serde_json::json!("call_fixture_1"));
-        assert_eq!(input[1]["arguments"], serde_json::json!("{}"));
+        assert_eq!(input[1]["name"], serde_json::json!("lookup"));
+        assert_eq!(
+            input[1]["arguments"],
+            serde_json::json!("{\"query\":\"x\"}")
+        );
         assert_eq!(input[2]["type"], serde_json::json!("function_call_output"));
         assert_eq!(input[2]["call_id"], serde_json::json!("call_fixture_1"));
         assert_eq!(input[2]["output"], serde_json::json!("{\"ok\":true}"));
         assert!(serialized.get("instructions").is_none());
         assert!(serialized.get("store").is_none());
+    }
+
+    #[test]
+    fn transform_to_responses_request_rejects_orphaned_tool_results() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        let request = orphaned_public_responses_continuation_request();
+
+        let err = provider
+            .transform_to_responses_request(&request)
+            .unwrap_err();
+        match err {
+            ProviderError::ConfigError(message) => {
+                assert!(message.contains("authoritative provenance"));
+            }
+            other => panic!("expected config error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn transform_to_responses_request_preserves_mixed_continuation_order() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_PUBLIC_RESPONSES_METADATA_KEY.to_string(),
+            serde_json::Value::Bool(true),
+        );
+
+        let request = GatewayRequest {
+            model: "gpt-4.1-mini".to_string(),
+            messages: vec![
+                crate::models::Message {
+                    role: "assistant".to_string(),
+                    content: crate::models::MessageContent::Text("first".to_string()),
+                },
+                crate::models::Message {
+                    role: "assistant".to_string(),
+                    content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                        KnownContentBlock::ToolUse {
+                            id: "call_1".to_string(),
+                            name: "lookup".to_string(),
+                            input: serde_json::json!({"query":"a"}),
+                        },
+                    )]),
+                },
+                crate::models::Message {
+                    role: "user".to_string(),
+                    content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                        KnownContentBlock::ToolResult {
+                            tool_use_id: "call_1".to_string(),
+                            content: crate::models::ToolResultContent::Text(
+                                "{\"ok\":1}".to_string(),
+                            ),
+                            is_error: false,
+                            cache_control: None,
+                        },
+                    )]),
+                },
+                crate::models::Message {
+                    role: "assistant".to_string(),
+                    content: crate::models::MessageContent::Text("second".to_string()),
+                },
+                crate::models::Message {
+                    role: "assistant".to_string(),
+                    content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                        KnownContentBlock::ToolUse {
+                            id: "call_2".to_string(),
+                            name: "lookup".to_string(),
+                            input: serde_json::json!({"query":"b"}),
+                        },
+                    )]),
+                },
+                crate::models::Message {
+                    role: "user".to_string(),
+                    content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                        KnownContentBlock::ToolResult {
+                            tool_use_id: "call_2".to_string(),
+                            content: crate::models::ToolResultContent::Text(
+                                "{\"ok\":2}".to_string(),
+                            ),
+                            is_error: false,
+                            cache_control: None,
+                        },
+                    )]),
+                },
+            ],
+            max_output_tokens: 32,
+            reasoning: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: None,
+        };
+
+        let serialized =
+            serde_json::to_value(provider.transform_to_responses_request(&request).unwrap())
+                .unwrap();
+        let input = serialized["input"]
+            .as_array()
+            .expect("responses input array");
+
+        assert_eq!(input.len(), 6);
+        assert_eq!(input[0]["type"], serde_json::json!("message"));
+        assert_eq!(input[0]["content"][0]["text"], serde_json::json!("first"));
+        assert_eq!(input[1]["type"], serde_json::json!("function_call"));
+        assert_eq!(input[1]["call_id"], serde_json::json!("call_1"));
+        assert_eq!(input[2]["type"], serde_json::json!("function_call_output"));
+        assert_eq!(input[2]["call_id"], serde_json::json!("call_1"));
+        assert_eq!(input[3]["type"], serde_json::json!("message"));
+        assert_eq!(input[3]["content"][0]["text"], serde_json::json!("second"));
+        assert_eq!(input[4]["type"], serde_json::json!("function_call"));
+        assert_eq!(input[4]["call_id"], serde_json::json!("call_2"));
+        assert_eq!(input[5]["type"], serde_json::json!("function_call_output"));
+        assert_eq!(input[5]["call_id"], serde_json::json!("call_2"));
     }
 
     #[test]

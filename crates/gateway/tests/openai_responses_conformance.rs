@@ -63,6 +63,8 @@ struct NegativeFixture {
 struct ToolLoopFixture {
     request: Value,
     expected_tool_use_id: String,
+    expected_tool_name: String,
+    expected_arguments: Value,
     expected_output: String,
 }
 
@@ -346,6 +348,19 @@ async fn tool_loop_continuation_preserves_call_id_through_the_public_route() {
 
     let requests = captured_requests.lock().unwrap();
     assert_eq!(requests.len(), 1);
+    let tool_use_message = &requests[0].messages[1];
+    let tool_use_blocks = match &tool_use_message.content {
+        substrate_gateway::models::MessageContent::Blocks(blocks) => blocks,
+        other => panic!("expected tool use blocks, got {other:?}"),
+    };
+    assert!(matches!(
+        &tool_use_blocks[0],
+        substrate_gateway::models::ContentBlock::Known(
+            substrate_gateway::models::KnownContentBlock::ToolUse { id, name, input }
+        ) if id == &fixture.expected_tool_use_id
+            && name == &fixture.expected_tool_name
+            && input == &fixture.expected_arguments
+    ));
     let last_message = requests[0].messages.last().expect("captured request");
     let blocks = match &last_message.content {
         substrate_gateway::models::MessageContent::Blocks(blocks) => blocks,
@@ -392,8 +407,8 @@ async fn tool_loop_continuation_uses_upstream_responses_api_and_preserves_functi
                 {
                     "type": "function_call",
                     "call_id": fixture.expected_tool_use_id,
-                    "name": "tool_call",
-                    "arguments": "{}"
+                    "name": fixture.expected_tool_name,
+                    "arguments": fixture.expected_arguments.to_string()
                 },
                 {
                     "type": "function_call_output",
@@ -451,6 +466,42 @@ async fn tool_loop_continuation_uses_upstream_responses_api_and_preserves_functi
     assert!(call_ids.is_empty());
 
     responses_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn orphaned_function_call_output_rejects_before_any_upstream_call() {
+    let mut server = Server::new_async().await;
+    let responses_mock = server
+        .mock("POST", "/v1/responses")
+        .with_status(200)
+        .with_body(responses_api_sync_body("gpt-4.1-mini", "wrong"))
+        .create_async()
+        .await;
+
+    let harness = build_openai_provider_harness(&server.url(), "gpt-4.1-mini");
+    let request = json!({
+        "model": "gateway-default",
+        "input": [
+            {
+                "type": "function_call_output",
+                "call_id": "call_missing",
+                "output": "{\"ok\":true}"
+            }
+        ]
+    });
+    let response = harness.invoke_responses(HeaderMap::new(), request).await;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        !responses_mock.matched_async().await,
+        "gateway must reject orphaned continuations before the upstream call"
+    );
+
+    let body = response_body_text(response).await;
+    let json: Value = serde_json::from_str(&body).expect("negative response body must be JSON");
+    assert_eq!(json["error"]["type"], "error");
+    assert_eq!(json["error"]["class"], "route");
+    assert_eq!(json["error"]["message"], "Route selection failed");
 }
 
 #[tokio::test]
@@ -718,6 +769,7 @@ async fn generic_negative_responses_requests_return_redacted_gateway_envelopes()
         "codex-negative-non-function-tool.json",
         "codex-negative-unsupported-text-format.json",
         "codex-negative-invalid-call-id.json",
+        "codex-negative-invalid-function-call-arguments.json",
     ] {
         let fixture: NegativeFixture =
             read_json_fixture(FixtureNamespace::OpenAiResponses, fixture_name);
@@ -774,6 +826,7 @@ async fn codex_route_negative_requests_return_redacted_gateway_envelopes() {
         "codex-negative-required-tool-choice.json",
         "codex-negative-invalid-reasoning-summary.json",
         "codex-negative-encrypted-include-without-reasoning.json",
+        "codex-negative-invalid-function-call-arguments.json",
     ] {
         let fixture: NegativeFixture =
             read_json_fixture(FixtureNamespace::OpenAiResponses, fixture_name);

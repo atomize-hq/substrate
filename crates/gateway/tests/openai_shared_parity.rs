@@ -10,7 +10,6 @@ use serde_json::{json, Value};
 use std::env;
 use std::fs;
 use std::sync::Mutex;
-use tempfile::TempDir;
 use substrate_gateway::auth::CodexAuthState;
 use substrate_gateway::core::{
     GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage,
@@ -19,9 +18,10 @@ use substrate_gateway::models::{ContentBlock, MessageContent};
 use substrate_gateway::providers::error::ProviderError;
 use substrate_gateway::providers::{GatewayProvider, ProviderRegistry};
 use substrate_gateway::server::openai_conformance_test_support::{
-    read_json_fixture, response_text, response_text_response, ConformanceHarness,
-    FixtureNamespace, StubProvider,
+    read_json_fixture, response_text, response_text_response, ConformanceHarness, FixtureNamespace,
+    StubProvider,
 };
+use tempfile::TempDir;
 
 const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
 const SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID: &str =
