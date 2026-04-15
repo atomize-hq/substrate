@@ -140,6 +140,14 @@ The Codex auth-handoff contract lives in [`docs/contracts/chatgpt-codex-auth-han
 
 If you are validating standalone gateway-local behavior, local auth files remain part of the compatibility path, but the gateway must still resolve a concrete `account_id` before any upstream request is sent.
 
+Route-boundary validation for Codex should check all three rules explicitly:
+
+1. Explicit `account_id` wins over any JWT-derived value in both integrated and standalone modes.
+2. JWT extraction from the OAuth access token is bounded fallback only when the explicit field for the selected mode is absent.
+3. If no concrete `account_id` can be resolved, the gateway returns the shared auth error envelope before any upstream Codex request is attempted.
+
+Integrated-mode validation should also prove that canonical Substrate env handoff is sufficient on its own and does not require gateway-local reads of `~/.codex/auth.json` or other local auth files.
+
 ## Using OAuth with Providers
 
 ### 1. Configure provider

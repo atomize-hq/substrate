@@ -129,6 +129,14 @@ For integrated ChatGPT Codex deployments, the gateway does not treat local token
 
 Standalone local token material, including `~/.substrate-gateway/oauth_tokens.json`, remains a compatibility path only. It is useful for gateway-local OAuth operation, but it must not be read as proof of the integrated Substrate-owned auth boundary.
 
+For the Codex route, account resolution follows a strict order:
+
+1. In integrated mode, use `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID` first.
+2. If that field is absent, fall back to the `chatgpt_account_id` claim inside the same Substrate-delivered OAuth access token.
+3. In standalone mode, use explicit `account_id` from local Codex auth state first, then the same JWT fallback rule.
+
+The JWT claim path is bounded compatibility fallback only. It does not redefine ownership, and the gateway must fail before any upstream Codex request when neither explicit nor JWT-derived `account_id` can be resolved.
+
 ## HTTP Endpoints
 
 The gateway exposes these OAuth HTTP endpoints directly:
