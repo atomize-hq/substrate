@@ -3078,15 +3078,15 @@ impl super::GatewayProvider for OpenAIProvider {
         // - OAuth: Always use /codex/responses for all models
         // - API Key: Only use /responses for models containing "codex"
         let use_responses_api = self.should_use_responses_api(&request);
-        let codex_auth_context = if self.is_oauth() && use_responses_api {
-            Some(self.resolve_codex_auth_context()?)
-        } else {
-            None
-        };
 
         if use_responses_api {
             // Use /v1/responses endpoint for Codex models
             let responses_request = self.transform_to_responses_request(&request)?;
+            let codex_auth_context = if self.is_oauth() {
+                Some(self.resolve_codex_auth_context()?)
+            } else {
+                None
+            };
 
             // OAuth (ChatGPT Codex) uses /codex/responses, API Key uses /responses
             let endpoint = if self.is_oauth() {
@@ -3298,11 +3298,6 @@ impl super::GatewayProvider for OpenAIProvider {
 
         // Check if this is a Codex model
         let use_responses_api = self.should_use_responses_api(&request);
-        let codex_auth_context = if self.is_oauth() && use_responses_api {
-            Some(self.resolve_codex_auth_context()?)
-        } else {
-            None
-        };
 
         let (url, request_body) = if use_responses_api {
             // Use /v1/responses endpoint for Codex models
@@ -3325,6 +3320,12 @@ impl super::GatewayProvider for OpenAIProvider {
             let body =
                 serde_json::to_value(&openai_request).map_err(ProviderError::SerializationError)?;
             (self.endpoint_url("/chat/completions"), body)
+        };
+
+        let codex_auth_context = if self.is_oauth() && use_responses_api {
+            Some(self.resolve_codex_auth_context()?)
+        } else {
+            None
         };
 
         let auth_value = match codex_auth_context.as_ref() {
@@ -3652,6 +3653,7 @@ mod tests {
     use crate::auth::codex_auth_context::{CodexAccountIdSource, CodexAuthMode};
     use crate::auth::CodexAuthSource;
     use crate::models::SystemPrompt;
+    use crate::providers::GatewayProvider;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use secrecy::SecretString;
     use serde::Deserialize;
@@ -4888,6 +4890,59 @@ mod tests {
                 }
                 other => panic!("expected config error for {field}, got {other:?}"),
             }
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn send_message_validates_codex_route_before_resolving_integrated_auth() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let provider = test_oauth_provider();
+        let original_account_id = env::var_os(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+        );
+        let original_access_token = env::var_os(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+        );
+
+        env::remove_var(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+        );
+        env::remove_var(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+        );
+
+        let mut request = gateway_request_with_parallel_tool_calls(None);
+        request.metadata = Some(HashMap::from([(
+            OPENAI_RESPONSES_EXPLICIT_MAX_OUTPUT_TOKENS_METADATA_KEY.to_string(),
+            serde_json::json!(64),
+        )]));
+
+        let result = provider.send_message(request).await;
+
+        match original_account_id {
+            Some(value) => env::set_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+                value,
+            ),
+            None => env::remove_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+            ),
+        }
+        match original_access_token {
+            Some(value) => env::set_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+                value,
+            ),
+            None => env::remove_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+            ),
+        }
+
+        match result {
+            Err(ProviderError::ConfigError(message)) => {
+                assert!(message.contains("max_output_tokens is not supported on the Codex route"));
+            }
+            other => panic!("expected route validation config error, got {other:?}"),
         }
     }
 
