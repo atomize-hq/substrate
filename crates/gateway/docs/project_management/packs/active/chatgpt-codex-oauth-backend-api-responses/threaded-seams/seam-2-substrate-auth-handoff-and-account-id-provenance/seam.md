@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-2
 seam_slug: substrate-auth-handoff-and-account-id-provenance
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -12,6 +12,7 @@ basis:
     - ../../governance/seam-1-closeout.md
   required_threads:
     - THR-14
+    - THR-15
   stale_triggers:
     - the route contract changes the required header contract or the exact auth-context fields the provider path consumes
     - Substrate delivery posture changes for auth bundles, secret-channel transport, or in-world consumption
@@ -22,14 +23,13 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
-open_remediations:
-  - REM-001
+  status: passed
+open_remediations: []
 ---
 # SEAM-2 - Substrate Auth Handoff And Account-Id Provenance
 
@@ -72,7 +72,7 @@ open_remediations:
     - standalone compatibility sources differ from the current ADR assumptions about `~/.codex/auth.json` and JWT fallback
 - **Threading constraints**
   - **Upstream blockers**: none at pre-exec; `THR-14` is published by `SEAM-1` and has now been revalidated against the landed route contract and current provider/auth evidence anchors
-  - **Downstream blocked seams**: `SEAM-3`
+  - **Downstream blocked seams**: none in this pack; `THR-15` is now published and consumed by the landed `SEAM-3` closeout-backed conformance baseline
   - **Contracts produced**: `C-15`
   - **Contracts consumed**: `C-14`
 
