@@ -1,4 +1,4 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-lift-autoplan-restore-20260415-221924.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-lift-autoplan-restore-20260416-190547.md -->
 
 # substrate-lift seam 1 spec — pack compiler (reviewed against landed seam 0)
 
@@ -2230,11 +2230,236 @@ Phase-C promotion gate:
 6. every required Phase-C validation command above passes;
 7. no Phase-C implementation change touches `src/app/runtime.rs`, `src/query/**`, `src/topo/**`, `src/repo/**`, `src/graph/**`, or `src/facts/**`.
 
-### 11.4 Phase D — first consumer loop
+### 11.4 Phase D / Phase 4 — pack activation boundary
 
-- at least one non-test downstream crate module consumes compiled pack output through a crate-internal bootstrap adapter.
-- the consumer path fails loudly with typed diagnostics on missing or wrong-kind refs.
-- the consumer path does not read raw pack documents directly.
+Phase C already proved the hard compiler-side claim:
+
+- `PackCompiler::resolve_profile_pack_set` can produce a deterministic `CompiledPackSet`;
+- advanced pack refs now close transitively through query/rule/recipe relationships;
+- the remaining unresolved risk is no longer "can something consume packs at all?"
+- the remaining unresolved risk is "what is the one allowed handoff contract out of `pack`?"
+
+That means Phase D should stop being a vague "first consumer loop" and become an explicit **pack activation boundary**.
+
+The first real consumer still matters, but it is now an **exit criterion**, not the phase identity.
+
+What already exists and must be reused:
+
+| Sub-problem | Existing code | Phase D decision |
+|---|---|---|
+| standalone source loading + profile compile | `src/pack/compiler.rs::compile_profile` | reuse directly, do not duplicate parsing or validation in runtime |
+| topology and advanced-pack closure | `src/pack/compiler.rs::resolve_profile_topology`, `resolve_profile_pack_set` | reuse directly as the only closure path |
+| builtin/file/inline source model | `src/pack/source.rs`, `src/pack/builtin.rs` | keep as the only accepted Phase-D ingress surface |
+| compiled bundle representation | `src/pack/compiled/mod.rs::CompiledPackSet` | treat as the compiler-owned payload wrapped by the runtime bootstrap contract |
+| runtime seam placeholder | `src/app/runtime.rs` | replace the stub with the narrow bootstrap adapter, not a full app runtime |
+| score compatibility helper | `src/app/score/compat_v1.rs` | leave untouched, score semantics remain out of scope |
+
+Scope decision for Phase D:
+
+- define one crate-internal handoff contract in `src/app/runtime.rs`;
+- prove one non-test consumer path can obtain that contract from pack sources;
+- keep typed `PackError` and `PackDiagnostic` surfaces intact;
+- keep CLI loading, repo discovery, score evaluation, query execution, and app dispatch out of scope.
+
+#### 11.4.b Exact contract to lock now
+
+Phase D should introduce a narrow runtime bootstrap contract, not a second compiler.
+
+Recommended contract:
+
+```rust
+pub(crate) struct ProfileBootstrap {
+    pub bundle: CompiledPackSet,
+}
+
+impl ProfileBootstrap {
+    pub(crate) fn from_pack_set(bundle: CompiledPackSet) -> Self;
+}
+
+pub(crate) fn bootstrap_profile(source: PackSource) -> PackResult<ProfileBootstrap>;
+```
+
+Contract rules:
+
+- `ProfileBootstrap` lives in `src/app/runtime.rs`, not in `src/pack/**`;
+- `bootstrap_profile` is a thin orchestration entrypoint:
+  - compile one profile from `PackSource`,
+  - resolve one `CompiledPackSet`,
+  - wrap it in `ProfileBootstrap`,
+  - return `PackResult<ProfileBootstrap>` unchanged;
+- Phase D must **not** introduce a new runtime-specific stringly error enum for bootstrap failures;
+- later app seams may depend on `ProfileBootstrap`, but they may not call pack parsing/bundle closure directly unless they are extending the runtime boundary itself;
+- `ProfileBootstrap::from_pack_set` must be pure and filesystem-free, so later consumers can be tested from already-compiled bundles.
+
+This is intentionally boring.
+
+That is the point.
+
+The boundary should be obvious in 30 seconds to a new contributor.
+
+#### 11.4.c Phase D architecture
+
+Phase D execution shape:
+
+```text
+PackSource
+  |
+  v
+PackCompiler::compile_profile
+  |
+  v
+CompiledProfile
+  |
+  v
+PackCompiler::resolve_profile_pack_set
+  |
+  v
+CompiledPackSet
+  |
+  v
+app::runtime::ProfileBootstrap::from_pack_set
+  |
+  v
+ProfileBootstrap
+  |
+  +--> later app seams read compiled intent only
+  +--> no raw document re-open
+  +--> no CLI / repo / score semantics
+```
+
+Dependency boundary for Phase D:
+
+```text
+cli / repo / future app::* seams
+          |
+          v
+app::runtime
+          |
+          v
+pack
+          |
+          v
+kernel
+```
+
+Forbidden reverse edges:
+
+- `pack -> app::runtime`
+- `app::runtime -> cli`
+- `app::runtime -> repo`
+- `app::runtime -> query`
+- `app::runtime -> topo`
+- `app::runtime -> score semantics`
+
+#### 11.4.d Phase D implementation slices
+
+1. **Bootstrap contract**
+   - replace the `ReservedForFutureSeam` stub in `src/app/runtime.rs` with `ProfileBootstrap`
+   - define `ProfileBootstrap::from_pack_set`
+   - keep the type intentionally tiny in v1
+
+2. **Thin load path**
+   - add `bootstrap_profile(source: PackSource) -> PackResult<ProfileBootstrap>`
+   - delegate to `PackCompiler::compile_profile` and `resolve_profile_pack_set`
+   - do not re-parse any raw pack payload inside `app::runtime`
+
+3. **One real downstream use**
+   - prove one non-test crate module can request a `ProfileBootstrap`
+   - this may still be `app::runtime` itself in Phase D, as long as the path is exercised by integration tests and is clearly the future ingress for later app seams
+   - do not force `lift score` or CLI invocation into this horizon just to manufacture a louder demo
+
+4. **README and seam docs sweep**
+   - update `README.md` so `app::runtime` explicitly starts as the bootstrap contract, not the full app registry/dispatch system
+   - keep the later runtime/app aspirations in the roadmap, but do not imply they already exist
+
+#### 11.4.e Test review — required coverage for Phase D
+
+Phase D is the promotion gate for "no raw fallback" and "one allowed handoff contract."
+
+Required coverage diagram:
+
+```text
+PHASE D COVERAGE
+================
+[+] src/app/runtime.rs
+    |
+    ├── bootstrap_profile(PackSource::Builtin)
+    │   └── must succeed and return ProfileBootstrap over compiled bundle
+    |
+    ├── bootstrap_profile(PackSource::File)
+    │   └── must succeed for the Phase-C advanced bundle fixture
+    |
+    ├── bootstrap_profile(PackSource::Inline)
+    │   └── must succeed for a deterministic inline profile case
+    |
+    ├── bootstrap_profile -> compile_profile failure
+    │   └── malformed profile input must surface PackError unchanged
+    |
+    ├── bootstrap_profile -> resolve_profile_pack_set failure
+    │   ├── missing pack ref must surface UnknownPackReference unchanged
+    │   └── wrong-kind ref must surface RefKindMismatch unchanged
+    |
+    └── ProfileBootstrap::from_pack_set
+        ├── must accept an already-compiled bundle with no filesystem access
+        └── must still work after the original source files are deleted
+```
+
+Required tests:
+
+- `bootstrap_builtin_profile_returns_profile_bootstrap`
+- `bootstrap_file_backed_advanced_profile_returns_profile_bootstrap`
+- `bootstrap_inline_profile_returns_profile_bootstrap`
+- `bootstrap_propagates_profile_compile_errors_without_translation`
+- `bootstrap_propagates_bundle_resolution_errors_without_translation`
+- `profile_bootstrap_from_pack_set_is_pure_after_source_cleanup`
+
+Recommended test file:
+
+- add `tests/runtime_bootstrap.rs`
+
+Phase-D validation commands:
+
+- `cargo fmt --all`
+- `cargo clippy -p substrate-lift --all-targets -- -D warnings`
+- `cargo test -p substrate-lift --test pack_schema -- --nocapture`
+- `cargo test -p substrate-lift --test pack_compile -- --nocapture`
+- `cargo test -p substrate-lift --test pack_topology -- --nocapture`
+- `cargo test -p substrate-lift --test pack_bundle -- --nocapture`
+- `cargo test -p substrate-lift --test runtime_bootstrap -- --nocapture`
+
+#### 11.4.f Failure modes for Phase D
+
+| Failure mode | Severity | Likelihood | Required mitigation |
+|---|---|---|---|
+| runtime bootstrap re-parses raw pack docs after bundle resolution | High | Medium | require `ProfileBootstrap::from_pack_set` pure path + deletion-after-compile regression test |
+| runtime bootstrap translates `PackError` into opaque strings | High | Medium | return `PackResult<ProfileBootstrap>` unchanged in v1 |
+| Phase D quietly expands into CLI loading or repo discovery | Medium | High | forbid `src/cli/**` and `src/repo/**` changes in the Phase-D gate |
+| later app seams bypass runtime and call pack compiler directly | Medium | Medium | document `ProfileBootstrap` as the only allowed pack handoff contract |
+| Phase D becomes score-first and pulls semantics into runtime | High | Medium | keep `app::score/**` untouched and treat score execution as a later app seam |
+
+Phase D does not promote if any failure mode above is both untested and capable of producing silent raw-fallback behavior.
+
+#### 11.4.g NOT in scope for Phase D
+
+- CLI flags or CLI profile-loading UX
+- repo-relative profile discovery
+- score-model evaluation
+- tree-sitter query compilation
+- rule execution
+- recipe execution
+- app registry, dispatch, DI container, or app result envelopes beyond the bootstrap contract
+- public crate API changes
+
+#### 11.4.h Phase D completion summary
+
+Phase D is complete when:
+
+1. `src/app/runtime.rs` defines `ProfileBootstrap` and a thin `bootstrap_profile` entrypoint;
+2. the only compiler/bundle closure used by Phase D is `PackCompiler::compile_profile` plus `resolve_profile_pack_set`;
+3. bootstrap failures return typed pack errors without string translation;
+4. one integration suite proves builtin, file-backed, and inline bootstrap success paths;
+5. one regression test proves `ProfileBootstrap::from_pack_set` remains pure after source cleanup, so Phase D cannot hide a raw-document fallback;
+6. no Phase-D implementation change touches `src/cli/**`, `src/repo/**`, `src/query/**`, `src/topo/**`, `src/app/score/**`, or public crate exports.
 
 ### 11.5 Boundary cleanliness
 
@@ -2687,6 +2912,50 @@ Update:
 - `fixtures/README.md`
 
 So they describe structural advanced-pack compilation and bundle resolution accurately, without implying that query execution, score evaluation, recipe execution, or runtime bootstrap already exist.
+
+### 16.16 Phase D code changes
+
+Touch only:
+
+- `src/app/runtime.rs`
+- `src/app/mod.rs` only if the runtime module comments or exports need a narrow correction
+- `README.md`
+
+Optional shared touch points:
+
+- `src/pack/compiled/mod.rs` only if a tiny visibility or doc tweak is needed for `CompiledPackSet` consumption
+- `src/error.rs` only if the crate-level error story needs to acknowledge typed pack bootstrap failures without wrapping them
+
+Explicitly defer from Phase D:
+
+- `src/cli/**`
+- `src/repo/**`
+- `src/query/**`
+- `src/topo/**`
+- `src/app/score/**` beyond existing placeholders
+- any public export changes in `src/lib.rs`
+
+### 16.17 Phase D tests
+
+Add or extend:
+
+- `tests/runtime_bootstrap.rs`
+- `tests/pack_bundle.rs` only if small helper reuse keeps the bootstrap tests explicit
+
+Required assertions:
+
+- builtin, file-backed, and inline profile bootstrap happy paths
+- unchanged propagation of `PackError` variants from compile and bundle-resolution failures
+- proof that `ProfileBootstrap::from_pack_set` does not need original source files once the bundle is compiled
+
+### 16.18 Phase D README updates
+
+Update:
+
+- `README.md`
+- `fixtures/README.md` only if Phase-D tests add a new runtime-focused fixture or helper note
+
+So they describe `app::runtime` as the first pack-activation boundary, not as an already-complete app runtime or a score-first entrypoint.
 
 ---
 
@@ -3602,6 +3871,8 @@ Conflict flags:
 | 10 | Phase 3 | Build Phase C on the already-landed deferred profile refs instead of inventing a second bundle-root config surface | Mechanical | P4 DRY / P5 Explicit | `score.model` plus the `rules/queries/recipes.packs` sections already exist in the landed profile contract. Phase C should honor them directly. | Adding a parallel bundle manifest just for advanced packs |
 | 11 | Phase 3 | Make `resolve_profile_pack_set(&CompiledProfile)` the single cross-pack closure gate | Mechanical | P5 Explicit | One owned bundle-resolution boundary keeps standalone compile composable and makes kind and duplicate checks deterministic. | Spreading cross-pack validation across individual pack compilers |
 | 12 | Phase 3 | Keep generic builtins narrow in Phase C, score-model only if a builtin profile actually needs it | Taste | P3 Pragmatic | The builtin registry should prove real usage, not swell to look complete. | Adding builtin query/rule/recipe packs without a consumer |
+| 13 | Phase 3 follow-up | Reframe Phase D from `first consumer loop` to `pack activation boundary` | Taste | P5 Explicit / P3 Pragmatic | After Phase C landed, the unresolved risk is the handoff contract out of `pack`, not whether any consumer can be fabricated. | Preserving the vague consumer-loop wording |
+| 14 | Phase 3 follow-up | Keep `ProfileBootstrap` as a thin wrapper over `CompiledPackSet` with unchanged `PackError` propagation | Mechanical | P5 Explicit / P4 DRY | This creates one obvious runtime ingress without inventing a second compiler or a stringly runtime error layer. | Adding a parallel runtime config model or opaque bootstrap strings |
 
 **Phase 3 complete.** Codex: 6 concerns. Claude subagent: 5 issues. Consensus: 4/6 confirmed, 1 disagreement, 1 medium-risk partial alignment.
 
