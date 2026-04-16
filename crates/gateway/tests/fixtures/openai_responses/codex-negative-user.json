@@ -1,0 +1,11 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "user": "codex-user"
+  },
+  "expected_error_contains": "user is not supported on the Codex route",
+  "expected_status": 502,
+  "expected_error_class": "route",
+  "expected_error_message": "Route selection failed"
+}

@@ -1,0 +1,13 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "include": [
+      "reasoning.encrypted_content"
+    ]
+  },
+  "expected_error_contains": "include reasoning.encrypted_content requires reasoning.effort to be enabled",
+  "expected_status": 502,
+  "expected_error_class": "route",
+  "expected_error_message": "Route selection failed"
+}

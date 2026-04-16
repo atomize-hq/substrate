@@ -1,0 +1,18 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "tools": [
+      {
+        "type": "web_search",
+        "function": {
+          "name": "ignored"
+        }
+      }
+    ]
+  },
+  "expected_error_contains": "Only function tools are supported",
+  "expected_status": 400,
+  "expected_error_class": "route",
+  "expected_error_message": "Route selection failed"
+}

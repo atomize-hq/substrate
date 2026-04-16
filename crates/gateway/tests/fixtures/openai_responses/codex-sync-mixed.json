@@ -1,0 +1,53 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "stream": false
+  },
+  "request_model": "gateway-default",
+  "provider_response": {
+    "id": "resp_sync_mixed",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Before tool"
+      },
+      {
+        "type": "tool_use",
+        "id": "call_fixture_mixed",
+        "name": "lookup",
+        "input": {
+          "path": "Cargo.toml"
+        }
+      },
+      {
+        "type": "text",
+        "text": "After tool"
+      }
+    ],
+    "model": "primary-actual",
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 8,
+      "output_tokens": 5
+    }
+  },
+  "expected": {
+    "status": "completed",
+    "item_types": [
+      "message",
+      "function_call",
+      "message"
+    ],
+    "texts": ["Before tool", "After tool"],
+    "call_ids": ["call_fixture_mixed"],
+    "usage": {
+      "input_tokens": 8,
+      "output_tokens": 5,
+      "total_tokens": 13
+    }
+  }
+}

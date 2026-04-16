@@ -1,0 +1,16 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "previous_response_id": "resp_prev_fixture_1",
+    "input": [
+      {
+        "type": "function_call_output",
+        "call_id": "call_fixture_1",
+        "output": "{\"ok\":true}"
+      }
+    ]
+  },
+  "previous_response_id": "resp_prev_fixture_1",
+  "expected_tool_use_id": "call_fixture_1",
+  "expected_output": "{\"ok\":true}"
+}

@@ -1,5 +1,7 @@
 use super::{error::ProviderError, OpenAITransport};
-use crate::auth::{OAuthClient, OAuthConfig, TokenStore};
+use crate::auth::{
+    CodexAuthSource, OAuthClient, OAuthConfig, ResolvedCodexAuthContext, TokenStore,
+};
 use crate::core::{GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage};
 use crate::models::{
     ContentBlock, CountTokensRequest, CountTokensResponse, ImageSource, KnownContentBlock,
@@ -13,10 +15,26 @@ use regex::Regex;
 use reqwest::Client;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
+
+use crate::providers::streaming::{parse_sse_events, SseEvent, SseStream};
 
 const OPENAI_PARALLEL_TOOL_CALLS_METADATA_KEY: &str = "parallel_tool_calls";
 const OPENAI_PUBLIC_RESPONSES_METADATA_KEY: &str = "openai_public_responses";
+const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
+const OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY: &str = "openai_responses_reasoning_effort";
+const OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY: &str = "openai_responses_reasoning_summary";
+const OPENAI_RESPONSES_INCLUDE_METADATA_KEY: &str = "openai_responses_include";
+const OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY: &str = "openai_responses_text_verbosity";
+const OPENAI_RESPONSES_EXPLICIT_MAX_OUTPUT_TOKENS_METADATA_KEY: &str =
+    "openai_responses_explicit_max_output_tokens";
+const OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY: &str = "openai_responses_input_metadata";
+const OPENAI_RESPONSES_TRUNCATION_METADATA_KEY: &str = "openai_responses_truncation";
+const OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY: &str =
+    "openai_responses_previous_response_id";
+const OPENAI_RESPONSES_USER_METADATA_KEY: &str = "openai_responses_user";
+const OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY: &str = "openai_responses_stream_options";
+const OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY: &str = "openai_responses_service_tier";
 
 /// Official Codex instructions from OpenAI
 /// Source: https://github.com/openai/codex (rust-v0.58.0)
@@ -55,7 +73,7 @@ struct OpenAIRequest {
 
 /// OpenAI Responses API request format (for Codex models)
 #[derive(Debug, Serialize)]
-struct OpenAIResponsesRequest {
+pub(crate) struct OpenAIResponsesRequest {
     model: String,
     input: OpenAIResponsesInput,
     /// System instructions for the model (required for ChatGPT Codex)
@@ -71,7 +89,27 @@ struct OpenAIResponsesRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     max_output_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    metadata: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    truncation: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previous_response_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    include: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
     // Note: ChatGPT Codex does NOT support max_output_tokens, max_tokens, temperature, top_p, stop
 }
 
@@ -500,6 +538,8 @@ pub struct OpenAIProvider {
     oauth_provider: Option<String>,
     /// Token store for OAuth authentication
     token_store: Option<TokenStore>,
+    /// Explicit Codex auth source selected at bootstrap for OAuth-backed Codex routes
+    codex_auth_source: Option<CodexAuthSource>,
 }
 
 pub(crate) struct OpenAIProviderConfig {
@@ -510,6 +550,855 @@ pub(crate) struct OpenAIProviderConfig {
     pub custom_headers: Vec<(String, String)>,
     pub oauth_provider: Option<String>,
     pub token_store: Option<TokenStore>,
+    pub codex_auth_source: Option<CodexAuthSource>,
+}
+
+#[derive(Debug, Clone)]
+enum CodexSemanticItem {
+    Message {
+        text: String,
+    },
+    FunctionCall {
+        call_id: String,
+        name: String,
+        arguments: String,
+    },
+}
+
+#[derive(Debug, Default)]
+struct CodexSemanticAssemblyState {
+    response_id: Option<String>,
+    response_status: Option<String>,
+    usage: Option<GatewayUsage>,
+    open_items: HashMap<usize, CodexSemanticItem>,
+    finalized_items: BTreeMap<usize, CodexSemanticItem>,
+    saw_completed: bool,
+}
+
+#[derive(Debug, Default)]
+struct CodexSemanticStreamState {
+    response_id: Option<String>,
+    response_status: Option<String>,
+    usage: Option<GatewayUsage>,
+    message_started: bool,
+    saw_completed: bool,
+    text_block_started: HashSet<usize>,
+    tool_block_started: HashSet<usize>,
+    open_items: HashMap<usize, CodexSemanticItem>,
+}
+
+fn codex_transport_drift(message: impl Into<String>) -> ProviderError {
+    ProviderError::ApiError {
+        status: 502,
+        message: message.into(),
+    }
+}
+
+fn flatten_responses_tool_choice(tool_choice: &serde_json::Value) -> serde_json::Value {
+    let Some(obj) = tool_choice.as_object() else {
+        return tool_choice.clone();
+    };
+    if obj.get("type").and_then(|value| value.as_str()) != Some("function") {
+        return tool_choice.clone();
+    }
+    let Some(name) = obj
+        .get("function")
+        .and_then(|value| value.get("name"))
+        .and_then(|value| value.as_str())
+    else {
+        return tool_choice.clone();
+    };
+
+    serde_json::json!({
+        "type": "function",
+        "name": name
+    })
+}
+
+fn codex_semantic_output_index(json: &serde_json::Value) -> Result<usize, ProviderError> {
+    json.get("output_index")
+        .or_else(|| json.get("index"))
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
+        .ok_or_else(|| codex_transport_drift("Codex semantic event missing output index"))
+}
+
+fn codex_semantic_item_text(item: &serde_json::Value) -> String {
+    item.get("content")
+        .and_then(|value| value.as_array())
+        .into_iter()
+        .flat_map(|parts| parts.iter())
+        .filter(|part| part.get("type").and_then(|value| value.as_str()) == Some("output_text"))
+        .filter_map(|part| part.get("text").and_then(|value| value.as_str()))
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn codex_semantic_item_function_call(item: &serde_json::Value) -> Option<(String, String, String)> {
+    let call_id = item.get("call_id").and_then(|value| value.as_str())?;
+    let name = item.get("name").and_then(|value| value.as_str())?;
+    let arguments = item
+        .get("arguments")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default();
+    Some((call_id.to_string(), name.to_string(), arguments.to_string()))
+}
+
+fn codex_semantic_usage(response: &serde_json::Value) -> GatewayUsage {
+    let usage = response.get("usage");
+    let input_tokens = usage
+        .and_then(|value| value.get("input_tokens"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0) as u32;
+    let output_tokens = usage
+        .and_then(|value| value.get("output_tokens"))
+        .and_then(|value| value.as_u64())
+        .unwrap_or(0) as u32;
+
+    GatewayUsage {
+        input_tokens,
+        output_tokens,
+        cache_creation_input_tokens: None,
+        cache_read_input_tokens: None,
+    }
+}
+
+fn codex_semantic_item_from_value(
+    item: &serde_json::Value,
+) -> Result<Option<CodexSemanticItem>, ProviderError> {
+    let Some(item_type) = item.get("type").and_then(|value| value.as_str()) else {
+        return Ok(None);
+    };
+
+    match item_type {
+        "message" => Ok(Some(CodexSemanticItem::Message {
+            text: codex_semantic_item_text(item),
+        })),
+        "function_call" => {
+            let Some((call_id, name, arguments)) = codex_semantic_item_function_call(item) else {
+                return Err(codex_transport_drift(
+                    "Codex semantic function_call item missing call_id, name, or arguments",
+                ));
+            };
+
+            Ok(Some(CodexSemanticItem::FunctionCall {
+                call_id,
+                name,
+                arguments,
+            }))
+        }
+        "reasoning" => Ok(None),
+        _ => Ok(None),
+    }
+}
+
+fn codex_semantic_item_to_content_block(
+    item: &CodexSemanticItem,
+) -> Result<Option<ContentBlock>, ProviderError> {
+    match item {
+        CodexSemanticItem::Message { text } => Ok(Some(ContentBlock::text(text.clone(), None))),
+        CodexSemanticItem::FunctionCall {
+            call_id,
+            name,
+            arguments,
+        } => {
+            let input = if arguments.trim().is_empty() {
+                serde_json::json!({})
+            } else {
+                serde_json::from_str(arguments).map_err(|_| {
+                    codex_transport_drift(
+                        "Codex semantic function_call arguments were not valid JSON",
+                    )
+                })?
+            };
+
+            Ok(Some(ContentBlock::tool_use(
+                call_id.clone(),
+                name.clone(),
+                input,
+            )))
+        }
+    }
+}
+
+impl CodexSemanticAssemblyState {
+    fn upsert_open_item(
+        &mut self,
+        output_index: usize,
+        item: Option<CodexSemanticItem>,
+    ) -> Result<(), ProviderError> {
+        if let Some(item) = item {
+            self.open_items.insert(output_index, item);
+        }
+        Ok(())
+    }
+
+    fn set_response_metadata(&mut self, response: &serde_json::Value) {
+        self.response_id = response
+            .get("id")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string())
+            .or_else(|| self.response_id.take());
+        self.response_status = response
+            .get("status")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string());
+        self.usage = Some(codex_semantic_usage(response));
+    }
+
+    fn finalize_output_index(
+        &mut self,
+        output_index: usize,
+        item_value: Option<&serde_json::Value>,
+    ) -> Result<(), ProviderError> {
+        if let Some(item) = self.open_items.remove(&output_index) {
+            self.finalized_items.insert(output_index, item);
+            return Ok(());
+        }
+
+        if let Some(item_value) = item_value {
+            if let Some(item) = codex_semantic_item_from_value(item_value)? {
+                self.finalized_items.insert(output_index, item);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn finalize_pending_items(&mut self) -> Result<(), ProviderError> {
+        let pending_indexes = self.open_items.keys().copied().collect::<Vec<_>>();
+        for output_index in pending_indexes {
+            self.finalize_output_index(output_index, None)?;
+        }
+        Ok(())
+    }
+
+    fn consume_event(&mut self, event: &SseEvent) -> Result<(), ProviderError> {
+        let Some(name) = event.event.as_deref() else {
+            return Ok(());
+        };
+
+        let json: serde_json::Value = serde_json::from_str(&event.data).map_err(|_| {
+            codex_transport_drift(format!("Malformed Codex semantic SSE event: {name}"))
+        })?;
+
+        match name {
+            "response.output_item.added" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                if let Some(item) = json.get("item") {
+                    if let Some(item) = codex_semantic_item_from_value(item)? {
+                        self.upsert_open_item(output_index, Some(item))?;
+                    }
+                }
+            }
+            "response.content_part.added" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                if let Some(part) = json.get("part") {
+                    if part.get("type").and_then(|value| value.as_str()) == Some("output_text") {
+                        let text = part
+                            .get("text")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or_default();
+                        match self.open_items.get_mut(&output_index) {
+                            Some(CodexSemanticItem::Message { text: current }) => {
+                                current.push_str(text);
+                            }
+                            Some(CodexSemanticItem::FunctionCall { .. }) => {
+                                return Err(codex_transport_drift(
+                                    "Codex semantic text arrived on a function_call item",
+                                ));
+                            }
+                            None => {
+                                self.open_items.insert(
+                                    output_index,
+                                    CodexSemanticItem::Message {
+                                        text: text.to_string(),
+                                    },
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            "response.output_text.delta" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                let delta = json
+                    .get("delta")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default();
+                match self.open_items.get_mut(&output_index) {
+                    Some(CodexSemanticItem::Message { text }) => text.push_str(delta),
+                    Some(CodexSemanticItem::FunctionCall { .. }) => {
+                        return Err(codex_transport_drift(
+                            "Codex semantic output_text.delta arrived on a function_call item",
+                        ));
+                    }
+                    None => {
+                        self.open_items.insert(
+                            output_index,
+                            CodexSemanticItem::Message {
+                                text: delta.to_string(),
+                            },
+                        );
+                    }
+                }
+            }
+            "response.output_text.done" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                let text = json
+                    .get("text")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default();
+                match self.open_items.get_mut(&output_index) {
+                    Some(CodexSemanticItem::Message { text: current }) => {
+                        if !text.is_empty() {
+                            *current = text.to_string();
+                        }
+                    }
+                    Some(CodexSemanticItem::FunctionCall { .. }) => {
+                        return Err(codex_transport_drift(
+                            "Codex semantic output_text.done arrived on a function_call item",
+                        ));
+                    }
+                    None => {
+                        self.open_items.insert(
+                            output_index,
+                            CodexSemanticItem::Message {
+                                text: text.to_string(),
+                            },
+                        );
+                    }
+                }
+            }
+            "response.function_call_arguments.delta" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                let delta = json
+                    .get("delta")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default();
+                match self.open_items.get_mut(&output_index) {
+                    Some(CodexSemanticItem::FunctionCall { arguments, .. }) => {
+                        arguments.push_str(delta);
+                    }
+                    Some(CodexSemanticItem::Message { .. }) => {
+                        return Err(codex_transport_drift(
+                            "Codex semantic function_call_arguments.delta arrived on a message item",
+                        ));
+                    }
+                    None => {
+                        return Err(codex_transport_drift(
+                            "Codex semantic function_call_arguments.delta arrived before the matching function_call item",
+                        ));
+                    }
+                }
+            }
+            "response.function_call_arguments.done" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                let arguments = json
+                    .get("arguments")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default();
+                match self.open_items.get_mut(&output_index) {
+                    Some(CodexSemanticItem::FunctionCall {
+                        arguments: current, ..
+                    }) => {
+                        if !arguments.is_empty() {
+                            *current = arguments.to_string();
+                        }
+                    }
+                    Some(CodexSemanticItem::Message { .. }) => {
+                        return Err(codex_transport_drift(
+                            "Codex semantic function_call_arguments.done arrived on a message item",
+                        ));
+                    }
+                    None => {
+                        return Err(codex_transport_drift(
+                            "Codex semantic function_call_arguments.done arrived before the matching function_call item",
+                        ));
+                    }
+                }
+            }
+            "response.output_item.done" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                self.finalize_output_index(output_index, json.get("item"))?;
+            }
+            "response.completed" => {
+                if let Some(response) = json.get("response") {
+                    self.set_response_metadata(response);
+                    self.saw_completed = true;
+                    self.finalize_pending_items()?;
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn into_gateway_response(self, model: String) -> Result<GatewayResponse, ProviderError> {
+        if !self.saw_completed {
+            return Err(codex_transport_drift(
+                "Codex semantic SSE stream ended without response.completed",
+            ));
+        }
+
+        let mut content = Vec::new();
+        for item in self.finalized_items.values() {
+            if let Some(block) = codex_semantic_item_to_content_block(item)? {
+                content.push(block);
+            }
+        }
+
+        let usage = self.usage.unwrap_or(GatewayUsage {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+        });
+
+        Ok(GatewayResponse {
+            id: self
+                .response_id
+                .unwrap_or_else(|| "codex-semantic-response".to_string()),
+            r#type: "message".to_string(),
+            role: "assistant".to_string(),
+            content,
+            model,
+            stop_reason: Some(match self.response_status.as_deref() {
+                Some("incomplete") => "max_tokens".to_string(),
+                _ => "end_turn".to_string(),
+            }),
+            stop_sequence: None,
+            usage,
+        })
+    }
+}
+
+impl CodexSemanticStreamState {
+    fn ensure_message_start(&mut self, output: &mut String, model: &str) {
+        if self.message_started {
+            return;
+        }
+
+        self.message_started = true;
+        let response_id = self
+            .response_id
+            .clone()
+            .unwrap_or_else(|| format!("codex_{}", uuid::Uuid::new_v4()));
+        let message_start = serde_json::json!({
+            "type": "message_start",
+            "message": {
+                "id": response_id,
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": model,
+                "stop_reason": null,
+                "stop_sequence": null,
+                "usage": {
+                    "input_tokens": 0,
+                    "output_tokens": 0
+                }
+            }
+        });
+        OpenAIProvider::push_sse_event(output, "message_start", message_start);
+    }
+
+    fn ensure_text_block(&mut self, output: &mut String, output_index: usize) {
+        if self.text_block_started.contains(&output_index) {
+            return;
+        }
+
+        self.text_block_started.insert(output_index);
+        OpenAIProvider::push_sse_event(
+            output,
+            "content_block_start",
+            serde_json::json!({
+                "type": "content_block_start",
+                "index": output_index,
+                "content_block": {
+                    "type": "text",
+                    "text": ""
+                }
+            }),
+        );
+    }
+
+    fn ensure_tool_block(
+        &mut self,
+        output: &mut String,
+        output_index: usize,
+        call_id: &str,
+        name: &str,
+    ) {
+        if self.tool_block_started.contains(&output_index) {
+            return;
+        }
+
+        self.tool_block_started.insert(output_index);
+        OpenAIProvider::push_sse_event(
+            output,
+            "content_block_start",
+            serde_json::json!({
+                "type": "content_block_start",
+                "index": output_index,
+                "content_block": {
+                    "type": "tool_use",
+                    "id": call_id,
+                    "name": name,
+                    "input": {}
+                }
+            }),
+        );
+    }
+
+    fn close_text_block(&mut self, output: &mut String, output_index: usize) {
+        if self.text_block_started.remove(&output_index) {
+            OpenAIProvider::push_sse_event(
+                output,
+                "content_block_stop",
+                serde_json::json!({
+                    "type": "content_block_stop",
+                    "index": output_index
+                }),
+            );
+        }
+    }
+
+    fn close_tool_block(&mut self, output: &mut String, output_index: usize) {
+        if self.tool_block_started.remove(&output_index) {
+            OpenAIProvider::push_sse_event(
+                output,
+                "content_block_stop",
+                serde_json::json!({
+                    "type": "content_block_stop",
+                    "index": output_index
+                }),
+            );
+        }
+    }
+
+    fn emit_message_stop(&mut self, output: &mut String) {
+        let usage = self.usage.clone().unwrap_or(GatewayUsage {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+        });
+        let message_delta = serde_json::json!({
+            "type": "message_delta",
+            "delta": {
+                "stop_reason": match self.response_status.as_deref() {
+                    Some("incomplete") => "max_tokens",
+                    _ => "end_turn",
+                },
+                "stop_sequence": null
+            },
+            "usage": {
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens
+            }
+        });
+        OpenAIProvider::push_sse_event(output, "message_delta", message_delta);
+        OpenAIProvider::push_sse_event(
+            output,
+            "message_stop",
+            serde_json::json!({
+                "type": "message_stop"
+            }),
+        );
+    }
+
+    fn consume_event(&mut self, event: &SseEvent, model: &str) -> Result<String, ProviderError> {
+        let mut output = String::new();
+        let Some(name) = event.event.as_deref() else {
+            return Ok(output);
+        };
+
+        let json: serde_json::Value = serde_json::from_str(&event.data).map_err(|_| {
+            codex_transport_drift(format!("Malformed Codex semantic SSE event: {name}"))
+        })?;
+
+        match name {
+            "response.output_item.added" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                if let Some(item) = json.get("item") {
+                    if let Some(item) = codex_semantic_item_from_value(item)? {
+                        self.open_items.insert(output_index, item.clone());
+                        match item {
+                            CodexSemanticItem::Message { text } => {
+                                self.ensure_message_start(&mut output, model);
+                                if !text.is_empty() {
+                                    self.ensure_text_block(&mut output, output_index);
+                                    OpenAIProvider::push_sse_event(
+                                        &mut output,
+                                        "content_block_delta",
+                                        serde_json::json!({
+                                            "type": "content_block_delta",
+                                            "index": output_index,
+                                            "delta": {
+                                                "type": "text_delta",
+                                                "text": text
+                                            }
+                                        }),
+                                    );
+                                }
+                            }
+                            CodexSemanticItem::FunctionCall {
+                                call_id,
+                                name,
+                                arguments,
+                            } => {
+                                self.ensure_message_start(&mut output, model);
+                                self.ensure_tool_block(&mut output, output_index, &call_id, &name);
+                                if !arguments.is_empty() {
+                                    OpenAIProvider::push_sse_event(
+                                        &mut output,
+                                        "content_block_delta",
+                                        serde_json::json!({
+                                            "type": "content_block_delta",
+                                            "index": output_index,
+                                            "delta": {
+                                                "type": "input_json_delta",
+                                                "partial_json": arguments
+                                            }
+                                        }),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            "response.content_part.added" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                let Some(part) = json.get("part") else {
+                    return Ok(output);
+                };
+                if part.get("type").and_then(|value| value.as_str()) == Some("output_text") {
+                    let text = part
+                        .get("text")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or_default();
+                    self.ensure_message_start(&mut output, model);
+                    self.ensure_text_block(&mut output, output_index);
+                    if !text.is_empty() {
+                        OpenAIProvider::push_sse_event(
+                            &mut output,
+                            "content_block_delta",
+                            serde_json::json!({
+                                "type": "content_block_delta",
+                                "index": output_index,
+                                "delta": {
+                                    "type": "text_delta",
+                                    "text": text
+                                }
+                            }),
+                        );
+                    }
+                }
+            }
+            "response.output_text.delta" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                let delta = json
+                    .get("delta")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default();
+                self.ensure_message_start(&mut output, model);
+                self.ensure_text_block(&mut output, output_index);
+                if let Some(CodexSemanticItem::Message { text }) =
+                    self.open_items.get_mut(&output_index)
+                {
+                    text.push_str(delta);
+                } else {
+                    self.open_items.entry(output_index).or_insert_with(|| {
+                        CodexSemanticItem::Message {
+                            text: delta.to_string(),
+                        }
+                    });
+                }
+                if !delta.is_empty() {
+                    OpenAIProvider::push_sse_event(
+                        &mut output,
+                        "content_block_delta",
+                        serde_json::json!({
+                            "type": "content_block_delta",
+                            "index": output_index,
+                            "delta": {
+                                "type": "text_delta",
+                                "text": delta
+                            }
+                        }),
+                    );
+                }
+            }
+            "response.output_text.done" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                self.close_text_block(&mut output, output_index);
+                if let Some(CodexSemanticItem::Message { text }) =
+                    self.open_items.get_mut(&output_index)
+                {
+                    let done_text = json
+                        .get("text")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or_default();
+                    if !done_text.is_empty() {
+                        *text = done_text.to_string();
+                    }
+                }
+            }
+            "response.function_call_arguments.delta" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                let delta = json
+                    .get("delta")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default();
+                let Some(CodexSemanticItem::FunctionCall {
+                    call_id,
+                    name,
+                    arguments,
+                }) = self.open_items.get_mut(&output_index)
+                else {
+                    return Err(codex_transport_drift(
+                        "Codex semantic function_call_arguments.delta arrived before the matching function_call item",
+                    ));
+                };
+                let call_id = call_id.clone();
+                let name = name.clone();
+                arguments.push_str(delta);
+                self.ensure_message_start(&mut output, model);
+                self.ensure_tool_block(&mut output, output_index, &call_id, &name);
+                if !delta.is_empty() {
+                    OpenAIProvider::push_sse_event(
+                        &mut output,
+                        "content_block_delta",
+                        serde_json::json!({
+                            "type": "content_block_delta",
+                            "index": output_index,
+                            "delta": {
+                                "type": "input_json_delta",
+                                "partial_json": delta
+                            }
+                        }),
+                    );
+                }
+            }
+            "response.function_call_arguments.done" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                let Some(CodexSemanticItem::FunctionCall {
+                    call_id,
+                    name,
+                    arguments,
+                }) = self.open_items.get_mut(&output_index)
+                else {
+                    return Err(codex_transport_drift(
+                        "Codex semantic function_call_arguments.done arrived before the matching function_call item",
+                    ));
+                };
+                let done_arguments = json
+                    .get("arguments")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default();
+                if !done_arguments.is_empty() {
+                    *arguments = done_arguments.to_string();
+                }
+                let call_id = call_id.clone();
+                let name = name.clone();
+                self.ensure_message_start(&mut output, model);
+                self.ensure_tool_block(&mut output, output_index, &call_id, &name);
+            }
+            "response.output_item.done" => {
+                let output_index = codex_semantic_output_index(&json)?;
+                if let Some(item) = self.open_items.remove(&output_index) {
+                    match item {
+                        CodexSemanticItem::Message { .. } => {
+                            self.ensure_message_start(&mut output, model);
+                            self.close_text_block(&mut output, output_index);
+                        }
+                        CodexSemanticItem::FunctionCall { .. } => {
+                            self.ensure_message_start(&mut output, model);
+                            self.close_tool_block(&mut output, output_index);
+                        }
+                    }
+                } else if let Some(item_value) = json.get("item") {
+                    if let Some(item) = codex_semantic_item_from_value(item_value)? {
+                        self.ensure_message_start(&mut output, model);
+                        match item {
+                            CodexSemanticItem::Message { .. } => {
+                                self.close_text_block(&mut output, output_index);
+                            }
+                            CodexSemanticItem::FunctionCall {
+                                call_id,
+                                name,
+                                arguments,
+                            } => {
+                                self.ensure_tool_block(&mut output, output_index, &call_id, &name);
+                                if !arguments.is_empty() {
+                                    OpenAIProvider::push_sse_event(
+                                        &mut output,
+                                        "content_block_delta",
+                                        serde_json::json!({
+                                            "type": "content_block_delta",
+                                            "index": output_index,
+                                            "delta": {
+                                                "type": "input_json_delta",
+                                                "partial_json": arguments
+                                            }
+                                        }),
+                                    );
+                                }
+                                self.close_tool_block(&mut output, output_index);
+                            }
+                        }
+                    }
+                }
+            }
+            "response.completed" => {
+                let Some(response) = json.get("response") else {
+                    return Err(codex_transport_drift(
+                        "Codex semantic response.completed event missing response envelope",
+                    ));
+                };
+                self.ensure_message_start(&mut output, model);
+                self.response_id = response
+                    .get("id")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string())
+                    .or_else(|| self.response_id.take());
+                self.response_status = response
+                    .get("status")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string());
+                self.usage = Some(codex_semantic_usage(response));
+                self.saw_completed = true;
+
+                let pending_text = self.text_block_started.iter().copied().collect::<Vec<_>>();
+                for output_index in pending_text {
+                    self.close_text_block(&mut output, output_index);
+                }
+
+                let pending_tools = self.tool_block_started.iter().copied().collect::<Vec<_>>();
+                for output_index in pending_tools {
+                    self.close_tool_block(&mut output, output_index);
+                }
+
+                self.emit_message_stop(&mut output);
+            }
+            _ => {}
+        }
+
+        Ok(output)
+    }
+
+    fn finalize(&self, _model: &str) -> Result<String, ProviderError> {
+        if !self.saw_completed {
+            return Err(codex_transport_drift(
+                "Codex semantic SSE stream ended without response.completed",
+            ));
+        }
+
+        Ok(String::new())
+    }
 }
 
 impl OpenAIProvider {
@@ -612,6 +1501,10 @@ impl OpenAIProvider {
         )
     }
 
+    fn codex_responses_endpoint(&self) -> &'static str {
+        "/codex/responses"
+    }
+
     fn auth_header_parts(&self, auth_value: &str, is_oauth: bool) -> (&'static str, String) {
         if is_oauth {
             ("Authorization", format!("Bearer {}", auth_value))
@@ -620,6 +1513,26 @@ impl OpenAIProvider {
         } else {
             ("Authorization", format!("Bearer {}", auth_value))
         }
+    }
+
+    fn codex_oauth_request_builder(
+        &self,
+        req_builder: reqwest::RequestBuilder,
+        auth_context: &ResolvedCodexAuthContext,
+    ) -> Result<reqwest::RequestBuilder, ProviderError> {
+        Ok(req_builder.header("ChatGPT-Account-ID", auth_context.account_id.clone()))
+    }
+
+    fn resolve_codex_auth_context(&self) -> Result<ResolvedCodexAuthContext, ProviderError> {
+        let source = self.codex_auth_source.as_ref().ok_or_else(|| {
+            ProviderError::AuthError(
+                "Codex auth source is not configured for the selected OAuth route".to_string(),
+            )
+        })?;
+
+        source.resolve().map_err(|e| {
+            ProviderError::AuthError(format!("Failed to resolve Codex auth context: {}", e))
+        })
     }
 
     fn extract_text_content(content: Option<&OpenAIContent>) -> String {
@@ -979,12 +1892,184 @@ impl OpenAIProvider {
     }
 
     /// Transform Anthropic request to OpenAI Responses API format
-    fn transform_to_responses_request(
+    pub(crate) fn transform_to_responses_request(
         &self,
         request: &GatewayRequest,
     ) -> Result<OpenAIResponsesRequest, ProviderError> {
+        if self.is_oauth() {
+            if request.temperature.is_some() {
+                return Err(ProviderError::ConfigError(
+                    "temperature is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.top_p.is_some() {
+                return Err(ProviderError::ConfigError(
+                    "top_p is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.stop_sequences.is_some() {
+                return Err(ProviderError::ConfigError(
+                    "stop_sequences is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_EXPLICIT_MAX_OUTPUT_TOKENS_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "max_output_tokens is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "metadata is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_TRUNCATION_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "truncation is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "previous_response_id is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request
+                .metadata
+                .as_ref()
+                .is_some_and(|metadata| metadata.contains_key(OPENAI_RESPONSES_USER_METADATA_KEY))
+            {
+                return Err(ProviderError::ConfigError(
+                    "user is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "stream_options is not supported on the Codex route".to_string(),
+                ));
+            }
+            if request.metadata.as_ref().is_some_and(|metadata| {
+                metadata.contains_key(OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY)
+            }) {
+                return Err(ProviderError::ConfigError(
+                    "service_tier is not supported on the Codex route".to_string(),
+                ));
+            }
+            if let Some(tool_choice) = request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY))
+                .and_then(|value| value.as_str())
+            {
+                if tool_choice == "required" {
+                    return Err(ProviderError::ConfigError(
+                        "tool_choice=\"required\" is not supported on the Codex route".to_string(),
+                    ));
+                }
+            }
+            if let Some(reasoning_effort) = request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY))
+                .and_then(|value| value.as_str())
+            {
+                if !matches!(
+                    reasoning_effort,
+                    "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
+                ) {
+                    return Err(ProviderError::ConfigError(
+                        "Unsupported reasoning.effort on the Codex route".to_string(),
+                    ));
+                }
+            }
+            if let Some(reasoning_summary) = request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY))
+                .and_then(|value| value.as_str())
+            {
+                if !matches!(reasoning_summary, "auto" | "concise" | "detailed" | "none") {
+                    return Err(ProviderError::ConfigError(
+                        "Unsupported reasoning.summary on the Codex route".to_string(),
+                    ));
+                }
+                let reasoning_enabled = request
+                    .metadata
+                    .as_ref()
+                    .and_then(|metadata| {
+                        metadata.get(OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY)
+                    })
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|effort| effort != "none");
+                if reasoning_summary != "none" && !reasoning_enabled {
+                    return Err(ProviderError::ConfigError(
+                        "reasoning.summary requires reasoning.effort to be enabled on the Codex route"
+                            .to_string(),
+                    ));
+                }
+            }
+            if let Some(include) = request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_INCLUDE_METADATA_KEY))
+                .and_then(|value| value.as_array())
+            {
+                let include_values: Vec<&str> =
+                    include.iter().filter_map(|value| value.as_str()).collect();
+                if !(include_values.is_empty()
+                    || (include_values.len() == 1
+                        && include_values[0] == "reasoning.encrypted_content"))
+                {
+                    return Err(ProviderError::ConfigError(
+                        "Unsupported include value on the Codex route".to_string(),
+                    ));
+                }
+                let reasoning_enabled = request
+                    .metadata
+                    .as_ref()
+                    .and_then(|metadata| {
+                        metadata.get(OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY)
+                    })
+                    .and_then(|value| value.as_str())
+                    .is_some_and(|effort| effort != "none");
+                if !include_values.is_empty() && !reasoning_enabled {
+                    return Err(ProviderError::ConfigError(
+                        "include reasoning.encrypted_content requires reasoning.effort to be enabled on the Codex route"
+                            .to_string(),
+                    ));
+                }
+            }
+            if let Some(verbosity) = request
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY))
+                .and_then(|value| value.as_str())
+            {
+                if !matches!(verbosity, "low" | "medium" | "high") {
+                    return Err(ProviderError::ConfigError(
+                        "Unsupported text.verbosity on the Codex route".to_string(),
+                    ));
+                }
+            }
+        }
+
+        let allows_previous_response_continuation = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY))
+            .and_then(|value| value.as_str())
+            .is_some();
         let mut items = Vec::new();
-        let mut synthesized_call_ids = HashSet::new();
+        let mut emitted_call_ids = HashSet::new();
+        let mut authoritative_provenance = HashMap::new();
 
         if let Some(ref system) = request.system {
             let mut content = system_prompt_to_responses_parts(system);
@@ -1021,12 +2106,15 @@ impl OpenAIProvider {
                                     &msg.role,
                                     &mut content_parts,
                                 );
-                                synthesized_call_ids.insert(id.clone());
+                                let arguments = serde_json::to_string(input)
+                                    .unwrap_or_else(|_| "{}".to_string());
+                                authoritative_provenance
+                                    .insert(id.clone(), (name.clone(), arguments.clone()));
+                                emitted_call_ids.insert(id.clone());
                                 items.push(OpenAIResponsesInputItem::FunctionCall {
                                     call_id: id.clone(),
                                     name: name.clone(),
-                                    arguments: serde_json::to_string(input)
-                                        .unwrap_or_else(|_| "{}".to_string()),
+                                    arguments,
                                 });
                             }
                             ContentBlock::Known(KnownContentBlock::ToolResult {
@@ -1040,12 +2128,22 @@ impl OpenAIProvider {
                                     &msg.role,
                                     &mut content_parts,
                                 );
-                                if synthesized_call_ids.insert(tool_use_id.clone()) {
-                                    items.push(OpenAIResponsesInputItem::FunctionCall {
-                                        call_id: tool_use_id.clone(),
-                                        name: "tool_call".to_string(),
-                                        arguments: "{}".to_string(),
-                                    });
+                                if !emitted_call_ids.contains(tool_use_id) {
+                                    if let Some((name, arguments)) =
+                                        authoritative_provenance.get(tool_use_id).cloned()
+                                    {
+                                        emitted_call_ids.insert(tool_use_id.clone());
+                                        items.push(OpenAIResponsesInputItem::FunctionCall {
+                                            call_id: tool_use_id.clone(),
+                                            name,
+                                            arguments,
+                                        });
+                                    } else if !allows_previous_response_continuation {
+                                        return Err(ProviderError::ConfigError(
+                                            "Responses continuation requires authoritative provenance for each function_call_output"
+                                                .to_string(),
+                                        ));
+                                    }
                                 }
                                 let output = if *is_error {
                                     tracing::debug!(
@@ -1090,6 +2188,103 @@ impl OpenAIProvider {
                 .collect()
         });
 
+        let tool_choice = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY))
+            .map(flatten_responses_tool_choice);
+
+        let reasoning_effort = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY))
+            .and_then(|value| value.as_str());
+        let reasoning_summary = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY))
+            .and_then(|value| value.as_str());
+        let reasoning = reasoning_effort.map(|effort| {
+            let mut reasoning = serde_json::Map::new();
+            reasoning.insert(
+                "effort".to_string(),
+                serde_json::Value::String(effort.to_string()),
+            );
+            if let Some(summary) = reasoning_summary {
+                reasoning.insert(
+                    "summary".to_string(),
+                    serde_json::Value::String(summary.to_string()),
+                );
+            }
+            serde_json::Value::Object(reasoning)
+        });
+
+        let include = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_INCLUDE_METADATA_KEY))
+            .and_then(|value| value.as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|value| value.as_str().map(ToString::to_string))
+                    .collect::<Vec<_>>()
+            });
+
+        let text = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY))
+            .and_then(|value| value.as_str())
+            .map(|verbosity| {
+                serde_json::json!({
+                    "format": { "type": "text" },
+                    "verbosity": verbosity
+                })
+            })
+            .or_else(|| {
+                self.is_oauth()
+                    .then_some(serde_json::json!({ "format": { "type": "text" } }))
+            });
+
+        let input_metadata = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY))
+            .cloned();
+
+        let truncation = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TRUNCATION_METADATA_KEY))
+            .cloned();
+
+        let previous_response_id = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY))
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string);
+
+        let user = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_USER_METADATA_KEY))
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string);
+
+        let stream_options = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY))
+            .cloned();
+
+        let service_tier = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY))
+            .cloned();
+
         Ok(OpenAIResponsesRequest {
             model: request.model.clone(),
             input: OpenAIResponsesInput::Items(items),
@@ -1102,7 +2297,17 @@ impl OpenAIProvider {
                 .and_then(|metadata| metadata.get(OPENAI_PARALLEL_TOOL_CALLS_METADATA_KEY))
                 .and_then(|value| value.as_bool()),
             max_output_tokens: (!self.is_oauth()).then_some(request.max_output_tokens),
+            metadata: (!self.is_oauth()).then_some(input_metadata).flatten(),
+            truncation: (!self.is_oauth()).then_some(truncation).flatten(),
+            previous_response_id: (!self.is_oauth()).then_some(previous_response_id).flatten(),
+            user: (!self.is_oauth()).then_some(user).flatten(),
+            stream_options: (!self.is_oauth()).then_some(stream_options).flatten(),
+            service_tier: (!self.is_oauth()).then_some(service_tier).flatten(),
+            reasoning,
+            include,
+            text,
             tools,
+            tool_choice,
         })
     }
 
@@ -1122,6 +2327,7 @@ impl OpenAIProvider {
             custom_headers: config.custom_headers,
             oauth_provider: config.oauth_provider,
             token_store: config.token_store,
+            codex_auth_source: config.codex_auth_source,
         }
     }
 
@@ -1179,7 +2385,7 @@ impl OpenAIProvider {
 
     /// Check if using OAuth authentication
     fn is_oauth(&self) -> bool {
-        self.oauth_provider.is_some() && self.token_store.is_some()
+        self.oauth_provider.is_some()
     }
 
     /// Extract ChatGPT account ID from JWT access token
@@ -1868,9 +3074,6 @@ impl super::GatewayProvider for OpenAIProvider {
         &self,
         request: GatewayRequest,
     ) -> Result<GatewayResponse, ProviderError> {
-        // Get authentication token (API key or OAuth)
-        let auth_value = self.get_auth_header().await?;
-
         // Check if we should use Responses API endpoint:
         // - OAuth: Always use /codex/responses for all models
         // - API Key: Only use /responses for models containing "codex"
@@ -1879,10 +3082,15 @@ impl super::GatewayProvider for OpenAIProvider {
         if use_responses_api {
             // Use /v1/responses endpoint for Codex models
             let responses_request = self.transform_to_responses_request(&request)?;
+            let codex_auth_context = if self.is_oauth() {
+                Some(self.resolve_codex_auth_context()?)
+            } else {
+                None
+            };
 
             // OAuth (ChatGPT Codex) uses /codex/responses, API Key uses /responses
             let endpoint = if self.is_oauth() {
-                "/codex/responses"
+                self.codex_responses_endpoint()
             } else {
                 "/responses"
             };
@@ -1890,42 +3098,32 @@ impl super::GatewayProvider for OpenAIProvider {
 
             tracing::debug!("Using {} endpoint for model: {}", endpoint, request.model);
 
+            let auth_value = match codex_auth_context.as_ref() {
+                Some(auth_context) => auth_context.access_token.expose_secret().to_string(),
+                None => self.get_auth_header().await?,
+            };
             let (auth_header_name, auth_header_value) =
                 self.auth_header_parts(&auth_value, self.is_oauth());
             let mut req_builder = self
                 .client
                 .post(&url)
                 .header(auth_header_name, auth_header_value)
-                .header("Content-Type", "application/json")
-                .header("accept", "text/event-stream");
+                .header("Content-Type", "application/json");
 
             // For OAuth (ChatGPT Codex), add Codex-specific headers
-            if self.is_oauth() {
-                if let Some(account_id) = Self::extract_account_id(&auth_value) {
-                    req_builder = req_builder
-                        .header("chatgpt-account-id", account_id)
-                        .header("OpenAI-Beta", "responses=experimental")
-                        .header("originator", "codex_cli_rs")
-                        // Browser-like headers to avoid Cloudflare bot detection
-                        .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-                        .header("Origin", "https://chatgpt.com")
-                        .header("Referer", "https://chatgpt.com/")
-                        .header("sec-ch-ua", "\"Google Chrome\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"")
-                        .header("sec-ch-ua-mobile", "?0")
-                        .header("sec-ch-ua-platform", "\"macOS\"")
-                        .header("sec-fetch-dest", "empty")
-                        .header("sec-fetch-mode", "cors")
-                        .header("sec-fetch-site", "same-origin");
-                    tracing::debug!(
-                        "🔐 Using OAuth Bearer token for ChatGPT Codex on {}",
-                        self.name
-                    );
-                }
+            if let Some(auth_context) = codex_auth_context.as_ref() {
+                req_builder = self.codex_oauth_request_builder(req_builder, auth_context)?;
+                tracing::debug!(
+                    "🔐 Using OAuth Bearer token for ChatGPT Codex on {}",
+                    self.name
+                );
             }
 
-            // Add custom headers
-            for (key, value) in &self.custom_headers {
-                req_builder = req_builder.header(key, value);
+            if !(self.is_oauth() && use_responses_api) {
+                // Add custom headers for non-Codex routes only.
+                for (key, value) in &self.custom_headers {
+                    req_builder = req_builder.header(key, value);
+                }
             }
 
             let response = req_builder.json(&responses_request).send().await?;
@@ -1945,6 +3143,17 @@ impl super::GatewayProvider for OpenAIProvider {
 
             let response_text = response.text().await?;
             tracing::debug!("Responses API response body: {}", response_text);
+
+            if self.is_oauth() {
+                let events = parse_sse_events(&response_text);
+                let mut state = CodexSemanticAssemblyState::default();
+
+                for event in &events {
+                    state.consume_event(event)?;
+                }
+
+                return state.into_gateway_response(request.model.clone());
+            }
 
             // Parse SSE (Server-Sent Events) format
             // Format: event: xxx\ndata: {...}\n\n
@@ -1969,6 +3178,7 @@ impl super::GatewayProvider for OpenAIProvider {
             })
         } else {
             // Use standard /v1/chat/completions endpoint for non-Codex models
+            let auth_value = self.get_auth_header().await?;
             let openai_request = self.transform_request(&request)?;
             let url = self.endpoint_url("/chat/completions");
 
@@ -2086,9 +3296,6 @@ impl super::GatewayProvider for OpenAIProvider {
     ) -> Result<GatewayStreamResponse, ProviderError> {
         use futures::stream::TryStreamExt;
 
-        // Get authentication token (API key or OAuth)
-        let auth_value = self.get_auth_header().await?;
-
         // Check if this is a Codex model
         let use_responses_api = self.should_use_responses_api(&request);
 
@@ -2101,13 +3308,29 @@ impl super::GatewayProvider for OpenAIProvider {
             let responses_request = self.transform_to_responses_request(&request)?;
             let body = serde_json::to_value(&responses_request)
                 .map_err(ProviderError::SerializationError)?;
-            (self.endpoint_url("/responses"), body)
+            let endpoint = if self.is_oauth() {
+                self.codex_responses_endpoint()
+            } else {
+                "/responses"
+            };
+            (self.endpoint_url(endpoint), body)
         } else {
             // Use standard /v1/chat/completions endpoint
             let openai_request = self.transform_request(&request)?;
             let body =
                 serde_json::to_value(&openai_request).map_err(ProviderError::SerializationError)?;
             (self.endpoint_url("/chat/completions"), body)
+        };
+
+        let codex_auth_context = if self.is_oauth() && use_responses_api {
+            Some(self.resolve_codex_auth_context()?)
+        } else {
+            None
+        };
+
+        let auth_value = match codex_auth_context.as_ref() {
+            Some(auth_context) => auth_context.access_token.expose_secret().to_string(),
+            None => self.get_auth_header().await?,
         };
 
         // Send streaming request
@@ -2117,21 +3340,18 @@ impl super::GatewayProvider for OpenAIProvider {
             .client
             .post(&url)
             .header(auth_header_name, auth_header_value)
-            .header("Content-Type", "application/json")
-            .header("accept", "text/event-stream");
+            .header("Content-Type", "application/json");
 
         // For OAuth (ChatGPT Codex), add Codex-specific headers
         if self.is_oauth() && use_responses_api {
-            if let Some(account_id) = Self::extract_account_id(&auth_value) {
-                req_builder = req_builder
-                    .header("chatgpt-account-id", account_id)
-                    .header("OpenAI-Beta", "responses=experimental")
-                    .header("originator", "codex_cli_rs");
-                tracing::debug!(
-                    "🔐 Using OAuth Bearer token for ChatGPT Codex streaming on {}",
-                    self.name
-                );
-            }
+            let auth_context = codex_auth_context
+                .as_ref()
+                .expect("Codex auth context missing");
+            req_builder = self.codex_oauth_request_builder(req_builder, auth_context)?;
+            tracing::debug!(
+                "🔐 Using OAuth Bearer token for ChatGPT Codex streaming on {}",
+                self.name
+            );
         } else if self.is_oauth() {
             // For non-Codex OAuth (if needed in the future)
             if let Some(account_id) = Self::extract_account_id(&auth_value) {
@@ -2140,9 +3360,11 @@ impl super::GatewayProvider for OpenAIProvider {
             }
         }
 
-        // Add custom headers (for OpenRouter, NovitaAI, etc.)
-        for (key, value) in &self.custom_headers {
-            req_builder = req_builder.header(key, value);
+        if !(self.is_oauth() && use_responses_api) {
+            // Add custom headers for non-Codex routes only.
+            for (key, value) in &self.custom_headers {
+                req_builder = req_builder.header(key, value);
+            }
         }
 
         let response = req_builder.json(&request_body).send().await?;
@@ -2160,193 +3382,255 @@ impl super::GatewayProvider for OpenAIProvider {
             });
         }
 
-        // Transform OpenAI SSE format to Anthropic SSE format
-        use crate::providers::streaming::SseStream;
         use futures::stream::StreamExt;
         use std::sync::{Arc, Mutex};
 
-        let message_id = format!("msg_{}", uuid::Uuid::new_v4());
-
-        // Streaming State Management
-        // ===========================
-        // Using Arc<Mutex<StreamTransformState>> to track state across async chunks.
-        // The state tracks: message_started, text_block_open, tool_blocks, stream_ended
-        let state = Arc::new(Mutex::new(StreamTransformState::default()));
-        let state_for_cleanup = state.clone();
-
-        // Convert response bytes stream to SSE events
-        let sse_stream = SseStream::new(response.bytes_stream());
-
-        // Capture provider/model names for logging
-        let provider_name = self.name.clone();
         let model_name = request.model.clone();
+        let stream_model_name = model_name.clone();
+        let cleanup_model_name = model_name.clone();
 
-        // Transform OpenAI SSE events to Anthropic format
-        let transformed_stream = sse_stream
-            .then(move |result| {
-                let message_id = message_id.clone();
-                let state = state.clone();
-                let provider_name = provider_name.clone();
+        let finalized_stream: std::pin::Pin<
+            Box<dyn futures::stream::Stream<Item = Result<Bytes, ProviderError>> + Send>,
+        > = if self.is_oauth() {
+            let state = Arc::new(Mutex::new(CodexSemanticStreamState::default()));
+            let state_for_cleanup = state.clone();
+            let provider_name = self.name.clone();
 
-                async move {
-                    match result {
-                        Ok(sse_event) => {
-                            // If stream already ended, don't process any more chunks
-                            if state.lock().unwrap().stream_ended {
-                                tracing::debug!("⏹️ Stream already ended, skipping chunk");
-                                return Ok(Bytes::new());
-                            }
+            let transformed_stream = SseStream::new(response.bytes_stream())
+                .then(move |result| {
+                    let state = state.clone();
+                    let model_name = stream_model_name.clone();
+                    let provider_name = provider_name.clone();
 
-                            tracing::debug!("📦 Received SSE chunk: {}", sse_event.data);
-
-                            // Skip empty data
-                            if sse_event.data.trim().is_empty() {
-                                tracing::debug!("⏭️ Skipping empty SSE event");
-                                return Ok(Bytes::new());
-                            }
-
-                            if sse_event.data.trim() == "[DONE]" {
-                                tracing::debug!("✅ Stream finished with [DONE]");
-                                return Ok(Bytes::new());
-                            }
-
-                            // Check for error response first (some providers return HTTP 200 with error in body)
-                            if let Ok(error_response) =
-                                serde_json::from_str::<OpenAIStreamError>(&sse_event.data)
-                            {
-                                let status = error_response.status_code.unwrap_or(500);
-                                let error_type =
-                                    error_response.error.r#type.as_deref().unwrap_or("unknown");
-                                tracing::error!(
-                                    "❌ {} upstream error ({}): {} [type={}]",
-                                    provider_name,
-                                    status,
-                                    error_response.error.message,
-                                    error_type
-                                );
-                                return Err(ProviderError::ApiError {
-                                    status,
-                                    message: format!(
-                                        "{}: {}",
-                                        provider_name, error_response.error.message
-                                    ),
-                                });
-                            }
-
-                            // Parse OpenAI chunk
-                            match serde_json::from_str::<OpenAIStreamChunk>(&sse_event.data) {
-                                Ok(chunk) => {
-                                    tracing::debug!(
-                                        "✨ Transforming chunk with {} choices",
-                                        chunk.choices.len()
-                                    );
-
-                                    // Transform to Anthropic format (raw SSE bytes)
-                                    let sse_output = Self::transform_openai_chunk_to_anthropic_sse(
-                                        &chunk,
-                                        &message_id,
-                                        &mut state.lock().unwrap(),
-                                    );
-
-                                    if !sse_output.is_empty() {
-                                        tracing::debug!("SSE: {} bytes", sse_output.len());
-                                    } else {
-                                        tracing::debug!("SSE: empty output (will be filtered)");
+                    async move {
+                        match result {
+                            Ok(sse_event) => {
+                                let mut state = state.lock().unwrap();
+                                match state.consume_event(&sse_event, &model_name) {
+                                    Ok(output) => Ok(Bytes::from(output)),
+                                    Err(err) => {
+                                        tracing::error!(
+                                            "❌ {} failed to assemble Codex semantic SSE: {}",
+                                            provider_name,
+                                            err
+                                        );
+                                        Err(err)
                                     }
-
-                                    // Return as raw bytes (already SSE-formatted)
-                                    Ok(Bytes::from(sse_output))
-                                }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "❌ {} failed to parse chunk: {} - Data: {}",
-                                        provider_name,
-                                        e,
-                                        sse_event.data
-                                    );
-                                    Ok(Bytes::new())
                                 }
                             }
-                        }
-                        Err(e) => {
-                            tracing::error!("💥 Stream error: {}", e);
-                            Err(ProviderError::HttpError(e))
+                            Err(e) => {
+                                tracing::error!("💥 Stream error: {}", e);
+                                Err(ProviderError::HttpError(e))
+                            }
                         }
                     }
-                }
-            })
-            .try_filter(|bytes| futures::future::ready(!bytes.is_empty()));
+                })
+                .try_filter(|bytes| futures::future::ready(!bytes.is_empty()));
 
-        // Add stream finalization to ensure proper termination
-        // Some providers close streams without sending finish_reason
-        let finalized_stream = transformed_stream
-            .chain(futures::stream::once(async move {
-                let state = state_for_cleanup.lock().unwrap();
-                tracing::debug!(
-                    "🏁 Stream finalization: message_started={}, stream_ended={}",
-                    state.message_started,
-                    state.stream_ended
-                );
-
-                // Only send end events if stream didn't end properly
-                if state.message_started && !state.stream_ended {
-                    tracing::warn!("⚠️ Stream ended without finish_reason - sending end events");
-
-                    let mut output = String::new();
-
-                    // Close text block if open
-                    if state.text_block_open {
-                        let block_stop = serde_json::json!({
-                            "type": "content_block_stop",
-                            "index": state.text_block_index
-                        });
-                        output.push_str(&format!(
-                            "event: content_block_stop\ndata: {}\n\n",
-                            block_stop
-                        ));
-                    }
-
-                    // Close all tool blocks
-                    for block_index in state.tool_blocks.values() {
-                        let block_stop = serde_json::json!({
-                            "type": "content_block_stop",
-                            "index": block_index
-                        });
-                        output.push_str(&format!(
-                            "event: content_block_stop\ndata: {}\n\n",
-                            block_stop
-                        ));
-                    }
-
-                    // Send message_delta with end_turn (we don't know the real stop_reason)
-                    let message_delta = serde_json::json!({
-                        "type": "message_delta",
-                        "delta": {
-                            "stop_reason": "end_turn",
-                            "stop_sequence": null
-                        },
-                        "usage": {
-                            "output_tokens": 0
+            Box::pin(
+                transformed_stream
+                    .chain(futures::stream::once(async move {
+                        let state = state_for_cleanup.lock().unwrap();
+                        match state.finalize(&cleanup_model_name) {
+                            Ok(output) if !output.is_empty() => Ok(Bytes::from(output)),
+                            Ok(_) => Ok(Bytes::new()),
+                            Err(err) => Err(err),
                         }
-                    });
-                    output.push_str(&format!(
-                        "event: message_delta\ndata: {}\n\n",
-                        message_delta
-                    ));
+                    }))
+                    .try_filter(|bytes| futures::future::ready(!bytes.is_empty())),
+            )
+        } else {
+            // Transform OpenAI SSE format to Anthropic SSE format
+            let message_id = format!("msg_{}", uuid::Uuid::new_v4());
 
-                    // Send message_stop
-                    let message_stop = serde_json::json!({
-                        "type": "message_stop"
-                    });
-                    output.push_str(&format!("event: message_stop\ndata: {}\n\n", message_stop));
+            // Streaming State Management
+            // ===========================
+            // Using Arc<Mutex<StreamTransformState>> to track state across async chunks.
+            // The state tracks: message_started, text_block_open, tool_blocks, stream_ended
+            let state = Arc::new(Mutex::new(StreamTransformState::default()));
+            let state_for_cleanup = state.clone();
 
-                    Ok(Bytes::from(output))
-                } else {
-                    tracing::debug!("🏁 Stream properly ended, no finalization needed");
-                    Ok(Bytes::new())
-                }
-            }))
-            .try_filter(|bytes| futures::future::ready(!bytes.is_empty()));
+            // Convert response bytes stream to SSE events
+            let sse_stream = SseStream::new(response.bytes_stream());
+
+            // Capture provider/model names for logging
+            let provider_name = self.name.clone();
+
+            // Transform OpenAI SSE events to Anthropic format
+            let transformed_stream = sse_stream
+                .then(move |result| {
+                    let message_id = message_id.clone();
+                    let state = state.clone();
+                    let provider_name = provider_name.clone();
+
+                    async move {
+                        match result {
+                            Ok(sse_event) => {
+                                // If stream already ended, don't process any more chunks
+                                if state.lock().unwrap().stream_ended {
+                                    tracing::debug!("⏹️ Stream already ended, skipping chunk");
+                                    return Ok(Bytes::new());
+                                }
+
+                                tracing::debug!("📦 Received SSE chunk: {}", sse_event.data);
+
+                                // Skip empty data
+                                if sse_event.data.trim().is_empty() {
+                                    tracing::debug!("⏭️ Skipping empty SSE event");
+                                    return Ok(Bytes::new());
+                                }
+
+                                if sse_event.data.trim() == "[DONE]" {
+                                    tracing::debug!("✅ Stream finished with [DONE]");
+                                    return Ok(Bytes::new());
+                                }
+
+                                // Check for error response first (some providers return HTTP 200 with error in body)
+                                if let Ok(error_response) =
+                                    serde_json::from_str::<OpenAIStreamError>(&sse_event.data)
+                                {
+                                    let status = error_response.status_code.unwrap_or(500);
+                                    let error_type =
+                                        error_response.error.r#type.as_deref().unwrap_or("unknown");
+                                    tracing::error!(
+                                        "❌ {} upstream error ({}): {} [type={}]",
+                                        provider_name,
+                                        status,
+                                        error_response.error.message,
+                                        error_type
+                                    );
+                                    return Err(ProviderError::ApiError {
+                                        status,
+                                        message: format!(
+                                            "{}: {}",
+                                            provider_name, error_response.error.message
+                                        ),
+                                    });
+                                }
+
+                                // Parse OpenAI chunk
+                                match serde_json::from_str::<OpenAIStreamChunk>(&sse_event.data) {
+                                    Ok(chunk) => {
+                                        tracing::debug!(
+                                            "✨ Transforming chunk with {} choices",
+                                            chunk.choices.len()
+                                        );
+
+                                        // Transform to Anthropic format (raw SSE bytes)
+                                        let sse_output =
+                                            Self::transform_openai_chunk_to_anthropic_sse(
+                                                &chunk,
+                                                &message_id,
+                                                &mut state.lock().unwrap(),
+                                            );
+
+                                        if !sse_output.is_empty() {
+                                            tracing::debug!("SSE: {} bytes", sse_output.len());
+                                        } else {
+                                            tracing::debug!("SSE: empty output (will be filtered)");
+                                        }
+
+                                        // Return as raw bytes (already SSE-formatted)
+                                        Ok(Bytes::from(sse_output))
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(
+                                            "❌ {} failed to parse chunk: {} - Data: {}",
+                                            provider_name,
+                                            e,
+                                            sse_event.data
+                                        );
+                                        Ok(Bytes::new())
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                tracing::error!("💥 Stream error: {}", e);
+                                Err(ProviderError::HttpError(e))
+                            }
+                        }
+                    }
+                })
+                .try_filter(|bytes| futures::future::ready(!bytes.is_empty()));
+
+            // Add stream finalization to ensure proper termination
+            // Some providers close streams without sending finish_reason
+            Box::pin(
+                transformed_stream
+                    .chain(futures::stream::once(async move {
+                        let state = state_for_cleanup.lock().unwrap();
+                        tracing::debug!(
+                            "🏁 Stream finalization: message_started={}, stream_ended={}",
+                            state.message_started,
+                            state.stream_ended
+                        );
+
+                        // Only send end events if stream didn't end properly
+                        if state.message_started && !state.stream_ended {
+                            tracing::warn!(
+                                "⚠️ Stream ended without finish_reason - sending end events"
+                            );
+
+                            let mut output = String::new();
+
+                            // Close text block if open
+                            if state.text_block_open {
+                                let block_stop = serde_json::json!({
+                                    "type": "content_block_stop",
+                                    "index": state.text_block_index
+                                });
+                                output.push_str(&format!(
+                                    "event: content_block_stop\ndata: {}\n\n",
+                                    block_stop
+                                ));
+                            }
+
+                            // Close all tool blocks
+                            for block_index in state.tool_blocks.values() {
+                                let block_stop = serde_json::json!({
+                                    "type": "content_block_stop",
+                                    "index": block_index
+                                });
+                                output.push_str(&format!(
+                                    "event: content_block_stop\ndata: {}\n\n",
+                                    block_stop
+                                ));
+                            }
+
+                            // Send message_delta with end_turn (we don't know the real stop_reason)
+                            let message_delta = serde_json::json!({
+                                "type": "message_delta",
+                                "delta": {
+                                    "stop_reason": "end_turn",
+                                    "stop_sequence": null
+                                },
+                                "usage": {
+                                    "output_tokens": 0
+                                }
+                            });
+                            output.push_str(&format!(
+                                "event: message_delta\ndata: {}\n\n",
+                                message_delta
+                            ));
+
+                            // Send message_stop
+                            let message_stop = serde_json::json!({
+                                "type": "message_stop"
+                            });
+                            output.push_str(&format!(
+                                "event: message_stop\ndata: {}\n\n",
+                                message_stop
+                            ));
+
+                            Ok(Bytes::from(output))
+                        } else {
+                            tracing::debug!("🏁 Stream properly ended, no finalization needed");
+                            Ok(Bytes::new())
+                        }
+                    }))
+                    .try_filter(|bytes| futures::future::ready(!bytes.is_empty())),
+            )
+        };
 
         // Wrap with logging stream to capture token stats
         use crate::providers::streaming::LoggingSseStream;
@@ -2366,8 +3650,19 @@ impl super::GatewayProvider for OpenAIProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::codex_auth_context::{CodexAccountIdSource, CodexAuthMode};
+    use crate::auth::CodexAuthSource;
     use crate::models::SystemPrompt;
+    use crate::providers::GatewayProvider;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use secrecy::SecretString;
     use serde::Deserialize;
+    use std::{env, fs};
+    use tempfile::TempDir;
+    use tokio::sync::Mutex;
+
+    static ENV_LOCK: once_cell::sync::Lazy<Mutex<()>> =
+        once_cell::sync::Lazy::new(|| Mutex::new(()));
 
     #[derive(Debug, Deserialize)]
     struct FixtureFile {
@@ -2465,6 +3760,7 @@ mod tests {
             custom_headers: Vec::new(),
             oauth_provider: None,
             token_store: None,
+            codex_auth_source: None,
         }
     }
 
@@ -2485,6 +3781,133 @@ mod tests {
             custom_headers: Vec::new(),
             oauth_provider: Some("test-oauth-provider".to_string()),
             token_store: Some(token_store),
+            codex_auth_source: Some(CodexAuthSource::Integrated),
+        }
+    }
+
+    fn codex_access_token(account_id: &str) -> String {
+        let header = base64::Engine::encode(&URL_SAFE_NO_PAD, r#"{"alg":"none","typ":"JWT"}"#);
+        let payload = base64::Engine::encode(
+            &URL_SAFE_NO_PAD,
+            format!(
+                r#"{{"https://api.openai.com/auth":{{"chatgpt_account_id":"{}"}}}}"#,
+                account_id
+            ),
+        );
+        format!("{header}.{payload}.signature")
+    }
+
+    fn codex_resolved_context(
+        mode: CodexAuthMode,
+        explicit_account_id: Option<&str>,
+        access_token: SecretString,
+    ) -> Result<ResolvedCodexAuthContext, anyhow::Error> {
+        if let Some(account_id) = explicit_account_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return Ok(ResolvedCodexAuthContext {
+                mode,
+                account_id: account_id.to_string(),
+                account_id_source: CodexAccountIdSource::Explicit,
+                access_token,
+            });
+        }
+
+        let account_id = OpenAIProvider::extract_account_id(access_token.expose_secret())
+            .ok_or_else(|| anyhow::anyhow!("Codex auth context could not resolve account_id"))?;
+
+        Ok(ResolvedCodexAuthContext {
+            mode,
+            account_id,
+            account_id_source: CodexAccountIdSource::JwtFallback,
+            access_token,
+        })
+    }
+
+    #[test]
+    fn codex_auth_resolution_prefers_integrated_env_handoff_before_local_path() {
+        let _guard = ENV_LOCK.blocking_lock();
+        let temp_dir = TempDir::new().unwrap();
+        let bogus_home = temp_dir.path().join("home-as-file");
+        fs::write(&bogus_home, "not a directory").unwrap();
+
+        let original_home = env::var_os("HOME");
+        let original_account_id = env::var_os(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+        );
+        let original_access_token = env::var_os(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+        );
+
+        env::set_var("HOME", &bogus_home);
+        env::set_var(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+            "acct_env_explicit",
+        );
+        env::set_var(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+            codex_access_token("acct_env_jwt"),
+        );
+
+        let provider = test_oauth_provider();
+        let resolved = provider.resolve_codex_auth_context().unwrap();
+
+        assert_eq!(resolved.account_id, "acct_env_explicit");
+        assert_eq!(resolved.account_id_source, CodexAccountIdSource::Explicit);
+
+        match original_home {
+            Some(value) => env::set_var("HOME", value),
+            None => env::remove_var("HOME"),
+        }
+        match original_account_id {
+            Some(value) => env::set_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+                value,
+            ),
+            None => env::remove_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+            ),
+        }
+        match original_access_token {
+            Some(value) => env::set_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+                value,
+            ),
+            None => env::remove_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+            ),
+        }
+    }
+
+    fn codex_request_with_tool_choice(tool_choice: serde_json::Value) -> GatewayRequest {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY.to_string(),
+            tool_choice,
+        );
+
+        GatewayRequest {
+            model: "gpt-test".to_string(),
+            messages: vec![crate::models::Message {
+                role: "user".to_string(),
+                content: crate::models::MessageContent::Text("hello".to_string()),
+            }],
+            max_output_tokens: 32,
+            reasoning: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: Some(vec![crate::models::Tool {
+                r#type: Some("function".to_string()),
+                name: Some("lookup".to_string()),
+                description: None,
+                input_schema: None,
+            }]),
         }
     }
 
@@ -2560,6 +3983,77 @@ mod tests {
         }
     }
 
+    fn codex_request_with_route_matrix_controls() -> GatewayRequest {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_PARALLEL_TOOL_CALLS_METADATA_KEY.to_string(),
+            serde_json::Value::Bool(false),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY.to_string(),
+            serde_json::json!({
+                "type": "function",
+                "function": { "name": "lookup" }
+            }),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY.to_string(),
+            serde_json::Value::String("low".to_string()),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY.to_string(),
+            serde_json::Value::String("concise".to_string()),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_INCLUDE_METADATA_KEY.to_string(),
+            serde_json::json!(["reasoning.encrypted_content"]),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY.to_string(),
+            serde_json::Value::String("low".to_string()),
+        );
+
+        GatewayRequest {
+            model: "gpt-4.1-mini".to_string(),
+            messages: vec![crate::models::Message {
+                role: "user".to_string(),
+                content: crate::models::MessageContent::Blocks(vec![
+                    ContentBlock::text("Describe this image".to_string(), None),
+                    ContentBlock::Known(KnownContentBlock::Image {
+                        source: crate::models::ImageSource {
+                            r#type: "url".to_string(),
+                            media_type: None,
+                            data: None,
+                            url: Some("https://example.com/image.png".to_string()),
+                        },
+                    }),
+                ]),
+            }],
+            max_output_tokens: 32,
+            reasoning: Some(crate::core::ReasoningConfig {
+                r#type: "enabled".to_string(),
+                budget_tokens: None,
+            }),
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: Some(vec![crate::models::Tool {
+                r#type: Some("function".to_string()),
+                name: Some("lookup".to_string()),
+                description: Some("Look something up".to_string()),
+                input_schema: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": { "query": { "type": "string" } },
+                    "required": ["query"]
+                })),
+            }]),
+        }
+    }
+
     fn public_responses_continuation_request() -> GatewayRequest {
         let mut metadata = HashMap::new();
         metadata.insert(
@@ -2573,6 +4067,18 @@ mod tests {
                 crate::models::Message {
                     role: "assistant".to_string(),
                     content: crate::models::MessageContent::Text("Need tool output.".to_string()),
+                },
+                crate::models::Message {
+                    role: "assistant".to_string(),
+                    content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                        KnownContentBlock::ToolUse {
+                            id: "call_fixture_1".to_string(),
+                            name: "lookup".to_string(),
+                            input: serde_json::json!({
+                                "query": "x"
+                            }),
+                        },
+                    )]),
                 },
                 crate::models::Message {
                     role: "user".to_string(),
@@ -2601,6 +4107,135 @@ mod tests {
         }
     }
 
+    fn public_responses_request_with_passthrough_controls() -> GatewayRequest {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_PUBLIC_RESPONSES_METADATA_KEY.to_string(),
+            serde_json::Value::Bool(true),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY.to_string(),
+            serde_json::json!({
+                "client": "sdk",
+                "request_id": "req_123"
+            }),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_TRUNCATION_METADATA_KEY.to_string(),
+            serde_json::json!("auto"),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY.to_string(),
+            serde_json::Value::String("resp_prev_123".to_string()),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_USER_METADATA_KEY.to_string(),
+            serde_json::Value::String("user_123".to_string()),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY.to_string(),
+            serde_json::json!({
+                "include_obfuscation": true
+            }),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY.to_string(),
+            serde_json::json!("priority"),
+        );
+
+        GatewayRequest {
+            model: "gpt-4.1-mini".to_string(),
+            messages: vec![crate::models::Message {
+                role: "user".to_string(),
+                content: crate::models::MessageContent::Text("hello".to_string()),
+            }],
+            max_output_tokens: 32,
+            reasoning: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: None,
+        }
+    }
+
+    fn previous_response_id_public_responses_continuation_request() -> GatewayRequest {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_PUBLIC_RESPONSES_METADATA_KEY.to_string(),
+            serde_json::Value::Bool(true),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY.to_string(),
+            serde_json::Value::String("resp_prev_123".to_string()),
+        );
+
+        GatewayRequest {
+            model: "gpt-4.1-mini".to_string(),
+            messages: vec![crate::models::Message {
+                role: "user".to_string(),
+                content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                    KnownContentBlock::ToolResult {
+                        tool_use_id: "call_fixture_1".to_string(),
+                        content: crate::models::ToolResultContent::Text(
+                            "{\"ok\":true}".to_string(),
+                        ),
+                        is_error: false,
+                        cache_control: None,
+                    },
+                )]),
+            }],
+            max_output_tokens: 32,
+            reasoning: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: None,
+        }
+    }
+
+    fn orphaned_public_responses_continuation_request() -> GatewayRequest {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_PUBLIC_RESPONSES_METADATA_KEY.to_string(),
+            serde_json::Value::Bool(true),
+        );
+
+        GatewayRequest {
+            model: "gpt-4.1-mini".to_string(),
+            messages: vec![crate::models::Message {
+                role: "user".to_string(),
+                content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                    KnownContentBlock::ToolResult {
+                        tool_use_id: "call_fixture_1".to_string(),
+                        content: crate::models::ToolResultContent::Text(
+                            "{\"ok\":true}".to_string(),
+                        ),
+                        is_error: false,
+                        cache_control: None,
+                    },
+                )]),
+            }],
+            max_output_tokens: 32,
+            reasoning: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: None,
+        }
+    }
+
     fn test_azure_provider() -> OpenAIProvider {
         OpenAIProvider {
             name: "test-azure".to_string(),
@@ -2612,6 +4247,7 @@ mod tests {
             custom_headers: Vec::new(),
             oauth_provider: None,
             token_store: None,
+            codex_auth_source: None,
         }
     }
 
@@ -2665,11 +4301,23 @@ mod tests {
             custom_headers: Vec::new(),
             oauth_provider: Some("test-oauth-provider".to_string()),
             token_store: Some(token_store),
+            codex_auth_source: Some(CodexAuthSource::Integrated),
         };
 
         assert_eq!(
             provider.endpoint_url("/chat/completions"),
             "https://chatgpt.com/backend-api/chat/completions"
+        );
+    }
+
+    #[test]
+    fn codex_oauth_routes_share_the_codex_responses_endpoint() {
+        let provider = test_oauth_provider();
+
+        assert_eq!(provider.codex_responses_endpoint(), "/codex/responses");
+        assert_eq!(
+            provider.endpoint_url(provider.codex_responses_endpoint()),
+            "https://chatgpt.com/backend-api/codex/responses"
         );
     }
 
@@ -2699,6 +4347,7 @@ mod tests {
                 custom_headers: Vec::new(),
                 oauth_provider: None,
                 token_store: None,
+                codex_auth_source: None,
             },
         );
 
@@ -2932,12 +4581,585 @@ mod tests {
         );
         assert_eq!(input[1]["type"], serde_json::json!("function_call"));
         assert_eq!(input[1]["call_id"], serde_json::json!("call_fixture_1"));
-        assert_eq!(input[1]["arguments"], serde_json::json!("{}"));
+        assert_eq!(input[1]["name"], serde_json::json!("lookup"));
+        assert_eq!(
+            input[1]["arguments"],
+            serde_json::json!("{\"query\":\"x\"}")
+        );
         assert_eq!(input[2]["type"], serde_json::json!("function_call_output"));
         assert_eq!(input[2]["call_id"], serde_json::json!("call_fixture_1"));
         assert_eq!(input[2]["output"], serde_json::json!("{\"ok\":true}"));
         assert!(serialized.get("instructions").is_none());
         assert!(serialized.get("store").is_none());
+    }
+
+    #[test]
+    fn transform_to_responses_request_rejects_orphaned_tool_results() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        let request = orphaned_public_responses_continuation_request();
+
+        let err = provider
+            .transform_to_responses_request(&request)
+            .unwrap_err();
+        match err {
+            ProviderError::ConfigError(message) => {
+                assert!(message.contains("authoritative provenance"));
+            }
+            other => panic!("expected config error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn transform_to_responses_request_preserves_previous_response_id_output_only_continuations() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        let request = previous_response_id_public_responses_continuation_request();
+
+        let serialized =
+            serde_json::to_value(provider.transform_to_responses_request(&request).unwrap())
+                .unwrap();
+        let input = serialized["input"]
+            .as_array()
+            .expect("responses input array");
+
+        assert_eq!(
+            serialized["previous_response_id"],
+            serde_json::json!("resp_prev_123")
+        );
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["type"], serde_json::json!("function_call_output"));
+        assert_eq!(input[0]["call_id"], serde_json::json!("call_fixture_1"));
+        assert_eq!(input[0]["output"], serde_json::json!("{\"ok\":true}"));
+    }
+
+    #[test]
+    fn transform_to_responses_request_preserves_mixed_continuation_order() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_PUBLIC_RESPONSES_METADATA_KEY.to_string(),
+            serde_json::Value::Bool(true),
+        );
+
+        let request = GatewayRequest {
+            model: "gpt-4.1-mini".to_string(),
+            messages: vec![
+                crate::models::Message {
+                    role: "assistant".to_string(),
+                    content: crate::models::MessageContent::Text("first".to_string()),
+                },
+                crate::models::Message {
+                    role: "assistant".to_string(),
+                    content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                        KnownContentBlock::ToolUse {
+                            id: "call_1".to_string(),
+                            name: "lookup".to_string(),
+                            input: serde_json::json!({"query":"a"}),
+                        },
+                    )]),
+                },
+                crate::models::Message {
+                    role: "user".to_string(),
+                    content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                        KnownContentBlock::ToolResult {
+                            tool_use_id: "call_1".to_string(),
+                            content: crate::models::ToolResultContent::Text(
+                                "{\"ok\":1}".to_string(),
+                            ),
+                            is_error: false,
+                            cache_control: None,
+                        },
+                    )]),
+                },
+                crate::models::Message {
+                    role: "assistant".to_string(),
+                    content: crate::models::MessageContent::Text("second".to_string()),
+                },
+                crate::models::Message {
+                    role: "assistant".to_string(),
+                    content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                        KnownContentBlock::ToolUse {
+                            id: "call_2".to_string(),
+                            name: "lookup".to_string(),
+                            input: serde_json::json!({"query":"b"}),
+                        },
+                    )]),
+                },
+                crate::models::Message {
+                    role: "user".to_string(),
+                    content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                        KnownContentBlock::ToolResult {
+                            tool_use_id: "call_2".to_string(),
+                            content: crate::models::ToolResultContent::Text(
+                                "{\"ok\":2}".to_string(),
+                            ),
+                            is_error: false,
+                            cache_control: None,
+                        },
+                    )]),
+                },
+            ],
+            max_output_tokens: 32,
+            reasoning: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: None,
+        };
+
+        let serialized =
+            serde_json::to_value(provider.transform_to_responses_request(&request).unwrap())
+                .unwrap();
+        let input = serialized["input"]
+            .as_array()
+            .expect("responses input array");
+
+        assert_eq!(input.len(), 6);
+        assert_eq!(input[0]["type"], serde_json::json!("message"));
+        assert_eq!(input[0]["content"][0]["text"], serde_json::json!("first"));
+        assert_eq!(input[1]["type"], serde_json::json!("function_call"));
+        assert_eq!(input[1]["call_id"], serde_json::json!("call_1"));
+        assert_eq!(input[2]["type"], serde_json::json!("function_call_output"));
+        assert_eq!(input[2]["call_id"], serde_json::json!("call_1"));
+        assert_eq!(input[3]["type"], serde_json::json!("message"));
+        assert_eq!(input[3]["content"][0]["text"], serde_json::json!("second"));
+        assert_eq!(input[4]["type"], serde_json::json!("function_call"));
+        assert_eq!(input[4]["call_id"], serde_json::json!("call_2"));
+        assert_eq!(input[5]["type"], serde_json::json!("function_call_output"));
+        assert_eq!(input[5]["call_id"], serde_json::json!("call_2"));
+    }
+
+    #[test]
+    fn transform_to_responses_request_carries_explicit_tool_choice_from_metadata() {
+        let provider = test_oauth_provider();
+        let request = codex_request_with_tool_choice(serde_json::json!({
+            "type": "function",
+            "function": {
+                "name": "lookup"
+            }
+        }));
+
+        let openai_request = provider.transform_to_responses_request(&request).unwrap();
+        let serialized = serde_json::to_value(openai_request).unwrap();
+
+        assert_eq!(
+            serialized["tool_choice"],
+            serde_json::json!({
+                "type": "function",
+                "name": "lookup"
+            })
+        );
+    }
+
+    #[test]
+    fn transform_to_responses_request_preserves_codex_route_matrix_controls() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        let request = codex_request_with_route_matrix_controls();
+
+        let serialized =
+            serde_json::to_value(provider.transform_to_responses_request(&request).unwrap())
+                .unwrap();
+
+        assert_eq!(serialized["stream"], serde_json::json!(true));
+        assert_eq!(serialized["parallel_tool_calls"], serde_json::json!(false));
+        assert_eq!(
+            serialized["tool_choice"],
+            serde_json::json!({
+                "type": "function",
+                "name": "lookup"
+            })
+        );
+        assert_eq!(
+            serialized["reasoning"],
+            serde_json::json!({
+                "effort": "low",
+                "summary": "concise"
+            })
+        );
+        assert_eq!(
+            serialized["include"],
+            serde_json::json!(["reasoning.encrypted_content"])
+        );
+        assert_eq!(
+            serialized["text"],
+            serde_json::json!({
+                "format": { "type": "text" },
+                "verbosity": "low"
+            })
+        );
+        assert_eq!(
+            serialized["input"][0]["content"][0],
+            serde_json::json!({
+                "type": "input_text",
+                "text": "Describe this image"
+            })
+        );
+        assert_eq!(
+            serialized["input"][0]["content"][1],
+            serde_json::json!({
+                "type": "input_image",
+                "image_url": "https://example.com/image.png"
+            })
+        );
+        let tools = serialized["tools"].as_array().expect("tools array");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0]["function"]["name"], serde_json::json!("lookup"));
+    }
+
+    #[test]
+    fn transform_to_responses_request_preserves_public_passthrough_controls() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        let request = public_responses_request_with_passthrough_controls();
+
+        let serialized =
+            serde_json::to_value(provider.transform_to_responses_request(&request).unwrap())
+                .unwrap();
+
+        assert_eq!(
+            serialized["metadata"],
+            serde_json::json!({
+                "client": "sdk",
+                "request_id": "req_123"
+            })
+        );
+        assert_eq!(serialized["truncation"], serde_json::json!("auto"));
+        assert_eq!(
+            serialized["previous_response_id"],
+            serde_json::json!("resp_prev_123")
+        );
+        assert_eq!(serialized["user"], serde_json::json!("user_123"));
+        assert_eq!(
+            serialized["stream_options"],
+            serde_json::json!({
+                "include_obfuscation": true
+            })
+        );
+        assert_eq!(serialized["service_tier"], serde_json::json!("priority"));
+    }
+
+    #[test]
+    fn transform_to_responses_request_rejects_public_passthrough_controls_on_codex_route() {
+        let provider = test_oauth_provider();
+
+        for (field, metadata_key, metadata_value) in [
+            (
+                "metadata",
+                OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY,
+                serde_json::json!({"client": "sdk"}),
+            ),
+            (
+                "truncation",
+                OPENAI_RESPONSES_TRUNCATION_METADATA_KEY,
+                serde_json::json!("auto"),
+            ),
+            (
+                "previous_response_id",
+                OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY,
+                serde_json::json!("resp_prev_123"),
+            ),
+            (
+                "user",
+                OPENAI_RESPONSES_USER_METADATA_KEY,
+                serde_json::json!("user_123"),
+            ),
+            (
+                "stream_options",
+                OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY,
+                serde_json::json!({"include_obfuscation": true}),
+            ),
+            (
+                "service_tier",
+                OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY,
+                serde_json::json!("priority"),
+            ),
+        ] {
+            let mut request = gateway_request_with_parallel_tool_calls(None);
+            request.metadata = Some(HashMap::from([(metadata_key.to_string(), metadata_value)]));
+
+            let err = provider
+                .transform_to_responses_request(&request)
+                .unwrap_err();
+            match err {
+                ProviderError::ConfigError(message) => {
+                    assert!(
+                        message.contains(field),
+                        "expected reject message to mention {field}, got {message}"
+                    );
+                }
+                other => panic!("expected config error for {field}, got {other:?}"),
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn send_message_validates_codex_route_before_resolving_integrated_auth() {
+        let _guard = ENV_LOCK.lock().await;
+        let provider = test_oauth_provider();
+        let original_account_id = env::var_os(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+        );
+        let original_access_token = env::var_os(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+        );
+
+        env::remove_var(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+        );
+        env::remove_var(
+            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+        );
+
+        let mut request = gateway_request_with_parallel_tool_calls(None);
+        request.metadata = Some(HashMap::from([(
+            OPENAI_RESPONSES_EXPLICIT_MAX_OUTPUT_TOKENS_METADATA_KEY.to_string(),
+            serde_json::json!(64),
+        )]));
+
+        let result = provider.send_message(request).await;
+
+        match original_account_id {
+            Some(value) => env::set_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+                value,
+            ),
+            None => env::remove_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+            ),
+        }
+        match original_access_token {
+            Some(value) => env::set_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+                value,
+            ),
+            None => env::remove_var(
+                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+            ),
+        }
+
+        match result {
+            Err(ProviderError::ConfigError(message)) => {
+                assert!(message.contains("max_output_tokens is not supported on the Codex route"));
+            }
+            other => panic!("expected route validation config error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn codex_oauth_request_builder_emits_only_the_minimal_header_contract() {
+        let provider = test_oauth_provider();
+        let auth_context = codex_resolved_context(
+            CodexAuthMode::Integrated,
+            Some("acct_123"),
+            SecretString::new(codex_access_token("acct_123")),
+        )
+        .unwrap();
+        let expected_auth = format!("Bearer {}", auth_context.access_token.expose_secret());
+        let (auth_header_name, auth_header_value) =
+            provider.auth_header_parts(auth_context.access_token.expose_secret(), true);
+        let request = provider
+            .codex_oauth_request_builder(
+                provider
+                    .client
+                    .post("https://example.invalid/v1/responses")
+                    .header(auth_header_name, auth_header_value)
+                    .header("Content-Type", "application/json"),
+                &auth_context,
+            )
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let headers = request.headers();
+        assert_eq!(
+            headers
+                .get("authorization")
+                .and_then(|value| value.to_str().ok()),
+            Some(expected_auth.as_str())
+        );
+        assert_eq!(
+            headers
+                .get("chatgpt-account-id")
+                .and_then(|value| value.to_str().ok()),
+            Some("acct_123")
+        );
+        assert_eq!(
+            headers
+                .get("content-type")
+                .and_then(|value| value.to_str().ok()),
+            Some("application/json")
+        );
+        assert!(headers.get("accept").is_none());
+        assert!(headers.get("openai-beta").is_none());
+        assert!(headers.get("originator").is_none());
+        assert!(headers.get("user-agent").is_none());
+        assert!(headers.get("origin").is_none());
+        assert!(headers.get("referer").is_none());
+        assert!(headers.get("sec-ch-ua").is_none());
+        assert!(headers.get("sec-ch-ua-mobile").is_none());
+        assert!(headers.get("sec-ch-ua-platform").is_none());
+        assert!(headers.get("sec-fetch-dest").is_none());
+        assert!(headers.get("sec-fetch-mode").is_none());
+        assert!(headers.get("sec-fetch-site").is_none());
+    }
+
+    #[test]
+    fn codex_oauth_request_builder_prefers_explicit_account_id_over_jwt_fallback() {
+        let provider = test_oauth_provider();
+        let auth_context = codex_resolved_context(
+            CodexAuthMode::Integrated,
+            Some("acct_explicit"),
+            SecretString::new(codex_access_token("acct_jwt")),
+        )
+        .unwrap();
+        assert_eq!(auth_context.account_id, "acct_explicit");
+        assert_eq!(
+            auth_context.account_id_source,
+            CodexAccountIdSource::Explicit
+        );
+
+        let expected_auth = format!("Bearer {}", auth_context.access_token.expose_secret());
+        let (auth_header_name, auth_header_value) =
+            provider.auth_header_parts(auth_context.access_token.expose_secret(), true);
+        let request = provider
+            .codex_oauth_request_builder(
+                provider
+                    .client
+                    .post("https://example.invalid/v1/responses")
+                    .header(auth_header_name, auth_header_value)
+                    .header("Content-Type", "application/json"),
+                &auth_context,
+            )
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let headers = request.headers();
+        assert_eq!(
+            headers
+                .get("authorization")
+                .and_then(|value| value.to_str().ok()),
+            Some(expected_auth.as_str())
+        );
+        assert_eq!(
+            headers
+                .get("chatgpt-account-id")
+                .and_then(|value| value.to_str().ok()),
+            Some("acct_explicit")
+        );
+    }
+
+    #[test]
+    fn codex_oauth_request_builder_uses_jwt_fallback_only_when_explicit_account_id_is_absent() {
+        let provider = test_oauth_provider();
+        let auth_context = codex_resolved_context(
+            CodexAuthMode::Standalone,
+            None,
+            SecretString::new(codex_access_token("acct_jwt")),
+        )
+        .unwrap();
+        assert_eq!(auth_context.account_id, "acct_jwt");
+        assert_eq!(
+            auth_context.account_id_source,
+            CodexAccountIdSource::JwtFallback
+        );
+
+        let expected_auth = format!("Bearer {}", auth_context.access_token.expose_secret());
+        let (auth_header_name, auth_header_value) =
+            provider.auth_header_parts(auth_context.access_token.expose_secret(), true);
+        let request = provider
+            .codex_oauth_request_builder(
+                provider
+                    .client
+                    .post("https://example.invalid/v1/responses")
+                    .header(auth_header_name, auth_header_value)
+                    .header("Content-Type", "application/json"),
+                &auth_context,
+            )
+            .unwrap()
+            .build()
+            .unwrap();
+
+        let headers = request.headers();
+        assert_eq!(
+            headers
+                .get("authorization")
+                .and_then(|value| value.to_str().ok()),
+            Some(expected_auth.as_str())
+        );
+        assert_eq!(
+            headers
+                .get("chatgpt-account-id")
+                .and_then(|value| value.to_str().ok()),
+            Some("acct_jwt")
+        );
+    }
+
+    #[test]
+    fn codex_oauth_request_builder_fails_before_upstream_when_account_id_is_unresolvable() {
+        let err = codex_resolved_context(
+            CodexAuthMode::Standalone,
+            None,
+            SecretString::new("not-a-jwt".to_string()),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Codex auth context could not resolve account_id"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn transform_to_responses_request_rejects_unsupported_codex_controls() {
+        let provider = test_oauth_provider();
+        for (field, request) in [
+            (
+                "temperature",
+                GatewayRequest {
+                    temperature: Some(0.2),
+                    ..codex_request_with_tool_choice(serde_json::json!({
+                        "type": "function",
+                        "function": { "name": "lookup" }
+                    }))
+                },
+            ),
+            (
+                "top_p",
+                GatewayRequest {
+                    top_p: Some(0.5),
+                    ..codex_request_with_tool_choice(serde_json::json!({
+                        "type": "function",
+                        "function": { "name": "lookup" }
+                    }))
+                },
+            ),
+            (
+                "stop_sequences",
+                GatewayRequest {
+                    stop_sequences: Some(vec!["done".to_string()]),
+                    ..codex_request_with_tool_choice(serde_json::json!({
+                        "type": "function",
+                        "function": { "name": "lookup" }
+                    }))
+                },
+            ),
+        ] {
+            let err = provider
+                .transform_to_responses_request(&request)
+                .unwrap_err();
+            match err {
+                ProviderError::ConfigError(message) => {
+                    assert!(
+                        message.contains(field),
+                        "expected reject message to mention {field}, got {message}"
+                    );
+                }
+                other => panic!("expected config error for {field}, got {other:?}"),
+            }
+        }
     }
 
     #[test]
@@ -3646,5 +5868,149 @@ mod tests {
             stop_reason_from_sse_outputs(&outputs).as_deref(),
             Some("tool_use")
         );
+    }
+
+    #[test]
+    fn codex_semantic_sync_assembles_text_and_tools_from_event_family() {
+        let sse_text = [
+            r#"event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Visible"}]}}
+
+"#,
+            r#"event: response.content_part.added
+data: {"type":"response.content_part.added","output_index":0,"content_index":0,"part":{"type":"output_text","text":" answer"}}
+
+"#,
+            r#"event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"!"}
+
+"#,
+            r#"event: response.output_text.done
+data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"Visible answer!"}
+
+"#,
+            r#"event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Visible answer!"}]}}
+
+"#,
+            r#"event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":1,"item":{"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}"}}
+
+"#,
+            r#"event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","output_index":1,"call_id":"call_1","delta":"{\"path\":\"README.md\"}"}
+
+"#,
+            r#"event: response.function_call_arguments.done
+data: {"type":"response.function_call_arguments.done","output_index":1,"call_id":"call_1","arguments":"{\"path\":\"README.md\"}"}
+
+"#,
+            r#"event: response.output_item.done
+data: {"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{\"path\":\"README.md\"}"}}
+
+"#,
+            r#"event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_codex","status":"completed","output":[],"usage":{"input_tokens":7,"output_tokens":2}}}
+
+"#,
+        ]
+        .join("");
+
+        let events = parse_sse_events(&sse_text);
+        let mut state = CodexSemanticAssemblyState::default();
+
+        for event in &events {
+            state.consume_event(event).unwrap();
+        }
+
+        let response = state
+            .into_gateway_response("gateway-default".to_string())
+            .unwrap();
+
+        assert_eq!(response.id, "resp_codex");
+        assert_eq!(response.model, "gateway-default");
+        assert_eq!(response.stop_reason.as_deref(), Some("end_turn"));
+        assert_eq!(response.usage.input_tokens, 7);
+        assert_eq!(response.usage.output_tokens, 2);
+        assert_eq!(response.content.len(), 2);
+        assert!(matches!(
+            &response.content[0],
+            ContentBlock::Known(KnownContentBlock::Text { text, .. }) if text == "Visible answer!"
+        ));
+        assert!(matches!(
+            &response.content[1],
+            ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input, .. })
+            if id == "call_1" && name == "lookup" && input == &serde_json::json!({"path":"README.md"})
+        ));
+    }
+
+    #[test]
+    fn codex_semantic_sync_requires_terminal_completed_event() {
+        let sse_text = r#"event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":0,"content_index":0,"delta":"Visible"}
+
+"#;
+        let events = parse_sse_events(sse_text);
+        let mut state = CodexSemanticAssemblyState::default();
+
+        for event in &events {
+            state.consume_event(event).unwrap();
+        }
+
+        let error = state
+            .into_gateway_response("gateway-default".to_string())
+            .unwrap_err();
+        assert!(matches!(error, ProviderError::ApiError { status: 502, .. }));
+    }
+
+    #[test]
+    fn codex_semantic_stream_emits_anthropic_sse_and_hides_reasoning() {
+        let sse_text = [
+            r#"event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":0,"item":{"type":"reasoning","content":[{"type":"output_text","text":"secret reasoning"}]}}
+
+"#,
+            r#"event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":1,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Visible"}]}}
+
+"#,
+            r#"event: response.output_text.delta
+data: {"type":"response.output_text.delta","output_index":1,"content_index":0,"delta":" answer"}
+
+"#,
+            r#"event: response.output_item.added
+data: {"type":"response.output_item.added","output_index":2,"item":{"type":"function_call","call_id":"call_2","name":"lookup","arguments":"{}"}}
+
+"#,
+            r#"event: response.function_call_arguments.delta
+data: {"type":"response.function_call_arguments.delta","output_index":2,"call_id":"call_2","delta":"{\"path\":\"README.md\"}"}
+
+"#,
+            r#"event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_stream","status":"completed","output":[],"usage":{"input_tokens":4,"output_tokens":2}}}
+
+"#,
+        ]
+        .join("");
+
+        let events = parse_sse_events(&sse_text);
+        let mut state = CodexSemanticStreamState::default();
+        let mut output = String::new();
+
+        for event in &events {
+            output.push_str(&state.consume_event(event, "gateway-default").unwrap());
+        }
+
+        assert!(!output.contains("secret reasoning"));
+        let parsed_events = parse_sse_events(&output);
+        let names = parsed_events
+            .iter()
+            .filter_map(|event| event.event.as_deref())
+            .collect::<Vec<_>>();
+
+        assert!(names.contains(&"message_start"));
+        assert!(names.contains(&"content_block_delta"));
+        assert!(names.contains(&"message_delta"));
+        assert!(names.contains(&"message_stop"));
     }
 }

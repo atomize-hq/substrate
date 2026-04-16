@@ -134,6 +134,55 @@ curl -X POST http://localhost:13456/api/oauth/tokens/delete \
   -d '{"provider_id": "anthropic-max"}'
 ```
 
+## ChatGPT Codex Handoff Boundary
+
+The Codex auth-handoff contract lives in [`docs/contracts/chatgpt-codex-auth-handoff-contract.md`](contracts/chatgpt-codex-auth-handoff-contract.md). For integrated Substrate-managed Codex runs, local OAuth artifacts such as `~/.substrate-gateway/oauth_tokens.json` are compatibility-only and do not define the account-id trust boundary.
+
+If you are validating standalone gateway-local behavior, local auth files remain part of the compatibility path, but the gateway must still resolve a concrete `account_id` before any upstream request is sent.
+
+Route-boundary validation for Codex should check all three rules explicitly:
+
+1. Explicit `account_id` wins over any JWT-derived value in both integrated and standalone modes.
+2. JWT extraction from the OAuth access token is bounded fallback only when the explicit field for the selected mode is absent.
+3. If no concrete `account_id` can be resolved, the gateway returns the shared auth error envelope before any upstream Codex request is attempted.
+
+Integrated-mode validation should also prove that canonical Substrate handoff is sufficient on its own and does not require gateway-local reads of `~/.codex/auth.json` or other local auth files.
+
+Bootstrap validation for the Codex route should keep mode selection explicit:
+
+- `SUBSTRATE_LLM_GATEWAY_MODE=in_world` selects the integrated auth source
+- `SUBSTRATE_LLM_GATEWAY_MODE=host_only` selects the standalone local compatibility source
+- missing integrated handoff must fail as auth before upstream and must not downgrade into standalone local auth-file reads
+
+Codex maintenance work should read the auth boundary together with the route and conformance contracts:
+
+- [`chatgpt-codex-auth-handoff-contract.md`](contracts/chatgpt-codex-auth-handoff-contract.md)
+- [`chatgpt-codex-route-contract.md`](contracts/chatgpt-codex-route-contract.md)
+- [`chatgpt-codex-conformance-and-drift-guard.md`](contracts/chatgpt-codex-conformance-and-drift-guard.md)
+
+The owned evidence anchors for deterministic Codex revalidation are:
+
+- `crates/gateway/tests/openai_responses_conformance.rs`
+- `crates/gateway/tests/openai_shared_parity.rs`
+- `crates/gateway/src/server/openai_conformance_test_support.rs`
+- `crates/gateway/tests/fixtures/openai_responses/codex-*.json`
+- `crates/gateway/src/providers/openai.rs`
+
+Maintenance checks should explicitly preserve these Codex-route truths:
+
+- integrated mode resolves `ChatGPT-Account-ID` from Substrate-delivered auth context first
+- explicit `account_id` remains authoritative over JWT fallback
+- unresolved account identity fails before any upstream call
+- integrated mode does not depend on gateway-local auth-file reads
+- standalone local auth state remains compatibility-only and must not be described as the integrated trust boundary
+
+Reopen Codex-route review when any of the following drift materially:
+
+- auth-handoff ownership, field identifiers, precedence rules, or bounded fallback behavior change
+- the Codex route compatibility matrix, semantic SSE assembly, or sync-drain failure posture changes
+- fixture namespaces or evidence anchors move in a way that makes deterministic revalidation ambiguous
+- normalized-core behavior changes in a way that invalidates Codex-route fixture expectations
+
 ## Using OAuth with Providers
 
 ### 1. Configure provider
@@ -223,6 +272,7 @@ After successful authentication:
 2. ✅ Configure provider with `auth_type = "oauth"`
 3. ✅ **Phase 3 Complete**: Bearer token injection works automatically!
 4. ✅ OAuth HTTP endpoints remain available without the retired admin UI
+5. ✅ For Codex integrated mode, follow the auth-handoff contract instead of treating local token storage as authoritative
 
 ## Security Notes
 
