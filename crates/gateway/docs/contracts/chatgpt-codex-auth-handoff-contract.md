@@ -23,7 +23,9 @@ This contract does not own:
 
 - Substrate owns policy-gated host credential reads, auth-state validation, and host-to-world delivery for the ChatGPT Codex auth material required by this route.
 - The gateway bootstrap selects integrated versus standalone auth mode before provider construction; provider code consumes the selected auth source and does not become the owner of host credential reads or trust-boundary decisions.
-- Secret-bearing delivery remains an auth bundle or equivalent secret-channel payload. Any env var used in this path is limited to non-secret pointer semantics such as a bundle file descriptor or handle.
+- Current v1 integrated delivery may place secret-bearing values for the closed `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_*` field set directly in the in-world gateway/manager process environment.
+- That v1 env-based delivery remains subordinate to the Substrate-owned trust boundary above: host credential reads stay policy-gated, values are not authoritative because they are in env vars, and the gateway remains only a consumer of the delivered auth context.
+- The preferred additive direction remains a secret-channel payload plus inherited FD/pipe-style auth-bundle delivery so secret values do not live in the in-world process environment by default.
 - The canonical integrated-mode field identifiers are:
   - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID`
   - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN`
@@ -35,7 +37,7 @@ Runtime bootstrap note:
 - `in_world` selects the integrated auth source for this route.
 - `host_only` selects the bounded standalone compatibility source for gateway-local operation.
 
-The gateway must treat those fields as the authoritative integrated-mode inputs for this route.
+The gateway must treat those field names as the authoritative integrated-mode inputs for this route, whether the current runtime receives their values through v1 env delivery or a later auth-bundle carrier.
 
 ## Standalone Compatibility Mode
 

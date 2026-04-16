@@ -454,10 +454,10 @@ route-contract ownership work below is completed.
 - that auth-handoff contract freezes the integrated-mode handoff posture already selected by the
   surrounding ADRs and standards:
   - host-side Substrate credential preflight remains policy-gated and authoritative
-  - host-to-world delivery remains a secret-channel payload with an inherited one-time FD/pipe auth
-    bundle by default
-  - any env var used in this path is limited to non-secret pointer semantics such as the auth-bundle
-    FD number
+  - current v1 host-to-world delivery may place the closed `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_*`
+    auth values directly in the in-world gateway/manager process environment
+  - the preferred additive direction remains a secret-channel payload with an inherited one-time
+    FD/pipe auth bundle so secret values do not live in the in-world process environment by default
 - that auth-handoff contract freezes the closed `cli:codex` auth field set and names the canonical
   auth field identifiers carried through the handoff artifact:
   - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID`
