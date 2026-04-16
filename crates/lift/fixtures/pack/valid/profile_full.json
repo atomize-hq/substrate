@@ -14,8 +14,8 @@
     "max_scope_depth": 3
   },
   "topology": {
-    "boundary_taxonomy": "file:topology/boundary-taxonomy.toml",
-    "component_map": "file:topology/component-map.toml"
+    "boundary_taxonomy": "file:topology/boundary-taxonomy.json",
+    "component_map": "file:topology/component-map.json"
   },
   "score": {
     "model": "file:score/model.toml"

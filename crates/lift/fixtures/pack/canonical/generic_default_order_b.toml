@@ -8,6 +8,10 @@ description = "Default deterministic profile for generic repositories"
 enabled = ["score"]
 default = "score"
 
+[topology]
+component_map = "builtin:generic/components"
+boundary_taxonomy = "builtin:generic/boundaries"
+
 [analysis]
 languages = ["json", "rust", "python", "javascript", "yaml", "typescript", "toml"]
 follow_symlinks = false

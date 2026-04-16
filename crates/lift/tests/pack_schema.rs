@@ -33,6 +33,14 @@ fn embedded_pack_schemas_match_disk() {
         load_text("schemas/pack/profile.v1.json")
     );
     assert_eq!(
+        pack::PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_JSON,
+        load_text("schemas/pack/boundary_taxonomy.v1.json")
+    );
+    assert_eq!(
+        pack::PACK_COMPONENT_MAP_V1_SCHEMA_JSON,
+        load_text("schemas/pack/component_map.v1.json")
+    );
+    assert_eq!(
         pack::PACK_COMMON_V1_SCHEMA_ID,
         "https://schemas.substrate.dev/lift/pack/common.v1.json"
     );
@@ -40,10 +48,28 @@ fn embedded_pack_schemas_match_disk() {
         pack::PACK_PROFILE_V1_SCHEMA_ID,
         "https://schemas.substrate.dev/lift/pack/profile.v1.json"
     );
+    assert_eq!(
+        pack::PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_ID,
+        "https://schemas.substrate.dev/lift/pack/boundary_taxonomy.v1.json"
+    );
+    assert_eq!(
+        pack::PACK_COMPONENT_MAP_V1_SCHEMA_ID,
+        "https://schemas.substrate.dev/lift/pack/component_map.v1.json"
+    );
     assert_eq!(pack::PACK_COMMON_V1_SCHEMA_FILE, "common.v1.json");
     assert_eq!(pack::PACK_PROFILE_V1_SCHEMA_FILE, "profile.v1.json");
+    assert_eq!(
+        pack::PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_FILE,
+        "boundary_taxonomy.v1.json"
+    );
+    assert_eq!(
+        pack::PACK_COMPONENT_MAP_V1_SCHEMA_FILE,
+        "component_map.v1.json"
+    );
     assert_eq!(pack::PACK_COMMON_V1_SCHEMA_VERSION, 1);
     assert_eq!(pack::PACK_PROFILE_V1_SCHEMA_VERSION, 1);
+    assert_eq!(pack::PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_VERSION, 1);
+    assert_eq!(pack::PACK_COMPONENT_MAP_V1_SCHEMA_VERSION, 1);
 }
 
 #[test]
@@ -52,13 +78,29 @@ fn valid_pack_profile_schema_fixtures_validate_and_deserialize() {
         "fixtures/pack/valid/profile_minimal.json",
         "fixtures/pack/valid/profile_full.json",
     ] {
-        let instance = load_json(fixture);
-        assert_schema_valid(&instance);
+        let instance = assert_schema_valid("profile", fixture);
 
         let raw: pack::raw::RawProfile =
             serde_json::from_value(instance).expect("fixture should deserialize");
         assert_eq!(raw.kind, pack::raw::PackKind::Profile);
     }
+}
+
+#[test]
+fn valid_topology_schema_fixtures_validate_and_deserialize() {
+    let boundary: pack::raw::RawBoundaryTaxonomy = serde_json::from_value(assert_schema_valid(
+        "boundary_taxonomy",
+        "fixtures/pack/valid/generic_boundaries.json",
+    ))
+    .expect("boundary taxonomy should deserialize");
+    assert_eq!(boundary.kind, pack::raw::PackKind::BoundaryTaxonomy);
+
+    let components: pack::raw::RawComponentMap = serde_json::from_value(assert_schema_valid(
+        "component_map",
+        "fixtures/pack/valid/generic_components.json",
+    ))
+    .expect("component map should deserialize");
+    assert_eq!(components.kind, pack::raw::PackKind::ComponentMap);
 }
 
 #[test]
@@ -72,27 +114,47 @@ fn invalid_pack_profile_schema_fixtures_fail_validation() {
         "fixtures/pack/invalid/profile_unknown_field.json",
     ] {
         let instance = load_json(fixture);
-        assert_schema_invalid(&instance);
+        assert_schema_invalid("profile", &instance);
     }
 }
 
-fn assert_schema_valid(instance: &Value) {
-    let validator = profile_validator();
-    if let Err(error) = validator.validate(instance) {
+#[test]
+fn invalid_topology_schema_fixtures_fail_validation() {
+    assert_schema_invalid(
+        "boundary_taxonomy",
+        &load_json("fixtures/pack/invalid/boundary_taxonomy_schema_violation.json"),
+    );
+    assert_schema_invalid(
+        "component_map",
+        &load_json("fixtures/pack/invalid/component_map_schema_violation.json"),
+    );
+}
+
+fn assert_schema_valid(kind: &str, fixture: &str) -> Value {
+    let instance = load_json(fixture);
+    let validator = schema_validator(kind);
+    if let Err(error) = validator.validate(&instance) {
         panic!("expected fixture to validate: {error}");
     }
+    instance
 }
 
-fn assert_schema_invalid(instance: &Value) {
-    let validator = profile_validator();
+fn assert_schema_invalid(kind: &str, instance: &Value) {
+    let validator = schema_validator(kind);
     assert!(
         validator.validate(instance).is_err(),
         "expected fixture to fail schema validation"
     );
 }
 
-fn profile_validator() -> Validator {
-    let profile_schema = load_json("schemas/pack/profile.v1.json");
+fn schema_validator(kind: &str) -> Validator {
+    let schema_path = match kind {
+        "profile" => "schemas/pack/profile.v1.json",
+        "boundary_taxonomy" => "schemas/pack/boundary_taxonomy.v1.json",
+        "component_map" => "schemas/pack/component_map.v1.json",
+        other => panic!("unsupported schema kind {other}"),
+    };
+    let root_schema = load_json(schema_path);
     let common_schema = load_json("schemas/pack/common.v1.json");
     let retriever = InMemoryRetriever {
         schemas: HashMap::from([
@@ -106,8 +168,8 @@ fn profile_validator() -> Validator {
 
     jsonschema::draft202012::options()
         .with_retriever(retriever)
-        .build(&profile_schema)
-        .expect("profile schema should compile")
+        .build(&root_schema)
+        .expect("schema should compile")
 }
 
 #[derive(Clone, Debug)]

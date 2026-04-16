@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+extern crate self as substrate_lift;
+
 #[cfg(test)]
 use assert_cmd as _;
 #[cfg(test)]

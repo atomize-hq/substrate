@@ -59,6 +59,69 @@ fn builtin_file_and_inline_profiles_compile_on_the_happy_path() {
 }
 
 #[test]
+fn standalone_topology_packs_compile_on_the_happy_path() {
+    let compiler = pack::PackCompiler::new();
+
+    let builtin_boundary = compiler
+        .compile_boundary_taxonomy(
+            pack::builtin::boundary_taxonomy_source("generic/boundaries").expect("builtin"),
+        )
+        .expect("builtin boundary taxonomy should compile");
+    let file_boundary = compiler
+        .compile_boundary_taxonomy(pack::PackSource::File {
+            path: crate_root().join("fixtures/pack/valid/topology/boundary-taxonomy.json"),
+            format_hint: None,
+        })
+        .expect("file boundary taxonomy should compile");
+    let inline_boundary = compiler
+        .compile_boundary_taxonomy(pack::PackSource::Inline {
+            logical_name: "inline-boundary".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: load_bytes("fixtures/pack/valid/generic_boundaries.json"),
+        })
+        .expect("inline boundary taxonomy should compile");
+
+    assert_eq!(builtin_boundary.header.id.as_str(), "generic/boundaries");
+    assert_eq!(file_boundary.header.id.as_str(), "acme/boundaries");
+    assert_eq!(inline_boundary.header.id.as_str(), "generic/boundaries");
+    assert_eq!(file_boundary.boundaries.len(), 2);
+    assert!(file_boundary
+        .boundaries
+        .values()
+        .next()
+        .expect("boundary")
+        .include_matcher
+        .is_match(Path::new("services/runtime/main.rs")));
+
+    let builtin_component = compiler
+        .compile_component_map(
+            pack::builtin::component_map_source("generic/components").expect("builtin"),
+        )
+        .expect("builtin component map should compile");
+    let file_component = compiler
+        .compile_component_map(pack::PackSource::File {
+            path: crate_root().join("fixtures/pack/valid/topology/component-map.json"),
+            format_hint: None,
+        })
+        .expect("file component map should compile");
+    let inline_component = compiler
+        .compile_component_map(pack::PackSource::Inline {
+            logical_name: "inline-component".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: load_bytes("fixtures/pack/valid/generic_components.json"),
+        })
+        .expect("inline component map should compile");
+
+    assert_eq!(builtin_component.header.id.as_str(), "generic/components");
+    assert_eq!(file_component.header.id.as_str(), "acme/components");
+    assert_eq!(inline_component.header.id.as_str(), "generic/components");
+    assert!(file_component
+        .components
+        .values()
+        .any(|component| component.tags.contains("public")));
+}
+
+#[test]
 fn unsupported_format_and_missing_file_hard_fail() {
     let compiler = pack::PackCompiler::new();
 
@@ -81,6 +144,185 @@ fn unsupported_format_and_missing_file_hard_fail() {
         })
         .expect_err("missing file should fail");
     assert!(matches!(missing, pack::PackError::Io { .. }));
+}
+
+#[test]
+fn malformed_topology_json_reports_parse_failure() {
+    let compiler = pack::PackCompiler::new();
+
+    let boundary = compiler
+        .compile_boundary_taxonomy(pack::PackSource::Inline {
+            logical_name: "bad-boundary-json".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: br#"{"kind":"boundary_taxonomy""#.to_vec(),
+        })
+        .expect_err("malformed boundary taxonomy should fail");
+    assert!(matches!(boundary, pack::PackError::ParseFailure { .. }));
+
+    let component = compiler
+        .compile_component_map(pack::PackSource::Inline {
+            logical_name: "bad-component-json".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: br#"{"kind":"component_map""#.to_vec(),
+        })
+        .expect_err("malformed component map should fail");
+    assert!(matches!(component, pack::PackError::ParseFailure { .. }));
+}
+
+#[test]
+fn topology_schema_violations_are_sorted_deterministically() {
+    let compiler = pack::PackCompiler::new();
+
+    let boundary = compiler
+        .compile_boundary_taxonomy(pack::PackSource::Inline {
+            logical_name: "bad-boundary-schema".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: load_bytes("fixtures/pack/invalid/boundary_taxonomy_schema_violation.json"),
+        })
+        .expect_err("invalid boundary schema should fail");
+    assert_schema_violation_codes(
+        boundary,
+        "inline:bad-boundary-schema",
+        pack::PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_ID,
+        &[
+            "/boundaries/0/id",
+            "/boundaries/0/include/0",
+            "/boundaries/0/label",
+            "/boundaries/0/label",
+            "/counting/mode",
+            "/name",
+            "/version",
+        ],
+    );
+
+    let component = compiler
+        .compile_component_map(pack::PackSource::Inline {
+            logical_name: "bad-component-schema".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: load_bytes("fixtures/pack/invalid/component_map_schema_violation.json"),
+        })
+        .expect_err("invalid component schema should fail");
+    assert_schema_violation_codes(
+        component,
+        "inline:bad-component-schema",
+        pack::PACK_COMPONENT_MAP_V1_SCHEMA_ID,
+        &[
+            "/components/0/id",
+            "/components/0/include/0",
+            "/components/0/label",
+            "/components/0/label",
+            "/components/0/tags/0",
+            "/counting/mode",
+            "/name",
+            "/version",
+        ],
+    );
+}
+
+#[test]
+fn duplicate_topology_entry_ids_fail_with_typed_errors() {
+    let compiler = pack::PackCompiler::new();
+
+    let boundary = compiler
+        .compile_boundary_taxonomy(pack::PackSource::Inline {
+            logical_name: "duplicate-boundary".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: br#"{
+  "kind": "boundary_taxonomy",
+  "version": 1,
+  "id": "acme/boundaries",
+  "name": "Dup boundaries",
+  "counting": { "mode": "distinct_minus_one" },
+  "boundaries": [
+    { "id": "runtime", "label": "Runtime", "include": ["services/runtime/**"] },
+    { "id": "runtime", "label": "Runtime two", "include": ["services/runtime/v2/**"] }
+  ]
+}"#
+            .to_vec(),
+        })
+        .expect_err("duplicate boundary ids should fail");
+    assert_duplicate_entry(
+        boundary,
+        pack::PackKind::BoundaryTaxonomy,
+        "acme/boundaries",
+        "boundary",
+        "runtime",
+    );
+
+    let component = compiler
+        .compile_component_map(pack::PackSource::Inline {
+            logical_name: "duplicate-component".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: br#"{
+  "kind": "component_map",
+  "version": 1,
+  "id": "acme/components",
+  "name": "Dup components",
+  "counting": { "mode": "distinct" },
+  "components": [
+    { "id": "api", "label": "API", "include": ["api/**"] },
+    { "id": "api", "label": "API two", "include": ["api/v2/**"] }
+  ]
+}"#
+            .to_vec(),
+        })
+        .expect_err("duplicate component ids should fail");
+    assert_duplicate_entry(
+        component,
+        pack::PackKind::ComponentMap,
+        "acme/components",
+        "component",
+        "api",
+    );
+}
+
+#[test]
+fn invalid_topology_globs_fail_during_compile() {
+    let compiler = pack::PackCompiler::new();
+
+    let invalid_include = compiler
+        .compile_boundary_taxonomy(pack::PackSource::Inline {
+            logical_name: "invalid-include".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: br#"{
+  "kind": "boundary_taxonomy",
+  "version": 1,
+  "id": "acme/boundaries",
+  "name": "Bad include",
+  "counting": { "mode": "distinct_minus_one" },
+  "boundaries": [
+    { "id": "runtime", "label": "Runtime", "include": ["["] }
+  ]
+}"#
+            .to_vec(),
+        })
+        .expect_err("invalid include glob should fail");
+    assert!(matches!(
+        invalid_include,
+        pack::PackError::GlobCompile { .. }
+    ));
+
+    let invalid_exclude = compiler
+        .compile_component_map(pack::PackSource::Inline {
+            logical_name: "invalid-exclude".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: br#"{
+  "kind": "component_map",
+  "version": 1,
+  "id": "acme/components",
+  "name": "Bad exclude",
+  "counting": { "mode": "distinct" },
+  "components": [
+    { "id": "api", "label": "API", "include": ["api/**"], "exclude": ["["] }
+  ]
+}"#
+            .to_vec(),
+        })
+        .expect_err("invalid exclude glob should fail");
+    assert!(matches!(
+        invalid_exclude,
+        pack::PackError::GlobCompile { .. }
+    ));
 }
 
 #[test]
@@ -334,6 +576,66 @@ fn assert_schema_violation(
                 .map(|(path, code)| ((*path).to_owned(), (*code).to_owned()))
                 .collect();
             assert_eq!(actual, expected);
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+fn assert_schema_violation_codes(
+    error: pack::PackError,
+    expected_origin: &str,
+    expected_schema: &str,
+    expected_paths: &[&str],
+) {
+    match error {
+        pack::PackError::SchemaViolation {
+            origin,
+            schema_id,
+            diagnostics,
+        } => {
+            assert_eq!(origin, expected_origin);
+            assert_eq!(schema_id, expected_schema);
+            let actual: Vec<String> = diagnostics
+                .iter()
+                .map(|diagnostic| {
+                    diagnostic
+                        .subject
+                        .as_ref()
+                        .and_then(|subject| subject.path.as_ref())
+                        .map(|path| path.as_str().to_owned())
+                        .expect("schema diagnostics should include paths")
+                })
+                .collect();
+            assert_eq!(
+                actual,
+                expected_paths
+                    .iter()
+                    .map(|path| (*path).to_owned())
+                    .collect::<Vec<_>>()
+            );
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+fn assert_duplicate_entry(
+    error: pack::PackError,
+    expected_kind: pack::PackKind,
+    expected_pack_id: &str,
+    expected_entry_kind: &'static str,
+    expected_entry_id: &str,
+) {
+    match error {
+        pack::PackError::DuplicateEntryId {
+            pack_kind,
+            pack_id,
+            entry_kind,
+            entry_id,
+        } => {
+            assert_eq!(pack_kind, expected_kind);
+            assert_eq!(pack_id, expected_pack_id);
+            assert_eq!(entry_kind, expected_entry_kind);
+            assert_eq!(entry_id, expected_entry_id);
         }
         other => panic!("unexpected error: {other:?}"),
     }

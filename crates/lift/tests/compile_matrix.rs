@@ -1,5 +1,6 @@
 use assert_cmd as _;
 use clap as _;
+use globset as _;
 use jsonschema as _;
 use predicates as _;
 use serde as _;

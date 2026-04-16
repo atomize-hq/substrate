@@ -182,13 +182,15 @@ Done when every cross-seam type comes from `kernel`, and no other seam defines d
 
 ### 1. Pack compiler
 
-Phase A owns the crate-private profile compiler foundation: builtin, file-backed, and inline profile sources; hand-authored common/profile schemas; deterministic normalization and fingerprints; typed pack refs and diagnostics; and the narrow builtin `builtin:generic/default`.
+Phase A landed the crate-private profile compiler foundation: builtin, file-backed, and inline profile sources; hand-authored common/profile schemas; deterministic normalization and fingerprints; typed pack refs and diagnostics; and the narrow builtin `builtin:generic/default`.
 
-Exposes `CompiledProfile` internally. The broader pack-family surface remains deferred.
+Phase B extends that compiler-only surface with embedded boundary taxonomy and component map schemas, focused standalone compilation entrypoints for those two topology pack kinds, builtin topology packs named `builtin:generic/boundaries` and `builtin:generic/components`, and profile topology resolution into a crate-internal `ResolvedProfileTopology`.
+
+Exposes `CompiledProfile` and crate-internal resolved topology artifacts inside the crate. The broader pack-family surface remains deferred.
 
 Must not own repo analysis, AST parsing, git access, or app orchestration.
 
-Done when one standalone profile can be loaded and compiled deterministically from builtin, file, and inline sources without requiring a repo snapshot.
+Done when one standalone profile, boundary taxonomy, or component map can be loaded and compiled deterministically from builtin, file, and inline sources, and a compiled profile can resolve zero, one, or two topology refs without requiring a repo snapshot.
 
 ### 2. Repo substrate
 
@@ -237,13 +239,15 @@ Done when the same snapshot, seeds, and closure rules always produce the same so
 
 ### 6. Topology and classification
 
-Owns component mapping, boundary assignment, public-surface classes, docs/test/ci/migration/security path classes, overlap validation, and component counting rules.
+This seam still eventually owns repo-facing component mapping, boundary assignment, public-surface classes, docs/test/ci/migration/security path classes, overlap validation, and component counting rules.
 
-Exposes `TopologyIndex`, `ComponentMap`, `BoundaryMap`, and `ClassifiedPaths`.
+What has landed so far is narrower: the pack compiler can now compile boundary taxonomy and component map documents and resolve a profile's topology refs into crate-internal compiled artifacts. Repo walking, boundary overlap detection against real inventories, and path classification remain deferred to later topology/classification work.
+
+The intended runtime-facing outputs for the later seam are `TopologyIndex`, `ComponentMap`, `BoundaryMap`, and `ClassifiedPaths`.
 
 Must not own AST parsing, score math, or app rendering.
 
-Done when a repo can be classified with snapshot plus compiled profile and no app logic.
+Done when a repo can be classified with snapshot plus compiled profile and no app logic. That runtime classification handoff is not landed in Phase B.
 
 ### 7. Query and match
 
@@ -409,9 +413,15 @@ Done when all meaningful behavior lives below the CLI.
 
 ### 15. Bundled profiles and migration shims
 
-Phase A ships only the embedded generic builtin profile, `builtin:generic/default`.
+The embedded generic builtin compiler packs now include:
 
-Bundled Substrate profiles, starter rule/query/recipe content, and migration helpers from old Work Lift inputs are intentionally deferred until later seams broaden the pack surface and add real runtime consumers.
+- `builtin:generic/default`
+- `builtin:generic/boundaries`
+- `builtin:generic/components`
+
+These builtin names are crate-internal compiler artifacts. They are not a public API, not repo classification by themselves, and not runtime bootstrap.
+
+Bundled Substrate profiles, starter rule/query/recipe content, and migration helpers from old Work Lift inputs are still intentionally deferred until later seams broaden the pack surface and add real runtime consumers.
 
 Must not own core engine behavior.
 

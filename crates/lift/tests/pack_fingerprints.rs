@@ -131,6 +131,106 @@ fn builtin_file_and_inline_sources_are_semantically_equivalent() {
     );
 }
 
+#[test]
+fn boundary_taxonomy_semantic_fingerprint_is_stable_across_json_key_reordering() {
+    let compiler = pack::PackCompiler::new();
+
+    let first = compile_boundary_file(
+        &compiler,
+        "fixtures/pack/canonical/boundary_taxonomy_order_a.json",
+    );
+    let second = compile_boundary_inline(
+        &compiler,
+        "boundary-reordered",
+        "fixtures/pack/canonical/boundary_taxonomy_order_b.json",
+    );
+
+    assert_eq!(
+        first.header.semantic_fingerprint,
+        second.header.semantic_fingerprint
+    );
+}
+
+#[test]
+fn boundary_taxonomy_source_fingerprint_differs_while_semantics_match() {
+    let compiler = pack::PackCompiler::new();
+
+    let file = compile_boundary_file(
+        &compiler,
+        "fixtures/pack/canonical/boundary_taxonomy_order_a.json",
+    );
+    let inline = compile_boundary_inline(
+        &compiler,
+        "boundary-same-semantics",
+        "fixtures/pack/canonical/boundary_taxonomy_order_b.json",
+    );
+
+    assert_eq!(
+        file.header.semantic_fingerprint,
+        inline.header.semantic_fingerprint
+    );
+    assert_ne!(
+        file.header.source_fingerprint,
+        inline.header.source_fingerprint
+    );
+}
+
+#[test]
+fn builtin_file_and_inline_boundary_taxonomies_are_semantically_equivalent() {
+    let compiler = pack::PackCompiler::new();
+
+    let builtin = compiler
+        .compile_boundary_taxonomy(
+            pack::builtin::boundary_taxonomy_source("generic/boundaries").expect("builtin"),
+        )
+        .expect("builtin boundary taxonomy should compile");
+    let file = compile_boundary_file(&compiler, "fixtures/pack/valid/generic_boundaries.json");
+    let inline = compile_boundary_inline(
+        &compiler,
+        "boundary-builtin-equivalent",
+        "fixtures/pack/valid/generic_boundaries.json",
+    );
+
+    assert_eq!(
+        builtin.header.semantic_fingerprint,
+        file.header.semantic_fingerprint
+    );
+    assert_eq!(
+        builtin.header.semantic_fingerprint,
+        inline.header.semantic_fingerprint
+    );
+    assert_ne!(
+        builtin.header.source_fingerprint,
+        file.header.source_fingerprint
+    );
+}
+
+#[test]
+fn resolved_topology_fingerprint_is_stable_for_equivalent_profile_inputs() {
+    let compiler = pack::PackCompiler::new();
+
+    let builtin = compiler
+        .compile_profile(pack::builtin::profile_source("generic/default").expect("builtin"))
+        .expect("builtin profile should compile");
+    let inline = compile_inline(
+        &compiler,
+        "resolved-topology-inline",
+        "fixtures/pack/canonical/generic_default_order_b.toml",
+    );
+
+    let builtin_resolved = compiler
+        .resolve_profile_topology(&builtin)
+        .expect("builtin topology should resolve");
+    let inline_resolved = compiler
+        .resolve_profile_topology(&inline)
+        .expect("inline topology should resolve");
+
+    assert_eq!(
+        builtin_resolved.semantic_fingerprint,
+        inline_resolved.semantic_fingerprint
+    );
+}
+
 fn compile_file(compiler: &pack::PackCompiler, relative: &str) -> pack::CompiledProfile {
     compiler
         .compile_profile(pack::PackSource::File {
@@ -152,6 +252,32 @@ fn compile_inline(
             bytes: load_bytes(relative),
         })
         .unwrap_or_else(|err| panic!("failed to compile {relative} inline: {err:?}"))
+}
+
+fn compile_boundary_file(
+    compiler: &pack::PackCompiler,
+    relative: &str,
+) -> pack::CompiledBoundaryTaxonomy {
+    compiler
+        .compile_boundary_taxonomy(pack::PackSource::File {
+            path: crate_root().join(relative),
+            format_hint: None,
+        })
+        .unwrap_or_else(|err| panic!("failed to compile boundary {relative}: {err:?}"))
+}
+
+fn compile_boundary_inline(
+    compiler: &pack::PackCompiler,
+    logical_name: &str,
+    relative: &str,
+) -> pack::CompiledBoundaryTaxonomy {
+    compiler
+        .compile_boundary_taxonomy(pack::PackSource::Inline {
+            logical_name: logical_name.to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: load_bytes(relative),
+        })
+        .unwrap_or_else(|err| panic!("failed to compile boundary {relative} inline: {err:?}"))
 }
 
 fn load_bytes(relative: &str) -> Vec<u8> {

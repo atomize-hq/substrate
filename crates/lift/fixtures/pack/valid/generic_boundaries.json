@@ -1,0 +1,42 @@
+{
+  "kind": "boundary_taxonomy",
+  "version": 1,
+  "id": "generic/boundaries",
+  "name": "Generic repository boundaries",
+  "description": "Coarse boundary taxonomy for generic repositories.",
+  "counting": {
+    "mode": "distinct_minus_one"
+  },
+  "boundaries": [
+    {
+      "id": "application",
+      "label": "Application surface",
+      "include": ["apps/**", "services/**", "bin/**", "cmd/**"]
+    },
+    {
+      "id": "library",
+      "label": "Shared library surface",
+      "include": ["crates/**", "packages/**", "libs/**", "src/**"]
+    },
+    {
+      "id": "interface",
+      "label": "Interface and contract surface",
+      "include": ["api/**", "proto/**", "schemas/**", "contracts/**"]
+    },
+    {
+      "id": "tests",
+      "label": "Test surface",
+      "include": ["tests/**", "test/**", "e2e/**", "integration-tests/**"]
+    },
+    {
+      "id": "operations",
+      "label": "Operations surface",
+      "include": ["infra/**", "ops/**", "deploy/**", ".github/**", "scripts/**"]
+    },
+    {
+      "id": "docs",
+      "label": "Documentation surface",
+      "include": ["docs/**"]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "component_map",
+  "version": 1,
+  "id": "acme/components",
+  "name": "Acme components",
+  "description": "Component map for file-backed topology resolution tests.",
+  "counting": {
+    "mode": "distinct"
+  },
+  "components": [
+    {
+      "id": "api",
+      "label": "API",
+      "include": ["api/**", "openapi/**"],
+      "tags": ["public", "service"]
+    },
+    {
+      "id": "runtime",
+      "label": "Runtime",
+      "include": ["services/runtime/**"],
+      "exclude": ["services/runtime/generated/**"],
+      "tags": ["internal"]
+    }
+  ]
+}

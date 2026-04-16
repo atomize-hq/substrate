@@ -1,0 +1,15 @@
+{
+  "kind": "boundary_taxonomy",
+  "version": 2,
+  "id": "acme/boundaries",
+  "counting": {
+    "mode": "distinct"
+  },
+  "boundaries": [
+    {
+      "id": "",
+      "label": 5,
+      "include": [""]
+    }
+  ]
+}

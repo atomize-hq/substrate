@@ -1,0 +1,16 @@
+{
+  "kind": "component_map",
+  "version": 2,
+  "id": "acme/components",
+  "counting": {
+    "mode": "distinct_minus_one"
+  },
+  "components": [
+    {
+      "id": "",
+      "label": false,
+      "include": [""],
+      "tags": [1]
+    }
+  ]
+}
