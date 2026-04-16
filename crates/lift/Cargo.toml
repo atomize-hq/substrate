@@ -3,12 +3,12 @@ name = "substrate-lift"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.89"
-description = "Deterministic lift scoring engine and CLI scaffold"
+description = "Deterministic code-intelligence engine and CLI scaffold"
 license = "MIT"
 repository = "https://github.com/atomize-hq/substrate"
 readme = "README.md"
 publish = false
-keywords = ["lift", "cli", "analysis"]
+keywords = ["lift", "cli", "code-intelligence"]
 categories = ["command-line-utilities", "development-tools"]
 
 [lib]

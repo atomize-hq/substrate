@@ -13,13 +13,15 @@ pub use cli::run as run_cli;
 #[cfg(feature = "cli")]
 pub(crate) mod cli;
 
-pub(crate) mod api;
-pub(crate) mod compat;
-pub(crate) mod core;
-pub(crate) mod detect;
+pub(crate) mod app;
+pub(crate) mod derive;
+pub(crate) mod export;
+pub(crate) mod facts;
 pub(crate) mod graph;
-pub(crate) mod languages;
-pub(crate) mod policy;
+pub(crate) mod kernel;
+pub(crate) mod lang;
+pub(crate) mod pack;
+pub(crate) mod patch;
+pub(crate) mod query;
 pub(crate) mod repo;
-pub(crate) mod resolve;
-pub(crate) mod runner;
+pub(crate) mod topo;

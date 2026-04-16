@@ -1,4 +1,4 @@
-//! Reserved for future repo seam work. No runtime logic in SEAM-0.
+//! Reserved for the future repo seam. No runtime logic in commit 1.
 
 #[allow(dead_code)]
 pub(crate) struct ReservedForFutureSeam;
