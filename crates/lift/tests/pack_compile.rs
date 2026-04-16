@@ -193,6 +193,8 @@ fn pack_refs_reject_absolute_and_traversal_inputs() {
         "file:../rules/security.toml",
         "file:rules//security.toml",
         "file:C:/rules/security.toml",
+        "file:-bad.toml",
+        "file:.bad.toml",
         "not-a-ref",
     ] {
         assert!(
@@ -200,6 +202,55 @@ fn pack_refs_reject_absolute_and_traversal_inputs() {
             "{input} should be rejected"
         );
     }
+}
+
+#[test]
+fn empty_profile_name_fails_schema_validation() {
+    let compiler = pack::PackCompiler::new();
+    let error = compiler
+        .compile_profile(pack::PackSource::Inline {
+            logical_name: "empty-name".to_owned(),
+            format: pack::PackFormat::Toml,
+            bytes: br#"kind = "profile"
+version = 1
+id = "generic/default"
+name = ""
+"#
+            .to_vec(),
+        })
+        .expect_err("empty name should fail");
+
+    assert_schema_violation(
+        error,
+        "inline:empty-name",
+        &[("/name", "pack.schema.invalid_name")],
+    );
+}
+
+#[test]
+fn malformed_file_ref_fails_schema_validation() {
+    let compiler = pack::PackCompiler::new();
+    let error = compiler
+        .compile_profile(pack::PackSource::Inline {
+            logical_name: "bad-ref".to_owned(),
+            format: pack::PackFormat::Toml,
+            bytes: br#"kind = "profile"
+version = 1
+id = "generic/default"
+name = "Invalid ref"
+
+[rules]
+packs = ["file:-bad.toml"]
+"#
+            .to_vec(),
+        })
+        .expect_err("invalid file ref should fail");
+
+    assert_schema_violation(
+        error,
+        "inline:bad-ref",
+        &[("/rules/packs/0", "pack.schema.invalid_pack_ref")],
+    );
 }
 
 #[test]
@@ -220,7 +271,7 @@ model = "file:score/model.toml"
 "#,
         })
         .expect_err("builtin file refs should fail");
-    assert_rejects_file_ref_origin(builtin_error, "builtin:bad-builtin");
+    assert_rejects_file_ref_origin(builtin_error, "builtin:bad-builtin", "/score/model");
 
     let inline_error = compiler
         .compile_profile(pack::PackSource::Inline {
@@ -237,10 +288,26 @@ packs = ["file:rules/security.toml"]
             .to_vec(),
         })
         .expect_err("inline file refs should fail");
-    assert_rejects_file_ref_origin(inline_error, "inline:bad-inline");
+    assert_rejects_file_ref_origin(inline_error, "inline:bad-inline", "/rules/packs/0");
 }
 
-fn assert_rejects_file_ref_origin(error: pack::PackError, expected_origin: &str) {
+fn assert_rejects_file_ref_origin(
+    error: pack::PackError,
+    expected_origin: &str,
+    expected_path: &str,
+) {
+    assert_schema_violation(
+        error,
+        expected_origin,
+        &[(expected_path, "pack.refs.file_requires_file_origin")],
+    );
+}
+
+fn assert_schema_violation(
+    error: pack::PackError,
+    expected_origin: &str,
+    expected: &[(&str, &str)],
+) {
     match error {
         pack::PackError::SchemaViolation {
             origin,
@@ -248,11 +315,25 @@ fn assert_rejects_file_ref_origin(error: pack::PackError, expected_origin: &str)
             ..
         } => {
             assert_eq!(origin, expected_origin);
-            assert_eq!(diagnostics.len(), 1);
-            assert_eq!(
-                diagnostics[0].code.as_str(),
-                "pack.refs.file_requires_file_origin"
-            );
+            let actual: Vec<(String, String)> = diagnostics
+                .iter()
+                .map(|diagnostic| {
+                    (
+                        diagnostic
+                            .subject
+                            .as_ref()
+                            .and_then(|subject| subject.path.as_ref())
+                            .map(|path| path.as_str().to_owned())
+                            .unwrap_or_default(),
+                        diagnostic.code.as_str().to_owned(),
+                    )
+                })
+                .collect();
+            let expected: Vec<(String, String)> = expected
+                .iter()
+                .map(|(path, code)| ((*path).to_owned(), (*code).to_owned()))
+                .collect();
+            assert_eq!(actual, expected);
         }
         other => panic!("unexpected error: {other:?}"),
     }

@@ -95,7 +95,10 @@ fn validate_pack_file_ref(input: &str) -> PackResult<()> {
     }
 
     for segment in input.split('/') {
-        if segment.is_empty() || matches!(segment, "." | "..") {
+        if segment.is_empty()
+            || matches!(segment, "." | "..")
+            || !is_valid_pack_file_segment(segment)
+        {
             return Err(PackError::InvalidPackRef {
                 input: format!("file:{input}"),
             });
@@ -110,6 +113,23 @@ fn has_windows_drive_prefix(input: &str) -> bool {
     bytes.len() >= 3 && bytes[1] == b':' && bytes[2] == b'/'
 }
 
+fn is_valid_pack_file_segment(segment: &str) -> bool {
+    let mut bytes = segment.bytes();
+    let Some(first) = bytes.next() else {
+        return false;
+    };
+
+    is_pack_file_segment_start(first) && bytes.all(is_pack_file_segment_continue)
+}
+
+fn is_pack_file_segment_start(byte: u8) -> bool {
+    byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_'
+}
+
+fn is_pack_file_segment_continue(byte: u8) -> bool {
+    is_pack_file_segment_start(byte) || matches!(byte, b'.' | b'_' | b'-')
+}
+
 #[cfg(test)]
 mod tests {
     use super::{PackFileRef, PackRef};
@@ -120,16 +140,23 @@ mod tests {
             PackRef::parse("builtin:generic/default").expect("builtin"),
             PackRef::Builtin(_)
         ));
-        assert!(matches!(
-            PackRef::parse("file:rules/security.v1.json").expect("file"),
-            PackRef::File(_)
-        ));
-        assert_eq!(
-            PackFileRef::parse("profiles/default.toml")
-                .expect("path")
-                .as_str(),
-            "profiles/default.toml"
-        );
+        for input in [
+            "file:rules/security.v1.json",
+            "file:_profiles/default.toml",
+            "file:rules/0-security.toml",
+        ] {
+            assert!(matches!(
+                PackRef::parse(input).expect("file"),
+                PackRef::File(_)
+            ));
+        }
+        for input in [
+            "profiles/default.toml",
+            "_profiles/default.toml",
+            "rules/0-security.toml",
+        ] {
+            assert_eq!(PackFileRef::parse(input).expect("path").as_str(), input);
+        }
     }
 
     #[test]
@@ -140,6 +167,18 @@ mod tests {
             "file:../rules/security.v1.json",
             "file:rules//security.v1.json",
             "file:C:/rules/security.v1.json",
+        ] {
+            assert!(PackRef::parse(input).is_err(), "{input} should fail");
+        }
+    }
+
+    #[test]
+    fn rejects_invalid_segment_shapes() {
+        for input in [
+            "file:-bad.toml",
+            "file:.bad.toml",
+            "file:rules/-bad.toml",
+            "file:rules/.bad.toml",
         ] {
             assert!(PackRef::parse(input).is_err(), "{input} should fail");
         }

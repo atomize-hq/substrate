@@ -65,7 +65,9 @@ fn valid_pack_profile_schema_fixtures_validate_and_deserialize() {
 fn invalid_pack_profile_schema_fixtures_fail_validation() {
     for fixture in [
         "fixtures/pack/invalid/profile_missing_name.json",
+        "fixtures/pack/invalid/profile_empty_name.json",
         "fixtures/pack/invalid/profile_invalid_pack_ref.json",
+        "fixtures/pack/invalid/profile_invalid_pack_ref_leading_dash.json",
         "fixtures/pack/invalid/profile_traversal_pack_ref.json",
         "fixtures/pack/invalid/profile_unknown_field.json",
     ] {

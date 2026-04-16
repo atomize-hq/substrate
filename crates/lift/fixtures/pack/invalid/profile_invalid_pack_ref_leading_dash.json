@@ -1,0 +1,9 @@
+{
+  "kind": "profile",
+  "version": 1,
+  "id": "acme/invalid-ref-leading-dash",
+  "name": "Invalid ref profile",
+  "rules": {
+    "packs": ["file:-bad.toml"]
+  }
+}

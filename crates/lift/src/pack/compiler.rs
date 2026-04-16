@@ -371,6 +371,15 @@ fn validate_profile_document(origin: &PackOrigin, value: &Value) -> Vec<PackDiag
             ));
         }
     }
+    if let Some(name) = root.get("name").and_then(Value::as_str) {
+        if name.is_empty() {
+            diagnostics.push(PackDiagnostic::error(
+                "pack.schema.invalid_name",
+                "name must be a non-empty string",
+                Some(location(origin, "/name")),
+            ));
+        }
+    }
 
     validate_optional_string(
         root.get("description"),
