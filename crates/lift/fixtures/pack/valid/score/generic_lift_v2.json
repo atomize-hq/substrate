@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schemas.substrate.dev/lift/pack/score_model.v1.json",
+  "kind": "score_model",
+  "version": 1,
+  "id": "generic/lift-v2",
+  "name": "Generic Lift model v2",
+  "vector_version": 2,
+  "lift_score": {
+    "op": "add",
+    "args": [
+      { "op": "field", "path": "/touch/edit_files" },
+      { "op": "field", "path": "/touch/components_touched" }
+    ]
+  },
+  "estimated_slices": {
+    "op": "max",
+    "args": [
+      { "op": "const_int", "value": 1 },
+      { "op": "field", "path": "/touch/components_touched" }
+    ]
+  },
+  "triggers": [
+    {
+      "id": "many_files",
+      "when": {
+        "op": "gt",
+        "lhs": { "op": "field", "path": "/touch/edit_files" },
+        "rhs": { "op": "const_int", "value": 12 }
+      }
+    }
+  ],
+  "confidence": {
+    "default": "high",
+    "rules": [
+      {
+        "id": "missing_touch_inputs",
+        "when": { "op": "is_null", "path": "/touch/edit_files" },
+        "set": "low",
+        "causes": ["missing_inputs"]
+      }
+    ]
+  },
+  "missing_input_rules": [
+    {
+      "field": "/touch/edit_files",
+      "when": { "op": "is_null", "path": "/touch/edit_files" }
+    }
+  ]
+}

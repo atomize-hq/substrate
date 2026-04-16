@@ -16,7 +16,8 @@ use toml as _;
 
 mod kernel {
     pub(crate) use substrate_lift::kernel::{
-        sha256_bytes, sha256_canonical_json, DiagnosticCode, Fingerprint, JsonPointer, Severity,
+        sha256_bytes, sha256_canonical_json, DiagnosticCode, Fingerprint, JsonPointer, QueryId,
+        RecipeId, RuleId, Severity,
     };
 }
 #[path = "../src/pack/mod.rs"]
@@ -41,6 +42,22 @@ fn embedded_pack_schemas_match_disk() {
         load_text("schemas/pack/component_map.v1.json")
     );
     assert_eq!(
+        pack::PACK_SCORE_MODEL_V1_SCHEMA_JSON,
+        load_text("schemas/pack/score_model.v1.json")
+    );
+    assert_eq!(
+        pack::PACK_QUERY_PACK_V1_SCHEMA_JSON,
+        load_text("schemas/pack/query_pack.v1.json")
+    );
+    assert_eq!(
+        pack::PACK_RULE_PACK_V1_SCHEMA_JSON,
+        load_text("schemas/pack/rule_pack.v1.json")
+    );
+    assert_eq!(
+        pack::PACK_RECIPE_PACK_V1_SCHEMA_JSON,
+        load_text("schemas/pack/recipe_pack.v1.json")
+    );
+    assert_eq!(
         pack::PACK_COMMON_V1_SCHEMA_ID,
         "https://schemas.substrate.dev/lift/pack/common.v1.json"
     );
@@ -56,6 +73,22 @@ fn embedded_pack_schemas_match_disk() {
         pack::PACK_COMPONENT_MAP_V1_SCHEMA_ID,
         "https://schemas.substrate.dev/lift/pack/component_map.v1.json"
     );
+    assert_eq!(
+        pack::PACK_SCORE_MODEL_V1_SCHEMA_ID,
+        "https://schemas.substrate.dev/lift/pack/score_model.v1.json"
+    );
+    assert_eq!(
+        pack::PACK_QUERY_PACK_V1_SCHEMA_ID,
+        "https://schemas.substrate.dev/lift/pack/query_pack.v1.json"
+    );
+    assert_eq!(
+        pack::PACK_RULE_PACK_V1_SCHEMA_ID,
+        "https://schemas.substrate.dev/lift/pack/rule_pack.v1.json"
+    );
+    assert_eq!(
+        pack::PACK_RECIPE_PACK_V1_SCHEMA_ID,
+        "https://schemas.substrate.dev/lift/pack/recipe_pack.v1.json"
+    );
     assert_eq!(pack::PACK_COMMON_V1_SCHEMA_FILE, "common.v1.json");
     assert_eq!(pack::PACK_PROFILE_V1_SCHEMA_FILE, "profile.v1.json");
     assert_eq!(
@@ -66,10 +99,18 @@ fn embedded_pack_schemas_match_disk() {
         pack::PACK_COMPONENT_MAP_V1_SCHEMA_FILE,
         "component_map.v1.json"
     );
+    assert_eq!(pack::PACK_SCORE_MODEL_V1_SCHEMA_FILE, "score_model.v1.json");
+    assert_eq!(pack::PACK_QUERY_PACK_V1_SCHEMA_FILE, "query_pack.v1.json");
+    assert_eq!(pack::PACK_RULE_PACK_V1_SCHEMA_FILE, "rule_pack.v1.json");
+    assert_eq!(pack::PACK_RECIPE_PACK_V1_SCHEMA_FILE, "recipe_pack.v1.json");
     assert_eq!(pack::PACK_COMMON_V1_SCHEMA_VERSION, 1);
     assert_eq!(pack::PACK_PROFILE_V1_SCHEMA_VERSION, 1);
     assert_eq!(pack::PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_VERSION, 1);
     assert_eq!(pack::PACK_COMPONENT_MAP_V1_SCHEMA_VERSION, 1);
+    assert_eq!(pack::PACK_SCORE_MODEL_V1_SCHEMA_VERSION, 1);
+    assert_eq!(pack::PACK_QUERY_PACK_V1_SCHEMA_VERSION, 1);
+    assert_eq!(pack::PACK_RULE_PACK_V1_SCHEMA_VERSION, 1);
+    assert_eq!(pack::PACK_RECIPE_PACK_V1_SCHEMA_VERSION, 1);
 }
 
 #[test]
@@ -101,6 +142,37 @@ fn valid_topology_schema_fixtures_validate_and_deserialize() {
     ))
     .expect("component map should deserialize");
     assert_eq!(components.kind, pack::raw::PackKind::ComponentMap);
+}
+
+#[test]
+fn valid_advanced_schema_fixtures_validate_and_deserialize() {
+    let score: pack::raw::RawScoreModel = serde_json::from_value(assert_schema_valid(
+        "score_model",
+        "fixtures/pack/valid/score/generic_lift_v2.json",
+    ))
+    .expect("score model should deserialize");
+    assert_eq!(score.kind, pack::raw::PackKind::ScoreModel);
+
+    let query: pack::raw::RawQueryPack = serde_json::from_value(assert_schema_valid(
+        "query_pack",
+        "fixtures/pack/valid/queries/rust_core.json",
+    ))
+    .expect("query pack should deserialize");
+    assert_eq!(query.kind, pack::raw::PackKind::QueryPack);
+
+    let rule: pack::raw::RawRulePack = serde_json::from_value(assert_schema_valid(
+        "rule_pack",
+        "fixtures/pack/valid/rules/generic_policy.json",
+    ))
+    .expect("rule pack should deserialize");
+    assert_eq!(rule.kind, pack::raw::PackKind::RulePack);
+
+    let recipe: pack::raw::RawRecipePack = serde_json::from_value(assert_schema_valid(
+        "recipe_pack",
+        "fixtures/pack/valid/recipes/generic_core_recipes.json",
+    ))
+    .expect("recipe pack should deserialize");
+    assert_eq!(recipe.kind, pack::raw::PackKind::RecipePack);
 }
 
 #[test]
@@ -138,6 +210,30 @@ fn invalid_topology_schema_fixtures_fail_validation() {
     );
 }
 
+#[test]
+fn invalid_advanced_schema_fixtures_fail_validation() {
+    assert_schema_invalid(
+        "score_model",
+        &load_json("fixtures/pack/invalid/score_model_schema_violation.json"),
+    );
+    assert_schema_invalid(
+        "query_pack",
+        &load_json("fixtures/pack/invalid/query_pack_schema_violation.json"),
+    );
+    assert_schema_invalid(
+        "rule_pack",
+        &load_json("fixtures/pack/invalid/rule_pack_bad_query_ref.json"),
+    );
+    assert_schema_invalid(
+        "rule_pack",
+        &load_json("fixtures/pack/invalid/rule_pack_invalid_severity.json"),
+    );
+    assert_schema_invalid(
+        "recipe_pack",
+        &load_json("fixtures/pack/invalid/recipe_pack_bad_transform.json"),
+    );
+}
+
 fn assert_schema_valid(kind: &str, fixture: &str) -> Value {
     let instance = load_json(fixture);
     let validator = schema_validator(kind);
@@ -160,6 +256,10 @@ fn schema_validator(kind: &str) -> Validator {
         "profile" => "schemas/pack/profile.v1.json",
         "boundary_taxonomy" => "schemas/pack/boundary_taxonomy.v1.json",
         "component_map" => "schemas/pack/component_map.v1.json",
+        "score_model" => "schemas/pack/score_model.v1.json",
+        "query_pack" => "schemas/pack/query_pack.v1.json",
+        "rule_pack" => "schemas/pack/rule_pack.v1.json",
+        "recipe_pack" => "schemas/pack/recipe_pack.v1.json",
         other => panic!("unsupported schema kind {other}"),
     };
     let root_schema = load_json(schema_path);

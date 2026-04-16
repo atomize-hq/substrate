@@ -1,0 +1,29 @@
+{
+  "$schema": "https://schemas.substrate.dev/lift/pack/rule_pack.v1.json",
+  "kind": "rule_pack",
+  "version": 1,
+  "id": "generic/policy",
+  "name": "Generic policy rules",
+  "rules": [
+    {
+      "id": "architecture.cross_boundary_import",
+      "summary": "Flags imports that cross configured boundaries",
+      "severity": "warning",
+      "scope": {
+        "languages": ["rust"],
+        "path_classes": ["public_api"]
+      },
+      "query": {
+        "pack": "file:queries/rust_core.json",
+        "id": "use_statement"
+      },
+      "emit": [
+        {
+          "kind": "finding",
+          "code": "architecture.cross_boundary_import",
+          "message": "Import crosses boundary"
+        }
+      ]
+    }
+  ]
+}

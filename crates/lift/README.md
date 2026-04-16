@@ -186,11 +186,13 @@ Phase A landed the crate-private profile compiler foundation: builtin, file-back
 
 Phase B extends that compiler-only surface with embedded boundary taxonomy and component map schemas, focused standalone compilation entrypoints for those two topology pack kinds, builtin topology packs named `builtin:generic/boundaries` and `builtin:generic/components`, and profile topology resolution into a crate-internal `ResolvedProfileTopology`.
 
-Exposes `CompiledProfile` and crate-internal resolved topology artifacts inside the crate. The broader pack-family surface remains deferred.
+Phase C extends that same explicit compiler pattern to structural `score_model`, `query_pack`, `rule_pack`, and `recipe_pack` inputs and adds deterministic profile bundle resolution into a crate-internal `CompiledPackSet`.
+
+Exposes `CompiledProfile` plus crate-internal resolved topology and bundle artifacts inside the crate.
 
 Must not own repo analysis, AST parsing, git access, or app orchestration.
 
-Done when one standalone profile, boundary taxonomy, or component map can be loaded and compiled deterministically from builtin, file, and inline sources, and a compiled profile can resolve zero, one, or two topology refs without requiring a repo snapshot.
+Done when one standalone profile, topology pack, score model, query pack, rule pack, or recipe pack can be loaded and compiled deterministically from the supported source types, and a compiled profile can resolve its selected pack bundle without requiring a repo snapshot.
 
 ### 2. Repo substrate
 

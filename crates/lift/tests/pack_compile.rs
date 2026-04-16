@@ -15,7 +15,8 @@ use toml as _;
 
 mod kernel {
     pub(crate) use substrate_lift::kernel::{
-        sha256_bytes, sha256_canonical_json, DiagnosticCode, Fingerprint, JsonPointer, Severity,
+        sha256_bytes, sha256_canonical_json, DiagnosticCode, Fingerprint, JsonPointer, QueryId,
+        RecipeId, RuleId, Severity,
     };
 }
 #[path = "../src/pack/mod.rs"]
@@ -51,7 +52,7 @@ fn builtin_file_and_inline_profiles_compile_on_the_happy_path() {
         Some(pack::PackRef::File(_))
     ));
     assert!(matches!(file.score.model, Some(pack::PackRef::File(_))));
-    assert_eq!(file.includes.rule_packs.len(), 2);
+    assert_eq!(file.includes.rule_packs.len(), 1);
     assert!(file
         .apps
         .enabled
@@ -119,6 +120,121 @@ fn standalone_topology_packs_compile_on_the_happy_path() {
         .components
         .values()
         .any(|component| component.tags.contains("public")));
+}
+
+#[test]
+fn standalone_advanced_packs_compile_on_the_happy_path() {
+    let compiler = pack::PackCompiler::new();
+
+    let score = compiler
+        .compile_score_model(pack::PackSource::File {
+            path: crate_root().join("fixtures/pack/valid/score/generic_lift_v2.json"),
+            format_hint: None,
+        })
+        .expect("score model should compile");
+    assert_eq!(score.header.id.as_str(), "generic/lift-v2");
+    assert_eq!(score.vector_version, 2);
+    assert_eq!(score.triggers.len(), 1);
+
+    let query = compiler
+        .compile_query_pack(pack::PackSource::File {
+            path: crate_root().join("fixtures/pack/valid/queries/rust_core.json"),
+            format_hint: None,
+        })
+        .expect("query pack should compile");
+    assert_eq!(query.header.id.as_str(), "rust/core");
+    assert_eq!(query.queries.len(), 1);
+
+    let rule = compiler
+        .compile_rule_pack(pack::PackSource::File {
+            path: crate_root().join("fixtures/pack/valid/rules/generic_policy.json"),
+            format_hint: None,
+        })
+        .expect("rule pack should compile");
+    let rule_def = rule.rules.values().next().expect("rule");
+    assert_eq!(rule.header.id.as_str(), "generic/policy");
+    assert_eq!(rule.rules.len(), 1);
+    assert_eq!(rule_def.query.pack.as_str(), "file:queries/rust_core.json");
+
+    let recipe = compiler
+        .compile_recipe_pack(pack::PackSource::File {
+            path: crate_root().join("fixtures/pack/valid/recipes/generic_core_recipes.json"),
+            format_hint: None,
+        })
+        .expect("recipe pack should compile");
+    let recipe_def = recipe.recipes.values().next().expect("recipe");
+    assert_eq!(recipe.header.id.as_str(), "generic/core-recipes");
+    assert_eq!(recipe.recipes.len(), 1);
+    assert_eq!(
+        recipe_def.query.pack.as_str(),
+        "file:queries/rust_core.json"
+    );
+}
+
+#[test]
+fn advanced_pack_compile_failures_are_typed() {
+    let compiler = pack::PackCompiler::new();
+
+    let bad_expr = compiler
+        .compile_score_model(pack::PackSource::File {
+            path: crate_root().join("fixtures/pack/invalid/score_model_bad_expr.json"),
+            format_hint: None,
+        })
+        .expect_err("bad expr should fail");
+    assert!(matches!(
+        bad_expr,
+        pack::PackError::ExpressionCompile { .. }
+    ));
+
+    let duplicate_trigger = compiler
+        .compile_score_model(pack::PackSource::File {
+            path: crate_root().join("fixtures/pack/invalid/score_model_duplicate_trigger.json"),
+            format_hint: None,
+        })
+        .expect_err("duplicate trigger should fail");
+    assert_duplicate_entry(
+        duplicate_trigger,
+        pack::PackKind::ScoreModel,
+        "acme/duplicate-trigger",
+        "trigger",
+        "dup",
+    );
+
+    let duplicate_query = compiler
+        .compile_query_pack(pack::PackSource::File {
+            path: crate_root().join("fixtures/pack/invalid/query_pack_duplicate_id.json"),
+            format_hint: None,
+        })
+        .expect_err("duplicate query ids should fail");
+    assert_duplicate_entry(
+        duplicate_query,
+        pack::PackKind::QueryPack,
+        "acme/duplicate-query",
+        "query",
+        "dup",
+    );
+
+    let invalid_severity = compiler
+        .compile_rule_pack(pack::PackSource::File {
+            path: crate_root().join("fixtures/pack/invalid/rule_pack_invalid_severity.json"),
+            format_hint: None,
+        })
+        .expect_err("invalid severity should fail");
+    assert!(matches!(
+        invalid_severity,
+        pack::PackError::SchemaViolation { .. }
+    ));
+
+    let invalid_transform = compiler
+        .compile_recipe_pack(pack::PackSource::File {
+            path: crate_root().join("fixtures/pack/invalid/recipe_pack_bad_transform.json"),
+            format_hint: None,
+        })
+        .expect_err("invalid transform should fail");
+    assert!(matches!(
+        invalid_transform,
+        pack::PackError::SchemaViolation { .. }
+    ));
 }
 
 #[test]
@@ -546,7 +662,7 @@ id = "generic/default"
 name = "Invalid builtin"
 
 [score]
-model = "file:score/model.toml"
+model = "file:score/generic_lift_v2.json"
 "#,
         })
         .expect_err("builtin file refs should fail");
@@ -562,7 +678,7 @@ id = "generic/default"
 name = "Invalid inline"
 
 [rules]
-packs = ["file:rules/security.toml"]
+packs = ["file:rules/generic_policy.json"]
 "#
             .to_vec(),
         })

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "$schema": "https://schemas.substrate.dev/lift/pack/rule_pack.v1.json",
+  "kind": "rule_pack",
+  "id": "acme/policy",
+  "name": "Acme policy rules",
+  "rules": [
+    {
+      "emit": [
+        {
+          "message": "Import crosses boundary",
+          "kind": "finding",
+          "code": "architecture.cross_boundary_import"
+        }
+      ],
+      "query": {
+        "id": "use_statement",
+        "pack": "file:queries/rust_core.json"
+      },
+      "severity": "warning",
+      "id": "architecture.cross_boundary_import"
+    }
+  ]
+}

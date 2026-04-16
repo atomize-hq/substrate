@@ -143,3 +143,23 @@ pub(crate) fn component_map_source(logical_name: &str) -> Option<PackSource> {
         _ => None,
     }
 }
+
+/// Returns a built-in score model source by logical pack name.
+pub(crate) fn score_model_source(_logical_name: &str) -> Option<PackSource> {
+    None
+}
+
+/// Returns a built-in query-pack source by logical pack name.
+pub(crate) fn query_pack_source(_logical_name: &str) -> Option<PackSource> {
+    None
+}
+
+/// Returns a built-in rule-pack source by logical pack name.
+pub(crate) fn rule_pack_source(_logical_name: &str) -> Option<PackSource> {
+    None
+}
+
+/// Returns a built-in recipe-pack source by logical pack name.
+pub(crate) fn recipe_pack_source(_logical_name: &str) -> Option<PackSource> {
+    None
+}

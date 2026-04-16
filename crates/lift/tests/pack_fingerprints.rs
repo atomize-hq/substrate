@@ -15,7 +15,8 @@ use toml as _;
 
 mod kernel {
     pub(crate) use substrate_lift::kernel::{
-        sha256_bytes, sha256_canonical_json, DiagnosticCode, Fingerprint, JsonPointer, Severity,
+        sha256_bytes, sha256_canonical_json, DiagnosticCode, Fingerprint, JsonPointer, QueryId,
+        RecipeId, RuleId, Severity,
     };
 }
 #[path = "../src/pack/mod.rs"]
@@ -284,6 +285,46 @@ fn builtin_file_and_inline_component_maps_are_semantically_equivalent() {
 }
 
 #[test]
+fn score_model_semantic_fingerprint_is_stable_across_json_key_reordering() {
+    let compiler = pack::PackCompiler::new();
+
+    let first = compile_score_file(
+        &compiler,
+        "fixtures/pack/canonical/score_model_order_a.json",
+    );
+    let second = compile_score_inline(
+        &compiler,
+        "score-reordered",
+        "fixtures/pack/canonical/score_model_order_b.json",
+    );
+
+    assert_eq!(
+        first.header.semantic_fingerprint,
+        second.header.semantic_fingerprint
+    );
+    assert_ne!(
+        first.header.source_fingerprint,
+        second.header.source_fingerprint
+    );
+}
+
+#[test]
+fn bundle_semantic_fingerprint_is_stable_across_include_order() {
+    let compiler = pack::PackCompiler::new();
+
+    let first = compile_bundle(
+        &compiler,
+        "fixtures/pack/canonical/bundle_order_a/profile.toml",
+    );
+    let second = compile_bundle(
+        &compiler,
+        "fixtures/pack/canonical/bundle_order_b/profile.toml",
+    );
+
+    assert_eq!(first.semantic_fingerprint, second.semantic_fingerprint);
+}
+
+#[test]
 fn resolved_topology_fingerprint_is_stable_for_equivalent_profile_inputs() {
     let compiler = pack::PackCompiler::new();
 
@@ -344,6 +385,29 @@ fn compile_boundary_file(
         .unwrap_or_else(|err| panic!("failed to compile boundary {relative}: {err:?}"))
 }
 
+fn compile_score_file(compiler: &pack::PackCompiler, relative: &str) -> pack::CompiledScoreModel {
+    compiler
+        .compile_score_model(pack::PackSource::File {
+            path: crate_root().join(relative),
+            format_hint: None,
+        })
+        .unwrap_or_else(|err| panic!("failed to compile score model {relative}: {err:?}"))
+}
+
+fn compile_score_inline(
+    compiler: &pack::PackCompiler,
+    logical_name: &str,
+    relative: &str,
+) -> pack::CompiledScoreModel {
+    compiler
+        .compile_score_model(pack::PackSource::Inline {
+            logical_name: logical_name.to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: load_bytes(relative),
+        })
+        .unwrap_or_else(|err| panic!("failed to compile score model {relative} inline: {err:?}"))
+}
+
 fn compile_boundary_inline(
     compiler: &pack::PackCompiler,
     logical_name: &str,
@@ -382,6 +446,18 @@ fn compile_component_inline(
             bytes: load_bytes(relative),
         })
         .unwrap_or_else(|err| panic!("failed to compile component map {relative} inline: {err:?}"))
+}
+
+fn compile_bundle(compiler: &pack::PackCompiler, relative: &str) -> pack::CompiledPackSet {
+    let profile = compiler
+        .compile_profile(pack::PackSource::File {
+            path: crate_root().join(relative),
+            format_hint: None,
+        })
+        .unwrap_or_else(|err| panic!("failed to compile bundle profile {relative}: {err:?}"));
+    compiler
+        .resolve_profile_pack_set(&profile)
+        .unwrap_or_else(|err| panic!("failed to resolve bundle {relative}: {err:?}"))
 }
 
 fn load_bytes(relative: &str) -> Vec<u8> {

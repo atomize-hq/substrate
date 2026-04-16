@@ -18,13 +18,13 @@ boundary_taxonomy = "file:topology/boundary-taxonomy.json"
 component_map = "file:topology/component-map.json"
 
 [score]
-model = "file:score/model.toml"
+model = "file:score/generic_lift_v2.json"
 
 [rules]
-packs = ["builtin:generic/default", "file:rules/security.toml"]
+packs = ["file:rules/generic_policy.json"]
 
 [queries]
-packs = ["file:queries/core.toml"]
+packs = ["file:queries/rust_core.json"]
 
 [recipes]
-packs = ["file:recipes/default.toml"]
+packs = ["file:recipes/generic_core_recipes.json"]

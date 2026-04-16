@@ -17,7 +17,8 @@ use toml as _;
 
 mod kernel {
     pub(crate) use substrate_lift::kernel::{
-        sha256_bytes, sha256_canonical_json, DiagnosticCode, Fingerprint, JsonPointer, Severity,
+        sha256_bytes, sha256_canonical_json, DiagnosticCode, Fingerprint, JsonPointer, QueryId,
+        RecipeId, RuleId, Severity,
     };
 }
 #[path = "../src/pack/mod.rs"]

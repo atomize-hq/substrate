@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.substrate.dev/lift/pack/recipe_pack.v1.json",
+  "title": "Substrate Lift Recipe Pack v1",
+  "type": "object",
+  "required": ["$schema", "kind", "version", "id", "name", "recipes"],
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.substrate.dev/lift/pack/recipe_pack.v1.json"
+    },
+    "kind": {
+      "const": "recipe_pack"
+    },
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "common.v1.json#/$defs/pack_name"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "recipes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/recipe"
+      }
+    }
+  },
+  "$defs": {
+    "recipe": {
+      "type": "object",
+      "required": ["id", "query", "transforms"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string"
+        },
+        "query": {
+          "$ref": "common.v1.json#/$defs/query_ref"
+        },
+        "transforms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/transform"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "transform": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/replace_capture_text_transform"
+        }
+      ]
+    },
+    "replace_capture_text_transform": {
+      "type": "object",
+      "required": ["op", "capture", "text"],
+      "properties": {
+        "op": {
+          "const": "replace_capture_text"
+        },
+        "capture": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

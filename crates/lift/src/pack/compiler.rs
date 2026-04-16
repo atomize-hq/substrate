@@ -11,27 +11,39 @@ use jsonschema::{Retrieve, Uri, ValidationError, Validator};
 use serde::Serialize;
 use serde_json::{Map, Number, Value};
 
-use crate::kernel::{sha256_bytes, sha256_canonical_json, Fingerprint, JsonPointer};
+use crate::kernel::{
+    sha256_bytes, sha256_canonical_json, Fingerprint, JsonPointer, QueryId, RecipeId, RuleId,
+};
 use crate::pack::builtin;
 use crate::pack::compiled::{
     BoundaryCountingMode, CompiledAnalysisDefaults, CompiledBoundary, CompiledBoundaryTaxonomy,
-    CompiledComponent, CompiledComponentMap, CompiledPackHeader, CompiledPathClasses,
+    CompiledComponent, CompiledComponentMap, CompiledConfidenceModel, CompiledConfidenceRule,
+    CompiledMissingInputRule, CompiledPackHeader, CompiledPackSet, CompiledPathClasses,
     CompiledProfile, CompiledProfileApps, CompiledProfileIncludes, CompiledProfileScore,
-    CompiledProfileTopology, ComponentCountingMode, ResolvedProfileTopology,
+    CompiledProfileTopology, CompiledQueryCapture, CompiledQueryDef, CompiledQueryPack,
+    CompiledRecipeDef, CompiledRecipePack, CompiledRecipeTransform, CompiledRuleDef,
+    CompiledRuleEmit, CompiledRulePack, CompiledRuleScope, CompiledScoreModel, CompiledTriggerRule,
+    ComponentCountingMode, QueryEngineKind, ReservedPathClass, ResolvedProfileTopology,
 };
 use crate::pack::diagnostics::{PackDiagnostic, PackLocation};
 use crate::pack::error::{PackError, PackResult};
+use crate::pack::expr::{compile_expr, compile_query_ref, CompiledQueryRef};
 use crate::pack::names::{AppName, LanguageId, PackName};
 use crate::pack::raw::{
     PackKind, RawBoundaryEntry, RawBoundaryTaxonomy, RawBoundaryTaxonomyCountingMode,
     RawComponentEntry, RawComponentMap, RawComponentMapCountingMode, RawIncludeSection, RawProfile,
-    RawProfileAnalysis, RawProfileApps, RawProfileScore, RawProfileTopology,
+    RawProfileAnalysis, RawProfileApps, RawProfileScore, RawProfileTopology, RawQueryPack,
+    RawRecipePack, RawRecipeTransform, RawReservedPathClass, RawRuleEmit, RawRulePack,
+    RawScoreModel,
 };
 use crate::pack::refs::PackRef;
 use crate::pack::schema::{
     PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_ID, PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_JSON,
     PACK_COMMON_V1_SCHEMA_ID, PACK_COMMON_V1_SCHEMA_JSON, PACK_COMPONENT_MAP_V1_SCHEMA_ID,
-    PACK_COMPONENT_MAP_V1_SCHEMA_JSON, PACK_PROFILE_V1_SCHEMA_ID,
+    PACK_COMPONENT_MAP_V1_SCHEMA_JSON, PACK_PROFILE_V1_SCHEMA_ID, PACK_QUERY_PACK_V1_SCHEMA_ID,
+    PACK_QUERY_PACK_V1_SCHEMA_JSON, PACK_RECIPE_PACK_V1_SCHEMA_ID, PACK_RECIPE_PACK_V1_SCHEMA_JSON,
+    PACK_RULE_PACK_V1_SCHEMA_ID, PACK_RULE_PACK_V1_SCHEMA_JSON, PACK_SCORE_MODEL_V1_SCHEMA_ID,
+    PACK_SCORE_MODEL_V1_SCHEMA_JSON,
 };
 use crate::pack::source::{PackFormat, PackOrigin, PackSource};
 use crate::pack::{BoundaryId, ComponentId};
@@ -67,6 +79,43 @@ impl TopologySchemaKind {
         match self {
             Self::BoundaryTaxonomy => boundary_taxonomy_schema_validator(),
             Self::ComponentMap => component_map_schema_validator(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AdvancedSchemaKind {
+    ScoreModel,
+    QueryPack,
+    RulePack,
+    RecipePack,
+}
+
+impl AdvancedSchemaKind {
+    fn invalid_root_code(self) -> &'static str {
+        match self {
+            Self::ScoreModel => "pack.score_model.invalid_root",
+            Self::QueryPack => "pack.query_pack.invalid_root",
+            Self::RulePack => "pack.rule_pack.invalid_root",
+            Self::RecipePack => "pack.recipe_pack.invalid_root",
+        }
+    }
+
+    fn validator(self) -> &'static Validator {
+        match self {
+            Self::ScoreModel => score_model_schema_validator(),
+            Self::QueryPack => query_pack_schema_validator(),
+            Self::RulePack => rule_pack_schema_validator(),
+            Self::RecipePack => recipe_pack_schema_validator(),
+        }
+    }
+
+    fn schema_id(self) -> &'static str {
+        match self {
+            Self::ScoreModel => PACK_SCORE_MODEL_V1_SCHEMA_ID,
+            Self::QueryPack => PACK_QUERY_PACK_V1_SCHEMA_ID,
+            Self::RulePack => PACK_RULE_PACK_V1_SCHEMA_ID,
+            Self::RecipePack => PACK_RECIPE_PACK_V1_SCHEMA_ID,
         }
     }
 }
@@ -284,6 +333,30 @@ impl PackCompiler {
         )
     }
 
+    /// Compiles one standalone score model from builtin, file, or inline JSON sources.
+    pub(crate) fn compile_score_model(&self, source: PackSource) -> PackResult<CompiledScoreModel> {
+        self.compile_score_model_loaded(source)
+            .map(|loaded| loaded.pack)
+    }
+
+    /// Compiles one standalone query pack from builtin, file, or inline JSON sources.
+    pub(crate) fn compile_query_pack(&self, source: PackSource) -> PackResult<CompiledQueryPack> {
+        self.compile_query_pack_loaded(source)
+            .map(|loaded| loaded.pack)
+    }
+
+    /// Compiles one standalone rule pack from builtin, file, or inline JSON sources.
+    pub(crate) fn compile_rule_pack(&self, source: PackSource) -> PackResult<CompiledRulePack> {
+        self.compile_rule_pack_loaded(source)
+            .map(|loaded| loaded.pack)
+    }
+
+    /// Compiles one standalone recipe pack from builtin, file, or inline JSON sources.
+    pub(crate) fn compile_recipe_pack(&self, source: PackSource) -> PackResult<CompiledRecipePack> {
+        self.compile_recipe_pack_loaded(source)
+            .map(|loaded| loaded.pack)
+    }
+
     /// Resolves the profile topology refs into compiled topology artifacts.
     pub(crate) fn resolve_profile_topology(
         &self,
@@ -328,6 +401,543 @@ impl PackCompiler {
             component_map,
             semantic_fingerprint,
         })
+    }
+
+    /// Resolves all selected advanced packs for a compiled profile into one bundle.
+    pub(crate) fn resolve_profile_pack_set(
+        &self,
+        profile: &CompiledProfile,
+    ) -> PackResult<CompiledPackSet> {
+        let topology = self.resolve_profile_topology(profile)?;
+        let mut memo = BTreeMap::new();
+        let mut seen_pack_ids = BTreeMap::new();
+
+        let score_model = profile
+            .score
+            .model
+            .as_ref()
+            .map(|reference| {
+                self.resolve_bundle_score_model(
+                    profile.header.id.as_str(),
+                    profile.source_file_base_dir.as_ref(),
+                    reference,
+                    &mut memo,
+                    &mut seen_pack_ids,
+                    &mut Vec::new(),
+                )
+            })
+            .transpose()?
+            .map(|loaded| loaded.pack);
+
+        let mut query_packs = BTreeMap::new();
+        let mut rule_packs = BTreeMap::new();
+        let mut recipe_packs = BTreeMap::new();
+
+        for reference in &profile.includes.query_packs {
+            let loaded = self.resolve_bundle_query_pack(
+                profile.header.id.as_str(),
+                profile.source_file_base_dir.as_ref(),
+                reference,
+                &mut memo,
+                &mut seen_pack_ids,
+                &mut Vec::new(),
+            )?;
+            query_packs.insert(loaded.pack.header.id.clone(), loaded.pack);
+        }
+
+        for reference in &profile.includes.rule_packs {
+            let loaded = self.resolve_bundle_rule_pack(
+                profile.header.id.as_str(),
+                profile.source_file_base_dir.as_ref(),
+                reference,
+                &mut memo,
+                &mut seen_pack_ids,
+                &mut Vec::new(),
+            )?;
+            self.resolve_rule_pack_queries(
+                &loaded,
+                &mut query_packs,
+                &mut memo,
+                &mut seen_pack_ids,
+                &mut Vec::new(),
+            )?;
+            rule_packs.insert(loaded.pack.header.id.clone(), loaded.pack);
+        }
+
+        for reference in &profile.includes.recipe_packs {
+            let loaded = self.resolve_bundle_recipe_pack(
+                profile.header.id.as_str(),
+                profile.source_file_base_dir.as_ref(),
+                reference,
+                &mut memo,
+                &mut seen_pack_ids,
+                &mut Vec::new(),
+            )?;
+            self.resolve_recipe_pack_queries(
+                &loaded,
+                &mut query_packs,
+                &mut memo,
+                &mut seen_pack_ids,
+                &mut Vec::new(),
+            )?;
+            recipe_packs.insert(loaded.pack.header.id.clone(), loaded.pack);
+        }
+
+        let semantic_fingerprint = compile_pack_set_fingerprint(
+            profile,
+            &topology,
+            score_model.as_ref(),
+            &rule_packs,
+            &query_packs,
+            &recipe_packs,
+        )?;
+
+        Ok(CompiledPackSet {
+            profile: profile.clone(),
+            boundary_taxonomy: topology.boundary_taxonomy,
+            component_map: topology.component_map,
+            score_model,
+            rule_packs,
+            query_packs,
+            recipe_packs,
+            diagnostics: Vec::new(),
+            semantic_fingerprint,
+        })
+    }
+
+    fn compile_score_model_loaded(
+        &self,
+        source: PackSource,
+    ) -> PackResult<LoadedCompiledScoreModel> {
+        let loaded = self.load_source(source)?;
+        if loaded.format != PackFormat::Json {
+            return Err(PackError::UnsupportedFormat {
+                origin: loaded.origin.display(),
+            });
+        }
+
+        let source_fingerprint = sha256_bytes(&loaded.bytes);
+        let json_value = parse_json_document(&loaded.origin, &loaded.bytes, "score_model")?;
+        let mut diagnostics = validate_score_model_document(&loaded.origin, &json_value);
+        if !diagnostics.is_empty() {
+            diagnostics.sort();
+            return Err(PackError::SchemaViolation {
+                origin: loaded.origin.display(),
+                schema_id: PACK_SCORE_MODEL_V1_SCHEMA_ID,
+                diagnostics,
+            });
+        }
+
+        let raw: RawScoreModel =
+            serde_json::from_value(json_value).map_err(|error| PackError::SchemaViolation {
+                origin: loaded.origin.display(),
+                schema_id: PACK_SCORE_MODEL_V1_SCHEMA_ID,
+                diagnostics: vec![PackDiagnostic::error(
+                    "pack.score_model.deserialize_failed",
+                    error.to_string(),
+                    Some(PackLocation {
+                        origin: loaded.origin.clone(),
+                        path: None,
+                    }),
+                )],
+            })?;
+        let normalized = normalize_score_model(&raw);
+        let semantic_fingerprint =
+            sha256_canonical_json(&normalized).map_err(|error| PackError::ParseFailure {
+                origin: loaded.origin.display(),
+                diagnostics: vec![PackDiagnostic::error(
+                    "pack.score_model.canonicalization_failed",
+                    error.to_string(),
+                    Some(PackLocation {
+                        origin: loaded.origin.clone(),
+                        path: None,
+                    }),
+                )],
+            })?;
+        compile_normalized_score_model(
+            loaded.origin,
+            loaded.file_base_dir,
+            source_fingerprint,
+            semantic_fingerprint,
+            normalized,
+        )
+    }
+
+    fn compile_query_pack_loaded(&self, source: PackSource) -> PackResult<LoadedCompiledQueryPack> {
+        let loaded = self.load_source(source)?;
+        if loaded.format != PackFormat::Json {
+            return Err(PackError::UnsupportedFormat {
+                origin: loaded.origin.display(),
+            });
+        }
+
+        let source_fingerprint = sha256_bytes(&loaded.bytes);
+        let json_value = parse_json_document(&loaded.origin, &loaded.bytes, "query_pack")?;
+        let mut diagnostics = validate_query_pack_document(&loaded.origin, &json_value);
+        if !diagnostics.is_empty() {
+            diagnostics.sort();
+            return Err(PackError::SchemaViolation {
+                origin: loaded.origin.display(),
+                schema_id: PACK_QUERY_PACK_V1_SCHEMA_ID,
+                diagnostics,
+            });
+        }
+
+        let raw: RawQueryPack =
+            serde_json::from_value(json_value).map_err(|error| PackError::SchemaViolation {
+                origin: loaded.origin.display(),
+                schema_id: PACK_QUERY_PACK_V1_SCHEMA_ID,
+                diagnostics: vec![PackDiagnostic::error(
+                    "pack.query_pack.deserialize_failed",
+                    error.to_string(),
+                    Some(PackLocation {
+                        origin: loaded.origin.clone(),
+                        path: None,
+                    }),
+                )],
+            })?;
+        let normalized = normalize_query_pack(&raw);
+        let semantic_fingerprint =
+            sha256_canonical_json(&normalized).map_err(|error| PackError::ParseFailure {
+                origin: loaded.origin.display(),
+                diagnostics: vec![PackDiagnostic::error(
+                    "pack.query_pack.canonicalization_failed",
+                    error.to_string(),
+                    Some(PackLocation {
+                        origin: loaded.origin.clone(),
+                        path: None,
+                    }),
+                )],
+            })?;
+        compile_normalized_query_pack(
+            loaded.origin,
+            loaded.file_base_dir,
+            source_fingerprint,
+            semantic_fingerprint,
+            normalized,
+        )
+    }
+
+    fn compile_rule_pack_loaded(&self, source: PackSource) -> PackResult<LoadedCompiledRulePack> {
+        let loaded = self.load_source(source)?;
+        if loaded.format != PackFormat::Json {
+            return Err(PackError::UnsupportedFormat {
+                origin: loaded.origin.display(),
+            });
+        }
+
+        let source_fingerprint = sha256_bytes(&loaded.bytes);
+        let json_value = parse_json_document(&loaded.origin, &loaded.bytes, "rule_pack")?;
+        let mut diagnostics = validate_rule_pack_document(&loaded.origin, &json_value);
+        if !diagnostics.is_empty() {
+            diagnostics.sort();
+            return Err(PackError::SchemaViolation {
+                origin: loaded.origin.display(),
+                schema_id: PACK_RULE_PACK_V1_SCHEMA_ID,
+                diagnostics,
+            });
+        }
+
+        let raw: RawRulePack =
+            serde_json::from_value(json_value).map_err(|error| PackError::SchemaViolation {
+                origin: loaded.origin.display(),
+                schema_id: PACK_RULE_PACK_V1_SCHEMA_ID,
+                diagnostics: vec![PackDiagnostic::error(
+                    "pack.rule_pack.deserialize_failed",
+                    error.to_string(),
+                    Some(PackLocation {
+                        origin: loaded.origin.clone(),
+                        path: None,
+                    }),
+                )],
+            })?;
+        let normalized = normalize_rule_pack(&raw);
+        let semantic_fingerprint =
+            sha256_canonical_json(&normalized).map_err(|error| PackError::ParseFailure {
+                origin: loaded.origin.display(),
+                diagnostics: vec![PackDiagnostic::error(
+                    "pack.rule_pack.canonicalization_failed",
+                    error.to_string(),
+                    Some(PackLocation {
+                        origin: loaded.origin.clone(),
+                        path: None,
+                    }),
+                )],
+            })?;
+        compile_normalized_rule_pack(
+            loaded.origin,
+            loaded.file_base_dir,
+            source_fingerprint,
+            semantic_fingerprint,
+            normalized,
+        )
+    }
+
+    fn compile_recipe_pack_loaded(
+        &self,
+        source: PackSource,
+    ) -> PackResult<LoadedCompiledRecipePack> {
+        let loaded = self.load_source(source)?;
+        if loaded.format != PackFormat::Json {
+            return Err(PackError::UnsupportedFormat {
+                origin: loaded.origin.display(),
+            });
+        }
+
+        let source_fingerprint = sha256_bytes(&loaded.bytes);
+        let json_value = parse_json_document(&loaded.origin, &loaded.bytes, "recipe_pack")?;
+        let mut diagnostics = validate_recipe_pack_document(&loaded.origin, &json_value);
+        if !diagnostics.is_empty() {
+            diagnostics.sort();
+            return Err(PackError::SchemaViolation {
+                origin: loaded.origin.display(),
+                schema_id: PACK_RECIPE_PACK_V1_SCHEMA_ID,
+                diagnostics,
+            });
+        }
+
+        let raw: RawRecipePack =
+            serde_json::from_value(json_value).map_err(|error| PackError::SchemaViolation {
+                origin: loaded.origin.display(),
+                schema_id: PACK_RECIPE_PACK_V1_SCHEMA_ID,
+                diagnostics: vec![PackDiagnostic::error(
+                    "pack.recipe_pack.deserialize_failed",
+                    error.to_string(),
+                    Some(PackLocation {
+                        origin: loaded.origin.clone(),
+                        path: None,
+                    }),
+                )],
+            })?;
+        let normalized = normalize_recipe_pack(&raw);
+        let semantic_fingerprint =
+            sha256_canonical_json(&normalized).map_err(|error| PackError::ParseFailure {
+                origin: loaded.origin.display(),
+                diagnostics: vec![PackDiagnostic::error(
+                    "pack.recipe_pack.canonicalization_failed",
+                    error.to_string(),
+                    Some(PackLocation {
+                        origin: loaded.origin.clone(),
+                        path: None,
+                    }),
+                )],
+            })?;
+        compile_normalized_recipe_pack(
+            loaded.origin,
+            loaded.file_base_dir,
+            source_fingerprint,
+            semantic_fingerprint,
+            normalized,
+        )
+    }
+
+    fn resolve_bundle_score_model(
+        &self,
+        referring_pack: &str,
+        referring_base_dir: Option<&PathBuf>,
+        reference: &PackRef,
+        memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
+        seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
+        stack: &mut Vec<ResolvedPackSourceKey>,
+    ) -> PackResult<LoadedCompiledScoreModel> {
+        let (source, key) = resolve_bundle_ref_source(
+            self,
+            referring_pack,
+            referring_base_dir,
+            reference,
+            PackKind::ScoreModel,
+        )?;
+        if let Some(existing) = memo.get(&key) {
+            return match existing {
+                ResolvedBundlePack::ScoreModel(loaded) => Ok(loaded.clone()),
+                other => Err(PackError::RefKindMismatch {
+                    reference: reference.as_str(),
+                    expected: PackKind::ScoreModel,
+                    actual: resolved_bundle_pack_kind(other),
+                }),
+            };
+        }
+
+        push_bundle_stack(&key, stack)?;
+        let result = self.compile_score_model_loaded(source);
+        stack.pop();
+        let loaded = result?;
+        register_bundle_pack_id(&loaded.pack.header, &key, seen_pack_ids)?;
+        memo.insert(key, ResolvedBundlePack::ScoreModel(loaded.clone()));
+        Ok(loaded)
+    }
+
+    fn resolve_bundle_query_pack(
+        &self,
+        referring_pack: &str,
+        referring_base_dir: Option<&PathBuf>,
+        reference: &PackRef,
+        memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
+        seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
+        stack: &mut Vec<ResolvedPackSourceKey>,
+    ) -> PackResult<LoadedCompiledQueryPack> {
+        let (source, key) = resolve_bundle_ref_source(
+            self,
+            referring_pack,
+            referring_base_dir,
+            reference,
+            PackKind::QueryPack,
+        )?;
+        if let Some(existing) = memo.get(&key) {
+            return match existing {
+                ResolvedBundlePack::QueryPack(loaded) => Ok(loaded.clone()),
+                other => Err(PackError::RefKindMismatch {
+                    reference: reference.as_str(),
+                    expected: PackKind::QueryPack,
+                    actual: resolved_bundle_pack_kind(other),
+                }),
+            };
+        }
+
+        push_bundle_stack(&key, stack)?;
+        let result = self.compile_query_pack_loaded(source);
+        stack.pop();
+        let loaded = result?;
+        register_bundle_pack_id(&loaded.pack.header, &key, seen_pack_ids)?;
+        memo.insert(key, ResolvedBundlePack::QueryPack(loaded.clone()));
+        Ok(loaded)
+    }
+
+    fn resolve_bundle_rule_pack(
+        &self,
+        referring_pack: &str,
+        referring_base_dir: Option<&PathBuf>,
+        reference: &PackRef,
+        memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
+        seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
+        stack: &mut Vec<ResolvedPackSourceKey>,
+    ) -> PackResult<LoadedCompiledRulePack> {
+        let (source, key) = resolve_bundle_ref_source(
+            self,
+            referring_pack,
+            referring_base_dir,
+            reference,
+            PackKind::RulePack,
+        )?;
+        if let Some(existing) = memo.get(&key) {
+            return match existing {
+                ResolvedBundlePack::RulePack(loaded) => Ok(loaded.clone()),
+                other => Err(PackError::RefKindMismatch {
+                    reference: reference.as_str(),
+                    expected: PackKind::RulePack,
+                    actual: resolved_bundle_pack_kind(other),
+                }),
+            };
+        }
+
+        push_bundle_stack(&key, stack)?;
+        let result = self.compile_rule_pack_loaded(source);
+        stack.pop();
+        let loaded = result?;
+        register_bundle_pack_id(&loaded.pack.header, &key, seen_pack_ids)?;
+        memo.insert(key, ResolvedBundlePack::RulePack(loaded.clone()));
+        Ok(loaded)
+    }
+
+    fn resolve_bundle_recipe_pack(
+        &self,
+        referring_pack: &str,
+        referring_base_dir: Option<&PathBuf>,
+        reference: &PackRef,
+        memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
+        seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
+        stack: &mut Vec<ResolvedPackSourceKey>,
+    ) -> PackResult<LoadedCompiledRecipePack> {
+        let (source, key) = resolve_bundle_ref_source(
+            self,
+            referring_pack,
+            referring_base_dir,
+            reference,
+            PackKind::RecipePack,
+        )?;
+        if let Some(existing) = memo.get(&key) {
+            return match existing {
+                ResolvedBundlePack::RecipePack(loaded) => Ok(loaded.clone()),
+                other => Err(PackError::RefKindMismatch {
+                    reference: reference.as_str(),
+                    expected: PackKind::RecipePack,
+                    actual: resolved_bundle_pack_kind(other),
+                }),
+            };
+        }
+
+        push_bundle_stack(&key, stack)?;
+        let result = self.compile_recipe_pack_loaded(source);
+        stack.pop();
+        let loaded = result?;
+        register_bundle_pack_id(&loaded.pack.header, &key, seen_pack_ids)?;
+        memo.insert(key, ResolvedBundlePack::RecipePack(loaded.clone()));
+        Ok(loaded)
+    }
+
+    fn resolve_rule_pack_queries(
+        &self,
+        loaded: &LoadedCompiledRulePack,
+        query_packs: &mut BTreeMap<PackName, CompiledQueryPack>,
+        memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
+        seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
+        stack: &mut Vec<ResolvedPackSourceKey>,
+    ) -> PackResult<()> {
+        for rule in loaded.pack.rules.values() {
+            let query_pack = self.resolve_bundle_query_pack(
+                loaded.pack.header.id.as_str(),
+                loaded.source_file_base_dir.as_ref(),
+                &rule.query.pack,
+                memo,
+                seen_pack_ids,
+                stack,
+            )?;
+            ensure_query_ref_exists(&loaded.pack.header.id, &rule.query, &query_pack.pack)?;
+            query_packs
+                .entry(query_pack.pack.header.id.clone())
+                .or_insert(query_pack.pack);
+        }
+        Ok(())
+    }
+
+    fn resolve_recipe_pack_queries(
+        &self,
+        loaded: &LoadedCompiledRecipePack,
+        query_packs: &mut BTreeMap<PackName, CompiledQueryPack>,
+        memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
+        seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
+        stack: &mut Vec<ResolvedPackSourceKey>,
+    ) -> PackResult<()> {
+        for recipe in loaded.pack.recipes.values() {
+            let query_pack = self.resolve_bundle_query_pack(
+                loaded.pack.header.id.as_str(),
+                loaded.source_file_base_dir.as_ref(),
+                &recipe.query.pack,
+                memo,
+                seen_pack_ids,
+                stack,
+            )?;
+            ensure_query_ref_exists(&loaded.pack.header.id, &recipe.query, &query_pack.pack)?;
+            query_packs
+                .entry(query_pack.pack.header.id.clone())
+                .or_insert(query_pack.pack);
+        }
+        Ok(())
+    }
+
+    fn detect_source_pack_kind(&self, source: &PackSource) -> PackResult<Option<PackKind>> {
+        let loaded = self.load_source(source.clone())?;
+        let value = match loaded.format {
+            PackFormat::Json => {
+                parse_json_document(&loaded.origin, &loaded.bytes, "pack_kind_probe")?
+            }
+            PackFormat::Toml => parse_profile_toml(&loaded.origin, &loaded.bytes)?,
+        };
+        Ok(value
+            .as_object()
+            .and_then(|object| object.get("kind"))
+            .and_then(Value::as_str)
+            .and_then(parse_pack_kind_string))
     }
 
     fn load_source(&self, source: PackSource) -> PackResult<LoadedSource> {
@@ -386,6 +996,44 @@ struct LoadedSource {
     format: PackFormat,
     bytes: Vec<u8>,
     file_base_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+enum ResolvedPackSourceKey {
+    Builtin(PackName),
+    File(PathBuf),
+}
+
+#[derive(Clone, Debug)]
+struct LoadedCompiledScoreModel {
+    pack: CompiledScoreModel,
+    source_file_base_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug)]
+struct LoadedCompiledQueryPack {
+    pack: CompiledQueryPack,
+    source_file_base_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug)]
+struct LoadedCompiledRulePack {
+    pack: CompiledRulePack,
+    source_file_base_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug)]
+struct LoadedCompiledRecipePack {
+    pack: CompiledRecipePack,
+    source_file_base_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug)]
+enum ResolvedBundlePack {
+    ScoreModel(LoadedCompiledScoreModel),
+    QueryPack(LoadedCompiledQueryPack),
+    RulePack(LoadedCompiledRulePack),
+    RecipePack(LoadedCompiledRecipePack),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -486,6 +1134,127 @@ struct NormalizedComponentEntry {
     include: Vec<String>,
     exclude: Vec<String>,
     tags: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedScoreModelDocument {
+    kind: PackKind,
+    version: u32,
+    id: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    vector_version: u32,
+    lift_score: Value,
+    estimated_slices: Value,
+    triggers: Vec<NormalizedScoreTriggerRule>,
+    confidence: NormalizedScoreConfidenceModel,
+    missing_input_rules: Vec<NormalizedScoreMissingInputRule>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedScoreTriggerRule {
+    id: String,
+    when: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedScoreConfidenceModel {
+    default: String,
+    rules: Vec<NormalizedScoreConfidenceRule>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedScoreConfidenceRule {
+    id: String,
+    when: Value,
+    set: String,
+    causes: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedScoreMissingInputRule {
+    field: String,
+    when: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedQueryPackDocument {
+    kind: PackKind,
+    version: u32,
+    id: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    language: String,
+    engine: String,
+    queries: Vec<NormalizedQueryDef>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedQueryDef {
+    id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<String>,
+    pattern: String,
+    captures: Vec<NormalizedQueryCapture>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedQueryCapture {
+    name: String,
+    required: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedRulePackDocument {
+    kind: PackKind,
+    version: u32,
+    id: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    rules: Vec<NormalizedRuleDef>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedRuleDef {
+    id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<String>,
+    severity: crate::kernel::Severity,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scope: Option<NormalizedRuleScope>,
+    query: Value,
+    emit: Vec<RawRuleEmit>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedRuleScope {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    languages: Vec<LanguageId>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    path_classes: Vec<RawReservedPathClass>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedRecipePackDocument {
+    kind: PackKind,
+    version: u32,
+    id: String,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    recipes: Vec<NormalizedRecipeDef>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+struct NormalizedRecipeDef {
+    id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<String>,
+    query: Value,
+    transforms: Vec<RawRecipeTransform>,
 }
 
 type ArrayItemValidator = fn(&PackOrigin, &str, &str, &mut Vec<PackDiagnostic>);
@@ -621,7 +1390,31 @@ fn component_map_schema_validator() -> &'static Validator {
     VALIDATOR.get_or_init(|| compile_topology_schema_validator(PACK_COMPONENT_MAP_V1_SCHEMA_JSON))
 }
 
+fn score_model_schema_validator() -> &'static Validator {
+    static VALIDATOR: OnceLock<Validator> = OnceLock::new();
+    VALIDATOR.get_or_init(|| compile_embedded_schema_validator(PACK_SCORE_MODEL_V1_SCHEMA_JSON))
+}
+
+fn query_pack_schema_validator() -> &'static Validator {
+    static VALIDATOR: OnceLock<Validator> = OnceLock::new();
+    VALIDATOR.get_or_init(|| compile_embedded_schema_validator(PACK_QUERY_PACK_V1_SCHEMA_JSON))
+}
+
+fn rule_pack_schema_validator() -> &'static Validator {
+    static VALIDATOR: OnceLock<Validator> = OnceLock::new();
+    VALIDATOR.get_or_init(|| compile_embedded_schema_validator(PACK_RULE_PACK_V1_SCHEMA_JSON))
+}
+
+fn recipe_pack_schema_validator() -> &'static Validator {
+    static VALIDATOR: OnceLock<Validator> = OnceLock::new();
+    VALIDATOR.get_or_init(|| compile_embedded_schema_validator(PACK_RECIPE_PACK_V1_SCHEMA_JSON))
+}
+
 fn compile_topology_schema_validator(schema_json: &str) -> Validator {
+    compile_embedded_schema_validator(schema_json)
+}
+
+fn compile_embedded_schema_validator(schema_json: &str) -> Validator {
     let root_schema: Value =
         serde_json::from_str(schema_json).expect("embedded topology schema JSON should parse");
     jsonschema::draft202012::options()
@@ -927,6 +1720,112 @@ fn validate_boundary_taxonomy_document(origin: &PackOrigin, value: &Value) -> Ve
 
 fn validate_component_map_document(origin: &PackOrigin, value: &Value) -> Vec<PackDiagnostic> {
     validate_topology_document(origin, value, TopologySchemaKind::ComponentMap)
+}
+
+fn validate_score_model_document(origin: &PackOrigin, value: &Value) -> Vec<PackDiagnostic> {
+    validate_advanced_document(origin, value, AdvancedSchemaKind::ScoreModel)
+}
+
+fn validate_query_pack_document(origin: &PackOrigin, value: &Value) -> Vec<PackDiagnostic> {
+    validate_advanced_document(origin, value, AdvancedSchemaKind::QueryPack)
+}
+
+fn validate_rule_pack_document(origin: &PackOrigin, value: &Value) -> Vec<PackDiagnostic> {
+    validate_advanced_document(origin, value, AdvancedSchemaKind::RulePack)
+}
+
+fn validate_recipe_pack_document(origin: &PackOrigin, value: &Value) -> Vec<PackDiagnostic> {
+    validate_advanced_document(origin, value, AdvancedSchemaKind::RecipePack)
+}
+
+fn validate_advanced_document(
+    origin: &PackOrigin,
+    value: &Value,
+    schema_kind: AdvancedSchemaKind,
+) -> Vec<PackDiagnostic> {
+    let mut diagnostics = Vec::new();
+    for error in schema_kind.validator().iter_errors(value) {
+        diagnostics.extend(advanced_schema_error_to_diagnostics(
+            origin,
+            schema_kind,
+            &error,
+        ));
+    }
+    diagnostics
+}
+
+fn advanced_schema_error_to_diagnostics(
+    origin: &PackOrigin,
+    schema_kind: AdvancedSchemaKind,
+    error: &ValidationError<'_>,
+) -> Vec<PackDiagnostic> {
+    match error.kind() {
+        ValidationErrorKind::AdditionalProperties { unexpected } => {
+            let mut fields = sorted_unique_strings(unexpected.clone());
+            fields
+                .drain(..)
+                .map(|field| {
+                    let path = append_pointer_segment(error.instance_path().as_str(), &field);
+                    PackDiagnostic::error(
+                        "pack.schema.unknown_field",
+                        format!("unexpected field `{field}`"),
+                        Some(location(origin, &path)),
+                    )
+                })
+                .collect()
+        }
+        ValidationErrorKind::Required { property } => {
+            let Some(property) = property.as_str() else {
+                return vec![PackDiagnostic::error(
+                    "pack.schema.missing_required_field",
+                    error.to_string(),
+                    pointer_subject(origin, error.instance_path().as_str()),
+                )];
+            };
+            let pointer = append_pointer_segment(error.instance_path().as_str(), property);
+            vec![PackDiagnostic::error(
+                "pack.schema.missing_required_field",
+                format!("required field `{property}` is missing"),
+                Some(location(origin, &pointer)),
+            )]
+        }
+        ValidationErrorKind::Type { .. } if error.instance_path().as_str().is_empty() => {
+            vec![PackDiagnostic::error(
+                schema_kind.invalid_root_code(),
+                error.to_string(),
+                Some(PackLocation {
+                    origin: origin.clone(),
+                    path: None,
+                }),
+            )]
+        }
+        ValidationErrorKind::Constant { .. } if error.instance_path().as_str() == "/kind" => {
+            vec![PackDiagnostic::error(
+                "pack.schema.invalid_kind",
+                error.to_string(),
+                Some(location(origin, "/kind")),
+            )]
+        }
+        ValidationErrorKind::Constant { .. } if error.instance_path().as_str() == "/version" => {
+            vec![PackDiagnostic::error(
+                "pack.schema.invalid_version",
+                error.to_string(),
+                Some(location(origin, "/version")),
+            )]
+        }
+        ValidationErrorKind::Pattern { .. } if error.instance_path().as_str() == "/id" => {
+            vec![PackDiagnostic::error(
+                "pack.schema.invalid_pack_name",
+                error.to_string(),
+                Some(location(origin, "/id")),
+            )]
+        }
+        _ => vec![PackDiagnostic::error(
+            "pack.schema.invalid_value",
+            error.to_string(),
+            pointer_subject(origin, error.instance_path().as_str()),
+        )],
+    }
 }
 
 fn require_string(
@@ -1704,10 +2603,146 @@ fn normalize_component_entry(raw: &RawComponentEntry) -> NormalizedComponentEntr
     }
 }
 
+fn normalize_score_model(raw: &RawScoreModel) -> NormalizedScoreModelDocument {
+    NormalizedScoreModelDocument {
+        kind: raw.kind,
+        version: raw.version,
+        id: raw.id.clone(),
+        name: raw.name.clone(),
+        description: raw.description.clone(),
+        vector_version: raw.vector_version,
+        lift_score: raw.lift_score.clone(),
+        estimated_slices: raw.estimated_slices.clone(),
+        triggers: raw
+            .triggers
+            .iter()
+            .map(|trigger| NormalizedScoreTriggerRule {
+                id: trigger.id.clone(),
+                when: trigger.when.clone(),
+            })
+            .collect(),
+        confidence: NormalizedScoreConfidenceModel {
+            default: raw.confidence.default_level.clone(),
+            rules: raw
+                .confidence
+                .rules
+                .iter()
+                .map(|rule| NormalizedScoreConfidenceRule {
+                    id: rule.id.clone(),
+                    when: rule.when.clone(),
+                    set: rule.set.clone(),
+                    causes: sorted_unique_strings(rule.causes.clone()),
+                })
+                .collect(),
+        },
+        missing_input_rules: raw
+            .missing_input_rules
+            .iter()
+            .map(|rule| NormalizedScoreMissingInputRule {
+                field: rule.field.clone(),
+                when: rule.when.clone(),
+            })
+            .collect(),
+    }
+}
+
+fn normalize_query_pack(raw: &RawQueryPack) -> NormalizedQueryPackDocument {
+    NormalizedQueryPackDocument {
+        kind: raw.kind,
+        version: raw.version,
+        id: raw.id.clone(),
+        name: raw.name.clone(),
+        description: raw.description.clone(),
+        language: raw.language.clone(),
+        engine: raw.engine.clone(),
+        queries: raw
+            .queries
+            .iter()
+            .map(|query| NormalizedQueryDef {
+                id: query.id.clone(),
+                summary: query.summary.clone(),
+                pattern: query.pattern.clone(),
+                captures: query
+                    .captures
+                    .iter()
+                    .map(|capture| NormalizedQueryCapture {
+                        name: capture.name.clone(),
+                        required: capture.required,
+                    })
+                    .collect(),
+            })
+            .collect(),
+    }
+}
+
+fn normalize_rule_pack(raw: &RawRulePack) -> NormalizedRulePackDocument {
+    NormalizedRulePackDocument {
+        kind: raw.kind,
+        version: raw.version,
+        id: raw.id.clone(),
+        name: raw.name.clone(),
+        description: raw.description.clone(),
+        rules: raw
+            .rules
+            .iter()
+            .map(|rule| NormalizedRuleDef {
+                id: rule.id.clone(),
+                summary: rule.summary.clone(),
+                severity: rule.severity,
+                scope: rule.scope.as_ref().map(|scope| NormalizedRuleScope {
+                    languages: scope.languages.clone().unwrap_or_default(),
+                    path_classes: scope.path_classes.clone().unwrap_or_default(),
+                }),
+                query: serde_json::json!({
+                    "pack": rule.query.pack.clone(),
+                    "id": rule.query.id.clone(),
+                }),
+                emit: rule.emit.clone(),
+            })
+            .collect(),
+    }
+}
+
+fn normalize_recipe_pack(raw: &RawRecipePack) -> NormalizedRecipePackDocument {
+    NormalizedRecipePackDocument {
+        kind: raw.kind,
+        version: raw.version,
+        id: raw.id.clone(),
+        name: raw.name.clone(),
+        description: raw.description.clone(),
+        recipes: raw
+            .recipes
+            .iter()
+            .map(|recipe| NormalizedRecipeDef {
+                id: recipe.id.clone(),
+                summary: recipe.summary.clone(),
+                query: serde_json::json!({
+                    "pack": recipe.query.pack.clone(),
+                    "id": recipe.query.id.clone(),
+                }),
+                transforms: recipe.transforms.clone(),
+            })
+            .collect(),
+    }
+}
+
 fn sorted_unique_strings(mut values: Vec<String>) -> Vec<String> {
     values.sort();
     values.dedup();
     values
+}
+
+fn parse_pack_kind_string(input: &str) -> Option<PackKind> {
+    match input {
+        "profile" => Some(PackKind::Profile),
+        "boundary_taxonomy" => Some(PackKind::BoundaryTaxonomy),
+        "component_map" => Some(PackKind::ComponentMap),
+        "score_model" => Some(PackKind::ScoreModel),
+        "rule_pack" => Some(PackKind::RulePack),
+        "query_pack" => Some(PackKind::QueryPack),
+        "recipe_pack" => Some(PackKind::RecipePack),
+        _ => None,
+    }
 }
 
 fn compile_normalized_profile(
@@ -1906,6 +2941,373 @@ fn compile_normalized_component_map(
     })
 }
 
+fn compile_normalized_score_model(
+    origin: PackOrigin,
+    source_file_base_dir: Option<PathBuf>,
+    source_fingerprint: Fingerprint,
+    semantic_fingerprint: Fingerprint,
+    normalized: NormalizedScoreModelDocument,
+) -> PackResult<LoadedCompiledScoreModel> {
+    let id = PackName::parse(&normalized.id)?;
+    let pack_id = normalized.id;
+    let lift_score = compile_expr(
+        &pack_id,
+        &JsonPointer::parse("/lift_score").expect("pointer"),
+        &normalized.lift_score,
+    )?;
+    let estimated_slices = compile_expr(
+        &pack_id,
+        &JsonPointer::parse("/estimated_slices").expect("pointer"),
+        &normalized.estimated_slices,
+    )?;
+
+    let mut trigger_ids = BTreeSet::new();
+    let mut triggers = Vec::with_capacity(normalized.triggers.len());
+    for (index, trigger) in normalized.triggers.into_iter().enumerate() {
+        if !trigger_ids.insert(trigger.id.clone()) {
+            return Err(PackError::DuplicateEntryId {
+                pack_kind: PackKind::ScoreModel,
+                pack_id: pack_id.clone(),
+                entry_kind: "trigger",
+                entry_id: trigger.id,
+            });
+        }
+        triggers.push(CompiledTriggerRule {
+            id: trigger.id,
+            when: compile_expr(
+                &pack_id,
+                &JsonPointer::parse(&format!("/triggers/{index}/when")).expect("pointer"),
+                &trigger.when,
+            )?,
+        });
+    }
+
+    let mut confidence_rule_ids = BTreeSet::new();
+    let mut confidence_rules = Vec::with_capacity(normalized.confidence.rules.len());
+    for (index, rule) in normalized.confidence.rules.into_iter().enumerate() {
+        if !confidence_rule_ids.insert(rule.id.clone()) {
+            return Err(PackError::DuplicateEntryId {
+                pack_kind: PackKind::ScoreModel,
+                pack_id: pack_id.clone(),
+                entry_kind: "confidence_rule",
+                entry_id: rule.id,
+            });
+        }
+        confidence_rules.push(CompiledConfidenceRule {
+            id: rule.id,
+            when: compile_expr(
+                &pack_id,
+                &JsonPointer::parse(&format!("/confidence/rules/{index}/when")).expect("pointer"),
+                &rule.when,
+            )?,
+            set: rule.set,
+            causes: rule.causes.into_iter().collect(),
+        });
+    }
+
+    let mut missing_fields = BTreeSet::new();
+    let mut missing_input_rules = Vec::with_capacity(normalized.missing_input_rules.len());
+    for (index, rule) in normalized.missing_input_rules.into_iter().enumerate() {
+        if !missing_fields.insert(rule.field.clone()) {
+            return Err(PackError::DuplicateEntryId {
+                pack_kind: PackKind::ScoreModel,
+                pack_id: pack_id.clone(),
+                entry_kind: "missing_input_field",
+                entry_id: rule.field,
+            });
+        }
+        let field =
+            JsonPointer::parse(&rule.field).map_err(|error| PackError::ExpressionCompile {
+                pack_id: pack_id.clone(),
+                path: JsonPointer::parse(&format!("/missing_input_rules/{index}/field"))
+                    .expect("pointer"),
+                reason: error.to_string(),
+            })?;
+        missing_input_rules.push(CompiledMissingInputRule {
+            field,
+            when: compile_expr(
+                &pack_id,
+                &JsonPointer::parse(&format!("/missing_input_rules/{index}/when"))
+                    .expect("pointer"),
+                &rule.when,
+            )?,
+        });
+    }
+
+    Ok(LoadedCompiledScoreModel {
+        pack: CompiledScoreModel {
+            header: CompiledPackHeader {
+                kind: PackKind::ScoreModel,
+                id,
+                version: normalized.version,
+                name: normalized.name,
+                description: normalized.description,
+                schema_id: PACK_SCORE_MODEL_V1_SCHEMA_ID,
+                origin,
+                source_fingerprint,
+                semantic_fingerprint,
+            },
+            vector_version: normalized.vector_version,
+            lift_score,
+            estimated_slices,
+            triggers,
+            confidence: CompiledConfidenceModel {
+                default_level: normalized.confidence.default,
+                rules: confidence_rules,
+            },
+            missing_input_rules,
+            diagnostics: Vec::new(),
+        },
+        source_file_base_dir,
+    })
+}
+
+fn compile_normalized_query_pack(
+    origin: PackOrigin,
+    source_file_base_dir: Option<PathBuf>,
+    source_fingerprint: Fingerprint,
+    semantic_fingerprint: Fingerprint,
+    normalized: NormalizedQueryPackDocument,
+) -> PackResult<LoadedCompiledQueryPack> {
+    let id = PackName::parse(&normalized.id)?;
+    let pack_id = normalized.id;
+    let language = LanguageId::parse(&normalized.language)?;
+    let engine = match normalized.engine.as_str() {
+        "tree_sitter" => QueryEngineKind::TreeSitter,
+        other => {
+            return Err(PackError::SchemaViolation {
+                origin: origin.display(),
+                schema_id: PACK_QUERY_PACK_V1_SCHEMA_ID,
+                diagnostics: vec![PackDiagnostic::error(
+                    "pack.query_pack.unsupported_engine",
+                    format!("unsupported query engine `{other}`"),
+                    Some(location(&origin, "/engine")),
+                )],
+            });
+        }
+    };
+
+    let mut local_ids = BTreeSet::new();
+    let mut queries = BTreeMap::new();
+    for query in normalized.queries {
+        if !local_ids.insert(query.id.clone()) {
+            return Err(PackError::DuplicateEntryId {
+                pack_kind: PackKind::QueryPack,
+                pack_id: pack_id.clone(),
+                entry_kind: "query",
+                entry_id: query.id,
+            });
+        }
+        let query_id = compile_query_id(&pack_id, &query.id);
+        queries.insert(
+            query_id.clone(),
+            CompiledQueryDef {
+                local_id: query.id,
+                id: query_id,
+                summary: query.summary,
+                pattern: query.pattern,
+                captures: query
+                    .captures
+                    .into_iter()
+                    .map(|capture| CompiledQueryCapture {
+                        name: capture.name,
+                        required: capture.required,
+                    })
+                    .collect(),
+            },
+        );
+    }
+
+    Ok(LoadedCompiledQueryPack {
+        pack: CompiledQueryPack {
+            header: CompiledPackHeader {
+                kind: PackKind::QueryPack,
+                id,
+                version: normalized.version,
+                name: normalized.name,
+                description: normalized.description,
+                schema_id: PACK_QUERY_PACK_V1_SCHEMA_ID,
+                origin,
+                source_fingerprint,
+                semantic_fingerprint,
+            },
+            language,
+            engine,
+            queries,
+            diagnostics: Vec::new(),
+        },
+        source_file_base_dir,
+    })
+}
+
+fn compile_normalized_rule_pack(
+    origin: PackOrigin,
+    source_file_base_dir: Option<PathBuf>,
+    source_fingerprint: Fingerprint,
+    semantic_fingerprint: Fingerprint,
+    normalized: NormalizedRulePackDocument,
+) -> PackResult<LoadedCompiledRulePack> {
+    let id = PackName::parse(&normalized.id)?;
+    let pack_id = normalized.id;
+    let mut local_ids = BTreeSet::new();
+    let mut rules = BTreeMap::new();
+
+    for (index, rule) in normalized.rules.into_iter().enumerate() {
+        if !local_ids.insert(rule.id.clone()) {
+            return Err(PackError::DuplicateEntryId {
+                pack_kind: PackKind::RulePack,
+                pack_id: pack_id.clone(),
+                entry_kind: "rule",
+                entry_id: rule.id,
+            });
+        }
+        let rule_id = compile_rule_id(&pack_id, &rule.id);
+        let query = compile_query_ref(
+            &pack_id,
+            &JsonPointer::parse(&format!("/rules/{index}/query")).expect("pointer"),
+            &rule.query,
+        )?;
+        rules.insert(
+            rule_id.clone(),
+            CompiledRuleDef {
+                local_id: rule.id,
+                id: rule_id,
+                summary: rule.summary,
+                severity: rule.severity,
+                scope: rule.scope.map(|scope| CompiledRuleScope {
+                    languages: scope.languages.into_iter().collect(),
+                    path_classes: scope
+                        .path_classes
+                        .into_iter()
+                        .map(map_reserved_path_class)
+                        .collect(),
+                }),
+                query,
+                emit: rule
+                    .emit
+                    .into_iter()
+                    .map(|emit| match emit {
+                        RawRuleEmit::Finding { code, message } => {
+                            CompiledRuleEmit::Finding { code, message }
+                        }
+                    })
+                    .collect(),
+            },
+        );
+    }
+
+    Ok(LoadedCompiledRulePack {
+        pack: CompiledRulePack {
+            header: CompiledPackHeader {
+                kind: PackKind::RulePack,
+                id,
+                version: normalized.version,
+                name: normalized.name,
+                description: normalized.description,
+                schema_id: PACK_RULE_PACK_V1_SCHEMA_ID,
+                origin,
+                source_fingerprint,
+                semantic_fingerprint,
+            },
+            rules,
+            diagnostics: Vec::new(),
+        },
+        source_file_base_dir,
+    })
+}
+
+fn compile_normalized_recipe_pack(
+    origin: PackOrigin,
+    source_file_base_dir: Option<PathBuf>,
+    source_fingerprint: Fingerprint,
+    semantic_fingerprint: Fingerprint,
+    normalized: NormalizedRecipePackDocument,
+) -> PackResult<LoadedCompiledRecipePack> {
+    let id = PackName::parse(&normalized.id)?;
+    let pack_id = normalized.id;
+    let mut local_ids = BTreeSet::new();
+    let mut recipes = BTreeMap::new();
+
+    for (index, recipe) in normalized.recipes.into_iter().enumerate() {
+        if !local_ids.insert(recipe.id.clone()) {
+            return Err(PackError::DuplicateEntryId {
+                pack_kind: PackKind::RecipePack,
+                pack_id: pack_id.clone(),
+                entry_kind: "recipe",
+                entry_id: recipe.id,
+            });
+        }
+        let recipe_id = compile_recipe_id(&pack_id, &recipe.id);
+        let query = compile_query_ref(
+            &pack_id,
+            &JsonPointer::parse(&format!("/recipes/{index}/query")).expect("pointer"),
+            &recipe.query,
+        )?;
+        recipes.insert(
+            recipe_id.clone(),
+            CompiledRecipeDef {
+                local_id: recipe.id,
+                id: recipe_id,
+                summary: recipe.summary,
+                query,
+                transforms: recipe
+                    .transforms
+                    .into_iter()
+                    .map(|transform| match transform {
+                        RawRecipeTransform::ReplaceCaptureText { capture, text } => {
+                            CompiledRecipeTransform::ReplaceCaptureText { capture, text }
+                        }
+                    })
+                    .collect(),
+            },
+        );
+    }
+
+    Ok(LoadedCompiledRecipePack {
+        pack: CompiledRecipePack {
+            header: CompiledPackHeader {
+                kind: PackKind::RecipePack,
+                id,
+                version: normalized.version,
+                name: normalized.name,
+                description: normalized.description,
+                schema_id: PACK_RECIPE_PACK_V1_SCHEMA_ID,
+                origin,
+                source_fingerprint,
+                semantic_fingerprint,
+            },
+            recipes,
+            diagnostics: Vec::new(),
+        },
+        source_file_base_dir,
+    })
+}
+
+fn compile_query_id(pack_id: &str, local_id: &str) -> QueryId {
+    QueryId::from_identity(&format!("pack\0query_pack\0{pack_id}\0query\0{local_id}"))
+}
+
+fn compile_rule_id(pack_id: &str, local_id: &str) -> RuleId {
+    RuleId::from_identity(&format!("pack\0rule_pack\0{pack_id}\0rule\0{local_id}"))
+}
+
+fn compile_recipe_id(pack_id: &str, local_id: &str) -> RecipeId {
+    RecipeId::from_identity(&format!("pack\0recipe_pack\0{pack_id}\0recipe\0{local_id}"))
+}
+
+fn map_reserved_path_class(value: RawReservedPathClass) -> ReservedPathClass {
+    match value {
+        RawReservedPathClass::Test => ReservedPathClass::Test,
+        RawReservedPathClass::Docs => ReservedPathClass::Docs,
+        RawReservedPathClass::Ci => ReservedPathClass::Ci,
+        RawReservedPathClass::Migration => ReservedPathClass::Migration,
+        RawReservedPathClass::Security => ReservedPathClass::Security,
+        RawReservedPathClass::PublicApi => ReservedPathClass::PublicApi,
+        RawReservedPathClass::Generated => ReservedPathClass::Generated,
+        RawReservedPathClass::Vendor => ReservedPathClass::Vendor,
+    }
+}
+
 fn compile_glob_set(patterns: &[String]) -> PackResult<GlobSet> {
     let mut builder = GlobSetBuilder::new();
     for pattern in patterns {
@@ -2017,26 +3419,12 @@ fn resolve_component_map(
 /// Phase B file refs resolve lexically from the compiled profile's captured
 /// parent directory, never from a display string or the ambient cwd.
 fn resolve_file_source(profile: &CompiledProfile, relative_path: &str) -> PackResult<PackSource> {
-    let Some(base) = &profile.source_file_base_dir else {
-        return Err(unknown_file_reference(profile, relative_path));
-    };
-
-    let path = base.join(relative_path);
-    match path.try_exists() {
-        Ok(true) => {}
-        Ok(false) => return Err(unknown_file_reference(profile, relative_path)),
-        Err(error) => {
-            return Err(PackError::Io {
-                origin: path.display().to_string(),
-                reason: error.to_string(),
-            });
-        }
-    }
-
-    Ok(PackSource::File {
-        path,
-        format_hint: Some(PackFormat::Json),
-    })
+    resolve_file_source_from_base(
+        profile.header.id.as_str(),
+        profile.source_file_base_dir.as_ref(),
+        relative_path,
+        Some(PackFormat::Json),
+    )
 }
 
 fn unknown_pack_reference(profile: &CompiledProfile, reference: &PackRef) -> PackError {
@@ -2047,10 +3435,293 @@ fn unknown_pack_reference(profile: &CompiledProfile, reference: &PackRef) -> Pac
 }
 
 fn unknown_file_reference(profile: &CompiledProfile, relative_path: &str) -> PackError {
+    unknown_file_reference_by_pack(profile.header.id.as_str(), relative_path)
+}
+
+fn unknown_file_reference_by_pack(referring_pack: &str, relative_path: &str) -> PackError {
     PackError::UnknownPackReference {
-        referring_pack: profile.header.id.as_str().to_owned(),
+        referring_pack: referring_pack.to_owned(),
         reference: format!("file:{relative_path}"),
     }
+}
+
+fn resolve_file_source_from_base(
+    referring_pack: &str,
+    base_dir: Option<&PathBuf>,
+    relative_path: &str,
+    format_hint: Option<PackFormat>,
+) -> PackResult<PackSource> {
+    let Some(base) = base_dir else {
+        return Err(unknown_file_reference_by_pack(
+            referring_pack,
+            relative_path,
+        ));
+    };
+
+    let path = base.join(relative_path);
+    match path.try_exists() {
+        Ok(true) => {}
+        Ok(false) => {
+            return Err(unknown_file_reference_by_pack(
+                referring_pack,
+                relative_path,
+            ))
+        }
+        Err(error) => {
+            return Err(PackError::Io {
+                origin: path.display().to_string(),
+                reason: error.to_string(),
+            });
+        }
+    }
+
+    Ok(PackSource::File { path, format_hint })
+}
+
+fn resolve_bundle_ref_source(
+    compiler: &PackCompiler,
+    referring_pack: &str,
+    referring_base_dir: Option<&PathBuf>,
+    reference: &PackRef,
+    expected: PackKind,
+) -> PackResult<(PackSource, ResolvedPackSourceKey)> {
+    match reference {
+        PackRef::Builtin(name) => {
+            if let Some(source) = builtin_source_for_kind(expected, name.as_str()) {
+                Ok((source, ResolvedPackSourceKey::Builtin(name.clone())))
+            } else if let Some(actual) = builtin_pack_kind(name.as_str()) {
+                Err(PackError::RefKindMismatch {
+                    reference: reference.as_str(),
+                    expected,
+                    actual,
+                })
+            } else {
+                Err(PackError::UnknownPackReference {
+                    referring_pack: referring_pack.to_owned(),
+                    reference: reference.as_str(),
+                })
+            }
+        }
+        PackRef::File(path) => {
+            let source = resolve_file_source_from_base(
+                referring_pack,
+                referring_base_dir,
+                path.as_str(),
+                None,
+            )?;
+            if let Some(actual) = compiler.detect_source_pack_kind(&source)? {
+                if actual != expected {
+                    return Err(PackError::RefKindMismatch {
+                        reference: reference.as_str(),
+                        expected,
+                        actual,
+                    });
+                }
+            }
+            let key = bundle_source_key(&source)?;
+            Ok((source, key))
+        }
+    }
+}
+
+fn bundle_source_key(source: &PackSource) -> PackResult<ResolvedPackSourceKey> {
+    match source {
+        PackSource::Builtin { logical_name, .. } => Ok(ResolvedPackSourceKey::Builtin(
+            PackName::parse(logical_name)?,
+        )),
+        PackSource::File { path, .. } => Ok(ResolvedPackSourceKey::File(absolutize_path(path)?)),
+        PackSource::Inline { .. } => Err(PackError::InvalidPackRef {
+            input: "inline bundle sources are unsupported".to_owned(),
+        }),
+    }
+}
+
+fn builtin_source_for_kind(expected: PackKind, logical_name: &str) -> Option<PackSource> {
+    match expected {
+        PackKind::Profile => builtin::profile_source(logical_name),
+        PackKind::BoundaryTaxonomy => builtin::boundary_taxonomy_source(logical_name),
+        PackKind::ComponentMap => builtin::component_map_source(logical_name),
+        PackKind::ScoreModel => builtin::score_model_source(logical_name),
+        PackKind::RulePack => builtin::rule_pack_source(logical_name),
+        PackKind::QueryPack => builtin::query_pack_source(logical_name),
+        PackKind::RecipePack => builtin::recipe_pack_source(logical_name),
+    }
+}
+
+fn builtin_pack_kind(logical_name: &str) -> Option<PackKind> {
+    [
+        (
+            PackKind::Profile,
+            builtin::profile_source(logical_name).is_some(),
+        ),
+        (
+            PackKind::BoundaryTaxonomy,
+            builtin::boundary_taxonomy_source(logical_name).is_some(),
+        ),
+        (
+            PackKind::ComponentMap,
+            builtin::component_map_source(logical_name).is_some(),
+        ),
+        (
+            PackKind::ScoreModel,
+            builtin::score_model_source(logical_name).is_some(),
+        ),
+        (
+            PackKind::RulePack,
+            builtin::rule_pack_source(logical_name).is_some(),
+        ),
+        (
+            PackKind::QueryPack,
+            builtin::query_pack_source(logical_name).is_some(),
+        ),
+        (
+            PackKind::RecipePack,
+            builtin::recipe_pack_source(logical_name).is_some(),
+        ),
+    ]
+    .into_iter()
+    .find_map(|(kind, present)| present.then_some(kind))
+}
+
+fn resolved_bundle_pack_kind(value: &ResolvedBundlePack) -> PackKind {
+    match value {
+        ResolvedBundlePack::ScoreModel(_) => PackKind::ScoreModel,
+        ResolvedBundlePack::QueryPack(_) => PackKind::QueryPack,
+        ResolvedBundlePack::RulePack(_) => PackKind::RulePack,
+        ResolvedBundlePack::RecipePack(_) => PackKind::RecipePack,
+    }
+}
+
+fn push_bundle_stack(
+    key: &ResolvedPackSourceKey,
+    stack: &mut Vec<ResolvedPackSourceKey>,
+) -> PackResult<()> {
+    if let Some(index) = stack.iter().position(|existing| existing == key) {
+        let cycle = stack[index..]
+            .iter()
+            .chain(std::iter::once(key))
+            .map(bundle_key_label)
+            .collect();
+        return Err(PackError::CyclicReference { cycle });
+    }
+    stack.push(key.clone());
+    Ok(())
+}
+
+fn bundle_key_label(key: &ResolvedPackSourceKey) -> String {
+    match key {
+        ResolvedPackSourceKey::Builtin(name) => format!("builtin:{}", name.as_str()),
+        ResolvedPackSourceKey::File(path) => path.display().to_string(),
+    }
+}
+
+fn register_bundle_pack_id(
+    header: &CompiledPackHeader,
+    key: &ResolvedPackSourceKey,
+    seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
+) -> PackResult<()> {
+    match seen_pack_ids.get(&header.id) {
+        Some(existing) if existing != key => Err(PackError::DuplicatePackId {
+            kind: header.kind,
+            id: header.id.as_str().to_owned(),
+        }),
+        Some(_) => Ok(()),
+        None => {
+            seen_pack_ids.insert(header.id.clone(), key.clone());
+            Ok(())
+        }
+    }
+}
+
+fn ensure_query_ref_exists(
+    referring_pack: &PackName,
+    query_ref: &CompiledQueryRef,
+    query_pack: &CompiledQueryPack,
+) -> PackResult<()> {
+    let query_id = compile_query_id(query_pack.header.id.as_str(), &query_ref.id);
+    if query_pack.queries.contains_key(&query_id) {
+        Ok(())
+    } else {
+        Err(PackError::UnknownPackReference {
+            referring_pack: referring_pack.as_str().to_owned(),
+            reference: format!("{}#{}", query_ref.pack.as_str(), query_ref.id),
+        })
+    }
+}
+
+fn compile_pack_set_fingerprint(
+    profile: &CompiledProfile,
+    topology: &ResolvedProfileTopology,
+    score_model: Option<&CompiledScoreModel>,
+    rule_packs: &BTreeMap<PackName, CompiledRulePack>,
+    query_packs: &BTreeMap<PackName, CompiledQueryPack>,
+    recipe_packs: &BTreeMap<PackName, CompiledRecipePack>,
+) -> PackResult<Fingerprint> {
+    #[derive(Serialize)]
+    struct BundleFingerprintInput {
+        profile: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        boundary_taxonomy: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        component_map: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        score_model: Option<String>,
+        rule_packs: BTreeMap<String, String>,
+        query_packs: BTreeMap<String, String>,
+        recipe_packs: BTreeMap<String, String>,
+    }
+
+    let input = BundleFingerprintInput {
+        profile: profile.header.semantic_fingerprint.as_str().to_owned(),
+        boundary_taxonomy: topology
+            .boundary_taxonomy
+            .as_ref()
+            .map(|pack| pack.header.semantic_fingerprint.as_str().to_owned()),
+        component_map: topology
+            .component_map
+            .as_ref()
+            .map(|pack| pack.header.semantic_fingerprint.as_str().to_owned()),
+        score_model: score_model.map(|pack| pack.header.semantic_fingerprint.as_str().to_owned()),
+        rule_packs: rule_packs
+            .iter()
+            .map(|(name, pack)| {
+                (
+                    name.as_str().to_owned(),
+                    pack.header.semantic_fingerprint.as_str().to_owned(),
+                )
+            })
+            .collect(),
+        query_packs: query_packs
+            .iter()
+            .map(|(name, pack)| {
+                (
+                    name.as_str().to_owned(),
+                    pack.header.semantic_fingerprint.as_str().to_owned(),
+                )
+            })
+            .collect(),
+        recipe_packs: recipe_packs
+            .iter()
+            .map(|(name, pack)| {
+                (
+                    name.as_str().to_owned(),
+                    pack.header.semantic_fingerprint.as_str().to_owned(),
+                )
+            })
+            .collect(),
+    };
+
+    sha256_canonical_json(&input).map_err(|error| PackError::ParseFailure {
+        origin: profile.header.origin.display(),
+        diagnostics: vec![PackDiagnostic::error(
+            "pack.bundle.canonicalization_failed",
+            error.to_string(),
+            Some(PackLocation {
+                origin: profile.header.origin.clone(),
+                path: None,
+            }),
+        )],
+    })
 }
 
 fn is_invalid_kind_schema_violation(error: &PackError) -> bool {

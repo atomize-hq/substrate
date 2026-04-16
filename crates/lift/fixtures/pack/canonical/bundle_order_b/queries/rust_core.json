@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "language": "rust",
+  "$schema": "https://schemas.substrate.dev/lift/pack/query_pack.v1.json",
+  "kind": "query_pack",
+  "id": "acme/rust-core",
+  "name": "Acme Rust core queries",
+  "engine": "tree_sitter",
+  "queries": [
+    {
+      "captures": [{ "required": true, "name": "use" }],
+      "pattern": "(use_declaration) @use",
+      "id": "use_statement"
+    }
+  ]
+}

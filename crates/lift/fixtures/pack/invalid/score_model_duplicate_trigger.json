@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schemas.substrate.dev/lift/pack/score_model.v1.json",
+  "kind": "score_model",
+  "version": 1,
+  "id": "acme/duplicate-trigger",
+  "name": "Duplicate trigger",
+  "vector_version": 2,
+  "lift_score": {
+    "op": "const_int",
+    "value": 1
+  },
+  "estimated_slices": {
+    "op": "const_int",
+    "value": 1
+  },
+  "triggers": [
+    { "id": "dup", "when": { "op": "const_bool", "value": true } },
+    { "id": "dup", "when": { "op": "const_bool", "value": false } }
+  ],
+  "confidence": {
+    "default": "high",
+    "rules": []
+  },
+  "missing_input_rules": []
+}

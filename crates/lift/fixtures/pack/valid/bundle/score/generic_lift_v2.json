@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schemas.substrate.dev/lift/pack/score_model.v1.json",
+  "kind": "score_model",
+  "version": 1,
+  "id": "acme/lift-v2",
+  "name": "Acme Lift model v2",
+  "vector_version": 2,
+  "lift_score": {
+    "op": "add",
+    "args": [
+      { "op": "field", "path": "/touch/edit_files" },
+      { "op": "field", "path": "/touch/components_touched" }
+    ]
+  },
+  "estimated_slices": {
+    "op": "max",
+    "args": [
+      { "op": "const_int", "value": 1 },
+      { "op": "field", "path": "/touch/components_touched" }
+    ]
+  },
+  "triggers": [],
+  "confidence": {
+    "default": "high",
+    "rules": []
+  },
+  "missing_input_rules": []
+}

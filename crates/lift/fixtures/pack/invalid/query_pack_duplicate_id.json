@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schemas.substrate.dev/lift/pack/query_pack.v1.json",
+  "kind": "query_pack",
+  "version": 1,
+  "id": "acme/duplicate-query",
+  "name": "Duplicate query ids",
+  "language": "rust",
+  "engine": "tree_sitter",
+  "queries": [
+    {
+      "id": "dup",
+      "pattern": "(use_declaration) @use",
+      "captures": [{ "name": "use", "required": true }]
+    },
+    {
+      "id": "dup",
+      "pattern": "(extern_crate_item) @extern",
+      "captures": [{ "name": "extern", "required": true }]
+    }
+  ]
+}

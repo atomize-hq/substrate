@@ -2,4 +2,4 @@
 
 This directory is reserved for detector and policy rule packs that compile into immutable runtime objects.
 
-Rules stay declarative at rest and are consumed by later engine and app seams.
+Phase C now compiles rule packs structurally inside the crate-private `pack` seam. That means schema validation, typed query refs, deterministic fingerprints, and bundle closure support exist, but rule execution still belongs to later engine and app seams.

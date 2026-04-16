@@ -1,0 +1,10 @@
+kind = "profile"
+version = 1
+id = "acme/duplicate-bundle"
+name = "Duplicate bundle"
+
+[queries]
+packs = ["file:queries/rust_core.json"]
+
+[rules]
+packs = ["file:generic_policy_duplicate.json"]
