@@ -243,6 +243,7 @@ fn transform_openai_to_gateway_request(
     openai_req: OpenAIResponsesRequest,
 ) -> Result<GatewayRequest, String> {
     reject_known_unsupported_request_state(&openai_req)?;
+    let allows_previous_response_continuation = openai_req.previous_response_id.is_some();
 
     let (tools, tool_names) = parse_function_tools(openai_req.tools.as_ref())?;
     let tool_choice = openai_req.tool_choice.as_ref();
@@ -305,7 +306,9 @@ fn transform_openai_to_gateway_request(
                                 "function_call_output.call_id must not be empty".to_string()
                             );
                         }
-                        if !prior_function_call_ids.contains(function_call_output.call_id.trim()) {
+                        if !prior_function_call_ids.contains(function_call_output.call_id.trim())
+                            && !allows_previous_response_continuation
+                        {
                             return Err(
                                 "function_call_output.call_id must reference a prior function_call item"
                                     .to_string(),
@@ -1634,6 +1637,42 @@ mod tests {
 
         let err = transform_openai_to_gateway_request(request).unwrap_err();
         assert_eq!(err, "function_call.arguments must be a JSON string");
+    }
+
+    #[test]
+    fn previous_response_id_allows_function_call_output_without_same_request_function_call() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "previous_response_id": "resp_prev_123",
+            "input": [
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_123",
+                    "output": "tool-output"
+                }
+            ]
+        }))
+        .unwrap();
+
+        let gateway_request = transform_openai_to_gateway_request(request).unwrap();
+        assert_eq!(gateway_request.messages.len(), 1);
+        assert_eq!(gateway_request.messages[0].role, "user");
+        assert!(matches!(
+            gateway_request.messages[0].content,
+            MessageContent::Blocks(ref blocks)
+                if matches!(
+                    &blocks[0],
+                    ContentBlock::Known(KnownContentBlock::ToolResult { tool_use_id, content, .. })
+                    if tool_use_id == "call_123"
+                        && matches!(content, ToolResultContent::Text(text) if text == "tool-output")
+                )
+        ));
+        assert_eq!(
+            gateway_request.metadata.as_ref().and_then(
+                |metadata| metadata.get(OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY)
+            ),
+            Some(&json!("resp_prev_123"))
+        );
     }
 
     #[test]

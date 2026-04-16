@@ -2061,6 +2061,12 @@ impl OpenAIProvider {
             }
         }
 
+        let allows_previous_response_continuation = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY))
+            .and_then(|value| value.as_str())
+            .is_some();
         let mut items = Vec::new();
         let mut emitted_call_ids = HashSet::new();
         let mut authoritative_provenance = HashMap::new();
@@ -2123,20 +2129,21 @@ impl OpenAIProvider {
                                     &mut content_parts,
                                 );
                                 if !emitted_call_ids.contains(tool_use_id) {
-                                    let Some((name, arguments)) =
+                                    if let Some((name, arguments)) =
                                         authoritative_provenance.get(tool_use_id).cloned()
-                                    else {
+                                    {
+                                        emitted_call_ids.insert(tool_use_id.clone());
+                                        items.push(OpenAIResponsesInputItem::FunctionCall {
+                                            call_id: tool_use_id.clone(),
+                                            name,
+                                            arguments,
+                                        });
+                                    } else if !allows_previous_response_continuation {
                                         return Err(ProviderError::ConfigError(
                                             "Responses continuation requires authoritative provenance for each function_call_output"
                                                 .to_string(),
                                         ));
-                                    };
-                                    emitted_call_ids.insert(tool_use_id.clone());
-                                    items.push(OpenAIResponsesInputItem::FunctionCall {
-                                        call_id: tool_use_id.clone(),
-                                        name,
-                                        arguments,
-                                    });
+                                    }
                                 }
                                 let output = if *is_error {
                                     tracing::debug!(
@@ -4152,6 +4159,45 @@ mod tests {
         }
     }
 
+    fn previous_response_id_public_responses_continuation_request() -> GatewayRequest {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_PUBLIC_RESPONSES_METADATA_KEY.to_string(),
+            serde_json::Value::Bool(true),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY.to_string(),
+            serde_json::Value::String("resp_prev_123".to_string()),
+        );
+
+        GatewayRequest {
+            model: "gpt-4.1-mini".to_string(),
+            messages: vec![crate::models::Message {
+                role: "user".to_string(),
+                content: crate::models::MessageContent::Blocks(vec![ContentBlock::Known(
+                    KnownContentBlock::ToolResult {
+                        tool_use_id: "call_fixture_1".to_string(),
+                        content: crate::models::ToolResultContent::Text(
+                            "{\"ok\":true}".to_string(),
+                        ),
+                        is_error: false,
+                        cache_control: None,
+                    },
+                )]),
+            }],
+            max_output_tokens: 32,
+            reasoning: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: None,
+        }
+    }
+
     fn orphaned_public_responses_continuation_request() -> GatewayRequest {
         let mut metadata = HashMap::new();
         metadata.insert(
@@ -4558,6 +4604,28 @@ mod tests {
             }
             other => panic!("expected config error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn transform_to_responses_request_preserves_previous_response_id_output_only_continuations() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        let request = previous_response_id_public_responses_continuation_request();
+
+        let serialized =
+            serde_json::to_value(provider.transform_to_responses_request(&request).unwrap())
+                .unwrap();
+        let input = serialized["input"]
+            .as_array()
+            .expect("responses input array");
+
+        assert_eq!(
+            serialized["previous_response_id"],
+            serde_json::json!("resp_prev_123")
+        );
+        assert_eq!(input.len(), 1);
+        assert_eq!(input[0]["type"], serde_json::json!("function_call_output"));
+        assert_eq!(input[0]["call_id"], serde_json::json!("call_fixture_1"));
+        assert_eq!(input[0]["output"], serde_json::json!("{\"ok\":true}"));
     }
 
     #[test]

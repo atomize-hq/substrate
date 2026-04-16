@@ -151,6 +151,7 @@ Other rejected cases:
     - `data:` image URLs are also accepted
 - tool continuation input items:
   - `{ "type": "function_call_output", "call_id": "...", "output": "..." }`
+- `previous_response_id`
 - `tools`
   - function tools only
 - `tool_choice`
@@ -188,7 +189,7 @@ Other rejected cases:
   - `response.completed`
 - `response.completed` carries the final assembled Response object, including usage.
 - `parallel_tool_calls` is preserved into gateway metadata; it does not widen tool support beyond function tools.
-- Tool continuation uses `function_call_output` items and preserves `call_id`.
+- Tool continuation uses `function_call_output` items, preserves `call_id`, and accepts either replayed `function_call` history or `previous_response_id` as the continuation anchor.
 
 ### Rejected/unsupported behavior
 

@@ -69,6 +69,14 @@ struct ToolLoopFixture {
 }
 
 #[derive(Debug, Deserialize)]
+struct PreviousResponseContinuationFixture {
+    request: Value,
+    previous_response_id: String,
+    expected_tool_use_id: String,
+    expected_output: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct SupportedControlsFixture {
     request: Value,
 }
@@ -469,7 +477,88 @@ async fn tool_loop_continuation_uses_upstream_responses_api_and_preserves_functi
 }
 
 #[tokio::test]
+async fn previous_response_id_continuation_uses_upstream_responses_api_without_replaying_function_call(
+) {
+    let fixture: PreviousResponseContinuationFixture = read_json_fixture(
+        FixtureNamespace::OpenAiResponses,
+        "request-previous-response-id-function-call-output.json",
+    );
+    let mut server = Server::new_async().await;
+    let responses_mock = server
+        .mock("POST", "/v1/responses")
+        .match_header("authorization", "Bearer openai-secret")
+        .match_body(Matcher::PartialJson(json!({
+            "model": "gpt-4.1-mini",
+            "stream": true,
+            "previous_response_id": fixture.previous_response_id,
+            "input": [
+                {
+                    "type": "function_call_output",
+                    "call_id": fixture.expected_tool_use_id,
+                    "output": fixture.expected_output
+                }
+            ]
+        })))
+        .with_status(200)
+        .with_body(responses_api_sync_body(
+            "gpt-4.1-mini",
+            "continued-tool-loop-ok",
+        ))
+        .create_async()
+        .await;
+    let chat_mock = server
+        .mock("POST", "/v1/chat/completions")
+        .with_status(200)
+        .with_body(
+            r#"{
+            "id":"chatcmpl_wrong_endpoint",
+            "object":"chat.completion",
+            "model":"gpt-4.1-mini",
+            "choices":[{
+                "message":{"role":"assistant","content":"wrong endpoint"},
+                "finish_reason":"stop"
+            }],
+            "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}
+        }"#,
+        )
+        .create_async()
+        .await;
+
+    let harness = build_openai_provider_harness(&server.url(), "gpt-4.1-mini");
+    let response = harness
+        .invoke_responses(HeaderMap::new(), fixture.request.clone())
+        .await;
+
+    assert!(
+        responses_mock.matched_async().await,
+        "gateway should forward previous_response_id continuations to /v1/responses with output-only function_call_output items"
+    );
+    assert!(
+        !chat_mock.matched_async().await,
+        "gateway must not lower previous_response_id continuations into /v1/chat/completions"
+    );
+    let status = response.status();
+    let body = response_body_text(response).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let json: Value =
+        serde_json::from_str(&body).expect("continuation regression response body must be JSON");
+    assert_eq!(json["object"], "response");
+    assert_eq!(json["status"], "completed");
+
+    let (item_types, texts, call_ids) = collect_output_summary(&json["output"]);
+    assert_eq!(item_types, vec!["message".to_string()]);
+    assert_eq!(texts, vec!["continued-tool-loop-ok".to_string()]);
+    assert!(call_ids.is_empty());
+
+    responses_mock.assert_async().await;
+}
+
+#[tokio::test]
 async fn orphaned_function_call_output_rejects_before_any_upstream_call() {
+    let fixture: NegativeFixture = read_json_fixture(
+        FixtureNamespace::OpenAiResponses,
+        "negative-orphaned-function-call-output-without-previous-response-id.json",
+    );
     let mut server = Server::new_async().await;
     let responses_mock = server
         .mock("POST", "/v1/responses")
@@ -479,29 +568,28 @@ async fn orphaned_function_call_output_rejects_before_any_upstream_call() {
         .await;
 
     let harness = build_openai_provider_harness(&server.url(), "gpt-4.1-mini");
-    let request = json!({
-        "model": "gateway-default",
-        "input": [
-            {
-                "type": "function_call_output",
-                "call_id": "call_missing",
-                "output": "{\"ok\":true}"
-            }
-        ]
-    });
-    let response = harness.invoke_responses(HeaderMap::new(), request).await;
+    let response = harness
+        .invoke_responses(HeaderMap::new(), fixture.request.clone())
+        .await;
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response.status(),
+        StatusCode::from_u16(fixture.expected_status).unwrap()
+    );
     assert!(
         !responses_mock.matched_async().await,
-        "gateway must reject orphaned continuations before the upstream call"
+        "gateway must reject orphaned continuations before the upstream call when previous_response_id is absent"
+    );
+    assert!(
+        fixture.request.get("previous_response_id").is_none(),
+        "negative orphan fixture must not include previous_response_id"
     );
 
     let body = response_body_text(response).await;
     let json: Value = serde_json::from_str(&body).expect("negative response body must be JSON");
     assert_eq!(json["error"]["type"], "error");
-    assert_eq!(json["error"]["class"], "route");
-    assert_eq!(json["error"]["message"], "Route selection failed");
+    assert_eq!(json["error"]["class"], fixture.expected_error_class);
+    assert_eq!(json["error"]["message"], fixture.expected_error_message);
 }
 
 #[tokio::test]

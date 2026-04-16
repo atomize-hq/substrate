@@ -71,7 +71,7 @@ The gateway accepts the following top-level fields:
 `function_call_output` items support:
 
 - `{ "type": "function_call_output", "call_id": string, "output": string }`
-- `function_call_output.call_id` MUST reference a prior `function_call` item for the same request.
+- `function_call_output.call_id` MUST either reference a prior `function_call` item in the same request or be anchored by `previous_response_id` for a valid follow-up continuation request.
 
 ## Tooling
 
@@ -96,7 +96,9 @@ Tool-loop continuation:
 
 1. Client sends a request.
 2. Gateway emits `function_call` output items.
-3. Client executes tools and sends a follow-up request that preserves the authoritative prior `function_call` item and appends one `function_call_output` item per tool call.
+3. Client executes tools and sends a follow-up request that either:
+   - preserves the authoritative prior `function_call` item and appends one `function_call_output` item per tool call, or
+   - supplies `previous_response_id` and appends one `function_call_output` item per tool call without replaying the prior `function_call`.
 4. `function_call_output.call_id` MUST match the emitted tool id exactly.
 5. `function_call_output.output` MUST be a string.
 6. Orphaned `function_call_output` items reject before any upstream call; the gateway MUST NOT fabricate placeholder tool metadata.
