@@ -1420,6 +1420,7 @@ mod tests {
     use super::*;
     use crate::cli::ModelMapping;
     use crate::providers::ProviderRegistry;
+    use crate::providers::{OpenAIProvider, OpenAIProviderConfig, OpenAITransport};
     use crate::server::openai_conformance_test_support::{
         read_json_fixture, response_text_response as response_text,
         response_with_text_and_tool as response_with_tool_and_thinking, ConformanceHarness,
@@ -1693,6 +1694,62 @@ mod tests {
             Some(vec!["halt".to_string()])
         );
         assert_eq!(gateway_request.tools.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn public_responses_passthrough_controls_survive_ingress_and_provider_serialization() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "input": "hello",
+            "metadata": {
+                "client": "sdk",
+                "request_id": "req_123"
+            },
+            "truncation": "auto",
+            "previous_response_id": "resp_prev_123",
+            "user": "user_123",
+            "stream_options": { "include_obfuscation": true },
+            "service_tier": "priority"
+        }))
+        .unwrap();
+
+        let gateway_request = transform_openai_to_gateway_request(request).unwrap();
+        let provider = OpenAIProvider::with_transport(
+            OpenAITransport::OpenAI,
+            OpenAIProviderConfig {
+                name: "test-openai".to_string(),
+                api_key: String::new(),
+                base_url: "https://example.invalid/v1".to_string(),
+                models: Vec::new(),
+                custom_headers: Vec::new(),
+                oauth_provider: None,
+                token_store: None,
+                codex_auth_source: None,
+            },
+        );
+
+        let serialized = serde_json::to_value(
+            provider
+                .transform_to_responses_request(&gateway_request)
+                .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            serialized["metadata"],
+            json!({
+                "client": "sdk",
+                "request_id": "req_123"
+            })
+        );
+        assert_eq!(serialized["truncation"], json!("auto"));
+        assert_eq!(serialized["previous_response_id"], json!("resp_prev_123"));
+        assert_eq!(serialized["user"], json!("user_123"));
+        assert_eq!(
+            serialized["stream_options"],
+            json!({ "include_obfuscation": true })
+        );
+        assert_eq!(serialized["service_tier"], json!("priority"));
     }
 
     #[test]

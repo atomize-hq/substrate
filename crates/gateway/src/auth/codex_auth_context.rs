@@ -3,7 +3,7 @@
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use secrecy::{ExposeSecret, SecretString};
-use std::{env, path::Path};
+use std::{env, path::PathBuf};
 
 use super::codex_auth_state::CodexAuthState;
 
@@ -67,39 +67,48 @@ impl CodexIntegratedAuthHandoff {
 }
 
 #[derive(Debug, Clone)]
-pub enum CodexAuthSelection {
-    Integrated(CodexIntegratedAuthHandoff),
-    Standalone(CodexAuthState),
+pub enum CodexAuthSource {
+    Integrated,
+    StandaloneLocal { path: PathBuf },
 }
 
-impl CodexAuthSelection {
-    pub fn from_env_or_local_auth_state(local_auth_path: impl AsRef<Path>) -> Result<Self> {
-        if let Some(handoff) = CodexIntegratedAuthHandoff::from_env()? {
-            Ok(Self::Integrated(handoff))
-        } else {
-            Ok(Self::Standalone(CodexAuthState::load(local_auth_path)?))
-        }
-    }
-
+impl CodexAuthSource {
     pub fn mode(&self) -> CodexAuthMode {
         match self {
-            Self::Integrated(_) => CodexAuthMode::Integrated,
-            Self::Standalone(_) => CodexAuthMode::Standalone,
+            Self::Integrated => CodexAuthMode::Integrated,
+            Self::StandaloneLocal { .. } => CodexAuthMode::Standalone,
         }
     }
 
-    pub fn resolve(self) -> Result<ResolvedCodexAuthContext> {
+    pub fn resolve(&self) -> Result<ResolvedCodexAuthContext> {
         match self {
-            Self::Integrated(handoff) => resolve_selected_mode(
-                CodexAuthMode::Integrated,
-                handoff.account_id,
-                handoff.access_token,
-            ),
-            Self::Standalone(state) => resolve_selected_mode(
-                CodexAuthMode::Standalone,
-                state.account_id,
-                state.access_token,
-            ),
+            Self::Integrated => {
+                let Some(handoff) = CodexIntegratedAuthHandoff::from_env()? else {
+                    return Err(anyhow!(
+                        "integrated Codex auth source is unavailable: Substrate-delivered auth handoff is missing"
+                    ));
+                };
+
+                resolve_selected_mode(
+                    CodexAuthMode::Integrated,
+                    handoff.account_id,
+                    handoff.access_token,
+                )
+            }
+            Self::StandaloneLocal { path } => {
+                let state = CodexAuthState::load(path).with_context(|| {
+                    format!(
+                        "failed to load standalone Codex auth state from {}",
+                        path.display()
+                    )
+                })?;
+
+                resolve_selected_mode(
+                    CodexAuthMode::Standalone,
+                    state.account_id,
+                    state.access_token,
+                )
+            }
         }
     }
 }
@@ -188,12 +197,12 @@ mod tests {
 
     #[test]
     fn integrated_mode_uses_substrate_account_id_first() {
-        let selection = CodexAuthSelection::Integrated(CodexIntegratedAuthHandoff::new(
+        let resolved = resolve_selected_mode(
+            CodexAuthMode::Integrated,
             Some("acct_explicit".to_string()),
             codex_access_token("acct_jwt"),
-        ));
-
-        let resolved = selection.resolve().unwrap();
+        )
+        .unwrap();
 
         assert_eq!(resolved.mode, CodexAuthMode::Integrated);
         assert_eq!(resolved.account_id, "acct_explicit");
@@ -206,12 +215,12 @@ mod tests {
 
     #[test]
     fn integrated_mode_uses_jwt_fallback_when_explicit_account_id_is_absent() {
-        let selection = CodexAuthSelection::Integrated(CodexIntegratedAuthHandoff::new(
+        let resolved = resolve_selected_mode(
+            CodexAuthMode::Integrated,
             None,
             codex_access_token("acct_jwt"),
-        ));
-
-        let resolved = selection.resolve().unwrap();
+        )
+        .unwrap();
 
         assert_eq!(resolved.mode, CodexAuthMode::Integrated);
         assert_eq!(resolved.account_id, "acct_jwt");
@@ -223,12 +232,12 @@ mod tests {
 
     #[test]
     fn standalone_mode_uses_explicit_account_id_first() {
-        let selection = CodexAuthSelection::Standalone(CodexAuthState::new(
+        let resolved = resolve_selected_mode(
+            CodexAuthMode::Standalone,
             Some("acct_local_explicit".to_string()),
             codex_access_token("acct_local_jwt"),
-        ));
-
-        let resolved = selection.resolve().unwrap();
+        )
+        .unwrap();
 
         assert_eq!(resolved.mode, CodexAuthMode::Standalone);
         assert_eq!(resolved.account_id, "acct_local_explicit");
@@ -237,12 +246,12 @@ mod tests {
 
     #[test]
     fn standalone_mode_uses_jwt_fallback_when_explicit_account_id_is_absent() {
-        let selection = CodexAuthSelection::Standalone(CodexAuthState::new(
+        let resolved = resolve_selected_mode(
+            CodexAuthMode::Standalone,
             None,
             codex_access_token("acct_local_jwt"),
-        ));
-
-        let resolved = selection.resolve().unwrap();
+        )
+        .unwrap();
 
         assert_eq!(resolved.mode, CodexAuthMode::Standalone);
         assert_eq!(resolved.account_id, "acct_local_jwt");
@@ -254,22 +263,21 @@ mod tests {
 
     #[test]
     fn auth_context_resolution_fails_when_account_id_is_unresolvable() {
-        let selection = CodexAuthSelection::Standalone(CodexAuthState::new(
+        let err = resolve_selected_mode(
+            CodexAuthMode::Standalone,
             None,
             SecretString::new("not-a-jwt".to_string()),
-        ));
-
-        let err = selection.resolve().unwrap_err();
+        )
+        .unwrap_err();
         assert!(err
             .to_string()
             .contains("could not resolve account_id from JWT fallback"));
     }
 
     #[test]
-    fn integrated_mode_from_env_uses_canonical_field_names() {
+    fn integrated_source_uses_canonical_field_names() {
         let _env_lock_guard = ENV_LOCK.lock().unwrap();
 
-        let temp_dir = TempDir::new().unwrap();
         let _account_id_guard = EnvGuard::set(
             SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
             "acct_env_explicit",
@@ -279,13 +287,10 @@ mod tests {
             "header.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjdF9lbnZfand0In19.signature",
         );
 
-        let selection = CodexAuthSelection::from_env_or_local_auth_state(temp_dir.path()).unwrap();
-        match selection {
-            CodexAuthSelection::Integrated(handoff) => {
-                assert_eq!(handoff.account_id.as_deref(), Some("acct_env_explicit"));
-            }
-            _ => panic!("expected integrated selection"),
-        }
+        let resolved = CodexAuthSource::Integrated.resolve().unwrap();
+        assert_eq!(resolved.mode, CodexAuthMode::Integrated);
+        assert_eq!(resolved.account_id, "acct_env_explicit");
+        assert_eq!(resolved.account_id_source, CodexAccountIdSource::Explicit);
     }
 
     struct EnvGuard {
@@ -318,7 +323,23 @@ mod tests {
     }
 
     #[test]
-    fn env_selection_falls_back_to_standalone_when_integrated_handoff_is_absent() {
+    fn integrated_source_requires_substrate_handoff() {
+        let _env_lock_guard = ENV_LOCK.lock().unwrap();
+
+        let _account_id_guard = EnvGuard::clear(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
+        let _access_token_guard =
+            EnvGuard::clear(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
+
+        let err = CodexAuthSource::Integrated.resolve().unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Substrate-delivered auth handoff is missing"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn integrated_source_does_not_read_local_auth_files() {
         let _env_lock_guard = ENV_LOCK.lock().unwrap();
 
         let _account_id_guard = EnvGuard::clear(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
@@ -336,12 +357,30 @@ mod tests {
         )
         .unwrap();
 
-        let selection = CodexAuthSelection::from_env_or_local_auth_state(&path).unwrap();
-        match selection {
-            CodexAuthSelection::Standalone(state) => {
-                assert_eq!(state.account_id.as_deref(), Some("acct_local"));
-            }
-            _ => panic!("expected standalone selection"),
-        }
+        let err = CodexAuthSource::Integrated.resolve().unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("Substrate-delivered auth handoff is missing"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn standalone_local_source_uses_explicit_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("auth.json");
+        fs::write(
+            &path,
+            r#"{
+                "account_id": "acct_local",
+                "access_token": "header.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjdF9sb2NhbF9qd3QifX0.signature"
+            }"#,
+        )
+        .unwrap();
+
+        let resolved = CodexAuthSource::StandaloneLocal { path }.resolve().unwrap();
+        assert_eq!(resolved.mode, CodexAuthMode::Standalone);
+        assert_eq!(resolved.account_id, "acct_local");
+        assert_eq!(resolved.account_id_source, CodexAccountIdSource::Explicit);
     }
 }

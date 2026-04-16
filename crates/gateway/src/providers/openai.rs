@@ -1,5 +1,7 @@
 use super::{error::ProviderError, OpenAITransport};
-use crate::auth::{CodexAuthState, OAuthClient, OAuthConfig, ResolvedCodexAuthContext, TokenStore};
+use crate::auth::{
+    CodexAuthSource, OAuthClient, OAuthConfig, ResolvedCodexAuthContext, TokenStore,
+};
 use crate::core::{GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage};
 use crate::models::{
     ContentBlock, CountTokensRequest, CountTokensResponse, ImageSource, KnownContentBlock,
@@ -71,7 +73,7 @@ struct OpenAIRequest {
 
 /// OpenAI Responses API request format (for Codex models)
 #[derive(Debug, Serialize)]
-struct OpenAIResponsesRequest {
+pub(crate) struct OpenAIResponsesRequest {
     model: String,
     input: OpenAIResponsesInput,
     /// System instructions for the model (required for ChatGPT Codex)
@@ -86,6 +88,18 @@ struct OpenAIResponsesRequest {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    metadata: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    truncation: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    previous_response_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -524,6 +538,8 @@ pub struct OpenAIProvider {
     oauth_provider: Option<String>,
     /// Token store for OAuth authentication
     token_store: Option<TokenStore>,
+    /// Explicit Codex auth source selected at bootstrap for OAuth-backed Codex routes
+    codex_auth_source: Option<CodexAuthSource>,
 }
 
 pub(crate) struct OpenAIProviderConfig {
@@ -534,6 +550,7 @@ pub(crate) struct OpenAIProviderConfig {
     pub custom_headers: Vec<(String, String)>,
     pub oauth_provider: Option<String>,
     pub token_store: Option<TokenStore>,
+    pub codex_auth_source: Option<CodexAuthSource>,
 }
 
 #[derive(Debug, Clone)]
@@ -1193,13 +1210,12 @@ impl CodexSemanticStreamState {
                     self.open_items.get_mut(&output_index)
                 {
                     text.push_str(delta);
-                } else if !self.open_items.contains_key(&output_index) {
-                    self.open_items.insert(
-                        output_index,
+                } else {
+                    self.open_items.entry(output_index).or_insert_with(|| {
                         CodexSemanticItem::Message {
                             text: delta.to_string(),
-                        },
-                    );
+                        }
+                    });
                 }
                 if !delta.is_empty() {
                     OpenAIProvider::push_sse_event(
@@ -1508,34 +1524,13 @@ impl OpenAIProvider {
     }
 
     fn resolve_codex_auth_context(&self) -> Result<ResolvedCodexAuthContext, ProviderError> {
-        if let Some(handoff) =
-            crate::auth::codex_auth_context::CodexIntegratedAuthHandoff::from_env().map_err(
-                |e| {
-                    ProviderError::AuthError(format!(
-                        "Failed to resolve Codex integrated handoff: {}",
-                        e
-                    ))
-                },
-            )?
-        {
-            return crate::auth::codex_auth_context::CodexAuthSelection::Integrated(handoff)
-                .resolve()
-                .map_err(|e| {
-                    ProviderError::AuthError(format!("Failed to resolve Codex auth context: {}", e))
-                });
-        }
-
-        let local_auth_path = CodexAuthState::default_path().map_err(|e| {
-            ProviderError::AuthError(format!("Failed to resolve Codex auth path: {}", e))
+        let source = self.codex_auth_source.as_ref().ok_or_else(|| {
+            ProviderError::AuthError(
+                "Codex auth source is not configured for the selected OAuth route".to_string(),
+            )
         })?;
 
-        crate::auth::codex_auth_context::CodexAuthSelection::Standalone(
-            CodexAuthState::load(local_auth_path).map_err(|e| {
-                ProviderError::AuthError(format!("Failed to load Codex auth state: {}", e))
-            })?,
-        )
-        .resolve()
-        .map_err(|e| {
+        source.resolve().map_err(|e| {
             ProviderError::AuthError(format!("Failed to resolve Codex auth context: {}", e))
         })
     }
@@ -1897,7 +1892,7 @@ impl OpenAIProvider {
     }
 
     /// Transform Anthropic request to OpenAI Responses API format
-    fn transform_to_responses_request(
+    pub(crate) fn transform_to_responses_request(
         &self,
         request: &GatewayRequest,
     ) -> Result<OpenAIResponsesRequest, ProviderError> {
@@ -2245,6 +2240,44 @@ impl OpenAIProvider {
                     .then_some(serde_json::json!({ "format": { "type": "text" } }))
             });
 
+        let input_metadata = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY))
+            .cloned();
+
+        let truncation = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TRUNCATION_METADATA_KEY))
+            .cloned();
+
+        let previous_response_id = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY))
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string);
+
+        let user = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_USER_METADATA_KEY))
+            .and_then(|value| value.as_str())
+            .map(ToString::to_string);
+
+        let stream_options = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY))
+            .cloned();
+
+        let service_tier = request
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY))
+            .cloned();
+
         Ok(OpenAIResponsesRequest {
             model: request.model.clone(),
             input: OpenAIResponsesInput::Items(items),
@@ -2257,6 +2290,12 @@ impl OpenAIProvider {
                 .and_then(|metadata| metadata.get(OPENAI_PARALLEL_TOOL_CALLS_METADATA_KEY))
                 .and_then(|value| value.as_bool()),
             max_output_tokens: (!self.is_oauth()).then_some(request.max_output_tokens),
+            metadata: (!self.is_oauth()).then_some(input_metadata).flatten(),
+            truncation: (!self.is_oauth()).then_some(truncation).flatten(),
+            previous_response_id: (!self.is_oauth()).then_some(previous_response_id).flatten(),
+            user: (!self.is_oauth()).then_some(user).flatten(),
+            stream_options: (!self.is_oauth()).then_some(stream_options).flatten(),
+            service_tier: (!self.is_oauth()).then_some(service_tier).flatten(),
             reasoning,
             include,
             text,
@@ -2281,6 +2320,7 @@ impl OpenAIProvider {
             custom_headers: config.custom_headers,
             oauth_provider: config.oauth_provider,
             token_store: config.token_store,
+            codex_auth_source: config.codex_auth_source,
         }
     }
 
@@ -2338,7 +2378,7 @@ impl OpenAIProvider {
 
     /// Check if using OAuth authentication
     fn is_oauth(&self) -> bool {
-        self.oauth_provider.is_some() && self.token_store.is_some()
+        self.oauth_provider.is_some()
     }
 
     /// Extract ChatGPT account ID from JWT access token
@@ -3602,8 +3642,8 @@ impl super::GatewayProvider for OpenAIProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::codex_auth_context::CodexAuthSelection;
-    use crate::auth::codex_auth_context::{CodexAccountIdSource, CodexIntegratedAuthHandoff};
+    use crate::auth::codex_auth_context::{CodexAccountIdSource, CodexAuthMode};
+    use crate::auth::CodexAuthSource;
     use crate::models::SystemPrompt;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use secrecy::SecretString;
@@ -3710,6 +3750,7 @@ mod tests {
             custom_headers: Vec::new(),
             oauth_provider: None,
             token_store: None,
+            codex_auth_source: None,
         }
     }
 
@@ -3730,6 +3771,7 @@ mod tests {
             custom_headers: Vec::new(),
             oauth_provider: Some("test-oauth-provider".to_string()),
             token_store: Some(token_store),
+            codex_auth_source: Some(CodexAuthSource::Integrated),
         }
     }
 
@@ -3745,19 +3787,32 @@ mod tests {
         format!("{header}.{payload}.signature")
     }
 
-    fn codex_resolved_context(account_id: &str) -> ResolvedCodexAuthContext {
-        CodexAuthSelection::Integrated(CodexIntegratedAuthHandoff::new(
-            Some(account_id.to_string()),
-            SecretString::new(codex_access_token(account_id)),
-        ))
-        .resolve()
-        .unwrap()
-    }
-
-    fn codex_resolved_context_from_selection(
-        selection: CodexAuthSelection,
+    fn codex_resolved_context(
+        mode: CodexAuthMode,
+        explicit_account_id: Option<&str>,
+        access_token: SecretString,
     ) -> Result<ResolvedCodexAuthContext, anyhow::Error> {
-        selection.resolve()
+        if let Some(account_id) = explicit_account_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return Ok(ResolvedCodexAuthContext {
+                mode,
+                account_id: account_id.to_string(),
+                account_id_source: CodexAccountIdSource::Explicit,
+                access_token,
+            });
+        }
+
+        let account_id = OpenAIProvider::extract_account_id(access_token.expose_secret())
+            .ok_or_else(|| anyhow::anyhow!("Codex auth context could not resolve account_id"))?;
+
+        Ok(ResolvedCodexAuthContext {
+            mode,
+            account_id,
+            account_id_source: CodexAccountIdSource::JwtFallback,
+            access_token,
+        })
     }
 
     #[test]
@@ -4042,6 +4097,61 @@ mod tests {
         }
     }
 
+    fn public_responses_request_with_passthrough_controls() -> GatewayRequest {
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            OPENAI_PUBLIC_RESPONSES_METADATA_KEY.to_string(),
+            serde_json::Value::Bool(true),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY.to_string(),
+            serde_json::json!({
+                "client": "sdk",
+                "request_id": "req_123"
+            }),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_TRUNCATION_METADATA_KEY.to_string(),
+            serde_json::json!("auto"),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY.to_string(),
+            serde_json::Value::String("resp_prev_123".to_string()),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_USER_METADATA_KEY.to_string(),
+            serde_json::Value::String("user_123".to_string()),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY.to_string(),
+            serde_json::json!({
+                "include_obfuscation": true
+            }),
+        );
+        metadata.insert(
+            OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY.to_string(),
+            serde_json::json!("priority"),
+        );
+
+        GatewayRequest {
+            model: "gpt-4.1-mini".to_string(),
+            messages: vec![crate::models::Message {
+                role: "user".to_string(),
+                content: crate::models::MessageContent::Text("hello".to_string()),
+            }],
+            max_output_tokens: 32,
+            reasoning: None,
+            temperature: None,
+            top_p: None,
+            top_k: None,
+            stop_sequences: None,
+            stream: Some(false),
+            metadata: Some(metadata),
+            system: None,
+            tools: None,
+        }
+    }
+
     fn orphaned_public_responses_continuation_request() -> GatewayRequest {
         let mut metadata = HashMap::new();
         metadata.insert(
@@ -4088,6 +4198,7 @@ mod tests {
             custom_headers: Vec::new(),
             oauth_provider: None,
             token_store: None,
+            codex_auth_source: None,
         }
     }
 
@@ -4141,6 +4252,7 @@ mod tests {
             custom_headers: Vec::new(),
             oauth_provider: Some("test-oauth-provider".to_string()),
             token_store: Some(token_store),
+            codex_auth_source: Some(CodexAuthSource::Integrated),
         };
 
         assert_eq!(
@@ -4186,6 +4298,7 @@ mod tests {
                 custom_headers: Vec::new(),
                 oauth_provider: None,
                 token_store: None,
+                codex_auth_source: None,
             },
         );
 
@@ -4626,9 +4739,99 @@ mod tests {
     }
 
     #[test]
+    fn transform_to_responses_request_preserves_public_passthrough_controls() {
+        let provider = test_provider(OpenAITransport::OpenAI);
+        let request = public_responses_request_with_passthrough_controls();
+
+        let serialized =
+            serde_json::to_value(provider.transform_to_responses_request(&request).unwrap())
+                .unwrap();
+
+        assert_eq!(
+            serialized["metadata"],
+            serde_json::json!({
+                "client": "sdk",
+                "request_id": "req_123"
+            })
+        );
+        assert_eq!(serialized["truncation"], serde_json::json!("auto"));
+        assert_eq!(
+            serialized["previous_response_id"],
+            serde_json::json!("resp_prev_123")
+        );
+        assert_eq!(serialized["user"], serde_json::json!("user_123"));
+        assert_eq!(
+            serialized["stream_options"],
+            serde_json::json!({
+                "include_obfuscation": true
+            })
+        );
+        assert_eq!(serialized["service_tier"], serde_json::json!("priority"));
+    }
+
+    #[test]
+    fn transform_to_responses_request_rejects_public_passthrough_controls_on_codex_route() {
+        let provider = test_oauth_provider();
+
+        for (field, metadata_key, metadata_value) in [
+            (
+                "metadata",
+                OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY,
+                serde_json::json!({"client": "sdk"}),
+            ),
+            (
+                "truncation",
+                OPENAI_RESPONSES_TRUNCATION_METADATA_KEY,
+                serde_json::json!("auto"),
+            ),
+            (
+                "previous_response_id",
+                OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY,
+                serde_json::json!("resp_prev_123"),
+            ),
+            (
+                "user",
+                OPENAI_RESPONSES_USER_METADATA_KEY,
+                serde_json::json!("user_123"),
+            ),
+            (
+                "stream_options",
+                OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY,
+                serde_json::json!({"include_obfuscation": true}),
+            ),
+            (
+                "service_tier",
+                OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY,
+                serde_json::json!("priority"),
+            ),
+        ] {
+            let mut request = gateway_request_with_parallel_tool_calls(None);
+            request.metadata = Some(HashMap::from([(metadata_key.to_string(), metadata_value)]));
+
+            let err = provider
+                .transform_to_responses_request(&request)
+                .unwrap_err();
+            match err {
+                ProviderError::ConfigError(message) => {
+                    assert!(
+                        message.contains(field),
+                        "expected reject message to mention {field}, got {message}"
+                    );
+                }
+                other => panic!("expected config error for {field}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
     fn codex_oauth_request_builder_emits_only_the_minimal_header_contract() {
         let provider = test_oauth_provider();
-        let auth_context = codex_resolved_context("acct_123");
+        let auth_context = codex_resolved_context(
+            CodexAuthMode::Integrated,
+            Some("acct_123"),
+            SecretString::new(codex_access_token("acct_123")),
+        )
+        .unwrap();
         let expected_auth = format!("Bearer {}", auth_context.access_token.expose_secret());
         let (auth_header_name, auth_header_value) =
             provider.auth_header_parts(auth_context.access_token.expose_secret(), true);
@@ -4681,11 +4884,12 @@ mod tests {
     #[test]
     fn codex_oauth_request_builder_prefers_explicit_account_id_over_jwt_fallback() {
         let provider = test_oauth_provider();
-        let selection = CodexAuthSelection::Integrated(CodexIntegratedAuthHandoff::new(
-            Some("acct_explicit".to_string()),
+        let auth_context = codex_resolved_context(
+            CodexAuthMode::Integrated,
+            Some("acct_explicit"),
             SecretString::new(codex_access_token("acct_jwt")),
-        ));
-        let auth_context = codex_resolved_context_from_selection(selection).unwrap();
+        )
+        .unwrap();
         assert_eq!(auth_context.account_id, "acct_explicit");
         assert_eq!(
             auth_context.account_id_source,
@@ -4726,11 +4930,12 @@ mod tests {
     #[test]
     fn codex_oauth_request_builder_uses_jwt_fallback_only_when_explicit_account_id_is_absent() {
         let provider = test_oauth_provider();
-        let selection = CodexAuthSelection::Standalone(CodexAuthState::new(
+        let auth_context = codex_resolved_context(
+            CodexAuthMode::Standalone,
             None,
             SecretString::new(codex_access_token("acct_jwt")),
-        ));
-        let auth_context = codex_resolved_context_from_selection(selection).unwrap();
+        )
+        .unwrap();
         assert_eq!(auth_context.account_id, "acct_jwt");
         assert_eq!(
             auth_context.account_id_source,
@@ -4770,12 +4975,12 @@ mod tests {
 
     #[test]
     fn codex_oauth_request_builder_fails_before_upstream_when_account_id_is_unresolvable() {
-        let selection = CodexAuthSelection::Standalone(CodexAuthState::new(
+        let err = codex_resolved_context(
+            CodexAuthMode::Standalone,
             None,
             SecretString::new("not-a-jwt".to_string()),
-        ));
-
-        let err = codex_resolved_context_from_selection(selection).unwrap_err();
+        )
+        .unwrap_err();
         assert!(
             err.to_string()
                 .contains("Codex auth context could not resolve account_id"),

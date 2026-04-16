@@ -137,6 +137,12 @@ For the Codex route, account resolution follows a strict order:
 
 The JWT claim path is bounded compatibility fallback only. It does not redefine ownership, and the gateway must fail before any upstream Codex request when neither explicit nor JWT-derived `account_id` can be resolved.
 
+Mode selection for the Codex route is explicit and happens at gateway bootstrap, not inside the provider fallback path. Current bootstrap may carry the effective `llm.gateway.mode` posture through `SUBSTRATE_LLM_GATEWAY_MODE=in_world|host_only`:
+
+- `in_world` selects the integrated Substrate-delivered auth source
+- `host_only` selects the standalone local compatibility source
+- integrated mode never falls back to `~/.codex/auth.json` when the Substrate handoff is missing or incomplete
+
 For maintenance purposes, keep the Codex auth owner line explicit:
 
 - integrated mode consumes Substrate-delivered auth context first

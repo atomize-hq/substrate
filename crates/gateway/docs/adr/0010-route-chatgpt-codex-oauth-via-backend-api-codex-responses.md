@@ -183,7 +183,7 @@ For Substrate-managed in-world deployment, `ChatGPT-Account-ID` MUST come from t
 Integrated-mode owner line:
 
 - Substrate owns policy-gated host credential reads, auth-state resolution, and host-to-world delivery for the auth material required by this route
-- the gateway consumes a resolved auth context for the selected ChatGPT Codex OAuth provider route
+- gateway bootstrap selects integrated versus standalone auth mode before provider construction, and the gateway consumes the selected auth context for the selected ChatGPT Codex OAuth provider route
 - the provider request builder injects `ChatGPT-Account-ID` from that resolved auth context; it does not define the authoritative ownership of account identity for integrated mode
 - integrated-mode account-id resolution order is:
   1. explicit `account_id` from the Substrate-delivered auth context

@@ -146,7 +146,13 @@ Route-boundary validation for Codex should check all three rules explicitly:
 2. JWT extraction from the OAuth access token is bounded fallback only when the explicit field for the selected mode is absent.
 3. If no concrete `account_id` can be resolved, the gateway returns the shared auth error envelope before any upstream Codex request is attempted.
 
-Integrated-mode validation should also prove that canonical Substrate env handoff is sufficient on its own and does not require gateway-local reads of `~/.codex/auth.json` or other local auth files.
+Integrated-mode validation should also prove that canonical Substrate handoff is sufficient on its own and does not require gateway-local reads of `~/.codex/auth.json` or other local auth files.
+
+Bootstrap validation for the Codex route should keep mode selection explicit:
+
+- `SUBSTRATE_LLM_GATEWAY_MODE=in_world` selects the integrated auth source
+- `SUBSTRATE_LLM_GATEWAY_MODE=host_only` selects the standalone local compatibility source
+- missing integrated handoff must fail as auth before upstream and must not downgrade into standalone local auth-file reads
 
 Codex maintenance work should read the auth boundary together with the route and conformance contracts:
 

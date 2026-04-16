@@ -9,8 +9,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::env;
 use std::fs;
-use std::sync::Mutex;
-use substrate_gateway::auth::CodexAuthState;
+use std::path::PathBuf;
+use substrate_gateway::auth::CodexAuthSource;
 use substrate_gateway::core::{
     GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage,
 };
@@ -22,6 +22,7 @@ use substrate_gateway::server::openai_conformance_test_support::{
     StubProvider,
 };
 use tempfile::TempDir;
+use tokio::sync::Mutex;
 
 const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
 const SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID: &str =
@@ -99,10 +100,15 @@ fn build_single_provider_harness(provider: StubProvider) -> ConformanceHarness {
     ConformanceHarness::single_provider(provider, "primary-actual", false)
 }
 
-fn build_codex_oauth_provider_harness(base_url: &str, actual_model: &str) -> ConformanceHarness {
+fn build_codex_oauth_provider_harness(
+    base_url: &str,
+    actual_model: &str,
+    codex_auth_source: CodexAuthSource,
+) -> ConformanceHarness {
     let provider = CodexAuthProbeProvider {
         base_url: base_url.to_string(),
         actual_model: actual_model.to_string(),
+        codex_auth_source,
     };
     let mut registry = ProviderRegistry::new();
     registry.insert_provider_for_tests("codex-auth-probe", Box::new(provider));
@@ -273,7 +279,7 @@ fn codex_access_token(account_id: &str) -> String {
     format!("header.{}.signature", encoded_payload)
 }
 
-fn write_codex_auth_state(home: &TempDir, account_id: Option<&str>, access_token: &str) {
+fn write_codex_auth_state(home: &TempDir, account_id: Option<&str>, access_token: &str) -> PathBuf {
     let codex_dir = home.path().join(".codex");
     fs::create_dir_all(&codex_dir).unwrap();
     let auth_path = codex_dir.join("auth.json");
@@ -287,6 +293,7 @@ fn write_codex_auth_state(home: &TempDir, account_id: Option<&str>, access_token
         }),
     };
     fs::write(auth_path, serde_json::to_vec(&payload).unwrap()).unwrap();
+    codex_dir.join("auth.json")
 }
 
 struct EnvVarGuard {
@@ -321,6 +328,7 @@ impl Drop for EnvVarGuard {
 struct CodexAuthProbeProvider {
     base_url: String,
     actual_model: String,
+    codex_auth_source: CodexAuthSource,
 }
 
 #[async_trait]
@@ -329,15 +337,7 @@ impl GatewayProvider for CodexAuthProbeProvider {
         &self,
         _request: GatewayRequest,
     ) -> Result<GatewayResponse, ProviderError> {
-        let local_auth_path = CodexAuthState::default_path().map_err(|e| {
-            ProviderError::AuthError(format!("Failed to resolve Codex auth path: {}", e))
-        })?;
-        let selection =
-            substrate_gateway::auth::codex_auth_context::CodexAuthSelection::from_env_or_local_auth_state(
-                local_auth_path,
-            )
-            .map_err(|e| ProviderError::AuthError(format!("Failed to load Codex auth state: {}", e)))?;
-        let auth_context = selection.resolve().map_err(|e| {
+        let auth_context = self.codex_auth_source.resolve().map_err(|e| {
             ProviderError::AuthError(format!("Failed to resolve Codex auth context: {}", e))
         })?;
 
@@ -950,7 +950,7 @@ async fn provider_auth_failure_maps_to_shared_auth_envelope() {
 
 #[tokio::test]
 async fn integrated_codex_env_handoff_succeeds_without_local_auth_files_at_route_boundary() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = ENV_LOCK.lock().await;
     let mut server = Server::new_async().await;
     let access_token = codex_access_token("acct_env_jwt");
     let upstream = server
@@ -978,7 +978,11 @@ async fn integrated_codex_env_handoff_succeeds_without_local_auth_files_at_route
         access_token,
     );
 
-    let harness = build_codex_oauth_provider_harness(&server.url(), "codex-mini-latest");
+    let harness = build_codex_oauth_provider_harness(
+        &server.url(),
+        "codex-mini-latest",
+        CodexAuthSource::Integrated,
+    );
     let response = harness
         .invoke_responses(HeaderMap::new(), responses_sync_request())
         .await;
@@ -991,8 +995,52 @@ async fn integrated_codex_env_handoff_succeeds_without_local_auth_files_at_route
 }
 
 #[tokio::test]
+async fn integrated_codex_missing_handoff_does_not_fallback_to_local_auth_files_at_route_boundary()
+{
+    let _guard = ENV_LOCK.lock().await;
+    let mut server = Server::new_async().await;
+    let upstream = server
+        .mock("POST", "/backend-api/codex/responses")
+        .expect(0)
+        .with_status(200)
+        .with_header("content-type", "text/event-stream")
+        .with_body(codex_sync_sse_body("should not reach upstream"))
+        .create_async()
+        .await;
+
+    let standalone_home = TempDir::new().unwrap();
+    let standalone_access_token = codex_access_token("acct_local_jwt");
+    let _auth_path = write_codex_auth_state(
+        &standalone_home,
+        Some("acct_local_explicit"),
+        &standalone_access_token,
+    );
+
+    let _home = EnvVarGuard::set("HOME", standalone_home.path().display().to_string());
+    let _account_id = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
+    let _access_token = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
+
+    let harness = build_codex_oauth_provider_harness(
+        &server.url(),
+        "codex-mini-latest",
+        CodexAuthSource::Integrated,
+    );
+    let response = harness
+        .invoke_responses(HeaderMap::new(), responses_sync_request())
+        .await;
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let body = response_text(response).await;
+    assert!(!body.contains("acct_local_explicit"));
+    let json: Value =
+        serde_json::from_str(&body).expect("integrated missing handoff failure must be JSON");
+    assert_provider_error_shape(&json, "auth", "Authentication failed");
+    upstream.assert_async().await;
+}
+
+#[tokio::test]
 async fn standalone_codex_auth_state_succeeds_with_distinct_route_boundary_proof() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = ENV_LOCK.lock().await;
     let mut server = Server::new_async().await;
     let access_token = codex_access_token("acct_local_jwt");
     let upstream = server
@@ -1007,13 +1055,15 @@ async fn standalone_codex_auth_state_succeeds_with_distinct_route_boundary_proof
         .await;
 
     let home = TempDir::new().unwrap();
-    write_codex_auth_state(&home, Some("acct_local_explicit"), &access_token);
-
-    let _home = EnvVarGuard::set("HOME", home.path().display().to_string());
+    let auth_path = write_codex_auth_state(&home, Some("acct_local_explicit"), &access_token);
     let _account_id = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
     let _access_token = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
 
-    let harness = build_codex_oauth_provider_harness(&server.url(), "codex-mini-latest");
+    let harness = build_codex_oauth_provider_harness(
+        &server.url(),
+        "codex-mini-latest",
+        CodexAuthSource::StandaloneLocal { path: auth_path },
+    );
     let response = harness
         .invoke_responses(HeaderMap::new(), responses_sync_request())
         .await;
@@ -1027,7 +1077,7 @@ async fn standalone_codex_auth_state_succeeds_with_distinct_route_boundary_proof
 
 #[tokio::test]
 async fn unresolved_codex_identity_fails_before_upstream_for_integrated_and_standalone_modes() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = ENV_LOCK.lock().await;
 
     let mut integrated_server = Server::new_async().await;
     let integrated_upstream = integrated_server
@@ -1050,8 +1100,11 @@ async fn unresolved_codex_identity_fails_before_upstream_for_integrated_and_stan
         "not-a-jwt",
     );
 
-    let integrated_harness =
-        build_codex_oauth_provider_harness(&integrated_server.url(), "gpt-5-codex");
+    let integrated_harness = build_codex_oauth_provider_harness(
+        &integrated_server.url(),
+        "gpt-5-codex",
+        CodexAuthSource::Integrated,
+    );
     let integrated_response = integrated_harness
         .invoke_responses(HeaderMap::new(), responses_sync_request())
         .await;
@@ -1079,14 +1132,15 @@ async fn unresolved_codex_identity_fails_before_upstream_for_integrated_and_stan
         .await;
 
     let standalone_home = TempDir::new().unwrap();
-    write_codex_auth_state(&standalone_home, None, "not-a-jwt");
-
-    let _home = EnvVarGuard::set("HOME", standalone_home.path().display().to_string());
+    let auth_path = write_codex_auth_state(&standalone_home, None, "not-a-jwt");
     let _account_id = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
     let _access_token = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
 
-    let standalone_harness =
-        build_codex_oauth_provider_harness(&standalone_server.url(), "gpt-5-codex");
+    let standalone_harness = build_codex_oauth_provider_harness(
+        &standalone_server.url(),
+        "gpt-5-codex",
+        CodexAuthSource::StandaloneLocal { path: auth_path },
+    );
     let standalone_response = standalone_harness
         .invoke_responses(HeaderMap::new(), responses_sync_request())
         .await;

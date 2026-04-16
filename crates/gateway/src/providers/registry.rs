@@ -3,7 +3,7 @@ use super::{
     error::ProviderError, AnthropicCompatibleProvider, GatewayProvider, OpenAIProvider,
     OpenAIProviderConfig, OpenAITransport, ProviderConfig,
 };
-use crate::auth::TokenStore;
+use crate::auth::{CodexAuthSource, CodexAuthState, TokenStore};
 use crate::cli::ModelConfig;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,6 +13,74 @@ const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 
 /// GitHub repository URL (used in HTTP-Referer headers)
 const REPO_URL: &str = "https://github.com/elidickinson/claude-code-mux";
+
+/// Runtime bootstrap carrier for the effective `llm.gateway.mode` posture.
+const SUBSTRATE_LLM_GATEWAY_MODE: &str = "SUBSTRATE_LLM_GATEWAY_MODE";
+const GATEWAY_MODE_IN_WORLD: &str = "in_world";
+const GATEWAY_MODE_HOST_ONLY: &str = "host_only";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GatewayBootstrapMode {
+    InWorld,
+    HostOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ProviderBootstrapContext {
+    gateway_mode: GatewayBootstrapMode,
+}
+
+impl ProviderBootstrapContext {
+    fn from_env() -> Result<Self, ProviderError> {
+        let gateway_mode = match std::env::var(SUBSTRATE_LLM_GATEWAY_MODE) {
+            Ok(value) => match value.trim() {
+                GATEWAY_MODE_IN_WORLD => GatewayBootstrapMode::InWorld,
+                GATEWAY_MODE_HOST_ONLY => GatewayBootstrapMode::HostOnly,
+                other => {
+                    return Err(ProviderError::ConfigError(format!(
+                        "Invalid {} value '{}'; expected '{}' or '{}'",
+                        SUBSTRATE_LLM_GATEWAY_MODE,
+                        other,
+                        GATEWAY_MODE_IN_WORLD,
+                        GATEWAY_MODE_HOST_ONLY
+                    )));
+                }
+            },
+            Err(std::env::VarError::NotPresent) => GatewayBootstrapMode::HostOnly,
+            Err(err) => {
+                return Err(ProviderError::ConfigError(format!(
+                    "Failed to read {}: {}",
+                    SUBSTRATE_LLM_GATEWAY_MODE, err
+                )));
+            }
+        };
+
+        Ok(Self { gateway_mode })
+    }
+}
+
+fn codex_auth_source_for_openai_oauth(
+    config: &ProviderConfig,
+    bootstrap: ProviderBootstrapContext,
+) -> Result<Option<CodexAuthSource>, ProviderError> {
+    if config.provider_type != "openai" || config.auth_type != super::AuthType::OAuth {
+        return Ok(None);
+    }
+
+    let source = match bootstrap.gateway_mode {
+        GatewayBootstrapMode::InWorld => CodexAuthSource::Integrated,
+        GatewayBootstrapMode::HostOnly => CodexAuthSource::StandaloneLocal {
+            path: CodexAuthState::default_path().map_err(|e| {
+                ProviderError::ConfigError(format!(
+                    "Failed to resolve standalone Codex auth path for provider '{}': {}",
+                    config.name, e
+                ))
+            })?,
+        },
+    };
+
+    Ok(Some(source))
+}
 
 /// Provider registry that manages all configured providers
 pub struct ProviderRegistry {
@@ -46,6 +114,16 @@ impl ProviderRegistry {
         token_store: Option<TokenStore>,
         models: &[ModelConfig],
     ) -> Result<Self, ProviderError> {
+        let bootstrap = ProviderBootstrapContext::from_env()?;
+        Self::from_configs_with_models_and_bootstrap(configs, token_store, models, bootstrap)
+    }
+
+    fn from_configs_with_models_and_bootstrap(
+        configs: &[ProviderConfig],
+        token_store: Option<TokenStore>,
+        models: &[ModelConfig],
+        bootstrap: ProviderBootstrapContext,
+    ) -> Result<Self, ProviderError> {
         let mut registry = Self::new();
 
         for config in configs {
@@ -72,6 +150,8 @@ impl ProviderRegistry {
                 }
             };
 
+            let codex_auth_source = codex_auth_source_for_openai_oauth(config, bootstrap)?;
+
             // Create provider instance based on type
             let provider: Box<dyn GatewayProvider> = match config.provider_type.as_str() {
                 // OpenAI-compatible providers (unified with custom headers support)
@@ -95,6 +175,7 @@ impl ProviderRegistry {
                         custom_headers,
                         oauth_provider: config.oauth_provider.clone(),
                         token_store: token_store.clone(),
+                        codex_auth_source,
                     }))
                 }
 
@@ -126,6 +207,7 @@ impl ProviderRegistry {
                             custom_headers,
                             oauth_provider: config.oauth_provider.clone(),
                             token_store: token_store.clone(),
+                            codex_auth_source: None,
                         },
                     ))
                 }
@@ -147,6 +229,7 @@ impl ProviderRegistry {
                     ],
                     oauth_provider: config.oauth_provider.clone(),
                     token_store: token_store.clone(),
+                    codex_auth_source: None,
                 })),
 
                 // Deprecated aliases for OpenAI-compatible providers
@@ -202,6 +285,7 @@ impl ProviderRegistry {
                         custom_headers: headers_vec,
                         oauth_provider: config.oauth_provider.clone(),
                         token_store: token_store.clone(),
+                        codex_auth_source: None,
                     }))
                 }
 

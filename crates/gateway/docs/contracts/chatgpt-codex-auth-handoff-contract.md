@@ -22,11 +22,18 @@ This contract does not own:
 ## Integrated-Mode Owner Line
 
 - Substrate owns policy-gated host credential reads, auth-state validation, and host-to-world delivery for the ChatGPT Codex auth material required by this route.
-- The gateway consumes a resolved auth context for the selected ChatGPT Codex OAuth provider route; it does not become the owner of host credential reads or trust-boundary decisions.
+- The gateway bootstrap selects integrated versus standalone auth mode before provider construction; provider code consumes the selected auth source and does not become the owner of host credential reads or trust-boundary decisions.
 - Secret-bearing delivery remains an auth bundle or equivalent secret-channel payload. Any env var used in this path is limited to non-secret pointer semantics such as a bundle file descriptor or handle.
 - The canonical integrated-mode field identifiers are:
   - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID`
   - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN`
+
+Runtime bootstrap note:
+
+- The effective `llm.gateway.mode` posture is applied outside the provider boundary.
+- Current gateway bootstrap may carry that posture via `SUBSTRATE_LLM_GATEWAY_MODE=in_world|host_only`.
+- `in_world` selects the integrated auth source for this route.
+- `host_only` selects the bounded standalone compatibility source for gateway-local operation.
 
 The gateway must treat those fields as the authoritative integrated-mode inputs for this route.
 
@@ -65,7 +72,7 @@ The selected mode determines which auth context is consulted first.
 - The provider request builder consumes resolved auth context and injects:
   - `Authorization: Bearer <access_token>`
   - `ChatGPT-Account-ID: <resolved account_id>`
-- The provider path remains a consumer of resolved auth context. It does not become the owner of auth-source selection.
+- The provider path remains a consumer of resolved auth context. Auth-source selection is explicit and external to the provider.
 - Provider code must not perform host-local auth-file reads for integrated mode.
 - A JWT-only helper may remain as an implementation detail for bounded fallback, but only behind the resolution order above.
 
