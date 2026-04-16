@@ -1,7 +1,13 @@
 use assert_cmd::Command;
 use clap as _;
+use jsonschema as _;
 use predicates::prelude::*;
+use serde as _;
+use serde_jcs as _;
+use serde_json as _;
+use sha2 as _;
 use substrate_lift as _;
+use thiserror as _;
 
 #[test]
 fn top_level_help_lists_required_commands() {

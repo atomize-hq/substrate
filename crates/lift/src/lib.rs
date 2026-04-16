@@ -3,7 +3,18 @@
 #[cfg(test)]
 use assert_cmd as _;
 #[cfg(test)]
+use jsonschema as _;
+#[cfg(test)]
 use predicates as _;
+#[cfg(test)]
+use serde as _;
+#[cfg(test)]
+use serde_jcs as _;
+use serde_json as _;
+#[cfg(test)]
+use sha2 as _;
+#[cfg(test)]
+use thiserror as _;
 
 pub mod error;
 
@@ -18,7 +29,7 @@ pub(crate) mod derive;
 pub(crate) mod export;
 pub(crate) mod facts;
 pub(crate) mod graph;
-pub(crate) mod kernel;
+pub mod kernel;
 pub(crate) mod lang;
 pub(crate) mod pack;
 pub(crate) mod patch;

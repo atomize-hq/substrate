@@ -1,9 +1,15 @@
 use assert_cmd as _;
 use clap as _;
+use jsonschema as _;
 use predicates as _;
+use serde as _;
+use serde_jcs as _;
+use serde_json as _;
+use sha2 as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use thiserror as _;
 
 #[cfg(feature = "cli")]
 #[test]

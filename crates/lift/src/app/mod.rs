@@ -1,7 +1,7 @@
 //! Reserved for future app seams and shared runtime wiring.
 
-pub(crate) mod contract;
 pub(crate) mod context;
+pub(crate) mod contract;
 pub(crate) mod impact;
 pub(crate) mod index;
 pub(crate) mod policy;
