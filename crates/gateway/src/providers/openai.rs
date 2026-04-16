@@ -3657,8 +3657,9 @@ mod tests {
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use secrecy::SecretString;
     use serde::Deserialize;
-    use std::{env, fs, sync::Mutex};
+    use std::{env, fs};
     use tempfile::TempDir;
+    use tokio::sync::Mutex;
 
     static ENV_LOCK: once_cell::sync::Lazy<Mutex<()>> =
         once_cell::sync::Lazy::new(|| Mutex::new(()));
@@ -3826,7 +3827,7 @@ mod tests {
 
     #[test]
     fn codex_auth_resolution_prefers_integrated_env_handoff_before_local_path() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.blocking_lock();
         let temp_dir = TempDir::new().unwrap();
         let bogus_home = temp_dir.path().join("home-as-file");
         fs::write(&bogus_home, "not a directory").unwrap();
@@ -4895,7 +4896,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn send_message_validates_codex_route_before_resolving_integrated_auth() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = ENV_LOCK.lock().await;
         let provider = test_oauth_provider();
         let original_account_id = env::var_os(
             crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
