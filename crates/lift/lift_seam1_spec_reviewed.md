@@ -1238,6 +1238,245 @@ Seam 1 is not done as a one-shot mega-seam. It is complete only when each ordere
 - malformed `PackRef` strings are rejected, including absolute paths and dot-segment traversal refs.
 - `builtin:generic/default` exists as a deliberately narrow builtin that does not require late-phase pack families.
 
+#### 11.1.a Step 0 — scope challenge
+
+Phase A is the first real implementation slice, so it needs the same scope discipline as the eng review, not just a wish list.
+
+What already exists and must be reused:
+
+| Sub-problem | Existing code | Phase A decision |
+|---|---|---|
+| schema embedding | `src/kernel/schema.rs` | mirror the same embed-and-access pattern, do not invent a second loader style |
+| canonical JSON + semantic hashing | `src/kernel/canonical_json.rs`, `src/kernel/fingerprint.rs` | reuse for semantic fingerprints |
+| machine-readable diagnostics | `src/kernel/diagnostic.rs`, `src/kernel/json_pointer.rs` | keep pack diagnostics typed and pointer-addressable |
+| crate-internal seam boundary | `src/lib.rs`, `src/pack/mod.rs` | preserve `pub(crate) mod pack;`, no public API promotion |
+| downstream runtime bootstrap | `src/app/runtime.rs` stub | explicitly defer to Phase D |
+
+Scope decision for Phase A:
+
+- keep Phase A profile-only
+- do not add topology pack compilation yet
+- do not add `expr.rs`, score-model, query, rule, or recipe compilation yet
+- do not touch CLI loading, repo walking, or runtime bootstrap yet
+- do not add new feature flags or any public crate API
+
+Complexity check:
+
+- Phase A still touches more than 8 files, but that is acceptable after reduction because this seam is almost entirely contracts, schema files, and deterministic compiler plumbing
+- the scope reduction already happened here: topology, advanced pack families, and the runtime consumer were pushed to later horizons instead of pretending they fit in one first slice
+
+Distribution check:
+
+- Phase A does not introduce a new distributable artifact
+- no release pipeline or install path changes are required in this phase
+
+#### 11.1.b Phase A architecture
+
+Phase A execution shape:
+
+```text
+PackSource
+  ├── Builtin { logical_name, format, bytes }
+  ├── File { path, format_hint }
+  └── Inline { logical_name, format, bytes }
+          |
+          v
+PackCompiler::load_source
+          |
+          v
+infer format -> parse TOML/JSON -> schema validate
+          |
+          v
+normalize profile document -> canonical JSON -> semantic fingerprint
+          |
+          v
+compile refs/defaults/header -> CompiledProfile
+          |
+          +--> typed PackDiagnostic / PackError on every failure path
+```
+
+Module boundary for Phase A only:
+
+```text
+src/lib.rs
+  └── pub(crate) mod pack
+        ├── names.rs
+        ├── refs.rs
+        ├── source.rs
+        ├── diagnostics.rs
+        ├── error.rs
+        ├── schema.rs
+        ├── compiler.rs
+        ├── builtin.rs
+        ├── raw/
+        │    ├── mod.rs
+        │    ├── common.rs
+        │    └── profile.rs
+        └── compiled/
+             ├── mod.rs
+             ├── header.rs
+             └── profile.rs
+```
+
+#### 11.1.c Exact implementation slices
+
+| Slice | Files / modules | Deliverable | Done when |
+|---|---|---|---|
+| A1. seam contracts | `src/pack/mod.rs`, `names.rs`, `refs.rs`, `source.rs`, `diagnostics.rs`, `error.rs` | crate-internal seam surface exists with typed contracts | `mod.rs` is no longer a stub and all core types compile |
+| A2. schema embedding | `src/pack/schema.rs`, `schemas/pack/common.v1.json`, `schemas/pack/profile.v1.json` | profile/common schemas embedded like kernel schemas | compiler can fetch both schemas without disk I/O |
+| A3. raw + compiled profile types | `src/pack/raw/{mod.rs,common.rs,profile.rs}`, `src/pack/compiled/{mod.rs,header.rs,profile.rs}` | deterministic raw/compiled profile shapes | raw parse and compiled construction compile cleanly |
+| A4. compiler spine | `src/pack/compiler.rs` | builtin/file/inline profile compile pipeline | load, parse, validate, normalize, fingerprint, compile all work for profiles |
+| A5. narrow builtin | `src/pack/builtin.rs` | `builtin:generic/default` exists with only Phase-A guarantees | builtin profile compiles without any topology or advanced pack dependency |
+| A6. fixtures + integration tests | `fixtures/pack/`, `tests/pack_schema.rs`, `tests/pack_compile.rs`, `tests/pack_fingerprints.rs` | contract and determinism coverage for every Phase-A branch | all required acceptance paths have tests |
+| A7. docs sweep | `schemas/README.md`, `profiles/README.md`, `fixtures/README.md`, root `README.md` if needed | docs match the landed Phase-A behavior | no README still describes pack as purely reserved |
+
+Implementation order:
+
+1. Land A1.
+2. Land A2.
+3. Land A3.
+4. Land A4.
+5. Land A5.
+6. Launch A6 and A7 once A4/A5 interfaces stop moving.
+
+#### 11.1.d Test review — required coverage for Phase A
+
+CODE PATH COVERAGE
+===========================
+[+] `PackName` / `PackFileRef` / `PackRef`
+    ├── [REQUIRED] valid builtin ref parse
+    ├── [REQUIRED] valid file ref parse
+    ├── [REQUIRED] absolute-path rejection
+    ├── [REQUIRED] dot-segment rejection
+    └── [REQUIRED] builtin/inline source rejects `file:` refs
+
+[+] Profile source loading
+    ├── [REQUIRED] builtin source happy path
+    ├── [REQUIRED] file source happy path
+    ├── [REQUIRED] inline source happy path
+    ├── [REQUIRED] unsupported format hard-fails deterministically
+    └── [REQUIRED] unreadable file yields `PackError::Io`
+
+[+] Profile parse + schema validation
+    ├── [REQUIRED] valid TOML profile compiles
+    ├── [REQUIRED] invalid TOML produces typed diagnostics
+    ├── [REQUIRED] schema violation produces ordered diagnostics
+    └── [REQUIRED] omitted optional fields normalize deterministically
+
+[+] Fingerprinting + normalization
+    ├── [REQUIRED] same profile twice => same semantic fingerprint
+    ├── [REQUIRED] TOML key reorder => same semantic fingerprint
+    ├── [REQUIRED] source fingerprint differs while semantic fingerprint matches
+    └── [REQUIRED] builtin/file/inline semantic equivalence holds for the same logical document
+
+USER FLOW COVERAGE
+===========================
+[+] Internal engine flow
+    ├── [REQUIRED] select builtin profile -> compile -> inspect compiled header
+    ├── [REQUIRED] select file-backed profile -> compile -> inspect compiled profile
+    └── [REQUIRED] invalid profile -> diagnostic surfaced without panic
+
+─────────────────────────────────
+COVERAGE GOAL: 16/16 required paths covered before Phase A promotion
+  Code paths: 13/13
+  Internal flows: 3/3
+QUALITY BAR: no `★` smoke-only tests for acceptance paths
+GAPS ALLOWED AT PROMOTION: 0
+─────────────────────────────────
+
+Required test files:
+
+- `tests/pack_schema.rs` for schema embedding, parse failures, and diagnostic shape
+- `tests/pack_compile.rs` for builtin/file/inline compile paths and reference validation
+- `tests/pack_fingerprints.rs` for semantic/source fingerprint invariants
+- extend `tests/compile_matrix.rs` only if the new pack compiler needs to participate in existing crate-level matrix assertions
+
+Recommended validation commands:
+
+```bash
+cargo fmt --all
+cargo clippy -p substrate-lift --all-targets -- -D warnings
+cargo test -p substrate-lift --test pack_schema -- --nocapture
+cargo test -p substrate-lift --test pack_compile -- --nocapture
+cargo test -p substrate-lift --test pack_fingerprints -- --nocapture
+```
+
+#### 11.1.e Failure modes for Phase A
+
+| Codepath | Failure mode | Test required? | Error handling required? | Consumer sees |
+|---|---|---|---|---|
+| `PackFileRef` parse | absolute or traversal path accepted | yes | yes, `InvalidPackRef` | typed compile failure |
+| schema validation | malformed profile accepted past validation | yes | yes, `SchemaViolation` with diagnostics | typed compile failure with locations |
+| normalization | semantically equal TOML docs hash differently | yes | test-enforced invariant | failing determinism test |
+| builtin registry | builtin profile drifts from embedded schema | yes | yes, compile-time or test-time hard fail | typed compile failure |
+| diagnostic ordering | same invalid input yields unstable diagnostic ordering | yes | test-enforced invariant | flaky contract surface |
+
+Critical gap rule:
+
+- Phase A does not promote if any failure mode is both untested and capable of surfacing as a silent semantic drift
+
+#### 11.1.f NOT in scope for Phase A
+
+- boundary taxonomy compilation, component-map compilation, and topology ref resolution
+- score-model expression AST and glob compilation
+- query, rule, and recipe pack compilation
+- transitive bundle resolution across pack families
+- runtime bootstrap adapter in `src/app/runtime.rs`
+- CLI flags or config wiring for pack loading
+- any public export of the `pack` module
+
+#### 11.1.g Worktree parallelization strategy
+
+Dependency table:
+
+| Step | Modules touched | Depends on |
+|---|---|---|
+| A1 seam contracts | `src/pack/` | — |
+| A2 schema embedding | `src/pack/`, `schemas/pack/` | A1 |
+| A3 raw + compiled profile types | `src/pack/raw/`, `src/pack/compiled/`, `src/pack/` | A1, A2 |
+| A4 compiler spine | `src/pack/` | A1, A2, A3 |
+| A5 builtin registry | `src/pack/`, `fixtures/pack/valid/` | A4 |
+| A6 fixtures + tests | `fixtures/pack/`, `tests/` | A4, A5 |
+| A7 docs sweep | `README.md`, `schemas/README.md`, `profiles/README.md`, `fixtures/README.md` | A2, A5 |
+
+Parallel lanes:
+
+- Lane A: A1 -> A2 -> A3 -> A4 -> A5 (sequential, shared `src/pack/`)
+- Lane B: A6 (sidecar after A5, lives in `fixtures/pack/` and `tests/`)
+- Lane C: A7 (sidecar after A5, lives in README surfaces)
+
+Execution order:
+
+- Run Lane A first until A5 is stable.
+- Once the builtin profile shape and compiler surface stop moving, launch Lane B and Lane C in parallel worktrees.
+- Merge B and C back into A before the Phase-A promotion gate.
+
+Conflict flags:
+
+- A1 through A5 all share `src/pack/`, so they are one lane only
+- Lane B must not edit `src/pack/`; if missing test hooks require core changes, fold that work back into Lane A
+- Lane C is safe only if doc updates stay in README surfaces and do not reopen contract debates
+
+#### 11.1.h Phase A completion summary
+
+- Step 0: scope accepted after reduction to profile-only compiler spine
+- Architecture: Phase-A data flow and module diagram written
+- Test Review: 16 required paths named, 0 gaps allowed at promotion
+- Failure modes: 0 silent-drift gaps allowed
+- NOT in scope: written
+- What already exists: written
+- Parallelization: 3 lanes, 2 sidecar lanes after 1 sequential core lane
+
+Phase-A promotion gate:
+
+1. `src/pack/mod.rs` is no longer a stub and remains crate-private.
+2. `common.v1.json` and `profile.v1.json` are embedded via `src/pack/schema.rs`.
+3. builtin, file, and inline profile sources all compile through the same `PackCompiler` spine.
+4. `PackRef` rejects absolute and dot-segment traversal forms deterministically.
+5. semantic fingerprints are stable across equivalent TOML documents.
+6. every required Phase-A test above is present and passing.
+7. no later-phase module or runtime bootstrap work leaked into this slice.
+
 ### 11.2 Phase B — topology packs
 
 - boundary taxonomy and component map schemas exist and are embedded.
@@ -1448,99 +1687,104 @@ A note on that last point:
 
 ## 16. Specific implementation items
 
-### 16.1 Code changes
+### 16.1 Phase A code changes
 
-- replace `src/pack/mod.rs` stub with real module tree
-- add `src/pack/error.rs`
-- add `src/pack/schema.rs`
-- add `src/pack/source.rs`
-- add `src/pack/names.rs`
-- add `src/pack/refs.rs`
-- add `src/pack/diagnostics.rs`
-- add `src/pack/expr.rs`
-- add `src/pack/compiler.rs`
-- add `src/pack/builtin.rs`
-- add raw and compiled submodules
+Replace the Phase-A stub with only the modules required by the profile foundation:
 
-### 16.2 Schema files
+- `src/pack/mod.rs`
+- `src/pack/error.rs`
+- `src/pack/schema.rs`
+- `src/pack/source.rs`
+- `src/pack/names.rs`
+- `src/pack/refs.rs`
+- `src/pack/diagnostics.rs`
+- `src/pack/compiler.rs`
+- `src/pack/builtin.rs`
+- `src/pack/raw/mod.rs`
+- `src/pack/raw/common.rs`
+- `src/pack/raw/profile.rs`
+- `src/pack/compiled/mod.rs`
+- `src/pack/compiled/header.rs`
+- `src/pack/compiled/profile.rs`
 
-Add and embed:
+Explicitly deferred from Phase A:
+
+- `src/pack/expr.rs`
+- topology-pack raw/compiled modules
+- score-model, query-pack, rule-pack, and recipe-pack raw/compiled modules
+- `src/app/runtime.rs` bootstrap work
+
+### 16.2 Phase A schema files
+
+Add and embed only:
 
 - `schemas/pack/common.v1.json`
 - `schemas/pack/profile.v1.json`
-- `schemas/pack/boundary_taxonomy.v1.json`
-- `schemas/pack/component_map.v1.json`
-- `schemas/pack/score_model.v1.json`
-- `schemas/pack/rule_pack.v1.json`
-- `schemas/pack/query_pack.v1.json`
-- `schemas/pack/recipe_pack.v1.json`
 
-### 16.3 Fixture layout
+Explicitly defer all other pack schemas to their later horizons.
+
+### 16.3 Phase A fixture layout
 
 ```text
 fixtures/pack/
   valid/
     profile_generic_default.toml
-    boundaries_generic.json
-    components_generic.json
-    score_model_generic.json
-    query_pack_rust_core.json
-    rule_pack_generic_policy.json
-    recipe_pack_generic.json
+    profile_generic_default.json
+    profile_generic_default.inline.json
   invalid/
     profile_bad_ref.toml
-    profile_wrong_kind.toml
-    profile_cycle_a.toml
-    profile_cycle_b.toml
-    boundaries_duplicate_id.json
-    components_bad_glob.json
-    score_model_bad_expr.json
-    query_pack_duplicate_query.json
-    rule_pack_duplicate_rule.json
-    recipe_pack_duplicate_recipe.json
+    profile_absolute_ref.toml
+    profile_traversal_ref.toml
+    profile_schema_violation.toml
+    profile_invalid_toml.toml
   canonical/
     profile_a.toml
     profile_b.toml
     expected_profile_semantic_sha256.txt
+    expected_profile_source_sha256.txt
 ```
 
-### 16.4 Tests
+### 16.4 Phase A tests
 
 Add integration tests such as:
 
 - `tests/pack_schema.rs`
 - `tests/pack_compile.rs`
-- `tests/pack_bundles.rs`
 - `tests/pack_fingerprints.rs`
 
-### 16.5 README updates
+And only extend `tests/compile_matrix.rs` if the pack compiler becomes part of an existing crate-level assertion path.
+
+### 16.5 Phase A README updates
 
 Update:
 
+- `README.md` if the root crate docs mention pack as purely reserved
 - `schemas/README.md`
 - `profiles/README.md`
-- `rules/README.md`
-- `recipes/README.md`
+- `fixtures/README.md`
 
-So they describe actual seam-1 behavior rather than only reserved directories.
+So they describe actual Phase-A behavior rather than only reserved directories.
 
 ---
 
-## 17. Suggested merge order inside seam 1
+## 17. Suggested merge order inside Phase A
 
 ```mermaid
 flowchart LR
-    A[1. pack names / refs / errors] --> B[2. schema embedding]
-    B --> C[3. raw profile + profile schema]
-    C --> D[4. boundary/component packs]
-    D --> E[5. score model expr AST]
-    E --> F[6. query/rule/recipe packs]
-    F --> G[7. bundle resolution]
-    G --> H[8. built-in registry]
-    H --> I[9. fixture + README sweep]
+    A[1. seam contracts] --> B[2. common/profile schema embedding]
+    B --> C[3. raw and compiled profile types]
+    C --> D[4. PackCompiler profile pipeline]
+    D --> E[5. builtin generic default]
+    E --> F[6. fixtures and tests]
+    E --> G[7. README sweep]
 ```
 
-That order gives you a useful `CompiledProfile` path early without blocking on the full rule/query/recipe surface.
+Parallelization note:
+
+- steps 1 through 5 are a single sequential lane because they all touch `src/pack/`
+- steps 6 and 7 are the first safe parallel sidecars once step 5 lands
+
+That order gives you a useful `CompiledProfile` path early without pretending the rest of the pack control plane is already in scope.
 
 ---
 
