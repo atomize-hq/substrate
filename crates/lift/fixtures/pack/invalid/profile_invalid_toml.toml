@@ -1,0 +1,7 @@
+kind = "profile"
+version = 1
+id = "acme/invalid-toml"
+name = "Invalid TOML"
+
+[apps
+default = "score"

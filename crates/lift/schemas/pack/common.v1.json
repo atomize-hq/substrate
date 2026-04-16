@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.substrate.dev/lift/pack/common.v1.json",
+  "title": "Substrate Lift Pack Common Definitions v1",
+  "type": "object",
+  "$defs": {
+    "pack_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*(?:/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*)*$"
+    },
+    "pack_ref": {
+      "type": "string",
+      "pattern": "^(builtin:[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*(?:/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*)*|file:(?:[a-z0-9_][a-z0-9._-]*)(?:/[a-z0-9_][a-z0-9._-]*)*)$"
+    },
+    "pack_kind": {
+      "type": "string",
+      "enum": [
+        "profile",
+        "boundary_taxonomy",
+        "component_map",
+        "score_model",
+        "rule_pack",
+        "query_pack",
+        "recipe_pack"
+      ]
+    },
+    "language_id": {
+      "type": "string",
+      "enum": [
+        "json",
+        "toml",
+        "yaml",
+        "rust",
+        "python",
+        "javascript",
+        "typescript"
+      ]
+    },
+    "glob": {
+      "type": "string",
+      "minLength": 1
+    },
+    "glob_list": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/glob"
+      }
+    },
+    "reserved_path_class": {
+      "type": "string",
+      "enum": [
+        "test",
+        "docs",
+        "ci",
+        "migration",
+        "security",
+        "public_api",
+        "generated",
+        "vendor"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["error", "warning", "info"]
+    },
+    "json_pointer": {
+      "type": "string"
+    },
+    "query_ref": {
+      "type": "object",
+      "required": ["pack", "id"],
+      "properties": {
+        "pack": {
+          "$ref": "#/$defs/pack_ref"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "expr": {
+      "type": "object",
+      "required": ["op"],
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": [
+            "const_int",
+            "const_bool",
+            "field",
+            "exists",
+            "is_null",
+            "add",
+            "sub",
+            "mul",
+            "div",
+            "max",
+            "min",
+            "eq",
+            "ne",
+            "gt",
+            "ge",
+            "lt",
+            "le",
+            "and",
+            "or",
+            "not"
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

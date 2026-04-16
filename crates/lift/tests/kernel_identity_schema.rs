@@ -15,6 +15,7 @@ use substrate_lift::kernel::{
     PRIMITIVES_V1_SCHEMA_JSON, PRIMITIVES_V1_SCHEMA_VERSION,
 };
 use thiserror as _;
+use toml as _;
 
 #[test]
 fn stable_id_from_identity_is_deterministic() {

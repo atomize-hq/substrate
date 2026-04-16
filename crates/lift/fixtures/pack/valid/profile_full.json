@@ -1,0 +1,32 @@
+{
+  "kind": "profile",
+  "version": 1,
+  "id": "acme/file-backed",
+  "name": "File backed profile",
+  "description": "Uses local file refs when loaded from disk",
+  "apps": {
+    "enabled": ["score"],
+    "default": "score"
+  },
+  "analysis": {
+    "languages": ["rust", "toml"],
+    "follow_symlinks": true,
+    "max_scope_depth": 3
+  },
+  "topology": {
+    "boundary_taxonomy": "file:topology/boundary-taxonomy.toml",
+    "component_map": "file:topology/component-map.toml"
+  },
+  "score": {
+    "model": "file:score/model.toml"
+  },
+  "rules": {
+    "packs": ["builtin:generic/default", "file:rules/security.toml"]
+  },
+  "queries": {
+    "packs": ["file:queries/core.toml"]
+  },
+  "recipes": {
+    "packs": ["file:recipes/default.toml"]
+  }
+}

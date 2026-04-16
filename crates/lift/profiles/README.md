@@ -1,7 +1,9 @@
 # Profiles
 
-This directory is reserved for compiled-pack inputs such as bundled generic profiles, bundled Substrate profiles, and migration shims from older Work Lift inputs.
+This directory is part of the pack-authoring surface, but Phase A keeps the shipped profile story deliberately small.
 
-In the corrected architecture, profiles are one category of declarative pack consumed by the engine after compilation; they are not the center of the crate.
+Profiles are declarative inputs consumed through the crate-private `pack` compiler seam. In Phase A, the compiler can build one standalone profile from builtin, file-backed, or inline sources, validate it against the embedded common/profile schemas, and produce deterministic compiled output plus typed diagnostics.
 
-Commit 1 reserves the directory only and does not add profile content yet.
+The only builtin profile guaranteed in Phase A is `builtin:generic/default`. That builtin is embedded in the compiler; this directory does not yet carry bundled profile files.
+
+Later seams may add bundled Substrate profiles, migration shims, and broader pack-family authoring here. Those are explicitly deferred until topology, advanced pack families, and runtime consumers land.

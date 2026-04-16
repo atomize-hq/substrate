@@ -1,0 +1,9 @@
+{
+  "kind": "profile",
+  "version": 1,
+  "id": "acme/traversal-ref",
+  "name": "Traversal ref profile",
+  "queries": {
+    "packs": ["file:rules/../query.toml"]
+  }
+}

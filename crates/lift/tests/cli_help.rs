@@ -8,6 +8,7 @@ use serde_json as _;
 use sha2 as _;
 use substrate_lift as _;
 use thiserror as _;
+use toml as _;
 
 #[test]
 fn top_level_help_lists_required_commands() {

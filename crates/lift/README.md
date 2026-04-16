@@ -182,13 +182,13 @@ Done when every cross-seam type comes from `kernel`, and no other seam defines d
 
 ### 1. Pack compiler
 
-Owns every declarative thing on disk: profile files, boundary taxonomies, component rules, score models, detector rule packs, query packs, rewrite recipes, built-in defaults, and version validation.
+Phase A owns the crate-private profile compiler foundation: builtin, file-backed, and inline profile sources; hand-authored common/profile schemas; deterministic normalization and fingerprints; typed pack refs and diagnostics; and the narrow builtin `builtin:generic/default`.
 
-Exposes `CompiledProfile`, `CompiledScoreModel`, `CompiledRulePack`, `CompiledQueryPack`, and `CompiledRecipePack`.
+Exposes `CompiledProfile` internally. The broader pack-family surface remains deferred.
 
 Must not own repo analysis, AST parsing, git access, or app orchestration.
 
-Done when any pack can be loaded and compiled from fixtures without requiring a repo snapshot.
+Done when one standalone profile can be loaded and compiled deterministically from builtin, file, and inline sources without requiring a repo snapshot.
 
 ### 2. Repo substrate
 
@@ -409,11 +409,13 @@ Done when all meaningful behavior lives below the CLI.
 
 ### 15. Bundled profiles and migration shims
 
-Owns built-in generic profiles, built-in Substrate profiles, starter rule packs, starter recipes, and migration helpers from old Work Lift inputs and config.
+Phase A ships only the embedded generic builtin profile, `builtin:generic/default`.
+
+Bundled Substrate profiles, starter rule/query/recipe content, and migration helpers from old Work Lift inputs are intentionally deferred until later seams broaden the pack surface and add real runtime consumers.
 
 Must not own core engine behavior.
 
-Done when a non-Substrate repo can adopt the crate with the generic profile, and Substrate can adopt it with a bundled Substrate profile.
+Done when the generic builtin remains a stable narrow foundation for later bundled-profile and migration work.
 
 ### 16. Fixtures, goldens, and perf
 

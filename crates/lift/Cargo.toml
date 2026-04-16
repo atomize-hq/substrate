@@ -39,6 +39,7 @@ serde_jcs = "0.2.0"
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 thiserror = "1"
+toml = "0.8"
 
 [dev-dependencies]
 assert_cmd = "2"

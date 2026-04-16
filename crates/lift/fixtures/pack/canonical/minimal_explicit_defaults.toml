@@ -1,0 +1,13 @@
+name = "Acme minimal defaults"
+id = "acme/minimal-defaults"
+version = 1
+kind = "profile"
+
+[analysis]
+max_scope_depth = 2
+follow_symlinks = false
+languages = ["typescript", "javascript", "python", "rust", "yaml", "toml", "json"]
+
+[apps]
+default = "score"
+enabled = ["score"]

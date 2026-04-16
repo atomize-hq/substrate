@@ -10,6 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use thiserror as _;
+use toml as _;
 
 #[cfg(feature = "cli")]
 #[test]
