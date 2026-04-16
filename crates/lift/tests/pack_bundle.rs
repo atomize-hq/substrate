@@ -199,6 +199,145 @@ packs = ["file:generic_policy.json"]
     }
 }
 
+#[test]
+fn duplicate_pack_id_against_profile_fails_bundle_resolution() {
+    let compiler = pack::PackCompiler::new();
+    let dir = unique_temp_dir("bundle-duplicate-profile-id");
+    fs::create_dir_all(dir.join("queries")).expect("queries dir");
+    write_text(
+        &dir.join("profile.toml"),
+        r#"kind = "profile"
+version = 1
+id = "dup/shared"
+name = "Duplicate bundle"
+
+[queries]
+packs = ["file:queries/rust_core.json"]
+"#,
+    );
+    write_text(
+        &dir.join("queries/rust_core.json"),
+        &query_pack_json("dup/shared"),
+    );
+
+    let profile = compiler
+        .compile_profile(pack::PackSource::File {
+            path: dir.join("profile.toml"),
+            format_hint: None,
+        })
+        .expect("profile should compile");
+
+    let error = compiler
+        .resolve_profile_pack_set(&profile)
+        .expect_err("duplicate profile id should fail");
+
+    match error {
+        pack::PackError::DuplicatePackId { kind, id } => {
+            assert_eq!(kind, pack::PackKind::QueryPack);
+            assert_eq!(id, "dup/shared");
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[test]
+fn duplicate_pack_id_against_boundary_taxonomy_fails_bundle_resolution() {
+    let compiler = pack::PackCompiler::new();
+    let dir = unique_temp_dir("bundle-duplicate-boundary-id");
+    fs::create_dir_all(dir.join("queries")).expect("queries dir");
+    fs::create_dir_all(dir.join("topology")).expect("topology dir");
+    write_text(
+        &dir.join("profile.toml"),
+        r#"kind = "profile"
+version = 1
+id = "acme/duplicate-boundary-bundle"
+name = "Duplicate boundary bundle"
+
+[topology]
+boundary_taxonomy = "file:topology/boundary-taxonomy.json"
+
+[queries]
+packs = ["file:queries/rust_core.json"]
+"#,
+    );
+    write_text(
+        &dir.join("topology/boundary-taxonomy.json"),
+        &boundary_taxonomy_json("dup/shared"),
+    );
+    write_text(
+        &dir.join("queries/rust_core.json"),
+        &query_pack_json("dup/shared"),
+    );
+
+    let profile = compiler
+        .compile_profile(pack::PackSource::File {
+            path: dir.join("profile.toml"),
+            format_hint: None,
+        })
+        .expect("profile should compile");
+
+    let error = compiler
+        .resolve_profile_pack_set(&profile)
+        .expect_err("duplicate boundary taxonomy id should fail");
+
+    match error {
+        pack::PackError::DuplicatePackId { kind, id } => {
+            assert_eq!(kind, pack::PackKind::QueryPack);
+            assert_eq!(id, "dup/shared");
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[test]
+fn duplicate_pack_id_against_component_map_fails_bundle_resolution() {
+    let compiler = pack::PackCompiler::new();
+    let dir = unique_temp_dir("bundle-duplicate-component-id");
+    fs::create_dir_all(dir.join("queries")).expect("queries dir");
+    fs::create_dir_all(dir.join("topology")).expect("topology dir");
+    write_text(
+        &dir.join("profile.toml"),
+        r#"kind = "profile"
+version = 1
+id = "acme/duplicate-component-bundle"
+name = "Duplicate component bundle"
+
+[topology]
+component_map = "file:topology/component-map.json"
+
+[queries]
+packs = ["file:queries/rust_core.json"]
+"#,
+    );
+    write_text(
+        &dir.join("topology/component-map.json"),
+        &component_map_json("dup/shared"),
+    );
+    write_text(
+        &dir.join("queries/rust_core.json"),
+        &query_pack_json("dup/shared"),
+    );
+
+    let profile = compiler
+        .compile_profile(pack::PackSource::File {
+            path: dir.join("profile.toml"),
+            format_hint: None,
+        })
+        .expect("profile should compile");
+
+    let error = compiler
+        .resolve_profile_pack_set(&profile)
+        .expect_err("duplicate component map id should fail");
+
+    match error {
+        pack::PackError::DuplicatePackId { kind, id } => {
+            assert_eq!(kind, pack::PackKind::QueryPack);
+            assert_eq!(id, "dup/shared");
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
 fn compile_profile(compiler: &pack::PackCompiler, relative: &str) -> pack::CompiledProfile {
     compiler
         .compile_profile(pack::PackSource::File {
@@ -252,6 +391,49 @@ fn rule_pack_json(query_pack_ref: &str) -> String {
           "message": "Import crosses boundary"
         }}
       ]
+    }}
+  ]
+}}"#
+    )
+}
+
+fn boundary_taxonomy_json(id: &str) -> String {
+    format!(
+        r#"{{
+  "kind": "boundary_taxonomy",
+  "version": 1,
+  "id": "{id}",
+  "name": "Boundary taxonomy",
+  "counting": {{
+    "mode": "distinct_minus_one"
+  }},
+  "boundaries": [
+    {{
+      "id": "runtime",
+      "label": "Runtime",
+      "include": ["services/runtime/**"]
+    }}
+  ]
+}}"#
+    )
+}
+
+fn component_map_json(id: &str) -> String {
+    format!(
+        r#"{{
+  "kind": "component_map",
+  "version": 1,
+  "id": "{id}",
+  "name": "Component map",
+  "counting": {{
+    "mode": "distinct"
+  }},
+  "components": [
+    {{
+      "id": "runtime",
+      "label": "Runtime",
+      "include": ["services/runtime/**"],
+      "tags": ["internal"]
     }}
   ]
 }}"#

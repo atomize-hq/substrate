@@ -449,9 +449,6 @@ pub(crate) enum PackError {
         actual: PackKind,
     },
 
-    #[error("cyclic pack reference")]
-    CyclicReference { cycle: Vec<String> },
-
     #[error("glob compile failure")]
     GlobCompile { pattern: String, reason: String },
 
@@ -1178,7 +1175,7 @@ Pack-local compile responsibilities:
 Profile resolution responsibilities:
 
 - load all referenced packs recursively from the selected profile;
-- detect cycles;
+- reject duplicate pack IDs across every resolved bundle slot;
 - reject duplicate pack IDs with different semantic fingerprints;
 - allow duplicate references to the same normalized resolved source and dedupe them;
 - reject cross-origin duplicate pack IDs in v1, even when semantic fingerprints match;
@@ -1211,11 +1208,10 @@ These are seam-1 invariants.
 3. `source_fingerprint` may depend on bytes; `semantic_fingerprint` must depend only on normalized document semantics.
 4. All maps exposed by compiled forms must be `BTreeMap`-ordered.
 5. All set-like arrays must be canonicalized to sorted unique form.
-6. Cycle detection must report a deterministic cycle path ordering.
-7. Duplicate-ID errors must name the same conflicting IDs regardless of load order.
-8. Built-in registry iteration order must not affect outputs.
-9. Pack compilation must not touch wall clock, hostname, env vars, randomness, or network.
-10. `PackOrigin` must not leak into semantic fingerprints or stable entry IDs.
+6. Duplicate-ID errors must name the same conflicting IDs regardless of load order.
+7. Built-in registry iteration order must not affect outputs.
+8. Pack compilation must not touch wall clock, hostname, env vars, randomness, or network.
+9. `PackOrigin` must not leak into semantic fingerprints or stable entry IDs.
 
 ---
 
@@ -1854,7 +1850,7 @@ What already exists and must be reused:
 |---|---|---|
 | deferred advanced refs on profiles | `src/pack/raw/profile.rs`, `src/pack/compiled/profile.rs` | keep `score.model`, `rules.packs`, `queries.packs`, and `recipes.packs` as the authoritative Phase-C entry surface; do not invent a second bundle-root config shape |
 | pack kind universe | `src/pack/raw/common.rs::PackKind` | fill in the already-landed `ScoreModel`, `QueryPack`, `RulePack`, and `RecipePack` variants instead of redesigning the pack kind model |
-| typed error vocabulary | `src/pack/error.rs` | reuse `DuplicatePackId`, `DuplicateEntryId`, `UnknownPackReference`, `RefKindMismatch`, `CyclicReference`, and `ExpressionCompile`; do not create bundle-only ad hoc errors |
+| typed error vocabulary | `src/pack/error.rs` | reuse `DuplicatePackId`, `DuplicateEntryId`, `UnknownPackReference`, `RefKindMismatch`, and `ExpressionCompile`; do not create bundle-only ad hoc errors |
 | common schema seed | `schemas/pack/common.v1.json` | extend the existing `expr` and `query_ref` defs; do not fork a second "advanced common" schema |
 | deterministic compile pipeline | `src/pack/compiler.rs` | reuse the landed load -> parse -> schema validate -> normalize -> canonicalize -> compile pipeline for every new pack kind |
 | topology resolution precedent | `src/pack/compiler.rs`, `src/pack/compiled/topology.rs` | build Phase-C bundle resolution on the same normalized-source identity, fingerprint, and kind-checking rules already used for topology resolution |
@@ -1911,7 +1907,7 @@ resolve_profile_pack_set(profile)
         |       |
         |       +--> enqueue transitive query refs
         |
-        +--> detect cycles / kind mismatches / duplicate pack ids
+        +--> detect kind mismatches / duplicate pack ids
         +--> canonicalize ordered bundle semantics
         |
         v
@@ -2038,7 +2034,7 @@ ASCII diagram maintenance requirements:
 | C2. score-model contracts | `src/pack/raw/score_model.rs`, `src/pack/compiled/score_model.rs`, `schemas/pack/score_model.v1.json`, `src/pack/compiler.rs` | standalone score-model compile works from builtin/file/inline JSON | duplicate trigger, confidence, and missing-input entries fail deterministically |
 | C3. query-pack contracts | `src/pack/raw/query_pack.rs`, `src/pack/compiled/query_pack.rs`, `schemas/pack/query_pack.v1.json`, `src/pack/compiler.rs` | standalone query-pack compile works with typed query IDs and capture metadata | duplicate query IDs, unsupported engines, and invalid capture shapes fail deterministically |
 | C4. rule-pack + recipe-pack contracts | `src/pack/raw/{rule_pack.rs,recipe_pack.rs}`, `src/pack/compiled/{rule_pack.rs,recipe_pack.rs}`, `schemas/pack/{rule_pack.v1.json,recipe_pack.v1.json}`, `src/pack/compiler.rs` | standalone rule/recipe compile works with structural query refs and typed emit/transform definitions | invalid severity, bad emit shape, bad transform shape, and duplicate local IDs fail deterministically |
-| C5. bundle resolution | `src/pack/compiler.rs`, `src/pack/compiled/mod.rs` | one `CompiledPackSet` is built from a selected profile using deterministic closure rules | optional score model, direct includes, transitive query closure, cycle detection, duplicate detection, and bundle fingerprinting all work through one owned path |
+| C5. bundle resolution | `src/pack/compiler.rs`, `src/pack/compiled/mod.rs` | one `CompiledPackSet` is built from a selected profile using deterministic closure rules | optional score model, direct includes, transitive query closure, duplicate detection, and bundle fingerprinting all work through one owned path |
 | C6. fixtures + optional builtins | `fixtures/pack/**`, `src/pack/builtin.rs` | valid, invalid, and canonical fixtures exist for every advanced pack family and bundle-resolution edge case | builtin score model is added only if a builtin profile needs it, and no decorative builtins land |
 | C7. tests + docs sweep | `tests/{pack_schema.rs,pack_compile.rs,pack_fingerprints.rs,pack_bundle.rs,pack_topology.rs}`, `README.md`, `schemas/README.md`, `profiles/README.md`, `rules/README.md`, `recipes/README.md`, `fixtures/README.md` | Phase-C behavior is fully covered and documented | docs describe structural compile + bundle resolution accurately without implying runtime execution exists |
 
@@ -2100,7 +2096,7 @@ Required coverage diagram:
     ├── [REQUIRED] recipe-pack query refs pull transitive query-pack closure
     ├── [REQUIRED] missing ref -> `PackError::UnknownPackReference`
     ├── [REQUIRED] wrong-kind ref -> `PackError::RefKindMismatch`
-    ├── [REQUIRED] cycle across packs -> `PackError::CyclicReference`
+    ├── [REQUIRED] duplicate against profile/topology/advanced slots -> `PackError::DuplicatePackId`
     ├── [REQUIRED] cross-origin duplicate pack id -> `PackError::DuplicatePackId`
     ├── [REQUIRED] same resolved source referenced twice dedupes deterministically
     └── [REQUIRED] bundle semantic fingerprint is stable across discovery order
@@ -2112,7 +2108,7 @@ Required test file plan:
 - extend `tests/pack_compile.rs` for standalone score/query/rule/recipe compile success and failure paths;
 - extend `tests/pack_fingerprints.rs` for score-model and bundle-order determinism invariants;
 - keep `tests/pack_topology.rs` as a regression suite, because Phase C bundle resolution reuses Phase-B topology rules;
-- add `tests/pack_bundle.rs` for closure, cycle, duplicate, wrong-kind, and dedupe coverage;
+- add `tests/pack_bundle.rs` for closure, duplicate, wrong-kind, and dedupe coverage;
 - touch `tests/compile_matrix.rs` only if `CompiledPackSet` becomes part of an existing crate-level compile assertion.
 
 Required validation commands before Phase-C promotion:
@@ -2156,8 +2152,7 @@ Phase-C performance is acceptable only if bundle closure work scales with the nu
 | rule or recipe standalone compile | external query refs look resolved even though closure has not happened yet | yes | yes, unresolved refs stay structural until bundle resolution | explicit deferred state, never false success |
 | bundle resolution | rule or recipe pack carries a query ref of the wrong pack kind | yes | yes, `PackError::RefKindMismatch` during bundle resolution | typed bundle-resolution failure |
 | bundle resolution | transitive query closure is incomplete | yes | yes, hard fail bundle resolution | no partially-resolved `CompiledPackSet` |
-| bundle resolution | cycle across profile-included packs | yes | yes, `PackError::CyclicReference` | deterministic cycle report |
-| bundle resolution | builtin, file, and inline pack IDs collide across origins | yes | yes, `PackError::DuplicatePackId` | typed bundle-resolution failure |
+| bundle resolution | duplicate IDs across profile, topology, score, query, rule, or recipe slots | yes | yes, `PackError::DuplicatePackId` | typed bundle-resolution failure |
 | bundle fingerprinting | semantic fingerprint depends on discovery order or origin display strings | yes | test-enforced invariant | failing determinism test |
 
 Critical gap rule:
@@ -2231,7 +2226,7 @@ Phase-C promotion gate:
 2. standalone compile entrypoints exist for score, query, rule, and recipe packs;
 3. `resolve_profile_pack_set` produces a deterministic `CompiledPackSet`;
 4. transitive query closure from rule and recipe packs is enforced;
-5. cycles, duplicate pack IDs, wrong-kind refs, invalid expressions, and malformed advanced-pack payloads all fail with typed errors;
+5. duplicate pack IDs, wrong-kind refs, invalid expressions, and malformed advanced-pack payloads all fail with typed errors;
 6. every required Phase-C validation command above passes;
 7. no Phase-C implementation change touches `src/app/runtime.rs`, `src/query/**`, `src/topo/**`, `src/repo/**`, `src/graph/**`, or `src/facts/**`.
 
@@ -2288,7 +2283,6 @@ Fixtures across the staged rollout must exist for:
 - transitive recipe-pack -> query-pack closure
 - same-source duplicate ref dedupe
 - cross-origin duplicate pack ID rejection
-- cyclic reference graph
 - semantic fingerprint stability across key order
 - source fingerprint difference with semantic fingerprint equality
 - bundle semantic fingerprint stability across discovery order
@@ -2311,7 +2305,7 @@ Fixtures across the staged rollout must exist for:
 2. Seam 1 compiles declarative inputs; it does not execute them.
 3. Pack schemas are the source of truth for raw document shape.
 4. Compiled pack types are immutable data objects.
-5. Profile resolution is deterministic and cycle-safe.
+5. Profile resolution is deterministic and duplicate-safe.
 6. Cross-pack reference validation occurs only in resolved bundle compilation.
 7. Formatting changes must not change semantic fingerprints.
 8. Built-in registry contents are explicit and finite.
@@ -2338,7 +2332,7 @@ If any answer below is “yes”, seam 1 is not clean enough.
 9. Can unresolved external refs be silently dropped when building a `CompiledPackSet`?
 10. Can pack compiler diagnostics require human log parsing instead of machine-readable fields?
 11. Can pack origin strings affect semantic fingerprints?
-12. Can a cycle in pack references produce non-deterministic error reporting?
+12. Can duplicate bundle-slot IDs produce non-deterministic error reporting?
 13. Can a rule/query/recipe pack compile depend on CLI feature flags?
 14. Can the seam be used only inside Substrate because generic built-ins are missing?
 15. Can pack compiler code depend on `repo`, `lang`, `graph`, or `app::*` modules?
@@ -2413,7 +2407,7 @@ Mitigation:
 - expression AST compilation
 - profile resolution
 - bundle construction into `CompiledPackSet`
-- duplicate/cycle/kind-mismatch validation
+- duplicate/kind-mismatch validation
 - built-in generic profile support
 - optional built-in Substrate profile support behind feature flag
 
@@ -2661,7 +2655,6 @@ fixtures/pack/
     rule_pack_bad_query_ref.json
     rule_pack_invalid_severity.json
     recipe_pack_bad_transform.json
-    bundle_cycle_profile.toml
     bundle_duplicate_pack_id_cross_origin.toml
   canonical/
     score_model_order_a.json
@@ -2916,7 +2909,7 @@ Expansion scan:
   HOUR 1 (foundations):     The implementer needs to know which pack kinds are truly in seam 1 and whether one consumer path is mandatory.
   HOUR 2-3 (core logic):    They will hit ambiguity around whether to mint a new location/diagnostic contract or reuse kernel patterns.
   HOUR 4-5 (integration):   They will discover that "compiled" can still mean late semantic failure unless one downstream consumer is actually exercised.
-  HOUR 6+ (polish/tests):   They will wish the plan had said exactly which fixture matrices are required for determinism vs wrong-kind vs cycle vs semantic-equality/source-difference.
+  HOUR 6+ (polish/tests):   They will wish the plan had said exactly which fixture matrices are required for determinism vs wrong-kind vs duplicate-id vs semantic-equality/source-difference.
 ```
 
 ### 0F. Mode Selection Confirmation
@@ -3057,7 +3050,7 @@ Error & Rescue Registry:
 | `PackCompiler::parse_json_pack` | invalid JSON | `PackError::SchemaViolation` or parse-mapped diagnostic | Y | emit structured diagnostics | typed compile failure with diagnostics |
 | `PackCompiler::compile_globs` | malformed glob | `PackError::GlobCompile` | Y | fail compile early | typed compile failure |
 | `PackCompiler::compile_expr` | bad operator / malformed AST | `PackError::ExpressionCompile` | Y | fail compile early with pointer path | typed compile failure |
-| `PackCompiler::resolve_profile_refs` | missing pack / wrong kind / cycle | `UnknownPackReference` / `RefKindMismatch` / `CyclicReference` | Y | fail bundle build deterministically | typed compile failure |
+| `PackCompiler::resolve_profile_refs` | missing pack / wrong kind / duplicate ID | `UnknownPackReference` / `RefKindMismatch` / `DuplicatePackId` | Y | fail bundle build deterministically | typed compile failure |
 | `app::runtime::profile_bootstrap` | receives broken compiled set | propagated `PackError` + diagnostics | Y | surface diagnostics, do not silently default | bootstrap failure, no raw fallback |
 
 CEO judgment:
@@ -3112,7 +3105,7 @@ INPUT SOURCE ──▶ LOAD BYTES ──▶ PARSE ──▶ SCHEMA VALIDATE ─�
    v
 SEMANTIC FINGERPRINT ──▶ PACK-LOCAL COMPILE ──▶ BUNDLE RESOLUTION ──▶ PROFILE BOOTSTRAP
                               │                        │                     │
-                              ├── bad refs             ├── cycle            ├── typed diagnostics surfaced
+                              ├── bad refs             ├── duplicate ID     ├── typed diagnostics surfaced
                               ├── bad glob             ├── missing pack      └── no raw fallback
                               └── bad expr             └── wrong kind
 ```
@@ -3165,7 +3158,7 @@ NEW CODEPATHS
 - schema embed + validation
 - normalization + fingerprint split
 - duplicate id detection
-- wrong-kind / cycle detection
+- wrong-kind / duplicate-id detection
 - runtime bootstrap consumption path
 
 NEW ERROR/RESCUE PATHS
@@ -3283,7 +3276,7 @@ Skipped, no UI scope detected.
 | parse | malformed TOML/JSON | Y | Planned | typed compile error | Yes via diagnostics |
 | normalize | semantic/source fingerprint mismatch bug | N | Planned | internal test failure | Yes via tests |
 | compile | bad glob / bad expr | Y | Planned | typed compile error | Yes via diagnostics |
-| bundle resolution | wrong-kind / missing / cycle | Y | Planned | typed compile error | Yes via diagnostics |
+| bundle resolution | wrong-kind / missing / duplicate ID | Y | Planned | typed compile error | Yes via diagnostics |
 | runtime bootstrap | raw fallback sneaks in | N | Planned critical | potentially silent drift if untested | Must be asserted in tests |
 
 Critical gap assessment:
@@ -3493,7 +3486,7 @@ CODE PATH COVERAGE
 
 [+] Advanced/bundle resolution
     ├── [GAP] wrong-kind slot reference
-    ├── [GAP] cycle detection
+    ├── [GAP] duplicate detection against profile/topology/advanced slots
     ├── [GAP] cross-origin duplicate pack rejection
     ├── [GAP] transitive rule/recipe -> query dependency closure
     └── [GAP] large shared-reference graph traversal stability
@@ -3607,7 +3600,7 @@ Conflict flags:
 | 8 | Phase 3 | Reject cross-origin duplicate pack IDs in v1 | Taste | P5 Explicit | Simpler and safer than inventing provenance-merging rules now. | Silent semantic dedupe across builtin/file origins |
 | 9 | Phase 3 | Keep Phase C broad but make `rule_pack` and `recipe_pack` the first slip candidates if needed | Taste | P3 Pragmatic | Preserves broad intent while protecting the first consumer loop. | Splitting the plan into even more numbered seams immediately |
 | 10 | Phase 3 | Build Phase C on the already-landed deferred profile refs instead of inventing a second bundle-root config surface | Mechanical | P4 DRY / P5 Explicit | `score.model` plus the `rules/queries/recipes.packs` sections already exist in the landed profile contract. Phase C should honor them directly. | Adding a parallel bundle manifest just for advanced packs |
-| 11 | Phase 3 | Make `resolve_profile_pack_set(&CompiledProfile)` the single cross-pack closure gate | Mechanical | P5 Explicit | One owned bundle-resolution boundary keeps standalone compile composable and makes cycle, kind, and duplicate checks deterministic. | Spreading cross-pack validation across individual pack compilers |
+| 11 | Phase 3 | Make `resolve_profile_pack_set(&CompiledProfile)` the single cross-pack closure gate | Mechanical | P5 Explicit | One owned bundle-resolution boundary keeps standalone compile composable and makes kind and duplicate checks deterministic. | Spreading cross-pack validation across individual pack compilers |
 | 12 | Phase 3 | Keep generic builtins narrow in Phase C, score-model only if a builtin profile actually needs it | Taste | P3 Pragmatic | The builtin registry should prove real usage, not swell to look complete. | Adding builtin query/rule/recipe packs without a consumer |
 
 **Phase 3 complete.** Codex: 6 concerns. Claude subagent: 5 issues. Consensus: 4/6 confirmed, 1 disagreement, 1 medium-risk partial alignment.

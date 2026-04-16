@@ -411,6 +411,25 @@ impl PackCompiler {
         let topology = self.resolve_profile_topology(profile)?;
         let mut memo = BTreeMap::new();
         let mut seen_pack_ids = BTreeMap::new();
+        register_bundle_pack_id(
+            &profile.header,
+            &resolved_pack_origin_key(&profile.header.origin)?,
+            &mut seen_pack_ids,
+        )?;
+        if let Some(boundary_taxonomy) = topology.boundary_taxonomy.as_ref() {
+            register_bundle_pack_id(
+                &boundary_taxonomy.header,
+                &resolved_pack_origin_key(&boundary_taxonomy.header.origin)?,
+                &mut seen_pack_ids,
+            )?;
+        }
+        if let Some(component_map) = topology.component_map.as_ref() {
+            register_bundle_pack_id(
+                &component_map.header,
+                &resolved_pack_origin_key(&component_map.header.origin)?,
+                &mut seen_pack_ids,
+            )?;
+        }
 
         let score_model = profile
             .score
@@ -423,7 +442,6 @@ impl PackCompiler {
                     reference,
                     &mut memo,
                     &mut seen_pack_ids,
-                    &mut Vec::new(),
                 )
             })
             .transpose()?
@@ -440,7 +458,6 @@ impl PackCompiler {
                 reference,
                 &mut memo,
                 &mut seen_pack_ids,
-                &mut Vec::new(),
             )?;
             query_packs.insert(loaded.pack.header.id.clone(), loaded.pack);
         }
@@ -452,14 +469,12 @@ impl PackCompiler {
                 reference,
                 &mut memo,
                 &mut seen_pack_ids,
-                &mut Vec::new(),
             )?;
             self.resolve_rule_pack_queries(
                 &loaded,
                 &mut query_packs,
                 &mut memo,
                 &mut seen_pack_ids,
-                &mut Vec::new(),
             )?;
             rule_packs.insert(loaded.pack.header.id.clone(), loaded.pack);
         }
@@ -471,14 +486,12 @@ impl PackCompiler {
                 reference,
                 &mut memo,
                 &mut seen_pack_ids,
-                &mut Vec::new(),
             )?;
             self.resolve_recipe_pack_queries(
                 &loaded,
                 &mut query_packs,
                 &mut memo,
                 &mut seen_pack_ids,
-                &mut Vec::new(),
             )?;
             recipe_packs.insert(loaded.pack.header.id.clone(), loaded.pack);
         }
@@ -738,7 +751,6 @@ impl PackCompiler {
         reference: &PackRef,
         memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
         seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
-        stack: &mut Vec<ResolvedPackSourceKey>,
     ) -> PackResult<LoadedCompiledScoreModel> {
         let (source, key) = resolve_bundle_ref_source(
             self,
@@ -758,10 +770,7 @@ impl PackCompiler {
             };
         }
 
-        push_bundle_stack(&key, stack)?;
-        let result = self.compile_score_model_loaded(source);
-        stack.pop();
-        let loaded = result?;
+        let loaded = self.compile_score_model_loaded(source)?;
         register_bundle_pack_id(&loaded.pack.header, &key, seen_pack_ids)?;
         memo.insert(key, ResolvedBundlePack::ScoreModel(loaded.clone()));
         Ok(loaded)
@@ -774,7 +783,6 @@ impl PackCompiler {
         reference: &PackRef,
         memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
         seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
-        stack: &mut Vec<ResolvedPackSourceKey>,
     ) -> PackResult<LoadedCompiledQueryPack> {
         let (source, key) = resolve_bundle_ref_source(
             self,
@@ -794,10 +802,7 @@ impl PackCompiler {
             };
         }
 
-        push_bundle_stack(&key, stack)?;
-        let result = self.compile_query_pack_loaded(source);
-        stack.pop();
-        let loaded = result?;
+        let loaded = self.compile_query_pack_loaded(source)?;
         register_bundle_pack_id(&loaded.pack.header, &key, seen_pack_ids)?;
         memo.insert(key, ResolvedBundlePack::QueryPack(loaded.clone()));
         Ok(loaded)
@@ -810,7 +815,6 @@ impl PackCompiler {
         reference: &PackRef,
         memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
         seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
-        stack: &mut Vec<ResolvedPackSourceKey>,
     ) -> PackResult<LoadedCompiledRulePack> {
         let (source, key) = resolve_bundle_ref_source(
             self,
@@ -830,10 +834,7 @@ impl PackCompiler {
             };
         }
 
-        push_bundle_stack(&key, stack)?;
-        let result = self.compile_rule_pack_loaded(source);
-        stack.pop();
-        let loaded = result?;
+        let loaded = self.compile_rule_pack_loaded(source)?;
         register_bundle_pack_id(&loaded.pack.header, &key, seen_pack_ids)?;
         memo.insert(key, ResolvedBundlePack::RulePack(loaded.clone()));
         Ok(loaded)
@@ -846,7 +847,6 @@ impl PackCompiler {
         reference: &PackRef,
         memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
         seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
-        stack: &mut Vec<ResolvedPackSourceKey>,
     ) -> PackResult<LoadedCompiledRecipePack> {
         let (source, key) = resolve_bundle_ref_source(
             self,
@@ -866,10 +866,7 @@ impl PackCompiler {
             };
         }
 
-        push_bundle_stack(&key, stack)?;
-        let result = self.compile_recipe_pack_loaded(source);
-        stack.pop();
-        let loaded = result?;
+        let loaded = self.compile_recipe_pack_loaded(source)?;
         register_bundle_pack_id(&loaded.pack.header, &key, seen_pack_ids)?;
         memo.insert(key, ResolvedBundlePack::RecipePack(loaded.clone()));
         Ok(loaded)
@@ -881,7 +878,6 @@ impl PackCompiler {
         query_packs: &mut BTreeMap<PackName, CompiledQueryPack>,
         memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
         seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
-        stack: &mut Vec<ResolvedPackSourceKey>,
     ) -> PackResult<()> {
         for rule in loaded.pack.rules.values() {
             let query_pack = self.resolve_bundle_query_pack(
@@ -890,7 +886,6 @@ impl PackCompiler {
                 &rule.query.pack,
                 memo,
                 seen_pack_ids,
-                stack,
             )?;
             ensure_query_ref_exists(&loaded.pack.header.id, &rule.query, &query_pack.pack)?;
             query_packs
@@ -906,7 +901,6 @@ impl PackCompiler {
         query_packs: &mut BTreeMap<PackName, CompiledQueryPack>,
         memo: &mut BTreeMap<ResolvedPackSourceKey, ResolvedBundlePack>,
         seen_pack_ids: &mut BTreeMap<PackName, ResolvedPackSourceKey>,
-        stack: &mut Vec<ResolvedPackSourceKey>,
     ) -> PackResult<()> {
         for recipe in loaded.pack.recipes.values() {
             let query_pack = self.resolve_bundle_query_pack(
@@ -915,7 +909,6 @@ impl PackCompiler {
                 &recipe.query.pack,
                 memo,
                 seen_pack_ids,
-                stack,
             )?;
             ensure_query_ref_exists(&loaded.pack.header.id, &recipe.query, &query_pack.pack)?;
             query_packs
@@ -1002,6 +995,7 @@ struct LoadedSource {
 enum ResolvedPackSourceKey {
     Builtin(PackName),
     File(PathBuf),
+    Inline(String),
 }
 
 #[derive(Clone, Debug)]
@@ -3592,29 +3586,6 @@ fn resolved_bundle_pack_kind(value: &ResolvedBundlePack) -> PackKind {
     }
 }
 
-fn push_bundle_stack(
-    key: &ResolvedPackSourceKey,
-    stack: &mut Vec<ResolvedPackSourceKey>,
-) -> PackResult<()> {
-    if let Some(index) = stack.iter().position(|existing| existing == key) {
-        let cycle = stack[index..]
-            .iter()
-            .chain(std::iter::once(key))
-            .map(bundle_key_label)
-            .collect();
-        return Err(PackError::CyclicReference { cycle });
-    }
-    stack.push(key.clone());
-    Ok(())
-}
-
-fn bundle_key_label(key: &ResolvedPackSourceKey) -> String {
-    match key {
-        ResolvedPackSourceKey::Builtin(name) => format!("builtin:{}", name.as_str()),
-        ResolvedPackSourceKey::File(path) => path.display().to_string(),
-    }
-}
-
 fn register_bundle_pack_id(
     header: &CompiledPackHeader,
     key: &ResolvedPackSourceKey,
@@ -3629,6 +3600,20 @@ fn register_bundle_pack_id(
         None => {
             seen_pack_ids.insert(header.id.clone(), key.clone());
             Ok(())
+        }
+    }
+}
+
+fn resolved_pack_origin_key(origin: &PackOrigin) -> PackResult<ResolvedPackSourceKey> {
+    match origin {
+        PackOrigin::Builtin { logical_name } => Ok(ResolvedPackSourceKey::Builtin(
+            PackName::parse(logical_name)?,
+        )),
+        PackOrigin::File { display_path } => Ok(ResolvedPackSourceKey::File(absolutize_path(
+            Path::new(display_path),
+        )?)),
+        PackOrigin::Inline { logical_name } => {
+            Ok(ResolvedPackSourceKey::Inline(logical_name.clone()))
         }
     }
 }

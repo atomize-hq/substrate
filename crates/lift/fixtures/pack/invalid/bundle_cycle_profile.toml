@@ -1,7 +1,0 @@
-kind = "profile"
-version = 1
-id = "acme/cycle-bundle"
-name = "Cycle bundle"
-
-[rules]
-packs = ["file:generic_policy_cycle.json"]

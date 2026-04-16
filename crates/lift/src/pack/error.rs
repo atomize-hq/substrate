@@ -62,9 +62,6 @@ pub(crate) enum PackError {
         actual: PackKind,
     },
 
-    #[error("cyclic pack reference")]
-    CyclicReference { cycle: Vec<String> },
-
     #[error("glob compile failure")]
     GlobCompile { pattern: String, reason: String },
 
