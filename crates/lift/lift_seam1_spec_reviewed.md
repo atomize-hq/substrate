@@ -1477,12 +1477,219 @@ Phase-A promotion gate:
 6. every required Phase-A test above is present and passing.
 7. no later-phase module or runtime bootstrap work leaked into this slice.
 
-### 11.2 Phase B — topology packs
+### 11.2 Phase B / Phase 2 — topology packs
+
+Phase B starts from the landed Phase-A spine as it exists in this branch today.
+
+This phase is not "more pack stuff" in the abstract. It is the first slice that turns the
+profile's deferred `topology` refs into real compiled artifacts, while still refusing to
+cross the seam into repo walking, path classification, or runtime bootstrap.
 
 - boundary taxonomy and component map schemas exist and are embedded.
 - `PackCompiler` can compile one standalone boundary taxonomy and one standalone component map.
 - duplicate local boundary/component IDs are rejected deterministically.
 - topology pack refs resolve from a selected profile without repo walking or classification logic.
+
+#### 11.2.a Step 0 — scope challenge
+
+Phase B must treat Phase A as the baseline, not reopen it.
+
+What already exists and must be reused:
+
+| Sub-problem | Existing code | Phase B decision |
+|---|---|---|
+| pack source loading | `src/pack/source.rs`, `src/pack/compiler.rs` | extend the same builtin/file/inline load path, do not invent a second source abstraction |
+| typed pack refs | `src/pack/refs.rs` | keep `PackRef` and `PackFileRef` as the only topology reference syntax |
+| profile topology selection | `src/pack/raw/profile.rs`, `src/pack/compiled/profile.rs` | reuse the existing `topology.boundary_taxonomy` and `topology.component_map` slots, do not redesign profile shape |
+| deterministic diagnostics | `src/pack/diagnostics.rs`, `src/pack/error.rs` | continue using `PackDiagnostic`, `PackError`, and sorted diagnostics |
+| semantic fingerprints | `src/kernel/canonical_json.rs`, `src/kernel/fingerprint.rs` | keep canonical-JSON hashing for topology pack semantics |
+| typed stable IDs | `src/kernel/id.rs` | use `BoundaryId` and `ComponentId` via explicit identity lemmas, do not add new ad-hoc ID types |
+| glob dependency and failure shape | `Cargo.toml`, `PackError::GlobCompile` | finally use `globset` for real compiled matchers in topology packs |
+
+Scope decision for Phase B:
+
+- add only the topology pack families: boundary taxonomy and component map;
+- keep profile compilation behavior stable unless a change is required to resolve topology refs cleanly;
+- add standalone JSON compilation entrypoints for topology packs;
+- add one crate-internal resolved topology result for a selected profile;
+- allow `builtin:generic/default` to grow topology refs only after the referenced builtin topology packs exist;
+- do not add score-model, query-pack, rule-pack, recipe-pack, expression compilation, or runtime bootstrap work.
+
+Complexity check:
+
+- this phase still concentrates on `src/pack/` and `schemas/pack/`, so it stays a single seam lane;
+- the risk is not file count, it is accidental semantic spillover into classification or bundle orchestration;
+- if a change requires touching `src/topo/**`, `src/repo/**`, or `src/app/runtime.rs`, it is probably Phase D work and should be deferred.
+
+#### 11.2.b Phase B architecture
+
+Phase B execution shape:
+
+```text
+PackSource(JSON)
+   |
+   v
+PackCompiler::load_source
+   |
+   v
+parse_json_pack
+   |
+   +--> compile_boundary_taxonomy ---------------------+
+   |                                                   |
+   +--> compile_component_map -------------------------+--> ResolvedProfileTopology
+                                                       ^
+CompiledProfile::topology refs ------------------------+
+```
+
+The exact new crate-internal output should be explicit:
+
+```rust
+pub(crate) struct ResolvedProfileTopology {
+    pub boundary_taxonomy: Option<CompiledBoundaryTaxonomy>,
+    pub component_map: Option<CompiledComponentMap>,
+    pub semantic_fingerprint: Fingerprint,
+}
+```
+
+Rules:
+
+- `CompiledProfile` still represents the selected intent and keeps deferred `PackRef` slots.
+- `ResolvedProfileTopology` is the Phase-B handoff object. It is narrower than `CompiledPackSet` and exists only to close the topology gap cleanly.
+- `ResolvedProfileTopology.semantic_fingerprint` is derived from canonical ordered topology semantics, not source path strings.
+- Phase B does not introduce bundle-wide rule/query/recipe closure. That remains Phase C.
+
+Module boundary for Phase B only:
+
+```text
+src/pack/
+  raw/
+    boundary_taxonomy.rs
+    component_map.rs
+  compiled/
+    topology.rs
+  compiler.rs
+  schema.rs
+  builtin.rs
+  mod.rs
+```
+
+#### 11.2.c Resolution rules to lock now
+
+Phase B needs a concrete answer for "how does a profile topology ref become a real pack?"
+
+Lock these rules:
+
+1. File-backed profiles resolve `file:` topology refs lexically relative to the profile file's parent directory only.
+2. Builtin and inline profiles may resolve only `builtin:` topology refs in v1.
+3. Resolution is explicit, never by directory scan, glob search, or repo-root discovery.
+4. Boundary-taxonomy slots accept only `PackKind::BoundaryTaxonomy`.
+5. Component-map slots accept only `PackKind::ComponentMap`.
+6. Wrong-kind refs fail with `PackError::RefKindMismatch`.
+7. Missing refs fail with `PackError::UnknownPackReference`.
+8. Absolute resolved file paths may be used to load bytes, but they must not affect stable IDs or semantic fingerprints.
+
+#### 11.2.d Phase B implementation slices
+
+| Slice | Files | Goal | Exit criteria |
+|---|---|---|---|
+| B1. topology schemas | `src/pack/schema.rs`, `schemas/pack/{boundary_taxonomy.v1.json,component_map.v1.json}` | embed topology schemas using the existing kernel-style pattern | compiler can fetch both schema blobs without disk I/O |
+| B2. raw + compiled topology contracts | `src/pack/raw/{mod.rs,boundary_taxonomy.rs,component_map.rs}`, `src/pack/compiled/{mod.rs,topology.rs}` | add deterministic raw/compiled topology types | raw deserialize and compiled structs build with typed IDs and diagnostics |
+| B3. standalone topology compile | `src/pack/compiler.rs` | compile one boundary taxonomy and one component map from builtin/file/inline JSON sources | parse, validate, normalize, fingerprint, glob compile, and duplicate detection all work |
+| B4. profile topology resolution | `src/pack/compiler.rs`, `src/pack/compiled/topology.rs` | resolve the two profile topology slots into `ResolvedProfileTopology` | selected profile can resolve zero, one, or two topology refs deterministically |
+| B5. builtin topology packs | `src/pack/builtin.rs` | ship `builtin:generic/boundaries` and `builtin:generic/components`, and optionally wire them into `builtin:generic/default` | builtin profile topology resolution succeeds without file I/O |
+| B6. fixtures + tests | `fixtures/pack/`, `tests/pack_compile.rs`, `tests/pack_fingerprints.rs`, `tests/pack_schema.rs`, `tests/pack_topology.rs` | cover every Phase-B branch with deterministic assertions | all required Phase-B acceptance paths have tests |
+
+#### 11.2.e Test review — required coverage for Phase B
+
+Phase B should not promote on "we compiled a couple JSON files."
+
+Required test diagram:
+
+| Path | What must be proven | Test type |
+|---|---|---|
+| standalone boundary taxonomy compile | valid JSON compiles into typed `BoundaryId` entries and glob matchers | integration |
+| standalone component map compile | valid JSON compiles into typed `ComponentId` entries, tags, and glob matchers | integration |
+| topology schema embedding | embedded schema constants are present and versioned | integration |
+| invalid topology JSON syntax | malformed JSON becomes typed parse failure diagnostics | integration |
+| invalid topology schema shape | schema violations surface deterministic `PackDiagnostic`s | integration |
+| duplicate boundary local ID | duplicate local IDs fail with typed duplicate-entry error | integration |
+| duplicate component local ID | duplicate local IDs fail with typed duplicate-entry error | integration |
+| invalid include glob | malformed include patterns fail with `PackError::GlobCompile` | integration |
+| invalid exclude glob | malformed exclude patterns fail with `PackError::GlobCompile` | integration |
+| semantic fingerprint stability | key-order-only changes do not alter semantic fingerprints | integration |
+| source fingerprint sensitivity | formatting-only changes can change source fingerprint while semantic fingerprint stays stable | integration |
+| file-backed profile topology resolution | `file:` refs resolve relative to the profile document directory only | integration |
+| builtin profile topology resolution | builtin profile topology refs resolve only against builtin packs | integration |
+| missing topology ref | missing selected topology pack fails loudly and deterministically | integration |
+| wrong-kind topology ref | selected topology slot rejects the wrong pack kind | integration |
+
+Promotion bar:
+
+```text
+COVERAGE GOAL: 15/15 required Phase-B paths covered before promotion
+```
+
+Recommended test files:
+
+- extend `tests/pack_schema.rs` for topology schema embedding and version constants
+- extend `tests/pack_compile.rs` for standalone topology compile and resolution failures
+- extend `tests/pack_fingerprints.rs` for topology fingerprint invariants
+- add `tests/pack_topology.rs` for resolved-profile-topology success paths and slot-kind checks
+
+#### 11.2.f Failure modes for Phase B
+
+| Surface | Failure mode | Expected failure | Must be tested? | Rescue |
+|---|---|---|---|---|
+| topology JSON parse | malformed bytes or invalid UTF-8 | `PackError::ParseFailure` with pack diagnostics | Y | fail before any compiled object exists |
+| topology schema validation | missing `kind`, wrong `version`, wrong field shape | `PackError::SchemaViolation` | Y | emit sorted diagnostics with JSON pointers |
+| boundary/component identity allocation | duplicate local IDs | `PackError::DuplicateEntryId` | Y | hard fail, no last-write-wins |
+| glob matcher build | invalid include/exclude pattern | `PackError::GlobCompile` | Y | fail compile early with the exact bad pattern |
+| profile topology lookup | referenced pack not found | `PackError::UnknownPackReference` | Y | fail the topology resolution step |
+| profile topology kind matching | boundary slot points at component map or vice versa | `PackError::RefKindMismatch` | Y | hard fail with expected vs actual kind |
+| semantic hashing | absolute source path leaks into semantic fingerprint | test regression, not user-facing error | Y | keep canonical fingerprint input path-free |
+
+Hard rule:
+
+- Phase B does not promote if any failure mode above can surface as silent topology drift.
+
+#### 11.2.g NOT in scope for Phase B
+
+- repo inventory or filesystem classification against real files
+- boundary overlap detection against an actual snapshot
+- component-to-boundary relationship inference
+- path-class derivation beyond carrying compiled topology artifacts forward
+- score-model, query-pack, rule-pack, and recipe-pack compilation
+- full `CompiledPackSet` bundle orchestration
+- runtime bootstrap or CLI loading
+
+#### 11.2.h Dependency and parallelization shape
+
+| Slice | Shared write set | Depends on |
+|---|---|---|
+| B1 topology schemas | `src/pack/`, `schemas/pack/` | — |
+| B2 raw + compiled topology contracts | `src/pack/raw/`, `src/pack/compiled/`, `src/pack/mod.rs` | B1 |
+| B3 standalone topology compile | `src/pack/compiler.rs` | B1, B2 |
+| B4 profile topology resolution | `src/pack/compiler.rs`, `src/pack/compiled/topology.rs` | B3 |
+| B5 builtin topology packs | `src/pack/builtin.rs`, `src/pack/compiler.rs` | B3 |
+| B6 fixtures + tests | `fixtures/pack/`, `tests/` | B3, finishes after B4/B5 |
+
+Parallelization note:
+
+- B1 through B5 are one sequential lane because they all hard-couple through `src/pack/`
+- B6 is the first safe sidecar, but only after the compile contracts stabilize
+- README sweeps are a second sidecar once builtin names and schema files stop moving
+
+#### 11.2.i Phase B completion summary
+
+Phase B is complete only when all of the following are true:
+
+1. `boundary_taxonomy.v1.json` and `component_map.v1.json` are embedded through `src/pack/schema.rs`.
+2. `PackCompiler` can compile standalone boundary-taxonomy and component-map packs from builtin, file, and inline JSON sources.
+3. `BoundaryId` and `ComponentId` are allocated deterministically from the identity lemmas already defined in this spec.
+4. invalid topology globs fail during compile, not later during repo analysis.
+5. a selected `CompiledProfile` can resolve zero, one, or two topology refs into a crate-internal `ResolvedProfileTopology`.
+6. `builtin:generic/boundaries` and `builtin:generic/components` exist before any builtin profile depends on them.
+7. no Phase-B change requires touching `src/topo/**`, `src/repo/**`, or `src/app/runtime.rs`.
 
 ### 11.3 Phase C — advanced pack families + bundle resolution
 
@@ -1764,6 +1971,83 @@ Update:
 - `fixtures/README.md`
 
 So they describe actual Phase-A behavior rather than only reserved directories.
+
+### 16.6 Phase B code changes
+
+Add or extend only the modules needed for topology packs:
+
+- `src/pack/mod.rs`
+- `src/pack/compiler.rs`
+- `src/pack/schema.rs`
+- `src/pack/builtin.rs`
+- `src/pack/raw/mod.rs`
+- `src/pack/raw/boundary_taxonomy.rs`
+- `src/pack/raw/component_map.rs`
+- `src/pack/compiled/mod.rs`
+- `src/pack/compiled/topology.rs`
+
+Explicitly defer from Phase B:
+
+- `src/pack/expr.rs`
+- score-model raw/compiled modules
+- query-pack raw/compiled modules
+- rule-pack raw/compiled modules
+- recipe-pack raw/compiled modules
+- `src/topo/**` repo-backed classification logic
+- `src/app/runtime.rs` bootstrap work
+
+### 16.7 Phase B schema files
+
+Add and embed:
+
+- `schemas/pack/boundary_taxonomy.v1.json`
+- `schemas/pack/component_map.v1.json`
+
+Do not pull score-model, query-pack, rule-pack, or recipe-pack schemas into this phase.
+
+### 16.8 Phase B fixture layout
+
+```text
+fixtures/pack/
+  valid/
+    boundary_taxonomy_generic.json
+    component_map_generic.json
+    profile_topology_file_backed.toml
+  invalid/
+    boundary_taxonomy_duplicate_id.json
+    boundary_taxonomy_bad_glob.json
+    component_map_duplicate_id.json
+    component_map_bad_glob.json
+    profile_topology_missing_ref.toml
+    profile_topology_wrong_kind.toml
+  canonical/
+    boundary_taxonomy_order_a.json
+    boundary_taxonomy_order_b.json
+    component_map_order_a.json
+    component_map_order_b.json
+```
+
+### 16.9 Phase B tests
+
+Extend or add:
+
+- `tests/pack_schema.rs`
+- `tests/pack_compile.rs`
+- `tests/pack_fingerprints.rs`
+- `tests/pack_topology.rs`
+
+And only touch `tests/compile_matrix.rs` if topology resolution becomes part of an existing crate-level compile assertion.
+
+### 16.10 Phase B README updates
+
+Update:
+
+- `README.md`
+- `schemas/README.md`
+- `profiles/README.md`
+- `fixtures/README.md`
+
+So they describe actual Phase-B topology behavior once those contracts land, without implying that repo classification or runtime consumption already exists.
 
 ---
 
