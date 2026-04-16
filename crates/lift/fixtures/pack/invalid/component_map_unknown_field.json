@@ -1,0 +1,19 @@
+{
+  "kind": "component_map",
+  "version": 1,
+  "id": "acme/components",
+  "name": "Unknown field component map",
+  "unexpected_root": true,
+  "counting": {
+    "mode": "distinct"
+  },
+  "components": [
+    {
+      "id": "api",
+      "label": "API",
+      "include": ["api/**"],
+      "weight": 5,
+      "tags": ["public"]
+    }
+  ]
+}

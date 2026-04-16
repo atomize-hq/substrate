@@ -2,9 +2,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use globset::{Glob, GlobSet, GlobSetBuilder};
+use jsonschema::error::ValidationErrorKind;
+use jsonschema::{Retrieve, Uri, ValidationError, Validator};
 use serde::Serialize;
 use serde_json::{Map, Number, Value};
 
@@ -26,7 +29,9 @@ use crate::pack::raw::{
 };
 use crate::pack::refs::PackRef;
 use crate::pack::schema::{
-    PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_ID, PACK_COMPONENT_MAP_V1_SCHEMA_ID, PACK_PROFILE_V1_SCHEMA_ID,
+    PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_ID, PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_JSON,
+    PACK_COMMON_V1_SCHEMA_ID, PACK_COMMON_V1_SCHEMA_JSON, PACK_COMPONENT_MAP_V1_SCHEMA_ID,
+    PACK_COMPONENT_MAP_V1_SCHEMA_JSON, PACK_PROFILE_V1_SCHEMA_ID,
 };
 use crate::pack::source::{PackFormat, PackOrigin, PackSource};
 use crate::pack::{BoundaryId, ComponentId};
@@ -44,6 +49,47 @@ const DEFAULT_LANGUAGES: &[&str] = &[
 const DEFAULT_FOLLOW_SYMLINKS: bool = false;
 const DEFAULT_MAX_SCOPE_DEPTH: u8 = 2;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TopologySchemaKind {
+    BoundaryTaxonomy,
+    ComponentMap,
+}
+
+impl TopologySchemaKind {
+    fn invalid_root_code(self) -> &'static str {
+        match self {
+            Self::BoundaryTaxonomy => "pack.boundary_taxonomy.invalid_root",
+            Self::ComponentMap => "pack.component_map.invalid_root",
+        }
+    }
+
+    fn validator(self) -> &'static Validator {
+        match self {
+            Self::BoundaryTaxonomy => boundary_taxonomy_schema_validator(),
+            Self::ComponentMap => component_map_schema_validator(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct EmbeddedSchemaRetriever;
+
+impl Retrieve for EmbeddedSchemaRetriever {
+    fn retrieve(
+        &self,
+        uri: &Uri<String>,
+    ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+        match uri.as_str() {
+            PACK_COMMON_V1_SCHEMA_ID | "common.v1.json" => {
+                serde_json::from_str(PACK_COMMON_V1_SCHEMA_JSON).map_err(|error| {
+                    format!("failed to parse embedded common schema: {error}").into()
+                })
+            }
+            other => Err(format!("schema not found: {other}").into()),
+        }
+    }
+}
+
 /// Profile-only compiler entrypoint for Phase A.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PackCompiler;
@@ -57,19 +103,25 @@ impl PackCompiler {
     /// Compiles one standalone profile from builtin, file, or inline sources.
     pub(crate) fn compile_profile(&self, source: PackSource) -> PackResult<CompiledProfile> {
         let loaded = self.load_source(source)?;
-        if loaded.format != PackFormat::Toml {
+        let LoadedSource {
+            origin,
+            format,
+            bytes,
+            file_base_dir,
+        } = loaded;
+        if format != PackFormat::Toml {
             return Err(PackError::UnsupportedFormat {
-                origin: loaded.origin.display(),
+                origin: origin.display(),
             });
         }
 
-        let source_fingerprint = sha256_bytes(&loaded.bytes);
-        let json_value = parse_profile_toml(&loaded.origin, &loaded.bytes)?;
-        let mut diagnostics = validate_profile_document(&loaded.origin, &json_value);
+        let source_fingerprint = sha256_bytes(&bytes);
+        let json_value = parse_profile_toml(&origin, &bytes)?;
+        let mut diagnostics = validate_profile_document(&origin, &json_value);
         if !diagnostics.is_empty() {
             diagnostics.sort();
             return Err(PackError::SchemaViolation {
-                origin: loaded.origin.display(),
+                origin: origin.display(),
                 schema_id: PACK_PROFILE_V1_SCHEMA_ID,
                 diagnostics,
             });
@@ -77,13 +129,13 @@ impl PackCompiler {
 
         let raw_profile: RawProfile =
             serde_json::from_value(json_value).map_err(|error| PackError::SchemaViolation {
-                origin: loaded.origin.display(),
+                origin: origin.display(),
                 schema_id: PACK_PROFILE_V1_SCHEMA_ID,
                 diagnostics: vec![PackDiagnostic::error(
                     "pack.profile.deserialize_failed",
                     error.to_string(),
                     Some(PackLocation {
-                        origin: loaded.origin.clone(),
+                        origin: origin.clone(),
                         path: None,
                     }),
                 )],
@@ -92,19 +144,20 @@ impl PackCompiler {
         let normalized = normalize_profile(&raw_profile);
         let semantic_fingerprint =
             sha256_canonical_json(&normalized).map_err(|error| PackError::ParseFailure {
-                origin: loaded.origin.display(),
+                origin: origin.display(),
                 diagnostics: vec![PackDiagnostic::error(
                     "pack.profile.canonicalization_failed",
                     error.to_string(),
                     Some(PackLocation {
-                        origin: loaded.origin.clone(),
+                        origin: origin.clone(),
                         path: None,
                     }),
                 )],
             })?;
 
         compile_normalized_profile(
-            loaded.origin,
+            origin,
+            file_base_dir,
             source_fingerprint,
             semantic_fingerprint,
             normalized,
@@ -289,12 +342,14 @@ impl PackCompiler {
                 },
                 format,
                 bytes: bytes.to_vec(),
+                file_base_dir: None,
             }),
             PackSource::File { path, format_hint } => {
                 let bytes = fs::read(&path).map_err(|error| PackError::Io {
                     origin: path.display().to_string(),
                     reason: error.to_string(),
                 })?;
+                let resolved_path = absolutize_path(&path)?;
                 let display_path = path.display().to_string();
                 let format = match format_hint.or_else(|| infer_file_format(&path)) {
                     Some(format) => format,
@@ -308,6 +363,7 @@ impl PackCompiler {
                     origin: PackOrigin::File { display_path },
                     format,
                     bytes,
+                    file_base_dir: resolved_path.parent().map(Path::to_path_buf),
                 })
             }
             PackSource::Inline {
@@ -318,6 +374,7 @@ impl PackCompiler {
                 origin: PackOrigin::Inline { logical_name },
                 format,
                 bytes,
+                file_base_dir: None,
             }),
         }
     }
@@ -328,6 +385,7 @@ struct LoadedSource {
     origin: PackOrigin,
     format: PackFormat,
     bytes: Vec<u8>,
+    file_base_dir: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -552,6 +610,207 @@ fn toml_to_json(
     }
 }
 
+fn boundary_taxonomy_schema_validator() -> &'static Validator {
+    static VALIDATOR: OnceLock<Validator> = OnceLock::new();
+    VALIDATOR
+        .get_or_init(|| compile_topology_schema_validator(PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_JSON))
+}
+
+fn component_map_schema_validator() -> &'static Validator {
+    static VALIDATOR: OnceLock<Validator> = OnceLock::new();
+    VALIDATOR.get_or_init(|| compile_topology_schema_validator(PACK_COMPONENT_MAP_V1_SCHEMA_JSON))
+}
+
+fn compile_topology_schema_validator(schema_json: &str) -> Validator {
+    let root_schema: Value =
+        serde_json::from_str(schema_json).expect("embedded topology schema JSON should parse");
+    jsonschema::draft202012::options()
+        .with_retriever(EmbeddedSchemaRetriever)
+        .build(&root_schema)
+        .expect("embedded topology schema should compile")
+}
+
+fn validate_topology_document(
+    origin: &PackOrigin,
+    value: &Value,
+    schema_kind: TopologySchemaKind,
+) -> Vec<PackDiagnostic> {
+    let mut diagnostics = Vec::new();
+    for error in schema_kind.validator().iter_errors(value) {
+        diagnostics.extend(topology_schema_error_to_diagnostics(
+            origin,
+            schema_kind,
+            &error,
+        ));
+    }
+    diagnostics
+}
+
+fn topology_schema_error_to_diagnostics(
+    origin: &PackOrigin,
+    schema_kind: TopologySchemaKind,
+    error: &ValidationError<'_>,
+) -> Vec<PackDiagnostic> {
+    match error.kind() {
+        ValidationErrorKind::AdditionalProperties { unexpected } => {
+            let mut fields = sorted_unique_strings(unexpected.clone());
+            fields
+                .drain(..)
+                .map(|field| {
+                    let path = append_pointer_segment(error.instance_path().as_str(), &field);
+                    PackDiagnostic::error(
+                        "pack.schema.unknown_field",
+                        format!("unexpected field `{field}`"),
+                        Some(location(origin, &path)),
+                    )
+                })
+                .collect()
+        }
+        ValidationErrorKind::Required { property } => {
+            let Some(property) = property.as_str() else {
+                return vec![PackDiagnostic::error(
+                    "pack.schema.missing_required_field",
+                    error.to_string(),
+                    pointer_subject(origin, error.instance_path().as_str()),
+                )];
+            };
+            let pointer = append_pointer_segment(error.instance_path().as_str(), property);
+            vec![PackDiagnostic::error(
+                missing_field_code(schema_kind, error.instance_path().as_str(), property),
+                format!("required field `{property}` is missing"),
+                Some(location(origin, &pointer)),
+            )]
+        }
+        _ => vec![PackDiagnostic::error(
+            topology_schema_error_code(schema_kind, error),
+            error.to_string(),
+            topology_schema_error_subject(origin, schema_kind, error),
+        )],
+    }
+}
+
+fn topology_schema_error_code(
+    schema_kind: TopologySchemaKind,
+    error: &ValidationError<'_>,
+) -> &'static str {
+    let path = error.instance_path().as_str();
+    match error.kind() {
+        ValidationErrorKind::Type { .. } if path.is_empty() => schema_kind.invalid_root_code(),
+        ValidationErrorKind::Type { .. } => "pack.schema.invalid_type",
+        ValidationErrorKind::Constant { .. } if path == "/kind" => "pack.schema.invalid_kind",
+        ValidationErrorKind::Constant { .. } if path == "/version" => "pack.schema.invalid_version",
+        ValidationErrorKind::Enum { .. } if path.ends_with("/counting/mode") => {
+            "pack.schema.invalid_counting_mode"
+        }
+        ValidationErrorKind::Pattern { .. } if path == "/id" => "pack.schema.invalid_pack_name",
+        ValidationErrorKind::MinLength { .. } => min_length_code(path),
+        _ => "pack.schema.invalid_value",
+    }
+}
+
+fn topology_schema_error_subject(
+    origin: &PackOrigin,
+    _schema_kind: TopologySchemaKind,
+    error: &ValidationError<'_>,
+) -> Option<PackLocation> {
+    let path = error.instance_path().as_str();
+    if path.is_empty() && matches!(error.kind(), ValidationErrorKind::Type { .. }) {
+        Some(PackLocation {
+            origin: origin.clone(),
+            path: None,
+        })
+    } else {
+        pointer_subject(origin, path)
+    }
+}
+
+fn pointer_subject(origin: &PackOrigin, path: &str) -> Option<PackLocation> {
+    if path.is_empty() {
+        None
+    } else {
+        Some(location(origin, path))
+    }
+}
+
+fn append_pointer_segment(base: &str, segment: &str) -> String {
+    if base.is_empty() {
+        format!("/{}", escape_json_pointer_segment(segment))
+    } else {
+        format!("{base}/{}", escape_json_pointer_segment(segment))
+    }
+}
+
+fn escape_json_pointer_segment(segment: &str) -> String {
+    segment.replace('~', "~0").replace('/', "~1")
+}
+
+fn missing_field_code(
+    schema_kind: TopologySchemaKind,
+    parent_path: &str,
+    property: &str,
+) -> &'static str {
+    match (schema_kind, parent_path, property) {
+        (_, "", "kind") => "pack.schema.missing_kind",
+        (_, "", "version") => "pack.schema.missing_version",
+        (_, "", "id") => "pack.schema.missing_id",
+        (_, "", "name") => "pack.schema.missing_name",
+        (TopologySchemaKind::BoundaryTaxonomy, "", "counting") => "pack.schema.missing_counting",
+        (TopologySchemaKind::BoundaryTaxonomy, "", "boundaries") => {
+            "pack.schema.missing_boundaries"
+        }
+        (TopologySchemaKind::ComponentMap, "", "counting") => "pack.schema.missing_counting",
+        (TopologySchemaKind::ComponentMap, "", "components") => "pack.schema.missing_components",
+        (_, "/counting", "mode") => "pack.schema.missing_counting_mode",
+        (TopologySchemaKind::BoundaryTaxonomy, path, "id")
+            if is_topology_entry_path(path, "boundaries") =>
+        {
+            "pack.schema.missing_boundary_id"
+        }
+        (TopologySchemaKind::BoundaryTaxonomy, path, "label")
+            if is_topology_entry_path(path, "boundaries") =>
+        {
+            "pack.schema.missing_boundary_label"
+        }
+        (TopologySchemaKind::BoundaryTaxonomy, path, "include")
+            if is_topology_entry_path(path, "boundaries") =>
+        {
+            "pack.schema.missing_boundary_include"
+        }
+        (TopologySchemaKind::ComponentMap, path, "id")
+            if is_topology_entry_path(path, "components") =>
+        {
+            "pack.schema.missing_component_id"
+        }
+        (TopologySchemaKind::ComponentMap, path, "label")
+            if is_topology_entry_path(path, "components") =>
+        {
+            "pack.schema.missing_component_label"
+        }
+        (TopologySchemaKind::ComponentMap, path, "include")
+            if is_topology_entry_path(path, "components") =>
+        {
+            "pack.schema.missing_component_include"
+        }
+        _ => "pack.schema.missing_required_field",
+    }
+}
+
+fn is_topology_entry_path(path: &str, collection: &str) -> bool {
+    path.strip_prefix(&format!("/{collection}/"))
+        .map(|suffix| suffix.parse::<usize>().is_ok())
+        .unwrap_or(false)
+}
+
+fn min_length_code(path: &str) -> &'static str {
+    if path == "/name" || path.ends_with("/id") || path.ends_with("/label") {
+        "pack.schema.invalid_name"
+    } else if path.contains("/include/") || path.contains("/exclude/") {
+        "pack.schema.invalid_glob"
+    } else {
+        "pack.schema.invalid_value"
+    }
+}
+
 fn validate_profile_document(origin: &PackOrigin, value: &Value) -> Vec<PackDiagnostic> {
     let mut diagnostics = Vec::new();
     let Some(root) = value.as_object() else {
@@ -663,209 +922,11 @@ fn validate_profile_document(origin: &PackOrigin, value: &Value) -> Vec<PackDiag
 }
 
 fn validate_boundary_taxonomy_document(origin: &PackOrigin, value: &Value) -> Vec<PackDiagnostic> {
-    let mut diagnostics = Vec::new();
-    let Some(root) = value.as_object() else {
-        diagnostics.push(PackDiagnostic::error(
-            "pack.boundary_taxonomy.invalid_root",
-            "boundary taxonomy document must be an object",
-            Some(PackLocation {
-                origin: origin.clone(),
-                path: None,
-            }),
-        ));
-        return diagnostics;
-    };
-
-    require_string(
-        root.get("kind"),
-        origin,
-        "/kind",
-        "pack.schema.missing_kind",
-        &mut diagnostics,
-    );
-    require_u64(
-        root.get("version"),
-        origin,
-        "/version",
-        "pack.schema.missing_version",
-        &mut diagnostics,
-    );
-    require_string(
-        root.get("id"),
-        origin,
-        "/id",
-        "pack.schema.missing_id",
-        &mut diagnostics,
-    );
-    require_string(
-        root.get("name"),
-        origin,
-        "/name",
-        "pack.schema.missing_name",
-        &mut diagnostics,
-    );
-    require_object(
-        root.get("counting"),
-        origin,
-        "/counting",
-        "pack.schema.missing_counting",
-        &mut diagnostics,
-    );
-    require_array(
-        root.get("boundaries"),
-        origin,
-        "/boundaries",
-        "pack.schema.missing_boundaries",
-        &mut diagnostics,
-    );
-
-    if let Some(kind) = root.get("kind").and_then(Value::as_str) {
-        if kind != "boundary_taxonomy" {
-            diagnostics.push(PackDiagnostic::error(
-                "pack.schema.invalid_kind",
-                format!("expected boundary_taxonomy kind, found {kind}"),
-                Some(location(origin, "/kind")),
-            ));
-        }
-    }
-    if let Some(version) = root.get("version").and_then(Value::as_u64) {
-        if version != 1 {
-            diagnostics.push(PackDiagnostic::error(
-                "pack.schema.invalid_version",
-                format!("expected boundary taxonomy version 1, found {version}"),
-                Some(location(origin, "/version")),
-            ));
-        }
-    }
-    if let Some(id) = root.get("id").and_then(Value::as_str) {
-        if PackName::parse(id).is_err() {
-            diagnostics.push(PackDiagnostic::error(
-                "pack.schema.invalid_pack_name",
-                format!("invalid boundary taxonomy id: {id}"),
-                Some(location(origin, "/id")),
-            ));
-        }
-    }
-    validate_non_empty_string(root.get("name"), origin, "/name", &mut diagnostics);
-    validate_optional_string(
-        root.get("description"),
-        origin,
-        "/description",
-        &mut diagnostics,
-    );
-    validate_counting_mode(
-        root.get("counting"),
-        origin,
-        "/counting",
-        "distinct_minus_one",
-        &mut diagnostics,
-    );
-    validate_boundary_entries(root.get("boundaries"), origin, &mut diagnostics);
-
-    diagnostics
+    validate_topology_document(origin, value, TopologySchemaKind::BoundaryTaxonomy)
 }
 
 fn validate_component_map_document(origin: &PackOrigin, value: &Value) -> Vec<PackDiagnostic> {
-    let mut diagnostics = Vec::new();
-    let Some(root) = value.as_object() else {
-        diagnostics.push(PackDiagnostic::error(
-            "pack.component_map.invalid_root",
-            "component map document must be an object",
-            Some(PackLocation {
-                origin: origin.clone(),
-                path: None,
-            }),
-        ));
-        return diagnostics;
-    };
-
-    require_string(
-        root.get("kind"),
-        origin,
-        "/kind",
-        "pack.schema.missing_kind",
-        &mut diagnostics,
-    );
-    require_u64(
-        root.get("version"),
-        origin,
-        "/version",
-        "pack.schema.missing_version",
-        &mut diagnostics,
-    );
-    require_string(
-        root.get("id"),
-        origin,
-        "/id",
-        "pack.schema.missing_id",
-        &mut diagnostics,
-    );
-    require_string(
-        root.get("name"),
-        origin,
-        "/name",
-        "pack.schema.missing_name",
-        &mut diagnostics,
-    );
-    require_object(
-        root.get("counting"),
-        origin,
-        "/counting",
-        "pack.schema.missing_counting",
-        &mut diagnostics,
-    );
-    require_array(
-        root.get("components"),
-        origin,
-        "/components",
-        "pack.schema.missing_components",
-        &mut diagnostics,
-    );
-
-    if let Some(kind) = root.get("kind").and_then(Value::as_str) {
-        if kind != "component_map" {
-            diagnostics.push(PackDiagnostic::error(
-                "pack.schema.invalid_kind",
-                format!("expected component_map kind, found {kind}"),
-                Some(location(origin, "/kind")),
-            ));
-        }
-    }
-    if let Some(version) = root.get("version").and_then(Value::as_u64) {
-        if version != 1 {
-            diagnostics.push(PackDiagnostic::error(
-                "pack.schema.invalid_version",
-                format!("expected component map version 1, found {version}"),
-                Some(location(origin, "/version")),
-            ));
-        }
-    }
-    if let Some(id) = root.get("id").and_then(Value::as_str) {
-        if PackName::parse(id).is_err() {
-            diagnostics.push(PackDiagnostic::error(
-                "pack.schema.invalid_pack_name",
-                format!("invalid component map id: {id}"),
-                Some(location(origin, "/id")),
-            ));
-        }
-    }
-    validate_non_empty_string(root.get("name"), origin, "/name", &mut diagnostics);
-    validate_optional_string(
-        root.get("description"),
-        origin,
-        "/description",
-        &mut diagnostics,
-    );
-    validate_counting_mode(
-        root.get("counting"),
-        origin,
-        "/counting",
-        "distinct",
-        &mut diagnostics,
-    );
-    validate_component_entries(root.get("components"), origin, &mut diagnostics);
-
-    diagnostics
+    validate_topology_document(origin, value, TopologySchemaKind::ComponentMap)
 }
 
 fn require_string(
@@ -1651,6 +1712,7 @@ fn sorted_unique_strings(mut values: Vec<String>) -> Vec<String> {
 
 fn compile_normalized_profile(
     origin: PackOrigin,
+    source_file_base_dir: Option<PathBuf>,
     source_fingerprint: Fingerprint,
     semantic_fingerprint: Fingerprint,
     normalized: NormalizedProfileDocument,
@@ -1704,6 +1766,7 @@ fn compile_normalized_profile(
             source_fingerprint,
             semantic_fingerprint,
         },
+        source_file_base_dir,
         apps: CompiledProfileApps {
             enabled: enabled_apps,
             default: default_app,
@@ -1718,6 +1781,18 @@ fn compile_normalized_profile(
         includes,
         diagnostics: Vec::new(),
     })
+}
+
+fn absolutize_path(path: &Path) -> PackResult<PathBuf> {
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+
+    let cwd = std::env::current_dir().map_err(|error| PackError::Io {
+        origin: path.display().to_string(),
+        reason: error.to_string(),
+    })?;
+    Ok(cwd.join(path))
 }
 
 fn compile_normalized_boundary_taxonomy(
@@ -1939,17 +2014,23 @@ fn resolve_component_map(
     }
 }
 
+/// Phase B file refs resolve lexically from the compiled profile's captured
+/// parent directory, never from a display string or the ambient cwd.
 fn resolve_file_source(profile: &CompiledProfile, relative_path: &str) -> PackResult<PackSource> {
-    let PackOrigin::File { display_path } = &profile.header.origin else {
+    let Some(base) = &profile.source_file_base_dir else {
         return Err(unknown_file_reference(profile, relative_path));
     };
 
-    let base = Path::new(display_path)
-        .parent()
-        .unwrap_or_else(|| Path::new(""));
     let path = base.join(relative_path);
-    if !path.exists() {
-        return Err(unknown_file_reference(profile, relative_path));
+    match path.try_exists() {
+        Ok(true) => {}
+        Ok(false) => return Err(unknown_file_reference(profile, relative_path)),
+        Err(error) => {
+            return Err(PackError::Io {
+                origin: path.display().to_string(),
+                reason: error.to_string(),
+            });
+        }
     }
 
     Ok(PackSource::File {

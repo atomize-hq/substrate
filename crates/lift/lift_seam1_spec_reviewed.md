@@ -9,12 +9,14 @@ This spec is intentionally anchored to the crate as it exists today, not to the 
 Observed state in the landed crate:
 
 - `src/kernel/**` is real, tested, schema-backed, and publicly re-exported from `lib.rs`.
-- `src/pack/mod.rs` is still a stub reserved for future work.
-- `pack` is currently `pub(crate)`, not public API.
-- `profiles/`, `rules/`, and `recipes/` exist as reserved directories with placeholder READMEs.
-- `schemas/` currently contains only `schemas/kernel/primitives.v1.json` plus a README that is now slightly stale.
+- `src/pack/**` is now real code, not a stub, but it currently covers only profile + topology compilation.
+- `pack` is still `pub(crate)`, not public API.
+- `PackKind`, `PackError`, and `CompiledProfile` already reserve the score/query/rule/recipe surface, but the raw/compiled modules and standalone compile entrypoints for those pack kinds do not exist yet.
+- `schemas/pack/` currently contains `common.v1.json`, `profile.v1.json`, `boundary_taxonomy.v1.json`, and `component_map.v1.json`; the advanced pack schemas are still missing.
+- `fixtures/pack/**` plus `tests/pack_schema.rs`, `tests/pack_compile.rs`, `tests/pack_fingerprints.rs`, and `tests/pack_topology.rs` now exercise the landed profile + topology compiler behavior.
+- `src/app/runtime.rs`, `src/query/mod.rs`, and `src/topo/mod.rs` are still placeholders, so there is still no real downstream consumer loop.
 - feature flags already include `substrate-profile`, `compat-v1`, and language flags, but no pack-specific feature flag yet.
-- the CLI is only a scaffold; no pack-loading path exists yet.
+- the CLI is still only a scaffold; no pack-loading path exists yet.
 
 That means seam 1 should be defined as an **internal, contract-heavy compiler seam** that turns declarative pack inputs into immutable runtime objects, while preserving the existing public/API posture of the crate.
 
@@ -1832,14 +1834,285 @@ Phase-B promotion gate:
 7. every required Phase-B test above is present and passing.
 8. no Phase-B change requires touching `src/topo/**`, `src/repo/**`, or `src/app/runtime.rs`.
 
-### 11.3 Phase C — advanced pack families + bundle resolution
+### 11.3 Phase C / Phase 3 — advanced pack families + bundle resolution
 
-- score model, query pack, rule pack, and recipe pack schemas exist and are embedded.
-- `PackCompiler` can compile one standalone score model, query pack, rule pack, and recipe pack.
-- invalid glob patterns and invalid expression AST nodes are rejected.
-- cyclic references are rejected.
-- bundle semantic fingerprint is stable regardless of pack discovery order.
-- rule/query/recipe dependency closure rules are deterministic and explicit.
+Phase C starts from the landed Phase-B spine as it exists in this branch today.
+
+The point of this phase is not “more pack kinds because the enum already has them.”
+The point is to close the contract gap that is already visible in the landed code:
+profiles can already carry deferred score/query/rule/recipe refs, but the compiler
+cannot yet turn those refs into a real crate-internal `CompiledPackSet`.
+
+Phase C should make that latent surface honest.
+
+What already exists and must be reused:
+
+| Sub-problem | Existing code | Phase C decision |
+|---|---|---|
+| deferred advanced refs on profiles | `src/pack/raw/profile.rs`, `src/pack/compiled/profile.rs` | keep `score.model`, `rules.packs`, `queries.packs`, and `recipes.packs` as the authoritative Phase-C entry surface; do not invent a second bundle-root config shape |
+| pack kind universe | `src/pack/raw/common.rs::PackKind` | fill in the already-landed `ScoreModel`, `QueryPack`, `RulePack`, and `RecipePack` variants instead of redesigning the pack kind model |
+| typed error vocabulary | `src/pack/error.rs` | reuse `DuplicatePackId`, `DuplicateEntryId`, `UnknownPackReference`, `RefKindMismatch`, `CyclicReference`, and `ExpressionCompile`; do not create bundle-only ad hoc errors |
+| common schema seed | `schemas/pack/common.v1.json` | extend the existing `expr` and `query_ref` defs, do not fork a second “advanced common” schema |
+| deterministic compile pipeline | `src/pack/compiler.rs` | reuse the landed load -> parse -> schema validate -> normalize -> canonicalize -> compile pipeline for every new pack kind |
+| topology resolution precedent | `src/pack/compiler.rs`, `src/pack/compiled/topology.rs` | build Phase-C bundle resolution on the same normalized-source identity, fingerprint, and kind-checking rules already used for topology resolution |
+
+Scope decision for Phase C:
+
+- add only `score_model`, `query_pack`, `rule_pack`, and `recipe_pack` structural compilation plus bundle resolution into `CompiledPackSet`;
+- keep all four advanced pack families JSON-only in v1;
+- add one crate-internal bundle-resolution entrypoint, preferably `PackCompiler::resolve_profile_pack_set(&CompiledProfile)`, rather than a generic “compile any pack” dispatcher;
+- keep standalone compile entrypoints for each advanced pack kind so the seam stays composable and testable in isolation;
+- allow standalone rule and recipe packs to carry unresolved external query refs, then close those refs only when building a `CompiledPackSet`;
+- add a Phase-C builtin score model only if a builtin profile actually references it;
+- do not add builtin query/rule/recipe packs just to make the registry look bigger;
+- keep runtime bootstrap, score evaluation, tree-sitter query compilation, rule execution, and recipe execution out of this phase.
+
+Complexity and blast radius for Phase C:
+
+- Phase C necessarily touches more than 8 files because the missing surface spans schemas, raw contracts, compiled contracts, compiler entrypoints, fixtures, and tests.
+- That is acceptable here because the blast radius stays inside `src/pack/**`, `schemas/pack/**`, `fixtures/pack/**`, and dedicated test files.
+- The scope reduction already happened by keeping the first real consumer loop in Phase D.
+- If this phase starts slipping, `rule_pack` and `recipe_pack` are still the first slip candidates, not bundle resolution itself.
+
+#### 11.3.b Phase C architecture
+
+Phase C execution shape:
+
+```text
+selected profile source
+        |
+        v
+compile_profile(source)
+        |
+        +--> compiled profile
+        |
+        +--> resolve_profile_topology(profile)        [reuse landed Phase-B path]
+        |
+        v
+resolve_profile_pack_set(profile)
+        |
+        +--> resolve optional score model
+        +--> resolve direct query packs
+        +--> resolve direct rule packs
+        |       |
+        |       +--> enqueue transitive query refs
+        |
+        +--> resolve direct recipe packs
+        |       |
+        |       +--> enqueue transitive query refs
+        |
+        +--> detect cycles / kind mismatches / duplicate pack ids
+        +--> canonicalize ordered bundle semantics
+        |
+        v
+CompiledPackSet
+  ├── profile
+  ├── boundary_taxonomy?
+  ├── component_map?
+  ├── score_model?
+  ├── query_packs
+  ├── rule_packs
+  ├── recipe_packs
+  ├── diagnostics
+  └── semantic_fingerprint
+```
+
+Module boundary for Phase C:
+
+```text
+src/pack/
+  expr.rs
+  compiler.rs
+  schema.rs
+  builtin.rs                      [optional score-model builtin only]
+
+  raw/
+    score_model.rs
+    query_pack.rs
+    rule_pack.rs
+    recipe_pack.rs
+
+  compiled/
+    score_model.rs
+    query_pack.rs
+    rule_pack.rs
+    recipe_pack.rs
+    mod.rs                        [exports CompiledPackSet]
+```
+
+Architecture rules to lock before coding:
+
+1. `resolve_profile_pack_set` consumes a compiled profile, not raw source bytes.
+2. `profile.score.model` may resolve only to `PackKind::ScoreModel`.
+3. `profile.queries.packs` may resolve only to `PackKind::QueryPack`.
+4. `profile.rules.packs` may resolve only to `PackKind::RulePack`.
+5. `profile.recipes.packs` may resolve only to `PackKind::RecipePack`.
+6. Rule and recipe defs may reference query packs structurally through `query_ref`, and those refs expand the bundle closure.
+7. Standalone pack compilation leaves external refs unresolved on purpose.
+8. Bundle traversal order must be deterministic and key-based, never filesystem-discovery-order-based.
+9. The memoization key for resolution remains the normalized resolved source identity.
+10. The same normalized source may be deduped within one resolution call.
+11. Cross-origin duplicate pack IDs still fail in v1, even if semantic fingerprints match.
+12. `CompiledPackSet.semantic_fingerprint` must depend only on canonical ordered bundle semantics, never on origin display strings or discovery order.
+
+#### 11.3.c Phase C implementation slices
+
+| Slice | Files | Outcome | Exit condition |
+|---|---|---|---|
+| C1. expression compiler + common-schema finalization | `src/pack/expr.rs`, `src/pack/schema.rs`, `schemas/pack/common.v1.json` | one explicit expression compiler exists for score-model expressions and shared query-ref validation | unsupported ops, bad JSON pointers, and malformed node shapes fail with typed errors |
+| C2. score-model contracts | `src/pack/raw/score_model.rs`, `src/pack/compiled/score_model.rs`, `schemas/pack/score_model.v1.json`, `src/pack/compiler.rs` | standalone score-model compile works from builtin/file/inline JSON | duplicate trigger/confidence/missing-input entries fail deterministically |
+| C3. query-pack contracts | `src/pack/raw/query_pack.rs`, `src/pack/compiled/query_pack.rs`, `schemas/pack/query_pack.v1.json`, `src/pack/compiler.rs` | standalone query-pack compile works with typed query IDs and capture metadata | duplicate query IDs and invalid capture shapes fail deterministically |
+| C4. rule-pack + recipe-pack contracts | `src/pack/raw/{rule_pack.rs,recipe_pack.rs}`, `src/pack/compiled/{rule_pack.rs,recipe_pack.rs}`, `schemas/pack/{rule_pack.v1.json,recipe_pack.v1.json}`, `src/pack/compiler.rs` | standalone rule/recipe compile works with structural query refs and typed emit/transform definitions | invalid severity, bad emit shape, bad transform shape, and duplicate local IDs fail deterministically |
+| C5. bundle resolution | `src/pack/compiler.rs`, `src/pack/compiled/mod.rs` | one `CompiledPackSet` is built from a selected profile using deterministic closure rules | optional score model, direct includes, transitive query closure, cycle detection, duplicate detection, and bundle fingerprinting all work through one owned path |
+| C6. fixtures + optional builtins | `fixtures/pack/**`, `src/pack/builtin.rs` | valid/invalid/canonical fixtures exist for every advanced pack family and bundle-resolution edge case | builtin score model is added only if a builtin profile needs it; no decorative builtins land |
+| C7. tests + docs sweep | `tests/{pack_schema.rs,pack_compile.rs,pack_fingerprints.rs,pack_bundle.rs,pack_topology.rs}`, `README.md`, `schemas/README.md`, `profiles/README.md`, `rules/README.md`, `recipes/README.md`, `fixtures/README.md` | Phase-C behavior is fully covered and documented | docs describe structural compile + bundle resolution accurately without implying runtime execution exists |
+
+Execution sequence:
+
+1. Land C1 first so every advanced pack shares one expression and common-schema contract.
+2. Land C2 and C3 next, because rule/recipe packs depend on those shapes being stable.
+3. Land C4 once query-pack shape is frozen.
+4. Land C5 only after standalone compile for all four advanced families stops moving.
+5. Land C6 and C7 last, after the bundle contract text is stable enough to document honestly.
+
+#### 11.3.d Test review — required coverage for Phase C
+
+This is the promotion gate for Phase C.
+
+The checklist is also written to:
+
+- `/Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/spensermcconnell-feat-lift-phase-c-test-plan-20260416-123701.md`
+
+Required coverage diagram:
+
+```text
+[+] Expression compiler
+    ├── [REQUIRED] valid arithmetic / comparison / boolean trees compile
+    ├── [REQUIRED] unsupported operator -> `PackError::ExpressionCompile`
+    ├── [REQUIRED] invalid JSON Pointer -> `PackError::ExpressionCompile`
+    └── [REQUIRED] arity / field-shape mismatches fail deterministically
+
+[+] Score model compile
+    ├── [REQUIRED] builtin/file/inline happy path
+    ├── [REQUIRED] duplicate trigger id -> `PackError::DuplicateEntryId`
+    ├── [REQUIRED] duplicate confidence rule id -> `PackError::DuplicateEntryId`
+    ├── [REQUIRED] duplicate missing-input field -> `PackError::DuplicateEntryId`
+    └── [REQUIRED] semantic/source fingerprint split stays stable
+
+[+] Query pack compile
+    ├── [REQUIRED] valid query pack happy path
+    ├── [REQUIRED] duplicate query id -> `PackError::DuplicateEntryId`
+    ├── [REQUIRED] unsupported engine or bad shape -> typed schema/compile failure
+    └── [REQUIRED] capture ordering / required flags preserve semantics deterministically
+
+[+] Rule pack compile
+    ├── [REQUIRED] valid rule pack with structural query ref
+    ├── [REQUIRED] duplicate rule id -> `PackError::DuplicateEntryId`
+    ├── [REQUIRED] invalid severity / emit shape fails deterministically
+    └── [REQUIRED] standalone rule-pack compile does not pretend external query refs are resolved
+
+[+] Recipe pack compile
+    ├── [REQUIRED] valid recipe pack with structural query ref
+    ├── [REQUIRED] duplicate recipe id -> `PackError::DuplicateEntryId`
+    ├── [REQUIRED] invalid transform op / shape fails deterministically
+    └── [REQUIRED] transform sequence ordering is preserved semantically
+
+[+] Bundle resolution
+    ├── [REQUIRED] profile score-model ref resolves into `CompiledPackSet`
+    ├── [REQUIRED] direct query/rule/recipe includes resolve by expected kind
+    ├── [REQUIRED] rule-pack query refs pull transitive query-pack closure
+    ├── [REQUIRED] recipe-pack query refs pull transitive query-pack closure
+    ├── [REQUIRED] missing ref -> `PackError::UnknownPackReference`
+    ├── [REQUIRED] wrong-kind ref -> `PackError::RefKindMismatch`
+    ├── [REQUIRED] cycle across packs -> `PackError::CyclicReference`
+    ├── [REQUIRED] cross-origin duplicate pack id -> `PackError::DuplicatePackId`
+    ├── [REQUIRED] same resolved source referenced twice dedupes deterministically
+    └── [REQUIRED] bundle semantic fingerprint is stable across discovery order
+```
+
+Test file plan:
+
+- extend `tests/pack_schema.rs` for advanced-pack schema embedding and fixture validation;
+- extend `tests/pack_compile.rs` for standalone score/query/rule/recipe compile success and failure paths;
+- extend `tests/pack_fingerprints.rs` for score-model and bundle-order determinism invariants;
+- keep `tests/pack_topology.rs` as a regression suite, because Phase C bundle resolution reuses Phase-B topology rules;
+- add `tests/pack_bundle.rs` for closure, cycle, duplicate, and wrong-kind coverage;
+- touch `tests/compile_matrix.rs` only if `CompiledPackSet` becomes part of an existing crate-level compile assertion.
+
+Required commands before Phase-C promotion:
+
+```bash
+cargo test -p substrate-lift --test pack_schema -- --nocapture
+cargo test -p substrate-lift --test pack_compile -- --nocapture
+cargo test -p substrate-lift --test pack_fingerprints -- --nocapture
+cargo test -p substrate-lift --test pack_topology -- --nocapture
+cargo test -p substrate-lift --test pack_bundle -- --nocapture
+```
+
+#### 11.3.e Failure modes for Phase C
+
+| Failure mode | Silent if missed? | Must fail in Phase C? | Expected surface |
+|---|---|---|---|
+| invalid expression tree | yes | yes, `PackError::ExpressionCompile` | typed compile failure at the pack-local path |
+| duplicate score-model trigger/confidence/missing-input entry | yes | yes, `PackError::DuplicateEntryId` | typed compile failure |
+| malformed query-pack capture / engine shape | yes | yes, schema or typed compile failure | no partial compiled query pack |
+| rule or recipe pack carries a query ref of the wrong pack kind | yes | yes, `PackError::RefKindMismatch` during bundle resolution | typed bundle-resolution failure |
+| transitive query closure is incomplete | yes | yes, hard fail bundle resolution | no partially-resolved `CompiledPackSet` |
+| cycle across profile-included packs | yes | yes, `PackError::CyclicReference` | deterministic cycle report |
+| builtin/file/inline pack IDs collide across origins | yes | yes, `PackError::DuplicatePackId` | typed bundle-resolution failure |
+| bundle semantic fingerprint depends on discovery order | yes | test-enforced invariant | failing determinism test |
+
+Phase C does not promote if any failure mode above is both untested and capable of producing silent semantic drift.
+
+#### 11.3.f NOT in scope for Phase C
+
+- tree-sitter query compilation or execution in `src/query/**`
+- score evaluation against real work-lift vectors
+- rule execution, finding emission, or any runtime policy loop
+- recipe application or patch generation
+- `src/app/runtime.rs` bootstrap work
+- repo walking, topology classification, or any `src/topo/**` implementation
+- CLI discovery or pack-management commands
+- remote registries, environment interpolation, or other non-local pack sources
+
+#### 11.3.g Worktree-parallel execution strategy
+
+Dependency table:
+
+| Slice | Modules touched | Depends on |
+|---|---|---|
+| C1 expression compiler + common schema | `src/pack/expr.rs`, `src/pack/schema.rs`, `schemas/pack/common.v1.json`, `tests/pack_schema.rs` | — |
+| C2 score-model contracts | `src/pack/raw/score_model.rs`, `src/pack/compiled/score_model.rs`, `schemas/pack/score_model.v1.json`, `src/pack/compiler.rs` | C1 |
+| C3 query-pack contracts | `src/pack/raw/query_pack.rs`, `src/pack/compiled/query_pack.rs`, `schemas/pack/query_pack.v1.json`, `src/pack/compiler.rs` | C1 |
+| C4 rule-pack + recipe-pack contracts | `src/pack/raw/**`, `src/pack/compiled/**`, `schemas/pack/{rule_pack.v1.json,recipe_pack.v1.json}`, `src/pack/compiler.rs` | C1, C3 |
+| C5 bundle resolution | `src/pack/compiler.rs`, `src/pack/compiled/mod.rs`, `tests/pack_bundle.rs` | C2, C3, C4, landed Phase-B topology code |
+| C6 fixtures + docs | `fixtures/pack/**`, `README.md`, `schemas/README.md`, `profiles/README.md`, `rules/README.md`, `recipes/README.md`, `fixtures/README.md` | C2-C5 contract shapes stable |
+
+Safe execution lanes:
+
+- Lane A: C1 -> C2 -> C3 -> C4 -> C5 (main pack lane, sequential because `src/pack/compiler.rs` is shared)
+- Lane B: fixture authoring + docs sweep after C4 contract freeze
+
+Conflict flags:
+
+- `src/pack/compiler.rs` is the integration choke point for Phase C and should have one owner at a time.
+- `schemas/pack/common.v1.json` is another conflict hotspot because C1 touches shared defs used by every later slice.
+- docs and fixture authoring are the only safe sidecar lane once the contract text stops moving.
+
+#### 11.3.h Phase C completion summary
+
+- Step 0: scope accepted as advanced structural packs + bundle resolution only
+- What already exists: written
+- NOT in scope: written
+- Test artifact: written to `/Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/spensermcconnell-feat-lift-phase-c-test-plan-20260416-123701.md`
+- Phase C is done only when:
+  1. all four advanced pack schemas are embedded;
+  2. standalone compile entrypoints exist for score/query/rule/recipe packs;
+  3. `resolve_profile_pack_set` produces a deterministic `CompiledPackSet`;
+  4. transitive query closure from rule/recipe packs is enforced;
+  5. cycles, duplicate pack IDs, wrong-kind refs, and invalid expressions all fail with typed errors;
+  6. every required Phase-C test above exists and passes;
+  7. no Phase-C implementation change touches `src/app/runtime.rs`, `src/query/**`, or `src/topo/**`.
 
 ### 11.4 Phase D — first consumer loop
 
@@ -1856,7 +2129,9 @@ Phase-B promotion gate:
   - `serde_jcs`,
   - `thiserror`,
   - `toml`,
-  - `globset`.
+  - `globset`,
+  - `jsonschema`.
+- the crate manifest still carries workspace `sha2`, but Phase C should continue routing hashing through `kernel::{sha256_bytes, sha256_canonical_json}` rather than calling hashing primitives directly from new pack code.
 - `pack` does not depend on:
   - `repo`,
   - `lang`,
@@ -1884,17 +2159,26 @@ Fixtures across the staged rollout must exist for:
 - invalid rule pack
 - valid recipe pack
 - invalid recipe pack
+- valid bundle root profile that resolves score/query/rule/recipe closure
+- wrong-kind advanced-pack reference
 - profile with missing referenced pack
 - profile with wrong-kind reference
+- transitive rule-pack -> query-pack closure
+- transitive recipe-pack -> query-pack closure
+- same-source duplicate ref dedupe
+- cross-origin duplicate pack ID rejection
 - cyclic reference graph
 - semantic fingerprint stability across key order
 - source fingerprint difference with semantic fingerprint equality
+- bundle semantic fingerprint stability across discovery order
 - traversal rejection for invalid `file:` refs
 - canonical-equivalent ref rejection where normalization would otherwise be ambiguous
 
 ### 11.7 Built-ins
 
 - `builtin:generic/default` exists in tests or fixtures and only promises the phase-appropriate pack surface already landed.
+- Phase C should add `builtin:generic/lift-v2` only if a builtin profile actually references that score model.
+- builtin query/rule/recipe packs are optional in Phase C and should land only for a concrete profile or Phase-D consumer path.
 - if `substrate-profile` is enabled, at least one built-in Substrate profile is loadable once the staged dependencies it references exist.
 - if `substrate-profile` is disabled, generic built-ins still work.
 
@@ -2007,6 +2291,7 @@ Mitigation:
 - glob compilation
 - expression AST compilation
 - profile resolution
+- bundle construction into `CompiledPackSet`
 - duplicate/cycle/kind-mismatch validation
 - built-in generic profile support
 - optional built-in Substrate profile support behind feature flag
@@ -2020,7 +2305,7 @@ Mitigation:
 - recipe application
 - patch generation
 - contract diffing
-- app runtime integration
+- broad app-runtime integration beyond the narrow Phase-D bootstrap adapter
 - CLI subcommands for pack management
 - environment-variable interpolation
 - remote registries or HTTP loading
@@ -2189,6 +2474,105 @@ Update:
 - `fixtures/README.md`
 
 So they describe actual Phase-B topology behavior once those contracts land, without implying that repo classification or runtime consumption already exists.
+
+### 16.11 Phase C code changes
+
+Add or extend only the modules needed for advanced structural packs and bundle resolution:
+
+- `src/pack/mod.rs`
+- `src/pack/compiler.rs`
+- `src/pack/schema.rs`
+- `src/pack/expr.rs`
+- `src/pack/builtin.rs` if a builtin score model is actually referenced
+- `src/pack/raw/mod.rs`
+- `src/pack/raw/score_model.rs`
+- `src/pack/raw/query_pack.rs`
+- `src/pack/raw/rule_pack.rs`
+- `src/pack/raw/recipe_pack.rs`
+- `src/pack/compiled/mod.rs`
+- `src/pack/compiled/score_model.rs`
+- `src/pack/compiled/query_pack.rs`
+- `src/pack/compiled/rule_pack.rs`
+- `src/pack/compiled/recipe_pack.rs`
+
+Explicitly defer from Phase C:
+
+- `src/app/runtime.rs`
+- `src/query/**`
+- `src/topo/**`
+- `src/graph/**`
+- `src/facts/**`
+- `src/derive/**`
+- CLI pack discovery or management work
+
+### 16.12 Phase C schema files
+
+Add and embed:
+
+- `schemas/pack/score_model.v1.json`
+- `schemas/pack/query_pack.v1.json`
+- `schemas/pack/rule_pack.v1.json`
+- `schemas/pack/recipe_pack.v1.json`
+
+Also tighten `schemas/pack/common.v1.json` only as needed for shared `expr` and `query_ref` constraints.
+
+Do not create a new schema generation layer, a new common-schema version, or runtime-only schemas in this phase.
+
+### 16.13 Phase C fixture layout
+
+```text
+fixtures/pack/
+  valid/
+    score/
+      generic_lift_v2.json
+    queries/
+      rust_core.json
+    rules/
+      generic_policy.json
+    recipes/
+      generic_core_recipes.json
+    bundle/
+      profile_advanced_file_backed.toml
+  invalid/
+    score_model_bad_expr.json
+    score_model_duplicate_trigger.json
+    query_pack_duplicate_id.json
+    rule_pack_bad_query_ref.json
+    rule_pack_invalid_severity.json
+    recipe_pack_bad_transform.json
+    bundle_cycle_profile.toml
+    bundle_duplicate_pack_id_cross_origin.toml
+  canonical/
+    score_model_order_a.json
+    score_model_order_b.json
+    bundle_order_a/
+    bundle_order_b/
+```
+
+### 16.14 Phase C tests
+
+Extend or add:
+
+- `tests/pack_schema.rs`
+- `tests/pack_compile.rs`
+- `tests/pack_fingerprints.rs`
+- `tests/pack_topology.rs` as a regression suite
+- `tests/pack_bundle.rs`
+
+And only touch `tests/compile_matrix.rs` if `CompiledPackSet` becomes part of an existing crate-level compile assertion.
+
+### 16.15 Phase C README updates
+
+Update:
+
+- `README.md`
+- `schemas/README.md`
+- `profiles/README.md` if builtin/default profile semantics widen
+- `rules/README.md`
+- `recipes/README.md`
+- `fixtures/README.md`
+
+So they describe structural advanced-pack compilation and bundle resolution accurately, without implying that query execution, score evaluation, recipe execution, or runtime bootstrap already exist.
 
 ---
 
@@ -3101,6 +3485,9 @@ Conflict flags:
 | 7 | Phase 3 | Reuse `DiagnosticCode` in pack diagnostics | Mechanical | P4 DRY / P5 Explicit | The kernel already solved typed machine-readable diagnostics. | Free-form pack diagnostic codes |
 | 8 | Phase 3 | Reject cross-origin duplicate pack IDs in v1 | Taste | P5 Explicit | Simpler and safer than inventing provenance-merging rules now. | Silent semantic dedupe across builtin/file origins |
 | 9 | Phase 3 | Keep Phase C broad but make `rule_pack` and `recipe_pack` the first slip candidates if needed | Taste | P3 Pragmatic | Preserves broad intent while protecting the first consumer loop. | Splitting the plan into even more numbered seams immediately |
+| 10 | Phase 3 | Build Phase C on the already-landed deferred profile refs instead of inventing a second bundle-root config surface | Mechanical | P4 DRY / P5 Explicit | `score.model` plus the `rules/queries/recipes.packs` sections already exist in the landed profile contract. Phase C should honor them directly. | Adding a parallel bundle manifest just for advanced packs |
+| 11 | Phase 3 | Make `resolve_profile_pack_set(&CompiledProfile)` the single cross-pack closure gate | Mechanical | P5 Explicit | One owned bundle-resolution boundary keeps standalone compile composable and makes cycle, kind, and duplicate checks deterministic. | Spreading cross-pack validation across individual pack compilers |
+| 12 | Phase 3 | Keep generic builtins narrow in Phase C, score-model only if a builtin profile actually needs it | Taste | P3 Pragmatic | The builtin registry should prove real usage, not swell to look complete. | Adding builtin query/rule/recipe packs without a consumer |
 
 **Phase 3 complete.** Codex: 6 concerns. Claude subagent: 5 issues. Consensus: 4/6 confirmed, 1 disagreement, 1 medium-risk partial alignment.
 

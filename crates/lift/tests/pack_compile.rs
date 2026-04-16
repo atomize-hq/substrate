@@ -188,7 +188,6 @@ fn topology_schema_violations_are_sorted_deterministically() {
             "/boundaries/0/id",
             "/boundaries/0/include/0",
             "/boundaries/0/label",
-            "/boundaries/0/label",
             "/counting/mode",
             "/name",
             "/version",
@@ -210,11 +209,49 @@ fn topology_schema_violations_are_sorted_deterministically() {
             "/components/0/id",
             "/components/0/include/0",
             "/components/0/label",
-            "/components/0/label",
             "/components/0/tags/0",
             "/counting/mode",
             "/name",
             "/version",
+        ],
+    );
+}
+
+#[test]
+fn topology_unknown_fields_report_pointer_addressable_schema_diagnostics() {
+    let compiler = pack::PackCompiler::new();
+
+    let boundary = compiler
+        .compile_boundary_taxonomy(pack::PackSource::Inline {
+            logical_name: "boundary-unknown-field".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: load_bytes("fixtures/pack/invalid/boundary_taxonomy_unknown_field.json"),
+        })
+        .expect_err("unknown boundary fields should fail");
+    assert_schema_violation_with_schema(
+        boundary,
+        "inline:boundary-unknown-field",
+        pack::PACK_BOUNDARY_TAXONOMY_V1_SCHEMA_ID,
+        &[
+            ("/boundaries/0/owner", "pack.schema.unknown_field"),
+            ("/unexpected_root", "pack.schema.unknown_field"),
+        ],
+    );
+
+    let component = compiler
+        .compile_component_map(pack::PackSource::Inline {
+            logical_name: "component-unknown-field".to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: load_bytes("fixtures/pack/invalid/component_map_unknown_field.json"),
+        })
+        .expect_err("unknown component fields should fail");
+    assert_schema_violation_with_schema(
+        component,
+        "inline:component-unknown-field",
+        pack::PACK_COMPONENT_MAP_V1_SCHEMA_ID,
+        &[
+            ("/components/0/weight", "pack.schema.unknown_field"),
+            ("/unexpected_root", "pack.schema.unknown_field"),
         ],
     );
 }
@@ -550,13 +587,26 @@ fn assert_schema_violation(
     expected_origin: &str,
     expected: &[(&str, &str)],
 ) {
+    assert_schema_violation_with_schema(error, expected_origin, "", expected);
+}
+
+fn assert_schema_violation_with_schema(
+    error: pack::PackError,
+    expected_origin: &str,
+    expected_schema: &str,
+    expected: &[(&str, &str)],
+) {
     match error {
         pack::PackError::SchemaViolation {
             origin,
+            schema_id,
             diagnostics,
             ..
         } => {
             assert_eq!(origin, expected_origin);
+            if !expected_schema.is_empty() {
+                assert_eq!(schema_id, expected_schema);
+            }
             let actual: Vec<(String, String)> = diagnostics
                 .iter()
                 .map(|diagnostic| {

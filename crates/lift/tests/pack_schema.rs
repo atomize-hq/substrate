@@ -125,8 +125,16 @@ fn invalid_topology_schema_fixtures_fail_validation() {
         &load_json("fixtures/pack/invalid/boundary_taxonomy_schema_violation.json"),
     );
     assert_schema_invalid(
+        "boundary_taxonomy",
+        &load_json("fixtures/pack/invalid/boundary_taxonomy_unknown_field.json"),
+    );
+    assert_schema_invalid(
         "component_map",
         &load_json("fixtures/pack/invalid/component_map_schema_violation.json"),
+    );
+    assert_schema_invalid(
+        "component_map",
+        &load_json("fixtures/pack/invalid/component_map_unknown_field.json"),
     );
 }
 

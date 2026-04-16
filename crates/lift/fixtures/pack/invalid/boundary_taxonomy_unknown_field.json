@@ -1,0 +1,18 @@
+{
+  "kind": "boundary_taxonomy",
+  "version": 1,
+  "id": "acme/boundaries",
+  "name": "Unknown field boundary taxonomy",
+  "unexpected_root": true,
+  "counting": {
+    "mode": "distinct_minus_one"
+  },
+  "boundaries": [
+    {
+      "id": "runtime",
+      "label": "Runtime",
+      "include": ["services/runtime/**"],
+      "owner": "platform"
+    }
+  ]
+}

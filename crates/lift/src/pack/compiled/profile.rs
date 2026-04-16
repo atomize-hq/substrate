@@ -1,6 +1,7 @@
 //! Compiled profile output types.
 
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
 use crate::pack::compiled::CompiledPackHeader;
 use crate::pack::diagnostics::PackDiagnostic;
@@ -11,6 +12,7 @@ use crate::pack::refs::PackRef;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct CompiledProfile {
     pub header: CompiledPackHeader,
+    pub source_file_base_dir: Option<PathBuf>,
     pub apps: CompiledProfileApps,
     pub analysis: CompiledAnalysisDefaults,
     pub topology: CompiledProfileTopology,

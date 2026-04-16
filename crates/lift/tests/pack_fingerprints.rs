@@ -206,6 +206,84 @@ fn builtin_file_and_inline_boundary_taxonomies_are_semantically_equivalent() {
 }
 
 #[test]
+fn component_map_semantic_fingerprint_is_stable_across_json_key_reordering() {
+    let compiler = pack::PackCompiler::new();
+
+    let first = compile_component_file(
+        &compiler,
+        "fixtures/pack/canonical/component_map_order_a.json",
+    );
+    let second = compile_component_inline(
+        &compiler,
+        "component-reordered",
+        "fixtures/pack/canonical/component_map_order_b.json",
+    );
+
+    assert_eq!(
+        first.header.semantic_fingerprint,
+        second.header.semantic_fingerprint
+    );
+}
+
+#[test]
+fn component_map_source_fingerprint_differs_while_semantics_match() {
+    let compiler = pack::PackCompiler::new();
+
+    let file = compile_component_file(
+        &compiler,
+        "fixtures/pack/canonical/component_map_order_a.json",
+    );
+    let inline = compile_component_inline(
+        &compiler,
+        "component-same-semantics",
+        "fixtures/pack/canonical/component_map_order_b.json",
+    );
+
+    assert_eq!(
+        file.header.semantic_fingerprint,
+        inline.header.semantic_fingerprint
+    );
+    assert_ne!(
+        file.header.source_fingerprint,
+        inline.header.source_fingerprint
+    );
+}
+
+#[test]
+fn builtin_file_and_inline_component_maps_are_semantically_equivalent() {
+    let compiler = pack::PackCompiler::new();
+
+    let builtin = compiler
+        .compile_component_map(
+            pack::builtin::component_map_source("generic/components").expect("builtin"),
+        )
+        .expect("builtin component map should compile");
+    let file = compile_component_file(&compiler, "fixtures/pack/valid/generic_components.json");
+    let inline = compile_component_inline(
+        &compiler,
+        "component-builtin-equivalent",
+        "fixtures/pack/valid/generic_components.json",
+    );
+
+    assert_eq!(
+        builtin.header.semantic_fingerprint,
+        file.header.semantic_fingerprint
+    );
+    assert_eq!(
+        builtin.header.semantic_fingerprint,
+        inline.header.semantic_fingerprint
+    );
+    assert_ne!(
+        builtin.header.source_fingerprint,
+        file.header.source_fingerprint
+    );
+    assert_ne!(
+        builtin.header.source_fingerprint,
+        inline.header.source_fingerprint
+    );
+}
+
+#[test]
 fn resolved_topology_fingerprint_is_stable_for_equivalent_profile_inputs() {
     let compiler = pack::PackCompiler::new();
 
@@ -278,6 +356,32 @@ fn compile_boundary_inline(
             bytes: load_bytes(relative),
         })
         .unwrap_or_else(|err| panic!("failed to compile boundary {relative} inline: {err:?}"))
+}
+
+fn compile_component_file(
+    compiler: &pack::PackCompiler,
+    relative: &str,
+) -> pack::CompiledComponentMap {
+    compiler
+        .compile_component_map(pack::PackSource::File {
+            path: crate_root().join(relative),
+            format_hint: None,
+        })
+        .unwrap_or_else(|err| panic!("failed to compile component map {relative}: {err:?}"))
+}
+
+fn compile_component_inline(
+    compiler: &pack::PackCompiler,
+    logical_name: &str,
+    relative: &str,
+) -> pack::CompiledComponentMap {
+    compiler
+        .compile_component_map(pack::PackSource::Inline {
+            logical_name: logical_name.to_owned(),
+            format: pack::PackFormat::Json,
+            bytes: load_bytes(relative),
+        })
+        .unwrap_or_else(|err| panic!("failed to compile component map {relative} inline: {err:?}"))
 }
 
 fn load_bytes(relative: &str) -> Vec<u8> {
