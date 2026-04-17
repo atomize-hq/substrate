@@ -3,33 +3,13 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use assert_cmd as _;
-use clap as _;
-use jsonschema as _;
-use predicates as _;
-use serde as _;
-use serde_jcs as _;
-use serde_json as _;
-use sha2 as _;
-use substrate_lift as _;
-use thiserror as _;
-use toml as _;
-
-mod kernel {
-    pub(crate) use substrate_lift::kernel::{
-        sha256_bytes, sha256_canonical_json, DiagnosticCode, Fingerprint, JsonPointer, QueryId,
-        RecipeId, RuleId, Severity,
-    };
-}
-#[path = "../src/pack/mod.rs"]
-mod pack;
-#[path = "../src/app/runtime.rs"]
-mod runtime;
+use crate::app::runtime::{bootstrap_profile, ProfileBootstrap};
+use crate::pack::{builtin, PackCompiler, PackError, PackFormat, PackName, PackSource};
 
 #[test]
 fn bootstrap_builtin_profile_returns_profile_bootstrap() {
-    let bootstrap = runtime::bootstrap_profile(
-        pack::builtin::profile_source("generic/default").expect("builtin profile source"),
+    let bootstrap = bootstrap_profile(
+        builtin::profile_source("generic/default").expect("builtin profile source"),
     )
     .expect("builtin bootstrap should succeed");
 
@@ -47,7 +27,7 @@ fn bootstrap_builtin_profile_returns_profile_bootstrap() {
 
 #[test]
 fn bootstrap_file_backed_advanced_profile_returns_profile_bootstrap() {
-    let bootstrap = runtime::bootstrap_profile(pack::PackSource::File {
+    let bootstrap = bootstrap_profile(PackSource::File {
         path: crate_root().join("fixtures/pack/valid/bundle/profile_advanced_file_backed.toml"),
         format_hint: None,
     })
@@ -71,22 +51,22 @@ fn bootstrap_file_backed_advanced_profile_returns_profile_bootstrap() {
     assert!(bootstrap
         .bundle
         .query_packs
-        .contains_key(&pack::PackName::parse("acme/rust-core").expect("query pack name")));
+        .contains_key(&PackName::parse("acme/rust-core").expect("query pack name")));
     assert!(bootstrap
         .bundle
         .rule_packs
-        .contains_key(&pack::PackName::parse("acme/policy").expect("rule pack name")));
+        .contains_key(&PackName::parse("acme/policy").expect("rule pack name")));
     assert!(bootstrap
         .bundle
         .recipe_packs
-        .contains_key(&pack::PackName::parse("acme/core-recipes").expect("recipe pack name")));
+        .contains_key(&PackName::parse("acme/core-recipes").expect("recipe pack name")));
 }
 
 #[test]
 fn bootstrap_inline_profile_returns_profile_bootstrap() {
-    let bootstrap = runtime::bootstrap_profile(pack::PackSource::Inline {
+    let bootstrap = bootstrap_profile(PackSource::Inline {
         logical_name: "inline-generic-default".to_owned(),
-        format: pack::PackFormat::Toml,
+        format: PackFormat::Toml,
         bytes: load_bytes("fixtures/pack/canonical/generic_default_order_b.toml"),
     })
     .expect("inline bootstrap should succeed");
@@ -105,24 +85,24 @@ fn bootstrap_inline_profile_returns_profile_bootstrap() {
 
 #[test]
 fn bootstrap_propagates_profile_compile_errors_without_translation() {
-    let source = pack::PackSource::Inline {
+    let source = PackSource::Inline {
         logical_name: "schema-violation".to_owned(),
-        format: pack::PackFormat::Toml,
+        format: PackFormat::Toml,
         bytes: load_bytes("fixtures/pack/invalid/profile_schema_violation.toml"),
     };
 
-    let compiler = pack::PackCompiler::new();
+    let compiler = PackCompiler::new();
     let expected = compiler
         .compile_profile(source.clone())
         .expect_err("compile_profile should fail");
-    let actual = runtime::bootstrap_profile(source).expect_err("bootstrap should fail");
+    let actual = bootstrap_profile(source).expect_err("bootstrap should fail");
 
     assert_eq!(actual, expected);
 }
 
 #[test]
 fn bootstrap_propagates_bundle_resolution_errors_without_translation() {
-    let compiler = pack::PackCompiler::new();
+    let compiler = PackCompiler::new();
 
     let unknown_source = write_temp_profile(
         "runtime-bootstrap-unknown-ref",
@@ -142,12 +122,11 @@ packs = ["file:queries/missing.json"]
                 .expect("unknown-ref profile should compile"),
         )
         .expect_err("bundle resolution should fail with missing ref");
-    let unknown_actual =
-        runtime::bootstrap_profile(unknown_source).expect_err("bootstrap should fail");
+    let unknown_actual = bootstrap_profile(unknown_source).expect_err("bootstrap should fail");
     assert_eq!(unknown_actual, unknown_expected);
     assert!(matches!(
         unknown_actual,
-        pack::PackError::UnknownPackReference { .. }
+        PackError::UnknownPackReference { .. }
     ));
 
     let mismatch_dir = unique_temp_dir("runtime-bootstrap-ref-kind-mismatch");
@@ -166,7 +145,7 @@ packs = ["file:generic_policy.json"]
         &mismatch_dir.join("generic_policy.json"),
         &rule_pack_json("file:queries/rust_core.json"),
     );
-    let mismatch_source = pack::PackSource::File {
+    let mismatch_source = PackSource::File {
         path: mismatch_dir.join("profile.toml"),
         format_hint: None,
     };
@@ -177,18 +156,14 @@ packs = ["file:generic_policy.json"]
                 .expect("mismatch profile should compile"),
         )
         .expect_err("bundle resolution should fail with ref kind mismatch");
-    let mismatch_actual =
-        runtime::bootstrap_profile(mismatch_source).expect_err("bootstrap should fail");
+    let mismatch_actual = bootstrap_profile(mismatch_source).expect_err("bootstrap should fail");
     assert_eq!(mismatch_actual, mismatch_expected);
-    assert!(matches!(
-        mismatch_actual,
-        pack::PackError::RefKindMismatch { .. }
-    ));
+    assert!(matches!(mismatch_actual, PackError::RefKindMismatch { .. }));
 }
 
 #[test]
 fn profile_bootstrap_from_pack_set_is_pure_after_source_cleanup() {
-    let compiler = pack::PackCompiler::new();
+    let compiler = PackCompiler::new();
     let source_root = unique_temp_dir("runtime-bootstrap-pure-source");
     copy_dir_recursive(
         &crate_root().join("fixtures/pack/valid/bundle"),
@@ -196,7 +171,7 @@ fn profile_bootstrap_from_pack_set_is_pure_after_source_cleanup() {
     );
 
     let profile = compiler
-        .compile_profile(pack::PackSource::File {
+        .compile_profile(PackSource::File {
             path: source_root.join("profile_advanced_file_backed.toml"),
             format_hint: None,
         })
@@ -207,7 +182,7 @@ fn profile_bootstrap_from_pack_set_is_pure_after_source_cleanup() {
 
     fs::remove_dir_all(&source_root).expect("source tree should be removable");
 
-    let bootstrap = runtime::ProfileBootstrap::from_pack_set(bundle);
+    let bootstrap = ProfileBootstrap::from_pack_set(bundle);
 
     assert_eq!(
         bootstrap.bundle.profile.header.id.as_str(),
@@ -239,11 +214,11 @@ fn load_bytes(relative: &str) -> Vec<u8> {
         .unwrap_or_else(|err| panic!("failed to read fixture {relative}: {err}"))
 }
 
-fn write_temp_profile(label: &str, contents: &str) -> pack::PackSource {
+fn write_temp_profile(label: &str, contents: &str) -> PackSource {
     let dir = unique_temp_dir(label);
     let path = dir.join("profile.toml");
     write_text(&path, contents);
-    pack::PackSource::File {
+    PackSource::File {
         path,
         format_hint: None,
     }

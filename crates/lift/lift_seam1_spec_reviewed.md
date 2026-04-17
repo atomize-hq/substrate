@@ -2394,7 +2394,7 @@ ASCII diagram maintenance requirements:
 | D1. bootstrap contract | `src/app/runtime.rs` | `ProfileBootstrap` replaces `ReservedForFutureSeam` and exposes `from_pack_set` | the runtime surface is one obvious wrapper with no hidden compiler logic |
 | D2. thin load path | `src/app/runtime.rs` | `bootstrap_profile(source: PackSource) -> PackResult<ProfileBootstrap>` delegates to `PackCompiler::compile_profile` plus `resolve_profile_pack_set` | no raw pack payload is parsed, normalized, or reopened in runtime |
 | D3. pure compiled-bundle handoff | `src/app/runtime.rs`, optional tiny `src/pack/compiled/mod.rs` doc/visibility touch | already-compiled bundles can be converted into `ProfileBootstrap` with no filesystem dependency | source files can disappear after compilation and the bootstrap object still behaves the same |
-| D4. runtime integration suite | `tests/runtime_bootstrap.rs`, optional tiny helper reuse from `tests/pack_bundle.rs` | one dedicated suite proves builtin, file, inline, compile-failure, resolution-failure, and pure-handoff paths | runtime bootstrap behavior is fully named and regression-safe without turning bundle tests into a second runtime suite |
+| D4. runtime crate-local suite | `src/lib.rs`, `src/runtime_bootstrap_tests.rs`, optional tiny helper reuse from `tests/pack_bundle.rs` | one dedicated suite proves builtin, file, inline, compile-failure, resolution-failure, and pure-handoff paths through the real crate module graph | runtime bootstrap behavior is fully named and regression-safe without turning bundle tests into a second runtime suite |
 | D5. docs sweep | `README.md`, optional `src/app/mod.rs` comment touch | docs describe `app::runtime` as the pack activation boundary, not a full app runtime | no prose claims runtime dispatch, scoring, or query execution already exist |
 
 Implementation order:
@@ -2460,7 +2460,8 @@ Required tests:
 
 Required test file plan:
 
-- add `tests/runtime_bootstrap.rs`;
+- add `#[cfg(test)] mod runtime_bootstrap_tests;` in `src/lib.rs`;
+- add `src/runtime_bootstrap_tests.rs`;
 - keep `tests/pack_bundle.rs` as the compiler-resolution regression suite and extend it only for tiny shared fixture helpers if that keeps the runtime suite explicit;
 - keep `tests/pack_compile.rs` and `tests/pack_topology.rs` in the validation set so Phase D cannot silently regress upstream compiler behavior while chasing runtime coverage.
 
@@ -2472,7 +2473,7 @@ Phase-D validation commands:
 - `cargo test -p substrate-lift --test pack_compile -- --nocapture`
 - `cargo test -p substrate-lift --test pack_topology -- --nocapture`
 - `cargo test -p substrate-lift --test pack_bundle -- --nocapture`
-- `cargo test -p substrate-lift --test runtime_bootstrap -- --nocapture`
+- `cargo test -p substrate-lift runtime_bootstrap_tests -- --nocapture`
 
 Critical promotion rule:
 
@@ -3051,7 +3052,8 @@ Explicitly defer from Phase D:
 
 Add or extend:
 
-- `tests/runtime_bootstrap.rs`
+- `src/lib.rs`
+- `src/runtime_bootstrap_tests.rs`
 - `tests/pack_bundle.rs` only if small helper reuse keeps the bootstrap tests explicit
 
 Keep in the required validation set:

@@ -38,3 +38,6 @@ pub(crate) mod patch;
 pub(crate) mod query;
 pub(crate) mod repo;
 pub(crate) mod topo;
+
+#[cfg(test)]
+mod runtime_bootstrap_tests;
