@@ -74,7 +74,48 @@
             }
           ]
         }
-      }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "added"
+            },
+            "before_blob_fingerprint": {
+              "type": "null"
+            },
+            "after_blob_fingerprint": {
+              "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "modified"
+            },
+            "before_blob_fingerprint": {
+              "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+            },
+            "after_blob_fingerprint": {
+              "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "removed"
+            },
+            "before_blob_fingerprint": {
+              "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+            },
+            "after_blob_fingerprint": {
+              "type": "null"
+            }
+          }
+        }
+      ]
     }
   }
 }

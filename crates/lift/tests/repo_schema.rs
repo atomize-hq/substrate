@@ -81,6 +81,48 @@ struct DiffFixtureEntry {
     after_blob_fingerprint: Option<String>,
 }
 
+fn assert_diff_entry_shape_invariant(entry: &DiffFixtureEntry, context: &str) {
+    match entry.kind.as_str() {
+        "added" => {
+            assert!(
+                entry.before_blob_fingerprint.is_none(),
+                "{context} added entries must not include before_blob_fingerprint"
+            );
+            assert!(
+                entry.after_blob_fingerprint.is_some(),
+                "{context} added entries must include after_blob_fingerprint"
+            );
+        }
+        "modified" => {
+            assert!(
+                entry.before_blob_fingerprint.is_some(),
+                "{context} modified entries must include before_blob_fingerprint"
+            );
+            assert!(
+                entry.after_blob_fingerprint.is_some(),
+                "{context} modified entries must include after_blob_fingerprint"
+            );
+        }
+        "removed" => {
+            assert!(
+                entry.before_blob_fingerprint.is_some(),
+                "{context} removed entries must include before_blob_fingerprint"
+            );
+            assert!(
+                entry.after_blob_fingerprint.is_none(),
+                "{context} removed entries must not include after_blob_fingerprint"
+            );
+        }
+        other => panic!("{context} should use lowercase diff kinds, got {other}"),
+    }
+}
+
+fn assert_diff_manifest_shape_invariants(manifest: &DiffFixtureManifest, context: &str) {
+    for entry in &manifest.entries {
+        assert_diff_entry_shape_invariant(entry, context);
+    }
+}
+
 #[test]
 fn embedded_snapshot_schema_matches_disk() {
     assert_eq!(
@@ -146,13 +188,7 @@ fn valid_diff_fixture_manifests_validate_and_deserialize() {
         let parsed: DiffFixtureManifest = serde_json::from_value(instance)
             .unwrap_or_else(|_| panic!("{relative} should deserialize"));
         assert_eq!(parsed.version, 1, "{relative} should be v1");
-        assert!(
-            parsed
-                .entries
-                .iter()
-                .all(|entry| matches!(entry.kind.as_str(), "added" | "modified" | "removed")),
-            "{relative} should use lowercase diff kinds"
-        );
+        assert_diff_manifest_shape_invariants(&parsed, relative);
     }
 }
 
@@ -176,10 +212,14 @@ fn invalid_diff_fixture_manifests_fail_deterministically() {
     let validator = repo_support::diff_validator();
 
     for relative in [
+        "fixtures/repo/diff/invalid/manifest_added_with_before_blob.json",
         "fixtures/repo/diff/invalid/manifest_bad_kind.json",
         "fixtures/repo/diff/invalid/manifest_bad_repo_path.json",
         "fixtures/repo/diff/invalid/manifest_before_after_shape_invalid.json",
+        "fixtures/repo/diff/invalid/manifest_modified_missing_after_blob.json",
+        "fixtures/repo/diff/invalid/manifest_modified_missing_before_blob.json",
         "fixtures/repo/diff/invalid/manifest_missing_diff_fingerprint.json",
+        "fixtures/repo/diff/invalid/manifest_removed_with_after_blob.json",
     ] {
         let instance = load_json(relative);
         assert!(
@@ -257,6 +297,7 @@ fn generated_diff_manifest_validates() {
     let parsed: DiffFixtureManifest =
         serde_json::from_value(manifest).expect("generated diff manifest should deserialize");
     assert_eq!(parsed.version, 1);
+    assert_diff_manifest_shape_invariants(&parsed, "generated diff manifest");
 }
 
 #[test]
