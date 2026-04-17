@@ -2199,8 +2199,12 @@ What already exists and must be reused:
 | one request/response materialization contract | `src/repo/snapshot.rs`, `SnapshotRequest`, `SnapshotSource::Worktree`, `materialize_snapshot` | extend the existing request/response seam, do not add a second top-level repo entrypoint |
 | explicit option surface | `src/repo/ignore.rs`, `SnapshotOptions`, `SymlinkPolicy::Skip`, caller glob compilation | extend the current option types directly for follow semantics and typed well-known excludes, not via parallel ad hoc flags |
 | immutable snapshot artifact | `RepoSnapshot`, `Inventory`, `BlobStore`, `SnapshotStats`, `RepoDiagnostic` | both worktree and git-backed materialization must still end at the same immutable snapshot shape |
+| source dispatch entrypoint | `materialize_snapshot` in `src/repo/snapshot.rs` currently has a single `Worktree` match arm | extend the current dispatch point, do not add a second top-level repo materializer |
+| shared finalization pipeline | `materialize_worktree_snapshot`, `Inventory::from_entries`, `BlobStore::from_records`, and snapshot fingerprint assembly in `src/repo/snapshot.rs` | keep one final assembly path and feed it from source-specific candidate loaders rather than forking snapshot assembly |
+| typed repo error surface | `src/repo/error.rs` already carries typed root, path, glob, source, option, and blob failures | add explicit GitRev and follow-resolution failures here, not stringly fallbacks hidden behind `RepoError::Io` |
 | downstream diff transparency | `src/repo/diff.rs`, `RepoDiff`, `tests/repo_diff.rs` | Phase C must not change diff semantics; downstream diffing should consume Phase-C snapshots unchanged |
 | schema/test harness pattern | `src/repo/schema.rs`, `tests/repo_schema.rs`, `tests/support/repo_support.rs` | extend the current snapshot-manifest embedding and helper pattern, do not create a second schema or fixture system |
+| current manifest shape | `schemas/repo/snapshot_manifest.v1.json` plus `manifest_from_snapshot` in `tests/support/repo_support.rs` currently hard-code `source_kind = "worktree"` and no typed well-known exclude field | lock the minimal schema/helper expansion before broad test writing begins |
 | no-default-features build posture | `tests/compile_matrix.rs` | Phase C must preserve `cargo check -p substrate-lift --no-default-features` |
 | runtime boundary | `src/app/runtime.rs` | keep runtime bootstrap, CLI wiring, and pack-driven translation out of Phase C |
 
@@ -2218,6 +2222,7 @@ Complexity check:
 
 - Phase C is larger than Phase B because it touches materialization semantics, schema shape, and cross-source determinism, not just a pure transform;
 - that extra scope is still justified because it remains inside `src/repo/**`, repo tests, schema fixtures, and docs, with no app/runtime integration;
+- the likely touch set is still above the normal "challenge the plan" threshold, around 10 to 13 files once repo code, schema parity, helpers, fixtures, and new tests are counted;
 - if a proposed change needs to modify `src/app/runtime.rs`, `src/pack/**`, or downstream consumer contracts, it is already Phase D or later work and should be deferred.
 
 Search and distribution check:
@@ -2230,6 +2235,26 @@ Search and distribution check:
 Scope result:
 
 - scope accepted as-is, because this is the complete next slice of seam-2 materialization semantics without reopening downstream seams.
+
+Exact file-touch forecast:
+
+| File / surface | Required Phase-C change | Why this file belongs in scope |
+|---|---|---|
+| `src/repo/snapshot.rs` | extend `SnapshotSource`, widen dispatch, add GitRev materialization helpers, add bounded follow resolution, preserve one final assembly pipeline | this is the only real materialization engine today |
+| `src/repo/ignore.rs` | add typed well-known exclude policy and compile it into the current ignore pipeline | excludes are already a first-class seam-2 concern here |
+| `src/repo/error.rs` | add typed GitRev resolution and symlink-follow failures | current errors are too vague for Phase-C failure modes |
+| `src/repo/mod.rs` | re-export only the new internal Phase-C seam types if needed | keeps the crate-private repo surface honest |
+| `src/repo/schema.rs` | keep embedded schema constants in sync with the expanded manifest | schema parity is part of the gate |
+| `schemas/repo/snapshot_manifest.v1.json` | represent `git_rev` and typed well-known excludes explicitly | tests need a concrete contract, not prose |
+| `tests/support/repo_support.rs` | add request builders for `GitRev`, git-history fixture synthesis, and manifest generation for the expanded option/source surface | current helpers only know how to build worktree snapshots |
+| `tests/repo_git_snapshot.rs` | new file | isolates GitRev materialization and cross-source parity coverage |
+| `tests/repo_symlinks.rs` | new file | keeps follow semantics and failure modes out of the basic snapshot happy-path file |
+| `tests/repo_ignore.rs` | extend | this is already the ignore-policy home |
+| `tests/repo_purity.rs` | extend | purity is the place where GitRev and follow semantics can quietly rot |
+| `tests/repo_schema.rs` | extend | manifest shape and runtime parity must stay coupled |
+| `fixtures/repo/**` | add tree descriptions and manifest cases only, not raw git object stores | keeps fixtures reviewable and deterministic |
+
+The implementer should treat that file list as the allowed blast radius. If the work starts pushing outside it, stop and re-check scope.
 
 ### 15.8.b Architecture review
 
@@ -2282,6 +2307,26 @@ one deterministic sort boundary by RepoPath
 RepoSnapshot { root, source, inventory, blobs, diagnostics, stats, fingerprint }
 ```
 
+Recommended implementation spine inside `src/repo/snapshot.rs`:
+
+```text
+materialize_snapshot(request)
+   |
+   +--> compile_ignore_set(request.options)
+   +--> enumerate_source_entries(request)
+   |       |
+   |       +--> enumerate_worktree_entries(root)
+   |       `--> enumerate_gitrev_entries(root, rev)
+   |
+   +--> normalize_candidate_entry(...)
+   +--> maybe_follow_symlink(...)
+   +--> maybe_prune_by_ignore(...)
+   +--> materialize_bytes_once(...)
+   `--> finalize_snapshot(...)
+```
+
+The names can differ, but the responsibility split should not. One source-enumeration layer, one normalization/follow layer, one final assembly layer. That is the smallest shape that keeps Worktree and GitRev from drifting while still avoiding fake abstraction.
+
 Architectural rules:
 
 - `SnapshotSource::GitRev { rev }` must resolve the requested revision against the detected repo root and either materialize that revision or return a typed error. There is no silent fallback to worktree semantics.
@@ -2316,6 +2361,29 @@ fixtures/repo/
   valid/
   invalid/
 ```
+
+Exact edit map to make the phase implementable:
+
+- `src/repo/snapshot.rs`
+  - extend `SnapshotSource` with `GitRev { rev: String }`
+  - widen `materialize_snapshot` dispatch instead of creating a second public function
+  - extract the current worktree-specific logic into a source-specific candidate enumerator
+  - add a bounded follow resolver that returns one terminal regular-file candidate or a typed failure/skip outcome
+  - keep `Inventory`, `BlobStore`, diagnostics sorting, and fingerprint finalization in one shared path
+- `src/repo/ignore.rs`
+  - add a typed well-known exclude enum/set
+  - compile those entries into the same `CompiledIgnoreSet` used for caller globs
+  - keep `.git/**` as the only intrinsic exclusion
+- `src/repo/error.rs`
+  - add explicit failures for invalid/missing revisions, revision object-kind mismatch if relevant, repo-boundary escape, dangling follow target, loop detection, and directory-target follow rejection
+  - do not hide those behind generic `Io`
+- `tests/support/repo_support.rs`
+  - add `snapshot_request_with_source(...)`
+  - add temporary git-history synthesis helpers
+  - expand `manifest_from_snapshot(...)` so it can express both `worktree` and `git_rev`
+- `schemas/repo/snapshot_manifest.v1.json`
+  - lock the exact JSON shape before fixture generation begins
+  - reject impossible source/option combinations at schema level where practical
 
 ### 15.8.c Code quality review
 
@@ -2356,17 +2424,51 @@ Lock these rules:
 10. Git-backed materialization must not consult live worktree contents once revision resolution is complete.
 11. `RepoProvider` lands only if two real backends now exist and the trait meaningfully reduces duplication.
 12. Downstream diff behavior remains path-based add/remove/modify only, independent of whether snapshots came from Worktree or GitRev.
+13. `snapshot_manifest.v1.json` remains the schema file for this phase, but it expands minimally and explicitly:
+    - `source_kind: "worktree" | "git_rev"`
+    - `source_rev` is absent for `worktree` and required, non-empty, for `git_rev`
+    - `options.well_known_excludes` is required and defaults to `[]`
+14. The typed well-known exclude surface should be a set of explicit enum values, not a boolean blob. Recommended canonical values:
+    - `rust_target`
+    - `node_modules`
+    - `python_hidden_venv`
+    - `python_venv`
+    - `python_pycache`
+    - `web_dist`
+    - `web_build`
+15. The directory mapping above is literal. This phase does not introduce fuzzy matching, suffix heuristics, or broad "common junk" presets.
+
+Recommended manifest shape to lock before implementation:
+
+```json
+{
+  "version": 1,
+  "case": "gitrev-basic",
+  "source_kind": "git_rev",
+  "source_rev": "HEAD~1",
+  "options": {
+    "symlink_policy": "follow",
+    "well_known_excludes": ["rust_target", "web_dist"],
+    "exclude_globs": ["generated"],
+    "non_utf8_path_policy": "error",
+    "max_file_bytes": null,
+    "large_file_policy": "error"
+  }
+}
+```
+
+This is the minimal honest expansion. It keeps the current top-level shape intact, avoids a schema version bump, and still makes impossible combinations testable.
 
 ### 15.8.e Phase C implementation slices
 
 | Slice | Files / modules | Deliverable | Done when |
 |---|---|---|---|
-| C1. source/options seam surface | `src/repo/{mod.rs,ignore.rs,snapshot.rs}` | `SnapshotSource::GitRev`, `SymlinkPolicy::Follow`, and a typed well-known exclude policy exist behind the current crate-private seam | the new enums/options compile without reopening downstream seams |
-| C2. git revision materializer | `src/repo/snapshot.rs` plus one private git helper or adapter | deterministic GitRev snapshot construction exists without temp checkout fallback | a known revision materializes through the same `RepoSnapshot` contract and invalid revs hard-fail |
-| C3. bounded symlink follow semantics | `src/repo/snapshot.rs`, `src/repo/ignore.rs` if needed | follow mode can resolve in-repo terminal file targets safely | in-bounds file targets materialize, while escape/loop/dangling/directory targets behave deterministically |
+| C1. source/options seam surface | `src/repo/{mod.rs,ignore.rs,snapshot.rs,error.rs}` | `SnapshotSource::GitRev`, `SymlinkPolicy::Follow`, the typed well-known exclude surface, and typed Phase-C errors exist behind the current crate-private seam | the new enums/error variants compile without reopening downstream seams or hiding new failures behind generic `Io` |
+| C2. git revision materializer | `src/repo/snapshot.rs` plus one private git helper or adapter | deterministic GitRev snapshot construction exists without temp checkout fallback | a known revision materializes through the same `RepoSnapshot` contract, invalid revs hard-fail, and no live-worktree reads occur after revision selection |
+| C3. bounded symlink follow semantics | `src/repo/snapshot.rs` | follow mode can resolve in-repo terminal file targets safely | in-bounds file targets materialize under the observed path, while escape/loop/dangling/directory targets behave deterministically |
 | C4. typed well-known excludes | `src/repo/ignore.rs`, `tests/repo_ignore.rs` | canonical cache/build/vendor directory exclusions are expressible as a typed policy | the policy is default-off, explicit, and identical across Worktree and GitRev |
-| C5. schema + fixture harness updates | `src/repo/schema.rs`, `schemas/repo/snapshot_manifest.v1.json`, `tests/support/repo_support.rs`, `fixtures/repo/{valid,invalid}/**` | manifest/test surfaces describe the new source and option shapes honestly | embedded snapshot schema matches disk and manifests round-trip through the helper path |
-| C6. integration tests | `tests/repo_git_snapshot.rs`, `tests/repo_symlinks.rs`, `tests/repo_ignore.rs`, `tests/repo_purity.rs`, `tests/repo_schema.rs`, `tests/compile_matrix.rs`, `tests/repo_diff.rs` only if needed | every required Phase-C path and invariant is covered | all acceptance paths below have deterministic tests |
+| C5. schema + fixture harness updates | `src/repo/schema.rs`, `schemas/repo/snapshot_manifest.v1.json`, `tests/support/repo_support.rs`, `fixtures/repo/{valid,invalid}/**` | manifest/test surfaces describe the new source and option shapes honestly | embedded snapshot schema matches disk, helper-generated manifests round-trip, and impossible `source_kind` / `source_rev` shapes fail validation |
+| C6. integration tests | `tests/repo_git_snapshot.rs`, `tests/repo_symlinks.rs`, `tests/repo_ignore.rs`, `tests/repo_purity.rs`, `tests/repo_schema.rs`, `tests/compile_matrix.rs`, `tests/repo_diff.rs` only if needed | every required Phase-C path and invariant is covered | all acceptance paths below have deterministic tests, including parity between equivalent Worktree and GitRev trees |
 | C7. docs sweep | `lift_seam2_spec_reviewed.md`, `README.md`, `fixtures/repo/README.md`, `schemas/README.md` | prose matches the landed Phase-C contract and stops describing GitRev/follow/excludes as vague future work | doc surfaces describe explicit semantics, not implementation vibes |
 
 Implementation order:
@@ -2438,6 +2540,16 @@ Required test files:
 - extend `tests/repo_diff.rs` only if needed to prove Phase-C snapshots stay transparent to downstream diff semantics;
 - extend `tests/compile_matrix.rs` only as needed to preserve the no-default-features posture.
 
+Exact helper additions expected in `tests/support/repo_support.rs`:
+
+- `snapshot_request_with_source(root, source, options)`
+- `init_git_fixture_tree(...)`
+- `commit_all(repo_path, message)`
+- `resolve_fixture_rev(...)`
+- `manifest_from_snapshot_with_source(case, source, options, snapshot)`
+
+If the implementation needs more than that, challenge the helper design before adding it. The harness should stay small and boring.
+
 Required fixture strategy:
 
 - keep committed fixtures as tree descriptions and manifest JSON, not checked-in `.git/` directories;
@@ -2462,6 +2574,7 @@ cargo test -p substrate-lift --test repo_ignore -- --nocapture
 cargo test -p substrate-lift --test repo_purity -- --nocapture
 cargo test -p substrate-lift --test repo_schema -- --nocapture
 cargo test -p substrate-lift --test compile_matrix -- --nocapture
+cargo test -p substrate-lift --test repo_diff -- --nocapture
 ```
 
 ### 15.8.g Performance review
@@ -2521,33 +2634,38 @@ Dependency table:
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| C1 seam surface + option types | `src/repo/` | - |
-| C2 GitRev materializer core | `src/repo/` | C1 |
-| C3 bounded symlink resolver | `src/repo/` | C1, C2 |
-| C4 typed well-known excludes | `src/repo/`, `tests/repo_ignore.rs` | C1 |
+| C1 seam surface + option/error types | `src/repo/{snapshot.rs,ignore.rs,error.rs,mod.rs}` | - |
+| C2 GitRev materializer core | `src/repo/snapshot.rs` | C1 |
+| C3 bounded symlink resolver | `src/repo/snapshot.rs` | C1, C2 |
+| C4 typed well-known excludes | `src/repo/ignore.rs`, `tests/repo_ignore.rs` | C1 |
 | C5 schema + fixture helper updates | `src/repo/schema.rs`, `schemas/repo/`, `tests/support/`, fixture manifests | C1, C2, C3, C4 |
 | C6 behavior + parity tests | `tests/` | C2, C3, C4, C5 |
 | C7 docs sweep | spec + README surfaces | C5 |
 
 Parallel lanes:
 
-- Lane A: C1 -> C2 -> C3 -> C4 (sequential core lane, shared snapshot/ignore semantics)
-- Lane B: C5 -> C6 (test lane after the core contract, option names, and schema shape stabilize)
-- Lane C: C7 (docs-only sidecar after schema filenames, manifest fields, and helper names freeze)
+- Lane A, `phase-c-core`: C1 -> C2 -> C3 (single-owner core lane for `src/repo/snapshot.rs` and `src/repo/error.rs`)
+- Lane B, `phase-c-ignore-schema`: C4 -> C5 (schema/harness lane after Lane A freezes enum names and source semantics)
+- Lane C, `phase-c-tests-docs`: C6 + C7 (sidecar lane once helper names, manifest fields, and fixture layout stop moving)
 
 Execution order:
 
-1. Run Lane A first until the source dispatch, follow semantics, and typed exclude policy stop moving.
-2. Once Lane A stabilizes, launch Lane B and Lane C in parallel worktrees.
-3. Merge Lane B before promotion, because the tests are part of the gate.
-4. Merge Lane C last, once code and fixture names are frozen.
+1. Run Lane A alone. This is the dangerous lane because `src/repo/snapshot.rs` is the single shared ownership surface for source dispatch, follow semantics, and final snapshot assembly.
+2. Start Lane B only after Lane A has frozen:
+   - `SnapshotSource::GitRev { rev }`
+   - `SymlinkPolicy::Follow`
+   - the typed well-known exclude names
+   - the exact error variants used by GitRev and follow failures
+3. Start Lane C only after Lane B has frozen helper names, manifest fields, and fixture locations.
+4. Merge order is A -> B -> C. If C reveals missing semantic hooks in `src/repo/**`, route that back to A and reopen the gate. Do not paper over it in tests.
 
 Conflict flags:
 
-- Lane A is one shared ownership surface in practice. `snapshot.rs`, `ignore.rs`, and any `provider.rs` work must be treated as one core lane.
+- `src/repo/snapshot.rs` is exclusive to Lane A. Do not split GitRev and follow work across two parallel branches. They will collide.
+- `src/repo/ignore.rs` can move into Lane B only after Lane A locks the enum names it consumes.
+- `tests/support/repo_support.rs` and `schemas/repo/snapshot_manifest.v1.json` are exclusive to Lane B. Lane C must consume them, not redefine them.
+- `tests/repo_git_snapshot.rs`, `tests/repo_symlinks.rs`, and docs files are Lane-C territory. If those changes require altering source semantics, stop and send the change back upstream.
 - If `RepoProvider` lands, it belongs inside Lane A, not as a fourth parallel lane.
-- Lane B must not reopen runtime code or downstream seams. If tests reveal missing semantic hooks in `src/repo/`, route that back into Lane A and re-evaluate scope.
-- Lane C is safe only if it stays docs-only. If prose reveals unresolved semantics, fix the semantics first in Lane A.
 
 ### 15.8.k Phase C completion summary
 
