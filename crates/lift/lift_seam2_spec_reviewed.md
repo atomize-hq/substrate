@@ -1,7 +1,7 @@
 
-<!-- /autoplan restore point: /mnt/data/lift_seam2_spec_reviewed.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-lift-autoplan-restore-20260417-133748.md -->
 
-# substrate-lift seam 2 spec — repo substrate (reviewed against landed seam 0 + seam 1)
+# substrate-lift seam 2 spec — repo substrate (reviewed against landed seam 0 + seam 1 + seam 2 Phase A)
 
 ## 0. Ground truth from the landed crate
 
@@ -11,30 +11,37 @@ Observed state in the landed crate:
 
 - `src/kernel/**` is real, tested, schema-backed, and publicly re-exported from `lib.rs`.
 - `src/pack/**` is real code and now compiles profiles, topology packs, score models, query packs, rule packs, recipe packs, and deterministic bundle resolution into `CompiledPackSet`.
-- `src/repo/mod.rs` is still a placeholder stub.
+- `src/repo/**` is real, tested, schema-backed, and crate-private. `src/repo/mod.rs` now re-exports the landed Phase-A seam surface.
 - `lib.rs` still exposes `repo` only as `pub(crate) mod repo;`, so seam 2 is not public API yet.
 - `src/app/runtime.rs` currently stops at `ProfileBootstrap { bundle: CompiledPackSet }`; there is no repo-facing runtime loop yet.
 - `kernel::RepoPath`, `FileId`, `Fingerprint`, `DiagnosticCode`, and `Severity` already exist and should be reused rather than redefined.
+- `RepoRoot`, `RepoRootDetectionOptions`, `SnapshotRequest`, `SnapshotOptions`, `RepoSnapshot`, `Inventory`, `BlobStore`, `RepoDiagnostic`, and `SnapshotStats` are now landed and covered by targeted repo tests.
 - `pack::CompiledAnalysisDefaults` already exists and currently contains:
   - `languages: BTreeSet<LanguageId>`
   - `follow_symlinks: bool`
   - `max_scope_depth: u8`
 - there is **no** landed pack-level repo config surface yet for ignore globs, non-UTF8 policy, large-file policy, VCS selection, or snapshot mode.
-- `Cargo.toml` already contains `globset`; it does **not** yet contain a repo-walking crate or a git backend crate.
-- there is no `schemas/repo/` directory yet.
-- there are no `fixtures/repo/**` tests yet.
+- `Cargo.toml` already contains both `globset` and `walkdir`; it does **not** yet contain a git backend crate.
+- `schemas/repo/snapshot_manifest.v1.json` is landed and embedded through `src/repo/schema.rs`.
+- `fixtures/repo/**` plus `tests/repo_root.rs`, `tests/repo_snapshot.rs`, `tests/repo_ignore.rs`, `tests/repo_fingerprints.rs`, `tests/repo_purity.rs`, and `tests/repo_schema.rs` are landed and passing.
+- there is still no `src/repo/diff.rs`, no `schemas/repo/diff_manifest.v1.json`, and no `tests/repo_diff.rs`.
 - the compile-matrix test already asserts the crate still builds with `--no-default-features`.
 
-That means seam 2 should be defined as an **internal, filesystem-first, immutable snapshot seam** that is cleanly downstream of `kernel` and cleanly upstream of `lang`, `topo`, `graph`, and app orchestration.
+Validated on this branch before updating this spec:
+
+- `cargo test -p substrate-lift --test repo_root --test repo_snapshot --test repo_ignore --test repo_fingerprints --test repo_purity --test repo_schema -- --nocapture`
+- `cargo test -p substrate-lift --test compile_matrix -- --nocapture`
+
+That means seam 2 is now an **internal, filesystem-first, immutable snapshot seam** with Phase A landed, and the next work should stay cleanly downstream of `kernel` and cleanly upstream of `lang`, `topo`, `graph`, and app orchestration.
 
 The key consequence is this:
 
 > seam 2 should **not** make `repo` public yet, and it should **not** depend on `pack`, `lang`, `graph`, app code, or CLI code.
 
-A second consequence, based on the current seam-1 reality:
+A second consequence, based on the current seam-1 and seam-2 Phase-A reality:
 
-> seam 2 phase A should **not** require retroactive changes to `profile.v1.toml`.
-> It should accept explicit Rust options, and later runtime/orchestration code can map `CompiledAnalysisDefaults.follow_symlinks` into those options.
+> seam 2 phase B should **not** require retroactive changes to `profile.v1.toml` or `CompiledAnalysisDefaults`.
+> It should diff already-materialized `RepoSnapshot` values directly, and later runtime/orchestration code can keep any pack-to-snapshot option mapping outside `repo`.
 
 ---
 
@@ -153,13 +160,13 @@ A future runtime/orchestration seam may map `CompiledAnalysisDefaults` into `Sna
 
 ## 4. Canonical phase map
 
-Because the current crate has no repo code yet, no git backend crate, and no landed repo-facing runtime loop, seam 2 should be specified in **three** phases.
+Because the current crate now has landed Phase A, but still has no diff module, no git backend crate, and no landed repo-facing runtime loop, seam 2 should continue in **three** phases.
 
 This section is canonical. Later sections should reference these phases, not restate a competing phase model.
 
 ### Phase A — filesystem-first snapshot substrate
 
-Phase A lands:
+Phase A landed:
 
 - repo root detection;
 - worktree snapshot materialization;
@@ -1400,7 +1407,7 @@ Mitigation:
 
 ## 15.1 Rust modules
 
-Phase A adds:
+Phase A landed:
 
 - `src/repo/error.rs`
 - `src/repo/diagnostics.rs`
@@ -1411,7 +1418,7 @@ Phase A adds:
 - `src/repo/snapshot.rs`
 - `src/repo/schema.rs`
 
-Replace the current placeholder `src/repo/mod.rs` with the real seam re-export surface.
+`src/repo/mod.rs` is now the real seam re-export surface.
 
 Phase B adds:
 
@@ -1423,7 +1430,7 @@ Phase C may add:
 
 ## 15.2 Schemas
 
-Phase A adds:
+Phase A landed:
 
 - `schemas/repo/snapshot_manifest.v1.json`
 
@@ -1431,27 +1438,25 @@ Phase B adds:
 
 - `schemas/repo/diff_manifest.v1.json`
 
-`src/repo/schema.rs` should embed schema constants in the same style already used by seam 0 and seam 1.
+`src/repo/schema.rs` should continue embedding schema constants in the same style already used by seam 0 and seam 1.
 
 ## 15.3 Fixtures
 
-Phase A adds:
+Phase A landed baseline:
 
 ```text
 fixtures/repo/
   README.md
   valid/
-    root_detection/
-    snapshot/
-    ignore/
-    canonical/
+    manifest_minimal.json
   invalid/
-    bad_glob/
-    root_not_found/
-    policy_failures/
+    manifest_bad_repo_path.json
+    manifest_missing_stats.json
+  trees/
+    basic_worktree/
 ```
 
-Suggested minimum fixture cases:
+The landed Phase-A fixture plus temp-tree test helpers already exercise the important content cases:
 
 - nearest `.git` marker wins
 - file-start and dir-start root detection
@@ -1481,7 +1486,7 @@ Phase C adds:
 
 ## 15.4 Tests
 
-Phase A adds test files analogous to the kernel/pack pattern:
+Phase A landed tests analogous to the kernel/pack pattern:
 
 - `tests/repo_root.rs`
 - `tests/repo_snapshot.rs`
@@ -1513,7 +1518,7 @@ No public crate exports are required just to test seam 2.
 
 ## 15.5 README / housekeeping cleanup
 
-When seam 2 lands, update:
+With seam 2 Phase A landed and Phase B next, update:
 
 - top-level `README.md` seam breakdown text to mark repo substrate as landed-initially
 - `fixtures/README.md` to mention `fixtures/repo/`
@@ -1812,6 +1817,270 @@ Phase-A promotion gate:
 6. all required Phase-A tests above are present and passing.
 7. `cargo check -p substrate-lift --no-default-features` still passes.
 
+## 15.7 Phase B execution plan, eng-review locked
+
+This section starts from the landed Phase-A repo substrate as it exists on `feat/lift` today.
+
+The earlier sections answer "what Phase B is." This section answers "how Phase B lands without reopening Phase A or smuggling in Phase C."
+
+### 15.7.a Step 0, scope challenge
+
+Phase B must treat the shipped snapshot substrate as the baseline, not as fresh clay.
+
+What already exists and must be reused:
+
+| Sub-problem | Existing code | Phase B decision |
+|---|---|---|
+| crate-private seam boundary | `src/lib.rs`, `src/repo/mod.rs` | keep `repo` crate-private, do not promote public API just to expose diffing |
+| immutable snapshot substrate | `src/repo/{root.rs,ignore.rs,inventory.rs,blob.rs,snapshot.rs}` | diff only already-materialized snapshots, do not reopen filesystem walking or option semantics |
+| stable repo-relative path identity | `src/kernel/path.rs`, `src/repo/inventory.rs` | key the diff on `RepoPath` only, one diff row per repo-relative path |
+| stable content and canonical fingerprinting | `src/kernel/fingerprint.rs`, `src/repo/inventory.rs` | fingerprint diff output with canonical JSON, never with absolute roots or traversal state |
+| landed snapshot schema/test harness | `src/repo/schema.rs`, `tests/support/repo_support.rs`, `tests/repo_schema.rs` | extend the same embedded-schema plus generated-manifest pattern for diff fixtures |
+| no-default-features build posture | `tests/compile_matrix.rs` | Phase B must preserve `cargo check -p substrate-lift --no-default-features` |
+| downstream runtime boundary | `src/app/runtime.rs` | keep runtime bootstrap out of Phase B, repo still ends at immutable artifact plus pure diff |
+
+Scope decision for the Phase B implementation PR:
+
+- add only pure path-based diffing over `RepoSnapshot`;
+- add `src/repo/diff.rs`, `schemas/repo/diff_manifest.v1.json`, `fixtures/repo/diff/**`, `tests/repo_diff.rs`, and the minimal schema/test-harness extensions needed to support them;
+- extend `src/repo/mod.rs` and `src/repo/schema.rs` only to expose the new Phase-B internal seam surface and embedded schema constants;
+- keep `SnapshotSource`, `SnapshotOptions`, traversal behavior, root detection, ignore semantics, and snapshot diagnostics unchanged;
+- do not add rename detection, blob-level patch hunks, diff-time filesystem reads, git revision materialization, or runtime wiring.
+
+Complexity check:
+
+- Phase B is smaller than Phase A, but it still touches core seam files plus schema, fixtures, and tests, so it should be treated as one focused repo slice rather than a "quick helper";
+- if a proposed change needs to modify `src/app/runtime.rs`, `src/pack/**`, or snapshot-construction behavior in `src/repo/snapshot.rs`, it is probably Phase C or later work and should be deferred.
+
+Distribution check:
+
+- Phase B does not introduce a new binary, package, feature flag, or published artifact;
+- no CLI surface, release workflow, or install-path change belongs in this PR.
+
+### 15.7.b Phase B architecture
+
+Phase B execution shape:
+
+```text
+base RepoSnapshot
+   |
+   +--> base.inventory.iter()
+   |
+   v
+collect union of repo-relative paths from base + head
+   ^
+   |
+   +--> head.inventory.iter()
+   |
+head RepoSnapshot
+
+union(path)
+   |
+   +--> only in head -> Added { before: None, after: Some(entry) }
+   +--> only in base -> Removed { before: Some(entry), after: None }
+   +--> in both and blob_fingerprint differs -> Modified { before, after }
+   +--> in both and blob_fingerprint matches -> omit
+   |
+   v
+sort entries by RepoPath
+   |
+   v
+canonical diff fingerprint from
+  (base_fingerprint, head_fingerprint, sorted entries[path, kind, before_blob, after_blob])
+   |
+   v
+RepoDiff { base_fingerprint, head_fingerprint, entries, fingerprint }
+```
+
+Architectural rules:
+
+- `build_diff(base, head)` compares `InventoryEntry` state only. It does not reopen the filesystem and does not need `BlobStore::read_bytes`.
+- The diff union is over `RepoPath` keys from the two inventories, not over host paths, file IDs, or diagnostics.
+- `DiffEntry.before` and `DiffEntry.after` carry the already-materialized `InventoryEntry` values needed by downstream consumers. Blob bytes stay in the snapshots.
+- Output order is deterministic and path-sorted. There is at most one `DiffEntry` per `RepoPath`.
+- The zero-diff case is first-class: identical snapshots produce `RepoDiff { entries: vec![] }` with a stable fingerprint.
+
+Module boundary for Phase B only:
+
+```text
+src/repo/
+  mod.rs
+  diff.rs
+  schema.rs
+
+tests/
+  repo_diff.rs
+  repo_schema.rs
+  support/repo_support.rs
+
+fixtures/repo/
+  diff/
+```
+
+### 15.7.c Rules to lock now
+
+Lock these rules:
+
+1. `build_diff` is a pure function over `&RepoSnapshot` inputs.
+2. `DiffKind` remains exactly `Added`, `Modified`, `Removed`.
+3. Path comparison is by canonical repo-relative `RepoPath`, never absolute host path.
+4. `Modified` is decided by `blob_fingerprint` inequality only.
+5. Unchanged files are omitted even if file IDs or stats are inspected elsewhere.
+6. Rename behavior is not inferred. A rename is one `Removed` plus one `Added`.
+7. `DiffEntry.before` is present only for `Removed` and `Modified`.
+8. `DiffEntry.after` is present only for `Added` and `Modified`.
+9. `RepoDiff.fingerprint` excludes absolute roots, file IDs, stats, diagnostics, and blob bytes.
+10. Phase B adds no new error surface beyond existing typed repo/schema failures needed to compile or validate fixtures.
+
+### 15.7.d Phase B implementation slices
+
+| Slice | Files / modules | Deliverable | Done when |
+|---|---|---|---|
+| B1. diff seam surface + algorithm | `src/repo/{mod.rs,diff.rs}` | real Phase-B diff types and pure builder land behind the existing crate-private seam | identical, add, remove, and modify cases all compile through one deterministic codepath |
+| B2. diff schema embedding | `src/repo/schema.rs`, `schemas/repo/diff_manifest.v1.json` | embedded diff schema matches the on-disk manifest and follows the existing repo-schema pattern | diff schema constants compile and disk-vs-embedded validation passes |
+| B3. diff fixture/test harness | `tests/support/repo_support.rs`, `fixtures/repo/diff/**` | generated diff manifests can be built and validated the same way snapshot manifests are | helper code can materialize paired snapshots and emit diff-manifest JSON without custom one-off logic |
+| B4. integration tests | `tests/repo_diff.rs`, `tests/repo_schema.rs`, `tests/compile_matrix.rs` if needed | every required Phase-B path and invariant is covered | add/remove/modify/rename-as-two-events/empty-diff/fingerprint determinism all have deterministic assertions |
+| B5. docs sweep | `lift_seam2_spec_reviewed.md`, `README.md`, `fixtures/repo/README.md`, `schemas/README.md` | prose matches the landed Phase-B contract and no file still describes diffing as hand-wavy future work | README surfaces describe repo diffing as pure over snapshots, not as git-aware history analysis |
+
+Implementation order:
+
+1. Land B1.
+2. Land B2.
+3. Land B3 once the diff contract and manifest shape stop moving.
+4. Land B4 after B1 through B3 are stable.
+5. Land B5 last, once schema filename and fixture names are frozen.
+
+### 15.7.e Test review, required coverage for Phase B
+
+CODE PATH COVERAGE
+===========================
+[+] Pure diff assembly
+    ├── [REQUIRED] only-in-head path emits one `Added` entry with `before: None`
+    ├── [REQUIRED] only-in-base path emits one `Removed` entry with `after: None`
+    ├── [REQUIRED] same path with different blob fingerprint emits one `Modified` entry
+    ├── [REQUIRED] unchanged path is omitted
+    ├── [REQUIRED] rename-shaped change appears as `Removed` + `Added`, never a rename kind
+    └── [REQUIRED] identical snapshots produce an empty `entries` list
+
+[+] Determinism and fingerprinting
+    ├── [REQUIRED] entry order is sorted by `RepoPath` regardless of snapshot construction order
+    ├── [REQUIRED] repeated `build_diff(base, head)` calls produce the same `RepoDiff.fingerprint`
+    ├── [REQUIRED] changing the diff entry set changes the diff fingerprint
+    ├── [REQUIRED] equivalent trees under different absolute temp roots still diff to empty when snapshot fingerprints match
+    └── [REQUIRED] diffing two prebuilt snapshots after later live-tree mutation still yields the original result
+
+[+] Schema and manifest coverage
+    ├── [REQUIRED] embedded `diff_manifest.v1.json` matches the on-disk schema
+    ├── [REQUIRED] valid diff fixture manifests validate and deserialize
+    └── [REQUIRED] invalid diff fixture manifests fail validation deterministically
+
+USER FLOW COVERAGE
+===========================
+[+] Internal engine flow
+    ├── [REQUIRED] materialize base snapshot -> materialize head snapshot -> build diff -> inspect ordered entries
+    ├── [REQUIRED] modified path carries both `before` and `after` inventory entries through the handoff
+    └── [REQUIRED] empty diff still exposes stable base/head fingerprints plus a deterministic diff fingerprint
+
+─────────────────────────────────
+COVERAGE GOAL: 14/14 required Phase-B paths covered before promotion
+  Code paths: 11/11
+  Internal flows: 3/3
+QUALITY BAR: no smoke-only tests for acceptance paths
+GAPS ALLOWED AT PROMOTION: 0
+─────────────────────────────────
+
+Required test files:
+
+- add `tests/repo_diff.rs` for diff assembly, ordering, and rename-as-add-remove semantics
+- extend `tests/repo_schema.rs` for diff-schema embedding, valid diff manifests, and invalid diff manifests
+- extend `tests/support/repo_support.rs` with the minimal helpers needed to generate diff-manifest JSON
+- extend `tests/compile_matrix.rs` only if the new schema constants or diff module alter existing crate-level compile assertions
+
+Recommended validation commands:
+
+```bash
+cargo fmt --all
+cargo clippy -p substrate-lift --all-targets -- -D warnings
+cargo test -p substrate-lift --test repo_diff -- --nocapture
+cargo test -p substrate-lift --test repo_schema -- --nocapture
+cargo test -p substrate-lift --test compile_matrix -- --nocapture
+```
+
+### 15.7.f Failure modes for Phase B
+
+| Codepath | Failure mode | Test required? | Error handling required? | Consumer sees |
+|---|---|---|---|---|
+| path-union assembly | added or removed path is dropped because only one snapshot inventory is scanned | yes | yes, diff builder must inspect the full union | missing change never reaches downstream seams |
+| modified detection | same-path content change is missed because comparison uses size or stale host reads instead of `blob_fingerprint` | yes | yes, compare the landed inventory fingerprints only | incorrect "unchanged" result |
+| unchanged omission | unchanged paths leak into output and bloat every downstream consumer | yes | test-enforced invariant | noisy diff with unstable fanout |
+| ordering | diff entries follow hash-map or traversal order instead of sorted `RepoPath` order | yes | test-enforced invariant | nondeterministic diff output and fingerprint drift |
+| rename semantics | heuristic rename detection sneaks in through future convenience logic | yes | yes, hard rule to stay add/remove/modify only | backend-specific drift and unstable semantics |
+| diff fingerprinting | absolute roots, file IDs, or output order leak into `RepoDiff.fingerprint` | yes | test-enforced invariant | same semantic diff hashes differently across runs |
+| schema embedding | embedded diff schema drifts from the on-disk schema or fixture shape | yes | yes, schema parity tests must hard-fail | manifest validation mismatch in tests |
+
+Critical gap rule:
+
+- Phase B does not promote if any failure mode is both untested and capable of causing silent diff drift.
+
+### 15.7.g NOT in scope for the Phase B implementation PR
+
+- `SnapshotSource::GitRev { rev }`
+- `SymlinkPolicy::Follow`
+- any new filesystem walking or ignore semantics
+- rename detection or similarity heuristics
+- blob-level textual patches or hunk generation
+- runtime, CLI, or pack integration work
+- provider abstraction
+
+### 15.7.h Worktree parallelization strategy
+
+Dependency table:
+
+| Step | Modules touched | Depends on |
+|---|---|---|
+| B1 diff seam surface + algorithm | `src/repo/` | — |
+| B2 diff schema embedding | `src/repo/`, `schemas/repo/` | B1 |
+| B3 diff fixture/test harness | `tests/support/`, `fixtures/repo/` | B1, B2 |
+| B4 integration tests | `tests/` | B1, B2, B3 |
+| B5 docs sweep | README + spec surfaces | B2, B3 |
+
+Parallel lanes:
+
+- Lane A: B1 -> B2 (sequential core lane, shared `src/repo/` contract surfaces)
+- Lane B: B3 -> B4 (test lane after the core contract and schema stabilize)
+- Lane C: B5 (docs-only sidecar after schema filename and fixture names freeze)
+
+Execution order:
+
+- Run Lane A first until the diff contract and schema ID stop moving.
+- Then launch Lane B.
+- Lane C can run after B2, but it must not reopen contract decisions.
+
+Conflict flags:
+
+- Lane A is strictly sequential because `src/repo/mod.rs`, `diff.rs`, and `schema.rs` define the seam surface.
+- Lane B must not reopen snapshot-construction behavior in `src/repo/snapshot.rs`; if tests discover that need, route it back to the core lane and re-evaluate scope.
+- Lane C is safe only if it stays docs-only. If prose uncovers unresolved semantics, fix the semantics first in Lane A.
+
+### 15.7.i Phase B completion summary
+
+- Step 0: scope accepted as pure diff over landed snapshots
+- Architecture: base/head inventory union -> sorted diff entries -> canonical diff fingerprint diagram written
+- Test Review: 14 required Phase-B paths named, 0 gaps allowed at promotion
+- Failure modes: 0 silent-diff-drift gaps allowed
+- NOT in scope: written
+- What already exists: written
+- Parallelization: 3 lanes, 1 sequential core lane plus 2 sidecars
+
+Phase-B promotion gate:
+
+1. `src/repo/diff.rs` exists and remains a pure function over `&RepoSnapshot`.
+2. `build_diff(base, head)` emits only sorted add/remove/modify entries and omits unchanged files.
+3. rename-shaped changes appear only as `Removed` + `Added`.
+4. `schemas/repo/diff_manifest.v1.json` is embedded through `src/repo/schema.rs` and validated in tests.
+5. all required Phase-B tests above are present and passing.
+6. `cargo check -p substrate-lift --no-default-features` still passes.
+
 ## 16. My recommended decision set
 
 These are the decisions I would lock now.
@@ -1835,6 +2104,8 @@ These are the decisions I would lock now.
 14. whole-snapshot size/file-count limits are deferred, but Phase A must expose stats so memory pressure is visible.
 15. Phase A performance guidance is lightweight: one materialization pass, one deterministic sort boundary, no live re-read after snapshot creation.
 16. Phase A should take `walkdir = "2"` instead of growing a handwritten recursive walker.
+17. Phase B should compare only already-materialized `InventoryEntry` state from two `RepoSnapshot`s.
+18. Phase B should ship `diff_manifest.v1.json`, `tests/repo_diff.rs`, and deterministic diff fingerprints before any GitRev work.
 
 That gives seam 2 a tight first landing that is honest about the current crate reality while still locking the right long-term shape for later seams.
 
@@ -1848,4 +2119,4 @@ That gives seam 2 a tight first landing that is honest about the current crate r
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | — |
 
 **UNRESOLVED:** 0
-**VERDICT:** ENG CLEARED — ready to implement the agreed seam-2 A/B/C plan. CEO review remains informational and has open issues.
+**VERDICT:** ENG CLEARED — Phase A is landed, and the next implementation target is the locked Phase-B pure-diff plan above. CEO review remains informational and has open issues.
