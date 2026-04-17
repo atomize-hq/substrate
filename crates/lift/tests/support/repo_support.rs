@@ -127,12 +127,61 @@ pub(crate) fn materialize(root: &Path, options: repo::SnapshotOptions) -> repo::
     repo::materialize_snapshot(&snapshot_request(root, options)).expect("snapshot should build")
 }
 
+pub(crate) fn materialize_basic_worktree_pair<FBase, FHead>(
+    prefix: &str,
+    mutate_base: FBase,
+    mutate_head: FHead,
+) -> (TempDir, TempDir, repo::RepoSnapshot, repo::RepoSnapshot)
+where
+    FBase: FnOnce(&Path),
+    FHead: FnOnce(&Path),
+{
+    let base = copy_fixture_tree(
+        "fixtures/repo/trees/basic_worktree",
+        &format!("{prefix}-base"),
+    );
+    let head = copy_fixture_tree(
+        "fixtures/repo/trees/basic_worktree",
+        &format!("{prefix}-head"),
+    );
+
+    mutate_base(base.path());
+    mutate_head(head.path());
+
+    let options = default_snapshot_options();
+    let base_snapshot = materialize(base.path(), options.clone());
+    let head_snapshot = materialize(head.path(), options);
+
+    (base, head, base_snapshot, head_snapshot)
+}
+
 pub(crate) fn inventory_paths(snapshot: &repo::RepoSnapshot) -> Vec<String> {
     snapshot
         .inventory
         .iter()
         .map(|entry| entry.path.as_str().to_owned())
         .collect()
+}
+
+pub(crate) fn diff_validator() -> Validator {
+    let root_schema: Value = serde_json::from_str(repo::schema::DIFF_MANIFEST_V1_SCHEMA_JSON)
+        .expect("embedded diff schema should parse");
+    let kernel_schema: Value =
+        serde_json::from_str(crate::kernel::PRIMITIVES_V1_SCHEMA_JSON).expect("kernel schema");
+    let retriever = InMemoryRetriever {
+        schemas: HashMap::from([
+            (
+                crate::kernel::PRIMITIVES_V1_SCHEMA_ID.to_owned(),
+                kernel_schema.clone(),
+            ),
+            ("../kernel/primitives.v1.json".to_owned(), kernel_schema),
+        ]),
+    };
+
+    jsonschema::draft202012::options()
+        .with_retriever(retriever)
+        .build(&root_schema)
+        .expect("diff schema should compile")
 }
 
 pub(crate) fn snapshot_validator() -> Validator {
@@ -198,6 +247,28 @@ pub(crate) fn manifest_from_snapshot(
             "skipped_large_files": snapshot.stats.skipped_large_files,
             "skipped_unsupported_file_kinds": snapshot.stats.skipped_unsupported_file_kinds,
         }
+    })
+}
+
+pub(crate) fn manifest_from_diff(case: &str, diff: &repo::RepoDiff) -> Value {
+    json!({
+        "version": 1,
+        "case": case,
+        "base_fingerprint": diff.base_fingerprint.as_str(),
+        "head_fingerprint": diff.head_fingerprint.as_str(),
+        "entries": diff.entries.iter().map(|entry| {
+            json!({
+                "path": entry.path.as_str(),
+                "kind": match entry.kind {
+                    repo::DiffKind::Added => "added",
+                    repo::DiffKind::Modified => "modified",
+                    repo::DiffKind::Removed => "removed",
+                },
+                "before_blob_fingerprint": entry.before.as_ref().map(|before| before.blob_fingerprint.as_str()),
+                "after_blob_fingerprint": entry.after.as_ref().map(|after| after.blob_fingerprint.as_str()),
+            })
+        }).collect::<Vec<_>>(),
+        "diff_fingerprint": diff.fingerprint.as_str(),
     })
 }
 

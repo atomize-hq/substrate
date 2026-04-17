@@ -4,6 +4,7 @@
 
 pub(crate) mod blob;
 pub(crate) mod diagnostics;
+pub(crate) mod diff;
 pub(crate) mod error;
 pub(crate) mod ignore;
 pub(crate) mod inventory;
@@ -15,6 +16,8 @@ pub(crate) mod snapshot;
 pub(crate) use blob::{BlobRecord, BlobStore};
 #[allow(unused_imports)]
 pub(crate) use diagnostics::{RepoDiagnostic, RepoLocation, RepoRelatedLocation};
+#[allow(unused_imports)]
+pub(crate) use diff::{build_diff, DiffEntry, DiffKind, RepoDiff};
 #[allow(unused_imports)]
 pub(crate) use error::{RepoError, RepoResult};
 #[allow(unused_imports)]

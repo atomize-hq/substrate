@@ -1,8 +1,9 @@
-Phase A repo fixtures cover the filesystem-first snapshot substrate.
+Repo fixtures cover the landed crate-private repo seam: Phase A snapshot materialization plus Phase B pure diff fixtures over already-materialized snapshots.
 
 Static trees in this directory are used for:
 - root detection semantics
 - deterministic snapshot manifests
+- paired-snapshot pure diff manifests under `fixtures/repo/diff/**`
 - explicit ignore behavior
 - default inclusion of common cache/build directories
 

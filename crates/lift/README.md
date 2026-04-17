@@ -196,17 +196,17 @@ Done when one standalone profile, topology pack, score model, query pack, rule p
 
 ### 2. Repo substrate
 
-Phase A landed this seam as a crate-private, filesystem-first immutable snapshot substrate.
+Phase A landed this seam as a crate-private, filesystem-first immutable snapshot substrate. Phase B landed pure path-based diffing over already-materialized `RepoSnapshot` values.
 
-What is landed today is narrower than the long-term seam sketch: repo root detection from a starting path, worktree snapshot materialization, intrinsic `.git` exclusion plus caller-supplied ignore globs, symlink/non-UTF8/large-file policy handling, deterministic inventory assembly, blob storage, content hashing, stable file IDs, snapshot stats, repo diagnostics, and an embedded snapshot-manifest schema for fixture contracts.
+What is landed today is narrower than the long-term seam sketch: repo root detection from a starting path, worktree snapshot materialization, intrinsic `.git` exclusion plus caller-supplied ignore globs, symlink/non-UTF8/large-file policy handling, deterministic inventory assembly, blob storage, content hashing, stable file IDs, snapshot stats, repo diagnostics, an embedded snapshot-manifest schema for fixture contracts, and pure add/remove/modify diff assembly with deterministic diff fingerprints plus an embedded diff-manifest schema for fixture contracts.
 
-The current implementation is internal-only. Everything under `src/repo/` is `pub(crate)`, the only supported snapshot source is `worktree`, and the seam does not yet expose git-backed history/diff providers or any public runtime wiring.
+The current implementation is internal-only. Everything under `src/repo/` is `pub(crate)`, the only supported snapshot source is `worktree`, and the seam still does not expose git revision materialization, rename detection, public API promotion, or runtime wiring.
 
-Exposes crate-private `RepoRoot`, `SnapshotRequest`, `RepoSnapshot`, `Inventory`, `BlobStore`, `SnapshotStats`, and repo diagnostics.
+Exposes crate-private `RepoRoot`, `SnapshotRequest`, `RepoSnapshot`, `Inventory`, `BlobStore`, `SnapshotStats`, `RepoDiff`, `DiffEntry`, `DiffKind`, `build_diff`, and repo diagnostics.
 
 Must not own language parsing, classification, findings, or app semantics.
 
-Done for Phase A when downstream crate seams can consume immutable filesystem snapshots through `RepoSnapshot` without reading the worktree directly. Git diffs, revision providers, and broader runtime integration remain later work.
+Done for Phase B when downstream crate seams can consume immutable filesystem snapshots through `RepoSnapshot` and compute pure diffs through `build_diff` without rereading the worktree. Git revision materialization, rename detection, and broader runtime integration remain later work.
 
 ### 3. Language platform
 

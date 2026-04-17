@@ -1,7 +1,7 @@
 
 <!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-lift-autoplan-restore-20260417-133748.md -->
 
-# substrate-lift seam 2 spec — repo substrate (reviewed against landed seam 0 + seam 1 + seam 2 Phase A)
+# substrate-lift seam 2 spec — repo substrate (reviewed against landed seam 0 + seam 1 + seam 2 Phase A + Phase B)
 
 ## 0. Ground truth from the landed crate
 
@@ -24,24 +24,24 @@ Observed state in the landed crate:
 - `Cargo.toml` already contains both `globset` and `walkdir`; it does **not** yet contain a git backend crate.
 - `schemas/repo/snapshot_manifest.v1.json` is landed and embedded through `src/repo/schema.rs`.
 - `fixtures/repo/**` plus `tests/repo_root.rs`, `tests/repo_snapshot.rs`, `tests/repo_ignore.rs`, `tests/repo_fingerprints.rs`, `tests/repo_purity.rs`, and `tests/repo_schema.rs` are landed and passing.
-- there is still no `src/repo/diff.rs`, no `schemas/repo/diff_manifest.v1.json`, and no `tests/repo_diff.rs`.
+- `src/repo/diff.rs`, `schemas/repo/diff_manifest.v1.json`, `fixtures/repo/diff/**`, `tests/repo_diff.rs`, and repo-schema parity coverage for both repo manifests are now landed.
 - the compile-matrix test already asserts the crate still builds with `--no-default-features`.
 
 Validated on this branch before updating this spec:
 
-- `cargo test -p substrate-lift --test repo_root --test repo_snapshot --test repo_ignore --test repo_fingerprints --test repo_purity --test repo_schema -- --nocapture`
+- `cargo test -p substrate-lift --test repo_root --test repo_snapshot --test repo_ignore --test repo_fingerprints --test repo_purity --test repo_diff --test repo_schema -- --nocapture`
 - `cargo test -p substrate-lift --test compile_matrix -- --nocapture`
 
-That means seam 2 is now an **internal, filesystem-first, immutable snapshot seam** with Phase A landed, and the next work should stay cleanly downstream of `kernel` and cleanly upstream of `lang`, `topo`, `graph`, and app orchestration.
+That means seam 2 is now an **internal, filesystem-first, immutable snapshot seam** with Phase A and Phase B landed, while still staying cleanly downstream of `kernel` and cleanly upstream of `lang`, `topo`, `graph`, and app orchestration.
 
 The key consequence is this:
 
 > seam 2 should **not** make `repo` public yet, and it should **not** depend on `pack`, `lang`, `graph`, app code, or CLI code.
 
-A second consequence, based on the current seam-1 and seam-2 Phase-A reality:
+A second consequence, based on the current seam-1 plus landed seam-2 Phase A/Phase B reality:
 
-> seam 2 phase B should **not** require retroactive changes to `profile.v1.toml` or `CompiledAnalysisDefaults`.
-> It should diff already-materialized `RepoSnapshot` values directly, and later runtime/orchestration code can keep any pack-to-snapshot option mapping outside `repo`.
+> seam 2 Phase B did **not** require retroactive changes to `profile.v1.toml` or `CompiledAnalysisDefaults`.
+> It diffs already-materialized `RepoSnapshot` values directly, and later runtime/orchestration code can keep any pack-to-snapshot option mapping outside `repo`.
 
 ---
 
@@ -160,7 +160,7 @@ A future runtime/orchestration seam may map `CompiledAnalysisDefaults` into `Sna
 
 ## 4. Canonical phase map
 
-Because the current crate now has landed Phase A, but still has no diff module, no git backend crate, and no landed repo-facing runtime loop, seam 2 should continue in **three** phases.
+Because the current crate now has landed Phase A and Phase B, but still has no git backend crate and no landed repo-facing runtime loop, seam 2 should continue in **three** phases.
 
 This section is canonical. Later sections should reference these phases, not restate a competing phase model.
 
@@ -189,7 +189,7 @@ Phase A does **not** land:
 
 ### Phase B — pure diff over already-materialized snapshots
 
-Phase B lands:
+Phase B landed:
 
 - pure path-based `RepoDiff`;
 - diff fixture schema;
@@ -240,7 +240,7 @@ src/repo/
   schema.rs
 ```
 
-Phase B adds:
+Phase B added:
 
 ```text
 src/repo/
@@ -281,7 +281,7 @@ pub(crate) use root::{RepoRoot, RepoRootDetectionOptions, RootMarker};
 pub(crate) use snapshot::{RepoSnapshot, SnapshotRequest, SnapshotSource, SnapshotStats};
 ```
 
-Phase B extends `mod.rs` with:
+Phase B extended `mod.rs` with:
 
 ```rust
 pub(crate) mod diff;
@@ -324,7 +324,7 @@ Phase A should **not** add:
 Reason:
 
 - `.gitignore` semantics are intentionally out of scope in phase A;
-- git revision materialization is deferred to phase B;
+- git revision materialization is deferred to phase C;
 - the seam should keep typed error contracts.
 
 If the implementation chooses not to add `walkdir`, a small internal recursive walker is acceptable, but traversal order must still be deterministic.
@@ -950,7 +950,7 @@ pub(crate) enum RepoError {
 
 Unlike seam 1, seam 2 does **not** need user-authored runtime config schemas in its first landing.
 
-The only JSON schemas seam 2 should add initially are **fixture manifest schemas** that lock deterministic test expectations.
+The only JSON schemas seam 2 has added so far are **fixture manifest schemas** that lock deterministic test expectations.
 
 ### Phase A required schema
 
@@ -958,7 +958,7 @@ The only JSON schemas seam 2 should add initially are **fixture manifest schemas
 schemas/repo/snapshot_manifest.v1.json
 ```
 
-### Phase B reserved schema
+### Phase B landed schema
 
 ```text
 schemas/repo/diff_manifest.v1.json
@@ -1076,7 +1076,7 @@ schemas/repo/diff_manifest.v1.json
 
 ### Phase B diff manifest shape
 
-Phase B should add `schemas/repo/diff_manifest.v1.json` with:
+Phase B added `schemas/repo/diff_manifest.v1.json` with:
 
 - `version`
 - `case`
@@ -1420,7 +1420,7 @@ Phase A landed:
 
 `src/repo/mod.rs` is now the real seam re-export surface.
 
-Phase B adds:
+Phase B added:
 
 - `src/repo/diff.rs`
 
@@ -1434,7 +1434,7 @@ Phase A landed:
 
 - `schemas/repo/snapshot_manifest.v1.json`
 
-Phase B adds:
+Phase B added:
 
 - `schemas/repo/diff_manifest.v1.json`
 
@@ -1474,7 +1474,7 @@ The landed Phase-A fixture plus temp-tree test helpers already exercise the impo
 - non-UTF8 path policy behavior (platform-guarded if necessary)
 - large-file policy behavior
 
-Phase B adds:
+Phase B added:
 
 - `fixtures/repo/diff/**`
 
@@ -1495,7 +1495,7 @@ Phase A landed tests analogous to the kernel/pack pattern:
 - `tests/repo_purity.rs`
 - `tests/repo_schema.rs`
 
-Phase B adds:
+Phase B added:
 
 - `tests/repo_diff.rs`
 
@@ -1518,11 +1518,11 @@ No public crate exports are required just to test seam 2.
 
 ## 15.5 README / housekeeping cleanup
 
-With seam 2 Phase A landed and Phase B next, update:
+With seam 2 Phase A and Phase B landed, update:
 
-- top-level `README.md` seam breakdown text to mark repo substrate as landed-initially
-- `fixtures/README.md` to mention `fixtures/repo/`
-- `schemas/README.md` to mention `schemas/repo/snapshot_manifest.v1.json`
+- top-level `README.md` seam breakdown text to mark repo substrate as landed snapshot plus pure diffing
+- `fixtures/repo/README.md` to mention `fixtures/repo/diff/**` alongside snapshot fixtures
+- `schemas/README.md` to mention both `schemas/repo/snapshot_manifest.v1.json` and `schemas/repo/diff_manifest.v1.json`
 
 ---
 
@@ -1819,9 +1819,9 @@ Phase-A promotion gate:
 
 ## 15.7 Phase B execution plan, eng-review locked
 
-This section starts from the landed Phase-A repo substrate as it exists on `feat/lift` today.
+This section starts from the landed repo substrate as it exists on `feat/lift` today.
 
-The earlier sections answer "what Phase B is." This section answers "how Phase B lands without reopening Phase A or smuggling in Phase C."
+The earlier sections answer "what Phase B is." This section records how Phase B landed without reopening Phase A or smuggling in Phase C.
 
 ### 15.7.a Step 0, scope challenge
 
@@ -1840,7 +1840,7 @@ What already exists and must be reused:
 | no-default-features build posture | `tests/compile_matrix.rs` | Phase B must preserve `cargo check -p substrate-lift --no-default-features` |
 | downstream runtime boundary | `src/app/runtime.rs` | keep runtime bootstrap out of Phase B, repo still ends at immutable artifact plus pure diff |
 
-Scope decision for the Phase B implementation PR:
+The landed scope for the Phase B implementation PR was:
 
 - add only pure path-based diffing over `RepoSnapshot`;
 - add `src/repo/diff.rs`, `schemas/repo/diff_manifest.v1.json`, `fixtures/repo/diff/**`, `tests/repo_diff.rs`, and the minimal schema/test-harness extensions needed to support them;
@@ -1932,7 +1932,7 @@ fixtures/repo/
 
 ### 15.7.c Code quality review
 
-Phase B should stay boring on purpose.
+Phase B stayed boring on purpose.
 
 | Area | Code quality rule | Why |
 |---|---|---|
@@ -2202,8 +2202,8 @@ These are the decisions I would lock now.
 14. whole-snapshot size/file-count limits are deferred, but Phase A must expose stats so memory pressure is visible.
 15. Phase A performance guidance is lightweight: one materialization pass, one deterministic sort boundary, no live re-read after snapshot creation.
 16. Phase A should take `walkdir = "2"` instead of growing a handwritten recursive walker.
-17. Phase B should compare only already-materialized `InventoryEntry` state from two `RepoSnapshot`s.
-18. Phase B should ship `diff_manifest.v1.json`, `tests/repo_diff.rs`, and deterministic diff fingerprints before any GitRev work.
+17. Phase B compares only already-materialized `InventoryEntry` state from two `RepoSnapshot`s.
+18. Phase B ships `diff_manifest.v1.json`, `tests/repo_diff.rs`, and deterministic diff fingerprints before any GitRev work.
 
 That gives seam 2 a tight first landing that is honest about the current crate reality while still locking the right long-term shape for later seams.
 

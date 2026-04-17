@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use serde_jcs as _;
 use serde_json::Value;
 use sha2 as _;
-use substrate_lift as _;
 use thiserror as _;
 use toml as _;
 use walkdir as _;
@@ -21,7 +20,8 @@ mod repo;
 mod repo_support;
 
 use repo_support::{
-    copy_fixture_tree, default_snapshot_options, load_json, load_text, manifest_from_snapshot,
+    copy_fixture_tree, default_snapshot_options, load_json, load_text, manifest_from_diff,
+    manifest_from_snapshot,
 };
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -63,6 +63,24 @@ struct FixtureStats {
     skipped_unsupported_file_kinds: u64,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct DiffFixtureManifest {
+    version: u32,
+    case: String,
+    base_fingerprint: String,
+    head_fingerprint: String,
+    entries: Vec<DiffFixtureEntry>,
+    diff_fingerprint: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct DiffFixtureEntry {
+    path: String,
+    kind: String,
+    before_blob_fingerprint: Option<String>,
+    after_blob_fingerprint: Option<String>,
+}
+
 #[test]
 fn embedded_snapshot_schema_matches_disk() {
     assert_eq!(
@@ -81,6 +99,23 @@ fn embedded_snapshot_schema_matches_disk() {
 }
 
 #[test]
+fn embedded_diff_schema_matches_disk() {
+    assert_eq!(
+        repo::schema::DIFF_MANIFEST_V1_SCHEMA_JSON,
+        load_text("schemas/repo/diff_manifest.v1.json")
+    );
+    assert_eq!(
+        repo::schema::DIFF_MANIFEST_V1_SCHEMA_ID,
+        "https://schemas.substrate.dev/lift/repo/diff_manifest.v1.json"
+    );
+    assert_eq!(
+        repo::schema::DIFF_MANIFEST_V1_SCHEMA_FILE,
+        "diff_manifest.v1.json"
+    );
+    assert_eq!(repo::schema::DIFF_MANIFEST_V1_SCHEMA_VERSION, 1);
+}
+
+#[test]
 fn valid_fixture_manifests_validate_and_deserialize() {
     let validator = repo_support::snapshot_validator();
     let instance = load_json("fixtures/repo/valid/manifest_minimal.json");
@@ -94,6 +129,34 @@ fn valid_fixture_manifests_validate_and_deserialize() {
 }
 
 #[test]
+fn valid_diff_fixture_manifests_validate_and_deserialize() {
+    let validator = repo_support::diff_validator();
+
+    for relative in [
+        "fixtures/repo/diff/valid/added_file.json",
+        "fixtures/repo/diff/valid/empty_diff.json",
+        "fixtures/repo/diff/valid/modified_file.json",
+        "fixtures/repo/diff/valid/removed_file.json",
+        "fixtures/repo/diff/valid/rename_as_add_remove.json",
+    ] {
+        let instance = load_json(relative);
+        validator
+            .validate(&instance)
+            .unwrap_or_else(|_| panic!("{relative} should validate"));
+        let parsed: DiffFixtureManifest = serde_json::from_value(instance)
+            .unwrap_or_else(|_| panic!("{relative} should deserialize"));
+        assert_eq!(parsed.version, 1, "{relative} should be v1");
+        assert!(
+            parsed
+                .entries
+                .iter()
+                .all(|entry| matches!(entry.kind.as_str(), "added" | "modified" | "removed")),
+            "{relative} should use lowercase diff kinds"
+        );
+    }
+}
+
+#[test]
 fn invalid_fixture_manifests_fail_validation() {
     let validator = repo_support::snapshot_validator();
     for relative in [
@@ -104,6 +167,28 @@ fn invalid_fixture_manifests_fail_validation() {
         assert!(
             validator.validate(&instance).is_err(),
             "{relative} should fail validation"
+        );
+    }
+}
+
+#[test]
+fn invalid_diff_fixture_manifests_fail_deterministically() {
+    let validator = repo_support::diff_validator();
+
+    for relative in [
+        "fixtures/repo/diff/invalid/manifest_bad_kind.json",
+        "fixtures/repo/diff/invalid/manifest_bad_repo_path.json",
+        "fixtures/repo/diff/invalid/manifest_before_after_shape_invalid.json",
+        "fixtures/repo/diff/invalid/manifest_missing_diff_fingerprint.json",
+    ] {
+        let instance = load_json(relative);
+        assert!(
+            validator.validate(&instance).is_err(),
+            "{relative} should fail validation"
+        );
+        assert!(
+            validator.validate(&instance).is_err(),
+            "{relative} should keep failing on repeated validation"
         );
     }
 }
@@ -144,5 +229,101 @@ fn generated_snapshot_manifest_validates_and_preserves_runtime_invariants() {
     assert_eq!(
         manifest_value["snapshot_fingerprint"].as_str(),
         Some(snapshot.fingerprint.as_str())
+    );
+}
+
+#[test]
+fn generated_diff_manifest_validates() {
+    let validator: Validator = repo_support::diff_validator();
+    let (_base_root, _head_root, base_snapshot, head_snapshot) =
+        repo_support::materialize_basic_worktree_pair(
+            "repo-diff-schema-generated",
+            |_| {},
+            |head| {
+                repo_support::write_file(&head.join("docs/new.txt"), b"new");
+                repo_support::write_file(
+                    &head.join("src/lib.rs"),
+                    b"pub fn fixture_value() -> &'static str {\n    \"schema\"\n}\n",
+                );
+            },
+        );
+    let diff = repo::build_diff(&base_snapshot, &head_snapshot);
+    let manifest = manifest_from_diff("generated-diff", &diff);
+
+    validator
+        .validate(&manifest)
+        .expect("generated diff manifest should validate");
+
+    let parsed: DiffFixtureManifest =
+        serde_json::from_value(manifest).expect("generated diff manifest should deserialize");
+    assert_eq!(parsed.version, 1);
+}
+
+#[test]
+fn manifest_ordering_matches_runtime_ordering() {
+    let (_base_root, _head_root, base_snapshot, head_snapshot) =
+        repo_support::materialize_basic_worktree_pair(
+            "repo-diff-schema-ordering",
+            |_| {},
+            |head| {
+                repo_support::write_file(&head.join("docs/new.txt"), b"new");
+                repo_support::write_file(
+                    &head.join("src/lib.rs"),
+                    b"pub fn fixture_value() -> &'static str {\n    \"ordered\"\n}\n",
+                );
+                std::fs::remove_file(head.join("target/cache.txt"))
+                    .expect("target/cache.txt should be removable");
+            },
+        );
+    let diff = repo::build_diff(&base_snapshot, &head_snapshot);
+    let manifest = manifest_from_diff("generated-ordering", &diff);
+
+    let runtime_paths = diff
+        .entries
+        .iter()
+        .map(|entry| entry.path.as_str().to_owned())
+        .collect::<Vec<_>>();
+    let manifest_paths = manifest["entries"]
+        .as_array()
+        .expect("entries should be an array")
+        .iter()
+        .map(|entry| {
+            entry["path"]
+                .as_str()
+                .expect("path should be a string")
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(manifest_paths, runtime_paths);
+}
+
+#[test]
+fn manifest_fingerprint_matches_runtime_fingerprint() {
+    let (_base_root, _head_root, base_snapshot, head_snapshot) =
+        repo_support::materialize_basic_worktree_pair(
+            "repo-diff-schema-fingerprint",
+            |_| {},
+            |head| {
+                repo_support::write_file(
+                    &head.join("src/lib.rs"),
+                    b"pub fn fixture_value() -> &'static str {\n    \"fingerprint\"\n}\n",
+                );
+            },
+        );
+    let diff = repo::build_diff(&base_snapshot, &head_snapshot);
+    let manifest = manifest_from_diff("generated-fingerprint", &diff);
+
+    assert_eq!(
+        manifest["base_fingerprint"].as_str(),
+        Some(diff.base_fingerprint.as_str())
+    );
+    assert_eq!(
+        manifest["head_fingerprint"].as_str(),
+        Some(diff.head_fingerprint.as_str())
+    );
+    assert_eq!(
+        manifest["diff_fingerprint"].as_str(),
+        Some(diff.fingerprint.as_str())
     );
 }
