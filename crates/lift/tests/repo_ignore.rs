@@ -137,3 +137,51 @@ fn followed_symlinks_still_compose_with_caller_glob_excludes() {
     assert!(snapshot.stats.skipped_by_ignore >= 2);
     assert!(snapshot.diagnostics.is_empty());
 }
+
+#[cfg(unix)]
+#[test]
+fn followed_symlinks_compose_with_directory_glob_excludes() {
+    use std::os::unix::fs::symlink;
+
+    let repo_root = TempDir::new("repo-ignore-follow-dir-glob");
+    std::fs::create_dir_all(repo_root.path().join(".git")).expect("git dir should exist");
+    write_file(&repo_root.path().join("dist/bundle.js"), b"bundle");
+    symlink("dist/bundle.js", repo_root.path().join("link.txt")).expect("symlink should exist");
+
+    let mut options = default_snapshot_options();
+    options.symlink_policy = repo::SymlinkPolicy::Follow;
+    options.exclude_globs = vec!["dist".to_owned()];
+
+    let snapshot = repo_support::materialize(repo_root.path(), options);
+    let paths = inventory_paths(&snapshot);
+
+    assert!(!paths.iter().any(|path| path == "link.txt"));
+    assert!(!paths.iter().any(|path| path.starts_with("dist/")));
+    assert_eq!(snapshot.stats.file_count, 0);
+    assert_eq!(snapshot.stats.skipped_by_ignore, 3);
+    assert!(snapshot.diagnostics.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn followed_symlinks_compose_with_directory_slash_glob_excludes() {
+    use std::os::unix::fs::symlink;
+
+    let repo_root = TempDir::new("repo-ignore-follow-dir-slash-glob");
+    std::fs::create_dir_all(repo_root.path().join(".git")).expect("git dir should exist");
+    write_file(&repo_root.path().join("dist/bundle.js"), b"bundle");
+    symlink("dist/bundle.js", repo_root.path().join("link.txt")).expect("symlink should exist");
+
+    let mut options = default_snapshot_options();
+    options.symlink_policy = repo::SymlinkPolicy::Follow;
+    options.exclude_globs = vec!["dist/".to_owned()];
+
+    let snapshot = repo_support::materialize(repo_root.path(), options);
+    let paths = inventory_paths(&snapshot);
+
+    assert!(!paths.iter().any(|path| path == "link.txt"));
+    assert!(!paths.iter().any(|path| path.starts_with("dist/")));
+    assert_eq!(snapshot.stats.file_count, 0);
+    assert_eq!(snapshot.stats.skipped_by_ignore, 3);
+    assert!(snapshot.diagnostics.is_empty());
+}

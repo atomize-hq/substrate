@@ -156,7 +156,7 @@ fn materialize_worktree_snapshot(
                 SymlinkPolicy::Follow => {
                     let resolved =
                         resolve_worktree_symlink(request.root.as_path(), entry.path(), &repo_path)?;
-                    if compiled_ignores.is_ignored(&resolved.repo_path, false) {
+                    if followed_target_is_ignored(compiled_ignores, &resolved.repo_path) {
                         assembly.record_ignore_skip();
                         continue;
                     }
@@ -344,7 +344,7 @@ fn walk_git_tree(
                         &repo_path,
                         target.trim_end_matches('\0'),
                     )?;
-                    if compiled_ignores.is_ignored(&resolved.repo_path, false) {
+                    if followed_target_is_ignored(compiled_ignores, &resolved.repo_path) {
                         assembly.record_ignore_skip();
                         continue;
                     }
@@ -688,6 +688,18 @@ fn lookup_git_entry<'repo>(
             object_id: root_tree.id.to_string(),
             reason: error.to_string(),
         })
+}
+
+fn followed_target_is_ignored(compiled_ignores: &CompiledIgnoreSet, repo_path: &RepoPath) -> bool {
+    let mut ancestor = repo_path.parent();
+    while let Some(directory) = ancestor {
+        if compiled_ignores.is_ignored(&directory, true) {
+            return true;
+        }
+        ancestor = directory.parent();
+    }
+
+    compiled_ignores.is_ignored(repo_path, false)
 }
 
 fn normalize_repo_symlink_target(

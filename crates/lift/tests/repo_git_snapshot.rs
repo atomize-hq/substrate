@@ -297,3 +297,67 @@ fn gitrev_followed_symlinks_still_compose_with_typed_excludes() {
     assert_eq!(snapshot.stats.file_count, 0);
     assert!(snapshot.diagnostics.is_empty());
 }
+
+#[cfg(unix)]
+#[test]
+fn gitrev_followed_symlinks_compose_with_directory_glob_excludes() {
+    use std::os::unix::fs::symlink;
+
+    let repo_root = init_git_repo("repo-gitrev-follow-ignore-dir-glob");
+    write_file(&repo_root.path().join("dist/bundle.js"), b"bundle");
+    symlink("dist/bundle.js", repo_root.path().join("link.txt")).expect("symlink should exist");
+    commit_all(repo_root.path(), "initial");
+    let head = git_stdout(repo_root.path(), &["rev-parse", "HEAD"]);
+
+    let options = repo::SnapshotOptions {
+        symlink_policy: repo::SymlinkPolicy::Follow,
+        exclude_globs: vec!["dist".to_owned()],
+        ..repo::SnapshotOptions::default()
+    };
+    let snapshot = materialize(
+        repo_root.path(),
+        repo::SnapshotSource::GitRev { rev: head },
+        options,
+    );
+    let link = crate::kernel::RepoPath::parse("link.txt").expect("path should parse");
+
+    assert!(snapshot.entry(&link).is_none());
+    assert!(inventory_paths(&snapshot)
+        .into_iter()
+        .all(|path| !path.starts_with("dist/")));
+    assert_eq!(snapshot.stats.skipped_by_ignore, 2);
+    assert_eq!(snapshot.stats.file_count, 0);
+    assert!(snapshot.diagnostics.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn gitrev_followed_symlinks_compose_with_directory_slash_glob_excludes() {
+    use std::os::unix::fs::symlink;
+
+    let repo_root = init_git_repo("repo-gitrev-follow-ignore-dir-slash-glob");
+    write_file(&repo_root.path().join("dist/bundle.js"), b"bundle");
+    symlink("dist/bundle.js", repo_root.path().join("link.txt")).expect("symlink should exist");
+    commit_all(repo_root.path(), "initial");
+    let head = git_stdout(repo_root.path(), &["rev-parse", "HEAD"]);
+
+    let options = repo::SnapshotOptions {
+        symlink_policy: repo::SymlinkPolicy::Follow,
+        exclude_globs: vec!["dist/".to_owned()],
+        ..repo::SnapshotOptions::default()
+    };
+    let snapshot = materialize(
+        repo_root.path(),
+        repo::SnapshotSource::GitRev { rev: head },
+        options,
+    );
+    let link = crate::kernel::RepoPath::parse("link.txt").expect("path should parse");
+
+    assert!(snapshot.entry(&link).is_none());
+    assert!(inventory_paths(&snapshot)
+        .into_iter()
+        .all(|path| !path.starts_with("dist/")));
+    assert_eq!(snapshot.stats.skipped_by_ignore, 2);
+    assert_eq!(snapshot.stats.file_count, 0);
+    assert!(snapshot.diagnostics.is_empty());
+}
