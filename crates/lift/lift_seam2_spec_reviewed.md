@@ -1832,10 +1832,11 @@ What already exists and must be reused:
 | Sub-problem | Existing code | Phase B decision |
 |---|---|---|
 | crate-private seam boundary | `src/lib.rs`, `src/repo/mod.rs` | keep `repo` crate-private, do not promote public API just to expose diffing |
-| immutable snapshot substrate | `src/repo/{root.rs,ignore.rs,inventory.rs,blob.rs,snapshot.rs}` | diff only already-materialized snapshots, do not reopen filesystem walking or option semantics |
+| immutable snapshot access | `src/repo/snapshot.rs`, `RepoSnapshot::entry`, `RepoSnapshot::read_bytes` | diff only already-materialized snapshots, never reopen filesystem walking or option semantics |
+| stable ordered inventory | `src/repo/inventory.rs`, `Inventory::iter`, `Inventory::get`, `fingerprint_entries` | build Phase B on the already-sorted inventory surface, not a new unordered map layer |
 | stable repo-relative path identity | `src/kernel/path.rs`, `src/repo/inventory.rs` | key the diff on `RepoPath` only, one diff row per repo-relative path |
 | stable content and canonical fingerprinting | `src/kernel/fingerprint.rs`, `src/repo/inventory.rs` | fingerprint diff output with canonical JSON, never with absolute roots or traversal state |
-| landed snapshot schema/test harness | `src/repo/schema.rs`, `tests/support/repo_support.rs`, `tests/repo_schema.rs` | extend the same embedded-schema plus generated-manifest pattern for diff fixtures |
+| landed schema/test harness pattern | `src/repo/schema.rs`, `tests/support/repo_support.rs`, `tests/repo_schema.rs` | extend the same embedded-schema plus generated-manifest pattern for diff fixtures |
 | no-default-features build posture | `tests/compile_matrix.rs` | Phase B must preserve `cargo check -p substrate-lift --no-default-features` |
 | downstream runtime boundary | `src/app/runtime.rs` | keep runtime bootstrap out of Phase B, repo still ends at immutable artifact plus pure diff |
 
@@ -1845,60 +1846,72 @@ Scope decision for the Phase B implementation PR:
 - add `src/repo/diff.rs`, `schemas/repo/diff_manifest.v1.json`, `fixtures/repo/diff/**`, `tests/repo_diff.rs`, and the minimal schema/test-harness extensions needed to support them;
 - extend `src/repo/mod.rs` and `src/repo/schema.rs` only to expose the new Phase-B internal seam surface and embedded schema constants;
 - keep `SnapshotSource`, `SnapshotOptions`, traversal behavior, root detection, ignore semantics, and snapshot diagnostics unchanged;
-- do not add rename detection, blob-level patch hunks, diff-time filesystem reads, git revision materialization, or runtime wiring.
+- do not add rename detection, blob-level patch hunks, diff-time filesystem reads, git revision materialization, runtime wiring, or pack-driven option translation.
 
 Complexity check:
 
-- Phase B is smaller than Phase A, but it still touches core seam files plus schema, fixtures, and tests, so it should be treated as one focused repo slice rather than a "quick helper";
+- Phase B is smaller than Phase A, but it still spans core seam code, schema, fixtures, and tests, so it should be treated as one focused repo slice rather than a "quick helper";
+- the minimum credible change still touches more than 8 files once fixtures and tests are counted, but that is acceptable because the implementation stays inside one seam and adds no new runtime integration;
 - if a proposed change needs to modify `src/app/runtime.rs`, `src/pack/**`, or snapshot-construction behavior in `src/repo/snapshot.rs`, it is probably Phase C or later work and should be deferred.
 
-Distribution check:
+Search and distribution check:
 
-- Phase B does not introduce a new binary, package, feature flag, or published artifact;
-- no CLI surface, release workflow, or install-path change belongs in this PR.
+- `[Layer 1]` use the built-in sorted `BTreeMap` inventory order already landed in `Inventory`; do not pull in a diff crate or invent a second ordering primitive;
+- `[Layer 1]` reuse the existing `jsonschema` + embedded-schema test pattern from `tests/repo_schema.rs`; do not introduce a second fixture-validation path;
+- Phase B does not introduce a new binary, package, feature flag, or published artifact, so no CLI surface, release workflow, or install-path change belongs in this PR.
 
-### 15.7.b Phase B architecture
+Scope result:
+
+- scope accepted as-is, because the plan is already the reduced version and the remaining work is the complete implementation of that reduced scope.
+
+### 15.7.b Architecture review
 
 Phase B execution shape:
 
 ```text
-base RepoSnapshot
-   |
-   +--> base.inventory.iter()
-   |
-   v
-collect union of repo-relative paths from base + head
-   ^
-   |
-   +--> head.inventory.iter()
-   |
-head RepoSnapshot
-
-union(path)
-   |
-   +--> only in head -> Added { before: None, after: Some(entry) }
-   +--> only in base -> Removed { before: Some(entry), after: None }
-   +--> in both and blob_fingerprint differs -> Modified { before, after }
-   +--> in both and blob_fingerprint matches -> omit
-   |
-   v
-sort entries by RepoPath
-   |
-   v
-canonical diff fingerprint from
-  (base_fingerprint, head_fingerprint, sorted entries[path, kind, before_blob, after_blob])
-   |
-   v
-RepoDiff { base_fingerprint, head_fingerprint, entries, fingerprint }
+base: RepoSnapshot.inventory.iter()         head: RepoSnapshot.inventory.iter()
+              |                                            |
+              v                                            v
+      peekable ordered stream                      peekable ordered stream
+                     \                            /
+                      \                          /
+                       +---- merge-walk on RepoPath ----+
+                                    |
+                                    +--> base path only -> Removed { before: Some, after: None }
+                                    +--> head path only -> Added   { before: None, after: Some }
+                                    +--> same path, same blob  -> omit
+                                    +--> same path, new blob   -> Modified { before: Some, after: Some }
+                                    |
+                                    v
+                         ordered Vec<DiffEntry> in path order
+                                    |
+                                    v
+               canonical diff fingerprint document:
+               {
+                 version,
+                 base_fingerprint,
+                 head_fingerprint,
+                 entries[path, kind, before_blob, after_blob]
+               }
+                                    |
+                                    v
+               RepoDiff { base_fingerprint, head_fingerprint, entries, fingerprint }
 ```
 
 Architectural rules:
 
 - `build_diff(base, head)` compares `InventoryEntry` state only. It does not reopen the filesystem and does not need `BlobStore::read_bytes`.
-- The diff union is over `RepoPath` keys from the two inventories, not over host paths, file IDs, or diagnostics.
+- The algorithm should merge-walk the two already-sorted inventory iterators instead of first building a path union set and then sorting it again. That keeps the implementation explicit, deterministic, and linear in the number of inventory entries.
 - `DiffEntry.before` and `DiffEntry.after` carry the already-materialized `InventoryEntry` values needed by downstream consumers. Blob bytes stay in the snapshots.
-- Output order is deterministic and path-sorted. There is at most one `DiffEntry` per `RepoPath`.
+- There is at most one `DiffEntry` per `RepoPath`.
 - The zero-diff case is first-class: identical snapshots produce `RepoDiff { entries: vec![] }` with a stable fingerprint.
+- There is no meaningful new auth or external security surface here because Phase B is a crate-private pure transform. The risk is semantic drift, not permission bypass. The architecture therefore needs tests and invariants more than new runtime guards.
+
+Realistic production failure scenarios this plan must account for:
+
+- if the merge walk advances the wrong iterator on equal paths, a modified file can be emitted as `Added` plus `Removed` instead of `Modified`;
+- if the fingerprint document is built from host-specific data or unstable entry order, identical semantic diffs hash differently across temp roots and test reruns;
+- if the implementation consults `BlobStore` or the live filesystem during diffing, Phase B silently reintroduces non-determinism that Phase A was explicitly built to prevent.
 
 Module boundary for Phase B only:
 
@@ -1917,7 +1930,28 @@ fixtures/repo/
   diff/
 ```
 
-### 15.7.c Rules to lock now
+### 15.7.c Code quality review
+
+Phase B should stay boring on purpose.
+
+| Area | Code quality rule | Why |
+|---|---|---|
+| `src/repo/diff.rs` | keep one small data-model layer plus a few private helpers, not a trait hierarchy or backend abstraction | there is one backend and one diff mode, so extra abstraction is fake flexibility |
+| diff algorithm | prefer a merge-walk over sorted iterators, not `HashMap` / `HashSet` plus a cleanup sort | the inventories are already ordered, so a second ordering phase is pure churn |
+| fingerprinting | fingerprint a plain canonical document built from diff entries, not ad hoc string concatenation | matches landed seam style and keeps the hash input reviewable |
+| `src/repo/schema.rs` | add diff schema constants in the same pattern as snapshot schema constants | keeps schema embedding DRY and discoverable |
+| `tests/support/repo_support.rs` | add `diff_validator`, `manifest_from_diff`, and paired-snapshot helpers by extending the current helper module, not by creating a second support module | prevents fixture logic from splitting across parallel helper stacks |
+| `tests/repo_schema.rs` | keep schema parity and manifest-shape assertions here | this file already owns repo-schema validation |
+| `tests/repo_diff.rs` | keep behavior assertions here, not inside schema tests | separates "what the diff means" from "what the manifest looks like" |
+
+Hard quality rules:
+
+1. Do not change `src/repo/snapshot.rs` unless an actual Phase-A defect is discovered. Phase B should consume snapshots, not renegotiate them.
+2. Do not duplicate `InventoryEntry` or `RepoSnapshot` fields into a second test-only manifest type when existing runtime types can already supply the values.
+3. Do not add a provider trait, a generic diff backend, or a rename-similarity helper "for later."
+4. Keep docs last. If prose reveals a missing semantic decision, fix the semantics in code/tests first.
+
+### 15.7.d Rules to lock now
 
 Lock these rules:
 
@@ -1931,70 +1965,106 @@ Lock these rules:
 8. `DiffEntry.after` is present only for `Added` and `Modified`.
 9. `RepoDiff.fingerprint` excludes absolute roots, file IDs, stats, diagnostics, and blob bytes.
 10. Phase B adds no new error surface beyond existing typed repo/schema failures needed to compile or validate fixtures.
+11. The emitted `entries` vector is already in final order when constructed. No "sort at the end just to be safe" cleanup pass should be needed.
+12. Schema/test helpers stay extensions of the landed repo test harness, not a second parallel fixture system.
 
-### 15.7.d Phase B implementation slices
+### 15.7.e Phase B implementation slices
 
 | Slice | Files / modules | Deliverable | Done when |
 |---|---|---|---|
-| B1. diff seam surface + algorithm | `src/repo/{mod.rs,diff.rs}` | real Phase-B diff types and pure builder land behind the existing crate-private seam | identical, add, remove, and modify cases all compile through one deterministic codepath |
-| B2. diff schema embedding | `src/repo/schema.rs`, `schemas/repo/diff_manifest.v1.json` | embedded diff schema matches the on-disk manifest and follows the existing repo-schema pattern | diff schema constants compile and disk-vs-embedded validation passes |
-| B3. diff fixture/test harness | `tests/support/repo_support.rs`, `fixtures/repo/diff/**` | generated diff manifests can be built and validated the same way snapshot manifests are | helper code can materialize paired snapshots and emit diff-manifest JSON without custom one-off logic |
-| B4. integration tests | `tests/repo_diff.rs`, `tests/repo_schema.rs`, `tests/compile_matrix.rs` if needed | every required Phase-B path and invariant is covered | add/remove/modify/rename-as-two-events/empty-diff/fingerprint determinism all have deterministic assertions |
-| B5. docs sweep | `lift_seam2_spec_reviewed.md`, `README.md`, `fixtures/repo/README.md`, `schemas/README.md` | prose matches the landed Phase-B contract and no file still describes diffing as hand-wavy future work | README surfaces describe repo diffing as pure over snapshots, not as git-aware history analysis |
+| B1. diff seam surface + merge-walk algorithm | `src/repo/{mod.rs,diff.rs}` | real Phase-B diff types and pure builder land behind the existing crate-private seam | identical, add, remove, modify, and empty-diff cases all compile through one deterministic ordered codepath |
+| B2. diff fingerprint helper | `src/repo/diff.rs` | canonical diff fingerprint is computed from the ordered diff document and stored on `RepoDiff` | equivalent snapshot pairs produce the same fingerprint across repeated calls and different temp roots |
+| B3. diff schema embedding | `src/repo/schema.rs`, `schemas/repo/diff_manifest.v1.json` | embedded diff schema matches the on-disk manifest and follows the existing repo-schema pattern | diff schema constants compile and disk-vs-embedded validation passes |
+| B4. diff fixture/test harness | `tests/support/repo_support.rs`, `fixtures/repo/diff/**` | generated diff manifests can be built and validated the same way snapshot manifests are | helper code can materialize paired snapshots and emit diff-manifest JSON without custom one-off logic |
+| B5. integration tests | `tests/repo_diff.rs`, `tests/repo_schema.rs`, `tests/compile_matrix.rs` if needed | every required Phase-B path and invariant is covered | add/remove/modify/rename-as-two-events/empty-diff/fingerprint determinism all have deterministic assertions |
+| B6. docs sweep | `lift_seam2_spec_reviewed.md`, `README.md`, `fixtures/repo/README.md`, `schemas/README.md` | prose matches the landed Phase-B contract and no file still describes diffing as hand-wavy future work | README surfaces describe repo diffing as pure over snapshots, not as git-aware history analysis |
 
 Implementation order:
 
-1. Land B1.
-2. Land B2.
-3. Land B3 once the diff contract and manifest shape stop moving.
-4. Land B4 after B1 through B3 are stable.
-5. Land B5 last, once schema filename and fixture names are frozen.
+1. Land B1 and B2 together. The data model and the fingerprint semantics should freeze at the same time.
+2. Land B3 immediately after the diff contract stops moving.
+3. Land B4 once the schema filename, manifest fields, and helper names are stable.
+4. Land B5 after B1 through B4 are stable.
+5. Land B6 last, once schema filename and fixture names are frozen.
 
-### 15.7.e Test review, required coverage for Phase B
+### 15.7.f Test review, required coverage for Phase B
 
 CODE PATH COVERAGE
 ===========================
-[+] Pure diff assembly
-    ├── [REQUIRED] only-in-head path emits one `Added` entry with `before: None`
-    ├── [REQUIRED] only-in-base path emits one `Removed` entry with `after: None`
-    ├── [REQUIRED] same path with different blob fingerprint emits one `Modified` entry
-    ├── [REQUIRED] unchanged path is omitted
-    ├── [REQUIRED] rename-shaped change appears as `Removed` + `Added`, never a rename kind
-    └── [REQUIRED] identical snapshots produce an empty `entries` list
+[+] `src/repo/diff.rs` merge-walk
+    |- [REQUIRED] base exhausted first -> remaining head paths emit `Added`
+    |- [REQUIRED] head exhausted first -> remaining base paths emit `Removed`
+    |- [REQUIRED] same path with equal blob fingerprint is omitted
+    |- [REQUIRED] same path with different blob fingerprint emits exactly one `Modified`
+    |- [REQUIRED] path ordering follows `RepoPath` lexical order without an extra final sort
+    `- [REQUIRED] identical snapshots produce `entries.is_empty()`
 
-[+] Determinism and fingerprinting
-    ├── [REQUIRED] entry order is sorted by `RepoPath` regardless of snapshot construction order
-    ├── [REQUIRED] repeated `build_diff(base, head)` calls produce the same `RepoDiff.fingerprint`
-    ├── [REQUIRED] changing the diff entry set changes the diff fingerprint
-    ├── [REQUIRED] equivalent trees under different absolute temp roots still diff to empty when snapshot fingerprints match
-    └── [REQUIRED] diffing two prebuilt snapshots after later live-tree mutation still yields the original result
+[+] `DiffEntry` shape invariants
+    |- [REQUIRED] `Added` has `before: None`, `after: Some`
+    |- [REQUIRED] `Removed` has `before: Some`, `after: None`
+    |- [REQUIRED] `Modified` has both `before` and `after`
+    `- [REQUIRED] rename-shaped change appears as `Removed` + `Added`, never a fourth kind
+
+[+] Fingerprinting
+    |- [REQUIRED] repeated `build_diff(base, head)` calls produce the same `RepoDiff.fingerprint`
+    |- [REQUIRED] changing entry order in fixture construction does not change the diff fingerprint
+    |- [REQUIRED] changing the diff entry set changes the diff fingerprint
+    |- [REQUIRED] equivalent trees under different absolute temp roots still diff to empty when snapshot fingerprints match
+    `- [REQUIRED] diffing two prebuilt snapshots after later live-tree mutation still yields the original result
 
 [+] Schema and manifest coverage
-    ├── [REQUIRED] embedded `diff_manifest.v1.json` matches the on-disk schema
-    ├── [REQUIRED] valid diff fixture manifests validate and deserialize
-    └── [REQUIRED] invalid diff fixture manifests fail validation deterministically
+    |- [REQUIRED] embedded `diff_manifest.v1.json` matches the on-disk schema
+    |- [REQUIRED] valid diff fixture manifests validate and deserialize
+    |- [REQUIRED] invalid diff fixture manifests fail validation deterministically
+    |- [REQUIRED] manifest ordering matches runtime ordering
+    `- [REQUIRED] manifest fingerprints match runtime fingerprints
 
 USER FLOW COVERAGE
 ===========================
 [+] Internal engine flow
-    ├── [REQUIRED] materialize base snapshot -> materialize head snapshot -> build diff -> inspect ordered entries
-    ├── [REQUIRED] modified path carries both `before` and `after` inventory entries through the handoff
-    └── [REQUIRED] empty diff still exposes stable base/head fingerprints plus a deterministic diff fingerprint
+    |- [REQUIRED] materialize base snapshot -> materialize head snapshot -> build diff -> inspect ordered entries
+    |- [REQUIRED] modified path carries both `before` and `after` inventory entries through the handoff
+    |- [REQUIRED] empty diff still exposes stable base/head fingerprints plus a deterministic diff fingerprint
+    `- [REQUIRED] diff fixture generation reuses the same runtime codepath as the behavior tests
 
-─────────────────────────────────
-COVERAGE GOAL: 14/14 required Phase-B paths covered before promotion
-  Code paths: 11/11
-  Internal flows: 3/3
+---------------------------------
+COVERAGE GOAL: 18/18 required Phase-B paths covered before promotion
+  Code paths: 14/14
+  Internal flows: 4/4
 QUALITY BAR: no smoke-only tests for acceptance paths
 GAPS ALLOWED AT PROMOTION: 0
-─────────────────────────────────
+---------------------------------
 
 Required test files:
 
-- add `tests/repo_diff.rs` for diff assembly, ordering, and rename-as-add-remove semantics
-- extend `tests/repo_schema.rs` for diff-schema embedding, valid diff manifests, and invalid diff manifests
-- extend `tests/support/repo_support.rs` with the minimal helpers needed to generate diff-manifest JSON
-- extend `tests/compile_matrix.rs` only if the new schema constants or diff module alter existing crate-level compile assertions
+- add `tests/repo_diff.rs` for diff assembly, ordering, before/after-shape invariants, and rename-as-add-remove semantics;
+- extend `tests/repo_schema.rs` for diff-schema embedding, valid diff manifests, invalid diff manifests, and runtime-vs-manifest parity assertions;
+- extend `tests/support/repo_support.rs` with the minimal helpers needed to materialize paired snapshots, generate diff-manifest JSON, and validate diff manifests;
+- extend `tests/compile_matrix.rs` only if the new schema constants or diff module alter existing crate-level compile assertions.
+
+Required fixture inventory:
+
+```text
+fixtures/repo/diff/
+  valid/
+    empty_diff.json
+    added_file.json
+    removed_file.json
+    modified_file.json
+    rename_as_add_remove.json
+  invalid/
+    manifest_bad_repo_path.json
+    manifest_bad_kind.json
+    manifest_missing_diff_fingerprint.json
+    manifest_before_after_shape_invalid.json
+```
+
+Test-plan artifact to write during review/implementation:
+
+- write `~/.gstack/projects/$SLUG/{user}-{branch}-eng-review-test-plan-{timestamp}.md`;
+- list the affected internal flow as `RepoSnapshot -> build_diff -> RepoDiff`;
+- list the key interactions to verify as add/remove/modify/empty/rename-shaped changes plus schema parity;
+- list the critical path as "materialize paired snapshots, build diff, validate manifest, rerun under a second temp root."
 
 Recommended validation commands:
 
@@ -2006,11 +2076,30 @@ cargo test -p substrate-lift --test repo_schema -- --nocapture
 cargo test -p substrate-lift --test compile_matrix -- --nocapture
 ```
 
-### 15.7.f Failure modes for Phase B
+### 15.7.g Performance review
+
+Phase B has no database or network path, but it still has real performance decisions to lock:
+
+| Concern | Risk | Required decision |
+|---|---|---|
+| algorithmic shape | building a union set and sorting it later turns a simple ordered merge into avoidable extra allocation and CPU | use a merge-walk over the two ordered inventories |
+| memory growth | cloning blob bytes or whole snapshots during diffing would scale with repository size, not with changed paths | clone only the `InventoryEntry` values needed for emitted `DiffEntry`s |
+| fingerprint cost | fingerprinting the full snapshot again would repeat Phase-A work | fingerprint only the ordered diff document plus base/head snapshot fingerprints |
+| hidden I/O | consulting `BlobStore::read_bytes` or host paths during diffing reintroduces live-tree coupling | Phase B stays metadata-only once the two snapshots already exist |
+
+Performance rules to lock now:
+
+- expected time complexity is `O(base_entries + head_entries + changed_entries_for_fingerprint)`;
+- expected memory beyond the two snapshots is `O(changed_entries)`, not `O(all_paths)` plus blob bytes;
+- do not add caches in Phase B. The data is already in memory, and a cache here would just be another invalidation problem;
+- if an implementation reaches for `HashMap` / `HashSet` plus a cleanup sort, reject it unless a benchmark demonstrates a real regression in the ordered merge-walk.
+
+### 15.7.h Failure modes for Phase B
 
 | Codepath | Failure mode | Test required? | Error handling required? | Consumer sees |
 |---|---|---|---|---|
-| path-union assembly | added or removed path is dropped because only one snapshot inventory is scanned | yes | yes, diff builder must inspect the full union | missing change never reaches downstream seams |
+| merge-walk advance logic | modified path is emitted as add+remove because the wrong iterator advances on equality | yes | yes, exact equal-path branch coverage | semantic drift in downstream change classification |
+| base/head exhaustion | added or removed path is dropped because one tail of the iterator pair is never flushed | yes | yes, tail-handling tests | missing change never reaches downstream seams |
 | modified detection | same-path content change is missed because comparison uses size or stale host reads instead of `blob_fingerprint` | yes | yes, compare the landed inventory fingerprints only | incorrect "unchanged" result |
 | unchanged omission | unchanged paths leak into output and bloat every downstream consumer | yes | test-enforced invariant | noisy diff with unstable fanout |
 | ordering | diff entries follow hash-map or traversal order instead of sorted `RepoPath` order | yes | test-enforced invariant | nondeterministic diff output and fingerprint drift |
@@ -2022,7 +2111,7 @@ Critical gap rule:
 
 - Phase B does not promote if any failure mode is both untested and capable of causing silent diff drift.
 
-### 15.7.g NOT in scope for the Phase B implementation PR
+### 15.7.i NOT in scope for the Phase B implementation PR
 
 - `SnapshotSource::GitRev { rev }`
 - `SymlinkPolicy::Follow`
@@ -2031,18 +2120,19 @@ Critical gap rule:
 - blob-level textual patches or hunk generation
 - runtime, CLI, or pack integration work
 - provider abstraction
+- pack/profile schema changes to thread diff config into seam 2
 
-### 15.7.h Worktree parallelization strategy
+### 15.7.j Worktree parallelization strategy
 
 Dependency table:
 
 | Step | Modules touched | Depends on |
 |---|---|---|
-| B1 diff seam surface + algorithm | `src/repo/` | — |
+| B1 core diff model + merge-walk | `src/repo/` | - |
 | B2 diff schema embedding | `src/repo/`, `schemas/repo/` | B1 |
-| B3 diff fixture/test harness | `tests/support/`, `fixtures/repo/` | B1, B2 |
-| B4 integration tests | `tests/` | B1, B2, B3 |
-| B5 docs sweep | README + spec surfaces | B2, B3 |
+| B3 diff fixture/harness helpers | `tests/support/`, `fixtures/repo/diff/` | B1, B2 |
+| B4 behavior + schema tests | `tests/` | B1, B2, B3 |
+| B5 docs sweep | spec + README surfaces | B2, B3 |
 
 Parallel lanes:
 
@@ -2052,34 +2142,42 @@ Parallel lanes:
 
 Execution order:
 
-- Run Lane A first until the diff contract and schema ID stop moving.
-- Then launch Lane B.
-- Lane C can run after B2, but it must not reopen contract decisions.
+1. Run Lane A first until the diff contract, helper names, and schema ID stop moving.
+2. Once B2 lands, launch Lane B and Lane C in parallel worktrees.
+3. Merge Lane B before promotion, because the tests are part of the gate.
+4. Merge Lane C last, once code and fixture names are frozen.
 
 Conflict flags:
 
 - Lane A is strictly sequential because `src/repo/mod.rs`, `diff.rs`, and `schema.rs` define the seam surface.
-- Lane B must not reopen snapshot-construction behavior in `src/repo/snapshot.rs`; if tests discover that need, route it back to the core lane and re-evaluate scope.
+- Lane B must not reopen snapshot-construction behavior in `src/repo/snapshot.rs`; if tests discover that need, route it back to Lane A and re-evaluate scope.
 - Lane C is safe only if it stays docs-only. If prose uncovers unresolved semantics, fix the semantics first in Lane A.
+- Do not split B1 into two parallel worktrees. `mod.rs` and `diff.rs` are one shared ownership surface in practice.
 
-### 15.7.i Phase B completion summary
+### 15.7.k Phase B completion summary
 
 - Step 0: scope accepted as pure diff over landed snapshots
-- Architecture: base/head inventory union -> sorted diff entries -> canonical diff fingerprint diagram written
-- Test Review: 14 required Phase-B paths named, 0 gaps allowed at promotion
+- Architecture review: ordered merge-walk plus canonical fingerprint pipeline written
+- Code quality review: no new abstraction layers, no snapshot renegotiation, helper reuse locked
+- Test review: 18 required Phase-B paths named, 0 gaps allowed at promotion
+- Performance review: linear merge-walk, no blob rereads, no cache layer, no extra union-sort pass
 - Failure modes: 0 silent-diff-drift gaps allowed
 - NOT in scope: written
 - What already exists: written
+- TODOS.md updates: none required beyond the explicit deferrals already captured here
+- Outside voice: skipped for this document rewrite, because this section is locking implementation structure rather than running a fresh multi-model review
 - Parallelization: 3 lanes, 1 sequential core lane plus 2 sidecars
+- Lake score: complete implementation path selected, no intentional shortcuts
 
 Phase-B promotion gate:
 
 1. `src/repo/diff.rs` exists and remains a pure function over `&RepoSnapshot`.
-2. `build_diff(base, head)` emits only sorted add/remove/modify entries and omits unchanged files.
-3. rename-shaped changes appear only as `Removed` + `Added`.
-4. `schemas/repo/diff_manifest.v1.json` is embedded through `src/repo/schema.rs` and validated in tests.
-5. all required Phase-B tests above are present and passing.
-6. `cargo check -p substrate-lift --no-default-features` still passes.
+2. `build_diff(base, head)` emits only ordered add/remove/modify entries and omits unchanged files.
+3. the implementation uses the landed ordered inventory surface, not a second unordered path-collection layer.
+4. rename-shaped changes appear only as `Removed` + `Added`.
+5. `schemas/repo/diff_manifest.v1.json` is embedded through `src/repo/schema.rs` and validated in tests.
+6. all required Phase-B tests above are present and passing.
+7. `cargo check -p substrate-lift --no-default-features` still passes.
 
 ## 16. My recommended decision set
 
