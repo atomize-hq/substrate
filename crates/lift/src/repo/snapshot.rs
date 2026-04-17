@@ -156,15 +156,24 @@ fn materialize_worktree_snapshot(
                 SymlinkPolicy::Follow => {
                     let resolved =
                         resolve_worktree_symlink(request.root.as_path(), entry.path(), &repo_path)?;
+                    if compiled_ignores.is_ignored(&resolved.repo_path, false) {
+                        assembly.record_ignore_skip();
+                        continue;
+                    }
                     if assembly.enforce_file_size_policy(
                         request,
                         &resolved.display_path,
                         &repo_path,
-                        resolved.bytes.len() as u64,
+                        resolved.size_bytes,
                     )? {
                         continue;
                     }
-                    assembly.push_file(repo_path, resolved.bytes);
+                    let bytes = fs::read(&resolved.fs_path).map_err(|error| RepoError::Io {
+                        op: "read_file",
+                        path: resolved.fs_path.display().to_string(),
+                        reason: error.to_string(),
+                    })?;
+                    assembly.push_file(repo_path, bytes);
                     continue;
                 }
             }
@@ -335,15 +344,26 @@ fn walk_git_tree(
                         &repo_path,
                         target.trim_end_matches('\0'),
                     )?;
+                    if compiled_ignores.is_ignored(&resolved.repo_path, false) {
+                        assembly.record_ignore_skip();
+                        continue;
+                    }
+                    let object = tree.repo.find_object(resolved.object_id).map_err(|error| {
+                        RepoError::GitObjectLookup {
+                            object_id: resolved.object_id.to_string(),
+                            reason: error.to_string(),
+                        }
+                    })?;
+                    let bytes = object.data.to_vec();
                     if assembly.enforce_file_size_policy(
                         request,
                         &resolved.display_path,
                         &repo_path,
-                        resolved.bytes.len() as u64,
+                        bytes.len() as u64,
                     )? {
                         continue;
                     }
-                    assembly.push_file(repo_path, resolved.bytes);
+                    assembly.push_file(repo_path, bytes);
                 }
             },
             _ => {
@@ -502,16 +522,24 @@ impl SnapshotAssembly {
     }
 }
 
-struct MaterializedTarget {
+struct ResolvedWorktreeTarget {
+    fs_path: PathBuf,
+    repo_path: RepoPath,
     display_path: String,
-    bytes: Vec<u8>,
+    size_bytes: u64,
+}
+
+struct ResolvedGitTarget {
+    object_id: gix::ObjectId,
+    repo_path: RepoPath,
+    display_path: String,
 }
 
 fn resolve_worktree_symlink(
     root: &Path,
     observed_path: &Path,
     observed_repo_path: &RepoPath,
-) -> RepoResult<MaterializedTarget> {
+) -> RepoResult<ResolvedWorktreeTarget> {
     let mut current = observed_path.to_path_buf();
     let mut visited = BTreeSet::from([observed_repo_path.as_str().to_owned()]);
 
@@ -566,14 +594,12 @@ fn resolve_worktree_symlink(
             });
         }
 
-        let bytes = fs::read(&current).map_err(|error| RepoError::Io {
-            op: "read_file",
-            path: current.display().to_string(),
-            reason: error.to_string(),
-        })?;
-        return Ok(MaterializedTarget {
+        let repo_path = repo_path_from_entry(root, &current)?;
+        return Ok(ResolvedWorktreeTarget {
+            fs_path: current.clone(),
+            repo_path,
             display_path: current.display().to_string(),
-            bytes,
+            size_bytes: metadata.len(),
         });
     }
 }
@@ -583,7 +609,7 @@ fn resolve_git_symlink(
     rev: &str,
     observed_repo_path: &RepoPath,
     initial_target: &str,
-) -> RepoResult<MaterializedTarget> {
+) -> RepoResult<ResolvedGitTarget> {
     let mut current_target = initial_target.to_owned();
     let mut current_repo_path =
         normalize_repo_symlink_target(observed_repo_path.parent(), &current_target).map_err(
@@ -617,13 +643,10 @@ fn resolve_git_symlink(
                 });
             }
             EntryKind::Blob | EntryKind::BlobExecutable => {
-                let object = entry.object().map_err(|error| RepoError::GitObjectLookup {
-                    object_id: entry.object_id().to_string(),
-                    reason: error.to_string(),
-                })?;
-                return Ok(MaterializedTarget {
+                return Ok(ResolvedGitTarget {
+                    object_id: entry.object_id().to_owned(),
+                    repo_path: current_repo_path.clone(),
                     display_path: format!("{rev}:{}", current_repo_path.as_str()),
-                    bytes: object.data.to_vec(),
                 });
             }
             EntryKind::Link => {

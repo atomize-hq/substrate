@@ -21,7 +21,9 @@ mod repo;
 #[path = "support/repo_support.rs"]
 mod repo_support;
 
-use repo_support::{copy_fixture_tree, default_snapshot_options, inventory_paths};
+use repo_support::{
+    copy_fixture_tree, default_snapshot_options, inventory_paths, write_file, TempDir,
+};
 
 #[test]
 fn invalid_caller_glob_hard_fails() {
@@ -110,4 +112,28 @@ fn typed_well_known_excludes_remove_only_the_selected_canonical_directories() {
     assert!(!paths.iter().any(|path| path.starts_with("target/")));
     assert!(!paths.iter().any(|path| path.starts_with("venv/")));
     assert!(paths.contains(&"src/lib.rs".to_owned()));
+}
+
+#[cfg(unix)]
+#[test]
+fn followed_symlinks_still_compose_with_caller_glob_excludes() {
+    use std::os::unix::fs::symlink;
+
+    let repo_root = TempDir::new("repo-ignore-follow-glob");
+    std::fs::create_dir_all(repo_root.path().join(".git")).expect("git dir should exist");
+    write_file(&repo_root.path().join("dist/bundle.js"), b"bundle");
+    symlink("dist/bundle.js", repo_root.path().join("link.txt")).expect("symlink should exist");
+
+    let mut options = default_snapshot_options();
+    options.symlink_policy = repo::SymlinkPolicy::Follow;
+    options.exclude_globs = vec!["dist/**".to_owned()];
+
+    let snapshot = repo_support::materialize(repo_root.path(), options);
+    let paths = inventory_paths(&snapshot);
+
+    assert!(!paths.iter().any(|path| path == "link.txt"));
+    assert!(!paths.iter().any(|path| path.starts_with("dist/")));
+    assert_eq!(snapshot.stats.file_count, 0);
+    assert!(snapshot.stats.skipped_by_ignore >= 2);
+    assert!(snapshot.diagnostics.is_empty());
 }

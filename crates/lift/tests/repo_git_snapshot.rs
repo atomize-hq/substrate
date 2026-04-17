@@ -268,3 +268,32 @@ fn gitrev_snapshot_rejects_revisions_that_resolve_to_blobs() {
         }
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn gitrev_followed_symlinks_still_compose_with_typed_excludes() {
+    use std::os::unix::fs::symlink;
+
+    let repo_root = init_git_repo("repo-gitrev-follow-ignore-typed");
+    write_file(&repo_root.path().join("target/cache.txt"), b"cached");
+    symlink("target/cache.txt", repo_root.path().join("link.txt")).expect("symlink should exist");
+    commit_all(repo_root.path(), "initial");
+    let head = git_stdout(repo_root.path(), &["rev-parse", "HEAD"]);
+
+    let options = repo::SnapshotOptions {
+        symlink_policy: repo::SymlinkPolicy::Follow,
+        well_known_excludes: vec![repo::WellKnownExclude::RustTarget],
+        ..repo::SnapshotOptions::default()
+    };
+    let snapshot = materialize(
+        repo_root.path(),
+        repo::SnapshotSource::GitRev { rev: head },
+        options,
+    );
+    let link = crate::kernel::RepoPath::parse("link.txt").expect("path should parse");
+
+    assert!(snapshot.entry(&link).is_none());
+    assert_eq!(snapshot.stats.skipped_by_ignore, 2);
+    assert_eq!(snapshot.stats.file_count, 0);
+    assert!(snapshot.diagnostics.is_empty());
+}

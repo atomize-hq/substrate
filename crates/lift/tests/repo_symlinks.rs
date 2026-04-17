@@ -239,6 +239,102 @@ fn worktree_follow_detects_symlink_loops() {
 
 #[cfg(unix)]
 #[test]
+fn worktree_follow_skips_links_that_resolve_into_intrinsic_git_excludes() {
+    use std::os::unix::fs::symlink;
+
+    let repo_root = TempDir::new("repo-symlink-worktree-ignore-git");
+    fs::create_dir_all(repo_root.path().join(".git")).expect("git dir should exist");
+    write_file(
+        &repo_root.path().join(".git/config"),
+        b"[core]\nrepositoryformatversion = 0\n",
+    );
+    symlink(".git/config", repo_root.path().join("link.txt")).expect("symlink should exist");
+
+    let options = repo::SnapshotOptions {
+        symlink_policy: repo::SymlinkPolicy::Follow,
+        ..repo::SnapshotOptions::default()
+    };
+    let snapshot = materialize(repo_root.path(), repo::SnapshotSource::Worktree, options);
+    let link = crate::kernel::RepoPath::parse("link.txt").expect("path should parse");
+
+    assert!(snapshot.entry(&link).is_none());
+    assert_eq!(snapshot.stats.skipped_by_ignore, 2);
+    assert_eq!(snapshot.stats.file_count, 0);
+    assert!(snapshot.diagnostics.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn worktree_follow_skips_links_that_resolve_into_typed_excludes() {
+    use std::os::unix::fs::symlink;
+
+    let repo_root = TempDir::new("repo-symlink-worktree-ignore-typed");
+    fs::create_dir_all(repo_root.path().join(".git")).expect("git dir should exist");
+    write_file(&repo_root.path().join("target/cache.txt"), b"cached");
+    symlink("target/cache.txt", repo_root.path().join("link.txt")).expect("symlink should exist");
+
+    let options = repo::SnapshotOptions {
+        symlink_policy: repo::SymlinkPolicy::Follow,
+        well_known_excludes: vec![repo::WellKnownExclude::RustTarget],
+        ..repo::SnapshotOptions::default()
+    };
+    let snapshot = materialize(repo_root.path(), repo::SnapshotSource::Worktree, options);
+    let link = crate::kernel::RepoPath::parse("link.txt").expect("path should parse");
+
+    assert!(snapshot.entry(&link).is_none());
+    assert_eq!(snapshot.stats.skipped_by_ignore, 3);
+    assert_eq!(snapshot.stats.file_count, 0);
+    assert!(snapshot.diagnostics.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn worktree_follow_applies_large_file_skip_before_reading_target_bytes() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+
+    let repo_root = TempDir::new("repo-symlink-worktree-large-file");
+    fs::create_dir_all(repo_root.path().join(".git")).expect("git dir should exist");
+    write_file(&repo_root.path().join("big.bin"), b"1234567890");
+    fs::set_permissions(
+        repo_root.path().join("big.bin"),
+        fs::Permissions::from_mode(0o000),
+    )
+    .expect("target file permissions should update");
+    symlink("big.bin", repo_root.path().join("link.txt")).expect("symlink should exist");
+
+    let options = repo::SnapshotOptions {
+        symlink_policy: repo::SymlinkPolicy::Follow,
+        max_file_bytes: Some(3),
+        large_file_policy: repo::LargeFilePolicy::Skip,
+        ..repo::SnapshotOptions::default()
+    };
+    let snapshot = materialize(repo_root.path(), repo::SnapshotSource::Worktree, options);
+    let link = crate::kernel::RepoPath::parse("link.txt").expect("path should parse");
+
+    assert!(snapshot.entry(&link).is_none());
+    assert_eq!(snapshot.stats.skipped_large_files, 2);
+    assert_eq!(snapshot.stats.file_count, 0);
+    assert!(snapshot
+        .diagnostics
+        .iter()
+        .all(|diagnostic| diagnostic.code.as_str() == "repo.snapshot.file_too_large"));
+    assert!(snapshot.diagnostics.iter().any(|diagnostic| {
+        diagnostic
+            .subject
+            .as_ref()
+            .and_then(|subject| subject.repo_path.as_ref())
+            == Some(&link)
+    }));
+    assert!(snapshot.diagnostics.iter().any(|diagnostic| {
+        diagnostic
+            .subject
+            .as_ref()
+            .is_some_and(|subject| subject.display_path.ends_with("big.bin"))
+    }));
+}
+
+#[cfg(unix)]
+#[test]
 fn gitrev_follow_materializes_committed_symlink_targets() {
     use std::os::unix::fs::symlink;
 
