@@ -1,4 +1,4 @@
-//! Reserved for future app seams and shared runtime wiring.
+//! App seams plus the Phase D bootstrap boundary for pack activation.
 
 pub(crate) mod context;
 pub(crate) mod contract;

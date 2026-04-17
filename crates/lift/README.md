@@ -321,13 +321,17 @@ Done when engine artifacts can be exported byte-stably from fixtures.
 
 ### 12. App runtime
 
-Owns app registry, request dispatch, dependency injection, shared option resolution, lifecycle hooks, and app result envelopes.
+Phase D lands the first runtime consumer boundary, but it is intentionally narrow.
 
-Exposes `App`, `AppRuntime`, `AppRequest`, and `AppResponse`.
+This seam currently owns the pack-activation boundary between the compiler and future app-facing execution: take a profile pack source, compile it, resolve its selected pack bundle, and hand back a bootstrap artifact that later app entrypoints can consume.
 
-Must not own score logic, contract semantics, query behavior, or CLI parsing.
+Today that is bootstrap ingress only, not a full app container. It does not yet provide app registry, request dispatch, dependency injection, shared lifecycle hooks, or generic app result envelopes.
 
-Done when the CLI can invoke every app through one runtime entrypoint.
+The current crate-internal surface is `ProfileBootstrap` plus `bootstrap_profile(...)`, which wraps the resolved `CompiledPackSet` for later runtime consumers.
+
+Must not own score logic, contract semantics, query behavior, CLI parsing, or broader app orchestration.
+
+Done when every later app entrypoint can share the same pack-bootstrap handoff without forcing the runtime seam to become a dispatch layer.
 
 ### 13. App seams
 
@@ -423,7 +427,9 @@ The embedded generic builtin compiler packs now include:
 
 These builtin names are crate-internal compiler artifacts. They are not a public API, not repo classification by themselves, and not runtime bootstrap.
 
-Bundled Substrate profiles, starter rule/query/recipe content, and migration helpers from old Work Lift inputs are still intentionally deferred until later seams broaden the pack surface and add real runtime consumers.
+Phase D does add the first runtime consumer boundary: compiled profile selection can now cross into `app::runtime` bootstrap as a resolved pack bundle. That does not make the builtin names a public runtime registry, runtime dispatch surface, or proof that broader app orchestration already exists.
+
+Bundled Substrate profiles, starter rule/query/recipe content, and migration helpers from old Work Lift inputs are still intentionally deferred until later seams broaden the pack surface and add more concrete runtime consumers.
 
 Must not own core engine behavior.
 
