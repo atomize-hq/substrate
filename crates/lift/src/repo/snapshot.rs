@@ -89,12 +89,12 @@ fn materialize_worktree_snapshot(request: &SnapshotRequest) -> RepoResult<RepoSn
     let mut diagnostics = Vec::new();
     let mut stats = SnapshotStats::default();
 
-    let walker = WalkDir::new(request.root.as_path())
+    let mut walker = WalkDir::new(request.root.as_path())
         .follow_links(false)
         .sort_by_file_name()
         .into_iter();
 
-    for entry in walker {
+    while let Some(entry) = walker.next() {
         let entry = entry.map_err(|error| RepoError::Io {
             op: "walk_repo",
             path: error
@@ -127,6 +127,7 @@ fn materialize_worktree_snapshot(request: &SnapshotRequest) -> RepoResult<RepoSn
                     ));
 
                     if path_kind.is_dir() {
+                        walker.skip_current_dir();
                         continue;
                     }
                     continue;
@@ -137,6 +138,7 @@ fn materialize_worktree_snapshot(request: &SnapshotRequest) -> RepoResult<RepoSn
         if compiled_ignores.is_ignored(&repo_path, path_kind.is_dir()) {
             stats.skipped_by_ignore += 1;
             if path_kind.is_dir() {
+                walker.skip_current_dir();
                 continue;
             }
             continue;

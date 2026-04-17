@@ -45,12 +45,13 @@ impl Default for SnapshotOptions {
 
 #[derive(Clone, Debug)]
 pub(crate) struct CompiledIgnoreSet {
+    patterns: Vec<String>,
     matcher: GlobSet,
 }
 
 impl PartialEq for CompiledIgnoreSet {
     fn eq(&self, other: &Self) -> bool {
-        self.matcher.len() == other.matcher.len()
+        self.patterns == other.patterns
     }
 }
 
@@ -71,7 +72,10 @@ impl CompiledIgnoreSet {
             pattern: "<set>".to_owned(),
             reason: error.to_string(),
         })?;
-        Ok(Self { matcher })
+        Ok(Self {
+            patterns: exclude_globs.to_vec(),
+            matcher,
+        })
     }
 
     pub(crate) fn is_ignored(&self, repo_path: &RepoPath, is_dir: bool) -> bool {
