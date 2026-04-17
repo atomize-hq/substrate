@@ -17,6 +17,7 @@ use substrate_lift::kernel::{
 };
 use thiserror as _;
 use toml as _;
+use walkdir as _;
 
 #[test]
 fn stable_id_from_identity_is_deterministic() {

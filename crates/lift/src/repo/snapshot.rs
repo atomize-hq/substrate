@@ -298,10 +298,12 @@ impl EntryPathKind {
 }
 
 fn repo_path_from_entry(root: &Path, path: &Path) -> RepoResult<RepoPath> {
-    let relative = path.strip_prefix(root).map_err(|error| RepoError::InvalidRepoPath {
-        display_path: path.display().to_string(),
-        reason: error.to_string(),
-    })?;
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|error| RepoError::InvalidRepoPath {
+            display_path: path.display().to_string(),
+            reason: error.to_string(),
+        })?;
 
     let mut segments = Vec::new();
     for component in relative.components() {

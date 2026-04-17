@@ -196,13 +196,17 @@ Done when one standalone profile, topology pack, score model, query pack, rule p
 
 ### 2. Repo substrate
 
-Owns repo root detection, snapshotting, inventory, diffing, blob reads, ignore handling, path normalization, content hashing, and repo fingerprinting.
+Phase A landed this seam as a crate-private, filesystem-first immutable snapshot substrate.
 
-Exposes `RepoSnapshot`, `RepoDiff`, `Inventory`, `BlobStore`, and `RepoProvider`.
+What is landed today is narrower than the long-term seam sketch: repo root detection from a starting path, worktree snapshot materialization, intrinsic `.git` exclusion plus caller-supplied ignore globs, symlink/non-UTF8/large-file policy handling, deterministic inventory assembly, blob storage, content hashing, stable file IDs, snapshot stats, repo diagnostics, and an embedded snapshot-manifest schema for fixture contracts.
+
+The current implementation is internal-only. Everything under `src/repo/` is `pub(crate)`, the only supported snapshot source is `worktree`, and the seam does not yet expose git-backed history/diff providers or any public runtime wiring.
+
+Exposes crate-private `RepoRoot`, `SnapshotRequest`, `RepoSnapshot`, `Inventory`, `BlobStore`, `SnapshotStats`, and repo diagnostics.
 
 Must not own language parsing, classification, findings, or app semantics.
 
-Done when every downstream seam gets filesystem and git data through `RepoSnapshot` or `RepoDiff`, and nothing else shells out to git.
+Done for Phase A when downstream crate seams can consume immutable filesystem snapshots through `RepoSnapshot` without reading the worktree directly. Git diffs, revision providers, and broader runtime integration remain later work.
 
 ### 3. Language platform
 

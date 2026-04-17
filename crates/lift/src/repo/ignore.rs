@@ -68,10 +68,12 @@ impl CompiledIgnoreSet {
             builder.add(glob);
         }
 
-        let matcher = builder.build().map_err(|error| RepoError::IgnoreGlobCompile {
-            pattern: "<set>".to_owned(),
-            reason: error.to_string(),
-        })?;
+        let matcher = builder
+            .build()
+            .map_err(|error| RepoError::IgnoreGlobCompile {
+                pattern: "<set>".to_owned(),
+                reason: error.to_string(),
+            })?;
         Ok(Self {
             patterns: exclude_globs.to_vec(),
             matcher,
@@ -85,7 +87,10 @@ impl CompiledIgnoreSet {
 
         let path = Path::new(repo_path.as_str());
         self.matcher.is_match(path)
-            || (is_dir && self.matcher.is_match(Path::new(&format!("{}/", repo_path.as_str()))))
+            || (is_dir
+                && self
+                    .matcher
+                    .is_match(Path::new(&format!("{}/", repo_path.as_str()))))
     }
 }
 

@@ -46,13 +46,7 @@ impl PartialOrd for RepoDiagnostic {
     }
 }
 
-type RepoDiagnosticSortKey<'a> = (
-    u8,
-    Option<&'a str>,
-    Option<&'a str>,
-    &'a str,
-    &'a str,
-);
+type RepoDiagnosticSortKey<'a> = (u8, Option<&'a str>, Option<&'a str>, &'a str, &'a str);
 
 fn diagnostic_sort_key(diagnostic: &RepoDiagnostic) -> RepoDiagnosticSortKey<'_> {
     (

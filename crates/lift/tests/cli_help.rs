@@ -10,6 +10,7 @@ use sha2 as _;
 use substrate_lift as _;
 use thiserror as _;
 use toml as _;
+use walkdir as _;
 
 #[test]
 fn top_level_help_lists_required_commands() {

@@ -26,7 +26,10 @@ impl Inventory {
             .map(|entry| (entry.path.clone(), entry))
             .collect::<BTreeMap<_, _>>();
         let fingerprint = fingerprint_entries(entries.values())?;
-        Ok(Self { entries, fingerprint })
+        Ok(Self {
+            entries,
+            fingerprint,
+        })
     }
 
     pub(crate) fn get(&self, path: &RepoPath) -> Option<&InventoryEntry> {

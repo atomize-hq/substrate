@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use thiserror as _;
 use toml as _;
+use walkdir as _;
 
 #[cfg(feature = "cli")]
 #[test]

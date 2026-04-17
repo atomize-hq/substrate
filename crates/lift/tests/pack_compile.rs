@@ -12,6 +12,7 @@ use sha2 as _;
 use substrate_lift as _;
 use thiserror as _;
 use toml as _;
+use walkdir as _;
 
 mod kernel {
     pub(crate) use substrate_lift::kernel::{
