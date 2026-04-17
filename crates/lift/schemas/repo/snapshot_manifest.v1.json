@@ -23,13 +23,18 @@
     },
     "source_kind": {
       "type": "string",
-      "enum": ["worktree"]
+      "enum": ["worktree", "git_rev"]
+    },
+    "source_rev": {
+      "type": "string",
+      "minLength": 1
     },
     "options": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "symlink_policy",
+        "well_known_excludes",
         "exclude_globs",
         "non_utf8_path_policy",
         "max_file_bytes",
@@ -39,6 +44,13 @@
         "symlink_policy": {
           "type": "string",
           "enum": ["skip", "follow"]
+        },
+        "well_known_excludes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/well_known_exclude"
+          },
+          "uniqueItems": true
         },
         "exclude_globs": {
           "type": "array",
@@ -75,7 +87,38 @@
       "$ref": "#/$defs/stats"
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source_kind": {
+            "const": "git_rev"
+          }
+        }
+      },
+      "then": {
+        "required": ["source_rev"]
+      },
+      "else": {
+        "not": {
+          "required": ["source_rev"]
+        }
+      }
+    }
+  ],
   "$defs": {
+    "well_known_exclude": {
+      "type": "string",
+      "enum": [
+        "rust_target",
+        "node_modules",
+        "python_hidden_venv",
+        "python_venv",
+        "python_pycache",
+        "web_dist",
+        "web_build"
+      ]
+    },
     "file_record": {
       "type": "object",
       "additionalProperties": false,

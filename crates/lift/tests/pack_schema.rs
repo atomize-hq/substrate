@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use assert_cmd as _;
 use clap as _;
+use gix as _;
 use jsonschema::{Retrieve, Uri, Validator};
 use predicates as _;
 use serde as _;

@@ -38,11 +38,40 @@ pub(crate) enum RepoError {
     #[error("ignore glob compile failure")]
     IgnoreGlobCompile { pattern: String, reason: String },
 
-    #[error("snapshot source is not implemented")]
-    UnsupportedSnapshotSource { source_name: &'static str },
+    #[error("git repository open failure")]
+    GitOpen { path: String, reason: String },
 
-    #[error("snapshot option is not implemented")]
-    UnsupportedSnapshotOption { option_name: &'static str },
+    #[error("git revision could not be resolved")]
+    GitRevisionResolve {
+        rev: String,
+        repo_root: String,
+        reason: String,
+    },
+
+    #[error("git revision did not resolve to a tree-compatible object")]
+    GitRevisionObjectKind {
+        rev: String,
+        actual_kind: String,
+        expected_kind: &'static str,
+    },
+
+    #[error("git object lookup failure")]
+    GitObjectLookup { object_id: String, reason: String },
+
+    #[error("git blob did not decode to utf-8 symlink target")]
+    GitSymlinkTargetInvalidUtf8 { rev: String, path: RepoPath },
+
+    #[error("symlink follow escaped the repository root")]
+    SymlinkTargetEscape { path: RepoPath, target: String },
+
+    #[error("symlink follow target does not exist")]
+    SymlinkTargetDangling { path: RepoPath, target: String },
+
+    #[error("symlink follow detected a loop")]
+    SymlinkTargetLoop { path: RepoPath, target: String },
+
+    #[error("symlink follow target is a directory")]
+    SymlinkTargetDirectory { path: RepoPath, target: String },
 
     #[error("file exceeds configured max_file_bytes")]
     FileTooLarge {

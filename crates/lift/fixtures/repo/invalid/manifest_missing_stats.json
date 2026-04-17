@@ -4,6 +4,7 @@
   "source_kind": "worktree",
   "options": {
     "symlink_policy": "skip",
+    "well_known_excludes": [],
     "exclude_globs": [],
     "non_utf8_path_policy": "error",
     "max_file_bytes": null,

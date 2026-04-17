@@ -116,9 +116,17 @@ pub(crate) fn snapshot_request(
     root: &Path,
     options: repo::SnapshotOptions,
 ) -> repo::SnapshotRequest {
+    snapshot_request_with_source(root, repo::SnapshotSource::Worktree, options)
+}
+
+pub(crate) fn snapshot_request_with_source(
+    root: &Path,
+    source: repo::SnapshotSource,
+    options: repo::SnapshotOptions,
+) -> repo::SnapshotRequest {
     repo::SnapshotRequest {
         root: repo::root::RepoRoot::from_dir(root).expect("repo root should parse"),
-        source: repo::SnapshotSource::Worktree,
+        source,
         options,
     }
 }
@@ -210,14 +218,28 @@ pub(crate) fn manifest_from_snapshot(
     options: &repo::SnapshotOptions,
     snapshot: &repo::RepoSnapshot,
 ) -> Value {
-    json!({
+    manifest_from_snapshot_with_source(case, &snapshot.source, options, snapshot)
+}
+
+pub(crate) fn manifest_from_snapshot_with_source(
+    case: &str,
+    source: &repo::SnapshotSource,
+    options: &repo::SnapshotOptions,
+    snapshot: &repo::RepoSnapshot,
+) -> Value {
+    let mut manifest = json!({
         "version": 1,
         "case": case,
-        "source_kind": "worktree",
+        "source_kind": match source {
+            repo::SnapshotSource::Worktree => "worktree",
+            repo::SnapshotSource::GitRev { .. } => "git_rev",
+        },
         "options": {
             "symlink_policy": match options.symlink_policy {
                 repo::SymlinkPolicy::Skip => "skip",
+                repo::SymlinkPolicy::Follow => "follow",
             },
+            "well_known_excludes": options.well_known_excludes,
             "exclude_globs": options.exclude_globs,
             "non_utf8_path_policy": match options.non_utf8_path_policy {
                 repo::NonUtf8PathPolicy::Error => "error",
@@ -247,7 +269,13 @@ pub(crate) fn manifest_from_snapshot(
             "skipped_large_files": snapshot.stats.skipped_large_files,
             "skipped_unsupported_file_kinds": snapshot.stats.skipped_unsupported_file_kinds,
         }
-    })
+    });
+
+    if let repo::SnapshotSource::GitRev { rev } = source {
+        manifest["source_rev"] = Value::String(rev.clone());
+    }
+
+    manifest
 }
 
 pub(crate) fn manifest_from_diff(case: &str, diff: &repo::RepoDiff) -> Value {

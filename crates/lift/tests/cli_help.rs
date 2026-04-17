@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use clap as _;
+use gix as _;
 use globset as _;
 use jsonschema as _;
 use predicates::prelude::*;

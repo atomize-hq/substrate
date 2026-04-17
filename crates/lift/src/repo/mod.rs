@@ -23,6 +23,7 @@ pub(crate) use error::{RepoError, RepoResult};
 #[allow(unused_imports)]
 pub(crate) use ignore::{
     CompiledIgnoreSet, LargeFilePolicy, NonUtf8PathPolicy, SnapshotOptions, SymlinkPolicy,
+    WellKnownExclude,
 };
 #[allow(unused_imports)]
 pub(crate) use inventory::{Inventory, InventoryEntry};

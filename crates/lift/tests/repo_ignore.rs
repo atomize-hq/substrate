@@ -1,5 +1,6 @@
 use assert_cmd as _;
 use clap as _;
+use gix as _;
 use globset as _;
 use jsonschema as _;
 use predicates as _;
@@ -24,7 +25,9 @@ use repo_support::{copy_fixture_tree, default_snapshot_options, inventory_paths}
 
 #[test]
 fn invalid_caller_glob_hard_fails() {
-    let error = repo::CompiledIgnoreSet::compile(&["[".to_owned()]).expect_err("glob should fail");
+    let mut options = default_snapshot_options();
+    options.exclude_globs = vec!["[".to_owned()];
+    let error = repo::CompiledIgnoreSet::compile(&options).expect_err("glob should fail");
     match error {
         repo::RepoError::IgnoreGlobCompile { pattern, .. } => assert_eq!(pattern, "["),
         other => panic!("unexpected error: {other:?}"),
@@ -42,28 +45,69 @@ fn git_directory_is_intrinsically_excluded_without_caller_input() {
 }
 
 #[test]
-fn explicit_glob_exclusion_removes_matching_subtrees() {
-    let fixture = copy_fixture_tree("fixtures/repo/trees/basic_worktree", "repo-ignore-explicit");
+fn explicit_glob_exclusion_still_composes_on_top_of_typed_policy() {
+    let fixture = copy_fixture_tree(
+        "fixtures/repo/trees/well_known_excludes",
+        "repo-ignore-explicit",
+    );
     let mut options = default_snapshot_options();
-    options.exclude_globs = vec!["dist".to_owned(), "target".to_owned()];
+    options.well_known_excludes = vec![repo::WellKnownExclude::RustTarget];
+    options.exclude_globs = vec!["dist".to_owned()];
 
     let snapshot = repo_support::materialize(fixture.path(), options);
     let paths = inventory_paths(&snapshot);
 
     assert!(!paths.iter().any(|path| path.starts_with("dist/")));
     assert!(!paths.iter().any(|path| path.starts_with("target/")));
+    assert!(paths.contains(&"build/output.txt".to_owned()));
+    assert!(paths.contains(&"node_modules/pkg/index.js".to_owned()));
 }
 
 #[test]
 fn common_cache_and_vendor_dirs_are_not_implicitly_excluded() {
-    let fixture = copy_fixture_tree("fixtures/repo/trees/basic_worktree", "repo-ignore-defaults");
+    let fixture = copy_fixture_tree(
+        "fixtures/repo/trees/well_known_excludes",
+        "repo-ignore-defaults",
+    );
     let snapshot = repo_support::materialize(fixture.path(), default_snapshot_options());
     let paths = inventory_paths(&snapshot);
 
     assert!(paths.contains(&".venv/bin/python".to_owned()));
+    assert!(paths.contains(&"__pycache__/module.pyc".to_owned()));
     assert!(paths.contains(&"build/output.txt".to_owned()));
     assert!(paths.contains(&"dist/bundle.js".to_owned()));
     assert!(paths.contains(&"node_modules/pkg/index.js".to_owned()));
     assert!(paths.contains(&"target/cache.txt".to_owned()));
+    assert!(paths.contains(&"venv/bin/python".to_owned()));
     assert!(paths.iter().all(|path| !path.contains('\\')));
+}
+
+#[test]
+fn typed_well_known_excludes_remove_only_the_selected_canonical_directories() {
+    let fixture = copy_fixture_tree(
+        "fixtures/repo/trees/well_known_excludes",
+        "repo-ignore-well-known",
+    );
+    let mut options = default_snapshot_options();
+    options.well_known_excludes = vec![
+        repo::WellKnownExclude::RustTarget,
+        repo::WellKnownExclude::NodeModules,
+        repo::WellKnownExclude::PythonHiddenVenv,
+        repo::WellKnownExclude::PythonVenv,
+        repo::WellKnownExclude::PythonPycache,
+        repo::WellKnownExclude::WebDist,
+        repo::WellKnownExclude::WebBuild,
+    ];
+
+    let snapshot = repo_support::materialize(fixture.path(), options);
+    let paths = inventory_paths(&snapshot);
+
+    assert!(!paths.iter().any(|path| path.starts_with(".venv/")));
+    assert!(!paths.iter().any(|path| path.starts_with("__pycache__/")));
+    assert!(!paths.iter().any(|path| path.starts_with("build/")));
+    assert!(!paths.iter().any(|path| path.starts_with("dist/")));
+    assert!(!paths.iter().any(|path| path.starts_with("node_modules/")));
+    assert!(!paths.iter().any(|path| path.starts_with("target/")));
+    assert!(!paths.iter().any(|path| path.starts_with("venv/")));
+    assert!(paths.contains(&"src/lib.rs".to_owned()));
 }

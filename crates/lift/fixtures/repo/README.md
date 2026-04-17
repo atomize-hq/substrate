@@ -6,6 +6,7 @@ Static trees in this directory are used for:
 - paired-snapshot pure diff manifests under `fixtures/repo/diff/**`
 - explicit ignore behavior
 - default inclusion of common cache/build directories
+- canonical typed well-known exclude directory examples under `fixtures/repo/trees/well_known_excludes`
 
 Some policy-sensitive cases are created dynamically inside the tests:
 - non-UTF8 filesystem paths

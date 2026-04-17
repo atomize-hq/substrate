@@ -83,6 +83,14 @@ fn materialize(
         .expect("snapshot should build")
 }
 
+fn inventory_paths(snapshot: &repo::RepoSnapshot) -> Vec<String> {
+    snapshot
+        .inventory
+        .iter()
+        .map(|entry| entry.path.as_str().to_owned())
+        .collect()
+}
+
 fn run_git(repo_root: &Path, args: &[&str]) {
     let output = Command::new("git")
         .current_dir(repo_root)
@@ -141,82 +149,122 @@ fn commit_all(repo_root: &Path, message: &str) {
 }
 
 #[test]
-fn worktree_snapshot_survives_source_mutation_and_deletion() {
-    let temp = TempDir::new("repo-purity-worktree");
-    fs::create_dir_all(temp.path().join(".git")).expect("git dir should exist");
+fn gitrev_snapshot_reads_the_committed_tree_not_dirty_worktree_state() {
+    let repo_root = init_git_repo("repo-gitrev-dirty-worktree");
     write_file(
-        &temp.path().join("Cargo.toml"),
+        &repo_root.path().join("Cargo.toml"),
         b"[package]\nname = \"fixture\"\nversion = \"0.1.0\"\n",
     );
     write_file(
-        &temp.path().join("src/lib.rs"),
-        b"pub fn fixture_value() -> &'static str {\n    \"fixture\"\n}\n",
+        &repo_root.path().join("src/lib.rs"),
+        b"pub fn fixture_value() -> &'static str {\n    \"committed\"\n}\n",
     );
+    commit_all(repo_root.path(), "initial");
+    let head = git_stdout(repo_root.path(), &["rev-parse", "HEAD"]);
 
-    let snapshot = materialize(
-        temp.path(),
-        repo::SnapshotSource::Worktree,
-        repo::SnapshotOptions::default(),
-    );
-    let path = crate::kernel::RepoPath::parse("src/lib.rs").expect("path should parse");
-    let entry_before = snapshot.entry(&path).expect("entry should exist").clone();
-    let bytes_before = snapshot
-        .read_bytes(&path)
-        .expect("bytes should exist")
-        .to_vec();
-    let fingerprint_before = snapshot.fingerprint.clone();
-
-    fs::write(temp.path().join("src/lib.rs"), b"changed").expect("source should mutate");
-    fs::remove_file(temp.path().join("Cargo.toml")).expect("source should delete");
-
-    assert_eq!(snapshot.entry(&path), Some(&entry_before));
-    assert_eq!(
-        snapshot.read_bytes(&path).expect("bytes should remain"),
-        bytes_before
-    );
-    assert_eq!(snapshot.fingerprint, fingerprint_before);
-}
-
-#[test]
-fn gitrev_snapshot_survives_head_advance_and_worktree_mutation() {
-    let repo_root = init_git_repo("repo-purity-gitrev");
     write_file(
         &repo_root.path().join("src/lib.rs"),
-        b"pub fn fixture_value() -> &'static str {\n    \"first\"\n}\n",
+        b"pub fn fixture_value() -> &'static str {\n    \"dirty\"\n}\n",
     );
-    commit_all(repo_root.path(), "first");
-    let first_rev = git_stdout(repo_root.path(), &["rev-parse", "HEAD"]);
+    write_file(&repo_root.path().join("untracked.txt"), b"worktree-only");
 
     let snapshot = materialize(
         repo_root.path(),
-        repo::SnapshotSource::GitRev {
-            rev: first_rev.clone(),
-        },
+        repo::SnapshotSource::GitRev { rev: head.clone() },
         repo::SnapshotOptions::default(),
     );
-    let path = crate::kernel::RepoPath::parse("src/lib.rs").expect("path should parse");
-    let entry_before = snapshot.entry(&path).expect("entry should exist").clone();
-    let bytes_before = snapshot
-        .read_bytes(&path)
-        .expect("bytes should exist")
-        .to_vec();
-    let fingerprint_before = snapshot.fingerprint.clone();
+    let paths = inventory_paths(&snapshot);
 
+    assert_eq!(snapshot.source, repo::SnapshotSource::GitRev { rev: head });
+    assert_eq!(paths, vec!["Cargo.toml", "src/lib.rs"]);
+    assert!(
+        !paths.iter().any(|path| path == "untracked.txt"),
+        "git revision snapshots must ignore untracked worktree files"
+    );
+    assert_eq!(
+        snapshot
+            .read_bytes(&crate::kernel::RepoPath::parse("src/lib.rs").expect("path should parse"))
+            .expect("blob bytes should exist"),
+        b"pub fn fixture_value() -> &'static str {\n    \"committed\"\n}\n"
+    );
+}
+
+#[test]
+fn clean_worktree_and_gitrev_snapshots_have_matching_inventory_and_fingerprint() {
+    let repo_root = init_git_repo("repo-gitrev-parity");
+    write_file(
+        &repo_root.path().join("Cargo.toml"),
+        b"[package]\nname = \"fixture\"\nversion = \"0.1.0\"\n",
+    );
     write_file(
         &repo_root.path().join("src/lib.rs"),
-        b"pub fn fixture_value() -> &'static str {\n    \"second\"\n}\n",
+        b"pub fn fixture_value() -> &'static str {\n    \"same\"\n}\n",
     );
-    write_file(&repo_root.path().join("notes.txt"), b"new file");
-    commit_all(repo_root.path(), "second");
+    write_file(&repo_root.path().join("docs/guide.md"), b"# guide\n");
+    commit_all(repo_root.path(), "initial");
+    let head = git_stdout(repo_root.path(), &["rev-parse", "HEAD"]);
+
+    let worktree = materialize(
+        repo_root.path(),
+        repo::SnapshotSource::Worktree,
+        repo::SnapshotOptions::default(),
+    );
+    let gitrev = materialize(
+        repo_root.path(),
+        repo::SnapshotSource::GitRev { rev: head },
+        repo::SnapshotOptions::default(),
+    );
+
+    assert_eq!(worktree.inventory, gitrev.inventory);
+    assert_eq!(worktree.blob_store, gitrev.blob_store);
+    assert_eq!(worktree.fingerprint, gitrev.fingerprint);
+    assert_eq!(worktree.stats.file_count, gitrev.stats.file_count);
+    assert_eq!(worktree.stats.total_bytes, gitrev.stats.total_bytes);
+    assert_eq!(worktree.stats.skipped_by_ignore, 1);
+    assert_eq!(gitrev.stats.skipped_by_ignore, 0);
+    assert_eq!(
+        worktree.stats.skipped_symlinks,
+        gitrev.stats.skipped_symlinks
+    );
+    assert_eq!(
+        worktree.stats.skipped_non_utf8_paths,
+        gitrev.stats.skipped_non_utf8_paths
+    );
+    assert_eq!(
+        worktree.stats.skipped_large_files,
+        gitrev.stats.skipped_large_files
+    );
+    assert_eq!(
+        worktree.stats.skipped_unsupported_file_kinds,
+        gitrev.stats.skipped_unsupported_file_kinds
+    );
+    assert_eq!(worktree.diagnostics, gitrev.diagnostics);
+}
+
+#[test]
+fn gitrev_snapshot_rejects_revisions_that_resolve_to_blobs() {
+    let repo_root = init_git_repo("repo-gitrev-object-kind");
+    write_file(
+        &repo_root.path().join("src/lib.rs"),
+        b"pub fn fixture_value() -> &'static str {\n    \"blob\"\n}\n",
+    );
+    commit_all(repo_root.path(), "initial");
+
+    let error = repo::materialize_snapshot(&snapshot_request(
+        repo_root.path(),
+        repo::SnapshotSource::GitRev {
+            rev: "HEAD:src/lib.rs".to_owned(),
+        },
+        repo::SnapshotOptions::default(),
+    ))
+    .expect_err("blob revisions should be rejected");
 
     assert_eq!(
-        snapshot.source,
-        repo::SnapshotSource::GitRev { rev: first_rev }
+        error,
+        repo::RepoError::GitRevisionObjectKind {
+            rev: "HEAD:src/lib.rs".to_owned(),
+            actual_kind: "blob".to_owned(),
+            expected_kind: "tree",
+        }
     );
-    assert_eq!(snapshot.entry(&path), Some(&entry_before));
-    assert_eq!(
-        snapshot.read_bytes(&path).expect("bytes should remain"),
-        bytes_before
-    );
-    assert_eq!(snapshot.fingerprint, fingerprint_before);
 }

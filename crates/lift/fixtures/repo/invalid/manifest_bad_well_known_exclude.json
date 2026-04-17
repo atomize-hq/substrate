@@ -1,27 +1,20 @@
 {
   "version": 1,
-  "case": "bad-repo-path",
+  "case": "bad-well-known-exclude",
   "source_kind": "worktree",
   "options": {
     "symlink_policy": "skip",
-    "well_known_excludes": [],
+    "well_known_excludes": ["cargo_home"],
     "exclude_globs": [],
     "non_utf8_path_policy": "error",
     "max_file_bytes": null,
     "large_file_policy": "error"
   },
-  "files": [
-    {
-      "path": "/absolute.txt",
-      "file_id": "file:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-      "blob_fingerprint": "sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
-      "size_bytes": 1
-    }
-  ],
+  "files": [],
   "snapshot_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "stats": {
-    "file_count": 1,
-    "total_bytes": 1,
+    "file_count": 0,
+    "total_bytes": 0,
     "skipped_by_ignore": 0,
     "skipped_symlinks": 0,
     "skipped_non_utf8_paths": 0,

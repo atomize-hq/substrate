@@ -1,5 +1,6 @@
 use assert_cmd as _;
 use clap as _;
+use gix as _;
 use globset as _;
 use jsonschema::Validator;
 use predicates as _;
@@ -21,7 +22,7 @@ mod repo_support;
 
 use repo_support::{
     copy_fixture_tree, default_snapshot_options, load_json, load_text, manifest_from_diff,
-    manifest_from_snapshot,
+    manifest_from_snapshot, manifest_from_snapshot_with_source,
 };
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -29,6 +30,7 @@ struct FixtureManifest {
     version: u32,
     case: String,
     source_kind: String,
+    source_rev: Option<String>,
     options: FixtureOptions,
     files: Vec<FixtureFile>,
     snapshot_fingerprint: String,
@@ -38,6 +40,7 @@ struct FixtureManifest {
 #[derive(Debug, Deserialize, Serialize)]
 struct FixtureOptions {
     symlink_policy: String,
+    well_known_excludes: Vec<repo::WellKnownExclude>,
     exclude_globs: Vec<String>,
     non_utf8_path_policy: String,
     max_file_bytes: Option<u64>,
@@ -123,6 +126,40 @@ fn assert_diff_manifest_shape_invariants(manifest: &DiffFixtureManifest, context
     }
 }
 
+fn assert_snapshot_manifest_shape_invariants(manifest: &FixtureManifest, context: &str) {
+    match manifest.source_kind.as_str() {
+        "worktree" => {
+            assert!(
+                manifest.source_rev.is_none(),
+                "{context} worktree manifests must omit source_rev"
+            );
+        }
+        "git_rev" => {
+            let source_rev = manifest
+                .source_rev
+                .as_deref()
+                .expect("git_rev manifests must include source_rev");
+            assert!(
+                !source_rev.is_empty(),
+                "{context} git_rev manifests must use a non-empty source_rev"
+            );
+        }
+        other => panic!("{context} should use a supported source_kind, got {other}"),
+    }
+
+    let unique_excludes = manifest
+        .options
+        .well_known_excludes
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        unique_excludes.len(),
+        manifest.options.well_known_excludes.len(),
+        "{context} should not repeat well_known_excludes"
+    );
+}
+
 #[test]
 fn embedded_snapshot_schema_matches_disk() {
     assert_eq!(
@@ -160,14 +197,21 @@ fn embedded_diff_schema_matches_disk() {
 #[test]
 fn valid_fixture_manifests_validate_and_deserialize() {
     let validator = repo_support::snapshot_validator();
-    let instance = load_json("fixtures/repo/valid/manifest_minimal.json");
-    validator
-        .validate(&instance)
-        .expect("valid manifest should validate");
-    let parsed: FixtureManifest =
-        serde_json::from_value(instance).expect("fixture should deserialize");
-    assert_eq!(parsed.version, 1);
-    assert_eq!(parsed.source_kind, "worktree");
+
+    for relative in [
+        "fixtures/repo/valid/manifest_follow_policy.json",
+        "fixtures/repo/valid/manifest_git_rev.json",
+        "fixtures/repo/valid/manifest_minimal.json",
+    ] {
+        let instance = load_json(relative);
+        validator
+            .validate(&instance)
+            .unwrap_or_else(|_| panic!("{relative} should validate"));
+        let parsed: FixtureManifest = serde_json::from_value(instance)
+            .unwrap_or_else(|_| panic!("{relative} should deserialize"));
+        assert_eq!(parsed.version, 1, "{relative} should be v1");
+        assert_snapshot_manifest_shape_invariants(&parsed, relative);
+    }
 }
 
 #[test]
@@ -197,7 +241,10 @@ fn invalid_fixture_manifests_fail_validation() {
     let validator = repo_support::snapshot_validator();
     for relative in [
         "fixtures/repo/invalid/manifest_bad_repo_path.json",
+        "fixtures/repo/invalid/manifest_bad_well_known_exclude.json",
+        "fixtures/repo/invalid/manifest_git_rev_missing_source_rev.json",
         "fixtures/repo/invalid/manifest_missing_stats.json",
+        "fixtures/repo/invalid/manifest_worktree_with_source_rev.json",
     ] {
         let instance = load_json(relative);
         assert!(
@@ -237,7 +284,12 @@ fn invalid_diff_fixture_manifests_fail_deterministically() {
 fn generated_snapshot_manifest_validates_and_preserves_runtime_invariants() {
     let validator: Validator = repo_support::snapshot_validator();
     let fixture = copy_fixture_tree("fixtures/repo/trees/basic_worktree", "repo-schema");
-    let options = default_snapshot_options();
+    let mut options = default_snapshot_options();
+    options.symlink_policy = repo::SymlinkPolicy::Follow;
+    options.well_known_excludes = vec![
+        repo::WellKnownExclude::RustTarget,
+        repo::WellKnownExclude::WebDist,
+    ];
     let snapshot = repo_support::materialize(fixture.path(), options.clone());
     let manifest = manifest_from_snapshot("basic-worktree", &options, &snapshot);
 
@@ -247,6 +299,7 @@ fn generated_snapshot_manifest_validates_and_preserves_runtime_invariants() {
 
     let parsed: FixtureManifest =
         serde_json::from_value(manifest.clone()).expect("generated manifest should deserialize");
+    assert_snapshot_manifest_shape_invariants(&parsed, "generated snapshot manifest");
     let manifest_paths = parsed
         .files
         .iter()
@@ -264,12 +317,51 @@ fn generated_snapshot_manifest_validates_and_preserves_runtime_invariants() {
         parsed.snapshot_fingerprint,
         snapshot.fingerprint.as_str().to_owned()
     );
+    assert_eq!(
+        parsed.options.well_known_excludes,
+        vec![
+            repo::WellKnownExclude::RustTarget,
+            repo::WellKnownExclude::WebDist,
+        ]
+    );
 
     let manifest_value: Value = manifest;
     assert_eq!(
         manifest_value["snapshot_fingerprint"].as_str(),
         Some(snapshot.fingerprint.as_str())
     );
+    assert_eq!(manifest_value["source_kind"].as_str(), Some("worktree"));
+    assert!(manifest_value.get("source_rev").is_none());
+}
+
+#[test]
+fn generated_git_rev_manifest_shape_validates() {
+    let validator: Validator = repo_support::snapshot_validator();
+    let fixture = copy_fixture_tree("fixtures/repo/trees/basic_worktree", "repo-schema-git-rev");
+    let mut options = default_snapshot_options();
+    options.well_known_excludes = vec![repo::WellKnownExclude::NodeModules];
+    let snapshot = repo_support::materialize(fixture.path(), options.clone());
+    let source = repo::SnapshotSource::GitRev {
+        rev: "HEAD~1".to_owned(),
+    };
+    let manifest =
+        manifest_from_snapshot_with_source("basic-git-rev", &source, &options, &snapshot);
+
+    validator
+        .validate(&manifest)
+        .expect("generated git_rev manifest should validate");
+
+    let parsed: FixtureManifest =
+        serde_json::from_value(manifest.clone()).expect("generated manifest should deserialize");
+    assert_snapshot_manifest_shape_invariants(&parsed, "generated git_rev manifest");
+    assert_eq!(parsed.source_kind, "git_rev");
+    assert_eq!(parsed.source_rev.as_deref(), Some("HEAD~1"));
+    assert_eq!(
+        parsed.options.well_known_excludes,
+        vec![repo::WellKnownExclude::NodeModules]
+    );
+    assert_eq!(manifest["source_kind"].as_str(), Some("git_rev"));
+    assert_eq!(manifest["source_rev"].as_str(), Some("HEAD~1"));
 }
 
 #[test]
