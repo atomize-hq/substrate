@@ -1,7 +1,8 @@
+#![allow(unused_crate_dependencies)]
+
 use std::collections::BTreeSet;
 
 use assert_cmd as _;
-use clap as _;
 use gix as _;
 use jsonschema as _;
 use predicates as _;

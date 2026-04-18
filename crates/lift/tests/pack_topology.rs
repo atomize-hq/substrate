@@ -1,11 +1,11 @@
+#![allow(unused_crate_dependencies)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use assert_cmd as _;
-use clap as _;
 use gix as _;
 use jsonschema as _;
 use predicates as _;
@@ -293,11 +293,9 @@ fn write_temp_profile(name: &str, contents: &str) -> PathBuf {
 fn unique_temp_dir(name: &str) -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("clock")
+        .expect("time went backwards")
         .as_nanos();
-    static NEXT_TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
-    let nonce = NEXT_TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!("substrate-lift-{nanos}-{nonce}-{name}"));
+    let dir = std::env::temp_dir().join(format!("substrate-lift-{nanos}-{name}"));
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
 }

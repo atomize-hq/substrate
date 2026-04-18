@@ -1,8 +1,9 @@
+#![allow(unused_crate_dependencies)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use assert_cmd as _;
-use clap as _;
 use gix as _;
 use globset as _;
 use jsonschema::Validator;

@@ -1,5 +1,6 @@
+#![allow(unused_crate_dependencies)]
+
 use assert_cmd::Command;
-use clap as _;
 use gix as _;
 use globset as _;
 use jsonschema as _;

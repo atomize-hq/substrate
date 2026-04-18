@@ -1,11 +1,11 @@
+#![allow(unused_crate_dependencies)]
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use assert_cmd as _;
-use clap as _;
 use gix as _;
 use globset as _;
 use jsonschema as _;
@@ -29,20 +29,14 @@ struct TempDir {
     path: PathBuf,
 }
 
-fn next_temp_nonce() -> u64 {
-    static NEXT_TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
-    NEXT_TEMP_NONCE.fetch_add(1, Ordering::Relaxed)
-}
-
 impl TempDir {
     fn new(prefix: &str) -> Self {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("system time before unix epoch")
             .as_nanos();
-        let nonce = next_temp_nonce();
         let path = std::env::temp_dir().join(format!(
-            "substrate-lift-{prefix}-{}-{suffix}-{nonce}",
+            "substrate-lift-{prefix}-{}-{suffix}",
             std::process::id(),
         ));
         fs::create_dir_all(&path).expect("temp dir should be creatable");

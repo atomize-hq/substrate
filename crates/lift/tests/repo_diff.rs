@@ -1,5 +1,6 @@
+#![allow(unused_crate_dependencies)]
+
 use assert_cmd as _;
-use clap as _;
 use gix as _;
 use globset as _;
 use predicates as _;
