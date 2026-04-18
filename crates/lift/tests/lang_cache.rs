@@ -45,6 +45,7 @@ struct FakeDocument {
 #[derive(Clone, Debug)]
 struct FakeAdapter {
     descriptor: AdapterDescriptor,
+    capabilities: lang::AdapterCapabilities,
     suffix: &'static str,
     panic_recognizes: BTreeSet<String>,
 }
@@ -57,9 +58,15 @@ impl FakeAdapter {
                 language: pack::LanguageId::parse(language).expect("language"),
                 version: version.to_owned(),
             },
+            capabilities: lang::AdapterCapabilities::default(),
             suffix,
             panic_recognizes: BTreeSet::new(),
         }
+    }
+
+    fn with_capabilities(mut self, capabilities: lang::AdapterCapabilities) -> Self {
+        self.capabilities = capabilities;
+        self
     }
 
     fn with_recognize_panic(mut self, path: &str) -> Self {
@@ -71,6 +78,10 @@ impl FakeAdapter {
 impl LanguageAdapter for FakeAdapter {
     fn descriptor(&self) -> AdapterDescriptor {
         self.descriptor.clone()
+    }
+
+    fn capabilities(&self) -> lang::AdapterCapabilities {
+        self.capabilities.clone()
     }
 
     fn recognizes(&self, input: &ParseInput<'_>) -> bool {
@@ -220,6 +231,88 @@ fn in_memory_cache_hits_on_second_equivalent_run_except_stats() {
     assert_eq!(first.stats.cache_misses, 1);
     assert_eq!(second.stats.cache_hits, 1);
     assert_eq!(second.stats.cache_misses, 0);
+    assert_eq!(cache.len().expect("cache length"), 1);
+}
+
+#[test]
+fn phase_c_capabilities_do_not_change_cache_keys_or_parse_stats() {
+    let bytes = serde_json::to_vec(&json!({
+        "symbols": [fake_symbol("main", "alpha", 0, 5)]
+    }))
+    .expect("json");
+    let (_temp, snapshot) = snapshot_with_files(&[("src/app.fake.json", &bytes)]);
+    let cache = InMemoryParseCache::default();
+    let request = ParseRequest {
+        languages: language_set(&["json"]),
+        scope: ParseScope::Snapshot,
+    };
+
+    let baseline = parse_with_driver(
+        &ParseDriver::with_cache(
+            registry(vec![FakeAdapter::new(
+                "builtin.fake_json",
+                "json",
+                ".fake.json",
+                "1.0.0",
+            )]),
+            cache.clone(),
+        ),
+        &snapshot,
+        request.clone(),
+    );
+    let phase_c = parse_with_driver(
+        &ParseDriver::with_cache(
+            registry(vec![FakeAdapter::new(
+                "builtin.fake_json",
+                "json",
+                ".fake.json",
+                "1.0.0",
+            )
+            .with_capabilities(lang::AdapterCapabilities {
+                emits_local_edges: true,
+                emits_surface_markers: true,
+                query_engines: [lang::QueryEngineKind::TreeSitter].into_iter().collect(),
+            })]),
+            cache.clone(),
+        ),
+        &snapshot,
+        request,
+    );
+
+    assert_same_payload_except_stats(&baseline, &phase_c);
+    assert_eq!(baseline.stats.considered_files, 1);
+    assert_eq!(baseline.stats.parsed_units, 1);
+    assert_eq!(baseline.stats.failed_units, 0);
+    assert_eq!(baseline.stats.skipped_no_adapter, 0);
+    assert_eq!(baseline.stats.skipped_missing_paths, 0);
+    assert_eq!(baseline.stats.missing_requested_languages, 0);
+    assert_eq!(baseline.stats.diagnostic_count, 0);
+    assert_eq!(baseline.stats.cache_hits, 0);
+    assert_eq!(baseline.stats.cache_misses, 1);
+    assert_eq!(
+        phase_c.stats.considered_files,
+        baseline.stats.considered_files
+    );
+    assert_eq!(phase_c.stats.parsed_units, baseline.stats.parsed_units);
+    assert_eq!(phase_c.stats.failed_units, baseline.stats.failed_units);
+    assert_eq!(
+        phase_c.stats.skipped_no_adapter,
+        baseline.stats.skipped_no_adapter
+    );
+    assert_eq!(
+        phase_c.stats.skipped_missing_paths,
+        baseline.stats.skipped_missing_paths
+    );
+    assert_eq!(
+        phase_c.stats.missing_requested_languages,
+        baseline.stats.missing_requested_languages
+    );
+    assert_eq!(
+        phase_c.stats.diagnostic_count,
+        baseline.stats.diagnostic_count
+    );
+    assert_eq!(phase_c.stats.cache_hits, 1);
+    assert_eq!(phase_c.stats.cache_misses, 0);
     assert_eq!(cache.len().expect("cache length"), 1);
 }
 
