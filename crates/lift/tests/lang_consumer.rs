@@ -16,36 +16,8 @@ mod kernel {
     pub(crate) use substrate_lift::kernel::*;
 }
 
-mod pack {
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-    #[serde(rename_all = "snake_case")]
-    pub(crate) enum LanguageId {
-        Json,
-        Toml,
-        Yaml,
-        Rust,
-        Python,
-        Javascript,
-        Typescript,
-    }
-
-    impl LanguageId {
-        pub(crate) fn as_str(self) -> &'static str {
-            match self {
-                Self::Json => "json",
-                Self::Toml => "toml",
-                Self::Yaml => "yaml",
-                Self::Rust => "rust",
-                Self::Python => "python",
-                Self::Javascript => "javascript",
-                Self::Typescript => "typescript",
-            }
-        }
-    }
-}
-
+#[path = "../src/pack/mod.rs"]
+mod pack;
 #[path = "../src/repo/mod.rs"]
 mod repo;
 #[path = "support/repo_support.rs"]

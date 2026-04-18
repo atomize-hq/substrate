@@ -16,35 +16,8 @@ mod kernel {
     pub(crate) use substrate_lift::kernel::*;
 }
 
-mod pack {
-    use serde::{Deserialize, Serialize};
-
-    #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-    #[serde(rename_all = "snake_case")]
-    pub(crate) enum LanguageId {
-        Json,
-        Toml,
-        Yaml,
-        Rust,
-        Python,
-        Javascript,
-        Typescript,
-    }
-
-    impl LanguageId {
-        pub(crate) fn as_str(self) -> &'static str {
-            match self {
-                Self::Json => "json",
-                Self::Toml => "toml",
-                Self::Yaml => "yaml",
-                Self::Rust => "rust",
-                Self::Python => "python",
-                Self::Javascript => "javascript",
-                Self::Typescript => "typescript",
-            }
-        }
-    }
-}
+#[path = "../src/pack/mod.rs"]
+mod pack;
 
 #[path = "../src/repo/mod.rs"]
 mod repo;
@@ -53,7 +26,7 @@ mod repo;
 mod lang;
 
 use lang::{
-    AdapterDescriptor, AdapterName, AdapterParseResult, LangError, LanguageAdapter, LanguageId,
+    AdapterDescriptor, AdapterName, AdapterParseResult, LangError, LanguageAdapter,
     LanguageRegistryBuilder, ParseInput,
 };
 
@@ -62,7 +35,7 @@ struct TestAdapter {
 }
 
 impl TestAdapter {
-    fn new(name: &str, language: LanguageId, version: &str) -> Self {
+    fn new(name: &str, language: pack::LanguageId, version: &str) -> Self {
         Self {
             descriptor: AdapterDescriptor {
                 name: AdapterName::parse(name).expect("adapter name should parse"),
@@ -92,9 +65,17 @@ impl LanguageAdapter for TestAdapter {
 #[test]
 fn duplicate_adapter_name_is_rejected() {
     let registration = LanguageRegistryBuilder::new()
-        .register(TestAdapter::new("builtin.alpha", LanguageId::Rust, "1.0.0"))
+        .register(TestAdapter::new(
+            "builtin.alpha",
+            pack::LanguageId::Rust,
+            "1.0.0",
+        ))
         .expect("first adapter should register")
-        .register(TestAdapter::new("builtin.alpha", LanguageId::Json, "1.0.0"));
+        .register(TestAdapter::new(
+            "builtin.alpha",
+            pack::LanguageId::Json,
+            "1.0.0",
+        ));
     let error = match registration {
         Ok(_) => panic!("duplicate name should fail"),
         Err(error) => error,
@@ -111,9 +92,17 @@ fn duplicate_adapter_name_is_rejected() {
 #[test]
 fn duplicate_language_registration_is_rejected() {
     let registration = LanguageRegistryBuilder::new()
-        .register(TestAdapter::new("builtin.alpha", LanguageId::Rust, "1.0.0"))
+        .register(TestAdapter::new(
+            "builtin.alpha",
+            pack::LanguageId::Rust,
+            "1.0.0",
+        ))
         .expect("first adapter should register")
-        .register(TestAdapter::new("builtin.beta", LanguageId::Rust, "1.0.0"));
+        .register(TestAdapter::new(
+            "builtin.beta",
+            pack::LanguageId::Rust,
+            "1.0.0",
+        ));
     let error = match registration {
         Ok(_) => panic!("duplicate language should fail"),
         Err(error) => error,
@@ -122,7 +111,7 @@ fn duplicate_language_registration_is_rejected() {
     assert_eq!(
         error,
         LangError::DuplicateLanguageAdapter {
-            language: LanguageId::Rust,
+            language: pack::LanguageId::Rust,
             existing: "builtin.alpha".to_owned(),
             duplicate: "builtin.beta".to_owned(),
         }
@@ -132,13 +121,21 @@ fn duplicate_language_registration_is_rejected() {
 #[test]
 fn descriptors_are_sorted_independently_of_registration_order() {
     let forward = LanguageRegistryBuilder::new()
-        .register(TestAdapter::new("builtin.zeta", LanguageId::Json, "1.0.0"))
+        .register(TestAdapter::new(
+            "builtin.zeta",
+            pack::LanguageId::Json,
+            "1.0.0",
+        ))
         .expect("zeta should register")
-        .register(TestAdapter::new("builtin.alpha", LanguageId::Rust, "1.1.0"))
+        .register(TestAdapter::new(
+            "builtin.alpha",
+            pack::LanguageId::Rust,
+            "1.1.0",
+        ))
         .expect("alpha should register")
         .register(TestAdapter::new(
             "builtin.gamma",
-            LanguageId::Typescript,
+            pack::LanguageId::Typescript,
             "1.2.0",
         ))
         .expect("gamma should register")
@@ -148,13 +145,21 @@ fn descriptors_are_sorted_independently_of_registration_order() {
     let reverse = LanguageRegistryBuilder::new()
         .register(TestAdapter::new(
             "builtin.gamma",
-            LanguageId::Typescript,
+            pack::LanguageId::Typescript,
             "1.2.0",
         ))
         .expect("gamma should register")
-        .register(TestAdapter::new("builtin.alpha", LanguageId::Rust, "1.1.0"))
+        .register(TestAdapter::new(
+            "builtin.alpha",
+            pack::LanguageId::Rust,
+            "1.1.0",
+        ))
         .expect("alpha should register")
-        .register(TestAdapter::new("builtin.zeta", LanguageId::Json, "1.0.0"))
+        .register(TestAdapter::new(
+            "builtin.zeta",
+            pack::LanguageId::Json,
+            "1.0.0",
+        ))
         .expect("zeta should register")
         .build()
         .expect("registry should build");
@@ -179,22 +184,30 @@ fn descriptors_are_sorted_independently_of_registration_order() {
 #[test]
 fn adapter_lookup_returns_registered_language_adapter() {
     let registry = LanguageRegistryBuilder::new()
-        .register(TestAdapter::new("builtin.alpha", LanguageId::Rust, "1.0.0"))
+        .register(TestAdapter::new(
+            "builtin.alpha",
+            pack::LanguageId::Rust,
+            "1.0.0",
+        ))
         .expect("rust adapter should register")
-        .register(TestAdapter::new("builtin.beta", LanguageId::Json, "2.0.0"))
+        .register(TestAdapter::new(
+            "builtin.beta",
+            pack::LanguageId::Json,
+            "2.0.0",
+        ))
         .expect("json adapter should register")
         .build()
         .expect("registry should build");
 
     let rust_adapter = registry
-        .adapter_for_language(LanguageId::Rust)
+        .adapter_for_language(pack::LanguageId::Rust)
         .expect("rust adapter should exist")
         .descriptor();
     assert_eq!(rust_adapter.name.as_str(), "builtin.alpha");
-    assert_eq!(rust_adapter.language, LanguageId::Rust);
+    assert_eq!(rust_adapter.language, pack::LanguageId::Rust);
     assert_eq!(rust_adapter.version, "1.0.0");
 
     assert!(registry
-        .adapter_for_language(LanguageId::Typescript)
+        .adapter_for_language(pack::LanguageId::Typescript)
         .is_none());
 }

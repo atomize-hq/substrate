@@ -10,237 +10,20 @@ use serde_jcs as _;
 use serde_json::json;
 use sha2 as _;
 use substrate_lift as _;
-use thiserror as _;
 use toml as _;
 use walkdir as _;
 
 mod kernel {
     pub(crate) use substrate_lift::kernel::*;
 }
+#[path = "../src/lang/mod.rs"]
+mod lang;
 #[path = "../src/pack/mod.rs"]
 mod pack;
 #[path = "../src/repo/mod.rs"]
 mod repo;
 #[path = "support/repo_support.rs"]
 mod repo_support;
-
-mod lang {
-    use std::collections::BTreeMap;
-    use std::sync::Arc;
-
-    use serde::{Deserialize, Serialize};
-    use thiserror::Error;
-
-    use crate::kernel::{Diagnostic, FileId, Fingerprint, RepoPath};
-
-    pub(crate) use crate::pack::LanguageId;
-
-    pub(crate) type LangResult<T> = Result<T, LangError>;
-
-    #[derive(Debug, Error, Clone, Eq, PartialEq)]
-    pub(crate) enum LangError {
-        #[error("duplicate adapter name")]
-        DuplicateAdapterName { name: String },
-
-        #[error("duplicate language adapter registration")]
-        DuplicateLanguageAdapter {
-            language: LanguageId,
-            existing: String,
-            duplicate: String,
-        },
-
-        #[error("invalid adapter name")]
-        InvalidAdapterName { input: String },
-
-        #[error("parse cache invariant failure")]
-        CacheInvariant { reason: String },
-
-        #[error("lang schema validation failure")]
-        SchemaViolation {
-            schema_id: &'static str,
-            reason: String,
-        },
-    }
-
-    #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-    #[serde(try_from = "String", into = "String")]
-    pub(crate) struct AdapterName(String);
-
-    impl AdapterName {
-        pub(crate) fn parse(input: &str) -> LangResult<Self> {
-            if valid_adapter_name(input) {
-                Ok(Self(input.to_owned()))
-            } else {
-                Err(LangError::InvalidAdapterName {
-                    input: input.to_owned(),
-                })
-            }
-        }
-
-        pub(crate) fn as_str(&self) -> &str {
-            &self.0
-        }
-    }
-
-    impl TryFrom<String> for AdapterName {
-        type Error = LangError;
-
-        fn try_from(value: String) -> LangResult<Self> {
-            Self::parse(&value)
-        }
-    }
-
-    impl From<AdapterName> for String {
-        fn from(value: AdapterName) -> Self {
-            value.0
-        }
-    }
-
-    fn valid_adapter_name(input: &str) -> bool {
-        let mut segments = input.split('.');
-        let Some(first) = segments.next() else {
-            return false;
-        };
-        if !valid_adapter_segment(first, false) {
-            return false;
-        }
-        let mut saw_tail = false;
-        for segment in segments {
-            saw_tail = true;
-            if !valid_adapter_segment(segment, true) {
-                return false;
-            }
-        }
-        saw_tail
-    }
-
-    fn valid_adapter_segment(segment: &str, allow_underscore: bool) -> bool {
-        let mut chars = segment.chars();
-        matches!(chars.next(), Some(ch) if ch.is_ascii_lowercase())
-            && chars.all(|ch| {
-                ch.is_ascii_lowercase() || ch.is_ascii_digit() || (allow_underscore && ch == '_')
-            })
-    }
-
-    #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-    pub(crate) struct AdapterDescriptor {
-        pub name: AdapterName,
-        pub language: LanguageId,
-        pub version: String,
-    }
-
-    #[derive(Clone, Copy, Debug)]
-    pub(crate) struct ParseInput<'a> {
-        pub path: &'a RepoPath,
-        pub file_id: &'a FileId,
-        pub blob_fingerprint: &'a Fingerprint,
-        pub bytes: &'a [u8],
-    }
-
-    #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-    pub(crate) struct AdapterParseOutput {
-        pub symbols: Vec<LocalSymbolDraft>,
-        pub edges: Vec<LocalEdgeDraft>,
-        pub surface_markers: Vec<SurfaceMarkerDraft>,
-        pub diagnostics: Vec<Diagnostic>,
-    }
-
-    #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-    pub(crate) enum AdapterParseResult {
-        Parsed(AdapterParseOutput),
-        Failed { diagnostics: Vec<Diagnostic> },
-    }
-
-    pub(crate) trait LanguageAdapter: Send + Sync {
-        fn descriptor(&self) -> AdapterDescriptor;
-        fn recognizes(&self, input: &ParseInput<'_>) -> bool;
-        fn parse(&self, input: &ParseInput<'_>) -> AdapterParseResult;
-    }
-
-    pub(crate) mod model {
-        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lang/model.rs"));
-    }
-    #[allow(unused_imports)]
-    pub(crate) use model::{
-        compare_symbol_drafts, sort_local_edges, sort_local_symbols, sort_surface_markers,
-        symbol_identity_lemma, EdgeEndpoint, EdgeEndpointDraft, FailedParse, LocalEdge,
-        LocalEdgeDraft, LocalEdgeKind, LocalSymbol, LocalSymbolDraft, MissingRequestedLanguage,
-        ParseRequest, ParseScope, ParseSet, ParseStats, ParsedUnit, ReferenceTarget,
-        ReferenceTargetDraft, SkippedParse, SkippedReason, SurfaceMarker, SurfaceMarkerDraft,
-        SurfaceMarkerKind, SymbolKind, SymbolVisibility,
-    };
-
-    #[derive(Default)]
-    pub(crate) struct LanguageRegistryBuilder {
-        adapters: BTreeMap<AdapterName, Arc<dyn LanguageAdapter>>,
-        languages: BTreeMap<LanguageId, AdapterName>,
-    }
-
-    pub(crate) struct LanguageRegistry {
-        adapters: BTreeMap<AdapterName, Arc<dyn LanguageAdapter>>,
-        languages: BTreeMap<LanguageId, AdapterName>,
-    }
-
-    impl LanguageRegistryBuilder {
-        pub(crate) fn new() -> Self {
-            Self::default()
-        }
-
-        pub(crate) fn register<A: LanguageAdapter + 'static>(
-            mut self,
-            adapter: A,
-        ) -> LangResult<Self> {
-            let adapter = Arc::new(adapter) as Arc<dyn LanguageAdapter>;
-            let descriptor = adapter.descriptor();
-            if self.adapters.contains_key(&descriptor.name) {
-                return Err(LangError::DuplicateAdapterName {
-                    name: descriptor.name.as_str().to_owned(),
-                });
-            }
-            if let Some(existing) = self.languages.get(&descriptor.language) {
-                return Err(LangError::DuplicateLanguageAdapter {
-                    language: descriptor.language,
-                    existing: existing.as_str().to_owned(),
-                    duplicate: descriptor.name.as_str().to_owned(),
-                });
-            }
-            self.languages
-                .insert(descriptor.language, descriptor.name.clone());
-            self.adapters.insert(descriptor.name, adapter);
-            Ok(self)
-        }
-
-        pub(crate) fn build(self) -> LangResult<LanguageRegistry> {
-            Ok(LanguageRegistry {
-                adapters: self.adapters,
-                languages: self.languages,
-            })
-        }
-    }
-
-    impl LanguageRegistry {
-        pub(crate) fn descriptors(&self) -> Vec<AdapterDescriptor> {
-            self.languages
-                .iter()
-                .filter_map(|(_, adapter_name)| self.adapters.get(adapter_name))
-                .map(|adapter| adapter.descriptor())
-                .collect()
-        }
-
-        pub(crate) fn adapter_for_language(
-            &self,
-            language: LanguageId,
-        ) -> Option<&Arc<dyn LanguageAdapter>> {
-            let adapter_name = self.languages.get(&language)?;
-            self.adapters.get(adapter_name)
-        }
-    }
-
-    pub(crate) mod driver {
-        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lang/driver.rs"));
-    }
-    pub(crate) use driver::ParseDriver;
-}
 
 use kernel::{Diagnostic, RepoPath};
 use lang::{
@@ -505,6 +288,42 @@ fn snapshot_parse_is_deterministic_and_uses_snapshot_bytes_only() {
     assert_eq!(left.stats.parsed_units, 2);
     assert_eq!(left.stats.considered_files, 2);
     assert_eq!(left.stats.failed_units, 0);
+}
+
+#[test]
+fn empty_language_requests_follow_registry_adapter_name_order() {
+    let bytes = serde_json::to_vec(&json!({
+        "symbols": [fake_symbol("main", "alpha", 0, 5)]
+    }))
+    .expect("json");
+    let (_temp, snapshot) = snapshot_with_files(&[("src/shared.fake", &bytes)]);
+    let request = ParseRequest {
+        languages: BTreeSet::new(),
+        scope: ParseScope::Snapshot,
+    };
+
+    let left = parse_snapshot(
+        &snapshot,
+        registry(vec![
+            FakeAdapter::new("builtin.zulu", "json", ".fake").with_parse_panic("src/shared.fake"),
+            FakeAdapter::new("builtin.alpha", "yaml", ".fake"),
+        ]),
+        request.clone(),
+    );
+    let right = parse_snapshot(
+        &snapshot,
+        registry(vec![
+            FakeAdapter::new("builtin.alpha", "yaml", ".fake"),
+            FakeAdapter::new("builtin.zulu", "json", ".fake").with_parse_panic("src/shared.fake"),
+        ]),
+        request,
+    );
+
+    assert_eq!(left, right);
+    assert_eq!(left.units.len(), 1);
+    assert!(left.failed.is_empty());
+    assert_eq!(left.units[0].language, pack::LanguageId::Yaml);
+    assert_eq!(left.units[0].path.as_str(), "src/shared.fake");
 }
 
 #[test]
