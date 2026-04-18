@@ -14,6 +14,8 @@ pub(crate) struct AdapterCapabilities {
     pub query_engines: BTreeSet<QueryEngineKind>,
 }
 
+// Keep this manual serde in sync with crate::pack::QueryEngineKind variants.
+// Adding a new engine does not automatically update these string mappings.
 impl Serialize for QueryEngineKind {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
