@@ -11,11 +11,11 @@ pub(crate) mod model;
 pub(crate) mod registry;
 pub(crate) mod schema;
 
-pub(crate) use crate::pack::LanguageId;
+pub(crate) use crate::pack::{LanguageId, QueryEngineKind};
 
 pub(crate) use adapter::{
-    AdapterDescriptor, AdapterName, AdapterParseOutput, AdapterParseResult, LanguageAdapter,
-    ParseInput,
+    AdapterCapabilities, AdapterDescriptor, AdapterName, AdapterParseOutput, AdapterParseResult,
+    LanguageAdapter, ParseInput,
 };
 pub(crate) use cache::{
     CachedParseOutcome, InMemoryParseCache, NoopParseCache, ParseCache, ParseCacheKey,
