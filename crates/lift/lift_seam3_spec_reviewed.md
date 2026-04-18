@@ -1,5 +1,5 @@
 <!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-lift-autoplan-restore-20260418-102634.md -->
-# substrate-lift seam 3 spec — language platform (reviewed against landed seam 0 + seam 1 + seam 2 + landed seam 3 Phase A)
+# substrate-lift seam 3 spec — language platform (reviewed against landed seam 0 + seam 1 + seam 2 + landed seam 3 Phases A + B)
 
 ## 0. Ground truth from the landed crate
 
@@ -11,11 +11,15 @@ Observed state in the landed crate:
 - `src/pack/**` is real code and now compiles profiles, topology packs, score models, query packs, rule packs, and recipe packs into crate-private compiled artifacts.
 - `src/repo/**` is real, tested, schema-backed, and crate-private. `RepoSnapshot`, `BlobStore`, `Inventory`, `RepoDiff`, `SnapshotRequest`, and repo diagnostics are already landed.
 - `src/lang/**` is now real, tested, schema-backed, and still crate-private:
-  - `src/lang/mod.rs` exports `adapter`, `driver`, `error`, `model`, `registry`, and `schema`;
+  - `src/lang/mod.rs` exports `adapter`, `cache`, `driver`, `error`, `model`, `registry`, and `schema`;
   - `lang::LanguageId` is the expected re-export of `pack::LanguageId`;
   - `ParseDriver::parse_snapshot(&self, ...)` already normalizes requests, computes `request_fingerprint`,
     contains adapter panics, validates draft output, and emits deterministic `ParseSet` output;
-  - `ParseStats` currently tracks parse outcomes only. It has **no** cache counters yet;
+  - `ParseStats` already tracks `cache_hits` and `cache_misses` in addition to parse outcomes;
+  - `src/lang/cache.rs` is real and owns `ParseCache`, `ParseCacheKey`, `NoopParseCache`,
+    `InMemoryParseCache`, and `PLATFORM_CACHE_VERSION`;
+  - `src/lang/registry.rs` already exposes deterministic `built_in_registry()` bootstrap preparation,
+    and it is intentionally empty today because no concrete production adapters are landed yet;
   - `lib.rs` still exposes `lang` only as `pub(crate) mod lang;`, so seam 3 is still not public API.
 - `Cargo.toml` already contains feature flags for concrete language families:
   - `config-lang`
@@ -36,22 +40,25 @@ Observed state in the landed crate:
 - seam 1 also already defines `QueryEngineKind::TreeSitter` in compiled query packs, but there is **no** query execution seam yet and no language runtime contract for query execution yet.
 - `src/app/runtime.rs` currently stops at `ProfileBootstrap { bundle: CompiledPackSet }`; there is no lang-facing runtime orchestration yet.
 - the compile-matrix test still asserts the crate builds with `--no-default-features`.
-- the top-level `README.md` has already been updated to describe Phase A as landed.
+- the top-level `README.md` has already been updated to describe seam 3 Phase B as landed internal seam work.
 - the real proof slice now exists in tests:
   - `tests/lang_consumer.rs`
+  - `tests/lang_cache.rs`
+  - `tests/lang_registry.rs`
   - `tests/support/lang_support.rs`
   - a bounded TOML adapter proof that demonstrates deterministic parse output and a consumer path
     deriving config-key inventory from `ParseSet` without rereading the filesystem.
-- there is still **no** `src/lang/cache.rs`, no parse-cache contract, no in-memory cache implementation,
-  and no built-in registry-construction helper for runtime bootstrapping.
+- there is still **no** concrete production adapter family, no parser runtime crates wired into the crate,
+  no lang-facing runtime bootstrap object, and no query execution seam.
 
 That changes the planning posture.
 
-Seam 3 is no longer the first landing question. Phase A is already in the crate. The remaining job
-for this document is to lock the next increment cleanly:
+Seam 3 is no longer the first landing question. Phases A and B are already in the crate. The remaining
+job for this document is to lock the next increment cleanly:
 
-> Phase B should add cache and runtime-bootstrap preparation surfaces around the landed Phase-A contracts,
-> without reopening the Phase-A boundary or smuggling concrete production adapters into seam 3.
+> Phase C should add the narrow metadata and registry hooks that seam 4 concrete adapters and seam 7
+> query execution will need, without reopening the Phase-A/B boundary or smuggling concrete production
+> parsers or query execution into seam 3.
 
 The seam-1 `LanguageId` consequence still holds:
 
@@ -215,7 +222,7 @@ Phase A does **not** land:
 - public API promotion;
 - adapter auto-registration from feature flags.
 
-### Phase B — cache and runtime-bootstrap preparation
+### Phase B — cache and runtime-bootstrap preparation (landed)
 
 Phase B lands:
 
@@ -238,9 +245,17 @@ Phase B still does **not** land:
 
 Phase C lands:
 
-- any additional adapter metadata needed by seam 4 and seam 7;
-- optional adapter capability descriptors if required by real adapters;
-- optional query-engine compatibility hooks if the concrete adapters now require them.
+- a narrow adapter-capability surface that real seam-4 adapters can report without widening `ParseSet`;
+- `lang::QueryEngineKind` as a re-export of the existing pack-owned query-engine identifier,
+  so later seams do not import query-engine truth from two places;
+- deterministic registry inspection helpers so seam 7 can ask what a registered adapter supports
+  before trying to run a query engine against it;
+- deterministic feature-gated built-in registration rules, so seam 4 adapters have one canonical
+  bootstrap path when they start landing.
+
+Phase C should keep one explicit rule:
+
+> capability metadata lives on the adapter/registry boundary, not inside parsed-unit payloads.
 
 Phase C must still keep the rule that:
 
@@ -312,7 +327,7 @@ pub(crate) use schema::{
 
 ### Phase B `src/lang/`
 
-Phase B should add:
+Phase B added:
 
 ```text
 src/lang/
@@ -332,15 +347,19 @@ The current Phase-A seam is still small enough that the explicit choice is:
 
 ### Phase C `src/lang/`
 
-Phase C may add:
+Phase C should add:
 
 ```text
 src/lang/
   capabilities.rs
 ```
 
-Only add this if real adapters now need explicit capability descriptors.
-Do not pre-land it in Phase A.
+Keep Phase C bounded:
+
+- `capabilities.rs` owns capability enums/structs only;
+- `adapter.rs` owns the trait hook that returns those capabilities, with a default empty implementation;
+- `registry.rs` owns deterministic inspection and built-in population helpers;
+- do **not** add parser-runtime modules, query execution modules, or runtime bootstrap modules here.
 
 ---
 
@@ -1631,6 +1650,10 @@ exists today.
 
 ## 16. Phase B detailed implementation plan
 
+This section is now a landed implementation record.
+It is preserved because it explains why the cache/bootstrap surfaces look the way they do.
+The live next-step plan starts in Section 19.
+
 Phase B exists because the crate has already proven the Phase-A seam shape in real code and tests.
 The next bottleneck is repeat work, not missing architecture. `ParseDriver::parse_snapshot(...)`
 already emits deterministic normalized output. Phase B should reuse that output safely, without
@@ -1968,6 +1991,352 @@ Reason:
 | 18 | Phase B | Add `parse_manifest.v2.json` instead of mutating v1 in place | Mechanical | P1 + P5 | The landed v1 schema and fixtures are already strict, so cache-counter serialization needs an explicit version step. | Silent in-place schema mutation |
 | 19 | Phase B | Prove cache reuse by semantic payload equality plus stats delta, not full byte-identical `ParseSet` equality | Mechanical | P5 | `cache_hits` and `cache_misses` must change on the second run, so full-value equality would assert against the point of the phase. | Requiring identical full serialized outputs across cached and uncached runs |
 | 20 | Phase B | Keep recognize-stage panic failures deterministic and uncached in this seam | Mechanical | P3 + P5 | Caching routing failures would widen the seam more than the value justifies right now; the boundary must be explicit and tested instead. | Smuggling a second routing-failure cache into Phase B |
+
+## 19. Phase C detailed implementation plan
+
+Phase B solved the repeat-work problem inside `lang`. The next bottleneck is not raw performance.
+It is handshake quality.
+
+Seam 4 needs one stable place to say what a real adapter actually provides.
+Seam 7 needs one stable place to ask whether a compiled query pack can even run against that adapter.
+Right now the crate has adapter identity (`name`, `language`, `version`) and normalized parse output,
+but it does not have an explicit contract for adapter capabilities.
+
+That is the Phase C wedge.
+
+### Working summary
+
+Current repo facts that shape the plan:
+
+- `src/lang/cache.rs` is landed and already owns the Phase-B cache contract.
+- `ParseStats` already includes `cache_hits` and `cache_misses`.
+- `schemas/lang/parse_manifest.v2.json` is landed, so Phase C should avoid another manifest bump
+  unless it truly changes serialized parse payloads.
+- `src/lang/registry.rs::built_in_registry()` exists, is deterministic, and intentionally returns an
+  empty registry today.
+- `src/pack/compiled/query_pack.rs` already owns `QueryEngineKind::TreeSitter`.
+- `src/app/runtime.rs` still bootstraps only `CompiledPackSet`; there is no lang/runtime join point yet.
+- no concrete production adapters or parser runtime crates are registered in the crate today.
+
+That means Phase C is not "start landing real parsers."
+It is "add the missing metadata handshake so real parsers can land cleanly in seam 4."
+
+### Step 0: scope challenge
+
+Phase C should touch exactly these surfaces:
+
+| Surface | Current state | Phase-C change |
+|---|---|---|
+| `src/lang/capabilities.rs` | absent | add adapter-capability types and query-engine support metadata |
+| `src/lang/adapter.rs` | descriptor + parse hooks only | add default `capabilities()` hook with empty/default behavior |
+| `src/lang/registry.rs` | registration, lookup, deterministic descriptors, empty `built_in_registry()` | add capability inspection helpers and document feature-gated built-in registration order |
+| `src/lang/mod.rs` | re-exports `LanguageId` and Phase-B surface | re-export `QueryEngineKind` and Phase-C capability types |
+| `tests/lang_registry.rs` | registry invariants + deterministic empty built-ins | extend for capability inspection and enabled-feature registration order |
+| `tests/lang_capabilities.rs` | absent | add dedicated capability-surface tests |
+| `README.md` + this spec | seam 3 described through Phase B | note that Phase C is the metadata handshake before seam-4 adapters |
+
+What must **not** move in this phase:
+
+- `src/lang/model.rs`
+- `src/lang/cache.rs`
+- `schemas/lang/parse_manifest.v1.json`
+- `schemas/lang/parse_manifest.v2.json`
+- `src/app/runtime.rs`
+- query execution
+- concrete production adapter code
+- public API promotion of `lang`
+
+### 1. Architecture review
+
+The clean architecture is:
+
+- keep parse payloads exactly where they are;
+- add adapter metadata on the registry boundary, not inside `ParseSet`;
+- let later seams join `ParsedUnit.adapter` + `ParsedUnit.adapter_version` back to registry metadata
+  when they need execution-time behavior;
+- keep `built_in_registry()` as the single deterministic construction point for feature-gated built-ins.
+
+Required ASCII dependency graph:
+
+```text
+ seam 4 concrete adapter impl
+        |
+        v
++---------------------------+
+| lang/adapter.rs           |
+| descriptor()              |
+| capabilities()            |
+| recognizes() / parse()    |
++-------------+-------------+
+              |
+              v
++-------------+------------------+
+| lang/registry.rs               |
+| register()                     |
+| descriptors()                  |
+| adapter capabilities lookup    |
+| built_in_registry()            |
++-------------+------------------+
+              |
+      +-------+--------+
+      |                |
+      v                v
++-----+----------+   +---------------------------+
+| lang/driver.rs |   | seam 7 query/match later  |
+| ParseSet flow  |   | joins language + engine   |
+| unchanged      |   | against registry metadata |
++----------------+   +---------------------------+
+```
+
+The important negative space:
+
+- Phase C does **not** add AST handles, parser sessions, or engine-specific runtime objects to
+  `ParsedUnit`.
+- Phase C does **not** add query-pack execution helpers to `lang`.
+- Phase C does **not** make cache keys depend on capabilities, because normalized parse payload does
+  not depend on registry metadata.
+
+### 2. Contract shape
+
+Phase C should keep `AdapterDescriptor` identity-only:
+
+- `name`
+- `language`
+- `version`
+
+Do **not** smuggle capability flags into `AdapterDescriptor`.
+Identity and capability are different concerns, and the cache key already depends on descriptor identity.
+
+Add a new Phase-C contract in `capabilities.rs`:
+
+```rust
+use std::collections::BTreeSet;
+
+use serde::{Deserialize, Serialize};
+
+use crate::lang::QueryEngineKind;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Default)]
+pub(crate) struct AdapterCapabilities {
+    pub emits_local_edges: bool,
+    pub emits_surface_markers: bool,
+    pub query_engines: BTreeSet<QueryEngineKind>,
+}
+```
+
+And extend the adapter trait with a default hook:
+
+```rust
+pub(crate) trait LanguageAdapter: Send + Sync {
+    fn descriptor(&self) -> AdapterDescriptor;
+
+    fn capabilities(&self) -> AdapterCapabilities {
+        AdapterCapabilities::default()
+    }
+
+    fn recognizes(&self, input: &ParseInput<'_>) -> bool;
+    fn parse(&self, input: &ParseInput<'_>) -> AdapterParseResult;
+}
+```
+
+Rules:
+
+- default capabilities must be empty so existing fake adapters and Phase-B tests remain easy to write;
+- `emits_local_edges` and `emits_surface_markers` describe structural support, not quality guarantees;
+- `query_engines` states only engine-level compatibility in Phase C, because the compiled query-pack
+  contract already speaks in terms of `language + engine` and nothing narrower yet;
+- if later work proves engine-level compatibility is insufficient, the next contract step belongs to
+  the pack/query seam, not to an ad hoc seam-3 escape hatch.
+
+### 3. Query-engine compatibility rule
+
+Phase C should avoid the same drift problem seam 3 already solved for `LanguageId`.
+
+Do this:
+
+```rust
+pub(crate) use crate::pack::QueryEngineKind;
+```
+
+Do **not** do this:
+
+- create `lang::QueryEngineKind` as a second enum,
+- copy string literals like `"tree_sitter"` into capability structs,
+- or make seam 7 import engine identity from both `pack` and `lang`.
+
+That keeps the compatibility story boring:
+
+- compiled query packs still say `language + engine`;
+- adapters still say `language + supported engines`;
+- seam 7 can deterministically reject unsupported combinations without needing query execution in seam 3.
+
+### 4. Registry behavior
+
+`LanguageRegistry` should gain a small inspection surface, not a second execution surface.
+
+Phase-C helpers should look like:
+
+```rust
+pub(crate) fn capabilities_for_language(
+    &self,
+    language: LanguageId,
+) -> Option<AdapterCapabilities>;
+
+pub(crate) fn supported_query_engines_for_language(
+    &self,
+    language: LanguageId,
+) -> BTreeSet<QueryEngineKind>;
+```
+
+And `built_in_registry()` should move from "deterministic empty helper" to
+"deterministic feature-gated registration point" once seam-4 adapters start landing.
+
+Registration order must be explicit:
+
+1. `json`
+2. `toml`
+3. `yaml`
+4. `rust`
+5. `python`
+6. `javascript`
+7. `typescript`
+
+Why this matters:
+
+- the current single-adapter-per-language invariant means order must never change which adapter wins;
+- deterministic order still matters for diagnostics, descriptor inspection, and feature-set snapshots;
+- the config-language feature can own the first three slots without inventing a second bootstrap path.
+
+### 5. Test review
+
+Phase C needs new tests because this is contract work, not implementation garnish.
+
+Required codepath diagram:
+
+```text
+CODE PATH COVERAGE
+===========================
+[+] LanguageAdapter trait
+    ├── default capabilities() is empty
+    └── concrete fake adapter can override capabilities()
+
+[+] LanguageRegistry inspection
+    ├── capabilities lookup by language
+    ├── supported query engines lookup by language
+    └── deterministic descriptor/capability ordering
+
+[+] built_in_registry bootstrap path
+    ├── empty under no-default-features
+    └── deterministic registration order when features are enabled
+
+[+] Non-goals remain explicit
+    ├── ParseSet schema unchanged
+    ├── cache key unchanged
+    └── no query execution hooks in lang
+```
+
+Required Phase-C tests:
+
+1. `default_adapter_capabilities_are_empty_and_backwards_compatible`
+2. `registry_exposes_capabilities_in_deterministic_descriptor_order`
+3. `built_in_registry_registers_enabled_adapters_in_canonical_language_order`
+4. `query_engine_capability_lookup_is_language_scoped`
+5. `phase_c_capabilities_do_not_change_cache_keys_or_parse_stats`
+6. `phase_c_preserves_parse_manifest_v2_shape`
+7. `phase_c_preserves_no_default_features_compile_matrix`
+
+Commands to lock before implementation:
+
+- `cargo test -p substrate-lift lang_registry -- --nocapture`
+- `cargo test -p substrate-lift lang_parse -- --nocapture`
+- `cargo test -p substrate-lift lang_cache -- --nocapture`
+- `cargo test -p substrate-lift lang_schema -- --nocapture`
+- `cargo test -p substrate-lift compile_matrix -- --nocapture`
+- `cargo check -p substrate-lift --no-default-features`
+
+Test plan artifact written to:
+
+- [spensermcconnell-feat-lift-phase-c-test-plan-20260418-161244.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/spensermcconnell-feat-lift-phase-c-test-plan-20260418-161244.md)
+
+### 6. Performance review
+
+Phase C is almost entirely metadata, so the performance rule is simple:
+
+- registry inspection may allocate small sorted collections;
+- parse throughput must stay unchanged;
+- cache behavior must stay unchanged;
+- manifest serialization must stay unchanged.
+
+If a Phase-C implementation makes `ParseDriver::parse_snapshot(...)` slower on the hot path,
+it is probably doing the wrong work in the wrong seam.
+
+### NOT in scope
+
+- concrete parser implementations
+- parser runtime crates
+- AST/session handles in `ParsedUnit`
+- query execution helpers
+- query-pack schema expansion
+- app/runtime integration
+- schema v3 for parse manifests
+- public API promotion of `lang`
+
+### What already exists
+
+- `ParsedUnit` already carries `adapter` and `adapter_version`, which is enough provenance to join
+  runtime metadata later without changing parse payload shape
+- `tests/lang_registry.rs` already proves deterministic descriptor behavior
+- `tests/lang_cache.rs` already proves the Phase-B cache key and stats behavior that Phase C must not break
+- `src/pack/compiled/query_pack.rs` already defines the only real query-engine enum in the crate
+- `built_in_registry()` already gives seam 4 one canonical registration choke point
+
+### Failure modes specific to Phase C
+
+| Codepath | Failure mode | Rescued? | Phase-C handling |
+|---|---|---|---|
+| capability contract | adapter metadata gets stuffed into `ParsedUnit` and forces schema churn | yes | keep capability metadata registry-side only |
+| engine identity | seam 3 creates a second query-engine enum | yes | re-export pack-owned `QueryEngineKind` |
+| bootstrap path | seam-4 adapters register through ad hoc constructors instead of `built_in_registry()` | yes | document `built_in_registry()` as the only built-in registration path |
+| feature gating | enabled-language descriptors appear in unstable order across builds | yes | freeze canonical language registration order |
+| downstream semantics | empty `surface_markers` or `edges` gets mistaken for "unsupported" | partial | add explicit capability flags so downstream seams can tell absence from non-support |
+| performance | Phase-C metadata leaks into parse hot path or cache key | yes | keep driver/cache/model contracts unchanged |
+
+### Completion summary
+
+```text
+  Scope challenge: 7 concrete surfaces identified, model/schema churn rejected
+  Architecture Review: capability metadata moved to adapter/registry boundary
+  Contract Review: descriptor identity kept separate from capabilities
+  Query compatibility: single query-engine enum source preserved through lang re-export
+  Test Review: 7 required tests locked, artifact written
+  Performance Review: parse/cache/schema hot paths explicitly frozen
+  NOT in scope: written (8 items)
+  What already exists: written
+  Failure modes: 6 Phase-C-specific modes mapped
+```
+
+## 20. Phase C locked decisions
+
+1. Keep `AdapterDescriptor` identity-only in Phase C.
+2. Add `AdapterCapabilities` as a separate adapter/registry contract.
+3. Add `LanguageAdapter::capabilities()` as a default method so existing fake adapters remain cheap.
+4. Keep capability metadata off `ParseSet` and `ParsedUnit`.
+5. Re-export the existing `pack::QueryEngineKind` from `lang`; do not mint a second enum.
+6. Keep query-engine compatibility engine-level only in Phase C.
+7. Treat `built_in_registry()` as the only canonical feature-gated built-in adapter registration path.
+8. Keep cache keys, `ParseStats`, and parse-manifest schemas unchanged in Phase C.
+
+## 21. Phase C decision audit addendum
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 21 | Phase C | Keep `AdapterDescriptor` identity-only and add a separate `AdapterCapabilities` surface | Mechanical | P5 | Cache identity and runtime metadata change at different rates; combining them would blur invariants and risk accidental cache or schema coupling. | Stuffing capability flags into `AdapterDescriptor` |
+| 22 | Phase C | Add `LanguageAdapter::capabilities()` as a default method | Mechanical | P3 + P5 | Existing fake adapters and Phase-B tests should not pay migration tax for metadata they do not need. | A new required trait method with no default |
+| 23 | Phase C | Keep capability metadata registry-side, not serialized in `ParseSet` | Mechanical | P1 + P5 | Downstream seams can join runtime metadata by adapter identity, so schema churn would buy complexity without new user value. | Adding capability fields to `ParsedUnit` or `ParseSet` |
+| 24 | Phase C | Re-export `pack::QueryEngineKind` from `lang` | Mechanical | P4 + P5 | The crate already has one query-engine identity source; duplicating it would recreate the exact drift problem seam 3 avoided for `LanguageId`. | Minting a second seam-3 query-engine enum |
+| 25 | Phase C | Keep query compatibility engine-level only for now | Mechanical | P3 + P5 | The compiled query-pack contract already speaks in `language + engine`; introducing finer compatibility before seam 7 proves it is necessary would be speculative churn. | Pre-landing grammar/dialect/version matrices in seam 3 |
+| 26 | Phase C | Freeze canonical built-in registration order by language id | Mechanical | P5 | Deterministic descriptors and feature-set snapshots matter even before runtime orchestration lands. | Letting feature compilation order define registry order implicitly |
+| 27 | Phase C | Do not change cache keys or `ParseStats` in Phase C | Mechanical | P3 + P5 | Phase C is metadata plumbing, not parse-behavior change; touching cache semantics would widen the blast radius for no gain. | Re-keying cache on capabilities or metadata |
 
 ## GSTACK REVIEW REPORT
 
