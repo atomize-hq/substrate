@@ -2,17 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::kernel::{Diagnostic, FileId, Fingerprint, RepoPath};
 use crate::lang::{
-    LangError, LangResult, LanguageId, LocalEdgeDraft, LocalSymbolDraft, SurfaceMarkerDraft,
+    capabilities::AdapterCapabilities, LangError, LangResult, LanguageId, LocalEdgeDraft,
+    LocalSymbolDraft, SurfaceMarkerDraft,
 };
-
-mod capabilities {
-    include!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/lang/capabilities.rs"
-    ));
-}
-
-pub(crate) use capabilities::AdapterCapabilities;
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]

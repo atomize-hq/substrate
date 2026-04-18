@@ -5,6 +5,7 @@
 
 pub(crate) mod adapter;
 pub(crate) mod cache;
+pub(crate) mod capabilities;
 pub(crate) mod driver;
 pub(crate) mod error;
 pub(crate) mod model;
@@ -14,13 +15,14 @@ pub(crate) mod schema;
 pub(crate) use crate::pack::{LanguageId, QueryEngineKind};
 
 pub(crate) use adapter::{
-    AdapterCapabilities, AdapterDescriptor, AdapterName, AdapterParseOutput, AdapterParseResult,
-    LanguageAdapter, ParseInput,
+    AdapterDescriptor, AdapterName, AdapterParseOutput, AdapterParseResult, LanguageAdapter,
+    ParseInput,
 };
 pub(crate) use cache::{
     CachedParseOutcome, InMemoryParseCache, NoopParseCache, ParseCache, ParseCacheKey,
     ParseCacheLookup, PLATFORM_CACHE_VERSION,
 };
+pub(crate) use capabilities::AdapterCapabilities;
 pub(crate) use driver::ParseDriver;
 pub(crate) use error::{LangError, LangResult};
 pub(crate) use model::{
