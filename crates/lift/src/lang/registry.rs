@@ -1,9 +1,20 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use crate::lang::{
-    AdapterDescriptor, AdapterName, LangError, LangResult, LanguageAdapter, LanguageId,
+    AdapterCapabilities, AdapterDescriptor, AdapterName, LangError, LangResult, LanguageAdapter,
+    LanguageId, QueryEngineKind,
 };
+
+pub(crate) const BUILT_IN_LANGUAGE_ORDER: &[LanguageId] = &[
+    LanguageId::Json,
+    LanguageId::Toml,
+    LanguageId::Yaml,
+    LanguageId::Rust,
+    LanguageId::Python,
+    LanguageId::Javascript,
+    LanguageId::Typescript,
+];
 
 #[derive(Default)]
 pub(crate) struct LanguageRegistryBuilder {
@@ -17,7 +28,7 @@ pub(crate) struct LanguageRegistry {
 }
 
 pub(crate) fn built_in_registry() -> LangResult<LanguageRegistry> {
-    LanguageRegistryBuilder::new().build()
+    bootstrap_built_in_registry(LanguageRegistryBuilder::new())?.build()
 }
 
 impl LanguageRegistryBuilder {
@@ -72,4 +83,27 @@ impl LanguageRegistry {
         let name = self.languages.get(&language)?;
         self.adapters.get(name)
     }
+
+    pub(crate) fn capabilities_for_language(
+        &self,
+        language: LanguageId,
+    ) -> Option<AdapterCapabilities> {
+        self.adapter_for_language(language)
+            .map(|adapter| adapter.capabilities())
+    }
+
+    pub(crate) fn supported_query_engines_for_language(
+        &self,
+        language: LanguageId,
+    ) -> BTreeSet<QueryEngineKind> {
+        self.capabilities_for_language(language)
+            .map(|capabilities| capabilities.query_engines)
+            .unwrap_or_default()
+    }
+}
+
+fn bootstrap_built_in_registry(
+    builder: LanguageRegistryBuilder,
+) -> LangResult<LanguageRegistryBuilder> {
+    Ok(builder)
 }
