@@ -210,7 +210,7 @@ Done for Phase C when downstream crate seams can consume immutable snapshots thr
 
 ### 3. Language platform
 
-Phase A landed the crate-private language platform contracts: adapter traits, the single-adapter-per-language registry, normalized parsed-unit models, deterministic request and unit fingerprinting, and fixture-facing parse-manifest schema coverage. Phase B extends that same internal seam with normalized per-file parse caching, cache hit/miss accounting in `ParseStats`, parse-manifest v2/schema fixtures, and deterministic `built_in_registry()` bootstrap preparation. Production language adapters, public API promotion, and runtime parse orchestration remain later seam work.
+Phase A landed the crate-private language platform contracts: adapter traits, the single-adapter-per-language registry, normalized parsed-unit models, deterministic request and unit fingerprinting, and fixture-facing parse-manifest schema coverage. Phase B extends that same internal seam with normalized per-file parse caching, cache hit/miss accounting in `ParseStats`, parse-manifest v2/schema fixtures, and deterministic `built_in_registry()` bootstrap preparation. Phase C is metadata plumbing only ahead of seam 4 adapters: the registry now carries adapter capability metadata so query-engine requirements can handshake with registry selection, but cache keys, parse-manifest/schema shape, and runtime parse behavior do not widen here. Production language adapters, public API promotion, and runtime parse orchestration remain later seam work.
 
 Exposes `LanguageAdapter`, `LanguageRegistry`, `ParsedUnit`, `LocalSymbol`, and `LocalEdge`.
 
