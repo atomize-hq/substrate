@@ -1,0 +1,9 @@
+name = "toml-proof-app"
+
+[server]
+port = 8080
+profile = "config://profiles.primary.database_url"
+
+[profiles.primary]
+database_url = "postgres://localhost/app"
+max_connections = 16

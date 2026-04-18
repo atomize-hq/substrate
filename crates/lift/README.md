@@ -210,7 +210,7 @@ Done for Phase C when downstream crate seams can consume immutable snapshots thr
 
 ### 3. Language platform
 
-Owns adapter traits, registry, parse cache, normalized parsed-unit interfaces, symbol surface contracts, local edge contracts, and parser error models.
+Phase A landed the crate-private language platform contracts: adapter traits, the single-adapter-per-language registry, normalized parsed-unit models, deterministic request and unit fingerprinting, and fixture-facing parse-manifest schema coverage. Production language adapters and public API promotion remain later seam work.
 
 Exposes `LanguageAdapter`, `LanguageRegistry`, `ParsedUnit`, `LocalSymbol`, and `LocalEdge`.
 

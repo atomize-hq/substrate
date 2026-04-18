@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "case": "snapshot_parse_manifest",
+  "snapshot_fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "request_fingerprint": "sha256:66244b31776a4ca368e26dc0283239126109987cd51c8ee1848f9f1f61d5c6a0",
+  "request": {
+    "languages": ["json", "rust"],
+    "scope": {
+      "kind": "snapshot"
+    }
+  },
+  "units": [
+    {
+      "path": "fixtures/app.fake.json",
+      "file_id": "file:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "blob_fingerprint": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "language": "json",
+      "adapter": "builtin.fake_config",
+      "adapter_version": "1.0.0",
+      "unit_fingerprint": "sha256:6b0f6632577c6941c9c292edb8f8573250ffaff67eb1160c30143bfe14a787a6",
+      "symbols": [
+        {
+          "id": "symbol:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "kind": "config_key",
+          "name": "feature_flag",
+          "path": ["settings", "feature_flag"],
+          "span": {
+            "start_byte": 3,
+            "end_byte": 20
+          },
+          "visibility": "public"
+        }
+      ],
+      "edges": [
+        {
+          "kind": "config_ref",
+          "source": "FileRoot",
+          "target": {
+            "QualifiedName": {
+              "parts": ["settings", "feature_flag"]
+            }
+          },
+          "span": {
+            "start_byte": 3,
+            "end_byte": 20
+          }
+        }
+      ],
+      "surface_markers": [
+        {
+          "kind": "entry_point",
+          "symbol": "symbol:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "span": {
+            "start_byte": 3,
+            "end_byte": 20
+          },
+          "label": "root-config"
+        }
+      ],
+      "diagnostics": [
+        {
+          "code": "lang.fixture.unit_warning",
+          "severity": "warning",
+          "message": "fixture unit carries one warning",
+          "subject": {
+            "path": "fixtures/app.fake.json",
+            "span": {
+              "start_byte": 3,
+              "end_byte": 20
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "failed": [
+    {
+      "path": "fixtures/bad.fake.json",
+      "file_id": "file:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "blob_fingerprint": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "language": "json",
+      "adapter": "builtin.fake_config",
+      "adapter_version": "1.0.0",
+      "diagnostics": [
+        {
+          "code": "lang.fixture.parse_failed",
+          "severity": "error",
+          "message": "fixture file failed to parse",
+          "subject": {
+            "path": "fixtures/bad.fake.json"
+          }
+        }
+      ]
+    }
+  ],
+  "skipped": [
+    {
+      "path": "fixtures/notes.txt",
+      "reason": "no_matching_adapter",
+      "detail": "no registered adapter recognized this file"
+    }
+  ],
+  "missing_languages": [
+    {
+      "language": "rust",
+      "detail": "no adapter registered"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "lang.fixture.missing_language",
+      "severity": "warning",
+      "message": "requested language rust has no registered adapter"
+    }
+  ],
+  "stats": {
+    "considered_files": 3,
+    "parsed_units": 1,
+    "failed_units": 1,
+    "skipped_no_adapter": 1,
+    "skipped_missing_paths": 0,
+    "missing_requested_languages": 1,
+    "diagnostic_count": 3
+  }
+}

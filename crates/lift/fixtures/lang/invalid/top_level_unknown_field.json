@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "case": "top_level_unknown_field",
+  "snapshot_fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "request_fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "request": {
+    "languages": [],
+    "scope": {
+      "kind": "snapshot"
+    }
+  },
+  "units": [],
+  "failed": [],
+  "skipped": [],
+  "missing_languages": [],
+  "diagnostics": [],
+  "stats": {
+    "considered_files": 0,
+    "parsed_units": 0,
+    "failed_units": 0,
+    "skipped_no_adapter": 0,
+    "skipped_missing_paths": 0,
+    "missing_requested_languages": 0,
+    "diagnostic_count": 0
+  },
+  "unexpected_root": true
+}

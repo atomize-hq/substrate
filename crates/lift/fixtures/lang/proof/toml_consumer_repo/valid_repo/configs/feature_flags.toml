@@ -1,0 +1,3 @@
+[flags]
+enable_search = true
+enable_metrics = false

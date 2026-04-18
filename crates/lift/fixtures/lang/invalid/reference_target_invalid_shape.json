@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "case": "reference_target_invalid_shape",
+  "snapshot_fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "request_fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "request": {
+    "languages": ["json"],
+    "scope": {
+      "kind": "snapshot"
+    }
+  },
+  "units": [
+    {
+      "path": "fixtures/app.fake.json",
+      "file_id": "file:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "blob_fingerprint": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "language": "json",
+      "adapter": "builtin.fake_config",
+      "adapter_version": "1.0.0",
+      "unit_fingerprint": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "symbols": [],
+      "edges": [
+        {
+          "kind": "config_ref",
+          "source": "FileRoot",
+          "target": {
+            "QualifiedName": {
+              "parts": "settings.feature_flag"
+            }
+          }
+        }
+      ],
+      "surface_markers": [],
+      "diagnostics": []
+    }
+  ],
+  "failed": [],
+  "skipped": [],
+  "missing_languages": [],
+  "diagnostics": [],
+  "stats": {
+    "considered_files": 1,
+    "parsed_units": 1,
+    "failed_units": 0,
+    "skipped_no_adapter": 0,
+    "skipped_missing_paths": 0,
+    "missing_requested_languages": 0,
+    "diagnostic_count": 0
+  }
+}

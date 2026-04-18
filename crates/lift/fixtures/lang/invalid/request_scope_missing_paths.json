@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "case": "request_scope_missing_paths",
+  "snapshot_fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "request_fingerprint": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "request": {
+    "languages": ["rust"],
+    "scope": {
+      "kind": "paths"
+    }
+  },
+  "units": [],
+  "failed": [],
+  "skipped": [],
+  "missing_languages": [],
+  "diagnostics": [],
+  "stats": {
+    "considered_files": 0,
+    "parsed_units": 0,
+    "failed_units": 0,
+    "skipped_no_adapter": 0,
+    "skipped_missing_paths": 0,
+    "missing_requested_languages": 0,
+    "diagnostic_count": 0
+  }
+}
