@@ -118,8 +118,8 @@ fn resolve_launch_and_config(
 ) -> anyhow::Result<(GatewayLaunchContract, cli::AppConfig)> {
     let launch = GatewayLaunchContract::resolve(
         cli_config,
-        || cli::AppConfig::default_path(),
-        || auth::token_store::TokenStore::default_path(),
+        cli::AppConfig::default_path,
+        auth::token_store::TokenStore::default_path,
     )?;
     let config = cli::AppConfig::from_file(&launch.config_path)?;
     Ok((launch, config))
