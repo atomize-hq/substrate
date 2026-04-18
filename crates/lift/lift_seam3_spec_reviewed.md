@@ -1,5 +1,5 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-lift-autoplan-restore-20260417-212718.md -->
-# substrate-lift seam 3 spec — language platform (reviewed against landed seam 0 + seam 1 + seam 2)
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-lift-autoplan-restore-20260418-101411.md -->
+# substrate-lift seam 3 spec — language platform (reviewed against landed seam 0 + seam 1 + seam 2 + landed seam 3 Phase A)
 
 ## 0. Ground truth from the landed crate
 
@@ -10,16 +10,13 @@ Observed state in the landed crate:
 - `src/kernel/**` is real, tested, schema-backed, and publicly re-exported from `lib.rs`.
 - `src/pack/**` is real code and now compiles profiles, topology packs, score models, query packs, rule packs, and recipe packs into crate-private compiled artifacts.
 - `src/repo/**` is real, tested, schema-backed, and crate-private. `RepoSnapshot`, `BlobStore`, `Inventory`, `RepoDiff`, `SnapshotRequest`, and repo diagnostics are already landed.
-- `src/lang/mod.rs` is still only a placeholder:
-
-  ```rust
-  //! Reserved for the future language platform seam. No runtime logic in commit 1.
-
-  #[allow(dead_code)]
-  pub(crate) struct ReservedForFutureSeam;
-  ```
-
-- `lib.rs` still exposes `lang` only as `pub(crate) mod lang;`, so seam 3 is not public API yet.
+- `src/lang/**` is now real, tested, schema-backed, and still crate-private:
+  - `src/lang/mod.rs` exports `adapter`, `driver`, `error`, `model`, `registry`, and `schema`;
+  - `lang::LanguageId` is the expected re-export of `pack::LanguageId`;
+  - `ParseDriver::parse_snapshot(&self, ...)` already normalizes requests, computes `request_fingerprint`,
+    contains adapter panics, validates draft output, and emits deterministic `ParseSet` output;
+  - `ParseStats` currently tracks parse outcomes only. It has **no** cache counters yet;
+  - `lib.rs` still exposes `lang` only as `pub(crate) mod lang;`, so seam 3 is still not public API.
 - `Cargo.toml` already contains feature flags for concrete language families:
   - `config-lang`
   - `rust-lang`
@@ -38,20 +35,31 @@ Observed state in the landed crate:
 - `CompiledAnalysisDefaults.languages`, `CompiledQueryPack.language`, and `CompiledRuleScope.languages` already use that `pack::LanguageId` type.
 - seam 1 also already defines `QueryEngineKind::TreeSitter` in compiled query packs, but there is **no** query execution seam yet and no language runtime contract for query execution yet.
 - `src/app/runtime.rs` currently stops at `ProfileBootstrap { bundle: CompiledPackSet }`; there is no lang-facing runtime orchestration yet.
-- the compile-matrix test already asserts the crate still builds with `--no-default-features`.
-- the top-level README still describes seam 3 only at a high level; the actual crate contains no landed language-platform code beyond the placeholder module.
+- the compile-matrix test still asserts the crate builds with `--no-default-features`.
+- the top-level `README.md` has already been updated to describe Phase A as landed.
+- the real proof slice now exists in tests:
+  - `tests/lang_consumer.rs`
+  - `tests/support/lang_support.rs`
+  - a bounded TOML adapter proof that demonstrates deterministic parse output and a consumer path
+    deriving config-key inventory from `ParseSet` without rereading the filesystem.
+- there is still **no** `src/lang/cache.rs`, no parse-cache contract, no in-memory cache implementation,
+  and no built-in registry-construction helper for runtime bootstrapping.
 
-That means seam 3 should be treated as the **first real landing** of `src/lang/**`, but it should still stay deliberately narrow:
+That changes the planning posture.
 
-> seam 3 should land the **platform and contracts** for source parsing, not the first production adapters.
+Seam 3 is no longer the first landing question. Phase A is already in the crate. The remaining job
+for this document is to lock the next increment cleanly:
 
-The concrete adapters remain seam 4.
+> Phase B should add cache and runtime-readiness surfaces around the landed Phase-A contracts,
+> without reopening the Phase-A boundary or smuggling concrete production adapters into seam 3.
 
-A second consequence follows from the current seam-1 reality:
+The seam-1 `LanguageId` consequence still holds:
 
-> seam 3 should **not** introduce a second competing `LanguageId` type in v1.
+> seam 3 should **continue** to avoid a second competing `LanguageId` type in v1.
 
-The crate already has one internal language identifier contract in `pack`, and back-migrating seam 1 just to move that enum is unnecessary churn. Seam 3 should consume and re-export that existing internal type under the `lang` module boundary.
+The crate already has one internal language identifier contract in `pack`, and back-migrating seam 1
+just to move that enum is unnecessary churn. Seam 3 should keep consuming and re-exporting that
+existing internal type under the `lang` module boundary.
 
 ---
 
@@ -307,11 +315,15 @@ Phase B should add:
 ```text
 src/lang/
   cache.rs
-  in_memory_cache.rs
 ```
 
-If Phase B does not actually need a separate `in_memory_cache.rs`, it is acceptable to keep the
-implementation in `cache.rs`, but the seam boundary must still remain the same.
+Do **not** split `cache.rs` yet unless Phase-B implementation proves it is needed.
+
+The current Phase-A seam is still small enough that the explicit choice is:
+
+- keep `NoopParseCache` and `InMemoryParseCache` together in `cache.rs`;
+- keep the built-in registry helper in `registry.rs`;
+- keep `ParseDriver` responsible for cache lookup/store orchestration only, not cache internals.
 
 ### Phase C `src/lang/`
 
@@ -757,6 +769,7 @@ pub(crate) struct ParseDriver {
 
 impl ParseDriver {
     pub(crate) fn new(registry: LanguageRegistry) -> Self;
+    pub(crate) fn with_cache<C: ParseCache + 'static>(registry: LanguageRegistry, cache: C) -> Self;
     pub(crate) fn parse_snapshot(
         &self,
         snapshot: &RepoSnapshot,
@@ -784,6 +797,150 @@ Rules:
 - Phase A must define and test hostile-input containment rules before the first real adapter spike
   is accepted: panic containment, malformed-byte handling, and explicit output-budget behavior for
   symbol/edge/marker/diagnostic counts per file.
+
+### 5.6 `cache.rs`
+
+Phase B should cache **normalized per-file outcomes**, not raw adapter drafts and not whole-run
+`ParseSet` blobs.
+
+Exact contract shape:
+
+```rust
+use crate::kernel::{FileId, Fingerprint};
+use crate::lang::{AdapterName, FailedParse, LanguageId, ParsedUnit};
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub(crate) struct ParseCacheKey {
+    pub file_id: FileId,
+    pub blob_fingerprint: Fingerprint,
+    pub language: LanguageId,
+    pub adapter: AdapterName,
+    pub adapter_version: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub(crate) enum CachedParseOutcome {
+    Parsed(ParsedUnit),
+    Failed(FailedParse),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum CacheLookup {
+    Disabled,
+    Hit(CachedParseOutcome),
+    Miss,
+}
+
+pub(crate) trait ParseCache: Send + Sync {
+    fn get(&self, key: &ParseCacheKey) -> LangResult<CacheLookup>;
+    fn put(&self, key: ParseCacheKey, value: CachedParseOutcome) -> LangResult<()>;
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct NoopParseCache;
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct InMemoryParseCache {
+    // exact storage type intentionally not locked here, but it must be deterministic.
+}
+```
+
+Rules:
+
+- `ParseCacheKey` must use `file_id` and `blob_fingerprint` together.
+  `file_id` is already path-sensitive in the repo seam, so Phase B does **not** need a duplicate
+  raw path string in the cache key.
+- the key must also include `language`, `adapter`, and `adapter_version`, so adapter upgrades or
+  routing changes cannot return stale results.
+- cache values must store the **final normalized outcome**:
+  - `ParsedUnit` on success;
+  - `FailedParse` on deterministic file-level parse failure.
+- cache values must **not** store:
+  - `SkippedParse` records;
+  - `MissingRequestedLanguage` records;
+  - whole-run `ParseSet` values.
+- `NoopParseCache` must return `CacheLookup::Disabled` from `get()` and ignore `put()`.
+- `InMemoryParseCache` must be deterministic for equivalent insertion sequences. A `BTreeMap` keyed
+  by `ParseCacheKey` is preferred over `HashMap`.
+- cache failures remain seam-level `LangError::CacheInvariant`, because a broken cache is a platform
+  failure, not a file-level parse result.
+
+### 5.7 Phase-B `ParseDriver` cache behavior
+
+The driver should stay `&self` in Phase B.
+
+That is still the cleanest contract because:
+
+- callers do not need to learn a new mutability story just to opt into caching;
+- `NoopParseCache` can remain the default behind `ParseDriver::new`;
+- real cache implementations can use interior mutability without forcing the seam API to widen.
+
+Exact behavior on each candidate file:
+
+1. select the adapter exactly as Phase A already does;
+2. build `ParseCacheKey` from the chosen adapter descriptor and the inventory entry;
+3. query the cache;
+4. on `Hit`, append the cached normalized outcome directly into the `ParseSet`;
+5. on `Miss`, invoke the adapter, normalize the outcome, append it to `ParseSet`, then store it;
+6. on `Disabled`, behave exactly like Phase A.
+
+Cache lookup happens **after** adapter selection.
+
+That means Phase B does **not** cache:
+
+- `recognizes()` routing decisions;
+- snapshot-wide “no matching adapter” counts;
+- missing-requested-language records.
+
+Those remain request-level or registry-level concerns.
+
+### 5.8 `ParseStats` additions in Phase B
+
+Phase B should extend `ParseStats` with cache accounting:
+
+```rust
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ParseStats {
+    pub considered_files: u64,
+    pub parsed_units: u64,
+    pub failed_units: u64,
+    pub skipped_no_adapter: u64,
+    pub skipped_missing_paths: u64,
+    pub missing_requested_languages: u64,
+    pub diagnostic_count: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+}
+```
+
+Rules:
+
+- `cache_hits` increments only when `CacheLookup::Hit(_)` is returned.
+- `cache_misses` increments only when `CacheLookup::Miss` is returned.
+- `NoopParseCache` must leave both counters at zero by returning `Disabled`, not synthetic misses.
+- for an enabled cache, `cache_hits + cache_misses` must equal the number of candidate files that
+  actually reached parse-stage execution, which is `parsed_units + failed_units` for that run.
+
+### 5.9 Built-in registry helper
+
+Phase B should add one tiny registry-construction helper in `registry.rs`:
+
+```rust
+pub(crate) fn built_in_registry() -> LangResult<LanguageRegistry>;
+```
+
+Rules:
+
+- this helper is the **only** place that should know about feature-gated built-in adapter
+  registration order;
+- it is allowed to return an empty registry today, because seam 4 still owns production adapter
+  landings;
+- when seam 4 starts adding feature-gated built-ins, they must be registered here in deterministic
+  adapter-name order;
+- `app/runtime.rs` and later seams should depend on this helper, not on concrete adapter types.
+
+This gives the runtime one stable construction seam without forcing seam 3 to land production
+adapters early.
 
 ---
 
@@ -1436,6 +1593,134 @@ These decisions are now locked for seam 3 based on the engineering review:
 
 These decisions keep seam 3 narrow, deterministic, and compatible with the crate that actually
 exists today.
+
+## 16. Phase B detailed implementation plan
+
+Phase B exists because the crate has now proven the seam shape. The next bottleneck is repeat work.
+
+Today every `ParseDriver::parse_snapshot` run recomputes the same normalized per-file outcome even
+when the repo snapshot, blob fingerprint, adapter, and adapter version are unchanged. That is not a
+correctness bug. It is just waste. Phase B is the small, explicit fix.
+
+### Mission
+
+Phase B should make repeat parse runs cheaper without changing the Phase-A source of truth.
+
+The key rule:
+
+> Phase B caches the final normalized per-file parse result.
+> It does not change routing semantics, request semantics, or cross-file ownership.
+
+### Data flow
+
+```text
+RepoSnapshot
+   |
+   v
+ParseDriver
+   |
+   +--> select adapter (unchanged Phase-A logic)
+   |
+   +--> build ParseCacheKey(file_id, blob_fingerprint, language, adapter, version)
+   |
+   +--> ParseCache::get
+         |             |
+         |             +--> Hit      -> append cached ParsedUnit/FailedParse
+         |             |
+         |             +--> Miss     -> parse -> normalize -> append -> cache put
+         |             |
+         |             +--> Disabled -> parse -> normalize -> append
+   |
+   v
+ParseSet + ParseStats(cache_hits, cache_misses)
+```
+
+### Why this is the right layer
+
+- The cache key belongs in `lang`, not `repo`, because only `lang` knows adapter identity and
+  adapter version.
+- The cache value belongs in `lang`, not `app/runtime`, because the thing being reused is the
+  normalized parse outcome, not an app-specific derivation.
+- The runtime helper belongs in `registry.rs`, not `app/runtime.rs`, because runtime should know
+  “give me the built-in registry,” not “construct these five concrete adapter types in this order.”
+
+### What Phase B must not do
+
+- no on-disk cache files
+- no cross-process cache sharing
+- no caching of whole `ParseSet` values
+- no caching of missing-language or no-match bookkeeping
+- no new public API promotion
+- no production adapter landings
+- no query-engine hooks
+- no runtime orchestration of parse runs in `app/runtime.rs`
+
+### Sequence
+
+1. Add `src/lang/cache.rs` with `ParseCacheKey`, `CachedParseOutcome`, `CacheLookup`,
+   `ParseCache`, `NoopParseCache`, and `InMemoryParseCache`.
+2. Extend `src/lang/mod.rs` to re-export the cache surface.
+3. Update `ParseDriver` to own `Arc<dyn ParseCache>` internally and add `with_cache(...)`.
+4. Wire cache hits and misses into `ParseStats`.
+5. Add the tiny `built_in_registry()` helper in `registry.rs`.
+6. Add deterministic tests for hit/miss behavior and invalidation.
+7. Keep `app/runtime.rs` unchanged in this seam. The helper is enough runtime-readiness for now.
+
+### Phase B acceptance criteria
+
+- parsing the same `RepoSnapshot` twice through `InMemoryParseCache` yields byte-identical
+  `ParseSet` output and non-zero `cache_hits` on the second run;
+- changing only the blob bytes for one file causes a miss for that file and does not poison other
+  cached results;
+- changing only `adapter_version` causes a miss for that adapter even when bytes are unchanged;
+- cached `FailedParse` outcomes are reused deterministically on repeat runs;
+- `NoopParseCache` preserves Phase-A behavior exactly and leaves `cache_hits == 0` and
+  `cache_misses == 0`;
+- `built_in_registry()` returns deterministic output regardless of compile-time feature order;
+- the crate still passes `cargo check -p substrate-lift --no-default-features`.
+
+### Required Phase-B tests
+
+1. `parse_driver_with_noop_cache_matches_phase_a_output`
+2. `in_memory_cache_hits_on_second_equivalent_run`
+3. `cache_miss_when_blob_fingerprint_changes`
+4. `cache_miss_when_adapter_version_changes`
+5. `cache_reuses_failed_parse_outcomes`
+6. `cache_does_not_materialize_no_match_records`
+7. `cache_counters_stay_zero_when_cache_is_disabled`
+8. `built_in_registry_is_deterministic_for_enabled_features`
+9. `phase_b_cache_preserves_no_default_features_compile_matrix`
+
+### Failure modes specific to Phase B
+
+| Codepath | Failure mode | Rescued? | Phase-B handling |
+|---|---|---|---|
+| cache key design | stale parse reused after adapter upgrade | yes | include `adapter_version` in `ParseCacheKey` |
+| cache key design | rename/path identity mismatch | yes | rely on path-sensitive `file_id` plus `blob_fingerprint` |
+| cache value design | raw draft output bypasses normalization fixes | yes | cache only `ParsedUnit` / `FailedParse` |
+| disabled cache | misleading miss counters pollute stats | yes | `NoopParseCache` returns `Disabled`, not `Miss` |
+| built-in registry helper | feature-order nondeterminism changes lookup behavior | yes | register in deterministic adapter-name order |
+
+## 17. Phase B locked decisions
+
+1. Cache normalized per-file outcomes, not raw adapter drafts.
+2. Keep `ParseDriver::parse_snapshot(&self, ...)` in Phase B.
+3. Use `NoopParseCache` as the default behind `ParseDriver::new(...)`.
+4. Count cache hits and misses only when a cache is actually enabled.
+5. Do not cache request-level bookkeeping like missing-language or no-match records.
+6. Use `file_id + blob_fingerprint + language + adapter + adapter_version` as the cache key.
+7. Keep all Phase-B cache implementation in `src/lang/cache.rs` unless the code proves it is too dense.
+8. Add `built_in_registry()` now, even if it returns an empty registry until seam 4 lands adapters.
+
+## 18. Phase B decision audit addendum
+
+| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
+|---|---|---|---|---|---|---|
+| 13 | Phase B | Cache normalized `ParsedUnit` and `FailedParse` outcomes only | Mechanical | P5 | The driver already owns normalization and failure semantics, so caching raw drafts would create a second truth source. | Caching adapter draft output |
+| 14 | Phase B | Keep `ParseDriver::parse_snapshot(&self, ...)` and inject cache via trait | Mechanical | P5 | Runtime callers should not take on fake mutability just to turn caching on. | Switching the driver API to `&mut self` |
+| 15 | Phase B | Key the cache by `file_id`, `blob_fingerprint`, `language`, `adapter`, and `adapter_version` | Mechanical | P1 + P5 | This captures path-sensitive file identity plus adapter invalidation without dragging request-scope noise into the key. | Keying only on path, only on blob, or on whole-request fingerprints |
+| 16 | Phase B | Do not cache `SkippedParse`, missing-language, or whole-`ParseSet` results | Mechanical | P3 + P5 | Those are request-level bookkeeping artifacts, not reusable per-file parse outcomes. | Whole-run cache blobs or no-match negative caches |
+| 17 | Phase B | Add `built_in_registry()` before real built-ins land | Mechanical | P3 | It gives later runtime code one stable seam without forcing production adapters into seam 3. | Wiring runtime code directly to concrete adapters later |
 
 ## GSTACK REVIEW REPORT
 
