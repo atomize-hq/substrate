@@ -1,0 +1,641 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.substrate.dev/lift/lang/parse_manifest.v2.json",
+  "title": "Lift Language Parse Manifest v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "case",
+    "snapshot_fingerprint",
+    "request_fingerprint",
+    "request",
+    "units",
+    "failed",
+    "skipped",
+    "missing_languages",
+    "diagnostics",
+    "stats"
+  ],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "case": {
+      "type": "string",
+      "minLength": 1
+    },
+    "snapshot_fingerprint": {
+      "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+    },
+    "request_fingerprint": {
+      "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+    },
+    "request": {
+      "$ref": "#/$defs/request"
+    },
+    "units": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/parsed_unit"
+      }
+    },
+    "failed": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/failed_parse"
+      }
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/skipped_parse"
+      }
+    },
+    "missing_languages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/missing_requested_language"
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "../kernel/primitives.v1.json#/$defs/diagnostic"
+      }
+    },
+    "stats": {
+      "$ref": "#/$defs/stats"
+    }
+  },
+  "$defs": {
+    "language_id": {
+      "type": "string",
+      "enum": [
+        "json",
+        "toml",
+        "yaml",
+        "rust",
+        "python",
+        "javascript",
+        "typescript"
+      ]
+    },
+    "adapter_name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "symbol_kind": {
+      "type": "string",
+      "enum": [
+        "module",
+        "namespace",
+        "package",
+        "function",
+        "method",
+        "class",
+        "struct",
+        "enum",
+        "trait",
+        "interface",
+        "type_alias",
+        "field",
+        "constant",
+        "variable",
+        "test_case",
+        "test_suite",
+        "config_key",
+        "unknown"
+      ]
+    },
+    "symbol_visibility": {
+      "type": "string",
+      "enum": [
+        "public",
+        "private",
+        "internal",
+        "unknown"
+      ]
+    },
+    "local_symbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "path",
+        "span",
+        "visibility"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/stable_id"
+        },
+        "kind": {
+          "$ref": "#/$defs/symbol_kind"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "span": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/byte_span"
+        },
+        "visibility": {
+          "$ref": "#/$defs/symbol_visibility"
+        }
+      }
+    },
+    "edge_endpoint": {
+      "oneOf": [
+        {
+          "type": "string",
+          "const": "FileRoot"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "Symbol"
+          ],
+          "properties": {
+            "Symbol": {
+              "$ref": "../kernel/primitives.v1.json#/$defs/stable_id"
+            }
+          }
+        }
+      ]
+    },
+    "reference_target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "LocalSymbol"
+          ],
+          "properties": {
+            "LocalSymbol": {
+              "$ref": "../kernel/primitives.v1.json#/$defs/stable_id"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "QualifiedName"
+          ],
+          "properties": {
+            "QualifiedName": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "parts"
+              ],
+              "properties": {
+                "parts": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "FilePath"
+          ],
+          "properties": {
+            "FilePath": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path"
+              ],
+              "properties": {
+                "path": {
+                  "$ref": "../kernel/primitives.v1.json#/$defs/repo_path"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ExternalPackage"
+          ],
+          "properties": {
+            "ExternalPackage": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "package",
+                "symbol"
+              ],
+              "properties": {
+                "package": {
+                  "type": "string"
+                },
+                "symbol": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "Opaque"
+          ],
+          "properties": {
+            "Opaque": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value"
+              ],
+              "properties": {
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "local_edge_kind": {
+      "type": "string",
+      "enum": [
+        "contains",
+        "import",
+        "export",
+        "call",
+        "type_ref",
+        "inherit",
+        "implement",
+        "test_ref",
+        "config_ref",
+        "schema_ref",
+        "unknown"
+      ]
+    },
+    "local_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "source",
+        "target"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/local_edge_kind"
+        },
+        "source": {
+          "$ref": "#/$defs/edge_endpoint"
+        },
+        "target": {
+          "$ref": "#/$defs/reference_target"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "../kernel/primitives.v1.json#/$defs/byte_span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "surface_marker_kind": {
+      "type": "string",
+      "enum": [
+        "public_api",
+        "test",
+        "entry_point",
+        "export"
+      ]
+    },
+    "surface_marker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "symbol",
+        "span",
+        "label"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/surface_marker_kind"
+        },
+        "symbol": {
+          "anyOf": [
+            {
+              "$ref": "../kernel/primitives.v1.json#/$defs/stable_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "../kernel/primitives.v1.json#/$defs/byte_span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "parsed_unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "file_id",
+        "blob_fingerprint",
+        "language",
+        "adapter",
+        "adapter_version",
+        "unit_fingerprint",
+        "symbols",
+        "edges",
+        "surface_markers",
+        "diagnostics"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/repo_path"
+        },
+        "file_id": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/stable_id"
+        },
+        "blob_fingerprint": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+        },
+        "language": {
+          "$ref": "#/$defs/language_id"
+        },
+        "adapter": {
+          "$ref": "#/$defs/adapter_name"
+        },
+        "adapter_version": {
+          "type": "string"
+        },
+        "unit_fingerprint": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+        },
+        "symbols": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/local_symbol"
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/local_edge"
+          }
+        },
+        "surface_markers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/surface_marker"
+          }
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "../kernel/primitives.v1.json#/$defs/diagnostic"
+          }
+        }
+      }
+    },
+    "failed_parse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "file_id",
+        "blob_fingerprint",
+        "language",
+        "adapter",
+        "adapter_version",
+        "diagnostics"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/repo_path"
+        },
+        "file_id": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/stable_id"
+        },
+        "blob_fingerprint": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+        },
+        "language": {
+          "$ref": "#/$defs/language_id"
+        },
+        "adapter": {
+          "$ref": "#/$defs/adapter_name"
+        },
+        "adapter_version": {
+          "type": "string"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "../kernel/primitives.v1.json#/$defs/diagnostic"
+          }
+        }
+      }
+    },
+    "skipped_reason": {
+      "type": "string",
+      "enum": [
+        "no_matching_adapter",
+        "path_not_in_snapshot"
+      ]
+    },
+    "skipped_parse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "reason"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/repo_path"
+        },
+        "file_id": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/stable_id"
+        },
+        "reason": {
+          "$ref": "#/$defs/skipped_reason"
+        },
+        "detail": {
+          "type": "string"
+        }
+      }
+    },
+    "missing_requested_language": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "language"
+      ],
+      "properties": {
+        "language": {
+          "$ref": "#/$defs/language_id"
+        },
+        "detail": {
+          "type": "string"
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "languages",
+        "scope"
+      ],
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/language_id"
+          },
+          "uniqueItems": true
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        }
+      }
+    },
+    "scope": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "snapshot"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "paths"
+          ],
+          "properties": {
+            "kind": {
+              "const": "paths"
+            },
+            "paths": {
+              "type": "array",
+              "items": {
+                "$ref": "../kernel/primitives.v1.json#/$defs/repo_path"
+              },
+              "uniqueItems": true
+            }
+          }
+        }
+      ]
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "considered_files",
+        "parsed_units",
+        "failed_units",
+        "skipped_no_adapter",
+        "skipped_missing_paths",
+        "missing_requested_languages",
+        "diagnostic_count",
+        "cache_hits",
+        "cache_misses"
+      ],
+      "properties": {
+        "considered_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parsed_units": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_units": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_no_adapter": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_missing_paths": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing_requested_languages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "diagnostic_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_hits": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_misses": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

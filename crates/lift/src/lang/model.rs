@@ -311,6 +311,10 @@ pub(crate) struct ParseStats {
     pub skipped_missing_paths: u64,
     pub missing_requested_languages: u64,
     pub diagnostic_count: u64,
+    #[serde(default)]
+    pub cache_hits: u64,
+    #[serde(default)]
+    pub cache_misses: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

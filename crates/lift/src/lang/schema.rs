@@ -7,3 +7,13 @@ pub(crate) const LANG_PARSE_MANIFEST_V1_SCHEMA_FILE: &str = "parse_manifest.v1.j
 
 pub(crate) const LANG_PARSE_MANIFEST_V1_SCHEMA_JSON: &str =
     include_str!("../../schemas/lang/parse_manifest.v1.json");
+
+pub(crate) const LANG_PARSE_MANIFEST_V2_SCHEMA_ID: &str =
+    "https://schemas.substrate.dev/lift/lang/parse_manifest.v2.json";
+
+pub(crate) const LANG_PARSE_MANIFEST_V2_SCHEMA_VERSION: u32 = 2;
+
+pub(crate) const LANG_PARSE_MANIFEST_V2_SCHEMA_FILE: &str = "parse_manifest.v2.json";
+
+pub(crate) const LANG_PARSE_MANIFEST_V2_SCHEMA_JSON: &str =
+    include_str!("../../schemas/lang/parse_manifest.v2.json");

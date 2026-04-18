@@ -4,6 +4,7 @@
 #![allow(unused_imports)]
 
 pub(crate) mod adapter;
+pub(crate) mod cache;
 pub(crate) mod driver;
 pub(crate) mod error;
 pub(crate) mod model;
@@ -15,6 +16,10 @@ pub(crate) use crate::pack::LanguageId;
 pub(crate) use adapter::{
     AdapterDescriptor, AdapterName, AdapterParseOutput, AdapterParseResult, LanguageAdapter,
     ParseInput,
+};
+pub(crate) use cache::{
+    CachedParseOutcome, InMemoryParseCache, NoopParseCache, ParseCache, ParseCacheKey,
+    ParseCacheLookup, PLATFORM_CACHE_VERSION,
 };
 pub(crate) use driver::ParseDriver;
 pub(crate) use error::{LangError, LangResult};

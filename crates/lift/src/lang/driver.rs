@@ -5,9 +5,10 @@ use std::sync::Arc;
 use crate::kernel::{Diagnostic, DiagnosticCode, Locator, RepoPath, Severity, SymbolId};
 use crate::lang::{
     compare_symbol_drafts, sort_local_edges, sort_local_symbols, sort_surface_markers,
-    symbol_identity_lemma, AdapterDescriptor, AdapterParseOutput, AdapterParseResult, EdgeEndpoint,
-    EdgeEndpointDraft, FailedParse, LangError, LangResult, LanguageAdapter, LanguageId,
-    LanguageRegistry, LocalEdge, LocalSymbol, LocalSymbolDraft, MissingRequestedLanguage,
+    symbol_identity_lemma, AdapterDescriptor, AdapterParseOutput, AdapterParseResult,
+    CachedParseOutcome, EdgeEndpoint, EdgeEndpointDraft, FailedParse, LangError, LangResult,
+    LanguageAdapter, LanguageId, LanguageRegistry, LocalEdge, LocalSymbol, LocalSymbolDraft,
+    MissingRequestedLanguage, NoopParseCache, ParseCache, ParseCacheKey, ParseCacheLookup,
     ParseInput, ParseRequest, ParseScope, ParseSet, ParseStats, ParsedUnit, ReferenceTarget,
     ReferenceTargetDraft, SkippedParse, SkippedReason, SurfaceMarker,
 };
@@ -15,11 +16,22 @@ use crate::repo::{InventoryEntry, RepoSnapshot};
 
 pub(crate) struct ParseDriver {
     registry: LanguageRegistry,
+    cache: Arc<dyn ParseCache>,
 }
 
 impl ParseDriver {
     pub(crate) fn new(registry: LanguageRegistry) -> Self {
-        Self { registry }
+        Self::with_cache(registry, NoopParseCache)
+    }
+
+    pub(crate) fn with_cache<C>(registry: LanguageRegistry, cache: C) -> Self
+    where
+        C: ParseCache + 'static,
+    {
+        Self {
+            registry,
+            cache: Arc::new(cache),
+        }
     }
 
     pub(crate) fn parse_snapshot(
@@ -163,15 +175,25 @@ impl ParseDriver {
             CandidateSelection::Adapter {
                 adapter,
                 descriptor,
-            } => match self.invoke_parse(&adapter, &descriptor, &input) {
-                ParseAttempt::Failed(failed) => parse_set.failed.push(failed),
-                ParseAttempt::Parsed(output) => {
-                    match normalize_parsed_output(&descriptor, &input, output)? {
-                        NormalizedFile::Parsed(unit) => parse_set.units.push(unit),
-                        NormalizedFile::Failed(failed) => parse_set.failed.push(failed),
+            } => {
+                let cache_key = ParseCacheKey::for_input(&input, &descriptor);
+                match self.cache.get(&cache_key) {
+                    ParseCacheLookup::Disabled => {
+                        let outcome = self.parse_and_normalize(&adapter, &descriptor, &input)?;
+                        apply_cached_outcome(parse_set, outcome);
+                    }
+                    ParseCacheLookup::Hit(outcome) => {
+                        parse_set.stats.cache_hits += 1;
+                        apply_cached_outcome(parse_set, *outcome);
+                    }
+                    ParseCacheLookup::Miss => {
+                        parse_set.stats.cache_misses += 1;
+                        let outcome = self.parse_and_normalize(&adapter, &descriptor, &input)?;
+                        self.cache.put(cache_key, outcome.clone());
+                        apply_cached_outcome(parse_set, outcome);
                     }
                 }
-            },
+            }
         }
 
         Ok(())
@@ -255,6 +277,30 @@ impl ParseDriver {
                 )],
             }),
         }
+    }
+
+    fn parse_and_normalize(
+        &self,
+        adapter: &Arc<dyn LanguageAdapter>,
+        descriptor: &AdapterDescriptor,
+        input: &ParseInput<'_>,
+    ) -> LangResult<CachedParseOutcome> {
+        match self.invoke_parse(adapter, descriptor, input) {
+            ParseAttempt::Failed(failed) => Ok(CachedParseOutcome::Failed(failed)),
+            ParseAttempt::Parsed(output) => {
+                match normalize_parsed_output(descriptor, input, output)? {
+                    NormalizedFile::Parsed(unit) => Ok(CachedParseOutcome::Parsed(unit)),
+                    NormalizedFile::Failed(failed) => Ok(CachedParseOutcome::Failed(failed)),
+                }
+            }
+        }
+    }
+}
+
+fn apply_cached_outcome(parse_set: &mut ParseSet, outcome: CachedParseOutcome) {
+    match outcome {
+        CachedParseOutcome::Parsed(unit) => parse_set.units.push(unit),
+        CachedParseOutcome::Failed(failed) => parse_set.failed.push(failed),
     }
 }
 

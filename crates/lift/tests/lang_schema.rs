@@ -106,6 +106,8 @@ mod lang {
     pub(crate) use schema::{
         LANG_PARSE_MANIFEST_V1_SCHEMA_FILE, LANG_PARSE_MANIFEST_V1_SCHEMA_ID,
         LANG_PARSE_MANIFEST_V1_SCHEMA_JSON, LANG_PARSE_MANIFEST_V1_SCHEMA_VERSION,
+        LANG_PARSE_MANIFEST_V2_SCHEMA_FILE, LANG_PARSE_MANIFEST_V2_SCHEMA_ID,
+        LANG_PARSE_MANIFEST_V2_SCHEMA_JSON, LANG_PARSE_MANIFEST_V2_SCHEMA_VERSION,
     };
 }
 
@@ -118,7 +120,7 @@ struct ParseManifest {
 }
 
 #[test]
-fn embedded_lang_schema_matches_disk() {
+fn embedded_lang_schemas_match_disk() {
     assert_eq!(
         lang::LANG_PARSE_MANIFEST_V1_SCHEMA_JSON,
         load_text("schemas/lang/parse_manifest.v1.json")
@@ -132,74 +134,72 @@ fn embedded_lang_schema_matches_disk() {
         "parse_manifest.v1.json"
     );
     assert_eq!(lang::LANG_PARSE_MANIFEST_V1_SCHEMA_VERSION, 1);
+
+    assert_eq!(
+        lang::LANG_PARSE_MANIFEST_V2_SCHEMA_JSON,
+        load_text("schemas/lang/parse_manifest.v2.json")
+    );
+    assert_eq!(
+        lang::LANG_PARSE_MANIFEST_V2_SCHEMA_ID,
+        "https://schemas.substrate.dev/lift/lang/parse_manifest.v2.json"
+    );
+    assert_eq!(
+        lang::LANG_PARSE_MANIFEST_V2_SCHEMA_FILE,
+        "parse_manifest.v2.json"
+    );
+    assert_eq!(lang::LANG_PARSE_MANIFEST_V2_SCHEMA_VERSION, 2);
 }
 
 #[test]
-fn valid_lang_schema_fixtures_validate_and_deserialize() {
+fn valid_lang_schema_v1_fixtures_validate_and_deserialize() {
     for fixture in [
         "fixtures/lang/valid/snapshot_parse_manifest.json",
         "fixtures/lang/valid/paths_scope_parse_manifest.json",
     ] {
-        let instance = assert_schema_valid(fixture);
+        let instance = assert_schema_valid("schemas/lang/parse_manifest.v1.json", fixture);
         let manifest: ParseManifest =
-            serde_json::from_value(instance).expect("fixture should deserialize");
+            serde_json::from_value(instance.clone()).expect("fixture should deserialize");
 
         assert_eq!(manifest.version, 1);
+        assert_manifest_invariants(&manifest, fixture);
         assert!(
-            !manifest.case.is_empty(),
-            "fixture case should not be empty"
+            instance["stats"].get("cache_hits").is_none(),
+            "unexpected cache_hits in {fixture}"
         );
-        assert_eq!(
-            manifest
-                .parse_set
-                .request
-                .fingerprint()
-                .expect("request fingerprint"),
-            manifest.parse_set.request_fingerprint,
-            "request_fingerprint mismatch in {fixture}"
+        assert!(
+            instance["stats"].get("cache_misses").is_none(),
+            "unexpected cache_misses in {fixture}"
         );
+    }
+}
 
-        for unit in &manifest.parse_set.units {
-            assert_eq!(
-                unit.fingerprint().expect("unit fingerprint"),
-                unit.unit_fingerprint,
-                "unit_fingerprint mismatch in {fixture} for {}",
-                unit.path.as_str()
-            );
-        }
+#[test]
+fn valid_lang_schema_v2_fixtures_validate_and_deserialize() {
+    for (fixture, expected_hits, expected_misses) in [
+        (
+            "fixtures/lang/valid/snapshot_parse_manifest_v2.json",
+            1_u64,
+            2_u64,
+        ),
+        (
+            "fixtures/lang/valid/paths_scope_parse_manifest_v2.json",
+            0_u64,
+            0_u64,
+        ),
+    ] {
+        let instance = assert_schema_valid("schemas/lang/parse_manifest.v2.json", fixture);
+        let manifest: ParseManifest =
+            serde_json::from_value(instance.clone()).expect("fixture should deserialize");
 
+        assert_eq!(manifest.version, 2);
+        assert_manifest_invariants(&manifest, fixture);
         assert_eq!(
-            manifest.parse_set.stats.parsed_units,
-            manifest.parse_set.units.len() as u64,
-            "parsed_units mismatch in {fixture}"
+            instance["stats"]["cache_hits"].as_u64(),
+            Some(expected_hits)
         );
         assert_eq!(
-            manifest.parse_set.stats.failed_units,
-            manifest.parse_set.failed.len() as u64,
-            "failed_units mismatch in {fixture}"
-        );
-        assert_eq!(
-            manifest.parse_set.stats.missing_requested_languages,
-            manifest.parse_set.missing_languages.len() as u64,
-            "missing_requested_languages mismatch in {fixture}"
-        );
-
-        let expected_diagnostic_count = manifest.parse_set.diagnostics.len() as u64
-            + manifest
-                .parse_set
-                .units
-                .iter()
-                .map(|unit| unit.diagnostics.len() as u64)
-                .sum::<u64>()
-            + manifest
-                .parse_set
-                .failed
-                .iter()
-                .map(|failed| failed.diagnostics.len() as u64)
-                .sum::<u64>();
-        assert_eq!(
-            manifest.parse_set.stats.diagnostic_count, expected_diagnostic_count,
-            "diagnostic_count mismatch in {fixture}"
+            instance["stats"]["cache_misses"].as_u64(),
+            Some(expected_misses)
         );
     }
 }
@@ -213,29 +213,88 @@ fn invalid_lang_schema_fixtures_fail_validation() {
         "fixtures/lang/invalid/top_level_unknown_field.json",
     ] {
         let instance = load_json(fixture);
-        assert_schema_invalid(&instance, fixture);
+        assert_schema_invalid("schemas/lang/parse_manifest.v1.json", &instance, fixture);
     }
 }
 
-fn assert_schema_valid(fixture: &str) -> Value {
+fn assert_manifest_invariants(manifest: &ParseManifest, fixture: &str) {
+    assert!(
+        !manifest.case.is_empty(),
+        "fixture case should not be empty"
+    );
+    assert_eq!(
+        manifest
+            .parse_set
+            .request
+            .fingerprint()
+            .expect("request fingerprint"),
+        manifest.parse_set.request_fingerprint,
+        "request_fingerprint mismatch in {fixture}"
+    );
+
+    for unit in &manifest.parse_set.units {
+        assert_eq!(
+            unit.fingerprint().expect("unit fingerprint"),
+            unit.unit_fingerprint,
+            "unit_fingerprint mismatch in {fixture} for {}",
+            unit.path.as_str()
+        );
+    }
+
+    assert_eq!(
+        manifest.parse_set.stats.parsed_units,
+        manifest.parse_set.units.len() as u64,
+        "parsed_units mismatch in {fixture}"
+    );
+    assert_eq!(
+        manifest.parse_set.stats.failed_units,
+        manifest.parse_set.failed.len() as u64,
+        "failed_units mismatch in {fixture}"
+    );
+    assert_eq!(
+        manifest.parse_set.stats.missing_requested_languages,
+        manifest.parse_set.missing_languages.len() as u64,
+        "missing_requested_languages mismatch in {fixture}"
+    );
+
+    let expected_diagnostic_count = manifest.parse_set.diagnostics.len() as u64
+        + manifest
+            .parse_set
+            .units
+            .iter()
+            .map(|unit| unit.diagnostics.len() as u64)
+            .sum::<u64>()
+        + manifest
+            .parse_set
+            .failed
+            .iter()
+            .map(|failed| failed.diagnostics.len() as u64)
+            .sum::<u64>();
+    assert_eq!(
+        manifest.parse_set.stats.diagnostic_count, expected_diagnostic_count,
+        "diagnostic_count mismatch in {fixture}"
+    );
+}
+
+fn assert_schema_valid(schema: &str, fixture: &str) -> Value {
     let instance = load_json(fixture);
-    let validator = schema_validator();
+    let validator = schema_validator(schema);
     if let Err(error) = validator.validate(&instance) {
         panic!("expected fixture to validate: {fixture}: {error}");
     }
     instance
 }
 
-fn assert_schema_invalid(instance: &Value, fixture: &str) {
-    let validator = schema_validator();
+fn assert_schema_invalid(schema: &str, instance: &Value, fixture: &str) {
+    let validator = schema_validator(schema);
     assert!(
         validator.validate(instance).is_err(),
         "expected fixture to fail schema validation: {fixture}"
     );
 }
 
-fn schema_validator() -> Validator {
-    let root_schema = load_json("schemas/lang/parse_manifest.v1.json");
+fn schema_validator(schema: &str) -> Validator {
+    let root_schema = load_json(schema);
     let kernel_schema = load_json("schemas/kernel/primitives.v1.json");
     let retriever = InMemoryRetriever {
         schemas: HashMap::from([

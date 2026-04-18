@@ -16,6 +16,10 @@ pub(crate) struct LanguageRegistry {
     languages: BTreeMap<LanguageId, AdapterName>,
 }
 
+pub(crate) fn built_in_registry() -> LangResult<LanguageRegistry> {
+    LanguageRegistryBuilder::new().build()
+}
+
 impl LanguageRegistryBuilder {
     pub(crate) fn new() -> Self {
         Self::default()

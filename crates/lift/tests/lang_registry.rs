@@ -63,6 +63,20 @@ impl LanguageAdapter for TestAdapter {
 }
 
 #[test]
+fn built_in_registry_is_deterministic_for_active_feature_set() {
+    let first = lang::registry::built_in_registry().expect("built-in registry should build");
+    let second = lang::registry::built_in_registry().expect("built-in registry should build");
+
+    assert_eq!(first.descriptors(), second.descriptors());
+    assert!(first.descriptors().is_empty());
+    assert!(second.descriptors().is_empty());
+    assert!(first.adapter_for_language(pack::LanguageId::Rust).is_none());
+    assert!(second
+        .adapter_for_language(pack::LanguageId::Rust)
+        .is_none());
+}
+
+#[test]
 fn duplicate_adapter_name_is_rejected() {
     let registration = LanguageRegistryBuilder::new()
         .register(TestAdapter::new(

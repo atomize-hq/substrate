@@ -1,0 +1,46 @@
+{
+  "version": 2,
+  "case": "paths_scope_parse_manifest_v2",
+  "snapshot_fingerprint": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "request_fingerprint": "sha256:ddd3fb14a72282b49bf2c8f8db910e710d70141c609945424290d413fd922199",
+  "request": {
+    "languages": ["rust"],
+    "scope": {
+      "kind": "paths",
+      "paths": ["src/lib.rs", "src/missing.rs"]
+    }
+  },
+  "units": [],
+  "failed": [],
+  "skipped": [
+    {
+      "path": "src/missing.rs",
+      "reason": "path_not_in_snapshot",
+      "detail": "requested path not present in snapshot"
+    }
+  ],
+  "missing_languages": [
+    {
+      "language": "rust",
+      "detail": "no adapter registered"
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "lang.fixture.paths_scope",
+      "severity": "warning",
+      "message": "explicit path scope requested one missing file"
+    }
+  ],
+  "stats": {
+    "considered_files": 0,
+    "parsed_units": 0,
+    "failed_units": 0,
+    "skipped_no_adapter": 0,
+    "skipped_missing_paths": 1,
+    "missing_requested_languages": 1,
+    "diagnostic_count": 1,
+    "cache_hits": 0,
+    "cache_misses": 0
+  }
+}
