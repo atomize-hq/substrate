@@ -22,94 +22,11 @@ mod kernel {
 #[path = "../src/pack/mod.rs"]
 mod pack;
 
-#[allow(dead_code)]
-mod lang {
-    use serde::{Deserialize, Serialize};
-    use thiserror::Error;
+#[path = "../src/repo/mod.rs"]
+mod repo;
 
-    pub(crate) use crate::pack::LanguageId;
-
-    #[derive(Debug, Error, Clone, Eq, PartialEq)]
-    pub(crate) enum LangError {
-        #[error("invalid adapter name")]
-        InvalidAdapterName { input: String },
-    }
-
-    pub(crate) type LangResult<T> = Result<T, LangError>;
-
-    #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-    #[serde(try_from = "String", into = "String")]
-    pub(crate) struct AdapterName(String);
-
-    impl AdapterName {
-        pub(crate) fn parse(input: &str) -> LangResult<Self> {
-            if valid_adapter_name(input) {
-                Ok(Self(input.to_owned()))
-            } else {
-                Err(LangError::InvalidAdapterName {
-                    input: input.to_owned(),
-                })
-            }
-        }
-    }
-
-    impl TryFrom<String> for AdapterName {
-        type Error = LangError;
-
-        fn try_from(value: String) -> LangResult<Self> {
-            Self::parse(&value)
-        }
-    }
-
-    impl From<AdapterName> for String {
-        fn from(value: AdapterName) -> Self {
-            value.0
-        }
-    }
-
-    fn valid_adapter_name(input: &str) -> bool {
-        let mut segments = input.split('.');
-        let Some(first) = segments.next() else {
-            return false;
-        };
-        if !valid_adapter_segment(first, false) {
-            return false;
-        }
-        let mut saw_tail = false;
-        for segment in segments {
-            saw_tail = true;
-            if !valid_adapter_segment(segment, true) {
-                return false;
-            }
-        }
-        saw_tail
-    }
-
-    fn valid_adapter_segment(segment: &str, allow_underscore: bool) -> bool {
-        let mut chars = segment.chars();
-        matches!(chars.next(), Some(ch) if ch.is_ascii_lowercase())
-            && chars.all(|ch| {
-                ch.is_ascii_lowercase() || ch.is_ascii_digit() || (allow_underscore && ch == '_')
-            })
-    }
-
-    pub(crate) mod model {
-        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lang/model.rs"));
-    }
-
-    pub(crate) use model::ParseSet;
-
-    pub(crate) mod schema {
-        include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lang/schema.rs"));
-    }
-
-    pub(crate) use schema::{
-        LANG_PARSE_MANIFEST_V1_SCHEMA_FILE, LANG_PARSE_MANIFEST_V1_SCHEMA_ID,
-        LANG_PARSE_MANIFEST_V1_SCHEMA_JSON, LANG_PARSE_MANIFEST_V1_SCHEMA_VERSION,
-        LANG_PARSE_MANIFEST_V2_SCHEMA_FILE, LANG_PARSE_MANIFEST_V2_SCHEMA_ID,
-        LANG_PARSE_MANIFEST_V2_SCHEMA_JSON, LANG_PARSE_MANIFEST_V2_SCHEMA_VERSION,
-    };
-}
+#[path = "../src/lang/mod.rs"]
+mod lang;
 
 #[derive(Clone, Debug, Deserialize)]
 struct ParseManifest {
@@ -135,6 +52,23 @@ fn embedded_lang_schemas_match_disk() {
     );
     assert_eq!(lang::LANG_PARSE_MANIFEST_V1_SCHEMA_VERSION, 1);
 
+    assert_eq!(
+        lang::LANG_PARSE_MANIFEST_V2_SCHEMA_JSON,
+        load_text("schemas/lang/parse_manifest.v2.json")
+    );
+    assert_eq!(
+        lang::LANG_PARSE_MANIFEST_V2_SCHEMA_ID,
+        "https://schemas.substrate.dev/lift/lang/parse_manifest.v2.json"
+    );
+    assert_eq!(
+        lang::LANG_PARSE_MANIFEST_V2_SCHEMA_FILE,
+        "parse_manifest.v2.json"
+    );
+    assert_eq!(lang::LANG_PARSE_MANIFEST_V2_SCHEMA_VERSION, 2);
+}
+
+#[test]
+fn lang_module_re_exports_v2_schema_constants() {
     assert_eq!(
         lang::LANG_PARSE_MANIFEST_V2_SCHEMA_JSON,
         load_text("schemas/lang/parse_manifest.v2.json")

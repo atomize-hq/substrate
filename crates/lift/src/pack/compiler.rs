@@ -3943,6 +3943,8 @@ enabled = ["score"]
             .duration_since(UNIX_EPOCH)
             .expect("clock")
             .as_nanos();
-        std::env::temp_dir().join(format!("{nanos}-{name}"))
+        static NEXT_TEMP_NONCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let nonce = NEXT_TEMP_NONCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        std::env::temp_dir().join(format!("{nanos}-{nonce}-{name}"))
     }
 }

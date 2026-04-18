@@ -3,7 +3,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::kernel::{FileId, Fingerprint};
 use crate::lang::{
-    AdapterDescriptor, AdapterName, FailedParse, LanguageId, ParseInput, ParsedUnit,
+    AdapterDescriptor, AdapterName, FailedParse, LangError, LangResult, LanguageId, ParseInput,
+    ParsedUnit,
 };
 
 pub(crate) const PLATFORM_CACHE_VERSION: &str = "phase_b_v1";
@@ -52,19 +53,21 @@ pub(crate) enum ParseCacheLookup {
 }
 
 pub(crate) trait ParseCache: Send + Sync {
-    fn get(&self, key: &ParseCacheKey) -> ParseCacheLookup;
-    fn put(&self, key: ParseCacheKey, value: CachedParseOutcome);
+    fn get(&self, key: &ParseCacheKey) -> LangResult<ParseCacheLookup>;
+    fn put(&self, key: ParseCacheKey, value: CachedParseOutcome) -> LangResult<()>;
 }
 
 #[derive(Default)]
 pub(crate) struct NoopParseCache;
 
 impl ParseCache for NoopParseCache {
-    fn get(&self, _key: &ParseCacheKey) -> ParseCacheLookup {
-        ParseCacheLookup::Disabled
+    fn get(&self, _key: &ParseCacheKey) -> LangResult<ParseCacheLookup> {
+        Ok(ParseCacheLookup::Disabled)
     }
 
-    fn put(&self, _key: ParseCacheKey, _value: CachedParseOutcome) {}
+    fn put(&self, _key: ParseCacheKey, _value: CachedParseOutcome) -> LangResult<()> {
+        Ok(())
+    }
 }
 
 #[derive(Clone, Default)]
@@ -73,30 +76,32 @@ pub(crate) struct InMemoryParseCache {
 }
 
 impl InMemoryParseCache {
-    pub(crate) fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> LangResult<usize> {
+        Ok(self.lock_entries()?.len())
+    }
+
+    fn lock_entries(
+        &self,
+    ) -> LangResult<std::sync::MutexGuard<'_, BTreeMap<ParseCacheKey, CachedParseOutcome>>> {
         self.entries
             .lock()
-            .expect("in-memory parse cache lock poisoned")
-            .len()
+            .map_err(|error| LangError::CacheInvariant {
+                reason: format!("in-memory parse cache lock poisoned: {error}"),
+            })
     }
 }
 
 impl ParseCache for InMemoryParseCache {
-    fn get(&self, key: &ParseCacheKey) -> ParseCacheLookup {
-        let entries = self
-            .entries
-            .lock()
-            .expect("in-memory parse cache lock poisoned");
-        match entries.get(key).cloned() {
+    fn get(&self, key: &ParseCacheKey) -> LangResult<ParseCacheLookup> {
+        let entries = self.lock_entries()?;
+        Ok(match entries.get(key).cloned() {
             Some(value) => ParseCacheLookup::Hit(Box::new(value)),
             None => ParseCacheLookup::Miss,
-        }
+        })
     }
 
-    fn put(&self, key: ParseCacheKey, value: CachedParseOutcome) {
-        self.entries
-            .lock()
-            .expect("in-memory parse cache lock poisoned")
-            .insert(key, value);
+    fn put(&self, key: ParseCacheKey, value: CachedParseOutcome) -> LangResult<()> {
+        self.lock_entries()?.insert(key, value);
+        Ok(())
     }
 }

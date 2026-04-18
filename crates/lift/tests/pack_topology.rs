@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -294,7 +295,9 @@ fn unique_temp_dir(name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("clock")
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!("substrate-lift-{nanos}-{name}"));
+    static NEXT_TEMP_NONCE: AtomicU64 = AtomicU64::new(0);
+    let nonce = NEXT_TEMP_NONCE.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("substrate-lift-{nanos}-{nonce}-{name}"));
     fs::create_dir_all(&dir).expect("create temp dir");
     dir
 }

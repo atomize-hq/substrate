@@ -177,7 +177,7 @@ impl ParseDriver {
                 descriptor,
             } => {
                 let cache_key = ParseCacheKey::for_input(&input, &descriptor);
-                match self.cache.get(&cache_key) {
+                match self.cache.get(&cache_key)? {
                     ParseCacheLookup::Disabled => {
                         let outcome = self.parse_and_normalize(&adapter, &descriptor, &input)?;
                         apply_cached_outcome(parse_set, outcome);
@@ -189,7 +189,7 @@ impl ParseDriver {
                     ParseCacheLookup::Miss => {
                         parse_set.stats.cache_misses += 1;
                         let outcome = self.parse_and_normalize(&adapter, &descriptor, &input)?;
-                        self.cache.put(cache_key, outcome.clone());
+                        self.cache.put(cache_key, outcome.clone())?;
                         apply_cached_outcome(parse_set, outcome);
                     }
                 }

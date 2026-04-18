@@ -28,8 +28,9 @@ mod repo_support;
 use kernel::RepoPath;
 use lang::{
     AdapterDescriptor, AdapterName, AdapterParseOutput, AdapterParseResult, CachedParseOutcome,
-    InMemoryParseCache, LanguageAdapter, LanguageRegistryBuilder, ParseCache, ParseCacheKey,
-    ParseDriver, ParseInput, ParseRequest, ParseScope, PLATFORM_CACHE_VERSION,
+    InMemoryParseCache, LangError, LangResult, LanguageAdapter, LanguageRegistryBuilder,
+    ParseCache, ParseCacheKey, ParseCacheLookup, ParseDriver, ParseInput, ParseRequest, ParseScope,
+    PLATFORM_CACHE_VERSION,
 };
 
 #[derive(Clone, Debug, Deserialize)]
@@ -100,6 +101,20 @@ impl LanguageAdapter for FakeAdapter {
             surface_markers: Vec::new(),
             diagnostics: Vec::new(),
         })
+    }
+}
+
+struct FailingCache;
+
+impl ParseCache for FailingCache {
+    fn get(&self, _key: &ParseCacheKey) -> LangResult<ParseCacheLookup> {
+        Err(LangError::CacheInvariant {
+            reason: "simulated cache get failure".to_owned(),
+        })
+    }
+
+    fn put(&self, _key: ParseCacheKey, _value: CachedParseOutcome) -> LangResult<()> {
+        Ok(())
     }
 }
 
@@ -204,7 +219,7 @@ fn in_memory_cache_hits_on_second_equivalent_run_except_stats() {
     assert_eq!(first.stats.cache_misses, 1);
     assert_eq!(second.stats.cache_hits, 1);
     assert_eq!(second.stats.cache_misses, 0);
-    assert_eq!(cache.len(), 1);
+    assert_eq!(cache.len().expect("cache length"), 1);
 }
 
 #[test]
@@ -244,7 +259,7 @@ fn cache_miss_when_blob_fingerprint_changes() {
         first.units[0].blob_fingerprint,
         second.units[0].blob_fingerprint
     );
-    assert_eq!(cache.len(), 2);
+    assert_eq!(cache.len().expect("cache length"), 2);
 }
 
 #[test]
@@ -291,7 +306,7 @@ fn cache_miss_when_adapter_version_changes() {
     assert_eq!(second.stats.cache_hits, 0);
     assert_eq!(second.stats.cache_misses, 1);
     assert_eq!(second.units[0].adapter_version, "2.0.0");
-    assert_eq!(cache.len(), 2);
+    assert_eq!(cache.len().expect("cache length"), 2);
 }
 
 #[test]
@@ -335,10 +350,12 @@ fn cache_miss_when_platform_cache_version_changes() {
         blob_fingerprint: &entry.blob_fingerprint,
         bytes,
     };
-    cache.put(
-        ParseCacheKey::with_platform_cache_version(&input, &descriptor, "stale-platform-v0"),
-        CachedParseOutcome::Parsed(seed.units[0].clone()),
-    );
+    cache
+        .put(
+            ParseCacheKey::with_platform_cache_version(&input, &descriptor, "stale-platform-v0"),
+            CachedParseOutcome::Parsed(seed.units[0].clone()),
+        )
+        .expect("seed cache entry");
 
     let current = parse_with_driver(
         &ParseDriver::with_cache(
@@ -357,7 +374,7 @@ fn cache_miss_when_platform_cache_version_changes() {
     assert_eq!(PLATFORM_CACHE_VERSION, "phase_b_v1");
     assert_eq!(current.stats.cache_hits, 0);
     assert_eq!(current.stats.cache_misses, 1);
-    assert_eq!(cache.len(), 2);
+    assert_eq!(cache.len().expect("cache length"), 2);
 }
 
 #[test]
@@ -390,7 +407,7 @@ fn cache_reuses_failed_parse_outcomes() {
     assert_same_payload_except_stats(&first, &second);
     assert_eq!(first.stats.cache_misses, 1);
     assert_eq!(second.stats.cache_hits, 1);
-    assert_eq!(cache.len(), 1);
+    assert_eq!(cache.len().expect("cache length"), 1);
 }
 
 #[test]
@@ -421,7 +438,7 @@ fn cache_does_not_cache_skipped_or_missing_language_records() {
 
     assert_eq!(missing.stats.cache_hits, 0);
     assert_eq!(missing.stats.cache_misses, 0);
-    assert_eq!(missing_cache.len(), 0);
+    assert_eq!(missing_cache.len().expect("cache length"), 0);
     assert_eq!(missing.missing_languages.len(), 1);
 
     let skip_cache = InMemoryParseCache::default();
@@ -448,11 +465,46 @@ fn cache_does_not_cache_skipped_or_missing_language_records() {
 
     assert_eq!(skipped.stats.cache_hits, 0);
     assert_eq!(skipped.stats.cache_misses, 0);
-    assert_eq!(skip_cache.len(), 0);
+    assert_eq!(skip_cache.len().expect("cache length"), 0);
     assert_eq!(skipped.skipped.len(), 1);
     assert_eq!(
         skipped.skipped[0].reason,
         lang::SkippedReason::NoMatchingAdapter
+    );
+}
+
+#[test]
+fn cache_backend_failures_surface_as_cache_invariant_errors() {
+    let bytes = serde_json::to_vec(&json!({
+        "symbols": [fake_symbol("main", "alpha", 0, 5)]
+    }))
+    .expect("json");
+    let (_temp, snapshot) = snapshot_with_files(&[("src/app.fake.json", &bytes)]);
+    let driver = ParseDriver::with_cache(
+        registry(vec![FakeAdapter::new(
+            "builtin.fake_json",
+            "json",
+            ".fake.json",
+            "1.0.0",
+        )]),
+        FailingCache,
+    );
+
+    let error = driver
+        .parse_snapshot(
+            &snapshot,
+            &ParseRequest {
+                languages: language_set(&["json"]),
+                scope: ParseScope::Snapshot,
+            },
+        )
+        .expect_err("cache get failure should surface");
+
+    assert_eq!(
+        error,
+        LangError::CacheInvariant {
+            reason: "simulated cache get failure".to_owned(),
+        }
     );
 }
 
@@ -487,5 +539,5 @@ fn recognize_panic_behavior_remains_deterministic_and_uncached() {
     assert_eq!(first.stats.cache_misses, 0);
     assert_eq!(second.stats.cache_hits, 0);
     assert_eq!(second.stats.cache_misses, 0);
-    assert_eq!(cache.len(), 0);
+    assert_eq!(cache.len().expect("cache length"), 0);
 }
