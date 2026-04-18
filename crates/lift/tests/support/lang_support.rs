@@ -4,13 +4,19 @@ use toml::Value;
 
 #[allow(dead_code)]
 mod lang {
-    pub(crate) use crate::pack::LanguageId;
+    pub(crate) use crate::pack::{LanguageId, QueryEngineKind};
 
     pub(crate) mod adapter {
         include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lang/adapter.rs"));
     }
     pub(crate) mod cache {
         include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lang/cache.rs"));
+    }
+    pub(crate) mod capabilities {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/lang/capabilities.rs"
+        ));
     }
     pub(crate) mod driver {
         include!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lang/driver.rs"));
@@ -32,6 +38,7 @@ mod lang {
     pub(crate) use cache::{
         CachedParseOutcome, NoopParseCache, ParseCache, ParseCacheKey, ParseCacheLookup,
     };
+    pub(crate) use capabilities::AdapterCapabilities;
     pub(crate) use driver::ParseDriver;
     pub(crate) use error::{LangError, LangResult};
     pub(crate) use model::{
