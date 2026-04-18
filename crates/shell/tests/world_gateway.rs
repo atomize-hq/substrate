@@ -229,3 +229,78 @@ fn world_gateway_http_failures_bubble_as_errors() {
         .code(1)
         .stderr(predicate::str::contains("substrate world gateway:"));
 }
+
+#[test]
+fn world_gateway_invalid_integration_uses_exit_code_2() {
+    let temp = tempfile::tempdir().expect("gateway invalid integration tempdir");
+    let socket_path = temp.path().join("agent.sock");
+    let _socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::GatewayLifecycleHttpError {
+            status: 500,
+            body: "{\"error\":\"internal: gateway_invalid_integration: unsupported integrated backend\"}".to_string(),
+        },
+    );
+
+    let mut cmd = substrate_shell_driver();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args(["world", "gateway", "sync"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "substrate world gateway sync: invalid integration",
+        ));
+}
+
+#[test]
+fn world_gateway_transient_runtime_failures_use_exit_code_3() {
+    let temp = tempfile::tempdir().expect("gateway transient error tempdir");
+    let socket_path = temp.path().join("agent.sock");
+    let _socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::GatewayLifecycleHttpError {
+            status: 500,
+            body: "{\"error\":\"internal: gateway_transient_failure: gateway did not become ready before timeout\"}".to_string(),
+        },
+    );
+
+    let mut cmd = substrate_shell_driver();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args(["world", "gateway", "restart"])
+        .assert()
+        .code(3)
+        .stderr(predicate::str::contains(
+            "substrate world gateway restart: transient runtime failure",
+        ));
+}
+
+#[test]
+fn world_gateway_policy_failures_use_exit_code_5() {
+    let temp = tempfile::tempdir().expect("gateway policy error tempdir");
+    let socket_path = temp.path().join("agent.sock");
+    let _socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::GatewayLifecycleHttpError {
+            status: 500,
+            body: "{\"error\":\"internal: gateway_policy_blocked: gateway lifecycle is disabled by effective config\"}".to_string(),
+        },
+    );
+
+    let mut cmd = substrate_shell_driver();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: policy or safety failure",
+        ));
+}

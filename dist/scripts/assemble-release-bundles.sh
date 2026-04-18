@@ -260,10 +260,12 @@ package_bundle() {
 
   if [[ "$kind" == "linux" ]]; then
     copy_bin_from_artifact "world-agent" "$target" "$bundle_dir/bin"
+    copy_bin_from_artifact "substrate-gateway" "$target" "$bundle_dir/bin"
   else
     local guest_dir="$bundle_dir/bin/linux"
     mkdir -p "$guest_dir"
     copy_bin_from_artifact "world-agent" "$guest_agent" "$guest_dir"
+    copy_bin_from_artifact "substrate-gateway" "$guest_agent" "$guest_dir"
   fi
 
   local archive_name="substrate-v${VERSION}-${label}."

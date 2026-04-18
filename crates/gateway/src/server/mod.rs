@@ -6,6 +6,7 @@ mod openai_responses;
 use crate::auth::TokenStore;
 use crate::cli::AppConfig;
 use crate::core::GatewayRequest;
+use crate::launch::{GatewayLaunchContract, TokenStoreStrategy};
 use crate::message_tracing::MessageTracer;
 use crate::models::{AnthropicMessagesRequest, RouteType};
 use crate::providers::error::ProviderError;
@@ -230,15 +231,18 @@ fn write_routing_info(model: &str, provider: &str, route_type: &RouteType) {
 }
 
 /// Start the HTTP server
-pub async fn start_server(
-    config: AppConfig,
-    _config_path: std::path::PathBuf,
-) -> anyhow::Result<()> {
+pub async fn start_server(config: AppConfig, launch: GatewayLaunchContract) -> anyhow::Result<()> {
     let router = Router::new(config.clone());
+    let GatewayLaunchContract {
+        mode, token_store, ..
+    } = launch;
 
     // Initialize OAuth token store FIRST (needed by provider registry)
-    let token_store = TokenStore::load_default()
-        .map_err(|e| anyhow::anyhow!("Failed to initialize token store: {}", e))?;
+    let token_store = match token_store {
+        TokenStoreStrategy::Persistent(path) => TokenStore::new(path),
+        TokenStoreStrategy::Disabled => Ok(TokenStore::disabled()),
+    }
+    .map_err(|e| anyhow::anyhow!("Failed to initialize token store: {}", e))?;
 
     let existing_tokens = token_store.list_providers();
     if !existing_tokens.is_empty() {
@@ -250,10 +254,11 @@ pub async fn start_server(
 
     // Initialize provider registry from config (with token store and model mappings)
     let provider_registry = Arc::new(
-        ProviderRegistry::from_configs_with_models(
+        ProviderRegistry::from_configs_with_models_and_mode(
             &config.providers,
             Some(token_store.clone()),
             &config.models,
+            mode,
         )
         .map_err(|e| anyhow::anyhow!("Failed to initialize provider registry: {}", e))?,
     );

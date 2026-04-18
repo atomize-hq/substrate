@@ -1,3 +1,4 @@
+use crate::execution::config_model::{self, CliConfigOverrides, LlmGatewayMode};
 use crate::execution::policy_snapshot::{
     request_world_network_routing, resolve_world_network_policy_for_cwd,
 };
@@ -9,7 +10,10 @@ use agent_api_types::{GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, Gat
 
 #[cfg(target_os = "linux")]
 const DEFAULT_WORLD_SOCKET_PATH: &str = "/run/substrate.sock";
+const EXIT_INVALID_INTEGRATION: i32 = 2;
+const EXIT_TRANSIENT_FAILURE: i32 = 3;
 const EXIT_COMPONENT_UNAVAILABLE: i32 = 4;
+const EXIT_POLICY_FAILURE: i32 = 5;
 
 pub fn run(cmd: &WorldGatewayCmd) -> i32 {
     match run_inner(cmd) {
@@ -45,7 +49,7 @@ fn run_typed_action_with_status_args(
         match call_gateway_action(GatewayAction::Status) {
             Ok(response) => response,
             Err(err) if error_is_component_unavailable(&err) => synthesized_unavailable_response(),
-            Err(err) => return Err(err),
+            Err(err) => return Ok(classify_and_print_gateway_error(command, err)),
         }
     };
 
@@ -77,7 +81,7 @@ fn run_typed_action(command: &str, action: GatewayAction) -> anyhow::Result<i32>
         match call_gateway_action(action) {
             Ok(response) => response,
             Err(err) if error_is_component_unavailable(&err) => synthesized_unavailable_response(),
-            Err(err) => return Err(err),
+            Err(err) => return Ok(classify_and_print_gateway_error(command, err)),
         }
     };
 
@@ -102,13 +106,36 @@ fn call_gateway_action(action: GatewayAction) -> anyhow::Result<GatewayLifecycle
 
 fn build_gateway_request() -> anyhow::Result<GatewayLifecycleRequestV1> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let effective_config =
+        config_model::resolve_effective_config(&cwd, &CliConfigOverrides::default())?;
     let network_policy = resolve_world_network_policy_for_cwd(&cwd)?;
     let world_network = request_world_network_routing(&network_policy);
+    let gateway_mode = match effective_config.llm.gateway.mode {
+        LlmGatewayMode::InWorld => "in_world",
+        LlmGatewayMode::HostOnly => "host_only",
+    };
+    let mut env = std::collections::HashMap::new();
+    env.insert(
+        "SUBSTRATE_LLM_GATEWAY_ENABLED".to_string(),
+        if effective_config.llm.gateway.enabled {
+            "1".to_string()
+        } else {
+            "0".to_string()
+        },
+    );
+    env.insert(
+        "SUBSTRATE_LLM_GATEWAY_MODE".to_string(),
+        gateway_mode.to_string(),
+    );
+    env.insert(
+        "SUBSTRATE_LLM_DEFAULT_BACKEND".to_string(),
+        effective_config.llm.routing.default_backend.clone(),
+    );
 
     Ok(GatewayLifecycleRequestV1 {
         profile: None,
         cwd: Some(cwd.display().to_string()),
-        env: None,
+        env: Some(env),
         agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string()),
         policy_snapshot: network_policy.snapshot,
         world_network: Some(world_network),
@@ -172,6 +199,27 @@ fn command_for_status<'a>(command: &'a str, args: &WorldGatewayStatusArgs) -> &'
 fn emit_unavailable(command: &str) -> i32 {
     eprintln!("{command}: unavailable (required gateway/world component unavailable)");
     EXIT_COMPONENT_UNAVAILABLE
+}
+
+fn classify_and_print_gateway_error(command: &str, err: anyhow::Error) -> i32 {
+    let (exit_code, label) = if error_has_marker(&err, "gateway_invalid_integration:") {
+        (EXIT_INVALID_INTEGRATION, "invalid integration")
+    } else if error_has_marker(&err, "gateway_policy_blocked:") {
+        (EXIT_POLICY_FAILURE, "policy or safety failure")
+    } else if error_has_marker(&err, "gateway_transient_failure:") {
+        (EXIT_TRANSIENT_FAILURE, "transient runtime failure")
+    } else {
+        eprintln!("substrate world gateway: {err:#}");
+        return 1;
+    };
+
+    eprintln!("{command}: {label}");
+    eprintln!("substrate world gateway: {err:#}");
+    exit_code
+}
+
+fn error_has_marker(err: &anyhow::Error, marker: &str) -> bool {
+    err.chain().any(|cause| cause.to_string().contains(marker))
 }
 
 #[cfg(target_os = "linux")]

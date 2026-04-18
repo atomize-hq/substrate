@@ -149,6 +149,16 @@ function Resolve-SubstrateExe {
 $SubstrateExe = Resolve-SubstrateExe -BaseDir $ProjectPath
 Write-Host "[INFO] Using substrate.exe at: $SubstrateExe" -ForegroundColor Yellow
 
+$projectHasCargo = Test-Path (Join-Path $ProjectPath 'Cargo.toml')
+if (-not $projectHasCargo) {
+    Invoke-Step "Packaged guest gateway artifact present" {
+        $gatewayArtifact = Join-Path $ProjectPath 'bin\linux\substrate-gateway'
+        if (-not (Test-Path -LiteralPath $gatewayArtifact)) {
+            throw "expected packaged guest gateway artifact at $gatewayArtifact"
+        }
+    }
+}
+
 function Invoke-WorldDisabledDiagnosticsSmoke {
     param([string]$Exe)
 

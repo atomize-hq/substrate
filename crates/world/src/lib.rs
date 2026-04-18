@@ -35,6 +35,21 @@ impl LinuxLocalBackend {
         Self::default()
     }
 
+    /// Return a compatible cached session if one already exists without creating a new world.
+    pub fn find_compatible_session(&self, spec: &WorldSpec) -> Result<Option<WorldHandle>> {
+        let cache = self
+            .session_cache
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache read lock: {}", e))?;
+
+        Ok(cache
+            .values()
+            .find(|world| world.compatible_with(spec))
+            .map(|world| WorldHandle {
+                id: world.id.clone(),
+            }))
+    }
+
     /// Ensure the overlay for a world is mounted and return its merged root.
     pub fn ensure_overlay_root(&self, world: &WorldHandle) -> Result<std::path::PathBuf> {
         let mut cache = self

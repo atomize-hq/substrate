@@ -30,7 +30,7 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Push-Location $repoRoot
 try {
-    $buildArgs = @('build', '--bin', 'substrate', '--bin', 'substrate-shim')
+    $buildArgs = @('build', '--bin', 'substrate', '--bin', 'substrate-shim', '--bin', 'substrate-gateway')
     if ($Profile -eq 'release') {
         $buildArgs += '--release'
     }

@@ -1883,7 +1883,10 @@ provision_macos_world() {
   if ! limactl shell substrate test -x /usr/local/bin/substrate-world-agent >/dev/null 2>&1; then
     fatal "Lima provisioning completed but /usr/local/bin/substrate-world-agent is missing. Provide bin/linux/world-agent in the release bundle or rerun from a source checkout so the installer can build one."
   fi
-  log "Verified Linux world-agent installation inside Lima (copy/build path logged above)."
+  if ! limactl shell substrate test -x /usr/local/bin/substrate-gateway >/dev/null 2>&1; then
+    fatal "Lima provisioning completed but /usr/local/bin/substrate-gateway is missing. Provide bin/linux/substrate-gateway in the release bundle or rerun from a source checkout so the installer can build one."
+  fi
+  log "Verified Linux world-agent + substrate-gateway installation inside Lima (copy/build path logged above)."
 }
 
 provision_linux_world() {
@@ -1895,10 +1898,17 @@ provision_linux_world() {
   fi
 
   local world_agent=""
+  local gateway_binary=""
   if [[ -x "${version_dir}/bin/world-agent" ]]; then
     world_agent="${version_dir}/bin/world-agent"
   elif [[ -x "${version_dir}/bin/linux/world-agent" ]]; then
     world_agent="${version_dir}/bin/linux/world-agent"
+  fi
+
+  if [[ -x "${version_dir}/bin/substrate-gateway" ]]; then
+    gateway_binary="${version_dir}/bin/substrate-gateway"
+  elif [[ -x "${version_dir}/bin/linux/substrate-gateway" ]]; then
+    gateway_binary="${version_dir}/bin/linux/substrate-gateway"
   fi
 
   if [[ -z "${world_agent}" ]]; then
@@ -1910,12 +1920,22 @@ provision_linux_world() {
     fi
   fi
 
-  log "Installing Linux world agent systemd service..."
+  if [[ -z "${gateway_binary}" ]]; then
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+      gateway_binary="${version_dir}/bin/substrate-gateway"
+      warn "Linux substrate-gateway binary not found in release bundle; using placeholder path for dry run."
+    else
+      fatal "Linux substrate-gateway binary not found in release bundle under ${version_dir}/bin."
+    fi
+  fi
+
+  log "Installing Linux world agent systemd service and substrate-gateway binary..."
 
   local service_path="/etc/systemd/system/substrate-world-agent.service"
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     printf '[%s][dry-run] sudo install -Dm0755 %s /usr/local/bin/substrate-world-agent\n' "${INSTALLER_NAME}" "${world_agent}" >&2
+    printf '[%s][dry-run] sudo install -Dm0755 %s /usr/local/bin/substrate-gateway\n' "${INSTALLER_NAME}" "${gateway_binary}" >&2
     printf '[%s][dry-run] sudo install -d -m0750 /run/substrate /var/lib/substrate\n' "${INSTALLER_NAME}" >&2
     printf '[%s][dry-run] Write systemd unit to %s\n' "${INSTALLER_NAME}" "${service_path}" >&2
     printf '[%s][dry-run] sudo systemctl daemon-reload && sudo systemctl enable --now substrate-world-agent\n' "${INSTALLER_NAME}" >&2
@@ -1923,6 +1943,7 @@ provision_linux_world() {
   fi
 
   run_cmd sudo install -Dm0755 "${world_agent}" /usr/local/bin/substrate-world-agent
+  run_cmd sudo install -Dm0755 "${gateway_binary}" /usr/local/bin/substrate-gateway
   run_cmd sudo install -d -m0750 /run/substrate
   run_cmd sudo install -d -m0750 /var/lib/substrate
 

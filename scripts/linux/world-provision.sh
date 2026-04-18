@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Provision the Substrate world-agent systemd service + socket on a Linux host.
 #
-# This script builds the world-agent binary (unless --skip-build is set),
-# installs it under /usr/local/bin, writes both the .service and .socket unit
-# files, and enables/starts the listener so /run/substrate.sock is owned by
-# root. Pass --dry-run to print the actions without invoking sudo.
+# This script builds the world-agent and substrate-gateway binaries (unless
+# --skip-build is set), installs them under /usr/local/bin, writes both the
+# .service and .socket unit files, and enables/starts the listener so
+# /run/substrate.sock is owned by root. Pass --dry-run to print the actions
+# without invoking sudo.
 #
 # Usage: scripts/linux/world-provision.sh [--profile <name>] [--skip-build] [--dry-run]
 
@@ -208,30 +209,37 @@ INVOKING_USER="$(detect_invoking_user)"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
-BIN_PATH="${REPO_ROOT}/target/${PROFILE}/world-agent"
+WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/world-agent"
+GATEWAY_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate-gateway"
 
 if [[ ${SKIP_BUILD} -eq 0 ]]; then
-    echo "==> Building world-agent (profile: ${PROFILE})"
+    echo "==> Building world-agent + substrate-gateway (profile: ${PROFILE})"
     if [[ "${PROFILE}" == "release" ]]; then
-        BIN_PATH="${REPO_ROOT}/target/release/world-agent"
+        WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/release/world-agent"
+        GATEWAY_BIN_PATH="${REPO_ROOT}/target/release/substrate-gateway"
         if [[ ${DRY_RUN} -eq 1 ]]; then
-            show_cmd cargo build -p world-agent --release --manifest-path "${REPO_ROOT}/Cargo.toml"
+            show_cmd cargo build -p world-agent -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
         else
-            cargo build -p world-agent --release --manifest-path "${REPO_ROOT}/Cargo.toml"
+            cargo build -p world-agent -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
     else
         if [[ ${DRY_RUN} -eq 1 ]]; then
-            show_cmd cargo build -p world-agent --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            show_cmd cargo build -p world-agent -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         else
-            cargo build -p world-agent --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            cargo build -p world-agent -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
     fi
 else
     echo "==> Skipping build as requested"
 fi
 
-if [[ ${DRY_RUN} -eq 0 && ! -x "${BIN_PATH}" ]]; then
-    echo "world-agent binary not found at ${BIN_PATH}. Did the build succeed?" >&2
+if [[ ${DRY_RUN} -eq 0 && ! -x "${WORLD_AGENT_BIN_PATH}" ]]; then
+    echo "world-agent binary not found at ${WORLD_AGENT_BIN_PATH}. Did the build succeed?" >&2
+    exit 1
+fi
+
+if [[ ${DRY_RUN} -eq 0 && ! -x "${GATEWAY_BIN_PATH}" ]]; then
+    echo "substrate-gateway binary not found at ${GATEWAY_BIN_PATH}. Did the build succeed?" >&2
     exit 1
 fi
 
@@ -309,7 +317,9 @@ WantedBy=sockets.target
 UNIT
 
 echo "==> Installing world-agent to /usr/local/bin (sudo will prompt if needed)"
-sudo_cmd install -Dm0755 "${BIN_PATH}" /usr/local/bin/substrate-world-agent
+sudo_cmd install -Dm0755 "${WORLD_AGENT_BIN_PATH}" /usr/local/bin/substrate-world-agent
+echo "==> Installing substrate-gateway to /usr/local/bin (no dedicated service)"
+sudo_cmd install -Dm0755 "${GATEWAY_BIN_PATH}" /usr/local/bin/substrate-gateway
 
 echo "==> Ensuring runtime directories exist"
 sudo_cmd install -d -m0750 /run/substrate
@@ -333,6 +343,8 @@ sudo_cmd systemctl start substrate-world-agent.service
 
 echo "==> ${SOCKET_FS_PATH} listing (should be root:${SUBSTRATE_GROUP} 0660)"
 sudo_cmd ls -l "${SOCKET_FS_PATH}"
+echo "==> Installed gateway binary"
+sudo_cmd ls -l /usr/local/bin/substrate-gateway
 
 echo "==> substrate-world-agent.socket status (last 10 log lines)"
 sudo_cmd systemctl status substrate-world-agent.socket --no-pager --lines=10 || true
@@ -344,5 +356,6 @@ print_linger_guidance "${INVOKING_USER}"
 echo "==> Provisioning complete"
 echo "    Verify socket with: sudo ls -l ${SOCKET_FS_PATH}"
 echo "    Probe capabilities: sudo curl --unix-socket ${SOCKET_FS_PATH} http://localhost/v1/capabilities"
+echo "    Verify gateway: sudo ls -l /usr/local/bin/substrate-gateway"
 echo "    Doctor socket block: substrate host doctor --json | jq '.host.world_socket'"
 echo "    Shim summary: substrate --shim-status | grep 'World socket'"

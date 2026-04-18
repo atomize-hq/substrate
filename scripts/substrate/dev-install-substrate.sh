@@ -844,6 +844,31 @@ find_linux_world_agent_elf() {
   return 0
 }
 
+find_linux_substrate_gateway() {
+  local root="$1"
+  local target_dir="$2"
+  local candidates=(
+    "${root}/bin/linux/substrate-gateway"
+    "${root}/bin/substrate-gateway-linux"
+    "${root}/bin/substrate-gateway"
+    "${root}/target/x86_64-unknown-linux-gnu/${target_dir}/substrate-gateway"
+    "${root}/target/aarch64-unknown-linux-gnu/${target_dir}/substrate-gateway"
+    "${root}/target/${target_dir}/substrate-gateway"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "${candidate}" ]]; then
+      local file_type
+      file_type="$(file -b "${candidate}" 2>/dev/null || true)"
+      if [[ -z "${file_type}" ]] || echo "${file_type}" | grep -qi "ELF"; then
+        printf '%s\n' "${candidate}"
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
+
 is_linux_elf() {
   local path="$1"
   if [[ ! -f "${path}" ]]; then
@@ -983,7 +1008,8 @@ clear_managed_prefix_linux_binary_cache() {
   while IFS= read -r cached_path; do
     case "${cached_path}" in
       "${BIN_DIR}/linux/substrate"|\
-      "${BIN_DIR}/linux/world-agent")
+      "${BIN_DIR}/linux/world-agent"|\
+      "${BIN_DIR}/linux/substrate-gateway")
         if [[ -f "${cached_path}" && ! -L "${cached_path}" ]]; then
           rm -f "${cached_path}"
           log "Removed cached Linux guest binary ${cached_path}"
@@ -1021,7 +1047,7 @@ cache_linux_binary_from_lima() {
 verify_prefix_linux_bundle() {
   local missing=0
   local binary path
-  for binary in substrate world-agent; do
+  for binary in substrate world-agent substrate-gateway; do
     path="${BIN_DIR}/linux/${binary}"
     if ! is_linux_elf "${path}"; then
       warn "Expected cached Linux ${binary} at ${path}, but it is missing or not a Linux ELF."
@@ -1071,6 +1097,14 @@ stage_dev_world_runtime_bundle() {
   else
     warn "Linux world-agent not available; leaving ${bin_linux_dir}/world-agent unchanged."
   fi
+
+  local linux_gateway
+  linux_gateway="$(find_linux_substrate_gateway "${repo_root}" "${target_dir}")" || true
+  if [[ -n "${linux_gateway:-}" ]]; then
+    stage_managed_bundle_symlink "${linux_gateway}" "${bin_linux_dir}/substrate-gateway" "${repo_root}" "${MANAGED_MAC_LINUX_BINARIES_PATH}" "Linux substrate-gateway"
+  else
+    warn "Linux substrate-gateway not available; leaving ${bin_linux_dir}/substrate-gateway unchanged."
+  fi
 }
 
 cleanup_legacy_world_enable_helper_bridge() {
@@ -1098,7 +1132,7 @@ ensure_release_bin_bridge() {
   local src_root="${target_root%/}/${profile_dir}"
   local dest_bin="${target_root%/}/bin"
   mkdir -p "${dest_bin}" "${dest_bin}/linux"
-  local -a binaries=("substrate" "substrate-shim" "substrate-forwarder" "host-proxy" "world-agent")
+  local -a binaries=("substrate" "substrate-shim" "substrate-forwarder" "host-proxy" "world-agent" "substrate-gateway")
   for binary in "${binaries[@]}"; do
     local src="${src_root}/${binary}"
     local dest="${dest_bin}/${binary}"
@@ -1107,6 +1141,8 @@ ensure_release_bin_bridge() {
       if [[ "${binary}" == "world-agent" ]]; then
         ln -sfn "${src}" "${dest_bin}/linux/world-agent"
         ln -sfn "${src}" "${dest_bin}/world-agent-linux"
+      elif [[ "${binary}" == "substrate-gateway" ]]; then
+        ln -sfn "${src}" "${dest_bin}/linux/substrate-gateway"
       fi
     fi
     local src_exe="${src}.exe"
@@ -1272,7 +1308,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${REPO_ROOT}"
 
 TARGET_DIR="${PROFILE}"
-BUILD_FLAGS=(build --bin substrate --bin substrate-shim)
+BUILD_FLAGS=(build --bin substrate --bin substrate-shim --bin substrate-gateway)
 if [[ "${PROFILE}" == "release" ]]; then
   BUILD_FLAGS+=(--release)
 fi
@@ -1352,7 +1388,7 @@ else
   shim_note="Shims were not deployed (--no-shims). Binaries are available under ${BIN_DIR}."
 fi
 
-for binary in substrate substrate-shim substrate-forwarder host-proxy world-agent; do
+for binary in substrate substrate-shim substrate-forwarder host-proxy world-agent substrate-gateway; do
   src="${REPO_ROOT}/target/${TARGET_DIR}/${binary}"
   if [[ -x "${src}" ]]; then
     stage_managed_bundle_symlink "${src}" "${BIN_DIR}/${binary}" "${REPO_ROOT}" "" "host binary ${binary}"
@@ -1458,9 +1494,25 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
     fi
   fi
 
+  linux_gateway="$(find_linux_substrate_gateway "${REPO_ROOT}" "${TARGET_DIR}")" || true
+  need_build_gateway=0
+  if [[ -z "${linux_gateway:-}" ]]; then
+    log "Linux substrate-gateway binary not found under ${REPO_ROOT}/target/${TARGET_DIR}; building inside Lima."
+    need_build_gateway=1
+  else
+    file_type="$(file -b "${linux_gateway}" 2>/dev/null || true)"
+    if ! echo "${file_type}" | grep -q "ELF"; then
+      log "Host substrate-gateway candidate is not a Linux ELF; building inside Lima instead..."
+      linux_gateway=""
+      need_build_gateway=1
+    else
+      log "Linux substrate-gateway install source: ${linux_gateway}"
+    fi
+  fi
+
   lima_target_dir="/tmp/substrate-dev-target"
-  log "Building Linux substrate inside Lima (target=${target_dir}; agent_build=${need_build_agent})..."
-  if ! limactl shell substrate env BUILD_FLAG="${build_flag}" TARGET_DIR="${target_dir}" BUILD_AGENT="${need_build_agent}" CARGO_TARGET_DIR="${lima_target_dir}" bash <<'LIMA_BUILD_AGENT'; then
+  log "Building Linux substrate inside Lima (target=${target_dir}; agent_build=${need_build_agent}; gateway_build=${need_build_gateway})..."
+  if ! limactl shell substrate env BUILD_FLAG="${build_flag}" TARGET_DIR="${target_dir}" BUILD_AGENT="${need_build_agent}" BUILD_GATEWAY="${need_build_gateway}" CARGO_TARGET_DIR="${lima_target_dir}" bash <<'LIMA_BUILD_AGENT'; then
 set -euo pipefail
 
 ensure_cargo() {
@@ -1531,6 +1583,9 @@ cd /src
 if [[ "${BUILD_AGENT}" == "1" ]]; then
   "${cargo_cmd}" build -p world-agent ${BUILD_FLAG}
 fi
+if [[ "${BUILD_GATEWAY}" == "1" ]]; then
+  "${cargo_cmd}" build -p substrate-gateway ${BUILD_FLAG}
+fi
 LIMA_BUILD_AGENT
     fatal "Failed to build Linux binaries inside Lima VM; ensure rustup/apt is available or rerun with --no-world."
   fi
@@ -1556,6 +1611,19 @@ sudo chmod 755 /usr/local/bin/world'
     limactl shell substrate sudo install -m0755 /tmp/world-agent /usr/local/bin/substrate-world-agent
     limactl shell substrate sudo rm -f /tmp/world-agent
   fi
+
+  if [[ "${need_build_gateway}" -eq 1 ]]; then
+    linux_gateway="${lima_target_dir}/${target_dir}/substrate-gateway"
+  fi
+
+  log "Installing Linux substrate-gateway inside Lima..."
+  if [[ -n "${linux_gateway:-}" && "${need_build_gateway}" -eq 1 ]]; then
+    limactl shell substrate sudo install -m0755 "${linux_gateway}" /usr/local/bin/substrate-gateway
+  else
+    limactl copy "${linux_gateway}" substrate:/tmp/substrate-gateway
+    limactl shell substrate sudo install -m0755 /tmp/substrate-gateway /usr/local/bin/substrate-gateway
+    limactl shell substrate sudo rm -f /tmp/substrate-gateway
+  fi
   limactl shell substrate sudo systemctl daemon-reload
   limactl shell substrate sudo systemctl enable substrate-world-agent.service
   limactl shell substrate sudo systemctl enable --now substrate-world-agent.socket
@@ -1566,6 +1634,9 @@ sudo chmod 755 /usr/local/bin/world'
     cache_ok=0
   fi
   if ! cache_linux_binary_from_lima /usr/local/bin/substrate-world-agent "${BIN_DIR}/linux/world-agent" "world-agent"; then
+    cache_ok=0
+  fi
+  if ! cache_linux_binary_from_lima /usr/local/bin/substrate-gateway "${BIN_DIR}/linux/substrate-gateway" "substrate-gateway"; then
     cache_ok=0
   fi
 

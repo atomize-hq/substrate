@@ -512,6 +512,7 @@ run_generic_smoke() {
 
   rm -rf "${REPO_ROOT}/world-mac-smoke"
   "${SCRIPTS_ROOT}/lima-warm.sh"
+  limactl shell substrate test -x /usr/local/bin/substrate-gateway
   "${SUBSTRATE_BIN}" -c 'echo smoke-nonpty'
   "${SUBSTRATE_BIN}" --pty -c 'printf smoke-pty\n'
   mkdir -p "$(dirname "${trace_log}")"
@@ -548,6 +549,7 @@ run_bedpm_installer_conformance() {
 
   log "Running BEDPM Linux smoke through the Lima-backed guest path"
   "${SCRIPTS_ROOT}/lima-warm.sh"
+  limactl shell substrate test -x /usr/local/bin/substrate-gateway
   "${SUBSTRATE_BIN}" -c "${smoke_cmd}"
 }
 
@@ -563,6 +565,7 @@ run_netfilter_conformance() {
 
   log "Using log directory ${log_dir}"
   SUBSTRATE_WORLD_NETFILTER_ENABLE=1 "${SCRIPTS_ROOT}/lima-warm.sh"
+  limactl shell substrate test -x /usr/local/bin/substrate-gateway
 
   run_netfilter_posture "allow-all" '["*"]' yes "${fixture_home}" "${substrate_home}" "${project_dir}" "${log_dir}"
   run_netfilter_posture "deny-all" '[]' no "${fixture_home}" "${substrate_home}" "${project_dir}" "${log_dir}"

@@ -52,6 +52,11 @@ use world::stream::{install_stream_sink, StreamKind, StreamSink};
 use world_api::{WorldBackend, WorldHandle, WorldSpec};
 
 use crate::enforcement_plan;
+#[cfg(target_os = "linux")]
+use crate::gateway_runtime::{
+    unavailable_response as gateway_unavailable_response_impl, GatewayControlSettings,
+    GatewayRuntimeFailure, GatewayRuntimeManager, GatewayRuntimeStartContext,
+};
 use crate::request_routing::resolve_snapshot_routing;
 
 pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
@@ -168,6 +173,8 @@ pub struct WorldAgentService {
     #[cfg(target_os = "linux")]
     linux_backend: Arc<world::LinuxLocalBackend>,
     #[cfg(target_os = "linux")]
+    gateway_runtime: Arc<GatewayRuntimeManager>,
+    #[cfg(target_os = "linux")]
     pending_diff_origin: Arc<RwLock<HashMap<String, PendingDiffOriginTracker>>>,
     #[allow(dead_code)]
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
@@ -236,6 +243,7 @@ impl WorldAgentService {
             Ok(Self {
                 backend,
                 linux_backend,
+                gateway_runtime: Arc::new(GatewayRuntimeManager::new()),
                 pending_diff_origin: Arc::new(RwLock::new(HashMap::new())),
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
@@ -1018,25 +1026,119 @@ impl WorldAgentService {
     /// Return the typed gateway lifecycle/status surface.
     pub async fn gateway_status(
         &self,
-        _req: GatewayLifecycleRequestV1,
+        req: GatewayLifecycleRequestV1,
     ) -> Result<GatewayLifecycleResponseV1> {
-        Ok(Self::gateway_unavailable_response())
+        #[cfg(target_os = "linux")]
+        {
+            let prepared = self.prepare_gateway_runtime_request(&req)?;
+            let Some(world) = self
+                .linux_backend
+                .find_compatible_session(&prepared.world_spec)
+                .map_err(|err| {
+                    gateway_runtime_error(GatewayRuntimeFailure::transient(err.to_string()))
+                })?
+            else {
+                return Ok(Self::gateway_unavailable_response());
+            };
+
+            return self
+                .gateway_runtime
+                .status(&world.id)
+                .await
+                .map_err(gateway_runtime_error);
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = req;
+            Ok(Self::gateway_unavailable_response())
+        }
     }
 
     /// Return the typed gateway lifecycle sync surface.
     pub async fn gateway_sync(
         &self,
-        _req: GatewayLifecycleRequestV1,
+        req: GatewayLifecycleRequestV1,
     ) -> Result<GatewayLifecycleResponseV1> {
-        Ok(Self::gateway_unavailable_response())
+        #[cfg(target_os = "linux")]
+        {
+            let prepared = self.prepare_gateway_runtime_request(&req)?;
+            let world = self
+                .backend
+                .ensure_session(&prepared.world_spec)
+                .map_err(|err| {
+                    self.record_last_netfilter_failure_for_error(
+                        prepared.world_spec.isolate_network,
+                        &err,
+                    );
+                    gateway_runtime_error(GatewayRuntimeFailure::transient(format!(
+                        "failed to ensure session world: {}",
+                        err
+                    )))
+                })?;
+            let cgroup_path = self.session_cgroup_path(&world).map_err(|err| {
+                gateway_runtime_error(GatewayRuntimeFailure::transient(err.to_string()))
+            })?;
+
+            return self
+                .gateway_runtime
+                .sync(GatewayRuntimeStartContext {
+                    world_id: world.id,
+                    project_dir: prepared.project_dir,
+                    cgroup_path,
+                    require_cgroup_attach: prepared.world_spec.isolate_network,
+                    control: prepared.control,
+                })
+                .await
+                .map_err(gateway_runtime_error);
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = req;
+            Ok(Self::gateway_unavailable_response())
+        }
     }
 
     /// Return the typed gateway lifecycle restart surface.
     pub async fn gateway_restart(
         &self,
-        _req: GatewayLifecycleRequestV1,
+        req: GatewayLifecycleRequestV1,
     ) -> Result<GatewayLifecycleResponseV1> {
-        Ok(Self::gateway_unavailable_response())
+        #[cfg(target_os = "linux")]
+        {
+            let prepared = self.prepare_gateway_runtime_request(&req)?;
+            let Some(world) = self
+                .linux_backend
+                .find_compatible_session(&prepared.world_spec)
+                .map_err(|err| {
+                    gateway_runtime_error(GatewayRuntimeFailure::transient(err.to_string()))
+                })?
+            else {
+                return Ok(Self::gateway_unavailable_response());
+            };
+            let cgroup_path = self.session_cgroup_path(&world).map_err(|err| {
+                gateway_runtime_error(GatewayRuntimeFailure::transient(err.to_string()))
+            })?;
+
+            return self
+                .gateway_runtime
+                .restart(GatewayRuntimeStartContext {
+                    world_id: world.id,
+                    project_dir: prepared.project_dir,
+                    cgroup_path,
+                    require_cgroup_attach: prepared.world_spec.isolate_network,
+                    control: prepared.control,
+                })
+                .await
+                .map_err(gateway_runtime_error);
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = req;
+            Ok(Self::gateway_unavailable_response())
+        }
     }
 
     /// Execute a command and stream incremental output frames via NDJSON.
@@ -1339,12 +1441,83 @@ impl WorldAgentService {
         }))
     }
 
+    #[cfg(target_os = "linux")]
+    fn prepare_gateway_runtime_request(
+        &self,
+        req: &GatewayLifecycleRequestV1,
+    ) -> Result<PreparedGatewayRuntimeRequest> {
+        let cwd = req
+            .cwd
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let env_ref = req.env.as_ref();
+        let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
+        let (policy_resolution_mode, policy_inputs) = resolve_policy_inputs(
+            &req.policy_snapshot,
+            req.world_network.as_ref(),
+            &cwd,
+            &project_dir,
+        )?;
+        self.record_doctor_request_context(policy_resolution_mode, policy_inputs.isolate_network);
+
+        let world_spec = build_world_spec(
+            project_dir.clone(),
+            should_always_isolate_for_profile(req.profile.as_deref()),
+            policy_inputs.fs_mode,
+            policy_inputs.isolate_network,
+            policy_inputs.allowed_domains,
+        );
+        let control =
+            GatewayControlSettings::from_request_env(env_ref).map_err(gateway_runtime_error)?;
+
+        Ok(PreparedGatewayRuntimeRequest {
+            project_dir,
+            world_spec,
+            control,
+        })
+    }
+
+    #[cfg(all(target_os = "linux", test))]
+    pub fn gateway_runtime_pid_for_test(
+        &self,
+        req: &GatewayLifecycleRequestV1,
+    ) -> Result<Option<u32>> {
+        let prepared = self.prepare_gateway_runtime_request(req)?;
+        let Some(world) = self
+            .linux_backend
+            .find_compatible_session(&prepared.world_spec)?
+        else {
+            return Ok(None);
+        };
+        Ok(self.gateway_runtime.pid_for_world(&world.id))
+    }
+
     fn gateway_unavailable_response() -> GatewayLifecycleResponseV1 {
-        GatewayLifecycleResponseV1 {
-            status: GatewayStatusV1::Unavailable,
-            client_wiring: None,
+        #[cfg(target_os = "linux")]
+        {
+            gateway_unavailable_response_impl()
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            GatewayLifecycleResponseV1 {
+                status: GatewayStatusV1::Unavailable,
+                client_wiring: None,
+            }
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+struct PreparedGatewayRuntimeRequest {
+    project_dir: PathBuf,
+    world_spec: WorldSpec,
+    control: GatewayControlSettings,
+}
+
+#[cfg(target_os = "linux")]
+fn gateway_runtime_error(err: GatewayRuntimeFailure) -> anyhow::Error {
+    anyhow!(err.to_string())
 }
 
 #[cfg(test)]
