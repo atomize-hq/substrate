@@ -5,6 +5,15 @@ use crate::lang::{
     LangError, LangResult, LanguageId, LocalEdgeDraft, LocalSymbolDraft, SurfaceMarkerDraft,
 };
 
+mod capabilities {
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/lang/capabilities.rs"
+    ));
+}
+
+pub(crate) use capabilities::AdapterCapabilities;
+
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub(crate) struct AdapterName(String);
@@ -70,6 +79,9 @@ pub(crate) enum AdapterParseResult {
 
 pub(crate) trait LanguageAdapter: Send + Sync {
     fn descriptor(&self) -> AdapterDescriptor;
+    fn capabilities(&self) -> AdapterCapabilities {
+        AdapterCapabilities::default()
+    }
     fn recognizes(&self, input: &ParseInput<'_>) -> bool;
     fn parse(&self, input: &ParseInput<'_>) -> AdapterParseResult;
 }
