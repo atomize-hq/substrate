@@ -1008,7 +1008,7 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
 
-    static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+    static ENV_LOCK: Lazy<AsyncMutex<()>> = Lazy::new(|| AsyncMutex::new(()));
 
     struct EnvGuard {
         key: &'static str,
@@ -1262,7 +1262,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn concurrent_same_world_sync_reuses_one_runtime() {
-        let _env_lock = ENV_LOCK.lock().unwrap();
+        let _env_lock = ENV_LOCK.lock().await;
         let temp_dir = TempDir::new().unwrap();
         let runtime_root = temp_dir.path().join("runtime-root");
         let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
@@ -1292,7 +1292,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn timed_out_cleanup_does_not_kill_next_same_world_runtime() {
-        let _env_lock = ENV_LOCK.lock().unwrap();
+        let _env_lock = ENV_LOCK.lock().await;
         let temp_dir = TempDir::new().unwrap();
         let runtime_root = temp_dir.path().join("runtime-root");
         let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
@@ -1336,7 +1336,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn status_during_start_returns_transient_failure() {
-        let _env_lock = ENV_LOCK.lock().unwrap();
+        let _env_lock = ENV_LOCK.lock().await;
         let temp_dir = TempDir::new().unwrap();
         let runtime_root = temp_dir.path().join("runtime-root");
         let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
@@ -1371,7 +1371,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn status_during_restart_returns_transient_failure() {
-        let _env_lock = ENV_LOCK.lock().unwrap();
+        let _env_lock = ENV_LOCK.lock().await;
         let temp_dir = TempDir::new().unwrap();
         let runtime_root = temp_dir.path().join("runtime-root");
         let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);

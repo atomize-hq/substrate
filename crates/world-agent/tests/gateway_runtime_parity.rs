@@ -9,11 +9,13 @@ use once_cell::sync::Lazy;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
+use tokio::sync::Mutex;
 use world_agent::WorldAgentService;
 
+// These tests mutate process-global env and spawn async work that reads it, so
+// the guard must stay alive across awaits to serialize the whole test body.
 static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 fn minimal_policy_snapshot() -> PolicySnapshotV3 {
@@ -164,14 +166,14 @@ print(match.group(1))
 PY
 )"
 
-sleep {delay_s}
+sleep {delay_s:.3}
 root="$(dirname "$config")/serve"
 mkdir -p "$root"
 printf 'ok' >"$root/health"
 exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 "#,
             pid_path = pid_path.display(),
-            delay_s = format!("{:.3}", delay_ms as f64 / 1000.0),
+            delay_s = delay_ms as f64 / 1000.0,
         ),
     )
     .unwrap();
@@ -244,7 +246,7 @@ print(match.group(1))
 PY
 )"
 
-sleep {delay_s}
+sleep {delay_s:.3}
 root="$(dirname "$config")/serve"
 mkdir -p "$root"
 printf 'ok' >"$root/health"
@@ -252,7 +254,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 "#,
             launch_count_path = launch_count_path.display(),
             pid_dir = pid_dir.display(),
-            delay_s = format!("{:.3}", delay_ms as f64 / 1000.0),
+            delay_s = delay_ms as f64 / 1000.0,
         ),
     )
     .unwrap();
@@ -373,7 +375,7 @@ impl Drop for EnvGuard {
 
 #[tokio::test]
 async fn gateway_status_returns_unavailable_before_sync() {
-    let _env_lock = ENV_LOCK.lock().unwrap();
+    let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
     let binary = fake_gateway_binary(&temp_dir);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
@@ -393,7 +395,7 @@ async fn gateway_status_returns_unavailable_before_sync() {
 
 #[tokio::test]
 async fn gateway_sync_makes_status_available_and_is_idempotent() {
-    let _env_lock = ENV_LOCK.lock().unwrap();
+    let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
     let (binary, pid_dir, launch_count_path) = tracking_gateway_binary(&temp_dir, "idempotent", 0);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
@@ -439,7 +441,7 @@ async fn gateway_sync_makes_status_available_and_is_idempotent() {
 
 #[tokio::test]
 async fn gateway_restart_recycles_the_runtime() {
-    let _env_lock = ENV_LOCK.lock().unwrap();
+    let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
     let (binary, pid_dir, launch_count_path) = tracking_gateway_binary(&temp_dir, "restart", 0);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
@@ -471,7 +473,7 @@ async fn gateway_restart_recycles_the_runtime() {
 
 #[tokio::test]
 async fn gateway_manifest_recovery_restores_status_sync_and_restart() {
-    let _env_lock = ENV_LOCK.lock().unwrap();
+    let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
     let (binary, pid_dir, launch_count_path) = tracking_gateway_binary(&temp_dir, "recovery", 0);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
@@ -521,7 +523,7 @@ async fn gateway_manifest_recovery_restores_status_sync_and_restart() {
 
 #[tokio::test]
 async fn gateway_status_turns_unavailable_after_child_exit() {
-    let _env_lock = ENV_LOCK.lock().unwrap();
+    let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
     let (binary, pid_dir, _) = tracking_gateway_binary(&temp_dir, "child-exit", 0);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
@@ -550,7 +552,7 @@ async fn gateway_status_turns_unavailable_after_child_exit() {
 
 #[tokio::test]
 async fn gateway_sync_reports_transient_failure_when_startup_crashes() {
-    let _env_lock = ENV_LOCK.lock().unwrap();
+    let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
     let binary = crashing_gateway_binary(&temp_dir);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
@@ -571,7 +573,7 @@ async fn gateway_sync_reports_transient_failure_when_startup_crashes() {
 
 #[tokio::test]
 async fn gateway_sync_kills_child_after_ready_timeout() {
-    let _env_lock = ENV_LOCK.lock().unwrap();
+    let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
     let (binary, pid_path) = hanging_gateway_binary(&temp_dir);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
@@ -604,7 +606,7 @@ async fn gateway_sync_kills_child_after_ready_timeout() {
 
 #[tokio::test]
 async fn gateway_status_reports_transient_failure_while_starting() {
-    let _env_lock = ENV_LOCK.lock().unwrap();
+    let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
     let (binary, pid_path) = delayed_gateway_binary(&temp_dir, "starting", 1000);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
@@ -639,7 +641,7 @@ async fn gateway_status_reports_transient_failure_while_starting() {
 
 #[tokio::test]
 async fn gateway_status_reports_transient_failure_while_restarting() {
-    let _env_lock = ENV_LOCK.lock().unwrap();
+    let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
     let binary = fake_gateway_binary(&temp_dir);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
