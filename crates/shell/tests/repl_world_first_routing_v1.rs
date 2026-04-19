@@ -168,6 +168,32 @@ fn wait_for_min_start_sessions(
     );
 }
 
+fn wait_for_min_records(
+    records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
+    min_execs: usize,
+    min_starts: usize,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let guard = records.lock().expect("lock records");
+        if guard.persistent_execs.len() >= min_execs
+            && guard.persistent_start_sessions.len() >= min_starts
+        {
+            return;
+        }
+        drop(guard);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    let guard = records.lock().expect("lock records");
+    panic!(
+        "timed out waiting for records execs>={min_execs} starts>={min_starts}; got execs={} starts={}; records: {guard:#?}",
+        guard.persistent_execs.len(),
+        guard.persistent_start_sessions.len(),
+    );
+}
+
 fn read_trace(trace_path: &Path) -> Vec<Value> {
     fs::read_to_string(trace_path)
         .expect("read trace")
@@ -752,6 +778,7 @@ fn c3_drift_restart_restarts_session_and_emits_message() {
         .expect("banner");
 
     repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
 
@@ -970,6 +997,7 @@ fn c3_drift_fail_closed_emits_world_restart_required_alert() {
         .expect("banner");
 
     repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
 
@@ -1305,38 +1333,18 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     let project_str = project_canon.to_string_lossy().into_owned();
     let parent_str = parent_canon.to_string_lossy().into_owned();
 
-    let wait_for_min_records = |min_execs: usize, min_starts: usize, timeout: Duration| {
-        let deadline = Instant::now() + timeout;
-        while Instant::now() < deadline {
-            let guard = records.lock().expect("lock records");
-            if guard.persistent_execs.len() >= min_execs
-                && guard.persistent_start_sessions.len() >= min_starts
-            {
-                return;
-            }
-            drop(guard);
-            std::thread::sleep(Duration::from_millis(25));
-        }
-        let guard = records.lock().expect("lock records");
-        panic!(
-            "timed out waiting for records execs>={min_execs} starts>={min_starts}; got execs={} starts={}; records: {guard:#?}",
-            guard.persistent_execs.len(),
-            guard.persistent_start_sessions.len(),
-        );
-    };
-
     // Move up to project root (still in workspace), then move to parent (workspace_root=None).
     // Drift restart should happen immediately after the second `cd` (the REPL checks drift both
     // before and after each world command). Wait on server-side records to avoid PTY timing
     // differences across platforms.
     repl.send_line("cd ..");
-    wait_for_min_records(1, 1, Duration::from_secs(3));
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("__PERSISTENT_EXEC_STUB__ eof cd ..", Duration::from_secs(2))
         .expect("cd .. executed in persistent session");
 
     // Use a distinct spelling so we can wait on the second exec deterministically.
     repl.send_line("cd ../");
-    wait_for_min_records(2, 1, Duration::from_secs(3));
+    wait_for_min_records(&records, 2, 1, Duration::from_secs(3));
     repl.wait_for_output(
         "__PERSISTENT_EXEC_STUB__ eof cd ../",
         Duration::from_secs(2),
@@ -1345,7 +1353,7 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
 
     // Ensure the drift restart has actually occurred (i.e., the client re-sent a new StartSession)
     // before terminating the REPL. Otherwise, a fast `exit` can race the restart and flake.
-    wait_for_min_records(2, 2, Duration::from_secs(5));
+    wait_for_min_records(&records, 2, 2, Duration::from_secs(5));
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 
@@ -1396,28 +1404,8 @@ fn c3_drift_restart_refreshes_world_network_routing() {
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
 
-    let wait_for_min_records = |min_execs: usize, min_starts: usize, timeout: Duration| {
-        let deadline = Instant::now() + timeout;
-        while Instant::now() < deadline {
-            let guard = records.lock().expect("lock records");
-            if guard.persistent_execs.len() >= min_execs
-                && guard.persistent_start_sessions.len() >= min_starts
-            {
-                return;
-            }
-            drop(guard);
-            std::thread::sleep(Duration::from_millis(25));
-        }
-        let guard = records.lock().expect("lock records");
-        panic!(
-            "timed out waiting for records execs>={min_execs} starts>={min_starts}; got execs={} starts={}; records: {guard:#?}",
-            guard.persistent_execs.len(),
-            guard.persistent_start_sessions.len(),
-        );
-    };
-
     repl.send_line("echo first");
-    wait_for_min_records(1, 1, Duration::from_secs(3));
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
 
@@ -1428,7 +1416,7 @@ fn c3_drift_restart_refreshes_world_network_routing() {
     );
 
     repl.send_line("echo second");
-    wait_for_min_records(2, 2, Duration::from_secs(5));
+    wait_for_min_records(&records, 2, 2, Duration::from_secs(5));
     repl.wait_for_output("second", Duration::from_secs(3))
         .expect("second command output");
     repl.send_line("exit");
