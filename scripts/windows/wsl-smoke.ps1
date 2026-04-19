@@ -105,6 +105,127 @@ function Invoke-Step {
     }
 }
 
+function New-HostGatewaySmokeAuthFixture {
+    $homeRoot = $env:HOME
+    $cleanupHome = $false
+    if (-not $homeRoot) {
+        if ($env:USERPROFILE) {
+            $homeRoot = $env:USERPROFILE
+        } else {
+            $homeRoot = Join-Path $env:TEMP ("substrate-gateway-auth-" + [guid]::NewGuid().ToString())
+            New-Item -ItemType Directory -Force -Path $homeRoot | Out-Null
+            $cleanupHome = $true
+        }
+    }
+
+    $authDir = Join-Path $homeRoot '.codex'
+    $authPath = Join-Path $authDir 'auth.json'
+    $created = $false
+    if (-not (Test-Path -LiteralPath $authPath)) {
+        New-Item -ItemType Directory -Force -Path $authDir | Out-Null
+        @'
+{
+  "account_id": "acct_smoke",
+  "access_token": "header.payload.signature"
+}
+ '@ | Set-Content -LiteralPath $authPath -NoNewline
+        $created = $true
+    }
+
+    return [pscustomobject]@{
+        Home = $homeRoot
+        AuthPath = $authPath
+        Created = $created
+        CleanupHome = $cleanupHome
+    }
+}
+
+function Remove-HostGatewaySmokeAuth {
+    param($Fixture)
+
+    if ($Fixture.Created -and (Test-Path -LiteralPath $Fixture.AuthPath)) {
+        Remove-Item -LiteralPath $Fixture.AuthPath -Force
+    }
+    if ($Fixture.CleanupHome -and (Test-Path -LiteralPath $Fixture.Home)) {
+        Remove-Item -LiteralPath $Fixture.Home -Recurse -Force
+    }
+}
+
+function Invoke-GatewayLifecycleProof {
+    param(
+        [string]$Exe,
+        [string]$DistroName
+    )
+
+    $fixture = New-HostGatewaySmokeAuthFixture
+    $previousHome = $env:HOME
+    $previousUserProfile = $env:USERPROFILE
+    $env:HOME = $fixture.Home
+    $env:USERPROFILE = $fixture.Home
+    try {
+        $syncOutput = & $Exe world gateway sync 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            throw "gateway sync failed: $syncOutput"
+        }
+
+        $statusText = & $Exe world gateway status --json 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            throw "gateway status --json failed: $statusText"
+        }
+        $status = $statusText.Trim() | ConvertFrom-Json
+        if ($status.status -ne 'available') {
+            throw "gateway status did not report available: $statusText"
+        }
+        if (-not $status.client_wiring) {
+            throw "gateway status omitted client wiring: $statusText"
+        }
+        if ($status.client_wiring.openai_base_url -ne $status.client_wiring.anthropic_base_url) {
+            throw "gateway status wiring diverged unexpectedly: $statusText"
+        }
+
+        $restartOutput = & $Exe world gateway restart 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            throw "gateway restart failed: $restartOutput"
+        }
+
+        $statusText = & $Exe world gateway status --json 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            throw "gateway status --json after restart failed: $statusText"
+        }
+        $status = $statusText.Trim() | ConvertFrom-Json
+        if ($status.status -ne 'available') {
+            throw "gateway status after restart did not report available: $statusText"
+        }
+
+        $baseUrl = [string]$status.client_wiring.openai_base_url
+        $uri = [Uri]$baseUrl
+        if ($uri.Host -ne '127.0.0.1' -or $uri.Port -le 0) {
+            throw "unexpected gateway base URL: $baseUrl"
+        }
+
+        $healthText = & wsl -d $DistroName -- bash -lc "curl -fsS http://127.0.0.1:$($uri.Port)/health" 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            throw "gateway /health probe failed: $healthText"
+        }
+        $health = $healthText.Trim() | ConvertFrom-Json
+        if ($health.status -ne 'ok' -or $health.service -ne 'substrate-gateway') {
+            throw "unexpected gateway /health payload: $healthText"
+        }
+    } finally {
+        if ($null -ne $previousHome) {
+            $env:HOME = $previousHome
+        } else {
+            Remove-Item Env:HOME -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $previousUserProfile) {
+            $env:USERPROFILE = $previousUserProfile
+        } else {
+            Remove-Item Env:USERPROFILE -ErrorAction SilentlyContinue
+        }
+        Remove-HostGatewaySmokeAuth -Fixture $fixture
+    }
+}
+
 function Resolve-SubstrateExe {
     param([string]$BaseDir)
 
@@ -151,8 +272,12 @@ Write-Host "[INFO] Using substrate.exe at: $SubstrateExe" -ForegroundColor Yello
 
 $projectHasCargo = Test-Path (Join-Path $ProjectPath 'Cargo.toml')
 if (-not $projectHasCargo) {
-    Invoke-Step "Packaged guest gateway artifact present" {
+    Invoke-Step "Packaged guest world artifacts present" {
+        $worldAgentArtifact = Join-Path $ProjectPath 'bin\linux\world-agent'
         $gatewayArtifact = Join-Path $ProjectPath 'bin\linux\substrate-gateway'
+        if (-not (Test-Path -LiteralPath $worldAgentArtifact)) {
+            throw "expected packaged guest world-agent artifact at $worldAgentArtifact"
+        }
         if (-not (Test-Path -LiteralPath $gatewayArtifact)) {
             throw "expected packaged guest gateway artifact at $gatewayArtifact"
         }
@@ -479,6 +604,10 @@ Invoke-Step "Doctor checks" {
     $resp = pwsh -File scripts/windows/wsl-doctor.ps1 -DistroName $DistroName 2>&1
     if ($LASTEXITCODE -ne 0) { throw ($resp -join "`n") }
     # success: stay quiet to avoid log pollution
+}
+
+Invoke-Step "Gateway lifecycle proof" {
+    Invoke-GatewayLifecycleProof -Exe $SubstrateExe -DistroName $DistroName
 }
 
 Invoke-Step "Non-PTY command executes (stdout-only)" {

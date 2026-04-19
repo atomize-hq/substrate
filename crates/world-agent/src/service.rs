@@ -1088,6 +1088,7 @@ impl WorldAgentService {
                     cgroup_path,
                     require_cgroup_attach: prepared.world_spec.isolate_network,
                     control: prepared.control,
+                    integrated_auth: prepared.integrated_auth,
                 })
                 .await
                 .map_err(gateway_runtime_error);
@@ -1129,6 +1130,7 @@ impl WorldAgentService {
                     cgroup_path,
                     require_cgroup_attach: prepared.world_spec.isolate_network,
                     control: prepared.control,
+                    integrated_auth: prepared.integrated_auth,
                 })
                 .await
                 .map_err(gateway_runtime_error);
@@ -1475,6 +1477,10 @@ impl WorldAgentService {
             project_dir,
             world_spec,
             control,
+            integrated_auth: req
+                .integrated_auth
+                .as_ref()
+                .and_then(|payload| payload.cli_codex.clone()),
         })
     }
 
@@ -1491,6 +1497,19 @@ impl WorldAgentService {
             return Ok(None);
         };
         Ok(self.gateway_runtime.pid_for_world(&world.id))
+    }
+
+    #[cfg(all(target_os = "linux", test))]
+    pub fn forget_gateway_runtime_for_test(&self, req: &GatewayLifecycleRequestV1) -> Result<()> {
+        let prepared = self.prepare_gateway_runtime_request(req)?;
+        let Some(world) = self
+            .linux_backend
+            .find_compatible_session(&prepared.world_spec)?
+        else {
+            return Ok(());
+        };
+        self.gateway_runtime.forget_runtime_for_test(&world.id);
+        Ok(())
     }
 
     fn gateway_unavailable_response() -> GatewayLifecycleResponseV1 {
@@ -1513,6 +1532,7 @@ struct PreparedGatewayRuntimeRequest {
     project_dir: PathBuf,
     world_spec: WorldSpec,
     control: GatewayControlSettings,
+    integrated_auth: Option<agent_api_types::GatewayCliCodexIntegratedAuthV1>,
 }
 
 #[cfg(target_os = "linux")]

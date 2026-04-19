@@ -1,6 +1,9 @@
-use agent_api_types::{GatewayClientWiringV1, GatewayLifecycleResponseV1, GatewayStatusV1};
+use agent_api_types::{
+    GatewayCliCodexIntegratedAuthV1, GatewayClientWiringV1, GatewayLifecycleResponseV1,
+    GatewayStatusV1,
+};
 use anyhow::{anyhow, Context, Result};
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
@@ -29,8 +32,12 @@ const DEFAULT_BACKEND: &str = "cli:codex";
 const DEFAULT_ROUTED_MODEL: &str = "codex";
 const DEFAULT_ACTUAL_MODEL: &str = "codex-mini-latest";
 const DEFAULT_PROVIDER_NAME: &str = "openai-codex";
+const GATEWAY_RUNTIME_ROOT_DIR: &str = "substrate-gateway-runtime";
+const GATEWAY_RUNTIME_MANIFEST_NAME: &str = "runtime.json";
+const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(8);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum GatewayRuntimeState {
     AbsentComponent,
     ProvisionedStopped,
@@ -124,6 +131,24 @@ pub(crate) struct GatewayRuntimeStartContext {
     pub cgroup_path: PathBuf,
     pub require_cgroup_attach: bool,
     pub control: GatewayControlSettings,
+    pub integrated_auth: Option<GatewayCliCodexIntegratedAuthV1>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct GatewayRuntimeManifest {
+    world_id: String,
+    pid: u32,
+    pid_start_time_ticks: u64,
+    port: u16,
+    runtime_dir: PathBuf,
+    config_path: PathBuf,
+    state: GatewayRuntimeState,
+}
+
+#[derive(Debug)]
+enum ManagedGatewayProcess {
+    Child(Child),
+    RediscoveredPid(u32),
 }
 
 #[derive(Debug, Clone)]
@@ -132,7 +157,9 @@ struct ManagedGatewayRuntime {
     port: u16,
     runtime_dir: PathBuf,
     config_path: PathBuf,
-    child: Arc<Mutex<Child>>,
+    manifest_path: PathBuf,
+    pid_start_time_ticks: u64,
+    process: Arc<Mutex<ManagedGatewayProcess>>,
     state: Arc<RwLock<GatewayRuntimeState>>,
 }
 
@@ -141,6 +168,7 @@ impl ManagedGatewayRuntime {
         if let Ok(mut guard) = self.state.write() {
             *guard = state;
         }
+        let _ = self.persist_manifest();
     }
 
     fn state(&self) -> GatewayRuntimeState {
@@ -148,6 +176,30 @@ impl ManagedGatewayRuntime {
             .read()
             .map(|guard| *guard)
             .unwrap_or(GatewayRuntimeState::ProvisionedStopped)
+    }
+
+    fn pid(&self) -> Result<u32> {
+        let guard = self
+            .process
+            .lock()
+            .map_err(|_| anyhow!("gateway child lock poisoned"))?;
+        Ok(match &*guard {
+            ManagedGatewayProcess::Child(child) => child.id(),
+            ManagedGatewayProcess::RediscoveredPid(pid) => *pid,
+        })
+    }
+
+    fn persist_manifest(&self) -> Result<()> {
+        let manifest = GatewayRuntimeManifest {
+            world_id: self.world_id.clone(),
+            pid: self.pid()?,
+            pid_start_time_ticks: self.pid_start_time_ticks,
+            port: self.port,
+            runtime_dir: self.runtime_dir.clone(),
+            config_path: self.config_path.clone(),
+            state: self.state(),
+        };
+        write_runtime_manifest(&self.manifest_path, &manifest)
     }
 }
 
@@ -165,17 +217,20 @@ impl GatewayRuntimeManager {
         &self,
         world_id: &str,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
-        let Some(runtime) = self.runtime_for_world(world_id) else {
+        let Some(runtime) = self.runtime_for_world_or_manifest(world_id) else {
             return Ok(unavailable_response());
         };
 
         let state = self.observe_runtime_state(&runtime).await?;
         Ok(match state {
             GatewayRuntimeState::Ready => available_response(runtime.port),
-            GatewayRuntimeState::Starting
-            | GatewayRuntimeState::RestartInProgress
-            | GatewayRuntimeState::ProvisionedStopped
-            | GatewayRuntimeState::AbsentComponent => unavailable_response(),
+            GatewayRuntimeState::Starting | GatewayRuntimeState::RestartInProgress => {
+                unavailable_response()
+            }
+            GatewayRuntimeState::ProvisionedStopped | GatewayRuntimeState::AbsentComponent => {
+                self.remove_runtime(world_id);
+                unavailable_response()
+            }
         })
     }
 
@@ -183,11 +238,19 @@ impl GatewayRuntimeManager {
         &self,
         ctx: GatewayRuntimeStartContext,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
-        if let Some(runtime) = self.runtime_for_world(&ctx.world_id) {
+        self.sync_with_timeout(ctx, DEFAULT_READY_TIMEOUT).await
+    }
+
+    async fn sync_with_timeout(
+        &self,
+        ctx: GatewayRuntimeStartContext,
+        ready_timeout: Duration,
+    ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
+        if let Some(runtime) = self.runtime_for_world_or_manifest(&ctx.world_id) {
             match self.observe_runtime_state(&runtime).await? {
                 GatewayRuntimeState::Ready => return Ok(available_response(runtime.port)),
                 GatewayRuntimeState::Starting | GatewayRuntimeState::RestartInProgress => {
-                    return self.wait_until_ready(runtime, Duration::from_secs(8)).await;
+                    return self.wait_until_ready(runtime, ready_timeout).await;
                 }
                 GatewayRuntimeState::ProvisionedStopped | GatewayRuntimeState::AbsentComponent => {
                     self.remove_runtime(&ctx.world_id);
@@ -202,10 +265,13 @@ impl GatewayRuntimeManager {
         let runtime = start_runtime(binary_path, ctx)?;
         let world_id = runtime.world_id.clone();
         self.insert_runtime(runtime.clone());
-        match self.wait_until_ready(runtime, Duration::from_secs(8)).await {
+        match self.wait_until_ready(runtime, ready_timeout).await {
             Ok(response) => Ok(response),
             Err(err) => {
-                self.remove_runtime(&world_id);
+                if let Some(runtime) = self.take_runtime(&world_id) {
+                    let _ = stop_runtime(runtime);
+                }
+                delete_runtime_manifest(&manifest_path_for_world(&world_id));
                 Err(err)
             }
         }
@@ -215,20 +281,27 @@ impl GatewayRuntimeManager {
         &self,
         ctx: GatewayRuntimeStartContext,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
-        if let Some(existing) = self.remove_runtime(&ctx.world_id) {
+        if let Some(existing) = self.runtime_for_world_or_manifest(&ctx.world_id) {
             existing.set_state(GatewayRuntimeState::RestartInProgress);
+            self.take_runtime(&ctx.world_id);
+            delete_runtime_manifest(&manifest_path_for_world(&ctx.world_id));
             stop_runtime(existing)
                 .with_context(|| format!("failed to stop gateway runtime for {}", ctx.world_id))
                 .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
         }
 
-        self.sync(ctx).await
+        self.sync_with_timeout(ctx, DEFAULT_READY_TIMEOUT).await
     }
 
     #[cfg(test)]
     pub(crate) fn pid_for_world(&self, world_id: &str) -> Option<u32> {
         let runtime = self.runtime_for_world(world_id)?;
-        runtime.child.lock().ok().map(|child| child.id())
+        runtime.pid().ok()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn forget_runtime_for_test(&self, world_id: &str) {
+        let _ = self.take_runtime(world_id);
     }
 
     fn runtime_for_world(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
@@ -238,6 +311,11 @@ impl GatewayRuntimeManager {
             .and_then(|guard| guard.get(world_id).cloned())
     }
 
+    fn runtime_for_world_or_manifest(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
+        self.runtime_for_world(world_id)
+            .or_else(|| self.recover_runtime(world_id))
+    }
+
     fn insert_runtime(&self, runtime: ManagedGatewayRuntime) {
         if let Ok(mut guard) = self.runtimes.lock() {
             guard.insert(runtime.world_id.clone(), runtime);
@@ -245,31 +323,75 @@ impl GatewayRuntimeManager {
     }
 
     fn remove_runtime(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
+        let runtime = self.take_runtime(world_id);
+        delete_runtime_manifest(&manifest_path_for_world(world_id));
+        runtime
+    }
+
+    fn take_runtime(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
         self.runtimes
             .lock()
             .ok()
             .and_then(|mut guard| guard.remove(world_id))
     }
 
+    fn recover_runtime(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
+        let manifest_path = manifest_path_for_world(world_id);
+        let manifest = match read_runtime_manifest(&manifest_path) {
+            Ok(manifest) => manifest,
+            Err(_) => {
+                delete_runtime_manifest(&manifest_path);
+                return None;
+            }
+        };
+        let runtime_dir_matches = manifest_path
+            .parent()
+            .is_some_and(|parent| parent == manifest.runtime_dir);
+        let artifacts_exist = manifest.runtime_dir.is_dir() && manifest.config_path.is_file();
+        let start_time_matches = read_pid_start_time_ticks(manifest.pid)
+            .map(|start_time| start_time == manifest.pid_start_time_ticks)
+            .unwrap_or(false);
+        if manifest.world_id != world_id
+            || !runtime_dir_matches
+            || !artifacts_exist
+            || !pid_is_running(manifest.pid)
+            || !start_time_matches
+            || !gateway_health_ready_blocking(manifest.port)
+        {
+            delete_runtime_manifest(&manifest_path);
+            return None;
+        }
+
+        let runtime = ManagedGatewayRuntime {
+            world_id: manifest.world_id,
+            port: manifest.port,
+            runtime_dir: manifest.runtime_dir,
+            config_path: manifest.config_path,
+            manifest_path,
+            pid_start_time_ticks: manifest.pid_start_time_ticks,
+            process: Arc::new(Mutex::new(ManagedGatewayProcess::RediscoveredPid(
+                manifest.pid,
+            ))),
+            state: Arc::new(RwLock::new(manifest.state)),
+        };
+        self.insert_runtime(runtime.clone());
+        Some(runtime)
+    }
+
     async fn observe_runtime_state(
         &self,
         runtime: &ManagedGatewayRuntime,
     ) -> Result<GatewayRuntimeState, GatewayRuntimeFailure> {
-        let status = {
-            let mut child = runtime
-                .child
+        let is_running = {
+            let mut process = runtime
+                .process
                 .lock()
                 .map_err(|_| GatewayRuntimeFailure::transient("gateway child lock poisoned"))?;
-            child.try_wait().with_context(|| {
-                format!(
-                    "failed to inspect gateway child status for {}",
-                    runtime.runtime_dir.display()
-                )
-            })
+            process_is_running(&mut process, &runtime.runtime_dir)
         }
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
-        if status.is_some() {
+        if !is_running {
             runtime.set_state(GatewayRuntimeState::ProvisionedStopped);
             return Ok(GatewayRuntimeState::ProvisionedStopped);
         }
@@ -319,9 +441,7 @@ fn start_runtime(
     ctx: GatewayRuntimeStartContext,
 ) -> Result<ManagedGatewayRuntime, GatewayRuntimeFailure> {
     let port = pick_free_port().map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
-    let runtime_dir = std::env::temp_dir()
-        .join("substrate-gateway-runtime")
-        .join(&ctx.world_id);
+    let runtime_dir = runtime_dir_for_world(&ctx.world_id);
     let home_dir = runtime_dir.join("home");
     fs::create_dir_all(&home_dir)
         .with_context(|| {
@@ -347,7 +467,7 @@ fn start_runtime(
         .with_context(|| format!("failed to create {}", stderr_log.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
-    let auth = resolve_codex_auth_handoff()?;
+    let auth = resolve_codex_auth_handoff(ctx.integrated_auth)?;
 
     let mut command = Command::new(&binary_path);
     command
@@ -375,28 +495,45 @@ fn start_runtime(
         .with_context(|| format!("failed to spawn {}", binary_path.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
-    attach_child_to_cgroup(child.id(), &ctx.cgroup_path, ctx.require_cgroup_attach)?;
+    if let Err(err) =
+        attach_child_to_cgroup(child.id(), &ctx.cgroup_path, ctx.require_cgroup_attach)
+    {
+        let _ = kill_child_process(&mut child);
+        return Err(err);
+    }
+    let pid_start_time_ticks = read_pid_start_time_ticks(child.id()).map_err(|err| {
+        let _ = kill_child_process(&mut child);
+        GatewayRuntimeFailure::transient(err.to_string())
+    })?;
 
-    Ok(ManagedGatewayRuntime {
-        world_id: ctx.world_id,
+    let world_id = ctx.world_id;
+    let runtime = ManagedGatewayRuntime {
+        world_id: world_id.clone(),
         port,
         runtime_dir,
         config_path,
-        child: Arc::new(Mutex::new(child)),
+        manifest_path: manifest_path_for_world(&world_id),
+        pid_start_time_ticks,
+        process: Arc::new(Mutex::new(ManagedGatewayProcess::Child(child))),
         state: Arc::new(RwLock::new(GatewayRuntimeState::Starting)),
-    })
+    };
+    if let Err(err) = runtime.persist_manifest() {
+        if let Ok(mut process) = runtime.process.lock() {
+            let _ = stop_process(&mut process);
+        }
+        delete_runtime_manifest(&runtime.manifest_path);
+        return Err(GatewayRuntimeFailure::transient(err.to_string()));
+    }
+
+    Ok(runtime)
 }
 
 fn stop_runtime(runtime: ManagedGatewayRuntime) -> Result<()> {
-    let mut child = runtime
-        .child
+    let mut process = runtime
+        .process
         .lock()
         .map_err(|_| anyhow!("gateway child lock poisoned"))?;
-    if child.try_wait()?.is_none() {
-        child.kill().context("failed to kill gateway child")?;
-        let _ = child.wait();
-    }
-    Ok(())
+    stop_process(&mut process)
 }
 
 fn attach_child_to_cgroup(
@@ -451,6 +588,54 @@ fn resolve_gateway_binary() -> Result<Option<PathBuf>, GatewayRuntimeFailure> {
     Ok(None)
 }
 
+fn runtime_dir_for_world(world_id: &str) -> PathBuf {
+    gateway_runtime_root_dir().join(world_id)
+}
+
+fn gateway_runtime_root_dir() -> PathBuf {
+    if let Some(path) = std::env::var_os("SUBSTRATE_GATEWAY_RUNTIME_ROOT") {
+        return PathBuf::from(path);
+    }
+
+    let run_dir = PathBuf::from("/run/substrate").join(GATEWAY_RUNTIME_ROOT_DIR);
+    if fs::create_dir_all(&run_dir).is_ok() {
+        return run_dir;
+    }
+
+    std::env::temp_dir().join(GATEWAY_RUNTIME_ROOT_DIR)
+}
+
+fn manifest_path_for_world(world_id: &str) -> PathBuf {
+    runtime_dir_for_world(world_id).join(GATEWAY_RUNTIME_MANIFEST_NAME)
+}
+
+fn write_runtime_manifest(path: &Path, manifest: &GatewayRuntimeManifest) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).with_context(|| {
+            format!("failed to create gateway manifest dir {}", parent.display())
+        })?;
+    }
+    let encoded =
+        serde_json::to_vec_pretty(manifest).context("failed to encode gateway manifest")?;
+    fs::write(path, encoded)
+        .with_context(|| format!("failed to write gateway manifest {}", path.display()))
+}
+
+fn read_runtime_manifest(path: &Path) -> Result<GatewayRuntimeManifest> {
+    let content = fs::read(path)
+        .with_context(|| format!("failed to read gateway manifest {}", path.display()))?;
+    serde_json::from_slice(&content)
+        .with_context(|| format!("failed to parse gateway manifest {}", path.display()))
+}
+
+fn delete_runtime_manifest(path: &Path) {
+    if let Err(err) = fs::remove_file(path) {
+        if err.kind() != std::io::ErrorKind::NotFound {
+            tracing::warn!(error = %err, manifest = %path.display(), "failed to remove gateway runtime manifest");
+        }
+    }
+}
+
 fn render_integrated_config(
     port: u16,
     default_backend: &str,
@@ -498,61 +683,32 @@ struct ResolvedCodexAuth {
     access_token: String,
 }
 
-fn resolve_codex_auth_handoff() -> Result<ResolvedCodexAuth, GatewayRuntimeFailure> {
-    if let Some(access_token) = read_trimmed_env(CODEX_ACCESS_TOKEN_ENV) {
-        let account_id = read_trimmed_env(CODEX_ACCOUNT_ID_ENV);
-        return Ok(ResolvedCodexAuth {
-            account_id,
-            access_token,
-        });
+fn resolve_codex_auth_handoff(
+    auth: Option<GatewayCliCodexIntegratedAuthV1>,
+) -> Result<ResolvedCodexAuth, GatewayRuntimeFailure> {
+    let Some(auth) = auth else {
+        return Err(GatewayRuntimeFailure::invalid_integration(
+            "missing request-provided integrated auth handoff for cli:codex",
+        ));
+    };
+
+    let access_token = auth.access_token.trim().to_string();
+    if access_token.is_empty() {
+        return Err(GatewayRuntimeFailure::invalid_integration(format!(
+            "request-provided {} is empty",
+            CODEX_ACCESS_TOKEN_ENV
+        )));
     }
 
-    let path = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".codex")
-        .join("auth.json");
-    let content = fs::read_to_string(&path)
-        .with_context(|| format!("failed to read Codex auth state from {}", path.display()))
-        .map_err(|err| GatewayRuntimeFailure::invalid_integration(err.to_string()))?;
-    let json: Value = serde_json::from_str(&content)
-        .with_context(|| format!("failed to parse Codex auth state at {}", path.display()))
-        .map_err(|err| GatewayRuntimeFailure::invalid_integration(err.to_string()))?;
-
-    let access_token = find_json_string(&json, &["access_token"]).ok_or_else(|| {
-        GatewayRuntimeFailure::invalid_integration("Codex auth state is missing access_token")
-    })?;
-    let account_id = find_json_string(&json, &["account_id"]);
+    let account_id = auth
+        .account_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
 
     Ok(ResolvedCodexAuth {
         account_id,
         access_token,
     })
-}
-
-fn find_json_string(value: &Value, keys: &[&str]) -> Option<String> {
-    match value {
-        Value::Object(map) => {
-            for key in keys {
-                if let Some(raw) = map.get(*key).and_then(Value::as_str) {
-                    let trimmed = raw.trim();
-                    if !trimmed.is_empty() {
-                        return Some(trimmed.to_string());
-                    }
-                }
-            }
-            map.values().find_map(|value| find_json_string(value, keys))
-        }
-        Value::Array(items) => items.iter().find_map(|value| find_json_string(value, keys)),
-        _ => None,
-    }
-}
-
-fn read_trimmed_env(key: &str) -> Option<String> {
-    std::env::var(key)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
 }
 
 fn parse_bool_env(
@@ -584,6 +740,108 @@ fn pick_free_port() -> Result<u16> {
         .port();
     drop(listener);
     Ok(port)
+}
+
+fn process_is_running(process: &mut ManagedGatewayProcess, runtime_dir: &Path) -> Result<bool> {
+    match process {
+        ManagedGatewayProcess::Child(child) => child
+            .try_wait()
+            .with_context(|| {
+                format!(
+                    "failed to inspect gateway child status for {}",
+                    runtime_dir.display()
+                )
+            })
+            .map(|status| status.is_none()),
+        ManagedGatewayProcess::RediscoveredPid(pid) => Ok(pid_is_running(*pid)),
+    }
+}
+
+fn stop_process(process: &mut ManagedGatewayProcess) -> Result<()> {
+    match process {
+        ManagedGatewayProcess::Child(child) => kill_child_process(child),
+        ManagedGatewayProcess::RediscoveredPid(pid) => kill_pid(*pid),
+    }
+}
+
+fn kill_child_process(child: &mut Child) -> Result<()> {
+    if child.try_wait()?.is_none() {
+        child.kill().context("failed to kill gateway child")?;
+        let _ = child.wait();
+    }
+    Ok(())
+}
+
+fn kill_pid(pid: u32) -> Result<()> {
+    if process_has_exited(pid) {
+        return Ok(());
+    }
+
+    let rc = unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) };
+    if rc != 0 {
+        let err = std::io::Error::last_os_error();
+        if err.raw_os_error() != Some(libc::ESRCH) {
+            return Err(err).context(format!("failed to kill gateway pid {pid}"));
+        }
+        return Ok(());
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while Instant::now() < deadline {
+        if process_has_exited(pid) {
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    Err(anyhow!("gateway pid {pid} did not exit after SIGKILL"))
+}
+
+fn pid_is_running(pid: u32) -> bool {
+    let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+    if rc == 0 {
+        return true;
+    }
+
+    match std::io::Error::last_os_error().raw_os_error() {
+        Some(code) if code == libc::EPERM => true,
+        Some(code) if code == libc::ESRCH => false,
+        _ => false,
+    }
+}
+
+fn process_has_exited(pid: u32) -> bool {
+    reap_pid_if_possible(pid) || !pid_is_running(pid)
+}
+
+fn reap_pid_if_possible(pid: u32) -> bool {
+    let mut status = 0;
+    let rc = unsafe { libc::waitpid(pid as libc::pid_t, &mut status, libc::WNOHANG) };
+    if rc > 0 {
+        return true;
+    }
+    false
+}
+
+fn read_pid_start_time_ticks(pid: u32) -> Result<u64> {
+    let stat_path = PathBuf::from("/proc").join(pid.to_string()).join("stat");
+    let stat = fs::read_to_string(&stat_path)
+        .with_context(|| format!("failed to read {}", stat_path.display()))?;
+    parse_pid_start_time_ticks(&stat)
+        .with_context(|| format!("failed to parse {}", stat_path.display()))
+}
+
+fn parse_pid_start_time_ticks(stat: &str) -> Result<u64> {
+    let (_, rest) = stat
+        .rsplit_once(") ")
+        .ok_or_else(|| anyhow!("missing comm terminator in /proc stat"))?;
+    let field = rest
+        .split_whitespace()
+        .nth(19)
+        .ok_or_else(|| anyhow!("missing start time field in /proc stat"))?;
+    field
+        .parse::<u64>()
+        .context("invalid start time field in /proc stat")
 }
 
 async fn gateway_health_ready(port: u16) -> bool {

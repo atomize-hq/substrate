@@ -19,6 +19,8 @@ ENABLE_WORLD_NETFILTER=0
 SUBSTRATE_GROUP="substrate"
 SOCKET_FS_PATH="/run/substrate.sock"
 INVOKING_USER=""
+INVOKING_HOME=""
+SUBSTRATE_CLI_BIN_PATH=""
 
 show_cmd() {
     printf '[dry-run]'
@@ -54,6 +56,91 @@ detect_invoking_user() {
     if [[ -n "${current}" ]]; then
         printf '%s\n' "${current}"
     fi
+}
+
+resolve_substrate_cli() {
+    local candidate=""
+    if [[ -n "${SUBSTRATE_CLI_BIN_PATH}" && -x "${SUBSTRATE_CLI_BIN_PATH}" ]]; then
+        printf '%s\n' "${SUBSTRATE_CLI_BIN_PATH}"
+        return 0
+    fi
+    candidate="$(command -v substrate 2>/dev/null || true)"
+    if [[ -n "${candidate}" ]]; then
+        printf '%s\n' "${candidate}"
+        return 0
+    fi
+    return 1
+}
+
+prepare_gateway_smoke_auth() {
+    local auth_path="${INVOKING_HOME}/.codex/auth.json"
+    if [[ -f "${auth_path}" ]]; then
+        printf '%s\n' "present"
+        return 0
+    fi
+
+    local tmp
+    tmp="$(mktemp)"
+    cat >"${tmp}" <<'JSON'
+{
+  "account_id": "acct_smoke",
+  "access_token": "header.payload.signature"
+}
+JSON
+    install -d -m0700 "${INVOKING_HOME}/.codex"
+    install -m0600 "${tmp}" "${auth_path}"
+    rm -f "${tmp}"
+    printf '%s\n' "created"
+}
+
+cleanup_gateway_smoke_auth() {
+    rm -f "${INVOKING_HOME}/.codex/auth.json"
+}
+
+run_gateway_lifecycle_proof() {
+    local substrate_cli="$1"
+    local auth_state=""
+    local cleanup_auth=0
+    local status_json=""
+    local base_url=""
+    local port=""
+    local health_json=""
+
+    echo "==> Running gateway lifecycle proof"
+    auth_state="$(prepare_gateway_smoke_auth)"
+    if [[ "${auth_state}" == "created" ]]; then
+        cleanup_auth=1
+    fi
+    trap 'if [[ ${cleanup_auth} -eq 1 ]]; then cleanup_gateway_smoke_auth; fi' RETURN
+
+    (
+        cd "${REPO_ROOT}"
+        "${substrate_cli}" world gateway sync
+        status_json="$("${substrate_cli}" world gateway status --json)"
+        if [[ "${status_json}" != *'"status":"available"'* ]]; then
+            echo "gateway status did not report available: ${status_json}" >&2
+            exit 1
+        fi
+
+        "${substrate_cli}" world gateway restart
+        status_json="$("${substrate_cli}" world gateway status --json)"
+        if [[ "${status_json}" != *'"status":"available"'* ]]; then
+            echo "gateway status after restart did not report available: ${status_json}" >&2
+            exit 1
+        fi
+        base_url="$(printf '%s\n' "${status_json}" | sed -n 's/.*"openai_base_url":"\([^"]*\)".*/\1/p')"
+        port="$(printf '%s\n' "${base_url}" | sed -n 's#http://127\.0\.0\.1:\([0-9][0-9]*\)$#\1#p')"
+        if [[ -z "${port}" ]]; then
+            echo "Unable to derive gateway port from ${base_url}" >&2
+            exit 1
+        fi
+        health_json="$(curl --fail --silent "http://127.0.0.1:${port}/health")"
+        if [[ "${health_json}" != *'"status":"ok"'* || "${health_json}" != *'"service":"substrate-gateway"'* ]]; then
+            echo "gateway health probe returned unexpected payload: ${health_json}" >&2
+            exit 1
+        fi
+    )
+
 }
 
 user_in_group() {
@@ -211,22 +298,24 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
 WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/world-agent"
 GATEWAY_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate-gateway"
+SUBSTRATE_CLI_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate"
 
 if [[ ${SKIP_BUILD} -eq 0 ]]; then
-    echo "==> Building world-agent + substrate-gateway (profile: ${PROFILE})"
+    echo "==> Building substrate + world-agent + substrate-gateway (profile: ${PROFILE})"
     if [[ "${PROFILE}" == "release" ]]; then
         WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/release/world-agent"
         GATEWAY_BIN_PATH="${REPO_ROOT}/target/release/substrate-gateway"
+        SUBSTRATE_CLI_BIN_PATH="${REPO_ROOT}/target/release/substrate"
         if [[ ${DRY_RUN} -eq 1 ]]; then
-            show_cmd cargo build -p world-agent -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
+            show_cmd cargo build -p substrate --bin substrate -p world-agent -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
         else
-            cargo build -p world-agent -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
+            cargo build -p substrate --bin substrate -p world-agent -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
     else
         if [[ ${DRY_RUN} -eq 1 ]]; then
-            show_cmd cargo build -p world-agent -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            show_cmd cargo build -p substrate --bin substrate -p world-agent -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         else
-            cargo build -p world-agent -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            cargo build -p substrate --bin substrate -p world-agent -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
     fi
 else
@@ -257,6 +346,9 @@ if [[ -z "${SUBSTRATE_HOME_FOR_AGENT}" ]]; then
         INVOKING_HOME="/home/${INVOKING_USER}"
     fi
     SUBSTRATE_HOME_FOR_AGENT="${INVOKING_HOME}/.substrate"
+fi
+if [[ -z "${INVOKING_HOME}" ]]; then
+    INVOKING_HOME="$(dirname "${SUBSTRATE_HOME_FOR_AGENT}")"
 fi
 
 NETFILTER_ENV_LINE=""
@@ -351,11 +443,26 @@ sudo_cmd systemctl status substrate-world-agent.socket --no-pager --lines=10 || 
 echo "==> substrate-world-agent.service status (last 10 log lines)"
 sudo_cmd systemctl status substrate-world-agent.service --no-pager --lines=10 || true
 
+if [[ ${DRY_RUN} -eq 1 ]]; then
+    substrate_cli="$(resolve_substrate_cli 2>/dev/null || true)"
+    if [[ -z "${substrate_cli}" ]]; then
+        substrate_cli="${SUBSTRATE_CLI_BIN_PATH}"
+    fi
+    echo "==> Gateway lifecycle proof"
+    show_cmd "${substrate_cli}" world gateway sync
+    show_cmd "${substrate_cli}" world gateway status --json
+    show_cmd "${substrate_cli}" world gateway restart
+    echo "[dry-run] curl --fail --silent http://127.0.0.1:<gateway-port>/health"
+else
+    substrate_cli="$(resolve_substrate_cli)"
+    run_gateway_lifecycle_proof "${substrate_cli}"
+fi
+
 print_linger_guidance "${INVOKING_USER}"
 
 echo "==> Provisioning complete"
 echo "    Verify socket with: sudo ls -l ${SOCKET_FS_PATH}"
 echo "    Probe capabilities: sudo curl --unix-socket ${SOCKET_FS_PATH} http://localhost/v1/capabilities"
-echo "    Verify gateway: sudo ls -l /usr/local/bin/substrate-gateway"
+echo "    Verify gateway lifecycle: $(basename "${substrate_cli:-substrate}") world gateway status --json"
 echo "    Doctor socket block: substrate host doctor --json | jq '.host.world_socket'"
 echo "    Shim summary: substrate --shim-status | grep 'World socket'"
