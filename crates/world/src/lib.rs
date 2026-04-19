@@ -37,17 +37,40 @@ impl LinuxLocalBackend {
 
     /// Return a compatible cached session if one already exists without creating a new world.
     pub fn find_compatible_session(&self, spec: &WorldSpec) -> Result<Option<WorldHandle>> {
-        let cache = self
-            .session_cache
-            .read()
-            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache read lock: {}", e))?;
+        self.find_compatible_session_from_root(&SessionWorld::shared_root_dir(), spec, false)
+    }
 
-        Ok(cache
-            .values()
-            .find(|world| world.compatible_with(spec))
-            .map(|world| WorldHandle {
+    fn find_compatible_session_from_root(
+        &self,
+        root_dir: &std::path::Path,
+        spec: &WorldSpec,
+        update_fs_mode: bool,
+    ) -> Result<Option<WorldHandle>> {
+        let mut cache = self
+            .session_cache
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to acquire session cache write lock: {}", e))?;
+
+        if let Some(world) = cache.values_mut().find(|world| world.compatible_with(spec)) {
+            if update_fs_mode {
+                world.spec.fs_mode = spec.fs_mode;
+            }
+            return Ok(Some(WorldHandle {
                 id: world.id.clone(),
-            }))
+            }));
+        }
+
+        let Some(mut world) = SessionWorld::recover_compatible_from_root(root_dir, spec)? else {
+            return Ok(None);
+        };
+        if update_fs_mode {
+            world.spec.fs_mode = spec.fs_mode;
+        }
+        let handle = WorldHandle {
+            id: world.id.clone(),
+        };
+        cache.insert(world.id.clone(), world);
+        Ok(Some(handle))
     }
 
     /// Ensure the overlay for a world is mounted and return its merged root.
@@ -138,14 +161,12 @@ impl WorldBackend for LinuxLocalBackend {
         self.check_platform()?;
 
         if spec.reuse_session {
-            let mut cache = self.session_cache.write().map_err(|e| {
-                anyhow::anyhow!("Failed to acquire session cache write lock: {}", e)
-            })?;
-            if let Some(world) = cache.values_mut().find(|world| world.compatible_with(spec)) {
-                world.spec.fs_mode = spec.fs_mode;
-                return Ok(WorldHandle {
-                    id: world.id.clone(),
-                });
+            if let Some(handle) = self.find_compatible_session_from_root(
+                &SessionWorld::shared_root_dir(),
+                spec,
+                true,
+            )? {
+                return Ok(handle);
             }
         }
 
@@ -212,6 +233,8 @@ mod tests {
     use std::collections::HashMap;
     #[cfg(target_os = "linux")]
     use std::sync::RwLock;
+    #[cfg(target_os = "linux")]
+    use tempfile::tempdir;
 
     #[test]
     fn test_backend_creation() {
@@ -231,6 +254,59 @@ mod tests {
     fn test_platform_check_succeeds_on_linux() {
         let backend = LinuxLocalBackend::new();
         assert!(backend.check_platform().is_ok());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cache_miss_with_valid_metadata_repopulates_backend_cache() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        let cgroup_path = temp.path().join("cgroup").join("wld_recovered");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&cgroup_path).unwrap();
+        let metadata_dir = root_dir.join("wld_recovered");
+        std::fs::create_dir_all(&metadata_dir).unwrap();
+
+        let spec = WorldSpec {
+            reuse_session: true,
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir: project_dir.clone(),
+            always_isolate: false,
+            fs_mode: world_api::WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+        std::fs::write(
+            metadata_dir.join("session.json"),
+            format!(
+                r#"{{
+  "world_id": "wld_recovered",
+  "project_dir": "{}",
+  "isolate_network": false,
+  "always_isolate": false,
+  "allowed_domains": ["example.com"],
+  "cgroup_path": "{}",
+  "started_at_unix_millis": 5000
+}}"#,
+                project_dir.display(),
+                cgroup_path.display()
+            ),
+        )
+        .unwrap();
+
+        let backend = LinuxLocalBackend::new();
+        let handle = backend
+            .find_compatible_session_from_root(&root_dir, &spec, false)
+            .unwrap()
+            .expect("expected recovered session handle");
+        assert_eq!(handle.id, "wld_recovered");
+        assert!(backend
+            .session_cache
+            .read()
+            .unwrap()
+            .contains_key(&handle.id));
     }
 
     #[cfg(target_os = "linux")]

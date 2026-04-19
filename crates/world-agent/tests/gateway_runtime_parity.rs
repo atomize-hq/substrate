@@ -91,7 +91,7 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
+if [ -z "${SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}" ]; then
   echo "missing Codex access token env" >&2
   exit 65
 fi
@@ -326,6 +326,24 @@ fn wait_for_pid_file(pid_path: &Path) -> u32 {
             pid_path.display()
         );
         std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+async fn wait_for_pid_file_async(pid_path: &Path) -> u32 {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if let Ok(raw) = fs::read_to_string(pid_path) {
+            let pid = raw.trim().parse::<u32>().expect("parse pid");
+            if pid > 0 {
+                return pid;
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for pid file {}",
+            pid_path.display()
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
 }
 
@@ -620,7 +638,7 @@ async fn gateway_status_reports_transient_failure_while_starting() {
         let request = request.clone();
         async move { service.gateway_sync(request).await }
     });
-    wait_for_pid_file(&pid_path);
+    wait_for_pid_file_async(&pid_path).await;
 
     let err = service
         .gateway_status(request.clone())
@@ -662,7 +680,7 @@ async fn gateway_status_reports_transient_failure_while_restarting() {
         let request = request.clone();
         async move { service.gateway_restart(request).await }
     });
-    wait_for_pid_file(&pid_path);
+    wait_for_pid_file_async(&pid_path).await;
 
     let err = service
         .gateway_status(request.clone())
