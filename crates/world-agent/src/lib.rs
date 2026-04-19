@@ -1,6 +1,8 @@
 //! World agent library for execution inside worlds/VMs.
 
 mod enforcement_plan;
+#[cfg(target_os = "linux")]
+mod gateway_runtime;
 pub mod gc;
 pub mod handlers;
 pub mod internal_exec;

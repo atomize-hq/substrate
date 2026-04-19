@@ -33,9 +33,13 @@ This contract does not own:
 Runtime bootstrap note:
 
 - The effective `llm.gateway.mode` posture is applied outside the provider boundary.
-- Current gateway bootstrap may carry that posture via `SUBSTRATE_LLM_GATEWAY_MODE=in_world|host_only`.
-- `in_world` selects the integrated auth source for this route.
-- `host_only` selects the bounded standalone compatibility source for gateway-local operation.
+- Current gateway bootstrap may carry that posture via:
+  - `SUBSTRATE_LLM_GATEWAY_MODE=in_world|host_only`
+  - `SUBSTRATE_LLM_GATEWAY_CONFIG_PATH=/absolute/path/to/config.toml`
+  - `SUBSTRATE_LLM_GATEWAY_TOKEN_STORE_PATH=/absolute/path/to/oauth_tokens.json`
+  - `SUBSTRATE_LLM_GATEWAY_DISABLE_TOKEN_PERSISTENCE=1`
+- `in_world` selects the integrated auth source for this route and must be paired with an explicit config-path handoff plus either an explicit gateway token-store path or explicit persistence disablement.
+- `host_only` selects the bounded standalone compatibility source for gateway-local operation and may still use the local convenience defaults under `~/.substrate-gateway/`.
 
 The gateway must treat those field names as the authoritative integrated-mode inputs for this route, whether the current runtime receives their values through v1 env delivery or a later auth-bundle carrier.
 

@@ -2,11 +2,26 @@
 
 use crate::overlayfs::OverlayFs;
 use anyhow::{anyhow, Context, Result};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use world_api::{ExecResult, FsDiff, WorldFsMode, WorldSpec};
+
+const SESSION_METADATA_FILE_NAME: &str = "session.json";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct SessionWorldMetadata {
+    world_id: String,
+    project_dir: PathBuf,
+    isolate_network: bool,
+    always_isolate: bool,
+    allowed_domains: Vec<String>,
+    cgroup_path: PathBuf,
+    started_at_unix_millis: u64,
+}
 
 /// A reusable Linux world with proper isolation.
 pub struct SessionWorld {
@@ -35,20 +50,17 @@ struct OverlayExecutionContext<'a> {
 }
 
 impl SessionWorld {
+    pub(crate) fn shared_root_dir() -> PathBuf {
+        PathBuf::from("/tmp/substrate-worlds")
+    }
+
     /// Ensure a session world is started and return it.
     pub fn ensure_started(spec: WorldSpec) -> Result<Self> {
-        // Check if session world already exists
-        if spec.reuse_session {
-            if let Some(existing) = Self::find_existing()? {
-                return Ok(existing);
-            }
-        }
-
         // Create new session world
         let world_id = format!("wld_{}", uuid::Uuid::now_v7());
         let mut world = Self {
             id: world_id.clone(),
-            root_dir: PathBuf::from("/tmp/substrate-worlds"),
+            root_dir: Self::shared_root_dir(),
             project_dir: spec.project_dir.clone(),
             cgroup_path: PathBuf::from("/sys/fs/cgroup/substrate").join(&world_id),
             net_namespace: None,
@@ -61,6 +73,9 @@ impl SessionWorld {
         };
 
         world.setup()?;
+        if world.spec.reuse_session {
+            world.persist_metadata()?;
+        }
         Ok(world)
     }
 
@@ -72,11 +87,132 @@ impl SessionWorld {
             && self.spec.allowed_domains == spec.allowed_domains
     }
 
-    /// Find an existing session world if available.
-    fn find_existing() -> Result<Option<Self>> {
-        // TODO: Implement session discovery logic
-        // For now, always create new
+    pub(crate) fn recover_compatible_from_root(
+        root_dir: &Path,
+        spec: &WorldSpec,
+    ) -> Result<Option<Self>> {
+        if !spec.reuse_session || !root_dir.is_dir() {
+            return Ok(None);
+        }
+
+        for entry in fs::read_dir(root_dir)
+            .with_context(|| format!("failed to read session root {}", root_dir.display()))?
+        {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    tracing::warn!(error = %err, root = %root_dir.display(), "failed to inspect session metadata entry");
+                    continue;
+                }
+            };
+            let metadata_path = entry.path().join(SESSION_METADATA_FILE_NAME);
+            if !metadata_path.is_file() {
+                continue;
+            }
+
+            match Self::recover_from_metadata_path(&metadata_path, root_dir, spec) {
+                Ok(Some(world)) => return Ok(Some(world)),
+                Ok(None) => {}
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        metadata = %metadata_path.display(),
+                        "ignoring invalid persisted session metadata"
+                    );
+                    let _ = fs::remove_file(&metadata_path);
+                }
+            }
+        }
+
         Ok(None)
+    }
+
+    fn recover_from_metadata_path(
+        metadata_path: &Path,
+        root_dir: &Path,
+        spec: &WorldSpec,
+    ) -> Result<Option<Self>> {
+        let metadata = Self::read_metadata(metadata_path)?;
+        if !Self::metadata_matches_spec(&metadata, spec) {
+            return Ok(None);
+        }
+        if !Self::metadata_is_usable(&metadata, metadata_path) {
+            return Ok(None);
+        }
+        Ok(Some(Self::from_metadata(root_dir, spec, metadata)))
+    }
+
+    fn metadata_matches_spec(metadata: &SessionWorldMetadata, spec: &WorldSpec) -> bool {
+        metadata.project_dir == spec.project_dir
+            && metadata.isolate_network == spec.isolate_network
+            && metadata.always_isolate == spec.always_isolate
+            && metadata.allowed_domains == spec.allowed_domains
+    }
+
+    fn metadata_is_usable(metadata: &SessionWorldMetadata, metadata_path: &Path) -> bool {
+        metadata_path.parent().is_some_and(Path::is_dir)
+            && metadata.project_dir.is_dir()
+            && metadata.cgroup_path.is_dir()
+    }
+
+    fn from_metadata(root_dir: &Path, spec: &WorldSpec, metadata: SessionWorldMetadata) -> Self {
+        Self {
+            id: metadata.world_id,
+            root_dir: root_dir.to_path_buf(),
+            project_dir: metadata.project_dir,
+            cgroup_path: metadata.cgroup_path,
+            net_namespace: None,
+            spec: spec.clone(),
+            started_at: UNIX_EPOCH + Duration::from_millis(metadata.started_at_unix_millis),
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            overlay: None,
+            overlay_mode: None,
+        }
+    }
+
+    fn metadata_dir(root_dir: &Path, world_id: &str) -> PathBuf {
+        root_dir.join(world_id)
+    }
+
+    fn metadata_path(root_dir: &Path, world_id: &str) -> PathBuf {
+        Self::metadata_dir(root_dir, world_id).join(SESSION_METADATA_FILE_NAME)
+    }
+
+    fn to_metadata(&self) -> Result<SessionWorldMetadata> {
+        let started_at_unix_millis = self
+            .started_at
+            .duration_since(UNIX_EPOCH)
+            .context("session start time predates unix epoch")?
+            .as_millis()
+            .try_into()
+            .context("session start time exceeds u64 millis")?;
+        Ok(SessionWorldMetadata {
+            world_id: self.id.clone(),
+            project_dir: self.project_dir.clone(),
+            isolate_network: self.spec.isolate_network,
+            always_isolate: self.spec.always_isolate,
+            allowed_domains: self.spec.allowed_domains.clone(),
+            cgroup_path: self.cgroup_path.clone(),
+            started_at_unix_millis,
+        })
+    }
+
+    pub(crate) fn persist_metadata(&self) -> Result<()> {
+        let metadata_dir = Self::metadata_dir(&self.root_dir, &self.id);
+        fs::create_dir_all(&metadata_dir)
+            .with_context(|| format!("failed to create {}", metadata_dir.display()))?;
+        let encoded =
+            serde_json::to_vec_pretty(&self.to_metadata()?).context("encode session metadata")?;
+        let metadata_path = Self::metadata_path(&self.root_dir, &self.id);
+        fs::write(&metadata_path, encoded)
+            .with_context(|| format!("failed to write {}", metadata_path.display()))
+    }
+
+    fn read_metadata(path: &Path) -> Result<SessionWorldMetadata> {
+        let bytes = fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
+        serde_json::from_slice(&bytes)
+            .with_context(|| format!("failed to parse {}", path.display()))
     }
 
     /// Set up the world isolation.
@@ -125,6 +261,10 @@ impl SessionWorld {
     pub fn refresh_network_filter(&mut self) -> Result<()> {
         if !self.spec.isolate_network {
             return Ok(());
+        }
+
+        if self.network_filter.is_none() {
+            self.setup_network_filter()?;
         }
 
         let filter = self
@@ -609,8 +749,9 @@ mod tests {
     use super::*;
     #[cfg(target_os = "linux")]
     use std::sync::Mutex;
+    use tempfile::tempdir;
     #[cfg(target_os = "linux")]
-    use tempfile::{tempdir, TempDir};
+    use tempfile::TempDir;
 
     #[cfg(target_os = "linux")]
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -741,6 +882,94 @@ mod tests {
             world.compatible_with(&changed),
             "fs_mode differences should not force a new world; overlay remount handles mode changes"
         );
+    }
+
+    #[test]
+    fn persisted_metadata_round_trips_for_recovery() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        let cgroup_path = temp.path().join("cgroup").join("wld_roundtrip");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&cgroup_path).unwrap();
+
+        let spec = WorldSpec {
+            reuse_session: true,
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir: project_dir.clone(),
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+        let world = SessionWorld {
+            id: "wld_roundtrip".into(),
+            root_dir: root_dir.clone(),
+            project_dir: project_dir.clone(),
+            cgroup_path: cgroup_path.clone(),
+            net_namespace: None,
+            spec: spec.clone(),
+            started_at: UNIX_EPOCH + Duration::from_millis(1_234),
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            overlay: None,
+            overlay_mode: None,
+        };
+
+        world.persist_metadata().unwrap();
+
+        let recovered = SessionWorld::recover_compatible_from_root(&root_dir, &spec)
+            .unwrap()
+            .expect("metadata should recover");
+        assert_eq!(recovered.id, world.id);
+        assert_eq!(recovered.project_dir, world.project_dir);
+        assert_eq!(recovered.cgroup_path, world.cgroup_path);
+        assert_eq!(recovered.started_at, world.started_at);
+        assert!(recovered.compatible_with(&spec));
+    }
+
+    #[test]
+    fn stale_or_invalid_metadata_is_ignored() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        let invalid_dir = root_dir.join("wld_invalid");
+        std::fs::create_dir_all(&invalid_dir).unwrap();
+        std::fs::write(invalid_dir.join(SESSION_METADATA_FILE_NAME), b"{not-json").unwrap();
+
+        let stale_dir = root_dir.join("wld_stale");
+        std::fs::create_dir_all(&stale_dir).unwrap();
+        let stale = SessionWorldMetadata {
+            world_id: "wld_stale".into(),
+            project_dir: project_dir.clone(),
+            isolate_network: false,
+            always_isolate: false,
+            allowed_domains: vec!["example.com".into()],
+            cgroup_path: temp.path().join("missing-cgroup"),
+            started_at_unix_millis: 42,
+        };
+        std::fs::write(
+            stale_dir.join(SESSION_METADATA_FILE_NAME),
+            serde_json::to_vec(&stale).unwrap(),
+        )
+        .unwrap();
+
+        let spec = WorldSpec {
+            reuse_session: true,
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir,
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+
+        let recovered = SessionWorld::recover_compatible_from_root(&root_dir, &spec).unwrap();
+        assert!(recovered.is_none(), "stale metadata should be ignored");
     }
 
     #[test]

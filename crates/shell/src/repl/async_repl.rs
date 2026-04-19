@@ -226,7 +226,10 @@ fn spawn_prompt_terminal_loss_monitor(
     });
 }
 
-fn consume_terminal_loss_message(
+const REEDLINE_CTRLD_TERMINAL_LOSS_RECHECKS: usize = 6;
+const REEDLINE_CTRLD_TERMINAL_LOSS_RECHECK_DELAY: Duration = Duration::from_millis(25);
+
+fn take_detected_terminal_loss_message(
     terminal_loss_detected: &AtomicBool,
     terminal_loss_message: &Mutex<Option<String>>,
 ) -> Option<anyhow::Error> {
@@ -239,7 +242,54 @@ fn consume_terminal_loss_message(
         return Some(anyhow!(message));
     }
 
-    detect_terminal_loss_while_prompting()
+    None
+}
+
+fn resolve_reedline_ctrl_d_terminal_loss(
+    terminal_loss_detected: &AtomicBool,
+    terminal_loss_message: &Mutex<Option<String>>,
+) -> Option<anyhow::Error> {
+    resolve_reedline_ctrl_d_terminal_loss_with(
+        terminal_loss_detected,
+        terminal_loss_message,
+        detect_terminal_loss_while_prompting,
+        || thread::sleep(REEDLINE_CTRLD_TERMINAL_LOSS_RECHECK_DELAY),
+    )
+}
+
+fn resolve_reedline_ctrl_d_terminal_loss_with<D, S>(
+    terminal_loss_detected: &AtomicBool,
+    terminal_loss_message: &Mutex<Option<String>>,
+    mut detect_terminal_loss: D,
+    mut sleep_between_rechecks: S,
+) -> Option<anyhow::Error>
+where
+    D: FnMut() -> Option<anyhow::Error>,
+    S: FnMut(),
+{
+    if let Some(err) =
+        take_detected_terminal_loss_message(terminal_loss_detected, terminal_loss_message)
+    {
+        return Some(err);
+    }
+
+    for attempt in 0..REEDLINE_CTRLD_TERMINAL_LOSS_RECHECKS {
+        if let Some(err) = detect_terminal_loss() {
+            return Some(err);
+        }
+
+        if let Some(err) =
+            take_detected_terminal_loss_message(terminal_loss_detected, terminal_loss_message)
+        {
+            return Some(err);
+        }
+
+        if attempt + 1 < REEDLINE_CTRLD_TERMINAL_LOSS_RECHECKS {
+            sleep_between_rechecks();
+        }
+    }
+
+    None
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -442,7 +492,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             prompt_active.store(false, Ordering::SeqCst);
             let prompt_response = match prompt_response {
                 PromptWorkerResponse::CtrlD if prompt_worker.is_reedline() => {
-                    if let Some(err) = consume_terminal_loss_message(
+                    if let Some(err) = resolve_reedline_ctrl_d_terminal_loss(
                         terminal_loss_detected.as_ref(),
                         terminal_loss_message.as_ref(),
                     ) {
@@ -2378,8 +2428,9 @@ fn exit_status_from_code(code: i32) -> ExitStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
     #[cfg(unix)]
-    use std::cell::{Cell, RefCell};
+    use std::cell::RefCell;
 
     #[cfg(unix)]
     fn reedline_terminal_loss_error() -> anyhow::Error {
@@ -2473,6 +2524,105 @@ mod tests {
             shutdown_disposition_for_termination_cause(ReplTerminationCause::AbnormalTerminalLoss),
             PromptWorkerShutdownDisposition::Abandon
         );
+    }
+
+    #[test]
+    fn resolve_reedline_ctrl_d_terminal_loss_returns_pre_recorded_message() {
+        let detected = AtomicBool::new(true);
+        let message = Mutex::new(Some("controlling terminal became invalid".to_string()));
+        let detect_calls = Cell::new(0usize);
+
+        let err = resolve_reedline_ctrl_d_terminal_loss_with(
+            &detected,
+            &message,
+            || {
+                detect_calls.set(detect_calls.get() + 1);
+                None
+            },
+            || panic!("should not sleep when terminal loss is already recorded"),
+        )
+        .expect("expected recorded terminal loss");
+
+        assert_eq!(detect_calls.get(), 0);
+        assert!(err
+            .to_string()
+            .contains("controlling terminal became invalid"));
+    }
+
+    #[test]
+    fn resolve_reedline_ctrl_d_terminal_loss_retries_detector_within_window() {
+        let detected = AtomicBool::new(false);
+        let message = Mutex::new(None::<String>);
+        let detect_calls = Cell::new(0usize);
+        let sleep_calls = Cell::new(0usize);
+
+        let err = resolve_reedline_ctrl_d_terminal_loss_with(
+            &detected,
+            &message,
+            || {
+                let next = detect_calls.get() + 1;
+                detect_calls.set(next);
+                if next == 3 {
+                    Some(anyhow!("delayed terminal loss"))
+                } else {
+                    None
+                }
+            },
+            || sleep_calls.set(sleep_calls.get() + 1),
+        )
+        .expect("expected delayed terminal loss");
+
+        assert_eq!(detect_calls.get(), 3);
+        assert_eq!(sleep_calls.get(), 2);
+        assert!(err.to_string().contains("delayed terminal loss"));
+    }
+
+    #[test]
+    fn resolve_reedline_ctrl_d_terminal_loss_observes_monitor_update_on_retry() {
+        let detected = AtomicBool::new(false);
+        let message = Mutex::new(None::<String>);
+        let sleep_calls = Cell::new(0usize);
+
+        let err = resolve_reedline_ctrl_d_terminal_loss_with(
+            &detected,
+            &message,
+            || None,
+            || {
+                let next = sleep_calls.get() + 1;
+                sleep_calls.set(next);
+                if next == 1 {
+                    detected.store(true, Ordering::SeqCst);
+                    *message.lock().expect("message mutex poisoned") =
+                        Some("monitor reported terminal loss".to_string());
+                }
+            },
+        )
+        .expect("expected terminal loss from monitor update");
+
+        assert_eq!(sleep_calls.get(), 1);
+        assert!(err.to_string().contains("monitor reported terminal loss"));
+    }
+
+    #[test]
+    fn resolve_reedline_ctrl_d_terminal_loss_returns_none_without_signal() {
+        let detected = AtomicBool::new(false);
+        let message = Mutex::new(None::<String>);
+        let detect_calls = Cell::new(0usize);
+        let sleep_calls = Cell::new(0usize);
+
+        let err = resolve_reedline_ctrl_d_terminal_loss_with(
+            &detected,
+            &message,
+            || {
+                detect_calls.set(detect_calls.get() + 1);
+                None
+            },
+            || sleep_calls.set(sleep_calls.get() + 1),
+        );
+
+        assert!(err.is_none());
+        assert_eq!(detect_calls.get(), REEDLINE_CTRLD_TERMINAL_LOSS_RECHECKS);
+        assert_eq!(sleep_calls.get(), REEDLINE_CTRLD_TERMINAL_LOSS_RECHECKS - 1);
     }
 
     #[cfg(unix)]

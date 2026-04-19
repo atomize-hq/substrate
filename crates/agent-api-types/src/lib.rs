@@ -824,6 +824,21 @@ fn world_fs_read_response_v1_default_schema_version() -> u32 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayCliCodexIntegratedAuthV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<String>,
+    pub access_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayIntegratedAuthPayloadV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli_codex: Option<GatewayCliCodexIntegratedAuthV1>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GatewayLifecycleRequestV1 {
     pub profile: Option<String>,
     pub cwd: Option<String>,
@@ -832,6 +847,8 @@ pub struct GatewayLifecycleRequestV1 {
     pub policy_snapshot: PolicySnapshotV3,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_network: Option<WorldNetworkRoutingV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

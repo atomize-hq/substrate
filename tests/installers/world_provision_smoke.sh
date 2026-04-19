@@ -21,8 +21,10 @@ usage() {
 Usage: tests/installers/world_provision_smoke.sh [--profile <name>] [--keep-root]
 
 Verifies scripts/linux/world-provision.sh writes the substrate socket unit with
-SocketGroup=substrate, records group membership operations, and emits linger guidance.
-The harness stubs systemd/group commands so it never touches the host.
+SocketGroup=substrate, records group membership operations, emits linger guidance,
+skips the gateway proof on a clean install, and runs the proof when config/policy
+make it eligible. The harness stubs systemd and gateway commands so it never
+touches the host.
 USAGE
 }
 
@@ -64,19 +66,8 @@ done
 maybe_skip_platform
 
 WORK_ROOT="$(mktemp -d "/tmp/substrate-world-provision.XXXXXX")"
-FAKE_ROOT="${WORK_ROOT}/fakeroot"
 STUB_BIN="${WORK_ROOT}/stub-bin"
-LOG_DIR="${WORK_ROOT}/logs"
-mkdir -p "${FAKE_ROOT}" "${STUB_BIN}" "${LOG_DIR}"
-
-SYSTEMCTL_LOG="${LOG_DIR}/systemctl.log"
-GROUP_OP_LOG="${LOG_DIR}/group_ops.log"
-LINGER_LOG="${LOG_DIR}/linger.log"
-PROVISION_LOG="${LOG_DIR}/provision.log"
-: > "${SYSTEMCTL_LOG}"
-: > "${GROUP_OP_LOG}"
-: > "${LINGER_LOG}"
-: > "${PROVISION_LOG}"
+mkdir -p "${STUB_BIN}"
 
 cleanup() {
   if [[ "${KEEP_ROOT}" -eq 0 ]]; then
@@ -107,31 +98,29 @@ if [[ "${cmd}" == -* ]]; then
 fi
 
 rewrite_dest_arg() {
-  local -n src_args=$1
   local rewritten=()
-  local last_index=$((${#src_args[@]} - 1))
-  for i in "${!src_args[@]}"; do
-    local val="${src_args[$i]}"
+  local last_index=$((${#args[@]} - 1))
+  for i in "${!args[@]}"; do
+    local val="${args[$i]}"
     if [[ "${i}" -eq "${last_index}" && "${val}" == /* && -n "${FAKE_ROOT}" ]]; then
       rewritten+=("${FAKE_ROOT}${val}")
     else
       rewritten+=("${val}")
     fi
   done
-  src_args=("${rewritten[@]}")
+  args=("${rewritten[@]}")
 }
 
 rewrite_all_paths() {
-  local -n src_args=$1
   local rewritten=()
-  for val in "${src_args[@]}"; do
+  for val in "${args[@]}"; do
     if [[ "${val}" == /* && -n "${FAKE_ROOT}" ]]; then
       rewritten+=("${FAKE_ROOT}${val}")
     else
       rewritten+=("${val}")
     fi
   done
-  src_args=("${rewritten[@]}")
+  args=("${rewritten[@]}")
 }
 
 log_systemctl() {
@@ -148,12 +137,12 @@ case "${cmd}" in
     ;;
   install|cp|mv|ln)
     args=("$@")
-    rewrite_dest_arg args
+    rewrite_dest_arg
     exec "${cmd}" "${args[@]}"
     ;;
   rm|mkdir|chmod|chown|ls)
     args=("$@")
-    rewrite_all_paths args
+    rewrite_all_paths
     exec "${cmd}" "${args[@]}"
     ;;
   *)
@@ -216,6 +205,7 @@ write_stub_getent() {
   cat >"${STUB_BIN}/getent" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+home_dir="${SUBSTRATE_TEST_HOME:-/tmp/substrate-smoke-home}"
 if [[ $# -ge 2 && "$1" == "group" ]]; then
   group="$2"
   if [[ "${group}" == "substrate" ]]; then
@@ -225,6 +215,11 @@ if [[ $# -ge 2 && "$1" == "group" ]]; then
     fi
     exit 2
   fi
+fi
+if [[ $# -ge 2 && "$1" == "passwd" ]]; then
+  user="$2"
+  printf '%s:x:1000:1000::%s:/bin/bash\n' "${user}" "${home_dir}"
+  exit 0
 fi
 exit 2
 EOF
@@ -242,6 +237,77 @@ fi
 exit 0
 EOF
   chmod +x "${STUB_BIN}/groupadd"
+}
+
+write_stub_install() {
+  cat >"${STUB_BIN}/install" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+mode=""
+make_dirs=0
+create_parent=0
+args=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -Dm*)
+      create_parent=1
+      mode="${1#-Dm}"
+      shift
+      ;;
+    -d)
+      make_dirs=1
+      shift
+      ;;
+    -D)
+      create_parent=1
+      shift
+      ;;
+    -m*)
+      if [[ "$1" == "-m" ]]; then
+        mode="${2:-}"
+        shift 2
+      else
+        mode="${1#-m}"
+        shift
+      fi
+      ;;
+    -*)
+      shift
+      ;;
+    *)
+      args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ ${make_dirs} -eq 1 ]]; then
+  for dest in "${args[@]}"; do
+    mkdir -p "${dest}"
+    if [[ -n "${mode}" ]]; then
+      chmod "${mode}" "${dest}" 2>/dev/null || true
+    fi
+  done
+  exit 0
+fi
+
+if [[ ${#args[@]} -ne 2 ]]; then
+  printf 'stub install expected src and dest, got %s args\n' "${#args[@]}" >&2
+  exit 1
+fi
+
+src="${args[0]}"
+dest="${args[1]}"
+if [[ ${create_parent} -eq 1 ]]; then
+  mkdir -p "$(dirname "${dest}")"
+fi
+cp "${src}" "${dest}"
+if [[ -n "${mode}" ]]; then
+  chmod "${mode}" "${dest}" 2>/dev/null || true
+fi
+EOF
+  chmod +x "${STUB_BIN}/install"
 }
 
 write_stub_usermod() {
@@ -285,26 +351,85 @@ EOF
   chmod +x "${STUB_BIN}/loginctl"
 }
 
+write_stub_substrate() {
+  local bin_path="${REPO_ROOT}/target/${PROFILE}/substrate"
+  mkdir -p "$(dirname "${bin_path}")"
+  cat >"${bin_path}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+log="${SUBSTRATE_TEST_GATEWAY_LOG:-}"
+case "$*" in
+  "config current show --json")
+    printf '%s\n' "${SUBSTRATE_TEST_CONFIG_JSON:-}"
+    exit 0
+    ;;
+  "policy current show --json")
+    printf '%s\n' "${SUBSTRATE_TEST_POLICY_JSON:-}"
+    exit 0
+    ;;
+  "world gateway sync")
+    [[ -n "${log}" ]] && printf 'substrate %s\n' "$*" >>"${log}"
+    exit 0
+    ;;
+  "world gateway status --json")
+    [[ -n "${log}" ]] && printf 'substrate %s\n' "$*" >>"${log}"
+    printf '{"status":"available","openai_base_url":"http://127.0.0.1:43123"}\n'
+    exit 0
+    ;;
+  "world gateway restart")
+    [[ -n "${log}" ]] && printf 'substrate %s\n' "$*" >>"${log}"
+    exit 0
+    ;;
+esac
+printf 'unexpected substrate args: %s\n' "$*" >&2
+exit 1
+EOF
+  chmod +x "${bin_path}"
+}
+
+write_stub_curl() {
+  cat >"${STUB_BIN}/curl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+log="${SUBSTRATE_TEST_GATEWAY_LOG:-}"
+if [[ -n "${log}" ]]; then
+  printf 'curl %s\n' "$*" >>"${log}"
+fi
+printf '{"status":"ok","service":"substrate-gateway"}\n'
+EOF
+  chmod +x "${STUB_BIN}/curl"
+}
+
 write_stub_helpers() {
   write_stub_sudo
   write_stub_systemctl
   write_stub_id
   write_stub_getent
   write_stub_groupadd
+  write_stub_install
   write_stub_usermod
   write_stub_loginctl
+  write_stub_curl
 }
 
-ensure_stub_binary() {
-  local bin_path="${REPO_ROOT}/target/${PROFILE}/world-agent"
-  mkdir -p "$(dirname "${bin_path}")"
-  if [[ ! -x "${bin_path}" ]]; then
-    cat >"${bin_path}" <<'EOF'
+ensure_stub_binaries() {
+  local world_agent_bin="${REPO_ROOT}/target/${PROFILE}/world-agent"
+  local gateway_bin="${REPO_ROOT}/target/${PROFILE}/substrate-gateway"
+  mkdir -p "$(dirname "${world_agent_bin}")"
+
+  cat >"${world_agent_bin}" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-    chmod +x "${bin_path}"
-  fi
+  chmod +x "${world_agent_bin}"
+
+  cat >"${gateway_bin}" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+  chmod +x "${gateway_bin}"
+
+  write_stub_substrate
 }
 
 assert_contains() {
@@ -316,8 +441,18 @@ assert_contains() {
   fi
 }
 
+assert_not_contains() {
+  local needle="$1"
+  local path="$2"
+  local message="$3"
+  if grep -Fq -- "${needle}" "${path}"; then
+    fatal "${message} (unexpected '${needle}' in ${path})"
+  fi
+}
+
 assert_socket_unit() {
-  local unit="${FAKE_ROOT}/etc/systemd/system/substrate-world-agent.socket"
+  local fake_root="$1"
+  local unit="${fake_root}/etc/systemd/system/substrate-world-agent.socket"
   if [[ ! -f "${unit}" ]]; then
     fatal "socket unit missing at ${unit}"
   fi
@@ -327,61 +462,147 @@ assert_socket_unit() {
 }
 
 assert_group_ops() {
-  if [[ ! -s "${GROUP_OP_LOG}" ]]; then
+  local group_log="$1"
+  if [[ ! -s "${group_log}" ]]; then
     fatal "group operation log empty (expected groupadd/usermod calls)"
   fi
-  if ! grep -Eq 'groupadd .*substrate' "${GROUP_OP_LOG}"; then
-    fatal "expected groupadd substrate entry in ${GROUP_OP_LOG}"
+  if ! grep -Eq 'groupadd .*substrate' "${group_log}"; then
+    fatal "expected groupadd substrate entry in ${group_log}"
   fi
-  if ! grep -Eq 'usermod .*substrate' "${GROUP_OP_LOG}"; then
-    fatal "expected usermod substrate entry in ${GROUP_OP_LOG}"
+  if ! grep -Eq 'usermod .*substrate' "${group_log}"; then
+    fatal "expected usermod substrate entry in ${group_log}"
   fi
 }
 
 assert_linger_guidance() {
-  if ! grep -qi 'loginctl enable-linger' "${PROVISION_LOG}"; then
-    fatal "provisioner output missing loginctl enable-linger guidance"
-  fi
+  local provision_log="$1"
+  assert_contains "loginctl enable-linger" "${provision_log}" "provisioner output missing loginctl enable-linger guidance"
 }
 
 assert_group_guidance() {
-  if grep -qi 'newgrp substrate' "${PROVISION_LOG}"; then
+  local provision_log="$1"
+  if grep -qi 'newgrp substrate' "${provision_log}"; then
     return
   fi
-  if grep -qi 'log out' "${PROVISION_LOG}"; then
+  if grep -qi 'log out' "${provision_log}"; then
     return
   fi
   fatal "provisioner output missing logout/newgrp guidance"
 }
 
-run_provisioner() {
+assert_clean_install_skip() {
+  local provision_log="$1"
+  local gateway_log="$2"
+  local fake_home="$3"
+  assert_contains "Skipping gateway lifecycle proof" "${provision_log}" "clean install should skip the gateway proof"
+  assert_contains "Provisioning continues without the proof." "${provision_log}" "clean install skip should explain provisioning continues"
+  assert_contains "llm.gateway.enabled=true" "${provision_log}" "clean install skip should explain config remediation"
+  assert_contains "agents.host_credentials.read.allowed_backends" "${provision_log}" "clean install skip should explain auth remediation"
+  assert_contains "The installer does not modify config or policy to satisfy these checks." "${provision_log}" "clean install skip should explain installer behavior"
+  if [[ -s "${gateway_log}" ]]; then
+    fatal "gateway proof commands should not run on clean install (see ${gateway_log})"
+  fi
+  if [[ -e "${fake_home}/.codex/auth.json" ]]; then
+    fatal "clean install skip should not create ${fake_home}/.codex/auth.json"
+  fi
+}
+
+assert_configured_eligible_proof() {
+  local provision_log="$1"
+  local gateway_log="$2"
+  local fake_home="$3"
+  assert_contains "Running gateway lifecycle proof (auth: synthetic_auth_file)" "${provision_log}" "eligible install should run the gateway proof"
+  assert_not_contains "Skipping gateway lifecycle proof" "${provision_log}" "eligible install should not skip the gateway proof"
+  assert_contains "substrate world gateway sync" "${gateway_log}" "gateway proof should sync the gateway"
+  assert_contains "substrate world gateway status --json" "${gateway_log}" "gateway proof should read gateway status"
+  assert_contains "substrate world gateway restart" "${gateway_log}" "gateway proof should restart the gateway"
+  assert_contains "curl --fail --silent http://127.0.0.1:43123/health" "${gateway_log}" "gateway proof should health-check the gateway"
+  if [[ -e "${fake_home}/.codex/auth.json" ]]; then
+    fatal "eligible proof should clean up synthetic auth at ${fake_home}/.codex/auth.json"
+  fi
+}
+
+run_scenario() {
+  local scenario_name="$1"
+  local config_json="$2"
+  local policy_json="$3"
+  local assertion_mode="$4"
+
+  local scenario_root="${WORK_ROOT}/${scenario_name}"
+  local fake_root="${scenario_root}/fakeroot"
+  local logs_dir="${scenario_root}/logs"
+  local fake_home="${scenario_root}/home/substrate-smoke"
+  local systemctl_log="${logs_dir}/systemctl.log"
+  local group_log="${logs_dir}/group_ops.log"
+  local linger_log="${logs_dir}/linger.log"
+  local gateway_log="${logs_dir}/gateway.log"
+  local provision_log="${logs_dir}/provision.log"
   local path_env="${STUB_BIN}:$PATH"
-  log "Running world-provision.sh with profile ${PROFILE}"
-  if ! (cd "${REPO_ROOT}" && \
+
+  mkdir -p "${fake_root}" "${logs_dir}" "${fake_home}"
+  : > "${systemctl_log}"
+  : > "${group_log}"
+  : > "${linger_log}"
+  : > "${gateway_log}"
+  : > "${provision_log}"
+
+  log "Running scenario '${scenario_name}'"
+  if ! (
+    cd "${REPO_ROOT}" && \
     env \
       PATH="${path_env}" \
-      FAKE_ROOT="${FAKE_ROOT}" \
-      SUBSTRATE_TEST_SYSTEMCTL_LOG="${SYSTEMCTL_LOG}" \
-      SUBSTRATE_TEST_GROUP_LOG="${GROUP_OP_LOG}" \
-      SUBSTRATE_TEST_LINGER_LOG="${LINGER_LOG}" \
+      FAKE_ROOT="${fake_root}" \
+      SUBSTRATE_TEST_SYSTEMCTL_LOG="${systemctl_log}" \
+      SUBSTRATE_TEST_GROUP_LOG="${group_log}" \
+      SUBSTRATE_TEST_LINGER_LOG="${linger_log}" \
+      SUBSTRATE_TEST_GATEWAY_LOG="${gateway_log}" \
       SUBSTRATE_TEST_PRIMARY_USER="substrate-smoke" \
       SUBSTRATE_TEST_USER_GROUPS="wheel docker" \
       SUBSTRATE_TEST_GROUP_EXISTS=0 \
       SUBSTRATE_TEST_LINGER_STATE="no" \
-      scripts/linux/world-provision.sh --profile "${PROFILE}" --skip-build >"${PROVISION_LOG}" 2>&1); then
-    log "Provisioner output:"
-    sed 's/^/[provision] /' "${PROVISION_LOG}" >&2 || true
-    fatal "world-provision.sh failed"
+      SUBSTRATE_TEST_HOME="${fake_home}" \
+      SUBSTRATE_TEST_CONFIG_JSON="${config_json}" \
+      SUBSTRATE_TEST_POLICY_JSON="${policy_json}" \
+      scripts/linux/world-provision.sh --profile "${PROFILE}" --skip-build >"${provision_log}" 2>&1
+  ); then
+    log "Provisioner output for scenario '${scenario_name}':"
+    sed 's/^/[provision] /' "${provision_log}" >&2 || true
+    fatal "world-provision.sh failed for scenario '${scenario_name}'"
   fi
+
+  assert_socket_unit "${fake_root}"
+  assert_group_ops "${group_log}"
+  assert_linger_guidance "${provision_log}"
+  assert_group_guidance "${provision_log}"
+  assert_contains "Provisioning complete" "${provision_log}" "provisioner should report completion"
+
+  case "${assertion_mode}" in
+    clean_skip)
+      assert_clean_install_skip "${provision_log}" "${gateway_log}" "${fake_home}"
+      ;;
+    eligible_run)
+      assert_configured_eligible_proof "${provision_log}" "${gateway_log}" "${fake_home}"
+      ;;
+    *)
+      fatal "unknown assertion mode '${assertion_mode}'"
+      ;;
+  esac
 }
 
 write_stub_helpers
-ensure_stub_binary
-run_provisioner
-assert_socket_unit
-assert_group_ops
-assert_linger_guidance
-assert_group_guidance
+ensure_stub_binaries
+
+run_scenario \
+  "clean-install" \
+  '{"world":{"enabled":true,"anchor_mode":"workspace","anchor_path":"","caged":true,"net":{"filter":false},"env":{"inherit_from_host":false},"deps":{"enabled":[],"inventory_mode":"merged","builtins":"enabled"}},"policy":{"mode":"observe"},"sync":{"auto_sync":false,"direction":"from_world","conflict_policy":"prefer_host","exclude":[".git/**",".substrate/**"]},"repl":{"exit_cwd":"entered","max_pty_buffered_lines":2048},"llm":{"enabled":false,"gateway":{"enabled":false,"mode":"in_world"},"routing":{"default_backend":""}},"agents":{"enabled":false,"defaults":{"execution":{"scope":"world"},"cli":{"mode":"persistent"}},"hub":{"orchestrator_agent_id":"","world_restart":{"on_drift":"auto_restart"}},"toolbox":{"enabled":false,"bind":{"transport":"uds"}}}}' \
+  '{"id":"default","name":"Default Policy","world_fs":{"host_visible":true,"fail_closed":{"routing":false},"caged_required":false,"write":{"enabled":true}},"llm":{"fail_closed":{"routing":true},"require_approval":false,"allowed_backends":[],"secrets":{"env_allowed":[]}},"agents":{"allowed_backends":[],"fail_closed":{"routing":true},"host_credentials":{"read":{"allowed_backends":[]}}},"workflow":{"router":{"enabled":false,"allow_cross_workspace":false,"allowed_rule_ids":[],"allowed_workflow_ids":[],"allowed_target_workspace_ids":[]}},"net_allowed":[],"cmd_allowed":[],"cmd_denied":["rm -rf *","curl * | bash","wget * | bash"],"cmd_isolated":[],"require_approval":false,"allow_shell_operators":true,"limits":{"max_memory_mb":null,"max_cpu_percent":null,"max_runtime_ms":null,"max_egress_bytes":null},"metadata":{}}' \
+  "clean_skip"
+
+run_scenario \
+  "configured-eligible" \
+  '{"world":{"enabled":true,"anchor_mode":"workspace","anchor_path":"","caged":true,"net":{"filter":false},"env":{"inherit_from_host":false},"deps":{"enabled":[],"inventory_mode":"merged","builtins":"enabled"}},"policy":{"mode":"observe"},"sync":{"auto_sync":false,"direction":"from_world","conflict_policy":"prefer_host","exclude":[".git/**",".substrate/**"]},"repl":{"exit_cwd":"entered","max_pty_buffered_lines":2048},"llm":{"enabled":true,"gateway":{"enabled":true,"mode":"in_world"},"routing":{"default_backend":"cli:codex"}},"agents":{"enabled":false,"defaults":{"execution":{"scope":"world"},"cli":{"mode":"persistent"}},"hub":{"orchestrator_agent_id":"","world_restart":{"on_drift":"auto_restart"}},"toolbox":{"enabled":false,"bind":{"transport":"uds"}}}}' \
+  '{"id":"default","name":"Default Policy","world_fs":{"host_visible":true,"fail_closed":{"routing":false},"caged_required":false,"write":{"enabled":true}},"llm":{"fail_closed":{"routing":true},"require_approval":false,"allowed_backends":["cli:codex"],"secrets":{"env_allowed":[]}},"agents":{"allowed_backends":[],"fail_closed":{"routing":true},"host_credentials":{"read":{"allowed_backends":["cli:codex"]}}},"workflow":{"router":{"enabled":false,"allow_cross_workspace":false,"allowed_rule_ids":[],"allowed_workflow_ids":[],"allowed_target_workspace_ids":[]}},"net_allowed":[],"cmd_allowed":[],"cmd_denied":["rm -rf *","curl * | bash","wget * | bash"],"cmd_isolated":[],"require_approval":false,"allow_shell_operators":true,"limits":{"max_memory_mb":null,"max_cpu_percent":null,"max_runtime_ms":null,"max_egress_bytes":null},"metadata":{}}' \
+  "eligible_run"
 
 log "All checks passed."
-log "Artifacts: ${LOG_DIR}"
+log "Artifacts: ${WORK_ROOT}"

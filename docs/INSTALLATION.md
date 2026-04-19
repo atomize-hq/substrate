@@ -76,7 +76,7 @@ The installer will:
    (`install.world_enabled: true` unless `--no-world` is provided). The
    metadata is consumed by `substrate world enable` and shims/CLI commands that
    need to detect pass-through mode.
-7. Install `substrate-world-agent` under `/usr/local/bin` and manage the
+7. Install `substrate-world-agent` and `substrate-gateway` under `/usr/local/bin` and manage the
    systemd `.service` + `.socket` units (`/etc/systemd/system/substrate-world-agent.{service,socket}`)
 8. Run `substrate world doctor --json` for a final readiness report
 9. Ensure the `substrate` group exists on Linux hosts, add the invoking user,
@@ -130,7 +130,8 @@ During installation the script:
 - Records the host PATH (for use as `SHIM_ORIGINAL_PATH`) without mutating it.
 - Deploys fresh shims and appends a small PATH snippet (between `# >>> substrate >>>`
   markers) so `substrate` is callable from your terminal.
-- Installs `substrate-world-agent` as a systemd service plus socket and runs
+- Installs `substrate-world-agent` as a systemd service plus socket, places
+  `substrate-gateway` beside it under `/usr/local/bin`, and runs
   `substrate world doctor --json` (inspect the `host.world_socket` block) without
   adding the shim directory to PATH to avoid self-referential lookups.
 - Ensures the Linux `substrate` group exists, adds the invoking user when
@@ -167,7 +168,7 @@ The macOS flow mirrors the Linux installer but additionally:
 - Requires the Lima CLI (`limactl`) to be installed beforehand
 - Requires `envsubst` (install via `brew install gettext` to provide it)
 - Provisions the Lima VM (`scripts/mac/lima-warm.sh`) and copies the Linux
-  `world-agent` into the guest
+  `world-agent` and `substrate-gateway` binaries into the guest
 
 **Manual Lima preparation** is documented in `docs/WORLD.md`.
 
@@ -291,8 +292,8 @@ scripts/substrate/dev-uninstall-substrate.sh
 ```
 
 These scripts build `substrate`, `substrate-shim`, `substrate-forwarder`,
-`host-proxy`, and (on supported platforms) `world-agent`, symlink them into
-`~/.substrate/bin`, and deploy shim wrappers that point back to
+`host-proxy`, `substrate-gateway`, and (on supported platforms) `world-agent`,
+symlink them into `~/.substrate/bin`, and deploy shim wrappers that point back to
 `target/<profile>`. The generated `~/.substrate/dev-shim-env.sh` prepends both
 the bin and shim directories to `PATH` while preserving `SHIM_ORIGINAL_PATH`, so
 interactive sessions and the world backend see the same clean view of your

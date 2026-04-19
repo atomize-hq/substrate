@@ -237,7 +237,9 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 - `substrate world gateway status --json` is the authoritative machine-readable status surface for that entrypoint.
 - Human-readable `substrate world gateway status` may abbreviate, but it does not redefine the machine-readable meaning.
 - `SUBSTRATE_LLM_OPENAI_BASE_URL` and `SUBSTRATE_LLM_ANTHROPIC_BASE_URL` are the stable non-secret wiring exports; they point to Substrate-managed gateway endpoints for in-world clients, not upstream provider endpoints or a direct-host reachability guarantee.
-- Exit `4` is the absent-state result for these gateway entrypoints; `2`, `3`, and `5` keep their distinct meanings for invalid integration, transient runtime failure, and policy/safety failure.
+- Exit `4` is reserved for actual absent component results: an explicit runtime `unavailable` response or a missing required gateway/world listener.
+- Start and restart windows, connection-refused handoff gaps, and ready-timeout lifecycle failures are transient runtime failures and exit `3`, not `4`.
+- Exit `2` remains invalid integration and exit `5` remains policy/safety failure.
 - `substrate --no-world ...` – run commands directly on the host (no isolation)
 - `substrate --world ...` – force world isolation for a single invocation even
   when install/config/env disables it (metadata remains unchanged)
