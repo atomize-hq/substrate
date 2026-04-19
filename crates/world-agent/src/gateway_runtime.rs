@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
+use tokio::sync::Mutex as AsyncMutex;
 
 pub(crate) const GATEWAY_REQUEST_ENABLED_ENV: &str = "SUBSTRATE_LLM_GATEWAY_ENABLED";
 pub(crate) const GATEWAY_REQUEST_MODE_ENV: &str = "SUBSTRATE_LLM_GATEWAY_MODE";
@@ -86,7 +87,6 @@ impl GatewayControlSettings {
         let default_backend = env
             .and_then(|values| values.get(GATEWAY_REQUEST_DEFAULT_BACKEND_ENV))
             .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty())
             .unwrap_or_else(|| DEFAULT_BACKEND.to_string());
 
         if default_backend != DEFAULT_BACKEND {
@@ -204,8 +204,47 @@ impl ManagedGatewayRuntime {
 }
 
 #[derive(Default)]
+struct GatewayLifecycleWorldState {
+    op_lock: AsyncMutex<()>,
+    state: RwLock<Option<GatewayRuntimeState>>,
+}
+
+impl GatewayLifecycleWorldState {
+    fn state(&self) -> Option<GatewayRuntimeState> {
+        self.state.read().ok().and_then(|guard| *guard)
+    }
+
+    fn replace_state(&self, state: Option<GatewayRuntimeState>) -> Option<GatewayRuntimeState> {
+        match self.state.write() {
+            Ok(mut guard) => std::mem::replace(&mut *guard, state),
+            Err(_) => None,
+        }
+    }
+
+    fn scoped_state(self: &Arc<Self>, state: GatewayRuntimeState) -> GatewayLifecycleStateGuard {
+        let previous = self.replace_state(Some(state));
+        GatewayLifecycleStateGuard {
+            state: Arc::clone(self),
+            previous,
+        }
+    }
+}
+
+struct GatewayLifecycleStateGuard {
+    state: Arc<GatewayLifecycleWorldState>,
+    previous: Option<GatewayRuntimeState>,
+}
+
+impl Drop for GatewayLifecycleStateGuard {
+    fn drop(&mut self) {
+        let _ = self.state.replace_state(self.previous);
+    }
+}
+
+#[derive(Default)]
 pub(crate) struct GatewayRuntimeManager {
     runtimes: Mutex<HashMap<String, ManagedGatewayRuntime>>,
+    lifecycle: Mutex<HashMap<String, Arc<GatewayLifecycleWorldState>>>,
 }
 
 impl GatewayRuntimeManager {
@@ -217,6 +256,10 @@ impl GatewayRuntimeManager {
         &self,
         world_id: &str,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
+        if let Some(state) = self.lifecycle_state_for_world(world_id) {
+            return Err(lifecycle_status_transient_failure(world_id, state));
+        }
+
         let Some(runtime) = self.runtime_for_world_or_manifest(world_id) else {
             return Ok(unavailable_response());
         };
@@ -225,7 +268,7 @@ impl GatewayRuntimeManager {
         Ok(match state {
             GatewayRuntimeState::Ready => available_response(runtime.port),
             GatewayRuntimeState::Starting | GatewayRuntimeState::RestartInProgress => {
-                unavailable_response()
+                return Err(lifecycle_status_transient_failure(world_id, state));
             }
             GatewayRuntimeState::ProvisionedStopped | GatewayRuntimeState::AbsentComponent => {
                 self.remove_runtime(world_id);
@@ -246,6 +289,18 @@ impl GatewayRuntimeManager {
         ctx: GatewayRuntimeStartContext,
         ready_timeout: Duration,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
+        let lifecycle = self.lifecycle_for_world(&ctx.world_id);
+        let _world_guard = lifecycle.op_lock.lock().await;
+        self.sync_with_timeout_locked(ctx, ready_timeout, Some(&lifecycle))
+            .await
+    }
+
+    async fn sync_with_timeout_locked(
+        &self,
+        ctx: GatewayRuntimeStartContext,
+        ready_timeout: Duration,
+        lifecycle: Option<&Arc<GatewayLifecycleWorldState>>,
+    ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
         if let Some(runtime) = self.runtime_for_world_or_manifest(&ctx.world_id) {
             match self.observe_runtime_state(&runtime).await? {
                 GatewayRuntimeState::Ready => return Ok(available_response(runtime.port)),
@@ -258,6 +313,7 @@ impl GatewayRuntimeManager {
             }
         }
 
+        let _state_guard = lifecycle.map(|state| state.scoped_state(GatewayRuntimeState::Starting));
         let Some(binary_path) = resolve_gateway_binary()? else {
             return Ok(unavailable_response());
         };
@@ -281,6 +337,10 @@ impl GatewayRuntimeManager {
         &self,
         ctx: GatewayRuntimeStartContext,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
+        let lifecycle = self.lifecycle_for_world(&ctx.world_id);
+        let _world_guard = lifecycle.op_lock.lock().await;
+        let _restart_state = lifecycle.scoped_state(GatewayRuntimeState::RestartInProgress);
+
         if let Some(existing) = self.runtime_for_world_or_manifest(&ctx.world_id) {
             existing.set_state(GatewayRuntimeState::RestartInProgress);
             self.take_runtime(&ctx.world_id);
@@ -290,7 +350,8 @@ impl GatewayRuntimeManager {
                 .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
         }
 
-        self.sync_with_timeout(ctx, DEFAULT_READY_TIMEOUT).await
+        self.sync_with_timeout_locked(ctx, DEFAULT_READY_TIMEOUT, None)
+            .await
     }
 
     #[cfg(test)]
@@ -309,6 +370,25 @@ impl GatewayRuntimeManager {
             .lock()
             .ok()
             .and_then(|guard| guard.get(world_id).cloned())
+    }
+
+    fn lifecycle_for_world(&self, world_id: &str) -> Arc<GatewayLifecycleWorldState> {
+        match self.lifecycle.lock() {
+            Ok(mut guard) => Arc::clone(
+                guard
+                    .entry(world_id.to_string())
+                    .or_insert_with(|| Arc::new(GatewayLifecycleWorldState::default())),
+            ),
+            Err(_) => Arc::new(GatewayLifecycleWorldState::default()),
+        }
+    }
+
+    fn lifecycle_state_for_world(&self, world_id: &str) -> Option<GatewayRuntimeState> {
+        self.lifecycle
+            .lock()
+            .ok()
+            .and_then(|guard| guard.get(world_id).cloned())
+            .and_then(|state| state.state())
     }
 
     fn runtime_for_world_or_manifest(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
@@ -544,7 +624,7 @@ fn attach_child_to_cgroup(
     let cgroup_procs = cgroup_path.join("cgroup.procs");
     match fs::write(&cgroup_procs, pid.to_string()) {
         Ok(()) => Ok(()),
-        Err(err) if !required => Ok(()),
+        Err(_err) if !required => Ok(()),
         Err(err) => Err(GatewayRuntimeFailure::transient(format!(
             "failed to attach gateway pid {} to {}: {}",
             pid,
@@ -901,5 +981,443 @@ pub(crate) fn unavailable_response() -> GatewayLifecycleResponseV1 {
     GatewayLifecycleResponseV1 {
         status: GatewayStatusV1::Unavailable,
         client_wiring: None,
+    }
+}
+
+fn lifecycle_status_transient_failure(
+    world_id: &str,
+    state: GatewayRuntimeState,
+) -> GatewayRuntimeFailure {
+    let action = match state {
+        GatewayRuntimeState::Starting => "starting",
+        GatewayRuntimeState::RestartInProgress => "restarting",
+        GatewayRuntimeState::Ready => "ready",
+        GatewayRuntimeState::ProvisionedStopped => "stopped",
+        GatewayRuntimeState::AbsentComponent => "absent",
+    };
+    GatewayRuntimeFailure::transient(format!(
+        "gateway runtime for world {world_id} is still {action}"
+    ))
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+    use agent_api_types::GatewayCliCodexIntegratedAuthV1;
+    use once_cell::sync::Lazy;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+
+    static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    struct EnvGuard {
+        key: &'static str,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: impl Into<std::ffi::OsString>) -> Self {
+            let previous = std::env::var_os(key);
+            std::env::set_var(key, value.into());
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = &self.previous {
+                std::env::set_var(self.key, previous);
+            } else {
+                std::env::remove_var(self.key);
+            }
+        }
+    }
+
+    fn start_context(project_dir: &Path, world_id: &str) -> GatewayRuntimeStartContext {
+        GatewayRuntimeStartContext {
+            world_id: world_id.to_string(),
+            project_dir: project_dir.to_path_buf(),
+            cgroup_path: project_dir.join("missing-cgroup"),
+            require_cgroup_attach: false,
+            control: GatewayControlSettings {
+                default_backend: DEFAULT_BACKEND.to_string(),
+            },
+            integrated_auth: Some(GatewayCliCodexIntegratedAuthV1 {
+                account_id: Some("acct_test".to_string()),
+                access_token: "header.payload.signature".to_string(),
+            }),
+        }
+    }
+
+    fn delayed_gateway_binary(temp_dir: &TempDir, delay_ms: u64) -> (PathBuf, PathBuf, PathBuf) {
+        let path = temp_dir.path().join("delayed-gateway.sh");
+        let pid_dir = temp_dir.path().join("pids");
+        let launch_count_path = temp_dir.path().join("launch-count.txt");
+        fs::write(
+            &path,
+            format!(
+                r#"#!/bin/sh
+set -eu
+config=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    start)
+      shift
+      ;;
+    --config)
+      config="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$config" ]; then
+  echo "missing --config" >&2
+  exit 64
+fi
+
+if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
+  echo "missing Codex access token env" >&2
+  exit 65
+fi
+
+launch="$(python3 - "{launch_count_path}" <<'PY'
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+count = int(path.read_text(encoding='utf-8').strip()) if path.exists() else 0
+count += 1
+path.write_text(str(count), encoding='utf-8')
+print(count)
+PY
+)"
+mkdir -p "{pid_dir}"
+printf '%s\n' "$$" >"{pid_dir}/$launch.pid"
+
+port="$(python3 - "$config" <<'PY'
+import re
+import sys
+text = open(sys.argv[1], 'r', encoding='utf-8').read()
+match = re.search(r'^port\s*=\s*(\d+)\s*$', text, re.M)
+if not match:
+    raise SystemExit(64)
+print(match.group(1))
+PY
+)"
+
+sleep {delay_s}
+root="$(dirname "$config")/serve"
+mkdir -p "$root"
+printf 'ok' >"$root/health"
+exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
+"#,
+                launch_count_path = launch_count_path.display(),
+                pid_dir = pid_dir.display(),
+                delay_s = format_delay_seconds(delay_ms),
+            ),
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).unwrap();
+        (path, pid_dir, launch_count_path)
+    }
+
+    fn first_launch_hangs_second_ready_binary(temp_dir: &TempDir) -> (PathBuf, PathBuf, PathBuf) {
+        let path = temp_dir.path().join("phased-gateway.sh");
+        let pid_dir = temp_dir.path().join("pids");
+        let launch_count_path = temp_dir.path().join("launch-count.txt");
+        fs::write(
+            &path,
+            format!(
+                r#"#!/bin/sh
+set -eu
+config=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    start)
+      shift
+      ;;
+    --config)
+      config="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$config" ]; then
+  echo "missing --config" >&2
+  exit 64
+fi
+
+if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
+  echo "missing Codex access token env" >&2
+  exit 65
+fi
+
+launch="$(python3 - "{launch_count_path}" <<'PY'
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+count = int(path.read_text(encoding='utf-8').strip()) if path.exists() else 0
+count += 1
+path.write_text(str(count), encoding='utf-8')
+print(count)
+PY
+)"
+mkdir -p "{pid_dir}"
+printf '%s\n' "$$" >"{pid_dir}/$launch.pid"
+
+if [ "$launch" = "1" ]; then
+  sleep 30
+  exit 0
+fi
+
+port="$(python3 - "$config" <<'PY'
+import re
+import sys
+text = open(sys.argv[1], 'r', encoding='utf-8').read()
+match = re.search(r'^port\s*=\s*(\d+)\s*$', text, re.M)
+if not match:
+    raise SystemExit(64)
+print(match.group(1))
+PY
+)"
+root="$(dirname "$config")/serve"
+mkdir -p "$root"
+printf 'ok' >"$root/health"
+exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
+"#,
+                launch_count_path = launch_count_path.display(),
+                pid_dir = pid_dir.display(),
+            ),
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).unwrap();
+        (path, pid_dir, launch_count_path)
+    }
+
+    fn format_delay_seconds(delay_ms: u64) -> String {
+        format!("{:.3}", delay_ms as f64 / 1000.0)
+    }
+
+    fn wait_for_pid(pid_dir: &Path, launch: u32) -> u32 {
+        let path = pid_dir.join(format!("{launch}.pid"));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Ok(raw) = fs::read_to_string(&path) {
+                let pid = raw.trim().parse::<u32>().expect("parse pid");
+                if pid > 0 {
+                    return pid;
+                }
+            }
+            assert!(
+                Instant::now() < deadline,
+                "timed out waiting for {}",
+                path.display()
+            );
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    fn read_launch_count(path: &Path) -> u32 {
+        fs::read_to_string(path)
+            .ok()
+            .and_then(|raw| raw.trim().parse::<u32>().ok())
+            .unwrap_or(0)
+    }
+
+    fn assert_process_exited(pid: u32) {
+        let rc = unsafe { libc::kill(pid as i32, 0) };
+        assert_eq!(rc, -1, "expected pid {pid} to be gone");
+        assert_eq!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::ESRCH),
+            "pid {pid} should be gone",
+        );
+    }
+
+    #[test]
+    fn empty_default_backend_stays_invalid() {
+        let mut env = HashMap::new();
+        env.insert(
+            GATEWAY_REQUEST_DEFAULT_BACKEND_ENV.to_string(),
+            "   ".to_string(),
+        );
+
+        let err = GatewayControlSettings::from_request_env(Some(&env)).expect_err("empty backend");
+        assert!(
+            matches!(err, GatewayRuntimeFailure::InvalidIntegration(_)),
+            "unexpected error: {err:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_same_world_sync_reuses_one_runtime() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let runtime_root = temp_dir.path().join("runtime-root");
+        let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
+        let (binary, pid_dir, launch_count_path) = delayed_gateway_binary(&temp_dir, 350);
+        let _binary_guard = EnvGuard::set(GATEWAY_BINARY_OVERRIDE_ENV, binary);
+        let manager = Arc::new(GatewayRuntimeManager::new());
+        let ctx = start_context(temp_dir.path(), "same-world");
+
+        let left = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let ctx = ctx.clone();
+            async move { manager.sync_with_timeout(ctx, Duration::from_secs(3)).await }
+        });
+        let right = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let ctx = ctx.clone();
+            async move { manager.sync_with_timeout(ctx, Duration::from_secs(3)).await }
+        });
+
+        let left = left.await.unwrap().expect("left sync");
+        let right = right.await.unwrap().expect("right sync");
+        assert_eq!(left.status, GatewayStatusV1::Available);
+        assert_eq!(right.status, GatewayStatusV1::Available);
+        assert_eq!(read_launch_count(&launch_count_path), 1);
+        wait_for_pid(&pid_dir, 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn timed_out_cleanup_does_not_kill_next_same_world_runtime() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let runtime_root = temp_dir.path().join("runtime-root");
+        let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
+        let (binary, pid_dir, launch_count_path) =
+            first_launch_hangs_second_ready_binary(&temp_dir);
+        let _binary_guard = EnvGuard::set(GATEWAY_BINARY_OVERRIDE_ENV, binary);
+        let manager = Arc::new(GatewayRuntimeManager::new());
+        let ctx = start_context(temp_dir.path(), "cleanup-safe");
+
+        let first = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let ctx = ctx.clone();
+            async move {
+                manager
+                    .sync_with_timeout(ctx, Duration::from_millis(250))
+                    .await
+            }
+        });
+        let first_pid = wait_for_pid(&pid_dir, 1);
+        let second = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let ctx = ctx.clone();
+            async move { manager.sync_with_timeout(ctx, Duration::from_secs(3)).await }
+        });
+
+        let first_err = first
+            .await
+            .unwrap()
+            .expect_err("first sync should time out");
+        assert!(
+            matches!(first_err, GatewayRuntimeFailure::Transient(_)),
+            "unexpected error: {first_err:?}"
+        );
+        let second = second.await.unwrap().expect("second sync should recover");
+        assert_eq!(second.status, GatewayStatusV1::Available);
+        assert_eq!(read_launch_count(&launch_count_path), 2);
+        assert_process_exited(first_pid);
+        let second_pid = wait_for_pid(&pid_dir, 2);
+        assert_ne!(first_pid, second_pid);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn status_during_start_returns_transient_failure() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let runtime_root = temp_dir.path().join("runtime-root");
+        let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
+        let (binary, pid_dir, _) = delayed_gateway_binary(&temp_dir, 1000);
+        let _binary_guard = EnvGuard::set(GATEWAY_BINARY_OVERRIDE_ENV, binary);
+        let manager = Arc::new(GatewayRuntimeManager::new());
+        let ctx = start_context(temp_dir.path(), "status-start");
+
+        let sync = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let ctx = ctx.clone();
+            async move { manager.sync_with_timeout(ctx, Duration::from_secs(3)).await }
+        });
+        wait_for_pid(&pid_dir, 1);
+
+        let err = manager
+            .status("status-start")
+            .await
+            .expect_err("status should surface a transient start failure");
+        assert!(
+            matches!(err, GatewayRuntimeFailure::Transient(_)),
+            "unexpected error: {err:?}"
+        );
+        assert!(
+            err.to_string().contains("starting"),
+            "unexpected error text: {err}"
+        );
+
+        let response = sync.await.unwrap().expect("sync should finish");
+        assert_eq!(response.status, GatewayStatusV1::Available);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn status_during_restart_returns_transient_failure() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let temp_dir = TempDir::new().unwrap();
+        let runtime_root = temp_dir.path().join("runtime-root");
+        let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
+        let (ready_binary, _, _) = delayed_gateway_binary(&temp_dir, 0);
+        let _binary_guard = EnvGuard::set(GATEWAY_BINARY_OVERRIDE_ENV, &ready_binary);
+        let manager = Arc::new(GatewayRuntimeManager::new());
+        let ctx = start_context(temp_dir.path(), "restart-start");
+
+        manager
+            .sync_with_timeout(ctx.clone(), Duration::from_secs(3))
+            .await
+            .expect("initial sync");
+
+        let (restart_binary, pid_dir, _) = delayed_gateway_binary(&temp_dir, 1000);
+        std::env::set_var(GATEWAY_BINARY_OVERRIDE_ENV, restart_binary);
+        let restart = tokio::spawn({
+            let manager = Arc::clone(&manager);
+            let ctx = ctx.clone();
+            async move { manager.restart(ctx).await }
+        });
+        wait_for_pid(&pid_dir, 1);
+
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let err = loop {
+            match manager.status("restart-start").await {
+                Err(err) => break err,
+                Ok(response) => {
+                    assert_ne!(response.status, GatewayStatusV1::Unavailable);
+                }
+            }
+            assert!(
+                Instant::now() < deadline,
+                "timed out waiting for restart-in-progress status"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        };
+        assert!(
+            matches!(err, GatewayRuntimeFailure::Transient(_)),
+            "unexpected error: {err:?}"
+        );
+        assert!(
+            err.to_string().contains("restarting"),
+            "unexpected error text: {err}"
+        );
+
+        let response = restart.await.unwrap().expect("restart should finish");
+        assert_eq!(response.status, GatewayStatusV1::Available);
     }
 }

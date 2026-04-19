@@ -21,6 +21,12 @@ SOCKET_FS_PATH="/run/substrate.sock"
 INVOKING_USER=""
 INVOKING_HOME=""
 SUBSTRATE_CLI_BIN_PATH=""
+CODEX_BACKEND_ID="cli:codex"
+CODEX_ACCOUNT_ID_ENV="SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"
+CODEX_ACCESS_TOKEN_ENV="SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN"
+GATEWAY_PROOF_ELIGIBLE=0
+GATEWAY_PROOF_AUTH_MODE=""
+declare -a GATEWAY_PROOF_SKIP_REASONS=()
 
 show_cmd() {
     printf '[dry-run]'
@@ -72,6 +78,142 @@ resolve_substrate_cli() {
     return 1
 }
 
+json_extract_section() {
+    local json="$1"
+    local start_literal="$2"
+    local end_literal="$3"
+    local remainder="${json#*"${start_literal}"}"
+    if [[ "${remainder}" == "${json}" ]]; then
+        return 1
+    fi
+    if [[ -n "${end_literal}" ]]; then
+        remainder="${remainder%%"${end_literal}"*}"
+    fi
+    printf '%s\n' "${remainder}"
+}
+
+json_section_contains_regex() {
+    local section="$1"
+    local regex="$2"
+    grep -Eq -- "${regex}" <<<"${section}"
+}
+
+json_section_contains_string_array_value() {
+    local section="$1"
+    local field="$2"
+    local value="$3"
+    json_section_contains_regex "${section}" "\"${field}\":\\[[^]]*\"${value}\""
+}
+
+gateway_proof_skip_reason() {
+    GATEWAY_PROOF_SKIP_REASONS+=("$1")
+}
+
+evaluate_gateway_lifecycle_proof_eligibility() {
+    local substrate_cli="$1"
+    local config_json=""
+    local policy_json=""
+    local config_llm=""
+    local policy_llm=""
+    local policy_agents=""
+    local proof_prereqs_met=1
+    local auth_eligible=0
+    local env_access_token="${!CODEX_ACCESS_TOKEN_ENV:-}"
+    local env_account_id="${!CODEX_ACCOUNT_ID_ENV:-}"
+
+    GATEWAY_PROOF_ELIGIBLE=0
+    GATEWAY_PROOF_AUTH_MODE=""
+    GATEWAY_PROOF_SKIP_REASONS=()
+
+    if [[ "${substrate_cli}" == */* ]]; then
+        if [[ ! -x "${substrate_cli}" ]]; then
+            gateway_proof_skip_reason "Unable to evaluate proof eligibility because substrate CLI is not executable at ${substrate_cli}."
+            return 0
+        fi
+    elif ! command -v "${substrate_cli}" >/dev/null 2>&1; then
+        gateway_proof_skip_reason "Unable to evaluate proof eligibility because substrate CLI '${substrate_cli}' is not on PATH."
+        return 0
+    fi
+
+    echo "==> Evaluating gateway lifecycle proof eligibility"
+    if ! config_json="$("${substrate_cli}" config current show --json)"; then
+        gateway_proof_skip_reason "Unable to read effective config via '${substrate_cli} config current show --json'."
+        return 0
+    fi
+    if ! policy_json="$("${substrate_cli}" policy current show --json)"; then
+        gateway_proof_skip_reason "Unable to read effective policy via '${substrate_cli} policy current show --json'."
+        return 0
+    fi
+    if ! config_llm="$(json_extract_section "${config_json}" '"llm":' ',"agents":')"; then
+        gateway_proof_skip_reason "Unable to locate llm settings in effective config JSON."
+        return 0
+    fi
+    if ! policy_llm="$(json_extract_section "${policy_json}" '"llm":' ',"agents":')"; then
+        gateway_proof_skip_reason "Unable to locate llm policy settings in effective policy JSON."
+        return 0
+    fi
+    if ! policy_agents="$(json_extract_section "${policy_json}" '"agents":' ',"workflow":')"; then
+        gateway_proof_skip_reason "Unable to locate agents policy settings in effective policy JSON."
+        return 0
+    fi
+
+    if ! json_section_contains_regex "${config_llm}" '"gateway":\{"enabled":true,'; then
+        gateway_proof_skip_reason "Effective config requires llm.gateway.enabled=true for the gateway proof."
+        proof_prereqs_met=0
+    fi
+    if ! json_section_contains_regex "${config_llm}" '"gateway":\{"enabled":[^,]*,"mode":"in_world"\}'; then
+        gateway_proof_skip_reason "Effective config requires llm.gateway.mode=in_world for the gateway proof."
+        proof_prereqs_met=0
+    fi
+    if ! json_section_contains_regex "${config_llm}" "\"routing\":\\{\"default_backend\":\"${CODEX_BACKEND_ID}\"\\}"; then
+        gateway_proof_skip_reason "Effective config requires llm.routing.default_backend=${CODEX_BACKEND_ID} for the gateway proof."
+        proof_prereqs_met=0
+    fi
+    if ! json_section_contains_string_array_value "${policy_llm}" "allowed_backends" "${CODEX_BACKEND_ID}"; then
+        gateway_proof_skip_reason "Effective policy llm.allowed_backends must allowlist ${CODEX_BACKEND_ID} for the gateway proof."
+        proof_prereqs_met=0
+    fi
+
+    if [[ -n "${env_access_token}" ]]; then
+        if ! json_section_contains_string_array_value "${policy_llm}" "env_allowed" "${CODEX_ACCESS_TOKEN_ENV}"; then
+            gateway_proof_skip_reason "Env handoff is active via ${CODEX_ACCESS_TOKEN_ENV}, but effective policy llm.secrets.env_allowed does not allowlist it."
+        elif [[ -n "${env_account_id}" ]] && ! json_section_contains_string_array_value "${policy_llm}" "env_allowed" "${CODEX_ACCOUNT_ID_ENV}"; then
+            gateway_proof_skip_reason "Env handoff is active via ${CODEX_ACCOUNT_ID_ENV}, but effective policy llm.secrets.env_allowed does not allowlist it."
+        else
+            auth_eligible=1
+            GATEWAY_PROOF_AUTH_MODE="env_handoff"
+        fi
+    elif [[ -n "${env_account_id}" ]]; then
+        gateway_proof_skip_reason "${CODEX_ACCOUNT_ID_ENV} is set without ${CODEX_ACCESS_TOKEN_ENV}; integrated Codex auth handoff is incomplete."
+    elif json_section_contains_regex "${policy_agents}" "\"host_credentials\":\\{\"read\":\\{\"allowed_backends\":\\[[^]]*\"${CODEX_BACKEND_ID}\""; then
+        auth_eligible=1
+        GATEWAY_PROOF_AUTH_MODE="synthetic_auth_file"
+    else
+        gateway_proof_skip_reason "Integrated auth is not policy-eligible: allowlist ${CODEX_BACKEND_ID} in agents.host_credentials.read.allowed_backends or use env handoff with allowlisted ${CODEX_ACCESS_TOKEN_ENV}/${CODEX_ACCOUNT_ID_ENV}."
+    fi
+
+    if [[ ${proof_prereqs_met} -eq 1 && ${auth_eligible} -eq 1 ]]; then
+        GATEWAY_PROOF_ELIGIBLE=1
+    fi
+}
+
+print_gateway_lifecycle_proof_skip() {
+    local reason
+    echo "==> Skipping gateway lifecycle proof"
+    if [[ ${#GATEWAY_PROOF_SKIP_REASONS[@]} -eq 0 ]]; then
+        echo "    No skip reason was captured, but the proof is not eligible."
+    else
+        for reason in "${GATEWAY_PROOF_SKIP_REASONS[@]}"; do
+            echo "    - ${reason}"
+        done
+    fi
+    echo "    Provisioning continues without the proof."
+    echo "    Remediation: set llm.gateway.enabled=true, llm.gateway.mode=in_world, llm.routing.default_backend=${CODEX_BACKEND_ID}, and allowlist ${CODEX_BACKEND_ID} in llm.allowed_backends."
+    echo "    Auth remediation: either export ${CODEX_ACCESS_TOKEN_ENV} (and optionally ${CODEX_ACCOUNT_ID_ENV}) while allowlisting those env names in llm.secrets.env_allowed, or allowlist ${CODEX_BACKEND_ID} in agents.host_credentials.read.allowed_backends."
+    echo "    Inspect current settings with: $(basename "${SUBSTRATE_CLI_BIN_PATH:-substrate}") config current show --json && $(basename "${SUBSTRATE_CLI_BIN_PATH:-substrate}") policy current show --json"
+    echo "    The installer does not modify config or policy to satisfy these checks."
+}
+
 prepare_gateway_smoke_auth() {
     local auth_path="${INVOKING_HOME}/.codex/auth.json"
     if [[ -f "${auth_path}" ]]; then
@@ -99,20 +241,24 @@ cleanup_gateway_smoke_auth() {
 
 run_gateway_lifecycle_proof() {
     local substrate_cli="$1"
+    local auth_mode="$2"
     local auth_state=""
     local cleanup_auth=0
     local status_json=""
     local base_url=""
     local port=""
     local health_json=""
+    local proof_status=0
 
-    echo "==> Running gateway lifecycle proof"
-    auth_state="$(prepare_gateway_smoke_auth)"
-    if [[ "${auth_state}" == "created" ]]; then
-        cleanup_auth=1
+    echo "==> Running gateway lifecycle proof (auth: ${auth_mode})"
+    if [[ "${auth_mode}" == "synthetic_auth_file" ]]; then
+        auth_state="$(prepare_gateway_smoke_auth)"
+        if [[ "${auth_state}" == "created" ]]; then
+            cleanup_auth=1
+        fi
     fi
-    trap 'if [[ ${cleanup_auth} -eq 1 ]]; then cleanup_gateway_smoke_auth; fi' RETURN
 
+    set +e
     (
         cd "${REPO_ROOT}"
         "${substrate_cli}" world gateway sync
@@ -140,7 +286,37 @@ run_gateway_lifecycle_proof() {
             exit 1
         fi
     )
+    proof_status=$?
+    set -e
 
+    if [[ ${cleanup_auth} -eq 1 ]]; then
+        cleanup_gateway_smoke_auth
+    fi
+    if [[ ${proof_status} -ne 0 ]]; then
+        return "${proof_status}"
+    fi
+
+}
+
+maybe_run_gateway_lifecycle_proof() {
+    local substrate_cli="$1"
+
+    evaluate_gateway_lifecycle_proof_eligibility "${substrate_cli}"
+    if [[ ${GATEWAY_PROOF_ELIGIBLE} -eq 0 ]]; then
+        print_gateway_lifecycle_proof_skip
+        return 0
+    fi
+
+    if [[ ${DRY_RUN} -eq 1 ]]; then
+        echo "==> Gateway lifecycle proof eligible (auth: ${GATEWAY_PROOF_AUTH_MODE})"
+        show_cmd "${substrate_cli}" world gateway sync
+        show_cmd "${substrate_cli}" world gateway status --json
+        show_cmd "${substrate_cli}" world gateway restart
+        echo "[dry-run] curl --fail --silent http://127.0.0.1:<gateway-port>/health"
+        return 0
+    fi
+
+    run_gateway_lifecycle_proof "${substrate_cli}" "${GATEWAY_PROOF_AUTH_MODE}"
 }
 
 user_in_group() {
@@ -448,15 +624,10 @@ if [[ ${DRY_RUN} -eq 1 ]]; then
     if [[ -z "${substrate_cli}" ]]; then
         substrate_cli="${SUBSTRATE_CLI_BIN_PATH}"
     fi
-    echo "==> Gateway lifecycle proof"
-    show_cmd "${substrate_cli}" world gateway sync
-    show_cmd "${substrate_cli}" world gateway status --json
-    show_cmd "${substrate_cli}" world gateway restart
-    echo "[dry-run] curl --fail --silent http://127.0.0.1:<gateway-port>/health"
 else
     substrate_cli="$(resolve_substrate_cli)"
-    run_gateway_lifecycle_proof "${substrate_cli}"
 fi
+maybe_run_gateway_lifecycle_proof "${substrate_cli}"
 
 print_linger_guidance "${INVOKING_USER}"
 

@@ -89,7 +89,7 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if [ -z "${SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}" ]; then
+if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
   echo "missing Codex access token env" >&2
   exit 65
 fi
@@ -116,6 +116,150 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
     perms.set_mode(0o755);
     fs::set_permissions(&path, perms).unwrap();
     path
+}
+
+fn delayed_gateway_binary(temp_dir: &TempDir, name: &str, delay_ms: u64) -> (PathBuf, PathBuf) {
+    let path = temp_dir.path().join(format!("{name}-gateway.sh"));
+    let pid_path = temp_dir.path().join(format!("{name}.pid"));
+    fs::write(
+        &path,
+        format!(
+            r#"#!/bin/sh
+set -eu
+config=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    start)
+      shift
+      ;;
+    --config)
+      config="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$config" ]; then
+  echo "missing --config" >&2
+  exit 64
+fi
+
+if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
+  echo "missing Codex access token env" >&2
+  exit 65
+fi
+
+printf '%s\n' "$$" >"{pid_path}"
+port="$(python3 - "$config" <<'PY'
+import re
+import sys
+text = open(sys.argv[1], 'r', encoding='utf-8').read()
+match = re.search(r'^port\s*=\s*(\d+)\s*$', text, re.M)
+if not match:
+    raise SystemExit(64)
+print(match.group(1))
+PY
+)"
+
+sleep {delay_s}
+root="$(dirname "$config")/serve"
+mkdir -p "$root"
+printf 'ok' >"$root/health"
+exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
+"#,
+            pid_path = pid_path.display(),
+            delay_s = format!("{:.3}", delay_ms as f64 / 1000.0),
+        ),
+    )
+    .unwrap();
+    let mut perms = fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).unwrap();
+    (path, pid_path)
+}
+
+fn tracking_gateway_binary(
+    temp_dir: &TempDir,
+    name: &str,
+    delay_ms: u64,
+) -> (PathBuf, PathBuf, PathBuf) {
+    let path = temp_dir.path().join(format!("{name}-tracking-gateway.sh"));
+    let pid_dir = temp_dir.path().join(format!("{name}-pids"));
+    let launch_count_path = temp_dir.path().join(format!("{name}-launch-count.txt"));
+    fs::write(
+        &path,
+        format!(
+            r#"#!/bin/sh
+set -eu
+config=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    start)
+      shift
+      ;;
+    --config)
+      config="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$config" ]; then
+  echo "missing --config" >&2
+  exit 64
+fi
+
+if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
+  echo "missing Codex access token env" >&2
+  exit 65
+fi
+
+launch="$(python3 - "{launch_count_path}" <<'PY'
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+count = int(path.read_text(encoding='utf-8').strip()) if path.exists() else 0
+count += 1
+path.write_text(str(count), encoding='utf-8')
+print(count)
+PY
+)"
+mkdir -p "{pid_dir}"
+printf '%s\n' "$$" >"{pid_dir}/$launch.pid"
+
+port="$(python3 - "$config" <<'PY'
+import re
+import sys
+text = open(sys.argv[1], 'r', encoding='utf-8').read()
+match = re.search(r'^port\s*=\s*(\d+)\s*$', text, re.M)
+if not match:
+    raise SystemExit(64)
+print(match.group(1))
+PY
+)"
+
+sleep {delay_s}
+root="$(dirname "$config")/serve"
+mkdir -p "$root"
+printf 'ok' >"$root/health"
+exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
+"#,
+            launch_count_path = launch_count_path.display(),
+            pid_dir = pid_dir.display(),
+            delay_s = format!("{:.3}", delay_ms as f64 / 1000.0),
+        ),
+    )
+    .unwrap();
+    let mut perms = fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).unwrap();
+    (path, pid_dir, launch_count_path)
 }
 
 fn crashing_gateway_binary(temp_dir: &TempDir) -> PathBuf {
@@ -148,7 +292,7 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
-if [ -z "${SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}" ]; then
+if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
   echo "missing Codex access token env" >&2
   exit 65
 fi
@@ -181,6 +325,17 @@ fn wait_for_pid_file(pid_path: &Path) -> u32 {
         );
         std::thread::sleep(Duration::from_millis(25));
     }
+}
+
+fn wait_for_pid(pid_dir: &Path, launch: u32) -> u32 {
+    wait_for_pid_file(&pid_dir.join(format!("{launch}.pid")))
+}
+
+fn read_launch_count(path: &Path) -> u32 {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u32>().ok())
+        .unwrap_or(0)
 }
 
 fn assert_process_exited(pid: u32) {
@@ -240,7 +395,7 @@ async fn gateway_status_returns_unavailable_before_sync() {
 async fn gateway_sync_makes_status_available_and_is_idempotent() {
     let _env_lock = ENV_LOCK.lock().unwrap();
     let temp_dir = TempDir::new().unwrap();
-    let binary = fake_gateway_binary(&temp_dir);
+    let (binary, pid_dir, launch_count_path) = tracking_gateway_binary(&temp_dir, "idempotent", 0);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
     let Some(service) = service_or_skip() else {
         return;
@@ -257,10 +412,7 @@ async fn gateway_sync_makes_status_available_and_is_idempotent() {
         .expect("available sync should publish client wiring");
     assert!(wiring.openai_base_url.starts_with("http://127.0.0.1:"));
     assert_eq!(wiring.openai_base_url, wiring.anthropic_base_url);
-    let first_pid = service
-        .gateway_runtime_pid_for_test(&request)
-        .expect("inspect gateway pid")
-        .expect("gateway pid after sync");
+    let first_pid = wait_for_pid(&pid_dir, 1);
 
     let status_response = service
         .gateway_status(request.clone())
@@ -274,21 +426,22 @@ async fn gateway_sync_makes_status_available_and_is_idempotent() {
         .await
         .expect("idempotent gateway sync");
     assert_eq!(second_sync.status, GatewayStatusV1::Available);
-    let second_pid = service
-        .gateway_runtime_pid_for_test(&request)
-        .expect("inspect gateway pid after second sync")
-        .expect("gateway pid after second sync");
+    let second_wiring = second_sync
+        .client_wiring
+        .expect("available sync should publish client wiring");
     assert_eq!(
-        first_pid, second_pid,
+        wiring.openai_base_url, second_wiring.openai_base_url,
         "sync should reuse the running gateway"
     );
+    assert_eq!(read_launch_count(&launch_count_path), 1);
+    assert_eq!(first_pid, wait_for_pid(&pid_dir, 1));
 }
 
 #[tokio::test]
 async fn gateway_restart_recycles_the_runtime() {
     let _env_lock = ENV_LOCK.lock().unwrap();
     let temp_dir = TempDir::new().unwrap();
-    let binary = fake_gateway_binary(&temp_dir);
+    let (binary, pid_dir, launch_count_path) = tracking_gateway_binary(&temp_dir, "restart", 0);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
     let Some(service) = service_or_skip() else {
         return;
@@ -299,10 +452,7 @@ async fn gateway_restart_recycles_the_runtime() {
         .gateway_sync(request.clone())
         .await
         .expect("initial gateway sync");
-    let initial_pid = service
-        .gateway_runtime_pid_for_test(&request)
-        .expect("inspect initial pid")
-        .expect("initial pid");
+    let initial_pid = wait_for_pid(&pid_dir, 1);
 
     let restart_response = service
         .gateway_restart(request.clone())
@@ -310,21 +460,20 @@ async fn gateway_restart_recycles_the_runtime() {
         .expect("gateway restart");
     assert_eq!(restart_response.status, GatewayStatusV1::Available);
 
-    let restarted_pid = service
-        .gateway_runtime_pid_for_test(&request)
-        .expect("inspect restarted pid")
-        .expect("restarted pid");
+    let restarted_pid = wait_for_pid(&pid_dir, 2);
     assert_ne!(
         initial_pid, restarted_pid,
         "restart should spawn a new process"
     );
+    assert_eq!(read_launch_count(&launch_count_path), 2);
+    assert_process_exited(initial_pid);
 }
 
 #[tokio::test]
 async fn gateway_manifest_recovery_restores_status_sync_and_restart() {
     let _env_lock = ENV_LOCK.lock().unwrap();
     let temp_dir = TempDir::new().unwrap();
-    let binary = fake_gateway_binary(&temp_dir);
+    let (binary, pid_dir, launch_count_path) = tracking_gateway_binary(&temp_dir, "recovery", 0);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
     let Some(service) = service_or_skip() else {
         return;
@@ -335,72 +484,46 @@ async fn gateway_manifest_recovery_restores_status_sync_and_restart() {
         .gateway_sync(request.clone())
         .await
         .expect("initial gateway sync");
-    let initial_pid = service
-        .gateway_runtime_pid_for_test(&request)
-        .expect("inspect initial pid")
-        .expect("initial pid");
+    let initial_pid = wait_for_pid(&pid_dir, 1);
+    drop(service);
 
-    service
-        .forget_gateway_runtime_for_test(&request)
-        .expect("forget runtime cache");
-    assert_eq!(
-        service
-            .gateway_runtime_pid_for_test(&request)
-            .expect("inspect cleared runtime cache"),
-        None
-    );
+    let Some(service) = service_or_skip() else {
+        return;
+    };
 
     let status_response = service
         .gateway_status(request.clone())
         .await
         .expect("status via recovered manifest");
     assert_eq!(status_response.status, GatewayStatusV1::Available);
-    let status_pid = service
-        .gateway_runtime_pid_for_test(&request)
-        .expect("inspect recovered status pid")
-        .expect("status pid");
-    assert_eq!(
-        status_pid, initial_pid,
-        "status should rediscover the same pid"
-    );
+    assert_eq!(read_launch_count(&launch_count_path), 1);
 
-    service
-        .forget_gateway_runtime_for_test(&request)
-        .expect("forget runtime cache before sync");
     let sync_response = service
         .gateway_sync(request.clone())
         .await
         .expect("sync via recovered manifest");
     assert_eq!(sync_response.status, GatewayStatusV1::Available);
-    let sync_pid = service
-        .gateway_runtime_pid_for_test(&request)
-        .expect("inspect recovered sync pid")
-        .expect("sync pid");
-    assert_eq!(sync_pid, initial_pid, "sync should reuse the manifest pid");
+    assert_eq!(read_launch_count(&launch_count_path), 1);
 
-    service
-        .forget_gateway_runtime_for_test(&request)
-        .expect("forget runtime cache before restart");
     let restart_response = service
         .gateway_restart(request.clone())
         .await
         .expect("restart via recovered manifest");
     assert_eq!(restart_response.status, GatewayStatusV1::Available);
-    let restarted_pid = service
-        .gateway_runtime_pid_for_test(&request)
-        .expect("inspect restarted pid")
-        .expect("restarted pid");
+    let restarted_pid = wait_for_pid(&pid_dir, 2);
     assert_ne!(
         restarted_pid, initial_pid,
         "restart should stop the recovered pid and replace it"
     );
+    assert_eq!(read_launch_count(&launch_count_path), 2);
+    assert_process_exited(initial_pid);
 }
 
 #[tokio::test]
 async fn gateway_status_turns_unavailable_after_child_exit() {
     let _env_lock = ENV_LOCK.lock().unwrap();
     let temp_dir = TempDir::new().unwrap();
-    let binary = fake_gateway_binary(&temp_dir);
+    let (binary, pid_dir, _) = tracking_gateway_binary(&temp_dir, "child-exit", 0);
     let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
     let Some(service) = service_or_skip() else {
         return;
@@ -411,10 +534,7 @@ async fn gateway_status_turns_unavailable_after_child_exit() {
         .gateway_sync(request.clone())
         .await
         .expect("initial gateway sync");
-    let pid = service
-        .gateway_runtime_pid_for_test(&request)
-        .expect("inspect pid")
-        .expect("gateway pid");
+    let pid = wait_for_pid(&pid_dir, 1);
 
     let kill_status = unsafe { libc::kill(pid as i32, libc::SIGKILL) };
     assert_eq!(kill_status, 0, "failed to kill fake gateway child");
@@ -480,4 +600,81 @@ async fn gateway_sync_kills_child_after_ready_timeout() {
         .expect("status after ready-timeout cleanup");
     assert_eq!(status_response.status, GatewayStatusV1::Unavailable);
     assert!(status_response.client_wiring.is_none());
+}
+
+#[tokio::test]
+async fn gateway_status_reports_transient_failure_while_starting() {
+    let _env_lock = ENV_LOCK.lock().unwrap();
+    let temp_dir = TempDir::new().unwrap();
+    let (binary, pid_path) = delayed_gateway_binary(&temp_dir, "starting", 1000);
+    let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
+    let Some(service) = service_or_skip() else {
+        return;
+    };
+    let request = gateway_request(temp_dir.path());
+
+    let sync_task = tokio::spawn({
+        let service = service.clone();
+        let request = request.clone();
+        async move { service.gateway_sync(request).await }
+    });
+    wait_for_pid_file(&pid_path);
+
+    let err = service
+        .gateway_status(request.clone())
+        .await
+        .expect_err("starting status should be transient");
+    assert!(
+        err.to_string().contains("gateway_transient_failure:"),
+        "unexpected error: {err:#}"
+    );
+    assert!(
+        err.to_string().contains("starting"),
+        "unexpected error: {err:#}"
+    );
+
+    let sync_response = sync_task.await.unwrap().expect("sync should finish");
+    assert_eq!(sync_response.status, GatewayStatusV1::Available);
+}
+
+#[tokio::test]
+async fn gateway_status_reports_transient_failure_while_restarting() {
+    let _env_lock = ENV_LOCK.lock().unwrap();
+    let temp_dir = TempDir::new().unwrap();
+    let binary = fake_gateway_binary(&temp_dir);
+    let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
+    let Some(service) = service_or_skip() else {
+        return;
+    };
+    let request = gateway_request(temp_dir.path());
+
+    service
+        .gateway_sync(request.clone())
+        .await
+        .expect("initial gateway sync");
+
+    let (restart_binary, pid_path) = delayed_gateway_binary(&temp_dir, "restarting", 1000);
+    let _restart_binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", restart_binary);
+    let restart_task = tokio::spawn({
+        let service = service.clone();
+        let request = request.clone();
+        async move { service.gateway_restart(request).await }
+    });
+    wait_for_pid_file(&pid_path);
+
+    let err = service
+        .gateway_status(request.clone())
+        .await
+        .expect_err("restart status should be transient");
+    assert!(
+        err.to_string().contains("gateway_transient_failure:"),
+        "unexpected error: {err:#}"
+    );
+    assert!(
+        err.to_string().contains("restarting"),
+        "unexpected error: {err:#}"
+    );
+
+    let restart_response = restart_task.await.unwrap().expect("restart should finish");
+    assert_eq!(restart_response.status, GatewayStatusV1::Available);
 }

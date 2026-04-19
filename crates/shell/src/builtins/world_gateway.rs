@@ -116,8 +116,12 @@ fn call_gateway_action(action: GatewayAction) -> anyhow::Result<GatewayLifecycle
 
 fn build_gateway_request() -> anyhow::Result<GatewayLifecycleRequestV1> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let effective_config =
-        config_model::resolve_effective_config(&cwd, &CliConfigOverrides::default())?;
+    let (effective_config, config_explain) = config_model::resolve_effective_config_with_explain(
+        &cwd,
+        &CliConfigOverrides::default(),
+        true,
+    )?;
+    validate_gateway_lifecycle_config(&effective_config, config_explain.as_ref())?;
     let (effective_policy, _) =
         substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
             .map_err(|err| config_model::user_error(err.to_string()))?;
@@ -155,6 +159,54 @@ fn build_gateway_request() -> anyhow::Result<GatewayLifecycleRequestV1> {
         world_network: Some(world_network),
         integrated_auth,
     })
+}
+
+fn validate_gateway_lifecycle_config(
+    effective_config: &config_model::SubstrateConfig,
+    config_explain: Option<&config_model::ConfigExplainV1>,
+) -> anyhow::Result<()> {
+    if !effective_config.llm.gateway.enabled
+        && config_key_is_explicit(config_explain, "llm.gateway.enabled")
+    {
+        return Err(gateway_policy_blocked_error(
+            "gateway lifecycle is disabled by effective config",
+        ));
+    }
+
+    if effective_config.llm.gateway.mode == LlmGatewayMode::HostOnly {
+        return Err(gateway_policy_blocked_error(
+            "gateway lifecycle is unavailable while llm.gateway.mode=host_only",
+        ));
+    }
+
+    if effective_config
+        .llm
+        .routing
+        .default_backend
+        .trim()
+        .is_empty()
+    {
+        return Err(gateway_invalid_integration_error(
+            "llm.routing.default_backend must be set before using gateway lifecycle commands",
+        ));
+    }
+
+    Ok(())
+}
+
+fn config_key_is_explicit(
+    config_explain: Option<&config_model::ConfigExplainV1>,
+    key: &str,
+) -> bool {
+    config_explain
+        .and_then(|explain| serde_json::to_value(explain).ok())
+        .and_then(|value| {
+            value
+                .pointer(&format!("/keys/{key}/sources/0/layer"))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .is_some_and(|layer| layer != "default")
 }
 
 fn resolve_integrated_auth_payload(
@@ -344,15 +396,7 @@ fn error_is_component_unavailable(err: &anyhow::Error) -> bool {
     if err.chain().any(|cause| {
         cause
             .downcast_ref::<std::io::Error>()
-            .is_some_and(|io_err| {
-                matches!(
-                    io_err.kind(),
-                    ErrorKind::NotFound
-                        | ErrorKind::ConnectionRefused
-                        | ErrorKind::AddrNotAvailable
-                        | ErrorKind::TimedOut
-                )
-            })
+            .is_some_and(|io_err| matches!(io_err.kind(), ErrorKind::NotFound))
     }) {
         return true;
     }
@@ -362,8 +406,37 @@ fn error_is_component_unavailable(err: &anyhow::Error) -> bool {
         msg.contains("world backend unavailable")
             || msg.contains("listener missing")
             || msg.contains("no such file or directory")
-            || msg.contains("connection refused")
             || msg.contains("failed to open named pipe")
+    })
+}
+
+fn error_is_transient_runtime_failure(err: &anyhow::Error) -> bool {
+    use std::io::ErrorKind;
+
+    if err.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|io_err| {
+                matches!(
+                    io_err.kind(),
+                    ErrorKind::ConnectionRefused
+                        | ErrorKind::AddrNotAvailable
+                        | ErrorKind::TimedOut
+                        | ErrorKind::ConnectionReset
+                        | ErrorKind::BrokenPipe
+                )
+            })
+    }) {
+        return true;
+    }
+
+    err.chain().any(|cause| {
+        let msg = cause.to_string().to_ascii_lowercase();
+        msg.contains("connection refused")
+            || msg.contains("timed out")
+            || msg.contains("timeout")
+            || msg.contains("connection reset")
+            || msg.contains("broken pipe")
             || msg.contains("failed to connect")
     })
 }
@@ -386,7 +459,9 @@ fn classify_and_print_gateway_error(command: &str, err: anyhow::Error) -> i32 {
         (EXIT_INVALID_INTEGRATION, "invalid integration")
     } else if error_has_marker(&err, "gateway_policy_blocked:") {
         (EXIT_POLICY_FAILURE, "policy or safety failure")
-    } else if error_has_marker(&err, "gateway_transient_failure:") {
+    } else if error_has_marker(&err, "gateway_transient_failure:")
+        || error_is_transient_runtime_failure(&err)
+    {
         (EXIT_TRANSIENT_FAILURE, "transient runtime failure")
     } else {
         eprintln!("substrate world gateway: {err:#}");

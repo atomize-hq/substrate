@@ -186,6 +186,18 @@ fn gateway_config_with_codex_backend() -> &'static str {
     "llm:\n  enabled: true\n  gateway:\n    enabled: true\n  routing:\n    default_backend: cli:codex\n"
 }
 
+fn gateway_config_with_generic_backend() -> &'static str {
+    "llm:\n  enabled: true\n  gateway:\n    enabled: true\n  routing:\n    default_backend: api:openai\n"
+}
+
+fn gateway_config_with_gateway_disabled() -> &'static str {
+    "llm:\n  enabled: true\n  gateway:\n    enabled: false\n  routing:\n    default_backend: cli:codex\n"
+}
+
+fn gateway_config_with_empty_backend() -> &'static str {
+    "llm:\n  enabled: true\n  gateway:\n    enabled: true\n  routing:\n    default_backend: \"\"\n"
+}
+
 fn gateway_policy_with_codex_host_credentials() -> &'static str {
     r#"id: "gateway-policy"
 name: "gateway-policy"
@@ -371,6 +383,14 @@ fn gateway_unavailable_socket_fixture() -> (TempDir, AgentSocket, std::path::Pat
     (temp, socket, socket_path)
 }
 
+fn stale_gateway_socket_path() -> (TempDir, std::path::PathBuf) {
+    let temp = short_socket_tempdir("sub-gws-");
+    let socket_path = temp.path().join("agent.sock");
+    let listener = UnixListener::bind(&socket_path).expect("bind stale gateway socket");
+    drop(listener);
+    (temp, socket_path)
+}
+
 #[test]
 fn world_gateway_status_accepts_json_leaf() {
     let cli = parse_world_gateway_status_json();
@@ -423,8 +443,10 @@ fn world_gateway_absent_state_is_explicit_for_status_sync_and_restart() {
 #[test]
 fn world_gateway_status_json_uses_typed_runtime_contract() {
     let (_temp, _socket, socket_path) = gateway_socket_fixture();
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
 
-    let mut cmd = substrate_shell_driver();
+    let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_WORLD", "enabled")
@@ -441,8 +463,10 @@ fn world_gateway_status_json_uses_typed_runtime_contract() {
 #[test]
 fn world_gateway_status_json_preserves_unavailable_shape_from_runtime() {
     let (_temp, _socket, socket_path) = gateway_unavailable_socket_fixture();
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
 
-    let mut cmd = substrate_shell_driver();
+    let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_WORLD", "enabled")
@@ -473,8 +497,10 @@ fn world_gateway_disabled_state_skips_typed_runtime_bootstrap() {
 fn world_gateway_missing_socket_is_classified_as_absent_state() {
     let temp = short_socket_tempdir("sub-gwm-");
     let missing_socket_path = temp.path().join("missing.sock");
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
 
-    let mut cmd = substrate_shell_driver();
+    let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_WORLD", "enabled")
@@ -484,6 +510,25 @@ fn world_gateway_missing_socket_is_classified_as_absent_state() {
         .code(4)
         .stderr(predicate::str::contains(
             "substrate world gateway status: unavailable (required gateway/world component unavailable)",
+        ));
+}
+
+#[test]
+fn world_gateway_connection_refused_is_classified_as_transient_runtime_failure() {
+    let (_temp, socket_path) = stale_gateway_socket_path();
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(3)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: transient runtime failure",
         ));
 }
 
@@ -498,8 +543,10 @@ fn world_gateway_http_failures_bubble_as_errors() {
             body: "{\"error\":\"internal\"}".to_string(),
         },
     );
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
 
-    let mut cmd = substrate_shell_driver();
+    let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_WORLD", "enabled")
@@ -521,8 +568,10 @@ fn world_gateway_invalid_integration_uses_exit_code_2() {
             body: "{\"error\":\"internal: gateway_invalid_integration: unsupported integrated backend\"}".to_string(),
         },
     );
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
 
-    let mut cmd = substrate_shell_driver();
+    let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_WORLD", "enabled")
@@ -546,8 +595,10 @@ fn world_gateway_transient_runtime_failures_use_exit_code_3() {
             body: "{\"error\":\"internal: gateway_transient_failure: gateway did not become ready before timeout\"}".to_string(),
         },
     );
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
 
-    let mut cmd = substrate_shell_driver();
+    let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_WORLD", "enabled")
@@ -571,8 +622,10 @@ fn world_gateway_policy_failures_use_exit_code_5() {
             body: "{\"error\":\"internal: gateway_policy_blocked: gateway lifecycle is disabled by effective config\"}".to_string(),
         },
     );
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
 
-    let mut cmd = substrate_shell_driver();
+    let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
         .env("SUBSTRATE_WORLD_ENABLED", "1")
         .env("SUBSTRATE_WORLD", "enabled")
@@ -696,6 +749,24 @@ fn world_gateway_host_credential_policy_denials_use_exit_code_5() {
 }
 
 #[test]
+fn world_gateway_config_disabled_stays_policy_blocked() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_gateway_disabled());
+    fixture.write_global_policy(gateway_policy_with_codex_host_credentials());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: policy or safety failure",
+        ));
+}
+
+#[test]
 fn world_gateway_incomplete_env_override_uses_exit_code_2() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_codex_backend());
@@ -709,6 +780,24 @@ fn world_gateway_incomplete_env_override_uses_exit_code_2() {
             "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
             "acct_env_explicit",
         )
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: invalid integration",
+        ));
+}
+
+#[test]
+fn world_gateway_empty_default_backend_uses_exit_code_2() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_empty_backend());
+    fixture.write_global_policy(gateway_policy_with_codex_host_credentials());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
         .args(["world", "gateway", "status"])
         .assert()
         .code(2)

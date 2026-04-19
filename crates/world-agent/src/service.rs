@@ -2,16 +2,18 @@
 
 #[cfg(target_os = "linux")]
 use agent_api_types::ExecuteStreamFrame;
+#[cfg(not(target_os = "linux"))]
+use agent_api_types::GatewayStatusV1;
 #[cfg(any(target_os = "linux", test))]
 use agent_api_types::PendingDiffBucketV1;
 #[cfg(target_os = "linux")]
 use agent_api_types::WorldFsEntryTypeV1;
 use agent_api_types::{
     Budget, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
-    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, GatewayStatusV1,
-    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
-    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, ProcessTelemetry,
-    WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
+    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, PendingDiffClearRequestV1,
+    PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
+    PendingDiffRecordV1, PendingDiffRequestV1, ProcessTelemetry, WorldFsReadRequestV1,
+    WorldFsReadResponseV1, WorldNetworkRoutingV1,
 };
 #[cfg(target_os = "linux")]
 use anyhow::Context;
