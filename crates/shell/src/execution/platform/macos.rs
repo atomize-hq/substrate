@@ -806,6 +806,7 @@ echo pass
 
         use std::cell::RefCell;
         use std::io::{Read, Write};
+        use std::os::fd::AsRawFd;
         use std::os::unix::net::{UnixListener, UnixStream};
         use std::path::{Path, PathBuf};
         use std::sync::{
@@ -945,6 +946,31 @@ echo pass
                 None => std::env::remove_var(key),
             }
             result
+        }
+
+        fn capture_stdout<T>(f: impl FnOnce() -> T) -> (T, String) {
+            let temp = tempfile::NamedTempFile::new().expect("temp stdout");
+            let stdout = std::io::stdout();
+            let stdout_fd = stdout.as_raw_fd();
+            let saved_fd = unsafe { libc::dup(stdout_fd) };
+            assert!(saved_fd >= 0, "dup stdout failed");
+
+            unsafe {
+                libc::fflush(std::ptr::null_mut());
+                assert_eq!(libc::dup2(temp.as_file().as_raw_fd(), stdout_fd), stdout_fd);
+            }
+
+            let result = f();
+            std::io::stdout().flush().expect("flush captured stdout");
+
+            unsafe {
+                libc::fflush(std::ptr::null_mut());
+                assert_eq!(libc::dup2(saved_fd, stdout_fd), stdout_fd);
+                libc::close(saved_fd);
+            }
+
+            let output = std::fs::read_to_string(temp.path()).expect("read captured stdout");
+            (result, output)
         }
 
         #[test]
@@ -1151,6 +1177,72 @@ echo pass
             let runner = MockRunner::new(responses);
             let exit = run(false, true, None, &runner);
             assert_eq!(exit, 4);
+        }
+
+        #[test]
+        #[serial]
+        fn world_doctor_json_reports_running_vm_with_inactive_service_as_not_provisioned() {
+            let vm_json = r#"{"status":"Running"}"#;
+
+            with_env_var("SUBSTRATE_WORLD_ENABLED", Some("1"), || {
+                let responses = vec![
+                    (
+                        "limactl".into(),
+                        vec!["--version".into()],
+                        success_out("Lima v1"),
+                    ),
+                    (
+                        "sysctl".into(),
+                        vec!["-n".into(), "kern.hv_support".into()],
+                        success_out("1\n"),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec!["list".into(), "substrate".into(), "--json".into()],
+                        success_out(vm_json),
+                    ),
+                    (
+                        "limactl".into(),
+                        vec![
+                            "shell".into(),
+                            "--workdir=/".into(),
+                            "substrate".into(),
+                            "systemctl".into(),
+                            "is-active".into(),
+                            "substrate-world-agent".into(),
+                        ],
+                        failure_out(),
+                    ),
+                ];
+                let runner = MockRunner::new(responses);
+                let (exit, stdout) = capture_stdout(|| run(true, true, None, &runner));
+                assert_eq!(exit, 4);
+
+                let json: Value = serde_json::from_str(&stdout).expect("world doctor JSON");
+                assert_eq!(json.pointer("/ok").and_then(Value::as_bool), Some(false));
+                assert_eq!(
+                    json.pointer("/host/lima/vm_status").and_then(Value::as_str),
+                    Some("Running")
+                );
+                assert_eq!(
+                    json.pointer("/host/lima/service_active")
+                        .and_then(Value::as_bool),
+                    Some(false)
+                );
+                assert_eq!(
+                    json.pointer("/host/lima/agent_caps_ok")
+                        .and_then(Value::as_bool),
+                    Some(false)
+                );
+                assert_eq!(
+                    json.pointer("/world/status").and_then(Value::as_str),
+                    Some("not_provisioned")
+                );
+                assert_eq!(
+                    json.pointer("/world/ok").and_then(Value::as_bool),
+                    Some(false)
+                );
+            });
         }
     }
 }

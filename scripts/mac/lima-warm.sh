@@ -530,11 +530,25 @@ if [[ -z "${cargo_bin}" ]]; then
     exit 1
 fi
 BUILD_DIR="/tmp/substrate-lima-build"
+BUILD_OUTPUT_DIR="${BUILD_PROFILE}"
+BUILD_PROFILE_FLAG=()
+case "${BUILD_PROFILE}" in
+debug)
+    BUILD_OUTPUT_DIR="debug"
+    ;;
+release)
+    BUILD_OUTPUT_DIR="release"
+    BUILD_PROFILE_FLAG=(--profile release)
+    ;;
+*)
+    BUILD_PROFILE_FLAG=(--profile "${BUILD_PROFILE}")
+    ;;
+esac
 mkdir -p "${BUILD_DIR}"
 cd /src
 if [[ "${build_cli}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build --bin substrate --profile "${BUILD_PROFILE}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_PROFILE}/substrate" /usr/local/bin/substrate
+    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build --bin substrate "${BUILD_PROFILE_FLAG[@]}" --locked
+    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate" /usr/local/bin/substrate
     sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
 #!/usr/bin/env bash
 exec substrate world "$@"
@@ -542,12 +556,12 @@ WORLD
     sudo chmod 0755 /usr/local/bin/world
 fi
 if [[ "${build_agent}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p world-agent --profile "${BUILD_PROFILE}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_PROFILE}/world-agent" /usr/local/bin/substrate-world-agent
+    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p world-agent "${BUILD_PROFILE_FLAG[@]}" --locked
+    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/world-agent" /usr/local/bin/substrate-world-agent
 fi
 if [[ "${build_gateway}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p substrate-gateway --profile "${BUILD_PROFILE}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_PROFILE}/substrate-gateway" /usr/local/bin/substrate-gateway
+    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p substrate-gateway "${BUILD_PROFILE_FLAG[@]}" --locked
+    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate-gateway" /usr/local/bin/substrate-gateway
 fi
 rm -rf "${BUILD_DIR}"
 EOF

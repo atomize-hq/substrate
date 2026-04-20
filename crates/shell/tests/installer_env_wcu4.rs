@@ -54,6 +54,23 @@ fn dev_install_scripts_explicitly_select_gateway_package() {
 }
 
 #[test]
+fn macos_dev_install_does_not_force_skip_guest_build_during_lima_warm() {
+    let unix_installer = read_repo_file("scripts/substrate/dev-install-substrate.sh");
+    assert!(
+        unix_installer.contains("scripts/mac/lima-warm.sh"),
+        "unix dev installer should still invoke the macOS Lima warm helper"
+    );
+    assert!(
+        !unix_installer.contains(
+            "(cd \"${REPO_ROOT}\" && SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1 \"${LIMA_WARM}\" \"${REPO_ROOT}\")"
+        ) && !unix_installer.contains(
+            "(cd \"${REPO_ROOT}\" && SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1 SUBSTRATE_WORLD_NETFILTER_ENABLE=1 \"${LIMA_WARM}\" \"${REPO_ROOT}\")"
+        ),
+        "macOS dev-install must not unconditionally force SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1 for lima-warm"
+    );
+}
+
+#[test]
 fn config_current_show_is_not_affected_without_override_inputs() {
     ensure_substrate_built();
     let temp = temp_dir("substrate-wcu4-clean-env-");

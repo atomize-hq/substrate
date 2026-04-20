@@ -121,6 +121,8 @@ cleanup_host_gateway_smoke_auth() {
 }
 
 run_gateway_lifecycle_proof() {
+  local substrate_bin="${1:-${SUBSTRATE_BIN}}"
+  local substrate_home="${2:-}"
   local auth_state=""
   local cleanup_auth=0
   local status_json=""
@@ -135,15 +137,29 @@ run_gateway_lifecycle_proof() {
   trap 'if [[ ${cleanup_auth} -eq 1 ]]; then cleanup_host_gateway_smoke_auth; fi' RETURN
 
   pushd "${REPO_ROOT}" >/dev/null
-  "${SUBSTRATE_BIN}" world gateway sync
-  status_json="$("${SUBSTRATE_BIN}" world gateway status --json)"
+  if [[ -n "${substrate_home}" ]]; then
+    env SUBSTRATE_HOME="${substrate_home}" SUBSTRATE_ROOT="${substrate_home}" \
+      "${substrate_bin}" world gateway sync
+    status_json="$(env SUBSTRATE_HOME="${substrate_home}" SUBSTRATE_ROOT="${substrate_home}" \
+      "${substrate_bin}" world gateway status --json)"
+  else
+    "${substrate_bin}" world gateway sync
+    status_json="$("${substrate_bin}" world gateway status --json)"
+  fi
   printf '%s\n' "${status_json}" | jq -e '
     .status == "available" and
     .client_wiring.openai_base_url == .client_wiring.anthropic_base_url
   ' >/dev/null
 
-  "${SUBSTRATE_BIN}" world gateway restart
-  status_json="$("${SUBSTRATE_BIN}" world gateway status --json)"
+  if [[ -n "${substrate_home}" ]]; then
+    env SUBSTRATE_HOME="${substrate_home}" SUBSTRATE_ROOT="${substrate_home}" \
+      "${substrate_bin}" world gateway restart
+    status_json="$(env SUBSTRATE_HOME="${substrate_home}" SUBSTRATE_ROOT="${substrate_home}" \
+      "${substrate_bin}" world gateway status --json)"
+  else
+    "${substrate_bin}" world gateway restart
+    status_json="$("${substrate_bin}" world gateway status --json)"
+  fi
   base_url="$(printf '%s\n' "${status_json}" | jq -r '.client_wiring.openai_base_url')"
   port="$(printf '%s\n' "${base_url}" | sed -n 's#http://127\.0\.0\.1:\([0-9][0-9]*\)$#\1#p')"
   popd >/dev/null
@@ -154,6 +170,33 @@ run_gateway_lifecycle_proof() {
 
   limactl shell substrate curl --fail --silent "http://127.0.0.1:${port}/health" \
     | jq -e '.status == "ok" and .service == "substrate-gateway"' >/dev/null
+}
+
+run_dev_install_readiness_proof() {
+  local install_prefix="$1"
+  local install_bin="${install_prefix%/}/bin/substrate"
+  local doctor_json=""
+
+  log "Running macOS dev-install readiness proof"
+  "${REPO_ROOT}/scripts/substrate/dev-install-substrate.sh" --prefix "${install_prefix}" --profile debug
+
+  if [[ ! -x "${install_bin}" ]]; then
+    echo "ERROR: dev-install did not produce ${install_bin}" >&2
+    exit 1
+  fi
+
+  limactl shell substrate sudo test -x /usr/local/bin/substrate-world-agent
+  limactl shell substrate sudo test -x /usr/local/bin/substrate-gateway
+  limactl shell substrate systemctl is-active --quiet substrate-world-agent
+
+  doctor_json="$(env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
+    "${install_bin}" world doctor --json)"
+  printf '%s\n' "${doctor_json}" | jq -e '
+    .ok == true and
+    .host.ok == true and
+    .world.ok == true and
+    .world.status == "ok"
+  ' >/dev/null
 }
 
 default_netfilter_log_dir() {
@@ -569,10 +612,12 @@ run_world_disabled_diagnostics() {
 
 run_generic_smoke() {
   local trace_log
+  local dev_install_prefix
   trace_log="${SHIM_TRACE_LOG:-$HOME/.substrate/trace.jsonl}"
+  dev_install_prefix="$(mktemp -d)"
 
   rm -rf "${REPO_ROOT}/world-mac-smoke"
-  "${SCRIPTS_ROOT}/lima-warm.sh"
+  run_dev_install_readiness_proof "${dev_install_prefix}"
   run_gateway_lifecycle_proof
   "${SUBSTRATE_BIN}" -c 'echo smoke-nonpty'
   "${SUBSTRATE_BIN}" --pty -c 'printf smoke-pty\n'
@@ -601,6 +646,7 @@ run_generic_smoke() {
   "${SUBSTRATE_BIN}" --replay "${span}" --replay-verbose
   "${SUBSTRATE_BIN}" --trace "${span}" | tee /tmp/world-mac-replay.json
   jq '.fs_diff | ((.writes // []) + (.mods // []))' /tmp/world-mac-replay.json | grep 'world-mac-smoke/file.txt'
+  rm -rf "${dev_install_prefix}"
 }
 
 run_bedpm_installer_conformance() {
