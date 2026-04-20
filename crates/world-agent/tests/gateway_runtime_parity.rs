@@ -120,6 +120,106 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
     path
 }
 
+fn strict_gateway_binary(temp_dir: &TempDir, name: &str) -> PathBuf {
+    let server_path = temp_dir.path().join(format!("{name}-strict-health.py"));
+    fs::write(
+        &server_path,
+        r#"#!/usr/bin/env python3
+import socket
+import sys
+
+port = int(sys.argv[1])
+listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+listener.bind(("127.0.0.1", port))
+listener.listen(32)
+
+while True:
+    conn, _ = listener.accept()
+    with conn:
+        conn.settimeout(0.15)
+        request = b""
+        while b"\r\n\r\n" not in request:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            request += chunk
+        if b"\r\n\r\n" not in request:
+            continue
+        try:
+            probe = conn.recv(1)
+            if probe == b"":
+                continue
+        except socket.timeout:
+            pass
+        response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Content-Length: 45\r\n"
+            b"Connection: close\r\n"
+            b"\r\n"
+            b"{\"status\":\"ok\",\"service\":\"substrate-gateway\"}"
+        )
+        conn.sendall(response)
+"#,
+    )
+    .unwrap();
+
+    let path = temp_dir.path().join(format!("{name}-strict-gateway.sh"));
+    fs::write(
+        &path,
+        format!(
+            r#"#!/bin/sh
+set -eu
+config=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    start)
+      shift
+      ;;
+    --config)
+      config="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$config" ]; then
+  echo "missing --config" >&2
+  exit 64
+fi
+
+if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
+  echo "missing Codex access token env" >&2
+  exit 65
+fi
+
+port="$(python3 - "$config" <<'PY'
+import re
+import sys
+text = open(sys.argv[1], 'r', encoding='utf-8').read()
+match = re.search(r'^port\s*=\s*(\d+)\s*$', text, re.M)
+if not match:
+    raise SystemExit(64)
+print(match.group(1))
+PY
+)"
+
+exec python3 "{server_path}" "$port"
+"#,
+            server_path = server_path.display(),
+        ),
+    )
+    .unwrap();
+    let mut perms = fs::metadata(&path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).unwrap();
+    path
+}
+
 fn delayed_gateway_binary(temp_dir: &TempDir, name: &str, delay_ms: u64) -> (PathBuf, PathBuf) {
     let path = temp_dir.path().join(format!("{name}-gateway.sh"));
     let pid_path = temp_dir.path().join(format!("{name}.pid"));
@@ -455,6 +555,34 @@ async fn gateway_sync_makes_status_available_and_is_idempotent() {
     );
     assert_eq!(read_launch_count(&launch_count_path), 1);
     assert_eq!(first_pid, wait_for_pid(&pid_dir, 1));
+}
+
+#[tokio::test]
+async fn gateway_sync_succeeds_against_strict_health_server() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = TempDir::new().unwrap();
+    let binary = strict_gateway_binary(&temp_dir, "strict-ready");
+    let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
+    let Some(service) = service_or_skip() else {
+        return;
+    };
+    let request = gateway_request(temp_dir.path());
+
+    let sync_response = service
+        .gateway_sync(request.clone())
+        .await
+        .expect("gateway sync against strict health server");
+    assert_eq!(sync_response.status, GatewayStatusV1::Available);
+    assert!(
+        sync_response.client_wiring.is_some(),
+        "available sync should publish client wiring"
+    );
+
+    let status_response = service
+        .gateway_status(request)
+        .await
+        .expect("gateway status after strict health sync");
+    assert_eq!(status_response.status, GatewayStatusV1::Available);
 }
 
 #[tokio::test]

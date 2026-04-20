@@ -30,6 +30,7 @@ These socket ACL details are runtime transport facts, not a second operator cont
 
 - The authorization boundary for world-agent requests is the OS-level transport ACL (Linux: Unix socket ownership/mode for `/run/substrate.sock`).
 - On Linux, `/run/substrate.sock` MUST be owned by `root:substrate` with mode `0660` (`srw-rw----`).
+- Managed gateway runtime diagnostics under `/run/substrate/substrate-gateway-runtime/` use that same `substrate` group boundary on Linux and in the macOS Lima guest path: directories remain `0750`, runtime files remain `0640`, and they are not expected to be world-readable.
 - Access to the socket is granted by membership in the `substrate` group; verify with `id -nG "$USER"`, grant with `sudo usermod -aG substrate <user>`, and re-login so the new group membership takes effect.
 - On multi-user hosts, operators MUST ensure only intended users are members of the `substrate` group.
 - Platform-specific transport differences stay confined to the hidden backend layer; this section records the socket ACL and reachability facts that support the runtime parity contract.
@@ -66,7 +67,10 @@ Windows (WSL backend) follows the same operator-facing lifecycle/status meaning;
   and enable socket activation. The script uses `sudo` for filesystem and systemd operations and
   will prompt if elevated credentials are required.
 - The helper ensures the Linux `substrate` group exists, adds the invoking user when possible,
-  and rewrites the socket unit so `/run/substrate.sock` is created as `root:substrate 0660`.
+  and rewrites the socket/service units so `/run/substrate` is recreated as
+  `root:substrate 0750`, `/run/substrate.sock` is created as `root:substrate 0660`,
+  and managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/`
+  stay group-readable (`0750` directories, `0640` files).
   If it cannot add you automatically it prints `sudo usermod -aG substrate <user>`. Run
   `loginctl enable-linger <user>` on hosts with systemd/logind (the script reports the current
   status) so socket activation survives logout or reboot.
@@ -81,7 +85,9 @@ Windows (WSL backend) follows the same operator-facing lifecycle/status meaning;
   substrate --shim-status | grep 'World socket'
   ```
   The socket listing should show `root substrate 0660`. If it does not, rerun the provisioning
-  helper or the installer to refresh the socket unit and group membership.
+  helper or the installer to refresh the socket/service units and group membership. Gateway
+  lifecycle failures that reference `/run/substrate/substrate-gateway-runtime/.../*.log` should
+  point at files readable by the `substrate` group after reprovision.
   The host-scoped doctor JSON surfaces `host.world_socket`:
   ```json
   {
@@ -126,7 +132,7 @@ Substrate on macOS uses a Lima VM (“substrate”) to host the world-agent. The
 Hosted installer behavior coverage on macOS flows through this Lima-backed Linux guest/world-agent path; package-manager selection itself remains Linux-only and does not define native macOS package-manager selection.
 
 - Provisioning & lifecycle
-- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` with `/tmp` included in `ReadWritePaths`.
+- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` and managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, with `/tmp` included in `ReadWritePaths`.
   - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` reports health (virtualization, agent socket, service status, forwarding tools).
   - The helper scripts substitute the active project path so `/src` inside the VM mirrors the host repo checkout.
   - If full isolation writable allowlists fail with `EPERM` in the guest, confirm the guest service has `cap_chown`:

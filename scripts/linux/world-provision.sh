@@ -548,6 +548,8 @@ Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
 Environment=SUBSTRATE_HOME=${SUBSTRATE_HOME_FOR_AGENT}
 ${NETFILTER_ENV_LINE}
+Group=substrate
+UMask=0027
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
 StateDirectory=substrate
@@ -590,7 +592,7 @@ echo "==> Installing substrate-gateway to /usr/local/bin (no dedicated service)"
 sudo_cmd install -Dm0755 "${GATEWAY_BIN_PATH}" /usr/local/bin/substrate-gateway
 
 echo "==> Ensuring runtime directories exist"
-sudo_cmd install -d -m0750 /run/substrate
+sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" /run/substrate
 sudo_cmd install -d -m0750 /var/lib/substrate
 
 echo "==> Writing systemd units to ${SERVICE_PATH} and ${SOCKET_PATH}"
@@ -605,6 +607,7 @@ sudo_cmd systemctl enable substrate-world-agent.socket
 echo "==> Restarting socket/service to enforce ${SOCKET_FS_PATH} ownership"
 sudo_cmd systemctl stop substrate-world-agent.service
 sudo_cmd systemctl stop substrate-world-agent.socket
+sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" /run/substrate
 sudo_cmd rm -f "${SOCKET_FS_PATH}"
 sudo_cmd systemctl start substrate-world-agent.socket
 sudo_cmd systemctl start substrate-world-agent.service

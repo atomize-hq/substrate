@@ -80,8 +80,11 @@ The installer will:
    systemd `.service` + `.socket` units (`/etc/systemd/system/substrate-world-agent.{service,socket}`)
 8. Run `substrate world doctor --json` for a final readiness report
 9. Ensure the `substrate` group exists on Linux hosts, add the invoking user,
-   and reload the socket/service units so `/run/substrate.sock` is recreated as
-   `root:substrate` with `0660` permissions. The installer prints
+   and reload the socket/service units so `/run/substrate` is recreated as
+   `root:substrate` with `0750` permissions, `/run/substrate.sock` is recreated as
+   `root:substrate` with `0660` permissions, and managed gateway runtime artifacts
+   under `/run/substrate/substrate-gateway-runtime/` stay group-readable (`0750`
+   directories, `0640` files). The installer prints
    `loginctl enable-linger <user>` guidance so socket activation survives
    logout/reboots.
 
@@ -136,8 +139,11 @@ During installation the script:
   adding the shim directory to PATH to avoid self-referential lookups.
 - Ensures the Linux `substrate` group exists, adds the invoking user when
   possible (printing manual steps otherwise), and restarts the socket/service
-  units so `/run/substrate.sock` is owned by `root:substrate` with `0660`
-  permissions. The script reports the current `loginctl` lingering status and
+  units so `/run/substrate` is `root:substrate 0750`, `/run/substrate.sock` is
+  owned by `root:substrate` with `0660` permissions, and managed gateway runtime
+  logs/config/manifests under `/run/substrate/substrate-gateway-runtime/` are
+  group-readable (`0750` directories, `0640` files). The script reports the
+  current `loginctl` lingering status and
   reminds you to run `loginctl enable-linger <user>` so socket activation stays
   live after logout or reboot.
 
@@ -302,8 +308,10 @@ tooling.
 On Linux, the dev installer also mirrors the production socket-activation
 requirements: it creates the `substrate` group if needed, adds the invoking
 user (or prints the `sudo usermod -aG substrate <user>` command), rewrites the
-socket unit so `/run/substrate.sock` is `root:substrate 0660`, and reports
-whether `loginctl enable-linger <user>` still needs to be run.
+socket/service units so `/run/substrate` is `root:substrate 0750`,
+`/run/substrate.sock` is `root:substrate 0660`, and managed gateway runtime
+artifacts under `/run/substrate/substrate-gateway-runtime/` remain group-readable.
+It also reports whether `loginctl enable-linger <user>` still needs to be run.
 
 ## Troubleshooting Highlights
 
@@ -324,6 +332,9 @@ whether `loginctl enable-linger <user>` still needs to be run.
   exists as `root substrate 0660` (`sudo ls -l /run/substrate.sock`). If the socket
   shows another group, rerun the installer to refresh the units. Permission issues
   usually mean your user is missing from the `substrate` group—check with
+  `id -nG "$USER"`. If gateway lifecycle failures point at
+  `/run/substrate/substrate-gateway-runtime/.../stderr.log`, that file should be
+  readable to the `substrate` group after reprovision/reinstall.
   `id -nG "$USER"`—or lingering is still disabled (`loginctl enable-linger "$USER"`).
   `substrate world doctor --json | jq '.host.world_socket'` and `substrate --shim-status`
   both spell out whether socket activation is healthy.

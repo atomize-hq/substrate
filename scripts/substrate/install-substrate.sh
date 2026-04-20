@@ -1936,7 +1936,7 @@ provision_linux_world() {
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     printf '[%s][dry-run] sudo install -Dm0755 %s /usr/local/bin/substrate-world-agent\n' "${INSTALLER_NAME}" "${world_agent}" >&2
     printf '[%s][dry-run] sudo install -Dm0755 %s /usr/local/bin/substrate-gateway\n' "${INSTALLER_NAME}" "${gateway_binary}" >&2
-    printf '[%s][dry-run] sudo install -d -m0750 /run/substrate /var/lib/substrate\n' "${INSTALLER_NAME}" >&2
+    printf '[%s][dry-run] sudo install -d -m0750 -o root -g substrate /run/substrate && sudo install -d -m0750 /var/lib/substrate\n' "${INSTALLER_NAME}" >&2
     printf '[%s][dry-run] Write systemd unit to %s\n' "${INSTALLER_NAME}" "${service_path}" >&2
     printf '[%s][dry-run] sudo systemctl daemon-reload && sudo systemctl enable --now substrate-world-agent\n' "${INSTALLER_NAME}" >&2
     return
@@ -1944,7 +1944,7 @@ provision_linux_world() {
 
   run_cmd sudo install -Dm0755 "${world_agent}" /usr/local/bin/substrate-world-agent
   run_cmd sudo install -Dm0755 "${gateway_binary}" /usr/local/bin/substrate-gateway
-  run_cmd sudo install -d -m0750 /run/substrate
+  run_cmd sudo install -d -m0750 -o root -g substrate /run/substrate
   run_cmd sudo install -d -m0750 /var/lib/substrate
 
   local home_path
@@ -1976,6 +1976,8 @@ Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
 Environment=SUBSTRATE_HOME=${PREFIX}
 ${netfilter_env_line}
+Group=substrate
+UMask=0027
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
 StateDirectory=substrate
@@ -2019,7 +2021,11 @@ UNIT
   run_cmd sudo systemctl daemon-reload
   run_cmd sudo systemctl enable substrate-world-agent.service
   run_cmd sudo systemctl enable --now substrate-world-agent.socket
-  run_cmd sudo systemctl restart substrate-world-agent.service
+  run_cmd sudo systemctl stop substrate-world-agent.service substrate-world-agent.socket || true
+  run_cmd sudo install -d -m0750 -o root -g substrate /run/substrate
+  run_cmd sudo rm -f /run/substrate.sock
+  run_cmd sudo systemctl start substrate-world-agent.socket
+  run_cmd sudo systemctl start substrate-world-agent.service
   run_cmd sudo systemctl status substrate-world-agent.socket --no-pager --lines=10 || true
   run_cmd sudo systemctl status substrate-world-agent.service --no-pager --lines=10 || true
 }

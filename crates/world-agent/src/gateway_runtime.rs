@@ -6,8 +6,10 @@ use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, Write};
-use std::net::{Shutdown, TcpListener as StdTcpListener, TcpStream};
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpListener as StdTcpListener, TcpStream};
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, RwLock};
@@ -36,6 +38,8 @@ const DEFAULT_PROVIDER_NAME: &str = "openai-codex";
 const GATEWAY_RUNTIME_ROOT_DIR: &str = "substrate-gateway-runtime";
 const GATEWAY_RUNTIME_MANIFEST_NAME: &str = "runtime.json";
 const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(8);
+const GATEWAY_RUNTIME_DIR_MODE: u32 = 0o750;
+const GATEWAY_RUNTIME_FILE_MODE: u32 = 0o640;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -523,7 +527,15 @@ fn start_runtime(
     let port = pick_free_port().map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
     let runtime_dir = runtime_dir_for_world(&ctx.world_id);
     let home_dir = runtime_dir.join("home");
-    fs::create_dir_all(&home_dir)
+    ensure_directory_with_mode(&runtime_dir, GATEWAY_RUNTIME_DIR_MODE)
+        .with_context(|| {
+            format!(
+                "failed to create gateway runtime directory {}",
+                runtime_dir.display()
+            )
+        })
+        .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
+    ensure_directory_with_mode(&home_dir, GATEWAY_RUNTIME_DIR_MODE)
         .with_context(|| {
             format!(
                 "failed to create gateway runtime directory {}",
@@ -534,16 +546,16 @@ fn start_runtime(
 
     let config_path = runtime_dir.join("config.toml");
     let config = render_integrated_config(port, &ctx.control.default_backend)?;
-    fs::write(&config_path, config)
+    write_file_with_mode(&config_path, config.as_bytes(), GATEWAY_RUNTIME_FILE_MODE)
         .with_context(|| format!("failed to write {}", config_path.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
     let stdout_log = runtime_dir.join("stdout.log");
     let stderr_log = runtime_dir.join("stderr.log");
-    let stdout = fs::File::create(&stdout_log)
+    let stdout = create_file_with_mode(&stdout_log, GATEWAY_RUNTIME_FILE_MODE)
         .with_context(|| format!("failed to create {}", stdout_log.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
-    let stderr = fs::File::create(&stderr_log)
+    let stderr = create_file_with_mode(&stderr_log, GATEWAY_RUNTIME_FILE_MODE)
         .with_context(|| format!("failed to create {}", stderr_log.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
@@ -551,9 +563,6 @@ fn start_runtime(
 
     let mut command = Command::new(&binary_path);
     command
-        .arg("start")
-        .arg("--config")
-        .arg(&config_path)
         .current_dir(&ctx.project_dir)
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
@@ -569,6 +578,7 @@ fn start_runtime(
     } else {
         command.env_remove(CODEX_ACCOUNT_ID_ENV);
     }
+    append_gateway_start_args(&mut command, &config_path);
 
     let mut child = command
         .spawn()
@@ -634,6 +644,10 @@ fn attach_child_to_cgroup(
     }
 }
 
+fn append_gateway_start_args(command: &mut Command, config_path: &Path) {
+    command.arg("--config").arg(config_path).arg("start");
+}
+
 fn resolve_gateway_binary() -> Result<Option<PathBuf>, GatewayRuntimeFailure> {
     if let Some(path) = std::env::var_os(GATEWAY_BINARY_OVERRIDE_ENV) {
         let path = PathBuf::from(path);
@@ -674,15 +688,19 @@ fn runtime_dir_for_world(world_id: &str) -> PathBuf {
 
 fn gateway_runtime_root_dir() -> PathBuf {
     if let Some(path) = std::env::var_os("SUBSTRATE_GATEWAY_RUNTIME_ROOT") {
-        return PathBuf::from(path);
+        let path = PathBuf::from(path);
+        let _ = ensure_directory_with_mode(&path, GATEWAY_RUNTIME_DIR_MODE);
+        return path;
     }
 
     let run_dir = PathBuf::from("/run/substrate").join(GATEWAY_RUNTIME_ROOT_DIR);
-    if fs::create_dir_all(&run_dir).is_ok() {
+    if ensure_directory_with_mode(&run_dir, GATEWAY_RUNTIME_DIR_MODE).is_ok() {
         return run_dir;
     }
 
-    std::env::temp_dir().join(GATEWAY_RUNTIME_ROOT_DIR)
+    let temp_dir = std::env::temp_dir().join(GATEWAY_RUNTIME_ROOT_DIR);
+    let _ = ensure_directory_with_mode(&temp_dir, GATEWAY_RUNTIME_DIR_MODE);
+    temp_dir
 }
 
 fn manifest_path_for_world(world_id: &str) -> PathBuf {
@@ -691,14 +709,43 @@ fn manifest_path_for_world(world_id: &str) -> PathBuf {
 
 fn write_runtime_manifest(path: &Path, manifest: &GatewayRuntimeManifest) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).with_context(|| {
+        ensure_directory_with_mode(parent, GATEWAY_RUNTIME_DIR_MODE).with_context(|| {
             format!("failed to create gateway manifest dir {}", parent.display())
         })?;
     }
     let encoded =
         serde_json::to_vec_pretty(manifest).context("failed to encode gateway manifest")?;
-    fs::write(path, encoded)
+    write_file_with_mode(path, &encoded, GATEWAY_RUNTIME_FILE_MODE)
         .with_context(|| format!("failed to write gateway manifest {}", path.display()))
+}
+
+fn ensure_directory_with_mode(path: &Path, mode: u32) -> Result<()> {
+    fs::create_dir_all(path)?;
+    set_path_mode(path, mode)
+}
+
+fn create_file_with_mode(path: &Path, mode: u32) -> Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.create(true).write(true).truncate(true);
+    #[cfg(unix)]
+    options.mode(mode);
+    let file = options.open(path)?;
+    set_path_mode(path, mode)?;
+    Ok(file)
+}
+
+fn write_file_with_mode(path: &Path, content: &[u8], mode: u32) -> Result<()> {
+    let mut file = create_file_with_mode(path, mode)?;
+    file.write_all(content)?;
+    Ok(())
+}
+
+fn set_path_mode(path: &Path, mode: u32) -> Result<()> {
+    #[cfg(unix)]
+    fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
+    #[cfg(not(unix))]
+    let _ = (path, mode);
+    Ok(())
 }
 
 fn read_runtime_manifest(path: &Path) -> Result<GatewayRuntimeManifest> {
@@ -957,13 +1004,13 @@ fn gateway_health_ready_blocking(port: u16) -> bool {
     if stream.write_all(request.as_bytes()).is_err() {
         return false;
     }
-    let _ = stream.shutdown(Shutdown::Write);
 
-    let mut response = String::new();
-    if stream.read_to_string(&mut response).is_err() {
+    let mut status_line = String::new();
+    let mut reader = BufReader::new(stream);
+    if reader.read_line(&mut status_line).is_err() {
         return false;
     }
-    response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200")
+    status_line.starts_with("HTTP/1.1 200") || status_line.starts_with("HTTP/1.0 200")
 }
 
 fn available_response(port: u16) -> GatewayLifecycleResponseV1 {
@@ -1005,6 +1052,7 @@ mod tests {
     use super::*;
     use agent_api_types::GatewayCliCodexIntegratedAuthV1;
     use once_cell::sync::Lazy;
+    use std::io::{Read, Write};
     use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
 
@@ -1245,6 +1293,110 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         );
     }
 
+    fn assert_mode(path: &Path, expected: u32) {
+        let actual = fs::metadata(path)
+            .unwrap_or_else(|_| panic!("missing {}", path.display()))
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(actual, expected, "unexpected mode for {}", path.display());
+    }
+
+    fn start_strict_health_server() -> u16 {
+        let listener = StdTcpListener::bind(("127.0.0.1", 0)).expect("bind strict health server");
+        let port = listener
+            .local_addr()
+            .expect("strict health server addr")
+            .port();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept strict health connection");
+            stream
+                .set_read_timeout(Some(Duration::from_millis(150)))
+                .expect("set strict health read timeout");
+
+            let mut request = Vec::new();
+            let mut buf = [0_u8; 256];
+            loop {
+                match stream.read(&mut buf) {
+                    Ok(0) => return,
+                    Ok(read) => {
+                        request.extend_from_slice(&buf[..read]);
+                        if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                            break;
+                        }
+                    }
+                    Err(err) => panic!("failed reading strict health request: {err}"),
+                }
+            }
+
+            let mut probe = [0_u8; 1];
+            match stream.read(&mut probe) {
+                Ok(0) => {}
+                Ok(_) => panic!("unexpected extra bytes after strict health request"),
+                Err(err)
+                    if err.kind() == std::io::ErrorKind::WouldBlock
+                        || err.kind() == std::io::ErrorKind::TimedOut =>
+                {
+                    stream
+                        .write_all(
+                            b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok",
+                        )
+                        .expect("write strict health response");
+                }
+                Err(err) => panic!("failed probing strict health client state: {err}"),
+            }
+        });
+        port
+    }
+
+    fn legacy_gateway_health_probe_blocking(port: u16) -> bool {
+        let mut stream = match TcpStream::connect_timeout(
+            &format!("127.0.0.1:{port}")
+                .parse()
+                .expect("legacy health socket address"),
+            Duration::from_millis(250),
+        ) {
+            Ok(stream) => stream,
+            Err(_) => return false,
+        };
+
+        if stream
+            .set_read_timeout(Some(Duration::from_millis(250)))
+            .is_err()
+            || stream
+                .set_write_timeout(Some(Duration::from_millis(250)))
+                .is_err()
+        {
+            return false;
+        }
+
+        let request =
+            format!("GET {HEALTH_PATH} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+        if stream.write_all(request.as_bytes()).is_err() {
+            return false;
+        }
+        let _ = stream.shutdown(std::net::Shutdown::Write);
+
+        let mut response = String::new();
+        if stream.read_to_string(&mut response).is_err() {
+            return false;
+        }
+        response.starts_with("HTTP/1.1 200") || response.starts_with("HTTP/1.0 200")
+    }
+
+    #[test]
+    fn append_gateway_start_args_uses_global_config_flag_position() {
+        let mut command = Command::new("/bin/true");
+        let config_path = Path::new("/tmp/config.toml");
+        append_gateway_start_args(&mut command, config_path);
+
+        let args: Vec<_> = command
+            .get_args()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(args, vec!["--config", "/tmp/config.toml", "start"]);
+    }
+
     #[test]
     fn empty_default_backend_stays_invalid() {
         let mut env = HashMap::new();
@@ -1258,6 +1410,58 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
             matches!(err, GatewayRuntimeFailure::InvalidIntegration(_)),
             "unexpected error: {err:?}"
         );
+    }
+
+    #[test]
+    fn gateway_health_probe_accepts_server_that_rejects_half_closed_clients() {
+        let port = start_strict_health_server();
+        assert!(
+            gateway_health_ready_blocking(port),
+            "fixed readiness probe should accept strict health server",
+        );
+    }
+
+    #[test]
+    fn legacy_gateway_health_probe_fails_against_strict_server() {
+        let port = start_strict_health_server();
+        assert!(
+            !legacy_gateway_health_probe_blocking(port),
+            "legacy half-close readiness probe should fail against strict health server",
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn managed_runtime_artifacts_use_group_readable_modes() {
+        let _env_lock = ENV_LOCK.lock().await;
+        let temp_dir = TempDir::new().unwrap();
+        let runtime_root = temp_dir.path().join("runtime-root");
+        let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
+        let (binary, _pid_dir, _launch_count_path) = delayed_gateway_binary(&temp_dir, 0);
+        let _binary_guard = EnvGuard::set(GATEWAY_BINARY_OVERRIDE_ENV, binary);
+
+        let project_dir = temp_dir.path().join("project");
+        fs::create_dir_all(&project_dir).unwrap();
+        let runtime = start_runtime(
+            PathBuf::from(std::env::var_os(GATEWAY_BINARY_OVERRIDE_ENV).unwrap()),
+            start_context(&project_dir, "world-modes"),
+        )
+        .expect("create runtime");
+
+        assert_mode(&runtime_root, GATEWAY_RUNTIME_DIR_MODE);
+        assert_mode(&runtime.runtime_dir, GATEWAY_RUNTIME_DIR_MODE);
+        assert_mode(&runtime.runtime_dir.join("home"), GATEWAY_RUNTIME_DIR_MODE);
+        assert_mode(&runtime.config_path, GATEWAY_RUNTIME_FILE_MODE);
+        assert_mode(
+            &runtime.runtime_dir.join("stdout.log"),
+            GATEWAY_RUNTIME_FILE_MODE,
+        );
+        assert_mode(
+            &runtime.runtime_dir.join("stderr.log"),
+            GATEWAY_RUNTIME_FILE_MODE,
+        );
+        assert_mode(&runtime.manifest_path, GATEWAY_RUNTIME_FILE_MODE);
+
+        stop_runtime(runtime).expect("stop runtime");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

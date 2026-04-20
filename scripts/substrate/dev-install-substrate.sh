@@ -761,12 +761,17 @@ ensure_socket_group_alignment() {
     return
   fi
   if ! command -v systemctl >/dev/null 2>&1; then
-    warn "systemctl not found; verify /run/substrate.sock is root:substrate 0660 after provisioning."
+    warn "systemctl not found; verify /run/substrate.sock is root:substrate 0660 and /run/substrate is root:substrate 0750 after provisioning."
     return
   fi
   local socket_unit="/etc/systemd/system/substrate-world-agent.socket"
+  local service_unit="/etc/systemd/system/substrate-world-agent.service"
   if [[ ! -f "${socket_unit}" ]]; then
     warn "Socket unit missing at ${socket_unit}; rerun scripts/linux/world-provision.sh to install it."
+    return
+  fi
+  if [[ ! -f "${service_unit}" ]]; then
+    warn "Service unit missing at ${service_unit}; rerun scripts/linux/world-provision.sh to install it."
     return
   fi
   if grep -q '^SocketGroup=substrate' "${socket_unit}"; then
@@ -778,14 +783,60 @@ ensure_socket_group_alignment() {
       return
     fi
   fi
+  if grep -q '^Group=substrate$' "${service_unit}" && grep -q '^UMask=0027$' "${service_unit}"; then
+    log "substrate-world-agent.service already sets Group=substrate and UMask=0027."
+  else
+    log "Updating ${service_unit} to enforce Group=substrate and UMask=0027 (sudo may prompt)..."
+    if ! run_privileged python3 - "${service_unit}" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8").splitlines()
+service_idx = next((i for i, line in enumerate(lines) if line.strip() == "[Service]"), None)
+if service_idx is None:
+    raise SystemExit("missing [Service] section")
+
+group_idx = next((i for i, line in enumerate(lines) if line.startswith("Group=")), None)
+umask_idx = next((i for i, line in enumerate(lines) if line.startswith("UMask=")), None)
+if group_idx is not None:
+    lines[group_idx] = "Group=substrate"
+else:
+    insert_at = next(
+        (i + 1 for i, line in enumerate(lines[service_idx + 1:], start=service_idx + 1)
+         if line.startswith("Environment=") or line.startswith("RestartSec=")),
+        service_idx + 1,
+    )
+    while insert_at < len(lines) and (
+        lines[insert_at].startswith("Environment=") or lines[insert_at].startswith("RestartSec=")
+    ):
+        insert_at += 1
+    lines.insert(insert_at, "Group=substrate")
+    if umask_idx is not None and umask_idx >= insert_at:
+        umask_idx += 1
+
+if umask_idx is not None:
+    lines[umask_idx] = "UMask=0027"
+else:
+    group_idx = next(i for i, line in enumerate(lines) if line == "Group=substrate")
+    lines.insert(group_idx + 1, "UMask=0027")
+
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+    then
+      warn "Failed to update ${service_unit}; edit it manually so it contains Group=substrate and UMask=0027, then rerun 'sudo systemctl daemon-reload'."
+      return
+    fi
+  fi
 
   log "Restarting world-agent units to apply socket ownership (sudo may prompt)..."
   run_privileged systemctl stop substrate-world-agent.service substrate-world-agent.socket || true
+  run_privileged install -d -m0750 -o root -g substrate /run/substrate || true
   run_privileged rm -f /run/substrate.sock || true
   run_privileged systemctl daemon-reload || true
   run_privileged systemctl start substrate-world-agent.socket || true
   run_privileged systemctl start substrate-world-agent.service || true
-  log "Reloaded socket/service units so /run/substrate.sock is recreated as root:substrate 0660."
+  log "Reloaded socket/service units so /run/substrate is root:substrate 0750 and /run/substrate.sock is recreated as root:substrate 0660."
 }
 
 ensure_world_enable_helper_bridge() {

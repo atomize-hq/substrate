@@ -1033,19 +1033,19 @@ impl WorldAgentService {
         #[cfg(target_os = "linux")]
         {
             let prepared = self.prepare_gateway_runtime_request(&req)?;
-            let Some(world) = self
-                .linux_backend
-                .find_compatible_session(&prepared.world_spec)
-                .map_err(|err| {
-                    gateway_runtime_error(GatewayRuntimeFailure::transient(err.to_string()))
-                })?
+            let Some(binding) = self
+                .resolve_gateway_runtime_binding(
+                    prepared,
+                    GatewayRuntimeBindingMode::ExistingSessionOnly,
+                )
+                .map_err(gateway_runtime_error)?
             else {
                 return Ok(Self::gateway_unavailable_response());
             };
 
             return self
                 .gateway_runtime
-                .status(&world.id)
+                .status(&binding.runtime_id)
                 .await
                 .map_err(gateway_runtime_error);
         }
@@ -1065,33 +1065,14 @@ impl WorldAgentService {
         #[cfg(target_os = "linux")]
         {
             let prepared = self.prepare_gateway_runtime_request(&req)?;
-            let world = self
-                .backend
-                .ensure_session(&prepared.world_spec)
-                .map_err(|err| {
-                    self.record_last_netfilter_failure_for_error(
-                        prepared.world_spec.isolate_network,
-                        &err,
-                    );
-                    gateway_runtime_error(GatewayRuntimeFailure::transient(format!(
-                        "failed to ensure session world: {}",
-                        err
-                    )))
-                })?;
-            let cgroup_path = self.session_cgroup_path(&world).map_err(|err| {
-                gateway_runtime_error(GatewayRuntimeFailure::transient(err.to_string()))
-            })?;
+            let binding = self
+                .resolve_gateway_runtime_binding(prepared, GatewayRuntimeBindingMode::EnsureSession)
+                .map_err(gateway_runtime_error)?
+                .expect("gateway sync should always resolve a runtime binding");
 
             return self
                 .gateway_runtime
-                .sync(GatewayRuntimeStartContext {
-                    world_id: world.id,
-                    project_dir: prepared.project_dir,
-                    cgroup_path,
-                    require_cgroup_attach: prepared.world_spec.isolate_network,
-                    control: prepared.control,
-                    integrated_auth: prepared.integrated_auth,
-                })
+                .sync(binding.start_context)
                 .await
                 .map_err(gateway_runtime_error);
         }
@@ -1111,29 +1092,19 @@ impl WorldAgentService {
         #[cfg(target_os = "linux")]
         {
             let prepared = self.prepare_gateway_runtime_request(&req)?;
-            let Some(world) = self
-                .linux_backend
-                .find_compatible_session(&prepared.world_spec)
-                .map_err(|err| {
-                    gateway_runtime_error(GatewayRuntimeFailure::transient(err.to_string()))
-                })?
+            let Some(binding) = self
+                .resolve_gateway_runtime_binding(
+                    prepared,
+                    GatewayRuntimeBindingMode::ExistingSessionOnly,
+                )
+                .map_err(gateway_runtime_error)?
             else {
                 return Ok(Self::gateway_unavailable_response());
             };
-            let cgroup_path = self.session_cgroup_path(&world).map_err(|err| {
-                gateway_runtime_error(GatewayRuntimeFailure::transient(err.to_string()))
-            })?;
 
             return self
                 .gateway_runtime
-                .restart(GatewayRuntimeStartContext {
-                    world_id: world.id,
-                    project_dir: prepared.project_dir,
-                    cgroup_path,
-                    require_cgroup_attach: prepared.world_spec.isolate_network,
-                    control: prepared.control,
-                    integrated_auth: prepared.integrated_auth,
-                })
+                .restart(binding.start_context)
                 .await
                 .map_err(gateway_runtime_error);
         }
@@ -1486,31 +1457,89 @@ impl WorldAgentService {
         })
     }
 
+    #[cfg(target_os = "linux")]
+    fn resolve_gateway_runtime_binding(
+        &self,
+        prepared: PreparedGatewayRuntimeRequest,
+        mode: GatewayRuntimeBindingMode,
+    ) -> std::result::Result<Option<ResolvedGatewayRuntimeBinding>, GatewayRuntimeFailure> {
+        if !prepared.world_spec.isolate_network {
+            return Ok(Some(ResolvedGatewayRuntimeBinding::non_isolated(prepared)));
+        }
+
+        let maybe_world = match mode {
+            GatewayRuntimeBindingMode::EnsureSession => Some(
+                self.backend
+                    .ensure_session(&prepared.world_spec)
+                    .map_err(|err| {
+                        self.record_last_netfilter_failure_for_error(
+                            prepared.world_spec.isolate_network,
+                            &err,
+                        );
+                        GatewayRuntimeFailure::transient(format!(
+                            "failed to ensure session world: {}",
+                            err
+                        ))
+                    })?,
+            ),
+            GatewayRuntimeBindingMode::ExistingSessionOnly => self
+                .linux_backend
+                .find_compatible_session(&prepared.world_spec)
+                .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?,
+        };
+
+        let Some(world) = maybe_world else {
+            return Ok(None);
+        };
+        let cgroup_path = self
+            .session_cgroup_path(&world)
+            .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
+
+        Ok(Some(ResolvedGatewayRuntimeBinding {
+            runtime_id: world.id.clone(),
+            start_context: GatewayRuntimeStartContext {
+                world_id: world.id,
+                project_dir: prepared.project_dir,
+                cgroup_path,
+                require_cgroup_attach: true,
+                control: prepared.control,
+                integrated_auth: prepared.integrated_auth,
+            },
+        }))
+    }
+
     #[cfg(all(target_os = "linux", test))]
     pub fn gateway_runtime_pid_for_test(
         &self,
         req: &GatewayLifecycleRequestV1,
     ) -> Result<Option<u32>> {
         let prepared = self.prepare_gateway_runtime_request(req)?;
-        let Some(world) = self
-            .linux_backend
-            .find_compatible_session(&prepared.world_spec)?
+        let Some(binding) = self
+            .resolve_gateway_runtime_binding(
+                prepared,
+                GatewayRuntimeBindingMode::ExistingSessionOnly,
+            )
+            .map_err(gateway_runtime_error)?
         else {
             return Ok(None);
         };
-        Ok(self.gateway_runtime.pid_for_world(&world.id))
+        Ok(self.gateway_runtime.pid_for_world(&binding.runtime_id))
     }
 
     #[cfg(all(target_os = "linux", test))]
     pub fn forget_gateway_runtime_for_test(&self, req: &GatewayLifecycleRequestV1) -> Result<()> {
         let prepared = self.prepare_gateway_runtime_request(req)?;
-        let Some(world) = self
-            .linux_backend
-            .find_compatible_session(&prepared.world_spec)?
+        let Some(binding) = self
+            .resolve_gateway_runtime_binding(
+                prepared,
+                GatewayRuntimeBindingMode::ExistingSessionOnly,
+            )
+            .map_err(gateway_runtime_error)?
         else {
             return Ok(());
         };
-        self.gateway_runtime.forget_runtime_for_test(&world.id);
+        self.gateway_runtime
+            .forget_runtime_for_test(&binding.runtime_id);
         Ok(())
     }
 
@@ -1535,6 +1564,77 @@ struct PreparedGatewayRuntimeRequest {
     world_spec: WorldSpec,
     control: GatewayControlSettings,
     integrated_auth: Option<agent_api_types::GatewayCliCodexIntegratedAuthV1>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+enum GatewayRuntimeBindingMode {
+    EnsureSession,
+    ExistingSessionOnly,
+}
+
+#[cfg(target_os = "linux")]
+struct ResolvedGatewayRuntimeBinding {
+    runtime_id: String,
+    start_context: GatewayRuntimeStartContext,
+}
+
+#[cfg(target_os = "linux")]
+impl ResolvedGatewayRuntimeBinding {
+    fn non_isolated(prepared: PreparedGatewayRuntimeRequest) -> Self {
+        let runtime_id =
+            non_isolated_gateway_runtime_id(&prepared.project_dir, &prepared.world_spec);
+        Self {
+            runtime_id: runtime_id.clone(),
+            start_context: GatewayRuntimeStartContext {
+                world_id: runtime_id,
+                project_dir: prepared.project_dir,
+                cgroup_path: PathBuf::from("/nonexistent"),
+                require_cgroup_attach: false,
+                control: prepared.control,
+                integrated_auth: prepared.integrated_auth,
+            },
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn non_isolated_gateway_runtime_id(project_dir: &Path, world_spec: &WorldSpec) -> String {
+    let canonical_project_dir = std::fs::canonicalize(project_dir)
+        .unwrap_or_else(|_| project_dir.to_path_buf())
+        .to_string_lossy()
+        .replace('\\', "/");
+    let mut allowed_domains = world_spec.allowed_domains.clone();
+    allowed_domains.sort();
+    allowed_domains.dedup();
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"project_dir\0");
+    hasher.update(canonical_project_dir.as_bytes());
+    hasher.update(b"\0isolate_network\0");
+    hasher.update(if world_spec.isolate_network {
+        b"1"
+    } else {
+        b"0"
+    });
+    hasher.update(b"\0always_isolate\0");
+    hasher.update(if world_spec.always_isolate {
+        b"1"
+    } else {
+        b"0"
+    });
+    hasher.update(b"\0allowed_domains\0");
+    for domain in allowed_domains {
+        hasher.update(domain.as_bytes());
+        hasher.update(b"\n");
+    }
+
+    let digest = hasher.finalize();
+    let mut encoded = String::with_capacity(16);
+    for byte in digest.iter().take(8) {
+        encoded.push_str(&format!("{byte:02x}"));
+    }
+    format!("gwrt_{encoded}")
 }
 
 #[cfg(target_os = "linux")]
@@ -1612,6 +1712,152 @@ mod pending_diff_id_tests {
             WorldAgentService::pending_diff_id_for_diff(&d2),
             "diff_id must not change when FsDiff reclassifies a path between writes and mods"
         );
+    }
+}
+
+#[cfg(all(target_os = "linux", test))]
+mod gateway_runtime_binding_tests {
+    use super::*;
+    use agent_api_types::{
+        GatewayCliCodexIntegratedAuthV1, GatewayIntegratedAuthPayloadV1, PolicySnapshotV3,
+        PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+        WorldNetworkRoutingV1,
+    };
+    use tempfile::TempDir;
+
+    fn minimal_policy_snapshot() -> PolicySnapshotV3 {
+        PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: Vec::new(),
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: None,
+                read: None,
+                write: PolicySnapshotWorldFsWriteV3::default(),
+            },
+        }
+    }
+
+    fn gateway_request(cwd: &Path) -> GatewayLifecycleRequestV1 {
+        GatewayLifecycleRequestV1 {
+            profile: None,
+            cwd: Some(cwd.display().to_string()),
+            env: None,
+            agent_id: "gateway-binding-test".to_string(),
+            policy_snapshot: minimal_policy_snapshot(),
+            world_network: Some(WorldNetworkRoutingV1 {
+                isolate_network: false,
+                allowed_domains: Vec::new(),
+            }),
+            integrated_auth: Some(GatewayIntegratedAuthPayloadV1 {
+                cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                    account_id: Some("acct_test".to_string()),
+                    access_token: "header.payload.signature".to_string(),
+                }),
+            }),
+        }
+    }
+
+    #[test]
+    fn non_isolated_runtime_id_is_stable_for_equivalent_specs() {
+        let project_dir = PathBuf::from("/tmp/project");
+        let mut world_spec = build_world_spec(
+            project_dir.clone(),
+            false,
+            WorldFsMode::Writable,
+            false,
+            vec!["b.example.com".to_string(), "a.example.com".to_string()],
+        );
+        let first = non_isolated_gateway_runtime_id(&project_dir, &world_spec);
+        world_spec.allowed_domains.reverse();
+        let second = non_isolated_gateway_runtime_id(&project_dir, &world_spec);
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn non_isolated_runtime_id_changes_with_binding_inputs() {
+        let project_dir = PathBuf::from("/tmp/project");
+        let base = build_world_spec(
+            project_dir.clone(),
+            false,
+            WorldFsMode::Writable,
+            false,
+            vec!["example.com".to_string()],
+        );
+        let changed_project = non_isolated_gateway_runtime_id(Path::new("/tmp/other"), &base);
+        let changed_always_isolate = non_isolated_gateway_runtime_id(
+            &project_dir,
+            &build_world_spec(
+                project_dir.clone(),
+                true,
+                WorldFsMode::Writable,
+                false,
+                vec!["example.com".to_string()],
+            ),
+        );
+        let changed_domains = non_isolated_gateway_runtime_id(
+            &project_dir,
+            &build_world_spec(
+                project_dir.clone(),
+                false,
+                WorldFsMode::Writable,
+                false,
+                vec!["other.example.com".to_string()],
+            ),
+        );
+        let base_id = non_isolated_gateway_runtime_id(&project_dir, &base);
+        assert_ne!(base_id, changed_project);
+        assert_ne!(base_id, changed_always_isolate);
+        assert_ne!(base_id, changed_domains);
+    }
+
+    #[test]
+    fn non_isolated_binding_uses_synthetic_runtime_key() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+        let prepared = service
+            .prepare_gateway_runtime_request(&gateway_request(temp_dir.path()))
+            .expect("prepared request");
+        let binding = service
+            .resolve_gateway_runtime_binding(
+                prepared,
+                GatewayRuntimeBindingMode::ExistingSessionOnly,
+            )
+            .expect("binding resolution")
+            .expect("non-isolated binding");
+
+        assert!(binding.runtime_id.starts_with("gwrt_"));
+        assert_eq!(binding.start_context.world_id, binding.runtime_id);
+        assert!(!binding.start_context.require_cgroup_attach);
+        assert_eq!(
+            binding.start_context.cgroup_path,
+            PathBuf::from("/nonexistent")
+        );
+    }
+
+    #[test]
+    fn isolated_binding_does_not_synthesize_runtime_without_session() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+        let mut request = gateway_request(temp_dir.path());
+        request.world_network = Some(WorldNetworkRoutingV1 {
+            isolate_network: true,
+            allowed_domains: Vec::new(),
+        });
+        let prepared = service
+            .prepare_gateway_runtime_request(&request)
+            .expect("prepared request");
+        let binding = service
+            .resolve_gateway_runtime_binding(
+                prepared,
+                GatewayRuntimeBindingMode::ExistingSessionOnly,
+            )
+            .expect("binding resolution");
+
+        assert!(binding.is_none());
     }
 }
 

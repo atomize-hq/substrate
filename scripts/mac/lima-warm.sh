@@ -657,6 +657,8 @@ Environment=RUST_LOG=info
 Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
 ${netfilter_env}
+Group=substrate
+UMask=0027
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
 StateDirectory=substrate
@@ -699,12 +701,13 @@ enable_socket_activation() {
     limactl shell "${VM_NAME}" bash <<'EOF'
 set -euo pipefail
 sudo install -d -m0750 /var/lib/substrate
-sudo install -d -m0750 /run/substrate
+sudo install -d -m0750 -o root -g substrate /run/substrate
 sudo systemctl daemon-reload
 sudo systemctl enable substrate-world-agent.service >/dev/null
 sudo systemctl enable substrate-world-agent.socket >/dev/null
 sudo systemctl stop substrate-world-agent.service >/dev/null 2>&1 || true
 sudo systemctl stop substrate-world-agent.socket >/dev/null 2>&1 || true
+sudo install -d -m0750 -o root -g substrate /run/substrate
 sudo rm -f /run/substrate.sock
 sudo systemctl start substrate-world-agent.socket
 sudo systemctl start substrate-world-agent.service
