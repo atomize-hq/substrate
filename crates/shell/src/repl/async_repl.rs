@@ -489,7 +489,6 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     }
                 }
             };
-            prompt_active.store(false, Ordering::SeqCst);
             let prompt_response = match prompt_response {
                 PromptWorkerResponse::CtrlD if prompt_worker.is_reedline() => {
                     if let Some(err) = resolve_reedline_ctrl_d_terminal_loss(
@@ -504,6 +503,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                 }
                 other => other,
             };
+            // Keep the monitor alive through the Reedline Ctrl-D recheck window so delayed TTY
+            // invalidation can still be observed before we classify the prompt result.
+            prompt_active.store(false, Ordering::SeqCst);
 
             match prompt_response {
                 PromptWorkerResponse::Line(command) => {

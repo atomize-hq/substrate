@@ -295,6 +295,235 @@ echo pass
         })
     }
 
+    struct WorldDoctorAssessment {
+        exit_code: i32,
+        world_fs_mode: String,
+        world_fs_isolation: String,
+        world_fs_require_world: bool,
+        vm_name: String,
+        lima_installed: bool,
+        lima_virtualization: bool,
+        vsock_proxy: bool,
+        vm_status: String,
+        service_active: bool,
+        agent_caps_ok: bool,
+        world_value: Value,
+        out: Value,
+    }
+
+    fn collect_world_doctor_assessment(
+        report_internal_errors: bool,
+        world_enabled: bool,
+        world_disable_attribution: Option<
+            &crate::execution::config_model::DoctorDisableAttribution,
+        >,
+        runner: &dyn CommandRunner,
+    ) -> WorldDoctorAssessment {
+        let fs_policy = world_fs_policy();
+        let vm_name = resolve_lima_vm_name();
+        let world_fs_mode = fs_policy.mode.as_str().to_string();
+        let world_fs_isolation = fs_policy.isolation.as_str().to_string();
+        let world_fs_require_world = fs_policy.require_world;
+
+        let lima_installed = runner.run("limactl", &["--version"]).success;
+        let virtualization = runner.run("sysctl", &["-n", "kern.hv_support"]);
+        let lima_virtualization = virtualization.success && virtualization.stdout.trim() == "1";
+        let vsock_proxy = which::which("vsock-proxy").is_ok();
+
+        let vm_status = if lima_installed {
+            let vm = runner.run("limactl", &["list", &vm_name, "--json"]);
+            if vm.success {
+                match serde_json::from_str::<Value>(&vm.stdout) {
+                    Ok(value) => value
+                        .get("status")
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown")
+                        .to_string(),
+                    Err(err) => format!("parse-error: {err}"),
+                }
+            } else {
+                "missing".into()
+            }
+        } else {
+            "unknown".into()
+        };
+
+        let vm_running = vm_status == "Running";
+        let can_probe_vm = world_enabled && vm_running;
+        let service_active = if can_probe_vm {
+            runner
+                .run(
+                    "limactl",
+                    &[
+                        "shell",
+                        "--workdir=/",
+                        &vm_name,
+                        "systemctl",
+                        "is-active",
+                        "substrate-world-agent",
+                    ],
+                )
+                .success
+        } else {
+            false
+        };
+
+        let agent_caps_ok = if !can_probe_vm || !service_active {
+            false
+        } else {
+            let sock = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".substrate/sock/agent.sock");
+            if sock.exists() && probe_caps_uds(&sock) {
+                true
+            } else {
+                probe_caps_tcp("127.0.0.1", 17788) || probe_caps_in_vm(runner, &vm_name)
+            }
+        };
+
+        let host_ok = world_enabled
+            && lima_installed
+            && lima_virtualization
+            && vm_status == "Running"
+            && service_active
+            && agent_caps_ok;
+
+        let host_value = json!({
+            "platform": "macos",
+            "ok": host_ok,
+            "world_fs_mode": world_fs_mode,
+            "world_fs_isolation": world_fs_isolation,
+            "world_fs_require_world": world_fs_require_world,
+            "lima": lima_json_value(
+                &vm_name,
+                lima_installed,
+                lima_virtualization,
+                &vm_status,
+                service_active,
+                agent_caps_ok,
+                vsock_proxy,
+            )
+        });
+
+        let mut exit_code = 4;
+        let world_value = if !world_enabled {
+            json!({"status": "disabled", "ok": false})
+        } else if !(lima_installed && lima_virtualization && vm_running && service_active) {
+            json!({"status": "not_provisioned", "ok": false})
+        } else if !agent_caps_ok {
+            exit_code = 3;
+            json!({"status": "unreachable", "ok": false})
+        } else {
+            let sock = dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".substrate/sock/agent.sock");
+            let report = match tokio::runtime::Runtime::new() {
+                Ok(rt) => {
+                    let sock_clone = sock.clone();
+                    Some(rt.block_on(async {
+                        if sock_clone.exists() {
+                            if let Ok(client) = AgentClient::unix_socket(&sock_clone) {
+                                if let Ok(report) = client.doctor_world().await {
+                                    return Some(report);
+                                }
+                            }
+                        }
+                        if let Ok(client) = AgentClient::tcp("127.0.0.1", 17788) {
+                            if let Ok(report) = client.doctor_world().await {
+                                return Some(report);
+                            }
+                        }
+                        let output = runner.run(
+                            "limactl",
+                            &[
+                                "shell",
+                                "--workdir=/",
+                                &vm_name,
+                                "sudo",
+                                "-n",
+                                "timeout",
+                                "5",
+                                "curl",
+                                "-sS",
+                                "--fail",
+                                "--unix-socket",
+                                "/run/substrate.sock",
+                                "http://localhost/v1/doctor/world",
+                            ],
+                        );
+                        if output.success {
+                            if let Ok(report) = serde_json::from_str(&output.stdout) {
+                                return Some(report);
+                            }
+                        }
+                        None
+                    }))
+                }
+                Err(err) => {
+                    if report_internal_errors {
+                        eprintln!(
+                            "substrate world doctor: internal error: failed to create tokio runtime: {err}"
+                        );
+                    }
+                    None
+                }
+            }
+            .flatten();
+
+            let mut value = match report {
+                Some(report) => serde_json::to_value(report).unwrap_or_else(|_| json!({})),
+                None => fallback_world_report_v1_via_vm(runner, &vm_name),
+            };
+
+            let status = if value.get("ok").and_then(Value::as_bool) == Some(true) {
+                "ok"
+            } else {
+                "missing_prereqs"
+            };
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("status".to_string(), json!(status));
+            }
+
+            if host_ok && value.get("ok").and_then(Value::as_bool) == Some(true) {
+                exit_code = 0;
+            } else {
+                exit_code = 4;
+            }
+            value
+        };
+
+        let ok = host_ok && world_value.get("ok").and_then(Value::as_bool) == Some(true);
+
+        let mut out = json!({
+            "schema_version": 1,
+            "platform": "macos",
+            "world_enabled": world_enabled,
+            "ok": ok,
+            "host": host_value,
+            "world": world_value.clone(),
+        });
+        if let Some(attribution) = world_disable_attribution {
+            out["world_disable_reason"] = json!(attribution.reason);
+            out["world_disable_source"] = json!(attribution.source);
+        }
+
+        WorldDoctorAssessment {
+            exit_code,
+            world_fs_mode,
+            world_fs_isolation,
+            world_fs_require_world,
+            vm_name,
+            lima_installed,
+            lima_virtualization,
+            vsock_proxy,
+            vm_status,
+            service_active,
+            agent_caps_ok,
+            world_value,
+            out,
+        }
+    }
+
     pub(super) fn run_host(
         json_mode: bool,
         world_enabled: bool,
@@ -492,13 +721,17 @@ echo pass
         >,
         runner: &dyn CommandRunner,
     ) -> i32 {
-        let fs_policy = world_fs_policy();
-        let vm_name = resolve_lima_vm_name();
-
         let pass = |msg: &str| println!("PASS  | {}", msg);
         let warn = |msg: &str| println!("WARN  | {}", msg);
         let fail = |msg: &str| println!("FAIL  | {}", msg);
         let info = |msg: &str| println!("INFO  | {}", msg);
+
+        let assessment = collect_world_doctor_assessment(
+            json_mode,
+            world_enabled,
+            world_disable_attribution,
+            runner,
+        );
 
         if !json_mode {
             println!("== substrate world doctor ==");
@@ -511,256 +744,78 @@ echo pass
             }
         }
 
-        let lima_installed = runner.run("limactl", &["--version"]).success;
-        let virtualization = runner.run("sysctl", &["-n", "kern.hv_support"]);
-        let lima_virtualization = virtualization.success && virtualization.stdout.trim() == "1";
-        let vsock_proxy = which::which("vsock-proxy").is_ok();
-
         if !json_mode {
-            if lima_installed {
+            if assessment.lima_installed {
                 pass("limactl: present");
             } else {
                 fail("limactl: not found");
             }
-            if lima_virtualization {
+            if assessment.lima_virtualization {
                 pass("Virtualization.framework available");
             } else {
                 fail("Virtualization.framework unavailable (sysctl kern.hv_support != 1)");
             }
-            if vsock_proxy {
+            if assessment.vsock_proxy {
                 pass("vsock-proxy: present");
             } else {
                 warn("vsock-proxy: not found (SSH forwarding may be used)");
             }
             info(&format!(
                 "world_fs: mode={} isolation={} require_world={}",
-                fs_policy.mode.as_str(),
-                fs_policy.isolation.as_str(),
-                fs_policy.require_world
+                assessment.world_fs_mode,
+                assessment.world_fs_isolation,
+                assessment.world_fs_require_world
             ));
         }
 
-        let vm_status = if lima_installed {
-            let vm = runner.run("limactl", &["list", &vm_name, "--json"]);
-            if vm.success {
-                match serde_json::from_str::<Value>(&vm.stdout) {
-                    Ok(value) => value
-                        .get("status")
-                        .and_then(Value::as_str)
-                        .unwrap_or("unknown")
-                        .to_string(),
-                    Err(err) => format!("parse-error: {err}"),
-                }
-            } else {
-                "missing".into()
-            }
-        } else {
-            "unknown".into()
-        };
-
         if !json_mode {
-            match vm_status.as_str() {
-                "Running" => pass(&format!("Lima VM '{vm_name}' running")),
-                "missing" => warn(&format!("Lima VM '{vm_name}' not found")),
+            match assessment.vm_status.as_str() {
+                "Running" => pass(&format!("Lima VM '{}' running", assessment.vm_name)),
+                "missing" => warn(&format!("Lima VM '{}' not found", assessment.vm_name)),
                 status => warn(&format!(
-                    "Lima VM '{vm_name}' not running (status: {status})"
+                    "Lima VM '{}' not running (status: {status})",
+                    assessment.vm_name
                 )),
             }
         }
 
-        let vm_running = vm_status == "Running";
-
-        // World doctor short-circuit: do not exec inside the guest and do not probe the agent.
-        let can_probe_vm = world_enabled && vm_running;
-        let service_active = if can_probe_vm {
-            runner
-                .run(
-                    "limactl",
-                    &[
-                        "shell",
-                        "--workdir=/",
-                        &vm_name,
-                        "systemctl",
-                        "is-active",
-                        "substrate-world-agent",
-                    ],
-                )
-                .success
-        } else {
-            false
-        };
+        let can_probe_vm = world_enabled && assessment.vm_status == "Running";
 
         if !json_mode && can_probe_vm {
-            if service_active {
+            if assessment.service_active {
                 pass("substrate-world-agent service active");
             } else {
                 fail("substrate-world-agent service not active");
             }
         }
 
-        let agent_caps_ok = if !can_probe_vm || !service_active {
-            false
-        } else {
-            let sock = dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".substrate/sock/agent.sock");
-            if sock.exists() && probe_caps_uds(&sock) {
-                true
-            } else {
-                probe_caps_tcp("127.0.0.1", 17788) || probe_caps_in_vm(runner, &vm_name)
-            }
-        };
-
-        if !json_mode && can_probe_vm && service_active {
-            if agent_caps_ok {
+        if !json_mode && can_probe_vm && assessment.service_active {
+            if assessment.agent_caps_ok {
                 pass("world-agent reachable (capabilities probe)");
             } else {
                 fail("world-agent unreachable (capabilities probe)");
             }
         }
 
-        let host_ok = world_enabled
-            && lima_installed
-            && lima_virtualization
-            && vm_status == "Running"
-            && service_active
-            && agent_caps_ok;
-
-        let host_value = json!({
-            "platform": "macos",
-            "ok": host_ok,
-            "world_fs_mode": fs_policy.mode.as_str(),
-            "world_fs_isolation": fs_policy.isolation.as_str(),
-            "world_fs_require_world": fs_policy.require_world,
-            "lima": lima_json_value(
-                &vm_name,
-                lima_installed,
-                lima_virtualization,
-                &vm_status,
-                service_active,
-                agent_caps_ok,
-                vsock_proxy,
-            )
-        });
-
-        let mut exit_code = 4;
-        let world_value = if !world_enabled {
-            json!({"status": "disabled", "ok": false})
-        } else if !(lima_installed && lima_virtualization && vm_running && service_active) {
-            json!({"status": "not_provisioned", "ok": false})
-        } else if !agent_caps_ok {
-            exit_code = 3;
-            json!({"status": "unreachable", "ok": false})
-        } else {
-            let sock = dirs::home_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join(".substrate/sock/agent.sock");
-            let report = match tokio::runtime::Runtime::new() {
-                Ok(rt) => {
-                    let sock_clone = sock.clone();
-                    Some(rt.block_on(async {
-                        if sock_clone.exists() {
-                            if let Ok(client) = AgentClient::unix_socket(&sock_clone) {
-                                if let Ok(report) = client.doctor_world().await {
-                                    return Some(report);
-                                }
-                            }
-                        }
-                        if let Ok(client) = AgentClient::tcp("127.0.0.1", 17788) {
-                            if let Ok(report) = client.doctor_world().await {
-                                return Some(report);
-                            }
-                        }
-                        let output = runner.run(
-                            "limactl",
-                            &[
-                                "shell",
-                                "--workdir=/",
-                                &vm_name,
-                                "sudo",
-                                "-n",
-                                "timeout",
-                                "5",
-                                "curl",
-                                "-sS",
-                                "--fail",
-                                "--unix-socket",
-                                "/run/substrate.sock",
-                                "http://localhost/v1/doctor/world",
-                            ],
-                        );
-                        if output.success {
-                            if let Ok(report) = serde_json::from_str(&output.stdout) {
-                                return Some(report);
-                            }
-                        }
-                        None
-                    }))
-                }
-                Err(err) => {
-                    if json_mode {
-                        eprintln!(
-                            "substrate world doctor: internal error: failed to create tokio runtime: {err}"
-                        );
-                    }
-                    None
-                }
-            }
-            .flatten();
-
-            let mut value = match report {
-                Some(report) => serde_json::to_value(report).unwrap_or_else(|_| json!({})),
-                None => fallback_world_report_v1_via_vm(runner, &vm_name),
-            };
-
-            let status = if value.get("ok").and_then(Value::as_bool) == Some(true) {
-                "ok"
-            } else {
-                "missing_prereqs"
-            };
-            if let Some(obj) = value.as_object_mut() {
-                obj.insert("status".to_string(), json!(status));
-            }
-
-            if host_ok && value.get("ok").and_then(Value::as_bool) == Some(true) {
-                exit_code = 0;
-            } else {
-                exit_code = 4;
-            }
-            value
-        };
-
-        let ok = host_ok && world_value.get("ok").and_then(Value::as_bool) == Some(true);
-
         if json_mode {
-            let mut out = json!({
-                "schema_version": 1,
-                "platform": "macos",
-                "world_enabled": world_enabled,
-                "ok": ok,
-                "host": host_value,
-                "world": world_value,
-            });
-            if let Some(attribution) = world_disable_attribution {
-                out["world_disable_reason"] = json!(attribution.reason);
-                out["world_disable_source"] = json!(attribution.source);
-            }
-            println!("{}", serde_json::to_string_pretty(&out).unwrap());
+            println!("{}", serde_json::to_string_pretty(&assessment.out).unwrap());
         } else {
             println!("== World ==");
-            match world_value.get("status").and_then(Value::as_str) {
+            match assessment.world_value.get("status").and_then(Value::as_str) {
                 Some("disabled") => fail("world doctor disabled (world isolation is off)"),
                 Some("not_provisioned") => {
                     fail("world backend not provisioned (VM/service not running)")
                 }
                 Some("unreachable") => fail("world backend unreachable (agent did not respond)"),
                 Some("missing_prereqs") | Some("ok") => {
-                    let landlock_supported = world_value
+                    let landlock_supported = assessment
+                        .world_value
                         .get("landlock")
                         .and_then(|l| l.get("supported"))
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
-                    let landlock_abi = world_value
+                    let landlock_abi = assessment
+                        .world_value
                         .get("landlock")
                         .and_then(|l| l.get("abi"))
                         .and_then(Value::as_u64);
@@ -774,7 +829,8 @@ echo pass
                     } else {
                         fail("landlock: unsupported");
                     }
-                    let probe_result = world_value
+                    let probe_result = assessment
+                        .world_value
                         .get("world_fs_strategy")
                         .and_then(|w| w.get("probe"))
                         .and_then(|p| p.get("result"))
@@ -785,7 +841,7 @@ echo pass
                     } else {
                         fail("world fs strategy probe: fail");
                     }
-                    if ok {
+                    if assessment.out.get("ok").and_then(Value::as_bool) == Some(true) {
                         pass("world doctor: ok");
                     } else {
                         fail("world doctor: ok=false");
@@ -795,7 +851,7 @@ echo pass
             }
         }
 
-        exit_code
+        assessment.exit_code
     }
 
     #[cfg(test)]
@@ -806,7 +862,6 @@ echo pass
 
         use std::cell::RefCell;
         use std::io::{Read, Write};
-        use std::os::fd::AsRawFd;
         use std::os::unix::net::{UnixListener, UnixStream};
         use std::path::{Path, PathBuf};
         use std::sync::{
@@ -946,31 +1001,6 @@ echo pass
                 None => std::env::remove_var(key),
             }
             result
-        }
-
-        fn capture_stdout<T>(f: impl FnOnce() -> T) -> (T, String) {
-            let temp = tempfile::NamedTempFile::new().expect("temp stdout");
-            let stdout = std::io::stdout();
-            let stdout_fd = stdout.as_raw_fd();
-            let saved_fd = unsafe { libc::dup(stdout_fd) };
-            assert!(saved_fd >= 0, "dup stdout failed");
-
-            unsafe {
-                libc::fflush(std::ptr::null_mut());
-                assert_eq!(libc::dup2(temp.as_file().as_raw_fd(), stdout_fd), stdout_fd);
-            }
-
-            let result = f();
-            std::io::stdout().flush().expect("flush captured stdout");
-
-            unsafe {
-                libc::fflush(std::ptr::null_mut());
-                assert_eq!(libc::dup2(saved_fd, stdout_fd), stdout_fd);
-                libc::close(saved_fd);
-            }
-
-            let output = std::fs::read_to_string(temp.path()).expect("read captured stdout");
-            (result, output)
         }
 
         #[test]
@@ -1215,10 +1245,10 @@ echo pass
                     ),
                 ];
                 let runner = MockRunner::new(responses);
-                let (exit, stdout) = capture_stdout(|| run(true, true, None, &runner));
-                assert_eq!(exit, 4);
+                let assessment = collect_world_doctor_assessment(true, true, None, &runner);
+                assert_eq!(assessment.exit_code, 4);
 
-                let json: Value = serde_json::from_str(&stdout).expect("world doctor JSON");
+                let json = assessment.out;
                 assert_eq!(json.pointer("/ok").and_then(Value::as_bool), Some(false));
                 assert_eq!(
                     json.pointer("/host/lima/vm_status").and_then(Value::as_str),

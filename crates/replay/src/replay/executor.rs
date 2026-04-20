@@ -163,7 +163,11 @@ struct AgentBackendOutcome {
 /// Execute a command directly (without world isolation)
 pub async fn execute_direct(state: &ExecutionState, timeout_secs: u64) -> Result<ExecutionResult> {
     let mut cmd = Command::new("/bin/bash");
-    cmd.arg("-lc").arg(&state.raw_cmd);
+    // Replay should execute the captured command with shell semantics, but it
+    // must not source user startup files because those can block or mutate the
+    // environment in ways unrelated to the recorded span.
+    cmd.args(["--noprofile", "--norc", "-c"])
+        .arg(&state.raw_cmd);
     cmd.current_dir(&state.cwd);
     cmd.envs(&state.env);
     if std::env::var("SHELL").is_err() {
