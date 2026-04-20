@@ -1308,7 +1308,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${REPO_ROOT}"
 
 TARGET_DIR="${PROFILE}"
-BUILD_FLAGS=(build --bin substrate --bin substrate-shim --bin substrate-gateway)
+BUILD_FLAGS=(build -p substrate --bin substrate --bin substrate-shim -p substrate-gateway --bin substrate-gateway)
 if [[ "${PROFILE}" == "release" ]]; then
   BUILD_FLAGS+=(--release)
 fi

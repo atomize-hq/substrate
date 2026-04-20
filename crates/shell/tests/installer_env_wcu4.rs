@@ -35,6 +35,25 @@ fn installer_scripts_do_not_export_substrate_override_by_default() {
 }
 
 #[test]
+fn dev_install_scripts_explicitly_select_gateway_package() {
+    let unix_installer = read_repo_file("scripts/substrate/dev-install-substrate.sh");
+    assert!(
+        unix_installer.contains(
+            "BUILD_FLAGS=(build -p substrate --bin substrate --bin substrate-shim -p substrate-gateway --bin substrate-gateway)"
+        ),
+        "unix dev installer must explicitly select substrate and substrate-gateway packages"
+    );
+
+    let windows_installer = read_repo_file("scripts/windows/dev-install-substrate.ps1");
+    assert!(
+        windows_installer.contains(
+            "$buildArgs = @('build', '-p', 'substrate', '--bin', 'substrate', '--bin', 'substrate-shim', '-p', 'substrate-gateway', '--bin', 'substrate-gateway')"
+        ),
+        "windows dev installer must explicitly select substrate and substrate-gateway packages"
+    );
+}
+
+#[test]
 fn config_current_show_is_not_affected_without_override_inputs() {
     ensure_substrate_built();
     let temp = temp_dir("substrate-wcu4-clean-env-");
