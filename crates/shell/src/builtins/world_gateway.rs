@@ -13,7 +13,13 @@ use agent_api_types::{
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
+#[cfg(target_os = "macos")]
+use std::io::{Read, Write};
+#[cfg(target_os = "macos")]
+use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+#[cfg(target_os = "macos")]
+use std::time::Duration;
 
 #[cfg(target_os = "linux")]
 const DEFAULT_WORLD_SOCKET_PATH: &str = "/run/substrate.sock";
@@ -109,11 +115,11 @@ fn call_gateway_action(action: GatewayAction) -> anyhow::Result<GatewayLifecycle
         let request = build_gateway_request()?;
         let client = build_macos_gateway_client()?;
 
-        return match action {
+        match action {
             GatewayAction::Status => client.client.gateway_status(request).await_result(),
             GatewayAction::Sync => client.client.gateway_sync(request).await_result(),
             GatewayAction::Restart => client.client.gateway_restart(request).await_result(),
-        };
+        }
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -147,7 +153,7 @@ fn build_macos_gateway_client() -> anyhow::Result<MacosGatewayClient> {
     let default_sock = dirs::home_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join(".substrate/sock/agent.sock");
-    if default_sock.exists() {
+    if default_sock.exists() && probe_gateway_caps_uds(&default_sock) {
         return Ok(MacosGatewayClient {
             client: AgentClient::unix_socket(default_sock)?,
             _forwarding: None,
@@ -188,7 +194,7 @@ fn resolve_macos_gateway_client_endpoint() -> MacosGatewayClientEndpoint {
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join(".substrate/sock/agent.sock");
 
-    if default_sock.exists() {
+    if default_sock.exists() && probe_gateway_caps_uds(&default_sock) {
         MacosGatewayClientEndpoint::Unix(default_sock)
     } else {
         MacosGatewayClientEndpoint::Tcp {
@@ -198,15 +204,24 @@ fn resolve_macos_gateway_client_endpoint() -> MacosGatewayClientEndpoint {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
-fn call_gateway_action(action: GatewayAction) -> anyhow::Result<GatewayLifecycleResponseV1> {
-    let client = build_gateway_client()?;
-    let request = build_gateway_request()?;
+#[cfg(target_os = "macos")]
+fn probe_gateway_caps_uds(path: &std::path::Path) -> bool {
+    let Ok(mut stream) = UnixStream::connect(path) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+    let request = b"GET /v1/capabilities HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+    if stream.write_all(request).is_err() {
+        return false;
+    }
 
-    match action {
-        GatewayAction::Status => client.gateway_status(request).await_result(),
-        GatewayAction::Sync => client.gateway_sync(request).await_result(),
-        GatewayAction::Restart => client.gateway_restart(request).await_result(),
+    let mut buf = [0u8; 512];
+    match stream.read(&mut buf) {
+        Ok(n) if n > 0 => std::str::from_utf8(&buf[..n])
+            .unwrap_or("")
+            .contains(" 200 "),
+        _ => false,
     }
 }
 
@@ -636,7 +651,15 @@ mod tests {
         let home = temp.path();
         let sock = home.join(".substrate/sock/agent.sock");
         std::fs::create_dir_all(sock.parent().expect("sock parent")).expect("create sock dir");
-        std::fs::write(&sock, "").expect("create placeholder socket path");
+        let listener = std::os::unix::net::UnixListener::bind(&sock).expect("bind listener");
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut buf = [0u8; 256];
+            let _ = stream.read(&mut buf);
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}")
+                .expect("write response");
+        });
 
         with_env_var("HOME", Some(home.as_os_str()), || {
             with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
@@ -648,6 +671,8 @@ mod tests {
                 }
             })
         });
+
+        server.join().expect("join server");
     }
 
     #[test]
@@ -664,6 +689,29 @@ mod tests {
                     }
                     MacosGatewayClientEndpoint::Unix(path) => {
                         panic!("expected tcp fallback when socket is missing, got {path:?}")
+                    }
+                }
+            })
+        });
+    }
+
+    #[test]
+    fn macos_gateway_client_endpoint_falls_back_to_tcp_when_host_socket_is_stale() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let home = temp.path();
+        let sock = home.join(".substrate/sock/agent.sock");
+        std::fs::create_dir_all(sock.parent().expect("sock parent")).expect("create sock dir");
+        std::fs::write(&sock, "").expect("create placeholder socket path");
+
+        with_env_var("HOME", Some(home.as_os_str()), || {
+            with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
+                match resolve_macos_gateway_client_endpoint() {
+                    MacosGatewayClientEndpoint::Tcp { host, port } => {
+                        assert_eq!(host, "127.0.0.1");
+                        assert_eq!(port, 17788);
+                    }
+                    MacosGatewayClientEndpoint::Unix(path) => {
+                        panic!("expected tcp fallback when socket is stale, got {path:?}")
                     }
                 }
             })
