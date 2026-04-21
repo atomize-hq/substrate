@@ -2,7 +2,7 @@ use crate::execution::config_model::{self, CliConfigOverrides, LlmGatewayMode};
 use crate::execution::policy_snapshot::{
     request_world_network_routing, resolve_world_network_policy_for_cwd,
 };
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(target_os = "windows")]
 use crate::execution::pw;
 use crate::execution::{WorldGatewayAction, WorldGatewayCmd, WorldGatewayStatusArgs};
 use agent_api_client::AgentClient;
@@ -103,6 +103,102 @@ fn run_typed_action(command: &str, action: GatewayAction) -> anyhow::Result<i32>
     Ok(0)
 }
 
+fn call_gateway_action(action: GatewayAction) -> anyhow::Result<GatewayLifecycleResponseV1> {
+    #[cfg(target_os = "macos")]
+    {
+        let request = build_gateway_request()?;
+        let client = build_macos_gateway_client()?;
+
+        return match action {
+            GatewayAction::Status => client.client.gateway_status(request).await_result(),
+            GatewayAction::Sync => client.client.gateway_sync(request).await_result(),
+            GatewayAction::Restart => client.client.gateway_restart(request).await_result(),
+        };
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let client = build_gateway_client()?;
+        let request = build_gateway_request()?;
+
+        match action {
+            GatewayAction::Status => client.gateway_status(request).await_result(),
+            GatewayAction::Sync => client.gateway_sync(request).await_result(),
+            GatewayAction::Restart => client.gateway_restart(request).await_result(),
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+struct MacosGatewayClient {
+    client: AgentClient,
+    _forwarding: Option<world_mac_lima::ForwardingHandle>,
+}
+
+#[cfg(target_os = "macos")]
+fn build_macos_gateway_client() -> anyhow::Result<MacosGatewayClient> {
+    if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
+        return Ok(MacosGatewayClient {
+            client: AgentClient::unix_socket(std::path::PathBuf::from(socket_path))?,
+            _forwarding: None,
+        });
+    }
+
+    let default_sock = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".substrate/sock/agent.sock");
+    if default_sock.exists() {
+        return Ok(MacosGatewayClient {
+            client: AgentClient::unix_socket(default_sock)?,
+            _forwarding: None,
+        });
+    }
+
+    let vm_name = std::env::var("SUBSTRATE_LIMA_VM_NAME")
+        .or_else(|_| std::env::var("LIMA_VM_NAME"))
+        .unwrap_or_else(|_| "substrate".to_string());
+    let forwarding = world_mac_lima::forwarding::auto_select(&vm_name)?;
+    let client = match forwarding.kind() {
+        world_mac_lima::ForwardingKind::SshUds { path } => AgentClient::unix_socket(path.clone())?,
+        world_mac_lima::ForwardingKind::SshTcp { port }
+        | world_mac_lima::ForwardingKind::Vsock { port } => AgentClient::tcp("127.0.0.1", *port)?,
+    };
+
+    Ok(MacosGatewayClient {
+        client,
+        _forwarding: Some(forwarding),
+    })
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(target_os = "macos")]
+enum MacosGatewayClientEndpoint {
+    Unix(std::path::PathBuf),
+    Tcp { host: String, port: u16 },
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(target_os = "macos")]
+fn resolve_macos_gateway_client_endpoint() -> MacosGatewayClientEndpoint {
+    if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
+        return MacosGatewayClientEndpoint::Unix(std::path::PathBuf::from(socket_path));
+    }
+
+    let default_sock = dirs::home_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join(".substrate/sock/agent.sock");
+
+    if default_sock.exists() {
+        MacosGatewayClientEndpoint::Unix(default_sock)
+    } else {
+        MacosGatewayClientEndpoint::Tcp {
+            host: "127.0.0.1".to_string(),
+            port: 17788,
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
 fn call_gateway_action(action: GatewayAction) -> anyhow::Result<GatewayLifecycleResponseV1> {
     let client = build_gateway_client()?;
     let request = build_gateway_request()?;
@@ -485,20 +581,6 @@ fn build_gateway_client() -> anyhow::Result<AgentClient> {
     AgentClient::unix_socket(socket_path)
 }
 
-#[cfg(target_os = "macos")]
-fn build_gateway_client() -> anyhow::Result<AgentClient> {
-    if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
-        return AgentClient::unix_socket(std::path::PathBuf::from(socket_path));
-    }
-
-    let ctx = pw::detect()?;
-    match &ctx.transport {
-        pw::WorldTransport::Unix(path) => AgentClient::unix_socket(path),
-        pw::WorldTransport::Tcp { host, port } => AgentClient::tcp(host, *port),
-        pw::WorldTransport::Vsock { port } => AgentClient::tcp("127.0.0.1", *port),
-    }
-}
-
 #[cfg(target_os = "windows")]
 fn build_gateway_client() -> anyhow::Result<AgentClient> {
     pw::windows::build_agent_client()
@@ -527,5 +609,64 @@ where
     fn await_result(self) -> anyhow::Result<GatewayLifecycleResponseV1> {
         let runtime = tokio::runtime::Runtime::new()?;
         runtime.block_on(self)
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    fn with_env_var<T>(key: &str, value: Option<&std::ffi::OsStr>, f: impl FnOnce() -> T) -> T {
+        let prev = std::env::var_os(key);
+        match value {
+            Some(value) => std::env::set_var(key, value),
+            None => std::env::remove_var(key),
+        }
+        let result = f();
+        match prev {
+            Some(value) => std::env::set_var(key, value),
+            None => std::env::remove_var(key),
+        }
+        result
+    }
+
+    #[test]
+    fn macos_gateway_client_endpoint_prefers_existing_host_socket() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let home = temp.path();
+        let sock = home.join(".substrate/sock/agent.sock");
+        std::fs::create_dir_all(sock.parent().expect("sock parent")).expect("create sock dir");
+        std::fs::write(&sock, "").expect("create placeholder socket path");
+
+        with_env_var("HOME", Some(home.as_os_str()), || {
+            with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
+                match resolve_macos_gateway_client_endpoint() {
+                    MacosGatewayClientEndpoint::Unix(path) => assert_eq!(path, sock),
+                    MacosGatewayClientEndpoint::Tcp { .. } => {
+                        panic!("expected unix endpoint when host socket exists")
+                    }
+                }
+            })
+        });
+    }
+
+    #[test]
+    fn macos_gateway_client_endpoint_falls_back_to_tcp_when_host_socket_missing() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let home = temp.path();
+
+        with_env_var("HOME", Some(home.as_os_str()), || {
+            with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
+                match resolve_macos_gateway_client_endpoint() {
+                    MacosGatewayClientEndpoint::Tcp { host, port } => {
+                        assert_eq!(host, "127.0.0.1");
+                        assert_eq!(port, 17788);
+                    }
+                    MacosGatewayClientEndpoint::Unix(path) => {
+                        panic!("expected tcp fallback when socket is missing, got {path:?}")
+                    }
+                }
+            })
+        });
     }
 }
