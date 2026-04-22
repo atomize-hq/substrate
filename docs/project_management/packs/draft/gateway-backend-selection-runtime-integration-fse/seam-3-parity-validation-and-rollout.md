@@ -3,7 +3,7 @@ seam_id: SEAM-3
 seam_slug: parity-validation-and-rollout
 type: conformance
 status: proposed
-execution_horizon: future
+execution_horizon: next
 plan_version: v1
 basis:
   currentness: provisional
@@ -122,13 +122,13 @@ open_remediations: []
   - Risk:
     - parity work can drift back into upstream contract design if runtime realization remains unsettled
   - De-risk plan:
-    - keep this seam future-only until `THR-01` and `THR-02` are published and a real additional backend exists to validate
+    - keep this seam queued behind active runtime realization until `THR-02` is published and a real additional backend exists to validate
 - **Rollout / safety**:
-  - This seam remains `future` because parity and rollout proof should verify landed upstream implementation rather than race ahead of it.
+  - This seam is now `next` because parity and rollout proof should verify landed upstream implementation rather than race ahead of it.
   - Safety depends on keeping `cli:codex` as the regression floor while proving explicit no-fallback behavior for unsupported backends.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `future` because it depends on upstream runtime implementation landing first, not because it needs another round of contract authoring.
+    - `next` because it depends on upstream runtime implementation landing first, not because it needs another round of contract authoring.
   - Which threads matter most
     - `THR-01`
     - `THR-02`

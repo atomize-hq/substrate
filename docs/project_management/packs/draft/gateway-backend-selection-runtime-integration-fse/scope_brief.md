@@ -4,15 +4,15 @@ pack_version: v1
 pack_status: extracted
 source_ref: docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md + docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/pre-planning/
 execution_horizon:
-  active_seam: SEAM-1
-  next_seam: SEAM-2
+  active_seam: SEAM-2
+  next_seam: SEAM-3
 ---
 
 # Scope Brief - gateway-backend-selection-runtime-integration
 
 - **Goal**:
   - Execute ADR-0046 as an implementation pack that turns the current hardcoded `cli:codex` integrated lifecycle into an inventory-backed backend realization path.
-  - Finish the minimum remaining `SEAM-1` contract alignment needed to make backend selection and policy inputs deterministic in implementation, then use that handoff to drive runtime realization and later parity proof.
+  - Consume the landed `SEAM-1` selection/policy handoff and use it to drive runtime realization in `SEAM-2`, then later parity proof in `SEAM-3`.
 - **Why now**:
   - ADR-0046 already defines the intended implementation seam, and the repo already has canonical selection, policy, protocol, and runtime-parity contracts.
   - The actual gap is execution: `world-agent` and shell still realize only a Codex-specific runtime path, so the pack needs to drive implementation rather than produce more contract/governance scaffolding.
@@ -40,9 +40,10 @@ execution_horizon:
   - The pack stays compatible with ADR-0046 while treating the existing canonical contracts as upstream constraints rather than placeholders for more governance publication.
 - **Constraints**:
   - Keep lifecycle state separate from basis freshness.
-  - `SEAM-1` is the active execution target and may begin with a narrow `S00` contract-alignment slice before implementation slices.
-  - `SEAM-2` is implementation work gated by `SEAM-1`, not another contract-publication seam.
-  - `SEAM-3` is a later validation/rollout seam that begins only after runtime realization exists and a named additional backend baseline is chosen.
+  - `SEAM-1` is landed evidence now, not an open execution target.
+  - `SEAM-2` is the active execution target and should proceed as implementation work against the published selection/policy handoff rather than reopen contract publication.
+  - `SEAM-2` does not require a contract-definition `S00`; the protocol and schema baselines already exist canonically under `docs/contracts/`.
+  - `SEAM-3` is the next validation/rollout seam and begins only after runtime realization exists and `THR-02` publishes.
   - Canonical contract artifacts live under `docs/contracts/`, but this pack does not assume broad new contract publication work.
   - Feature-local ADR-0046 docs remain supporting implementation and verification surfaces.
   - Planning IDs remain confined to planning/governance artifacts.

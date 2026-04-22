@@ -2,14 +2,15 @@
 seam_id: SEAM-2
 seam_slug: runtime-realization-and-artifacts
 type: integration
-status: proposed
-execution_horizon: next
+status: exec-ready
+execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
   required_threads:
     - THR-01
     - THR-02
@@ -19,9 +20,9 @@ basis:
     - world-agent runtime launch or artifact management changes before this seam lands
 gates:
   pre_exec:
-    review: pending
+    review: passed
     contract: passed
-    revalidation: pending
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -97,9 +98,9 @@ open_remediations: []
 - **Verification**:
   - This seam consumes canonical contracts `C-01`, `C-02`, `C-03`, and `C-04`. The repo already has durable contract truth for adapter lookup ordering, capability/error taxonomy, and auth-source precedence; this seam should execute against that truth instead of reopening it.
   - Current pre-exec gate posture is:
-    - `review: pending` because seam-local execution planning and slice decomposition have not yet been published.
-    - `contract: passed` because `docs/contracts/substrate-gateway-backend-adapter-protocol.md`, `docs/contracts/substrate-gateway-backend-adapter-schema.md`, and `docs/contracts/substrate-gateway-policy-evaluation.md` already cover lookup order, capability gating, bounded error kinds, and env-primary/file-fallback auth precedence. The remaining prerequisite is upstream `THR-01` inventory-root publication, not a new `SEAM-2` contract definition step.
-    - `revalidation: pending` because the current code still hardcodes `cli:codex` in request construction and runtime realization, so the seam must prove implementation alignment once `THR-01` settles.
+    - `review: passed` because seam-local execution planning and review now live under `threaded-seams/seam-2-runtime-realization-and-artifacts/`.
+    - `contract: passed` because `docs/contracts/substrate-gateway-backend-adapter-protocol.md`, `docs/contracts/substrate-gateway-backend-adapter-schema.md`, and `docs/contracts/substrate-gateway-policy-evaluation.md` already cover lookup order, capability gating, bounded error kinds, and env-primary/file-fallback auth precedence.
+    - `revalidation: passed` because `SEAM-1` published `THR-01`, the new seam-local review rechecked the active basis against that closeout, and current repo evidence still shows the exact Codex-only runtime gaps this seam is planned to land.
   - Later seam-local verification should prove:
     - selected non-Codex backends no longer disappear behind the current `cli:codex` checks in `crates/shell/src/builtins/world_gateway.rs` and `crates/world-agent/src/gateway_runtime.rs`
     - adapter lookup and capability gating happen against the selected backend before launch
@@ -130,11 +131,11 @@ open_remediations: []
   - De-risk plan:
     - treat config path, manifest path, and managed log inspectability as one owned runtime-artifact surface
 - **Rollout / safety**:
-  - This seam stays `next` because it is the first execution seam after `SEAM-1`: once selection/inventory truth publishes, the remaining work is code, tests, and artifact validation rather than more contract invention.
+  - This seam is now `active` and `exec-ready` because the selection/inventory truth published through `SEAM-1`, and the remaining work is code, tests, and artifact validation rather than more contract invention.
   - Safety depends on consuming published `SEAM-1` truth rather than backfilling it inside runtime code, and on preserving the existing fail-closed policy boundary while widening runtime support.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `next` because it is the immediate downstream execution target after `THR-01` publishes.
+    - `active` because it is the immediate downstream execution target after `THR-01` published, and the seam-local review now makes the remaining work executable.
   - Which threads matter most
     - `THR-01`
     - `THR-02`
@@ -145,7 +146,7 @@ open_remediations: []
     - explicit no-fallback behavior for unsupported backends
     - tests needed to prove sync/status/restart keep the selected backend stable
   - Why deeper planning stays provisional
-    - deeper planning stays provisional only until `SEAM-1` publishes the remaining inventory-root and filename/id truth; after that, this seam should move straight into execution
+    - deeper planning no longer stays provisional; the seam basis is current, the review bundle passed, and the seam should now execute directly against the landed handoff
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - none required for execution; this seam should consume the existing canonical contracts rather than create new blocker docs

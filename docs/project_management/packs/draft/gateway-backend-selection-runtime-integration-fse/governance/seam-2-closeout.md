@@ -1,13 +1,13 @@
 ---
 seam_id: SEAM-2
-status: proposed
+status: exec-ready
 closeout_version: v1
 seam_exit_gate:
   source_ref: ../threaded-seams/seam-2-runtime-realization-and-artifacts/slice-99-seam-exit-gate.md
   status: pending
   promotion_readiness: blocked
 basis:
-  currentness: provisional
+  currentness: current
   upstream_closeouts:
     - governance/seam-1-closeout.md
   required_threads:
@@ -24,7 +24,7 @@ open_remediations: []
 
 # Closeout - SEAM-2 Runtime realization and artifacts
 
-This scaffold is reserved for the post-exec closeout once the next seam lands.
+This scaffold is reserved for the post-exec closeout once the active seam lands.
 
 ## Seam-exit gate record
 
@@ -52,9 +52,9 @@ This scaffold is reserved for the post-exec closeout once the next seam lands.
 - **Remediation disposition**:
   - no seam-local pre-exec contract remediations should remain; record any carried-forward execution issues here if they emerge during landing
 - **Promotion blockers**:
-  - promotion remains blocked until `THR-01` publishes and the runtime implementation/tests land
+  - promotion remains blocked until the runtime implementation/tests land and the seam-exit gate passes
 - **Promotion readiness**:
-  - blocked until `THR-01` is published, the runtime implementation lands, and the seam-exit gate passes
+  - blocked until the runtime implementation lands and the seam-exit gate passes
 
 ## Post-exec gate disposition
 

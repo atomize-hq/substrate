@@ -30,20 +30,20 @@ Start here:
 
 Execution horizon:
 
-- Active seam: `SEAM-1`
-- Next seam: `SEAM-2`
-- Future seam(s): `SEAM-3`
+- Active seam: `SEAM-2`
+- Next seam: `SEAM-3`
+- Future seam(s): none currently queued beyond `SEAM-3`
 
 Horizon inference:
 
-- `SEAM-1` is active because the remaining repo ambiguity is narrow and localized: selection/policy consumer alignment plus one explicit inventory-root/filename consistency read for implementation surfaces.
-- `SEAM-2` is next because runtime realization should start only after `SEAM-1` locks those inputs and lands consumer evidence, but it is implementation work rather than another contract-publication seam.
-- `SEAM-3` stays future because parity and rollout proof should verify a landed runtime path and a named additional backend baseline, not invent either one.
+- `SEAM-2` is active because `SEAM-1` published `THR-01`, the selection and policy handoff is now landed, and the remaining work is executable runtime realization rather than more contract alignment.
+- `SEAM-3` is next because parity and rollout proof should follow the runtime path that `SEAM-2` lands, not run ahead of it.
+- No later seam is queued behind `SEAM-3` in the current pack.
 
 Policy:
 
 - only the active seam is eligible for authoritative downstream deep planning by default
-- the next seam starts after `SEAM-1` lands the selection/policy handoff and its implementation evidence
+- the next seam starts after `SEAM-2` lands runtime realization and publishes `THR-02`
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that still need a narrow contract-alignment slice may reserve `S00` for that boundary work before implementation slices
 - future seams remain deferred until their execution preconditions exist
@@ -55,3 +55,9 @@ Source-pack crosswalk:
 - lineage `GBSRI-01` and `seam-planning/backend-selection-and-policy.md` map to `SEAM-1`
 - lineage `GBSRI-02` and `seam-planning/runtime-realization-and-artifacts.md` map to `SEAM-2`
 - lineage `GBSRI-03` and `seam-planning/parity-validation-and-rollout.md` map to `SEAM-3`
+
+Current pack posture:
+
+- `SEAM-1` is landed and closed out as the published selection/policy handoff.
+- `SEAM-2` is now the active execution seam with seam-local planning and pre-exec review in place.
+- `SEAM-3` remains queued as the next seam and does not deep-plan until `THR-02` publishes.

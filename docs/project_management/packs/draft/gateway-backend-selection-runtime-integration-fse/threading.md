@@ -2,18 +2,17 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-1`
-  - This seam locks the selection/policy handoff and lands consumer alignment so runtime work can proceed on fixed inputs.
-- **Next seam**: `SEAM-2`
-  - This seam implements the adapter-driven runtime path from the `SEAM-1` handoff.
-- **Future seams**: `SEAM-3`
-  - This seam verifies parity and rollout posture after runtime realization exists and a named additional backend is chosen.
+- **Active seam**: `SEAM-2`
+  - This seam implements the adapter-driven runtime path from the now-landed `SEAM-1` handoff.
+- **Next seam**: `SEAM-3`
+  - This seam verifies parity and rollout posture after `SEAM-2` lands runtime realization and publishes `THR-02`.
+- **Future seams**: none currently queued beyond `SEAM-3`
 
 Horizon policy for this pack:
 
 - only the active seam gets authoritative downstream deep planning by default
-- the next seam starts after `SEAM-1` publishes `THR-01` and records closeout evidence
-- the future seam remains deferred until runtime realization exists and a later rollout baseline is intentional rather than speculative
+- the next seam starts after `SEAM-2` publishes `THR-02` and records closeout evidence
+- no later seam is queued until a safe post-`SEAM-3` target is intentionally added
 
 ## Contract registry
 
@@ -90,10 +89,10 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: make the existing selection and policy contracts executable in repo consumers so runtime realization does not infer truth from the current Codex-only path.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: selection order, backend inventory rules, allowlist semantics, auth precedence, or policy failure taxonomy changes.
   - **Satisfied by**: `governance/seam-1-closeout.md` plus evidence that shell, broker, config/policy surfaces, and any later subordinate ADR-0046 support docs align to `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`.
-  - **Notes**: the canonical contracts are already published, and the thread is `published` because `SEAM-1` recorded closeout evidence and the closeout marks `THR-01` as `published`.
+  - **Notes**: the canonical contracts were published by `SEAM-1`, and the thread is now `revalidated` because active `SEAM-2` rechecked its basis against `governance/seam-1-closeout.md` and the new seam-local `review.md`.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-2`
@@ -130,7 +129,7 @@ flowchart LR
    - lock the selection and policy handoff in implementation surfaces
    - publish `THR-01` and record the closeout evidence that retired `REM-001` / `REM-002`
 2. `SEAM-2` second:
-   - implement adapter lookup, capability gating, auth validation, config render, manifests, readiness, and restart behavior using the `SEAM-1` handoff
+   - implement adapter lookup, capability gating, auth validation, config render, manifests, readiness, and restart behavior using the revalidated `SEAM-1` handoff
    - any schema hardening happens only as needed to land runtime behavior
 3. `SEAM-3` third:
    - validate parity and rollout after the runtime path exists
@@ -140,13 +139,13 @@ flowchart LR
 
 - **Selection and policy implementation lane**
   - Primary seam: `SEAM-1`
-  - Focus: selected-backend source of truth, allowlists, auth precedence, inventory/root alignment, trusted-input boundary, broker/shell/config consumer evidence
+  - Focus: landed selected-backend source of truth, allowlists, auth precedence, inventory/root alignment, trusted-input boundary, broker/shell/config consumer evidence
 - **Runtime realization lane**
   - Primary seam: `SEAM-2`
-  - Focus: binding lookup, capability gates, auth validation, config render, artifact semantics, launch and restart order
+  - Focus: active binding lookup, capability gates, auth validation, config render, artifact semantics, launch and restart order
 - **Parity and rollout lane**
   - Primary seam: `SEAM-3`
-  - Focus: regression matrix, unsupported-backend behavior, Linux/macOS/Windows evidence, later additional-backend rollout proof
+  - Focus: next regression matrix, unsupported-backend behavior, Linux/macOS/Windows evidence, later additional-backend rollout proof
 
 Workstream note:
 

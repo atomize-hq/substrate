@@ -2,7 +2,7 @@
 seam_id: SEAM-1
 seam_slug: backend-selection-and-policy-surface
 type: integration
-status: exec-ready
+status: landed
 execution_horizon: active
 plan_version: v1
 basis:
@@ -22,15 +22,13 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
-open_remediations:
-  - REM-001
-  - REM-002
+  status: passed
+open_remediations: []
 ---
 
 # SEAM-1 - Backend selection and policy surface
@@ -93,7 +91,7 @@ open_remediations:
     - `review: passed` because the seam-local review bundle still exposes falsifiable selected-backend and auth-boundary flows.
     - `contract: passed` because canonical `docs/contracts/` refs already publish the selection, inventory, precedence, and fail-closed rules this seam needs.
     - `revalidation: passed` because the current shell still preserves the main failure buckets and Codex auth precedence rules, even though generic backend realization remains unimplemented.
-    - `status: exec-ready` is now justified because the pre-exec gates all pass, the basis remains `current`, and the remaining open remediations target seam exit and closeout publication rather than the `decomposed -> exec-ready` transition.
+    - `status: landed` is now justified because the seam-exit gate passed, `THR-01` published, post-exec gates passed, and `REM-001` / `REM-002` were resolved in closeout.
   - Later seam-local verification should prove:
     - `validate_gateway_lifecycle_config` and `build_gateway_request` reject empty, malformed, unknown, or disallowed selected backends before runtime dispatch, with landed evidence captured by `world_gateway_missing_inventory_uses_exit_code_2_before_socket_dispatch`, `world_gateway_inventory_filename_id_mismatch_uses_exit_code_2`, and `world_gateway_allowlist_denial_uses_exit_code_5`
     - `resolve_integrated_auth_payload` and `resolve_cli_codex_integrated_auth` enforce env-primary/file-fallback/no-mixed-source auth precedence
@@ -117,11 +115,11 @@ open_remediations:
   - De-risk plan:
     - keep shell-owned buckets explicit and hand runtime-owned availability/binding questions to `SEAM-2`
 - **Rollout / safety**:
-  - This seam is safe to execute first because it tightens shell-side validation and evidence without widening operator surface area.
+  - This seam landed safely by tightening shell-side validation and evidence without widening operator surface area.
   - Safety depends on failing closed before runtime launch and keeping gateway-local state out of authorization truth.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `active` because shell adoption of `C-01` / `C-02` is the last missing upstream execution boundary before adapter/runtime work.
+    - this seam was the initial active boundary because shell adoption of `C-01` / `C-02` was the last missing upstream execution boundary before adapter/runtime work; it is now landed.
   - Which threads matter most
     - `THR-01`
   - What the first seam-local review should focus on
