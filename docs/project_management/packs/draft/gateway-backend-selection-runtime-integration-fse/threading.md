@@ -16,6 +16,12 @@ Horizon policy for this extracted pack:
 - the next seam stays provisional because open upstream authority questions still affect contract-publication surfaces, which disqualifies deeper planning from becoming authoritative yet
 - the future seam remains seam-brief-only until upstream contracts publish and revalidation can consume recorded truth
 
+Publication model note:
+
+- This pack intentionally follows Option A: seam-owned contract publication targets are the feature-local ADR-0046 docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`.
+- This is an intentional repo-local variation from the extractor template because `pre-planning/spec_manifest.md` assigns the ADR-0046 delta surfaces to those feature-local docs.
+- External `docs/contracts/*` docs remain consumed authorities/evidence and compatibility baselines only.
+
 ## Contract registry
 
 - **Contract ID**: `C-01`
@@ -66,7 +72,7 @@ Horizon policy for this extracted pack:
   - **Direct consumers**: `SEAM-3`
   - **Derived consumers**: shared request types, integrated auth payloads, runtime artifact handling, failure reporting
   - **Thread IDs**: `THR-02`
-  - **Definition**: integrated adapter binding metadata, auth handoff payload shapes, runtime config payload shapes, managed runtime artifact naming/permission rules, and explicit failure-shape semantics for missing binding, missing auth material, and unsupported capabilities.
+  - **Definition**: integrated adapter binding metadata, auth handoff payload shapes, auth handoff delivery-model rules, runtime config payload shapes, managed runtime artifact naming/permission rules, and explicit failure-shape semantics for missing binding, missing auth material, and unsupported capabilities.
   - **Owned feature-local outputs**:
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/filesystem-semantics-spec.md`
@@ -108,11 +114,11 @@ Horizon policy for this extracted pack:
   - **Producer seam**: `SEAM-2`
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-03`, `C-04`
-  - **Purpose**: publish one integrated runtime realization truth that parity and rollout proof can verify without inventing missing classification or artifact rules.
+  - **Purpose**: publish one integrated runtime realization truth that parity and rollout proof can verify without inventing missing classification, auth handoff delivery-model, or artifact rules.
   - **State**: `identified`
-  - **Revalidation trigger**: binding lookup rules, capability gates, auth handoff classification, artifact naming, readiness semantics, or restart behavior changes.
+  - **Revalidation trigger**: binding lookup rules, capability gates, auth handoff classification, auth handoff delivery-model rules, artifact naming, readiness semantics, or restart behavior changes.
   - **Satisfied by**: future `governance/seam-2-closeout.md` plus landed feature-local outputs in `gateway-runtime-adapter-protocol-spec.md`, `gateway-runtime-adapter-schema-spec.md`, and `filesystem-semantics-spec.md`, validated against the consumed external authorities.
-  - **Notes**: this thread must not publish tuple metadata or status-schema widening as part of runtime realization.
+  - **Notes**: this thread must not publish tuple metadata or status-schema widening as part of runtime realization, and it must explicitly close the unresolved delivery-rule choice between env-only, file-only, or one fixed mixed model with explicit precedence.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-3`
@@ -141,7 +147,7 @@ flowchart LR
    - unresolved items `REM-001` and `REM-002` make this seam the current blocker
 2. `SEAM-2` second:
    - runtime realization can only become authoritative after `SEAM-1` publishes the selection/policy boundary
-   - unresolved items `REM-003` and `REM-004` keep this seam provisional until the active seam handoff exists
+   - unresolved items `REM-003`, `REM-004`, and `REM-006` keep this seam provisional until the active seam handoff exists
 3. `SEAM-3` third:
    - parity and rollout proof should verify published runtime truth, not invent it
    - unresolved item `REM-005` means there is no valid additional-backend baseline yet
@@ -153,7 +159,7 @@ flowchart LR
   - Focus: selection order, allowlists, auth precedence, inventory roots, filename rules, trusted-input boundary
 - **Runtime realization lane**
   - Primary seam: `SEAM-2`
-  - Focus: binding lookup, capability gates, auth handoff classification, config render, artifact semantics, launch and restart order
+  - Focus: binding lookup, capability gates, auth handoff classification, auth handoff delivery-model rules, config render, artifact semantics, launch and restart order
 - **Parity and rollout lane**
   - Primary seam: `SEAM-3`
   - Focus: first additional backend baseline, regression matrix, unsupported-backend behavior, Linux/macOS/Windows evidence

@@ -4,6 +4,12 @@ Source: `docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-r
 
 This pack captures a governance-ready v2.5 seam extraction for ADR-0046 using the existing pre-planning pack as basis. It intentionally stays one level above seam-local decomposition: no seam-local planning docs, slice files, candidate subslices, or execution units are created here.
 
+Publication model for this pack:
+
+- This pack intentionally uses the feature-local ADR-0046 docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/` as the seam-owned publication targets.
+- This is an intentional repo-local variation from the extractor template because the pre-planning manifest assigns the ADR-0046 deltas to those feature-local docs.
+- External `docs/contracts/*` gateway docs remain consumed authorities and evidence only in this pack.
+
 Restated scope and assumptions:
 
 - Realize ADR-0041 backend selection inside the integrated gateway lifecycle without reopening ADR-0040 ownership, ADR-0042 identity-tuple posture, or ADR-0043 tuple-policy work.
@@ -30,7 +36,7 @@ Execution horizon:
 Horizon inference:
 
 - `SEAM-1` is active because the repo still lacks a fixed contract for backend inventory roots, filename rules, and auth-source precedence beyond the current Codex-only code path.
-- `SEAM-2` is next because runtime realization work is blocked on `SEAM-1` publishing the selection/policy truth, and because the remaining runtime questions are still contract-authority-sensitive enough to stay provisional.
+- `SEAM-2` is next because runtime realization work is blocked on `SEAM-1` publishing the selection/policy truth, and because the remaining runtime questions, including the unresolved integrated auth handoff delivery rule, are still contract-authority-sensitive enough to stay provisional.
 - `SEAM-3` stays future because parity, validation, and rollout proof depend on both published upstream contracts and a named first additional integrated backend baseline that does not yet exist in repo truth.
 
 Policy:

@@ -31,6 +31,7 @@ seam_exit_gate:
 open_remediations:
   - REM-003
   - REM-004
+  - REM-006
 ---
 
 # SEAM-2 - Runtime realization and artifacts
@@ -44,6 +45,7 @@ open_remediations:
     - required capability gating
     - missing binding classification
     - missing auth handoff material classification after policy permits the read path
+    - integrated auth handoff delivery rule into the runtime: env-only, file-only, or one fixed mixed model with explicit precedence
     - adapter-driven config render
     - runtime artifact roots, naming, permissions, and inspectability
     - launch, readiness, and restart order
@@ -62,9 +64,11 @@ open_remediations:
     - one landed ADR-0046 delta in `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md`
     - one landed ADR-0046 delta in `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/filesystem-semantics-spec.md`
     - explicit classification for missing binding and missing auth material carried by `THR-02`
+    - one fixed integrated auth handoff delivery rule carried by `THR-02`
 - **Key invariants / rules**:
   - one selected backend resolves to one integrated adapter binding
   - capability gating, auth validation, config render, launch, and readiness must have one fixed order
+  - auth handoff delivery into the integrated runtime must use one explicit model rather than remaining an implicit byproduct of the current Codex path
   - runtime artifact semantics must not become implicit side effects of the current Codex-specific launch path
   - this seam must consume, not redefine, `SEAM-1` selection/policy truth
   - this seam must not widen operator commands, `status --json`, or tuple surfaces
@@ -90,10 +94,11 @@ open_remediations:
   - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
 - **Verification**:
   - This seam consumes upstream contracts `C-01` and `C-02`; verification may depend on accepted upstream evidence for selection order, policy gates, auth precedence, and inventory rules.
-  - This seam produces owned contracts `C-03` and `C-04` through the feature-local ADR-0046 docs `gateway-runtime-adapter-protocol-spec.md`, `gateway-runtime-adapter-schema-spec.md`, and `filesystem-semantics-spec.md`. Verification at seam-brief depth is those feature-local deltas becoming concrete enough for seam-local planning and implementation: binding lookup, capability taxonomy, auth handoff shapes, artifact semantics, and runtime ordering.
+  - This seam produces owned contracts `C-03` and `C-04` through the feature-local ADR-0046 docs `gateway-runtime-adapter-protocol-spec.md`, `gateway-runtime-adapter-schema-spec.md`, and `filesystem-semantics-spec.md`. Verification at seam-brief depth is those feature-local deltas becoming concrete enough for seam-local planning and implementation: binding lookup, capability taxonomy, auth handoff shapes, auth handoff delivery-model rules, artifact semantics, and runtime ordering.
   - The consumed external authorities under `docs/contracts/*` remain compatibility dependencies; verification here does not require editing them.
   - Later seam-local verification should prove:
     - missing binding and missing auth material are classified explicitly
+    - the integrated runtime uses one explicit auth handoff delivery rule: env-only, file-only, or one fixed mixed model with explicit precedence
     - adapter-driven config render replaces the static Codex-only render path
     - managed artifacts have fixed roots, names, and inspectability rules
     - restart preserves the selected backend contract instead of re-deriving behavior ad hoc
@@ -116,6 +121,10 @@ open_remediations:
   - De-risk plan:
     - keep those classifications as first-class runtime remediations before seam-local protocol/schema planning
   - Risk:
+    - the runtime delivery model for auth handoff is still unresolved, so downstream protocol/schema work can accidentally mix env and file paths without one explicit rule
+  - De-risk plan:
+    - record one blocking remediation for the delivery model and force seam-local review to choose env-only, file-only, or one fixed mixed model with explicit precedence
+  - Risk:
     - runtime artifact semantics can drift between shell, world-agent, and operator documentation
   - De-risk plan:
     - treat config path, manifest path, and managed log inspectability as one owned runtime-artifact surface
@@ -132,6 +141,7 @@ open_remediations:
     - binding lookup semantics
     - missing-binding classification
     - missing-auth classification
+    - auth handoff delivery model into the runtime
     - integrated auth payload widening strategy
     - runtime artifact roots and permissions
     - whether `S00` is needed to freeze protocol/schema truth before implementation slices begin

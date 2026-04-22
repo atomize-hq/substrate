@@ -14,7 +14,7 @@ basis:
     - THR-01
     - THR-02
   stale_triggers:
-    - revalidate downstream seams if binding classification, auth classification, or runtime artifact semantics change
+    - revalidate downstream seams if binding classification, auth classification, auth handoff delivery-model rules, or runtime artifact semantics change
 gates:
   post_exec:
     landing: pending
@@ -22,6 +22,7 @@ gates:
 open_remediations:
   - REM-003
   - REM-004
+  - REM-006
 ---
 
 # Closeout - SEAM-2 Runtime realization and artifacts
@@ -50,10 +51,11 @@ This scaffold is reserved for the post-exec closeout once the next seam lands.
 - **Remediation disposition**:
   - `REM-003`
   - `REM-004`
+  - `REM-006`
 - **Promotion blockers**:
   - open blocking remediations prevent promotion readiness
 - **Promotion readiness**:
-  - blocked until `REM-003` and `REM-004` resolve, `THR-01` is published, and the seam-exit gate passes
+  - blocked until `REM-003`, `REM-004`, and `REM-006` resolve, `THR-01` is published, and the seam-exit gate passes
 
 ## Post-exec gate disposition
 
@@ -62,5 +64,6 @@ This scaffold is reserved for the post-exec closeout once the next seam lands.
 - **Unresolved remediations**:
   - `REM-003`
   - `REM-004`
+  - `REM-006`
 - **Carried-forward remediations**:
   - none yet

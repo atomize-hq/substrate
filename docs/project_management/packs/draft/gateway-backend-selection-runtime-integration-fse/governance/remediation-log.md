@@ -107,6 +107,27 @@ Future remediation entries must use the canonical fields from the extractor gove
 ```
 
 ```yaml
+- remediation_id: REM-006
+  origin_phase: pre_exec
+  source_gate: contract
+  related_seam: SEAM-2
+  related_slice: S00
+  related_thread: THR-02
+  related_contract: C-04
+  related_artifact: docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md
+  severity: blocking
+  status: open
+  owner_seam: SEAM-2
+  blocked_targets:
+    - seam: SEAM-2
+      field: status
+      value: exec-ready
+  summary: the integrated auth handoff delivery rule into the runtime is still unresolved between env-only, file-only, or one fixed mixed model with explicit precedence
+  required_fix: publish one explicit integrated auth handoff delivery model in the feature-local ADR-0046 docs and align protocol, schema, and runtime wiring to it
+  resolution_evidence: []
+```
+
+```yaml
 - remediation_id: REM-005
   origin_phase: pre_exec
   source_gate: revalidation

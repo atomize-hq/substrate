@@ -7,6 +7,7 @@
   - `REM-002`
   - `REM-003`
   - `REM-004`
+  - `REM-006`
   - `REM-005`
 - **Threads still not closed**:
   - `THR-01`
@@ -15,6 +16,7 @@
 - **Downstream stale triggers still requiring attention**:
   - selection order, auth precedence, and backend inventory rules are not yet published in the feature-local ADR-0046 docs
   - runtime binding and auth classifications are not yet published in the feature-local ADR-0046 docs
+  - the integrated auth handoff delivery rule is not yet published in the feature-local ADR-0046 docs
   - the first additional integrated backend baseline is not yet fixed in the feature-local ADR-0046 docs
 - **Evidence summary**:
   - `governance/seam-1-closeout.md` is reserved for the landed feature-local backend-selection and policy-evaluation outputs plus compatibility checks against consumed external authorities
