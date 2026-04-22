@@ -75,6 +75,12 @@ impl GatewayAuthFixture {
         fs::create_dir_all(&auth_dir).expect("create .codex auth dir");
         fs::write(auth_dir.join("auth.json"), contents).expect("write auth.json");
     }
+
+    fn write_global_agent_inventory(&self, name: &str, contents: &str) {
+        let agents_dir = self.substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("create global agent inventory dir");
+        fs::write(agents_dir.join(name), contents).expect("write agent inventory file");
+    }
 }
 
 struct RecordedGatewayRequestSocket {
@@ -198,6 +204,54 @@ fn gateway_config_with_empty_backend() -> &'static str {
     "llm:\n  enabled: true\n  gateway:\n    enabled: true\n  routing:\n    default_backend: \"\"\n"
 }
 
+fn gateway_inventory_for_codex() -> &'static str {
+    r#"version: 1
+id: codex
+config:
+  enabled: true
+  kind: cli
+  cli:
+    binary: codex
+  capabilities:
+    llm: true
+    mcp_client: false
+"#
+}
+
+fn gateway_inventory_for_openai() -> &'static str {
+    r#"version: 1
+id: openai
+config:
+  enabled: true
+  kind: api
+  api:
+    base_url: https://api.openai.com/v1
+    auth:
+      env:
+        - OPENAI_API_KEY
+  capabilities:
+    llm: true
+    mcp_client: false
+"#
+}
+
+fn gateway_inventory_with_id_mismatch() -> &'static str {
+    r#"version: 1
+id: openai-wrong
+config:
+  enabled: true
+  kind: api
+  api:
+    base_url: https://api.openai.com/v1
+    auth:
+      env:
+        - OPENAI_API_KEY
+  capabilities:
+    llm: true
+    mcp_client: false
+"#
+}
+
 fn gateway_policy_with_codex_host_credentials() -> &'static str {
     r#"id: "gateway-policy"
 name: "gateway-policy"
@@ -218,6 +272,39 @@ agents:
     read:
       allowed_backends:
         - "cli:codex"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#
+}
+
+fn gateway_policy_with_openai_backend() -> &'static str {
+    r#"id: "gateway-policy"
+name: "gateway-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
+
+llm:
+  allowed_backends:
+    - "api:openai"
 
 net_allowed: []
 cmd_allowed: []
@@ -445,6 +532,8 @@ fn world_gateway_status_json_uses_typed_runtime_contract() {
     let (_temp, _socket, socket_path) = gateway_socket_fixture();
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -465,6 +554,8 @@ fn world_gateway_status_json_preserves_unavailable_shape_from_runtime() {
     let (_temp, _socket, socket_path) = gateway_unavailable_socket_fixture();
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -499,6 +590,8 @@ fn world_gateway_missing_socket_is_classified_as_absent_state() {
     let missing_socket_path = temp.path().join("missing.sock");
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -518,6 +611,8 @@ fn world_gateway_connection_refused_is_classified_as_transient_runtime_failure()
     let (_temp, socket_path) = stale_gateway_socket_path();
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -545,6 +640,8 @@ fn world_gateway_http_failures_bubble_as_errors() {
     );
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -570,6 +667,8 @@ fn world_gateway_invalid_integration_uses_exit_code_2() {
     );
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -597,6 +696,8 @@ fn world_gateway_transient_runtime_failures_use_exit_code_3() {
     );
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -624,6 +725,8 @@ fn world_gateway_policy_failures_use_exit_code_5() {
     );
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -639,9 +742,68 @@ fn world_gateway_policy_failures_use_exit_code_5() {
 }
 
 #[test]
+fn world_gateway_missing_inventory_uses_exit_code_2_before_socket_dispatch() {
+    let temp = short_socket_tempdir("sub-gwmiss-");
+    let missing_socket_path = temp.path().join("missing.sock");
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket_path)
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: invalid integration",
+        ));
+}
+
+#[test]
+fn world_gateway_inventory_filename_id_mismatch_uses_exit_code_2() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_with_id_mismatch());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: invalid integration",
+        ));
+}
+
+#[test]
+fn world_gateway_allowlist_denial_uses_exit_code_5() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_codex_host_credentials());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: policy or safety failure",
+        ));
+}
+
+#[test]
 fn world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
     fixture.write_global_policy(gateway_policy_with_codex_host_credentials());
     fixture.write_codex_auth_state(
         r#"{
@@ -685,6 +847,7 @@ fn world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file() {
 fn world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
     fixture.write_global_policy(gateway_policy_with_codex_env_override());
 
     let mut socket = RecordedGatewayRequestSocket::start(json!({
@@ -728,6 +891,7 @@ fn world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override
 fn world_gateway_host_credential_policy_denials_use_exit_code_5() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
     fixture.write_global_policy(gateway_policy_missing_host_credentials_gate());
     fixture.write_codex_auth_state(
         r#"{
@@ -770,6 +934,7 @@ fn world_gateway_config_disabled_stays_policy_blocked() {
 fn world_gateway_incomplete_env_override_uses_exit_code_2() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
     fixture.write_global_policy(gateway_policy_with_codex_env_override());
 
     let mut cmd = fixture.command();

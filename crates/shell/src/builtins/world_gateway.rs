@@ -1,3 +1,4 @@
+use crate::execution::agent_inventory;
 use crate::execution::config_model::{self, CliConfigOverrides, LlmGatewayMode};
 use crate::execution::policy_snapshot::{
     request_world_network_routing, resolve_world_network_policy_for_cwd,
@@ -124,8 +125,8 @@ fn call_gateway_action(action: GatewayAction) -> anyhow::Result<GatewayLifecycle
 
     #[cfg(not(target_os = "macos"))]
     {
-        let client = build_gateway_client()?;
         let request = build_gateway_request()?;
+        let client = build_gateway_client()?;
 
         match action {
             GatewayAction::Status => client.gateway_status(request).await_result(),
@@ -236,6 +237,7 @@ fn build_gateway_request() -> anyhow::Result<GatewayLifecycleRequestV1> {
     let (effective_policy, _) =
         substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
             .map_err(|err| config_model::user_error(err.to_string()))?;
+    validate_gateway_backend_selection(&cwd, &effective_config, &effective_policy)?;
     let network_policy = resolve_world_network_policy_for_cwd(&cwd)?;
     let world_network = request_world_network_routing(&network_policy);
     let integrated_auth = resolve_integrated_auth_payload(&effective_config, &effective_policy)?;
@@ -270,6 +272,26 @@ fn build_gateway_request() -> anyhow::Result<GatewayLifecycleRequestV1> {
         world_network: Some(world_network),
         integrated_auth,
     })
+}
+
+fn validate_gateway_backend_selection(
+    cwd: &std::path::Path,
+    effective_config: &config_model::SubstrateConfig,
+    effective_policy: &substrate_broker::Policy,
+) -> anyhow::Result<()> {
+    let selected_backend = effective_config.llm.routing.default_backend.trim();
+    agent_inventory::resolve_gateway_backend_inventory_entry(
+        cwd,
+        selected_backend,
+        effective_policy,
+    )
+    .map_err(|err| gateway_invalid_integration_error(err.to_string()))?;
+    ensure_backend_allowed(
+        &effective_policy.llm_allowed_backends,
+        "llm.allowed_backends",
+        selected_backend,
+    )?;
+    Ok(())
 }
 
 fn validate_gateway_lifecycle_config(
