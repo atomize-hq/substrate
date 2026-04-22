@@ -1,0 +1,22 @@
+# Pack Closeout - gateway-backend-selection-runtime-integration
+
+- **Pack status**: extracted; not yet executed
+- **Remaining open seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`
+- **Open remediations still blocking pack closeout**:
+  - `REM-001`
+  - `REM-002`
+  - `REM-003`
+  - `REM-004`
+  - `REM-005`
+- **Threads still not closed**:
+  - `THR-01`
+  - `THR-02`
+  - `THR-03`
+- **Downstream stale triggers still requiring attention**:
+  - selection order, auth precedence, and backend inventory rules are not yet published in the feature-local ADR-0046 docs
+  - runtime binding and auth classifications are not yet published in the feature-local ADR-0046 docs
+  - the first additional integrated backend baseline is not yet fixed in the feature-local ADR-0046 docs
+- **Evidence summary**:
+  - `governance/seam-1-closeout.md` is reserved for the landed feature-local backend-selection and policy-evaluation outputs plus compatibility checks against consumed external authorities
+  - `governance/seam-2-closeout.md` is reserved for the landed feature-local runtime realization and artifact outputs plus compatibility checks against consumed external authorities
+  - `governance/seam-3-closeout.md` is reserved for the landed feature-local parity, validation, and rollout outputs plus compatibility checks against consumed external authorities
