@@ -14,6 +14,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 use substrate_shell::execution::{Cli, SubCommands, WorldAction, WorldGatewayAction};
 use tempfile::TempDir;
 
@@ -21,6 +22,8 @@ use tempfile::TempDir;
 mod socket;
 
 use socket::{AgentSocket, SocketResponse};
+
+const SOCKET_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 fn short_socket_tempdir(prefix: &str) -> TempDir {
     tempfile::Builder::new()
@@ -58,7 +61,10 @@ impl GatewayAuthFixture {
         cmd.current_dir(&self.workspace_root)
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
-            .env("SUBSTRATE_HOME", &self.substrate_home);
+            .env("SUBSTRATE_HOME", &self.substrate_home)
+            .env_remove("OPENAI_API_KEY")
+            .env_remove("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID")
+            .env_remove("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN");
         cmd
     }
 
@@ -99,7 +105,23 @@ impl RecordedGatewayRequestSocket {
         let recorded_request_for_thread = recorded_request.clone();
 
         let handle = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().expect("accept gateway capture request");
+            listener
+                .set_nonblocking(true)
+                .expect("set gateway capture nonblocking");
+            let deadline = Instant::now() + SOCKET_REQUEST_TIMEOUT;
+            let (mut stream, _) = loop {
+                match listener.accept() {
+                    Ok(pair) => break pair,
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(
+                            Instant::now() < deadline,
+                            "timed out waiting for gateway capture request"
+                        );
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(err) => panic!("accept gateway capture request: {err}"),
+                }
+            };
             let request = read_http_request(&mut stream).expect("read gateway HTTP request");
             let json: JsonValue =
                 serde_json::from_slice(&request.body).expect("parse gateway request JSON");
@@ -170,8 +192,28 @@ impl RecordedGatewayLifecycleSocket {
         let recorded_requests_for_thread = recorded_requests.clone();
 
         let handle = thread::spawn(move || {
+            listener
+                .set_nonblocking(true)
+                .expect("set lifecycle capture nonblocking");
+            let mut accepted = 0usize;
             for _ in 0..expected_requests {
-                let (mut stream, _) = listener.accept().expect("accept lifecycle capture request");
+                let request_deadline = Instant::now() + SOCKET_REQUEST_TIMEOUT;
+                let (mut stream, _) = loop {
+                    match listener.accept() {
+                        Ok(pair) => break pair,
+                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                            assert!(
+                                Instant::now() < request_deadline,
+                                "timed out waiting for lifecycle capture request {}/{}",
+                                accepted + 1,
+                                expected_requests
+                            );
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(err) => panic!("accept lifecycle capture request: {err}"),
+                    }
+                };
+                accepted += 1;
                 let request = read_http_request(&mut stream).expect("read lifecycle HTTP request");
                 let first_line = request.header.lines().next().unwrap_or_default();
                 let path = first_line

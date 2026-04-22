@@ -1318,9 +1318,6 @@ mod tests {
             project_dir: project_dir.to_path_buf(),
             cgroup_path: project_dir.join("missing-cgroup"),
             require_cgroup_attach: false,
-            control: GatewayControlSettings {
-                default_backend: binding.backend_id.to_string(),
-            },
             binding,
             integrated_auth: integrated_auth_for_binding(binding),
         }

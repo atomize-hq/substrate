@@ -1581,6 +1581,7 @@ impl WorldAgentService {
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Debug)]
 struct PreparedGatewayRuntimeRequest {
     project_dir: PathBuf,
     world_spec: WorldSpec,
@@ -1940,14 +1941,14 @@ mod gateway_runtime_binding_tests {
     }
 
     #[test]
-    fn missing_backend_binding_returns_none_without_invalid_integration() {
+    fn unbound_api_backend_returns_none_without_invalid_integration() {
         let temp_dir = TempDir::new().unwrap();
         let service = WorldAgentService::new().expect("service");
-        let mut request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+        let mut request = gateway_request_with_backend(temp_dir.path(), "api:anthropic");
         let mut env = HashMap::new();
         env.insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
         request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
-            backend_id: "api:openai".to_string(),
+            backend_id: "api:anthropic".to_string(),
             cli_codex: None,
             api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
         });
