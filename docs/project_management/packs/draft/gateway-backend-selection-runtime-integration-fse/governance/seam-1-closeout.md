@@ -1,13 +1,13 @@
 ---
 seam_id: SEAM-1
-status: proposed
+status: decomposed
 closeout_version: v1
 seam_exit_gate:
   source_ref: ../threaded-seams/seam-1-backend-selection-and-policy-surface/slice-99-seam-exit-gate.md
   status: pending
   promotion_readiness: blocked
 basis:
-  currentness: provisional
+  currentness: current
   upstream_closeouts: []
   required_threads:
     - THR-01
@@ -25,6 +25,7 @@ open_remediations:
 # Closeout - SEAM-1 Backend selection and policy surface
 
 This scaffold is reserved for the post-exec closeout once the active seam lands.
+The seam is now decomposed at `../threaded-seams/seam-1-backend-selection-and-policy-surface/`.
 
 ## Seam-exit gate record
 
