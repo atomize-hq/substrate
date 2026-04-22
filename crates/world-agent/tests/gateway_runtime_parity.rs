@@ -15,9 +15,30 @@ use tempfile::TempDir;
 use tokio::sync::Mutex;
 use world_agent::WorldAgentService;
 
+const REGRESSION_FLOOR_BACKEND_ID: &str = "cli:codex";
+const FIRST_ADDITIONAL_BACKEND_ID: &str = "api:openai";
+const UNSUPPORTED_BACKEND_ID: &str = "api:anthropic";
+
 // These tests mutate process-global env and spawn async work that reads it, so
 // the guard must stay alive across awaits to serialize the whole test body.
 static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+#[derive(Copy, Clone)]
+struct BackendMatrixCase {
+    backend_id: &'static str,
+    binary_name: &'static str,
+}
+
+const SUPPORTED_BACKEND_MATRIX: &[BackendMatrixCase] = &[
+    BackendMatrixCase {
+        backend_id: REGRESSION_FLOOR_BACKEND_ID,
+        binary_name: "codex",
+    },
+    BackendMatrixCase {
+        backend_id: FIRST_ADDITIONAL_BACKEND_ID,
+        binary_name: "openai",
+    },
+];
 
 fn minimal_policy_snapshot() -> PolicySnapshotV3 {
     PolicySnapshotV3 {
@@ -77,6 +98,14 @@ fn gateway_request_with_backend(cwd: &Path, backend_id: &str) -> GatewayLifecycl
         request.integrated_auth = None;
     }
     request
+}
+
+fn gateway_request_for_backend(cwd: &Path, backend_id: &str) -> GatewayLifecycleRequestV1 {
+    if backend_id == REGRESSION_FLOOR_BACKEND_ID {
+        gateway_request(cwd)
+    } else {
+        gateway_request_with_backend(cwd, backend_id)
+    }
 }
 
 fn service_or_skip() -> Option<WorldAgentService> {
@@ -572,7 +601,7 @@ async fn missing_backend_binding_returns_unavailable_for_lifecycle_actions() {
     let Some(service) = service_or_skip() else {
         return;
     };
-    let request = gateway_request_with_backend(temp_dir.path(), "api:anthropic");
+    let request = gateway_request_with_backend(temp_dir.path(), UNSUPPORTED_BACKEND_ID);
 
     let status = service
         .gateway_status(request.clone())
@@ -649,7 +678,7 @@ async fn gateway_openai_sync_makes_status_available_and_is_idempotent() {
     let Some(service) = service_or_skip() else {
         return;
     };
-    let request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+    let request = gateway_request_for_backend(temp_dir.path(), FIRST_ADDITIONAL_BACKEND_ID);
 
     let status_before_sync = service
         .gateway_status(request.clone())
@@ -749,7 +778,7 @@ async fn gateway_openai_restart_recycles_the_runtime() {
     let Some(service) = service_or_skip() else {
         return;
     };
-    let request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+    let request = gateway_request_for_backend(temp_dir.path(), FIRST_ADDITIONAL_BACKEND_ID);
 
     service
         .gateway_sync(request.clone())
@@ -779,7 +808,7 @@ async fn gateway_unbound_lifecycle_actions_do_not_fall_back_to_running_codex_run
         return;
     };
     let codex_request = gateway_request(temp_dir.path());
-    let unbound_request = gateway_request_with_backend(temp_dir.path(), "api:anthropic");
+    let unbound_request = gateway_request_with_backend(temp_dir.path(), UNSUPPORTED_BACKEND_ID);
 
     let sync_response = service
         .gateway_sync(codex_request.clone())
@@ -911,7 +940,7 @@ async fn gateway_openai_manifest_recovery_restores_status_sync_and_restart() {
     let Some(service) = service_or_skip() else {
         return;
     };
-    let request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+    let request = gateway_request_for_backend(temp_dir.path(), FIRST_ADDITIONAL_BACKEND_ID);
 
     service
         .gateway_sync(request.clone())
@@ -976,6 +1005,77 @@ async fn gateway_status_turns_unavailable_after_child_exit() {
         .expect("status after child exit");
     assert_eq!(status_response.status, GatewayStatusV1::Unavailable);
     assert!(status_response.client_wiring.is_none());
+}
+
+#[tokio::test]
+async fn gateway_supported_backend_matrix_keeps_regression_floor_and_first_proof_target_visible() {
+    let _env_lock = ENV_LOCK.lock().await;
+
+    for case in SUPPORTED_BACKEND_MATRIX {
+        let temp_dir = TempDir::new().unwrap();
+        let (binary, pid_dir, launch_count_path) =
+            tracking_gateway_binary(&temp_dir, case.binary_name, 0);
+        let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
+        let Some(service) = service_or_skip() else {
+            return;
+        };
+        let request = gateway_request_for_backend(temp_dir.path(), case.backend_id);
+
+        let status_before_sync = service
+            .gateway_status(request.clone())
+            .await
+            .expect("gateway status before sync");
+        assert_eq!(
+            status_before_sync.status,
+            GatewayStatusV1::Unavailable,
+            "{backend} should start unavailable",
+            backend = case.backend_id,
+        );
+
+        let sync_response = service
+            .gateway_sync(request.clone())
+            .await
+            .expect("gateway sync");
+        assert_eq!(
+            sync_response.status,
+            GatewayStatusV1::Available,
+            "{backend} should become available after sync",
+            backend = case.backend_id,
+        );
+        let first_pid = wait_for_pid(&pid_dir, 1);
+
+        let status_after_sync = service
+            .gateway_status(request.clone())
+            .await
+            .expect("gateway status after sync");
+        assert_eq!(
+            status_after_sync.status,
+            GatewayStatusV1::Available,
+            "{backend} should stay available after sync",
+            backend = case.backend_id,
+        );
+
+        let restart_response = service
+            .gateway_restart(request.clone())
+            .await
+            .expect("gateway restart");
+        assert_eq!(
+            restart_response.status,
+            GatewayStatusV1::Available,
+            "{backend} should stay available after restart",
+            backend = case.backend_id,
+        );
+
+        let restarted_pid = wait_for_pid(&pid_dir, 2);
+        assert_ne!(
+            first_pid,
+            restarted_pid,
+            "{backend} should recycle the runtime on restart",
+            backend = case.backend_id,
+        );
+        assert_eq!(read_launch_count(&launch_count_path), 2);
+        assert_process_exited(first_pid);
+    }
 }
 
 #[tokio::test]

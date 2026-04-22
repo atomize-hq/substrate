@@ -24,6 +24,8 @@ mod socket;
 use socket::{AgentSocket, SocketResponse};
 
 const SOCKET_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const REGRESSION_FLOOR_BACKEND_ID: &str = "cli:codex";
+const FIRST_ADDITIONAL_BACKEND_ID: &str = "api:openai";
 
 fn short_socket_tempdir(prefix: &str) -> TempDir {
     tempfile::Builder::new()
@@ -341,6 +343,63 @@ fn gateway_config_with_gateway_disabled() -> &'static str {
 
 fn gateway_config_with_empty_backend() -> &'static str {
     "llm:\n  enabled: true\n  gateway:\n    enabled: true\n  routing:\n    default_backend: \"\"\n"
+}
+
+fn assert_gateway_lifecycle_backend(request: &RecordedGatewayLifecycleRequest, backend_id: &str) {
+    assert_eq!(
+        request.body.pointer("/env/SUBSTRATE_LLM_DEFAULT_BACKEND"),
+        Some(&json!(backend_id)),
+        "lifecycle request should preserve the selected backend",
+    );
+}
+
+fn assert_gateway_lifecycle_no_integrated_auth(request: &RecordedGatewayLifecycleRequest) {
+    assert_eq!(
+        request.body.pointer("/integrated_auth"),
+        None,
+        "non-Codex lifecycle requests should not synthesize Codex auth",
+    );
+}
+
+fn assert_gateway_lifecycle_cli_codex_auth(
+    request: &RecordedGatewayLifecycleRequest,
+    account_id: &str,
+    access_token: &str,
+) {
+    assert_eq!(
+        request.body.pointer("/integrated_auth/backend_id"),
+        Some(&json!(REGRESSION_FLOOR_BACKEND_ID))
+    );
+    assert_eq!(
+        request
+            .body
+            .pointer("/integrated_auth/cli_codex/account_id"),
+        Some(&json!(account_id))
+    );
+    assert_eq!(
+        request
+            .body
+            .pointer("/integrated_auth/cli_codex/access_token"),
+        Some(&json!(access_token))
+    );
+}
+
+fn assert_gateway_lifecycle_api_env_auth(request: &RecordedGatewayLifecycleRequest, api_key: &str) {
+    assert_eq!(
+        request.body.pointer("/integrated_auth/backend_id"),
+        Some(&json!(FIRST_ADDITIONAL_BACKEND_ID))
+    );
+    assert_eq!(
+        request
+            .body
+            .pointer("/integrated_auth/api_env/env/OPENAI_API_KEY"),
+        Some(&json!(api_key))
+    );
+    assert_eq!(
+        request.body.pointer("/integrated_auth/cli_codex"),
+        None,
+        "api backends must not emit the cli_codex auth facet",
+    );
 }
 
 fn gateway_inventory_for_codex() -> &'static str {
@@ -1205,16 +1264,8 @@ fn world_gateway_lifecycle_requests_preserve_selected_backend_without_codex_fall
     assert_eq!(requests[2].path, "/v1/gateway/restart");
 
     for request in requests {
-        assert_eq!(
-            request.body.pointer("/env/SUBSTRATE_LLM_DEFAULT_BACKEND"),
-            Some(&json!("api:openai")),
-            "lifecycle request should preserve the selected backend",
-        );
-        assert_eq!(
-            request.body.pointer("/integrated_auth"),
-            None,
-            "non-Codex lifecycle requests should not synthesize Codex auth",
-        );
+        assert_gateway_lifecycle_backend(&request, FIRST_ADDITIONAL_BACKEND_ID);
+        assert_gateway_lifecycle_no_integrated_auth(&request);
     }
 }
 
@@ -1277,21 +1328,7 @@ fn world_gateway_lifecycle_requests_emit_api_env_auth_when_allowed() {
     let requests = socket.recorded_requests();
     assert_eq!(requests.len(), 3);
     for request in requests {
-        assert_eq!(
-            request.body.pointer("/integrated_auth/backend_id"),
-            Some(&json!("api:openai"))
-        );
-        assert_eq!(
-            request
-                .body
-                .pointer("/integrated_auth/api_env/env/OPENAI_API_KEY"),
-            Some(&json!("sk-openai-proof"))
-        );
-        assert_eq!(
-            request.body.pointer("/integrated_auth/cli_codex"),
-            None,
-            "api backends must not emit the cli_codex auth facet",
-        );
+        assert_gateway_lifecycle_api_env_auth(&request, "sk-openai-proof");
     }
 }
 
@@ -1454,4 +1491,107 @@ fn world_gateway_empty_default_backend_uses_exit_code_2() {
         .stderr(predicate::str::contains(
             "substrate world gateway status: invalid integration",
         ));
+}
+
+#[test]
+fn world_gateway_backend_matrix_keeps_regression_floor_and_first_proof_target_visible() {
+    let cases = [
+        (
+            REGRESSION_FLOOR_BACKEND_ID,
+            gateway_config_with_codex_backend(),
+            gateway_inventory_for_codex(),
+            gateway_policy_with_codex_host_credentials(),
+            None,
+        ),
+        (
+            FIRST_ADDITIONAL_BACKEND_ID,
+            gateway_config_with_generic_backend(),
+            gateway_inventory_for_openai(),
+            gateway_policy_with_openai_env_override(),
+            Some("sk-openai-proof"),
+        ),
+    ];
+
+    for (backend_id, config, inventory, policy, api_key) in cases {
+        let fixture = GatewayAuthFixture::new();
+        fixture.write_global_config(config);
+        fixture.write_global_agent_inventory(
+            if backend_id == REGRESSION_FLOOR_BACKEND_ID {
+                "codex.yaml"
+            } else {
+                "openai.yaml"
+            },
+            inventory,
+        );
+        fixture.write_global_policy(policy);
+        if let Some(api_key) = api_key {
+            let available = json!({
+                "status": "available",
+                "client_wiring": {
+                    "openai_base_url": "http://gateway.test/openai",
+                    "anthropic_base_url": "http://gateway.test/anthropic"
+                }
+            });
+            let mut socket = RecordedGatewayLifecycleSocket::start(
+                available.clone(),
+                available.clone(),
+                available,
+                1,
+            );
+
+            let mut cmd = fixture.command();
+            cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+                .env("SUBSTRATE_WORLD_ENABLED", "1")
+                .env("SUBSTRATE_WORLD", "enabled")
+                .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+                .env("OPENAI_API_KEY", api_key)
+                .args(["world", "gateway", "status"])
+                .assert()
+                .code(0);
+
+            let requests = socket.recorded_requests();
+            assert_eq!(requests.len(), 1);
+            assert_gateway_lifecycle_backend(&requests[0], backend_id);
+            assert_gateway_lifecycle_api_env_auth(&requests[0], api_key);
+        } else {
+            fixture.write_codex_auth_state(
+                r#"{
+  "account_id": "acct_file_explicit",
+  "access_token": "token-from-file"
+}"#,
+            );
+
+            let available = json!({
+                "status": "available",
+                "client_wiring": {
+                    "openai_base_url": "http://gateway.test/openai",
+                    "anthropic_base_url": "http://gateway.test/anthropic"
+                }
+            });
+            let mut socket = RecordedGatewayLifecycleSocket::start(
+                available.clone(),
+                available.clone(),
+                available,
+                1,
+            );
+
+            let mut cmd = fixture.command();
+            cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+                .env("SUBSTRATE_WORLD_ENABLED", "1")
+                .env("SUBSTRATE_WORLD", "enabled")
+                .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+                .args(["world", "gateway", "status"])
+                .assert()
+                .code(0);
+
+            let requests = socket.recorded_requests();
+            assert_eq!(requests.len(), 1);
+            assert_gateway_lifecycle_backend(&requests[0], backend_id);
+            assert_gateway_lifecycle_cli_codex_auth(
+                &requests[0],
+                "acct_file_explicit",
+                "token-from-file",
+            );
+        }
+    }
 }
