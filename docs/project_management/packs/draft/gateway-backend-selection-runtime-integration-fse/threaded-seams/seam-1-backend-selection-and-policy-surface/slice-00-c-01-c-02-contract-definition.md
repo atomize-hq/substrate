@@ -39,11 +39,12 @@ open_remediations:
   - the slice records that `C-01` / `C-02` are sufficient for SEAM-1 and that the remaining work is shell implementation plus evidence
   - `validate_gateway_lifecycle_config`, `build_gateway_request`, `resolve_integrated_auth_payload`, and `resolve_cli_codex_integrated_auth` are named as the primary code surfaces
   - the slice names exact shell tests to preserve and the new tests required to prove adoption
-  - supporting ADR-0046 docs are treated as implementation notes that defer to canonical `docs/contracts/` ownership
+  - supporting ADR-0046 docs, if later created, are treated as implementation notes that defer to canonical `docs/contracts/` ownership; their current absence is a seam-local documentation inconsistency, not a contract-truth blocker
 - **Dependencies**:
   - none inbound; this is the first producer seam in the pack
 - **Verification**:
   - compare the seam plan against `docs/contracts/substrate-gateway-backend-adapter-selection.md`, `docs/contracts/substrate-gateway-policy-evaluation.md`, `crates/shell/src/builtins/world_gateway.rs`, and `crates/shell/tests/world_gateway.rs`
+  - treat the missing non-fse ADR-0046 support-doc files as future subordinate material, not as current evidence required to validate the baseline
 - **Rollout/safety**:
   - preserves fail-closed behavior by preventing the seam from broadening scope into runtime ownership
 - **Review surface refs**:
@@ -67,6 +68,7 @@ open_remediations:
 - **Acceptance criteria**:
   - the slice no longer claims fresh contract publication is needed to begin implementation
   - SEAM-1 names explicit shell tests for empty backend, unsupported backend, allowlist denial, and inventory mismatch handling
+  - the slice makes clear that the shell code/test surfaces named above are the implementation boundary for S00 and that no shell edits are required by S00 itself
 - **Test notes**:
   - preserve `world_gateway_empty_default_backend_uses_exit_code_2`
   - preserve `world_gateway_invalid_integration_uses_exit_code_2`
@@ -98,6 +100,7 @@ Checklist:
 - **Acceptance criteria**:
   - the slice records that env-primary/file-fallback/no-mixed-source is already canonical and no longer blocks implementation
   - the slice names the remaining missing evidence: “both env and file present; env wins without merge”
+  - the slice makes clear that any future ADR-0046 support docs remain subordinate to `docs/contracts/` and are not required to establish the baseline
 - **Test notes**:
   - preserve `world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file`
   - preserve `world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override`

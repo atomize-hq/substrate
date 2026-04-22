@@ -45,7 +45,7 @@ open_remediations:
     - shell validation and request construction in `crates/shell/src/builtins/world_gateway.rs`
     - shell lifecycle coverage in `crates/shell/tests/world_gateway.rs`
     - shell adoption of published backend selection, inventory, allowlist, and precedence rules from `C-01` / `C-02`
-    - minimum supporting ADR-0046 alignment so implementation docs do not compete with canonical `docs/contracts/` ownership
+    - minimum supporting ADR-0046 alignment, if future support docs are created, so implementation docs do not compete with canonical `docs/contracts/` ownership
     - closeout evidence needed to publish `THR-01`
   - Out:
     - integrated adapter binding metadata and capability gates
@@ -57,9 +57,7 @@ open_remediations:
   - `crates/shell/tests/world_gateway.rs`
   - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
   - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/contract.md`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/policy-spec.md`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md`
+  - any future ADR-0046 support docs created under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`, which must remain subordinate to canonical `docs/contracts/` truth
 - **Verification**:
   - This seam **consumes** published `C-01` and `C-02` and turns them into shell behavior plus evidence.
   - Readiness means `SEAM-1` can execute without inventing further contract truth, so `THR-01` has a deterministic publication target for `SEAM-2` once landing evidence exists.
@@ -119,7 +117,7 @@ open_remediations:
 - **Expected closeout evidence**:
   - landed shell updates in `crates/shell/src/builtins/world_gateway.rs`
   - landed shell tests in `crates/shell/tests/world_gateway.rs`
-  - supporting ADR-0046 doc alignment in `contract.md`, `policy-spec.md`, and `env-vars-spec.md`
+  - supporting ADR-0046 doc alignment only if those files are later created; they remain implementation notes subordinate to canonical `docs/contracts/`
   - recorded remediation disposition for any remaining landing-only follow-through, including `REM-001`
 
 ## Slice index

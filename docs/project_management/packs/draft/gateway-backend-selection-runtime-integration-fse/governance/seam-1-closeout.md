@@ -34,16 +34,13 @@ The seam is now `exec-ready` at `../threaded-seams/seam-1-backend-selection-and-
   - expected canonical contract alignment evidence:
     - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
     - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - supporting evidence may include aligned ADR-0046 docs:
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/contract.md`
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/policy-spec.md`
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md`
+  - supporting evidence may include future ADR-0046 docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`, but only as subordinate implementation notes that defer to canonical `docs/contracts/` truth
 - **Contracts consumed or narrowly aligned**:
   - expected: `C-01`, `C-02`
 - **Threads published / advanced**:
   - expected: `THR-01`
 - **Review-surface delta**:
-  - to be recorded after landing
+  - to be recorded after landing; any delta in the missing non-fse ADR-0046 support-doc path is a seam-local documentation issue, not a contract-truth change
 - **Planned-vs-landed delta**:
   - to be recorded after landing
 - **Downstream stale triggers raised**:
