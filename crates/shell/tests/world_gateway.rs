@@ -122,6 +122,11 @@ impl RecordedGatewayRequestSocket {
                     Err(err) => panic!("accept gateway capture request: {err}"),
                 }
             };
+            // Accepted Unix streams can inherit the listener's nonblocking flag on macOS.
+            // Switch back to blocking IO so request reads don't fail mid-body with WouldBlock.
+            stream
+                .set_nonblocking(false)
+                .expect("set gateway capture stream blocking");
             let request = read_http_request(&mut stream).expect("read gateway HTTP request");
             let json: JsonValue =
                 serde_json::from_slice(&request.body).expect("parse gateway request JSON");
@@ -213,6 +218,11 @@ impl RecordedGatewayLifecycleSocket {
                         Err(err) => panic!("accept lifecycle capture request: {err}"),
                     }
                 };
+                // Accepted Unix streams can inherit the listener's nonblocking flag on macOS.
+                // Switch back to blocking IO so request reads don't fail mid-body with WouldBlock.
+                stream
+                    .set_nonblocking(false)
+                    .expect("set lifecycle capture stream blocking");
                 accepted += 1;
                 let request = read_http_request(&mut stream).expect("read lifecycle HTTP request");
                 let first_line = request.header.lines().next().unwrap_or_default();

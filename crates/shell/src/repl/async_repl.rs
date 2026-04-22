@@ -146,7 +146,10 @@ fn is_terminal_loss_io_error(err: &std::io::Error) -> bool {
     #[cfg(unix)]
     {
         if let Some(code) = err.raw_os_error() {
-            return matches!(code, libc::ENOTTY | libc::EIO | libc::EBADF);
+            return matches!(
+                code,
+                libc::ENOTTY | libc::EIO | libc::EBADF | libc::ENXIO | libc::ENODEV
+            );
         }
     }
 
@@ -183,7 +186,39 @@ fn detect_terminal_loss_while_prompting() -> Option<anyhow::Error> {
         let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
         let rc = unsafe { libc::tcgetattr(libc::STDIN_FILENO, termios.as_mut_ptr()) };
         if rc == 0 {
-            return None;
+            #[cfg(target_os = "macos")]
+            {
+                match std::fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open("/dev/tty")
+                {
+                    Ok(file) => {
+                        use std::os::fd::AsRawFd;
+
+                        let rc = unsafe { libc::tcgetattr(file.as_raw_fd(), termios.as_mut_ptr()) };
+                        if rc == 0 {
+                            return None;
+                        }
+
+                        let err = std::io::Error::last_os_error();
+                        if is_terminal_loss_io_error(&err) {
+                            return Some(
+                                anyhow!(err).context("controlling terminal became invalid"),
+                            );
+                        }
+                    }
+                    Err(err) if is_terminal_loss_io_error(&err) => {
+                        return Some(anyhow!(err).context("controlling terminal became invalid"));
+                    }
+                    Err(_) => {}
+                }
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                return None;
+            }
         }
 
         let err = std::io::Error::last_os_error();
