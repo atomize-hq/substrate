@@ -27,7 +27,19 @@ Concrete rules:
 - Selection consumes the existing ADR-0027 surfaces only:
   - `llm.routing.default_backend`
   - `llm.allowed_backends`
-  - the existing one-file-per-backend inventory model and filename/id match rule
+  - the existing one-file-per-backend backend inventory rooted at:
+    - `$SUBSTRATE_HOME/agents/<agent_id>.yaml`
+    - `<workspace_root>/.substrate/agents/<agent_id>.yaml`
+- Effective backend inventory resolution uses the existing ADR-0027 precedence rules for the
+  `agents/` inventory roots:
+  - workspace inventory overrides global inventory per `id`
+  - built-in defaults, if any, remain lower precedence than workspace and global inventory
+- Backend inventory identity rules are:
+  - the filename-derived `<agent_id>` must match the YAML field `id` exactly
+  - the derived backend id is `<kind>:<agent_id>`, where `<kind>` is the inventory item's
+    `config.kind`
+  - for gateway-backed LLM selection, a backend id is eligible only when it resolves to exactly one
+    effective inventory item whose `config.capabilities.llm` is `true`
 - Selection order is:
   1. resolve the requested or default backend id from the existing config and inventory surfaces
   2. validate backend-id grammar and inventory identity consistency

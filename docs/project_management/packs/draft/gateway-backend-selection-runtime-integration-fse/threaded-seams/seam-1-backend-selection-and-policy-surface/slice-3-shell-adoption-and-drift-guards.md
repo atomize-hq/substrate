@@ -29,7 +29,7 @@ open_remediations: []
 ### S3 - Add drift guards and adoption evidence for `THR-01`
 
 - **User/system value**:
-  - Gives reviewers and downstream seams one reliable proof bundle that the published contracts, supporting ADR-0046 docs, and shell behavior still say the same thing.
+  - Gives reviewers and downstream seams one reliable proof bundle that shell behavior, shell tests, and supporting docs all adopt the published contracts the same way.
 - **Scope (in/out)**:
   - In: supporting doc alignment, shell test coverage, review-surface refresh, and publication-evidence notes
   - Out: new selection or policy semantics beyond what `S00`-`S2` already define
@@ -97,7 +97,15 @@ Checklist:
 - **Acceptance criteria**:
   - closeout can name landed evidence without reconstructing it after the fact
 - **Test notes**:
-  - ensure coverage distinguishes invalid integration, policy denial, and dependency unavailability where this seam owns the distinction
+  - preserve:
+    - `world_gateway_invalid_integration_uses_exit_code_2`
+    - `world_gateway_transient_runtime_failures_use_exit_code_3`
+    - `world_gateway_policy_failures_use_exit_code_5`
+    - `world_gateway_empty_default_backend_uses_exit_code_2`
+  - add:
+    - unsupported backend rejection before socket contact
+    - env wins over auth file when both sources are present
+    - env-allowed denial with no file fallback
 - **Risk/rollback notes**:
   - missing drift guards will make `THR-01` publication non-deterministic even if docs look correct
 

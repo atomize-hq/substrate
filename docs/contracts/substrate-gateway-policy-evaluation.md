@@ -28,8 +28,11 @@ Concrete rules:
 - Host secret sourcing is only a policy-gated preparation step for Substrate-owned delivery and only for env names and backend identities allowed by the governed inputs above.
 - If a selected backend has complete allowlisted env auth material for the integrated handoff, that env material is the authoritative source for the handoff.
 - Host credential file reads are permitted only as a host-side fallback when the required env auth handoff is absent; file material must not override, supplement, or merge with an already-present env handoff.
+- If env auth material is present but blocked by `llm.secrets.env_allowed`, the result is policy denial; host credential file fallback must not be used to bypass that denial.
 - If partial env auth material is present for the selected backend, the request is invalid integration and must fail closed rather than backfilling missing fields from a host credential file read.
 - Those precedence rules govern the content of the integrated handoff, not the durable host-to-world carrier. Current integrated delivery may still use env-based transport for the closed auth field set, while the preferred additive direction is a Substrate-owned secret-channel payload plus inherited FD/pipe-style auth-bundle delivery so secret values do not live in the in-world process environment by default.
+- Backend-specific auth renderers may differ, but they must preserve the same precedence and
+  fail-closed rules above; carrier choice does not change policy authorization.
 - Gateway-local config, admin mutation surfaces, and token persistence remain implementation details of `substrate-gateway`; they do not become trusted policy inputs.
 - Policy explanations remain part of the Substrate operator surface and must not be delegated to gateway-local state.
 - Invalid integration state, dependency unavailability, and policy denial are separate outcomes and must not be collapsed into a single failure bucket.

@@ -16,13 +16,12 @@ basis:
     - THR-02
     - THR-03
   stale_triggers:
-    - revalidate downstream proof if the additional-backend baseline, parity matrix, or unsupported-backend posture changes
+    - revalidate downstream proof if the named additional-backend target, parity matrix, or unsupported-backend posture changes
 gates:
   post_exec:
     landing: pending
     closeout: pending
-open_remediations:
-  - REM-005
+open_remediations: []
 ---
 
 # Closeout - SEAM-3 Parity, validation, and rollout
@@ -33,15 +32,18 @@ This scaffold is reserved for the post-exec closeout once the future seam lands.
 
 - **Source artifact**: `../threaded-seams/seam-3-parity-validation-and-rollout/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
-  - expected canonical contract publication:
-    - `docs/contracts/substrate-gateway-integrated-runtime-compatibility.md`
+  - expected validation evidence:
+    - `cli:codex` regression proof in the shell/world-agent parity suites
+    - end-to-end proof for one additional integrated backend
+    - explicit unsupported-backend no-fallback evidence across Linux/macOS/Windows
+    - smoke/manual validation results aligned with the existing operator/runtime parity contracts
   - supporting evidence may include aligned ADR-0046 docs and existing parity authorities:
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/platform-parity-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/compatibility-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/manual_testing_playbook.md`
     - `docs/contracts/substrate-gateway-runtime-parity.md`
 - **Contracts published or changed**:
-  - expected: `C-05`
+  - none required; this seam should primarily attach proof to existing runtime/operator contracts
 - **Threads published / advanced**:
   - expected: `THR-03`
 - **Review-surface delta**:
@@ -51,17 +53,17 @@ This scaffold is reserved for the post-exec closeout once the future seam lands.
 - **Downstream stale triggers raised**:
   - to be recorded after landing
 - **Remediation disposition**:
-  - `REM-005`
+  - no seam-local pre-exec contract remediations should remain; record any carried-forward validation gaps here if they emerge during landing
 - **Promotion blockers**:
-  - open blocking remediation prevents promotion readiness
+  - promotion remains blocked until upstream implementation lands and parity/rollout proof is complete
 - **Promotion readiness**:
-  - blocked until `REM-005` resolves, upstream threads publish, and the seam-exit gate passes
+  - blocked until `THR-01` and `THR-02` publish, one additional backend exists in landed code, and the seam-exit gate passes
 
 ## Post-exec gate disposition
 
 - **Landing gate**: pending
 - **Closeout gate**: pending
 - **Unresolved remediations**:
-  - `REM-005`
+  - none expected at seam start; record any validation gaps discovered during landing
 - **Carried-forward remediations**:
   - none yet

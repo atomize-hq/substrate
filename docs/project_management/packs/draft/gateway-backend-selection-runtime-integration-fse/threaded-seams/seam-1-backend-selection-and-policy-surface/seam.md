@@ -12,13 +12,13 @@ basis:
   required_threads:
     - THR-01
   stale_triggers:
-    - backend inventory roots or filename rules change outside this seam
-    - auth precedence changes in canonical contract docs or shell gateway handling
-    - selection order, failure taxonomy, or trusted-input boundaries drift between canonical docs, supporting ADR-0046 docs, and `crates/shell/src/builtins/world_gateway.rs`
+    - canonical `C-01` or `C-02` rules change outside this seam
+    - shell selection or auth-resolution logic changes outside the planned slice order
+    - failure-bucket wording drifts between shell docs, shell tests, and runtime markers
 gates:
   pre_exec:
     review: passed
-    contract: failed
+    contract: passed
     revalidation: passed
   post_exec:
     landing: pending
@@ -29,45 +29,44 @@ seam_exit_gate:
   status: pending
 open_remediations:
   - REM-001
-  - REM-002
 ---
 # SEAM-1 - Backend selection and policy surface
 
 ## Seam Brief (Restated)
 
 - **Goal / value**:
-  - Publish one authoritative integrated-lifecycle truth for backend selection and policy evaluation before runtime realization or parity proof consumes it.
-  - Replace the current Codex-only implied behavior with explicit contract language for selection order, inventory discoverability, allowlist timing, trusted-input boundaries, and auth-source precedence.
+  - Adopt already-published `C-01` and `C-02` truth at the shell boundary so downstream runtime work consumes executable behavior instead of relying on Codex-only special cases.
+  - Make `THR-01` publishable through landed shell logic, deterministic tests, and supporting-doc drift guards.
 - **Type**:
   - integration
 - **Scope**
   - In:
-    - canonical publication of `C-01` in `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-    - canonical publication of `C-02` in `docs/contracts/substrate-gateway-policy-evaluation.md`
-    - supporting ADR-0046 alignment in `contract.md`, `policy-spec.md`, and `env-vars-spec.md`
-    - shell gateway request construction and pre-dispatch validation in `crates/shell/src/builtins/world_gateway.rs`
-    - backend inventory roots, filename/id consistency, deny-by-default allowlisting, trusted-input boundaries, and auth precedence
-    - invalid integration, dependency unavailable, and policy denial classification at the selection boundary
+    - shell validation and request construction in `crates/shell/src/builtins/world_gateway.rs`
+    - shell lifecycle coverage in `crates/shell/tests/world_gateway.rs`
+    - shell adoption of published backend selection, inventory, allowlist, and precedence rules from `C-01` / `C-02`
+    - minimum supporting ADR-0046 alignment so implementation docs do not compete with canonical `docs/contracts/` ownership
+    - closeout evidence needed to publish `THR-01`
   - Out:
     - integrated adapter binding metadata and capability gates
     - adapter payload schemas or managed runtime artifact semantics
     - status-schema widening, tuple metadata, or tuple-policy surface changes
     - Linux/macOS/Windows parity proof and rollout governance
 - **Touch surface**:
+  - `crates/shell/src/builtins/world_gateway.rs`
+  - `crates/shell/tests/world_gateway.rs`
   - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
   - `docs/contracts/substrate-gateway-policy-evaluation.md`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/contract.md`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/policy-spec.md`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md`
-  - `crates/shell/src/builtins/world_gateway.rs`
 - **Verification**:
-  - This seam **produces** `C-01` and `C-02`.
-  - Producer-seam readiness means the canonical docs and seam-local plan make selection order, inventory roots and filename rules, deny-by-default allowlisting, trusted-input boundaries, and auth precedence concrete enough that `SEAM-2` can consume `THR-01` without inferring missing semantics from the current `cli:codex` implementation.
+  - This seam **consumes** published `C-01` and `C-02` and turns them into shell behavior plus evidence.
+  - Readiness means `SEAM-2` can consume `THR-01` without inferring missing semantics from the current `cli:codex` implementation.
   - Verification for this seam centers on:
-    - one explicit ordered selection path from config/policy/inventory inputs to allowed backend id
-    - one explicit precedence rule between allowlisted env material and allowlisted host credential files
-    - distinct invalid-integration, dependency-unavailable, and policy-denial outcomes
-    - shell-side tests and docs remaining aligned with the canonical `docs/contracts/` refs
+    - `validate_gateway_lifecycle_config` rejects empty or disallowed lifecycle posture before dispatch
+    - `build_gateway_request` keeps selection on existing config/policy roots and passes only an allowed backend id to the runtime boundary
+    - `resolve_integrated_auth_payload` plus `resolve_cli_codex_integrated_auth` enforce env-primary/file-fallback/no-mixed-source auth precedence
+    - shell-side tests prove the distinction between invalid integration, policy denial, transient runtime failure, and component unavailable where the shell owns that classification
 - **Canonical contract refs**:
   - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
   - `docs/contracts/substrate-gateway-policy-evaluation.md`
@@ -106,21 +105,21 @@ open_remediations:
   - `S99` (`slice-99-seam-exit-gate.md`)
 - **Why this seam needs an explicit exit gate**:
   - `THR-01` is the controlling upstream handoff for both downstream seams. They must consume closeout-backed publication truth, not inferred shell behavior.
-- **Expected contracts to publish**:
+- **Expected contracts to consume**:
   - `C-01`
   - `C-02`
 - **Expected threads to publish / advance**:
   - `THR-01`: `identified` -> `published`
 - **Likely downstream stale triggers**:
-  - backend inventory roots or filename/id invariants change
+  - selection or inventory validation behavior changes at the shell boundary
   - auth precedence or no-host-fallback rules change
-  - failure taxonomy shifts between invalid integration, dependency unavailable, and policy denial
+  - failure taxonomy shifts between invalid integration, policy denial, component unavailable, and dependency unavailable
   - supporting ADR-0046 docs drift away from canonical `docs/contracts/` truth
 - **Expected closeout evidence**:
-  - landed canonical contract updates in `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - landed shell updates in `crates/shell/src/builtins/world_gateway.rs`
+  - landed shell tests in `crates/shell/tests/world_gateway.rs`
   - supporting ADR-0046 doc alignment in `contract.md`, `policy-spec.md`, and `env-vars-spec.md`
-  - landed shell evidence for the selection/policy gate in `crates/shell/src/builtins/world_gateway.rs`
-  - recorded remediation disposition for `REM-001` and `REM-002`
+  - recorded remediation disposition for any remaining landing-only follow-through, including `REM-001`
 
 ## Slice index
 
@@ -136,9 +135,9 @@ open_remediations:
   - `SEAM-1` -> `SEAM-2` via `THR-01` carrying `C-01` and `C-02`
   - `SEAM-1` -> `SEAM-3` via `THR-01` carrying `C-01` and `C-02`
 - **Execution posture**:
-  - The seam remains `status: decomposed`: the seam-local review is now signed off and the shell/code basis revalidation passes, `REM-002` still blocks `gates.pre_exec.contract`, and `REM-001` remains open as landing and seam-exit alignment work against the published `C-02` rule.
+  - The seam remains `status: decomposed`: the seam-local review, contract, and revalidation gates all pass. Remaining work is implementation, conformance, and seam-exit evidence, with `REM-001` carried only as landing/closeout alignment.
 - **Slicing strategy**:
-  - contract-first, then dependency-first implementation, then conformance, then explicit seam exit
+  - baseline check, then shell selection implementation, then shell auth implementation, then conformance, then explicit seam exit
 
 ## Governance pointers
 

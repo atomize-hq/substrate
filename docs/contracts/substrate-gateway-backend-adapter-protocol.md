@@ -20,6 +20,8 @@ Concrete rules:
   contract has been accepted as a fixed input.
 - One selected backend id maps to one adapter dispatch target for the duration of a run. Internal
   provider or wrapper mechanics remain hidden behind that adapter identity.
+- If adapter resolution fails for a backend id that has already passed selection and allowlist
+  validation, the outcome is dependency unavailable rather than invalid selection.
 - The protocol lifecycle is:
   1. resolve the adapter for the already-selected backend id
   2. load the adapter capability advertisement for the adopted capability subset
@@ -68,6 +70,8 @@ The local-to-external handoff is explicit:
 
 - This contract does not redefine the stable backend-id grammar or allowlist order. That remains
   owned by `docs/contracts/substrate-gateway-backend-adapter-selection.md`.
+- This contract consumes the upstream invalid-selection, dependency-unavailable, and policy-denial
+  buckets; adapter lookup must not reinterpret backend-id grammar or allowlist policy locally.
 - This contract does not widen the machine-readable status boundary. That remains owned by
   `docs/contracts/substrate-gateway-status-schema.md`.
 - This contract does not define provider-specific routing strategy, planner/executor role splits,

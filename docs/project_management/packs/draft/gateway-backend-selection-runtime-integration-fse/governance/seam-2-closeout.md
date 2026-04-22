@@ -14,15 +14,12 @@ basis:
     - THR-01
     - THR-02
   stale_triggers:
-    - revalidate downstream seams if binding classification, auth classification, auth handoff delivery-model rules, or runtime artifact semantics change
+    - revalidate downstream seams if runtime binding behavior, integrated auth/request payload shape, or runtime artifact semantics change
 gates:
   post_exec:
     landing: pending
     closeout: pending
-open_remediations:
-  - REM-003
-  - REM-004
-  - REM-006
+open_remediations: []
 ---
 
 # Closeout - SEAM-2 Runtime realization and artifacts
@@ -33,15 +30,17 @@ This scaffold is reserved for the post-exec closeout once the next seam lands.
 
 - **Source artifact**: `../threaded-seams/seam-2-runtime-realization-and-artifacts/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
-  - expected canonical contract publications:
-    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
-  - supporting evidence may include aligned ADR-0046 docs:
+  - expected implementation evidence:
+    - generalized integrated auth/request payload support in `crates/agent-api-types/src/lib.rs`
+    - backend-aware request construction in `crates/shell/src/builtins/world_gateway.rs`
+    - adapter-driven runtime realization in `crates/world-agent/src/gateway_runtime.rs` and `crates/world-agent/src/service.rs`
+    - runtime and command-path regression coverage in the relevant shell/world-agent tests
+  - supporting evidence may include aligned ADR-0046 implementation notes:
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-protocol-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/filesystem-semantics-spec.md`
 - **Contracts published or changed**:
-  - expected: `C-03`, `C-04`
+  - none required; this seam primarily consumes existing canonical contracts
 - **Threads published / advanced**:
   - expected: `THR-02`
 - **Review-surface delta**:
@@ -51,21 +50,17 @@ This scaffold is reserved for the post-exec closeout once the next seam lands.
 - **Downstream stale triggers raised**:
   - to be recorded after landing
 - **Remediation disposition**:
-  - `REM-003`
-  - `REM-004`
-  - `REM-006`
+  - no seam-local pre-exec contract remediations should remain; record any carried-forward execution issues here if they emerge during landing
 - **Promotion blockers**:
-  - open blocking remediations prevent promotion readiness
+  - promotion remains blocked until `THR-01` publishes and the runtime implementation/tests land
 - **Promotion readiness**:
-  - blocked until `REM-003`, `REM-004`, and `REM-006` resolve, `THR-01` is published, and the seam-exit gate passes
+  - blocked until `THR-01` is published, the runtime implementation lands, and the seam-exit gate passes
 
 ## Post-exec gate disposition
 
 - **Landing gate**: pending
 - **Closeout gate**: pending
 - **Unresolved remediations**:
-  - `REM-003`
-  - `REM-004`
-  - `REM-006`
+  - none expected at seam start; record any implementation defects discovered during landing
 - **Carried-forward remediations**:
   - none yet

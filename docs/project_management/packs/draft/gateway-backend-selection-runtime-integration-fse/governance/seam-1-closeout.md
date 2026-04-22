@@ -31,14 +31,14 @@ The seam is now decomposed at `../threaded-seams/seam-1-backend-selection-and-po
 
 - **Source artifact**: `../threaded-seams/seam-1-backend-selection-and-policy-surface/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
-  - expected canonical contract publications:
+  - expected canonical contract alignment evidence:
     - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
     - `docs/contracts/substrate-gateway-policy-evaluation.md`
   - supporting evidence may include aligned ADR-0046 docs:
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/contract.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/policy-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md`
-- **Contracts published or changed**:
+- **Contracts consumed or narrowly aligned**:
   - expected: `C-01`, `C-02`
 - **Threads published / advanced**:
   - expected: `THR-01`

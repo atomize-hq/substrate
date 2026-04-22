@@ -20,26 +20,25 @@ gates:
     closeout: pending
 threads:
   - THR-01
-contracts_produced:
+contracts_produced: []
+contracts_consumed:
   - C-01
   - C-02
-contracts_consumed: []
 open_remediations:
   - REM-001
-  - REM-002
 ---
 ### S99 - Seam-exit gate
 
 - **User/system value**:
   - Turns `SEAM-1` from "probably done" into one recorded upstream truth that `SEAM-2` and `SEAM-3` may legally consume.
 - **Scope (in/out)**:
-  - In: landed evidence capture, contract publication accounting, thread publication, stale-trigger emission, remediation disposition, and promotion-readiness statement
+  - In: landed shell evidence capture, supporting-doc alignment accounting, thread publication, stale-trigger emission, remediation disposition, and promotion-readiness statement
   - Out: net-new selection or policy implementation
 - **Acceptance criteria**:
-  - `../../governance/seam-1-closeout.md` records landed evidence for canonical `C-01` and `C-02` publications
+  - `../../governance/seam-1-closeout.md` records landed evidence that shell behavior and tests adopt canonical `C-01` and `C-02`
   - `THR-01` is explicitly recorded as `published`
   - any planned-versus-landed delta that affects downstream basis becomes an explicit stale trigger
-  - promotion readiness is `ready` only if `REM-001` and `REM-002` are resolved and post-exec gates pass
+  - promotion readiness is `ready` only if shell evidence lands, post-exec gates pass, and any remaining governance residue is explicitly marked resolved or non-blocking
 - **Dependencies**:
   - `S00`
   - `S1`
@@ -47,7 +46,7 @@ open_remediations:
   - `S3`
   - `THR-01`
 - **Verification**:
-  - closeout review against landed docs, landed shell behavior, test evidence, and remediation disposition
+  - closeout review against landed shell behavior, test evidence, supporting ADR alignment, and remediation disposition
 - **Rollout/safety**:
   - do not let downstream seams promote against unpublished or partially published selection/policy truth
 - **Review surface refs**:
@@ -57,9 +56,9 @@ open_remediations:
 #### S99.T1 - Capture landed contract and thread publication evidence
 
 - **Outcome**:
-  - closeout records exactly what landed for `C-01`, `C-02`, and `THR-01`.
+  - closeout records exactly what landed for shell adoption of `C-01`, `C-02`, and `THR-01`.
 - **Inputs/outputs**:
-  - Inputs: landed canonical docs, supporting ADR-0046 docs, shell test evidence
+  - Inputs: landed shell code, shell test evidence, supporting ADR-0046 docs
   - Outputs: completed `../../governance/seam-1-closeout.md`
 - **Thread/contract refs**:
   - `THR-01`
@@ -92,11 +91,11 @@ Checklist:
 - **Thread/contract refs**:
   - `THR-01`
   - `REM-001`
-  - `REM-002`
 - **Implementation notes**:
   - promotion may not proceed if the previous closeout is missing, the seam-exit gate fails, or `THR-01` is not published
 - **Acceptance criteria**:
   - promotion readiness is explicitly `ready` or `blocked`, with blockers named
+  - any lingering external remediation/log mismatch is called out as coordination debt rather than silently treated as a SEAM-1 contract blocker
 - **Test notes**:
   - closeout review should verify no open blocking remediation remains hidden
 - **Risk/rollback notes**:

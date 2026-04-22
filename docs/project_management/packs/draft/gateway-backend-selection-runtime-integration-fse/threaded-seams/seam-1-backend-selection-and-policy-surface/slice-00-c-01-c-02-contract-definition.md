@@ -1,7 +1,7 @@
 ---
 slice_id: S00
 seam_id: SEAM-1
-slice_kind: contract_definition
+slice_kind: implementation
 execution_horizon: active
 status: decomposed
 plan_version: v1
@@ -9,7 +9,7 @@ basis:
   currentness: current
   basis_ref: seam.md#basis
   stale_triggers:
-    - canonical contract publication changes inventory roots, filename rules, or auth precedence outside the planned task order
+    - canonical `C-01` or `C-02` rules change after the baseline check
 gates:
   pre_exec:
     review: inherited
@@ -20,108 +20,100 @@ gates:
     closeout: pending
 threads:
   - THR-01
-contracts_produced:
+contracts_produced: []
+contracts_consumed:
   - C-01
   - C-02
-contracts_consumed: []
 open_remediations:
   - REM-001
-  - REM-002
 ---
-### S00 - Define the `C-01` and `C-02` contract baseline
+### S00 - Confirm the published `C-01` / `C-02` baseline and lock the implementation boundary
 
 - **User/system value**:
-  - Make the producer seam concrete enough that runtime realization can consume published selection and policy truth instead of reverse-engineering the current `cli:codex` path.
+  - Starts the seam from already-published contract truth so implementation can begin immediately instead of reopening contract drafting.
 - **Scope (in/out)**:
-  - In: canonical contract language for selection order, inventory discoverability, filename/id invariants, trusted-input boundaries, auth precedence, and failure taxonomy
-  - Out: adapter protocol details, runtime artifact semantics, or parity proof
+  - In: confirm that `C-01` / `C-02` already cover the shell-owned rules, map those rules to exact code/test surfaces, and record any residual alignment as non-blocking follow-through
+  - Out: new canonical contract publication, runtime protocol details, runtime artifact semantics, or parity proof
 - **Acceptance criteria**:
-  - `docs/contracts/substrate-gateway-backend-adapter-selection.md` explicitly names backend inventory discoverability roots and filename/id invariants tightly enough to close `REM-002`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md` explicitly names one precedence rule between allowlisted env material and allowlisted host credential files tightly enough to close `REM-001`
-  - supporting ADR-0046 docs reference and align to the canonical contract docs rather than acting as competing publication surfaces
-  - the verification checklist names concrete code and test surfaces that must remain aligned during landing
+  - the slice records that `C-01` / `C-02` are sufficient for SEAM-1 and that the remaining work is shell implementation plus evidence
+  - `validate_gateway_lifecycle_config`, `build_gateway_request`, `resolve_integrated_auth_payload`, and `resolve_cli_codex_integrated_auth` are named as the primary code surfaces
+  - the slice names exact shell tests to preserve and the new tests required to prove adoption
+  - supporting ADR-0046 docs are treated as implementation notes that defer to canonical `docs/contracts/` ownership
 - **Dependencies**:
   - none inbound; this is the first producer seam in the pack
 - **Verification**:
-  - compare contract text against `../../threading.md`, `../../seam-1-backend-selection-and-policy-surface.md`, `docs/contracts/substrate-gateway-backend-adapter-selection.md`, `docs/contracts/substrate-gateway-policy-evaluation.md`, and `crates/shell/src/builtins/world_gateway.rs`
+  - compare the seam plan against `docs/contracts/substrate-gateway-backend-adapter-selection.md`, `docs/contracts/substrate-gateway-policy-evaluation.md`, `crates/shell/src/builtins/world_gateway.rs`, and `crates/shell/tests/world_gateway.rs`
 - **Rollout/safety**:
-  - preserves fail-closed behavior and keeps gateway-local state out of authorization truth
+  - preserves fail-closed behavior by preventing the seam from broadening scope into runtime ownership
 - **Review surface refs**:
   - `../review.md`
   - `../../review_surfaces.md`
 
-For a `slice_kind: contract_definition` slice that produces an owned contract:
-
-- make the contract rules concrete enough that the producer seam can later satisfy `gates.pre_exec.contract`
-- include a narrow verification plan with test locations, edge cases, and pass/fail conditions
-- do not require the final accepted contract artifact to exist before the producer seam can become `exec-ready`
-
-#### S00.T1 - Freeze the `C-01` selection and inventory rules
+#### S00.T1 - Confirm the `C-01` shell-owned baseline and identify executable gaps
 
 - **Outcome**:
-  - `C-01` names one ordered selection path, one explicit discoverability-root policy, and one filename/id consistency rule that downstream seams can consume without local invention.
+  - The seam records that `C-01` already fixes selection order, inventory roots, and filename/id invariants, and that SEAM-1 now only needs shell-side adoption and tests.
 - **Inputs/outputs**:
-  - Inputs: `../../threading.md`, `../../seam-1-backend-selection-and-policy-surface.md`, `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-  - Outputs: updated canonical selection contract plus aligned supporting ADR-0046 contract/policy text
+  - Inputs: `../../threading.md`, `docs/contracts/substrate-gateway-backend-adapter-selection.md`, `crates/shell/src/builtins/world_gateway.rs`
+  - Outputs: a narrowed SEAM-1 implementation plan and explicit code/test ownership
 - **Thread/contract refs**:
   - `THR-01`
   - `C-01`
 - **Implementation notes**:
-  - keep the backend id as a stable adapter selector only
-  - make discoverability roots explicit without widening tuple or status surfaces
-  - preserve deny-by-default allowlisting before adapter dispatch
+  - `validate_gateway_lifecycle_config` currently only checks enabled/mode/non-empty backend and must become the shell’s starting gate, not the whole `C-01` story
+  - `build_gateway_request` is the handoff point where selection must already be legal before runtime dispatch
+  - keep `llm.routing.default_backend` and `llm.allowed_backends` as the only selection inputs
 - **Acceptance criteria**:
-  - malformed backend ids, unknown ids, inventory mismatches, and policy denial remain distinct outcomes
-  - inventory roots and filename/id invariants are explicit enough that `SEAM-2` can rely on them
+  - the slice no longer claims fresh contract publication is needed to begin implementation
+  - SEAM-1 names explicit shell tests for empty backend, unsupported backend, allowlist denial, and inventory mismatch handling
 - **Test notes**:
-  - review against shell gateway config/policy resolution and existing contract docs
+  - preserve `world_gateway_empty_default_backend_uses_exit_code_2`
+  - preserve `world_gateway_invalid_integration_uses_exit_code_2`
 - **Risk/rollback notes**:
-  - a vague inventory rule will re-open `REM-002` and force downstream stale triggers immediately
+  - if this slice leaves inventory adoption vague, the runtime will keep surfacing shell-owned invalid-integration cases
 
 Checklist:
 - Implement:
-  - publish the `C-01` contract details in the canonical selection doc
+  - record the exact shell code surfaces that must adopt `C-01`
 - Test:
-  - verify the ordered selection path matches the shell gateway entrypoint
+  - verify the selection path is fully validated before the world-agent call
 - Validate:
-  - confirm `SEAM-2` can cite `C-01` without inheriting hidden inventory assumptions
+  - confirm `SEAM-2` inherits an allowed backend id, not unresolved shell validation work
 
-#### S00.T2 - Freeze the `C-02` auth precedence and trusted-input rules
+#### S00.T2 - Confirm the `C-02` shell-owned baseline and identify evidence gaps
 
 - **Outcome**:
-  - `C-02` defines one explicit env-versus-file precedence rule and one trusted-input boundary for policy evaluation.
+  - The seam records that `C-02` already fixes precedence and fail-closed posture, and that SEAM-1 now owns adoption plus evidence.
 - **Inputs/outputs**:
-  - Inputs: `../../threading.md`, `../../seam-1-backend-selection-and-policy-surface.md`, `docs/contracts/substrate-gateway-policy-evaluation.md`, `crates/shell/src/builtins/world_gateway.rs`
-  - Outputs: updated canonical policy-evaluation contract plus aligned supporting ADR-0046 policy/env-var text
+  - Inputs: `../../threading.md`, `docs/contracts/substrate-gateway-policy-evaluation.md`, `crates/shell/src/builtins/world_gateway.rs`, `crates/shell/tests/world_gateway.rs`
+  - Outputs: a narrowed SEAM-1 plan for precedence/fail-closed adoption and tests
 - **Thread/contract refs**:
   - `THR-01`
   - `C-02`
 - **Implementation notes**:
-  - keep policy explanations and fail-closed behavior Substrate-owned
-  - preserve the boundary that gateway-local config, admin, and persistence are not trusted policy inputs
-  - make the precedence rule explicit rather than leaving the current `cli:codex` branch as accidental truth
-  - state explicitly that precedence chooses the handoff content, not the long-term host-to-world carrier; current env delivery may remain as v1 transport, while the preferred additive direction is a secret-channel payload plus inherited FD/pipe auth bundle
+  - `resolve_integrated_auth_payload` and `resolve_cli_codex_integrated_auth` are the primary shell adoption surfaces
+  - keep precedence attached to policy-allowed sources only
+  - do not pull secret-carrier redesign into this seam
 - **Acceptance criteria**:
-  - complete allowlisted env auth material is primary, host credential file reads are fallback-only when env auth is absent, and mixed-source completion is forbidden
-  - partial env auth remains invalid integration rather than silent file fallback
-  - no-host-fallback when in-world execution is required stays explicit
-  - trusted-input boundaries remain aligned across canonical and supporting docs
+  - the slice records that env-primary/file-fallback/no-mixed-source is already canonical and no longer blocks implementation
+  - the slice names the remaining missing evidence: “both env and file present; env wins without merge”
 - **Test notes**:
-  - compare contract text to the current shell env/file selection behavior
+  - preserve `world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file`
+  - preserve `world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override`
+  - preserve `world_gateway_host_credential_policy_denials_use_exit_code_5`
+  - preserve `world_gateway_incomplete_env_override_uses_exit_code_2`
 - **Risk/rollback notes**:
-  - if precedence is left ambiguous, `REM-001` remains blocking and downstream runtime auth shaping cannot become deterministic
+  - if evidence stays incomplete, `REM-001` will linger as seam-exit follow-through even after code lands
 
 - **Verification plan**:
-  - Preserve `world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file`, `world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override`, `world_gateway_incomplete_env_override_uses_exit_code_2`, and `world_gateway_host_credential_policy_denials_use_exit_code_5` in `crates/shell/tests/world_gateway.rs`.
-  - Add `world_gateway_status_prefers_allowed_env_auth_over_host_auth_file` in `crates/shell/tests/world_gateway.rs` so both sources can exist on the host while env-token presence still suppresses file-derived substitution.
-  - Preserve `integrated_source_requires_substrate_handoff` and `integrated_source_does_not_read_local_auth_files` in `crates/gateway/src/auth/codex_auth_context.rs` so integrated mode never reintroduces local auth-file fallback.
-  - Cover edge cases: env token with optional account id, file-only auth state, account-id-only env, policy-denied host credential file read, and integrated runtime missing or incomplete handoff.
-  - Pass/fail: env token present means the request carries env-derived auth only; env absent means allowed file fallback can populate the handoff; partial env fails as invalid integration; blocked file reads fail as policy denial; integrated mode rejects missing handoff before any local auth-file read.
+  - Add `world_gateway_status_prefers_allowed_env_auth_over_host_auth_file` in `crates/shell/tests/world_gateway.rs`.
+  - Add a shell test proving env auth blocked by `llm.secrets.env_allowed` denies without file fallback.
+  - Keep carrier and runtime-side auth handling out of SEAM-1; those remain `SEAM-2` follow-through.
 
 Checklist:
 - Implement:
-  - publish the `C-02` precedence and trusted-input rules in the canonical policy doc
+  - record the exact shell code surfaces that must adopt `C-02`
 - Test:
-  - verify the rule is consistent with or intentionally supersedes the current shell behavior
+  - verify shell precedence and fail-closed evidence is complete enough for seam exit
 - Validate:
-  - confirm `SEAM-2` can consume `C-02` without reopening auth-source ownership questions
+  - confirm `SEAM-2` inherits a stable shell auth boundary rather than an unresolved precedence question

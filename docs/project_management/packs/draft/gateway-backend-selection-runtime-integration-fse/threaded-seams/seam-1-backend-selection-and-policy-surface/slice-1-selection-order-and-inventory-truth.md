@@ -24,20 +24,19 @@ contracts_produced:
   - C-01
 contracts_consumed:
   - C-01
-open_remediations:
-  - REM-002
+open_remediations: []
 ---
 ### S1 - Land selection order and inventory truth at the shell boundary
 
 - **User/system value**:
-  - Ensures backend selection behaves the same way the published contract says it should, instead of leaving inventory or failure semantics inferred from one backend-specific path.
+  - Makes the shell adopt published `C-01` rules before the world-agent sees the request, instead of letting invalid or ambiguous backend selection leak downstream.
 - **Scope (in/out)**:
-  - In: shell selection validation, inventory-root consumption, filename/id consistency enforcement, and invalid-integration classification
-  - Out: auth precedence, payload shaping, runtime artifact creation
+  - In: shell selection validation, inventory-backed backend resolution posture, deny-by-default allowlisting, and invalid-integration classification
+  - Out: auth precedence, runtime config rendering, adapter lookup, and process launch
 - **Acceptance criteria**:
-  - shell gateway request construction validates selection inputs in the order published by `C-01`
-  - invalid integration remains separate from policy denial and dependency unavailable
-  - inventory-root and filename/id expectations land in supporting docs and code-facing validation notes
+  - `validate_gateway_lifecycle_config` and `build_gateway_request` validate selection inputs in the order published by `C-01`
+  - invalid integration remains separate from policy denial and runtime-owned dependency unavailable
+  - shell docs and tests explicitly describe which inventory and mismatch cases are shell-owned versus runtime-owned
 - **Dependencies**:
   - `S00`
   - `THR-01`
@@ -53,20 +52,24 @@ open_remediations:
 #### S1.T1 - Align shell validation with published selection order
 
 - **Outcome**:
-  - `crates/shell/src/builtins/world_gateway.rs` and supporting docs use the same ordered decision path from selected backend id through allowlist enforcement.
+  - `crates/shell/src/builtins/world_gateway.rs` uses the same ordered decision path as `C-01` from selected backend id through allowlist enforcement before runtime dispatch.
 - **Inputs/outputs**:
   - Inputs: `S00`, `docs/contracts/substrate-gateway-backend-adapter-selection.md`, `crates/shell/src/builtins/world_gateway.rs`
-  - Outputs: aligned shell selection flow and supporting ADR-0046 contract/policy text
+  - Outputs: aligned shell selection flow, targeted test updates, and supporting ADR-0046 doc notes
 - **Thread/contract refs**:
   - `THR-01`
   - `C-01`
 - **Implementation notes**:
-  - keep deny-by-default allowlisting ahead of adapter dispatch
-  - keep shell-side validation narrow to the selection boundary owned by this seam
+  - start at `validate_gateway_lifecycle_config` and `build_gateway_request`
+  - keep deny-by-default allowlisting ahead of any runtime call
+  - do not invent runtime binding/capability rules here; stop at “allowed backend id handed off”
 - **Acceptance criteria**:
-  - the selected backend id cannot reach runtime realization before the contract-defined pre-dispatch checks finish
+  - the selected backend id cannot reach runtime realization before shell-owned pre-dispatch checks finish
+  - a well-formed but unsupported backend is rejected deterministically at the shell boundary or explicitly documented as runtime-owned
 - **Test notes**:
-  - extend or update `crates/shell/tests/world_gateway.rs`
+  - preserve `world_gateway_empty_default_backend_uses_exit_code_2`
+  - add a test for unsupported-but-well-formed backend rejection before socket contact
+  - preserve `world_gateway_policy_failures_use_exit_code_5`
 - **Risk/rollback notes**:
   - a partial alignment leaves downstream reviewers with two conflicting selection orders
 
@@ -81,19 +84,20 @@ Checklist:
 #### S1.T2 - Make inventory discoverability and filename/id mismatch handling executable
 
 - **Outcome**:
-  - inventory roots and filename/id invariants are not only documented but also reflected in executable validation or drift-check notes.
+  - inventory roots and filename/id invariants are tied to executable validation notes and tests instead of being treated as planning prose only.
 - **Inputs/outputs**:
-  - Inputs: canonical `C-01`, supporting ADR-0046 docs, shell validation points
-  - Outputs: aligned docs, validation notes, and any shell-side checks required by the published rule
+  - Inputs: canonical `C-01`, supporting ADR-0046 docs, shell validation points, and `crates/shell/tests/world_gateway.rs`
+  - Outputs: aligned docs, validation notes, and shell-side tests required by the published rule
 - **Thread/contract refs**:
   - `THR-01`
   - `C-01`
 - **Implementation notes**:
   - keep rules descriptive in `docs/contracts/`; use seam-local planning and code/tests for planning IDs and implementation detail
 - **Acceptance criteria**:
-  - `REM-002` has clear landing evidence targets
+  - downstream runtime planning no longer relies on implicit shell behavior for inventory mismatch semantics
+  - any remaining inventory validation that cannot be owned by the shell is called out explicitly as `SEAM-2` follow-through
 - **Test notes**:
-  - document the expected mismatch cases and how tests prove them
+  - add an explicit mismatch/unsupported-backend test or record why that proof remains runtime-owned
 - **Risk/rollback notes**:
   - weak mismatch handling will let later runtime slices treat filesystem convention as a hidden contract
 

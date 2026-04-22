@@ -86,6 +86,8 @@ Rules:
 - `working_dir`, `timeout_ms`, and `env` remain optional request metadata and must not redefine
   backend identity or policy.
 - `extensions` is limited to the adopted run extension subset above.
+- Backend-specific integrated auth handoff material, when required to realize adapter execution,
+  is bounded request input rather than backend-selection or policy input.
 
 ### Adapter Event and Completion Payloads
 
@@ -155,6 +157,8 @@ Rules:
 - `kind: "unsupported_capability"` may include the rejected capability id in `capability`.
 - `kind: "invalid_request"` covers closed-schema or contradiction failures for the adopted
   extension subset.
+- `kind: "invalid_request"` also covers missing or incomplete required integrated auth handoff
+  material after policy has permitted the relevant host-side sourcing path.
 - `kind: "backend"` covers runtime rejections and bounded backend-owned failure messages,
   including the pinned cancelled completion outcome and the reserved safe session-selection failure
   messages.
@@ -165,6 +169,10 @@ Rules:
 
 - This schema does not redefine the top-level structured-event envelope or trace vocabulary. Those
   remain owned by ADR-0017 and ADR-0028.
+- This schema does not define the durable host-to-world carrier for integrated auth material.
+  Env-based delivery, file-backed delivery, or a future secret-channel handoff remain outside this
+  schema as long as the published policy precedence and bounded request validation rules stay
+  unchanged.
 - This schema does not redefine machine-readable gateway status output. That remains owned by
   `docs/contracts/substrate-gateway-status-schema.md`.
 - This schema does not make backend-specific capability ids, provider quirks, or raw transport
