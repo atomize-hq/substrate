@@ -2,26 +2,29 @@
 seam_id: SEAM-3
 seam_slug: parity-validation-and-rollout
 type: conformance
-status: proposed
-execution_horizon: next
-plan_version: v1
+status: exec-ready
+execution_horizon: active
+plan_version: v2
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
-  upstream_closeouts: []
+  upstream_closeouts:
+    - governance/seam-1-closeout.md
+    - governance/seam-2-closeout.md
   required_threads:
     - THR-01
     - THR-02
+    - THR-03
   stale_triggers:
-    - `SEAM-1` or `SEAM-2` publishes different classification or artifact truth than assumed here
-    - the first additional integrated backend baseline is fixed elsewhere
-    - Linux/macOS/Windows parity expectations or smoke ownership change
+    - `SEAM-1` or `SEAM-2` publishes different selection, runtime, or artifact truth than the parity proof now assumes
+    - the named `api:openai` proof target changes or another supported integrated backend is chosen first
+    - Linux/macOS/Windows parity expectations, smoke ownership, or unsupported-backend handling change before landing
 gates:
   pre_exec:
-    review: pending
+    review: passed
     contract: passed
-    revalidation: pending
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -37,10 +40,11 @@ open_remediations: []
 - **Goal / value**:
   - Prove that the multi-backend integrated runtime lands without regressing the existing operator contract or the current `cli:codex` floor.
   - Keep parity, unsupported-backend behavior, and rollout evidence as explicit execution proof rather than pretending they are blocked on another missing contract publication.
+  - Execute against the now-named first additional integrated backend proof target `api:openai` instead of planning around an unspecified future backend.
 - **Scope**
   - In:
     - `cli:codex` regression floor
-    - first additional integrated backend proof target once `SEAM-2` lands it in code
+    - first additional integrated backend proof target `api:openai`
     - Linux/macOS/Windows validation matrix
     - explicit unsupported-backend posture
     - compatibility and rollout evidence
@@ -76,7 +80,7 @@ open_remediations: []
     - `THR-01`
     - `THR-02`
   - Transitive blockers:
-    - a named first additional integrated backend must exist in landed code before cross-backend parity proof is authoritative
+    - none at promotion time beyond preserving the named `api:openai` proof target and current platform/runtime truth
   - Direct consumers:
     - none inside this pack
   - Derived consumers:
@@ -84,23 +88,23 @@ open_remediations: []
     - compatibility docs
     - smoke and manual validation
 - **Touch surface**:
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/platform-parity-spec.md`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/compatibility-spec.md`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/manual_testing_playbook.md`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/smoke/linux-smoke.sh`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/smoke/macos-smoke.sh`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/smoke/windows-smoke.ps1`
+  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/platform-parity-spec.md`
+  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/compatibility-spec.md`
+  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/manual_testing_playbook.md`
+  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/smoke/linux-smoke.sh`
+  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/smoke/macos-smoke.sh`
+  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/smoke/windows-smoke.ps1`
   - `crates/world-agent/tests/gateway_runtime_parity.rs`
   - `crates/shell/tests/world_gateway.rs`
 - **Verification**:
   - This seam consumes upstream contracts `C-01`, `C-02`, `C-03`, and `C-04` plus the existing lifecycle/status parity contract in `docs/contracts/substrate-gateway-runtime-parity.md`.
   - Current pre-exec gate posture is:
-    - `review: pending` because the seam-local proof plan and evidence checklist have not yet been decomposed.
+    - `review: passed` because seam-local proof planning, falsification questions, and the parity/rollout review bundle now exist under `threaded-seams/seam-3-parity-validation-and-rollout/`.
     - `contract: passed` because the operator/runtime parity surface is already owned by `docs/contracts/substrate-gateway-runtime-parity.md`, and unsupported-backend/no-fallback behavior is already implied by the existing selection/runtime contracts. This seam should validate those truths in code and smoke evidence rather than wait for a new compatibility contract.
-    - `revalidation: pending` because parity proof is downstream of `THR-01`, `THR-02`, and the first landed non-Codex backend.
+    - `revalidation: passed` because `governance/seam-2-closeout.md` publishes `THR-02`, names `api:openai` as the first landed non-Codex proof target, and the live runtime/test surfaces still expose `api_env`, `api:openai`, and explicit unsupported-backend behavior exactly where this seam expects to verify them.
   - Later seam-local verification should prove:
     - `cli:codex` remains non-regressed
-    - one additional integrated backend is named and exercised end to end
+    - `api:openai` is exercised end to end as the first additional integrated backend proof target
     - unsupported backends fail explicitly across Linux/macOS/Windows
     - rollout posture does not rely on widened status or tuple surfaces
     - smoke/manual evidence matches the existing operator/runtime parity contracts rather than an invented seam-local compatibility taxonomy
@@ -112,9 +116,9 @@ open_remediations: []
   - `docs/contracts/substrate-gateway-runtime-parity.md`
 - **Risks / unknowns**:
   - Risk:
-    - parity work can start before a real second backend exists and then hardcode fake fixtures or promises
+    - parity work can overfit to one `api:openai` proof path and stop exercising the explicit unsupported-backend posture that must remain visible
   - De-risk plan:
-    - treat the additional-backend target as an execution dependency chosen by landed implementation, then build parity evidence around that real backend
+    - keep the `cli:codex` regression floor and unsupported-backend negative cases in the same verification matrix as the `api:openai` proof path
   - Risk:
     - unsupported-backend behavior can quietly fall back to the current Codex path if explicit compatibility proof never lands
   - De-risk plan:
@@ -122,19 +126,19 @@ open_remediations: []
   - Risk:
     - parity work can drift back into upstream contract design if runtime realization remains unsettled
   - De-risk plan:
-    - keep this seam queued behind active runtime realization until `THR-02` is published and a real additional backend exists to validate
+    - keep this seam anchored to the landed `THR-02` handoff and re-run revalidation if runtime truth or the named proof target changes before landing
 - **Rollout / safety**:
-  - This seam is now `next` because parity and rollout proof should verify landed upstream implementation rather than race ahead of it.
+  - This seam is now `active` and `exec-ready` because parity and rollout proof should verify landed upstream implementation rather than race ahead of it, and the required runtime handoff has been revalidated.
   - Safety depends on keeping `cli:codex` as the regression floor while proving explicit no-fallback behavior for unsupported backends.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `next` because it depends on upstream runtime implementation landing first, not because it needs another round of contract authoring.
+    - `active` because the upstream runtime implementation landed, `THR-02` is now revalidated, and the remaining work is bounded conformance and rollout execution.
   - Which threads matter most
     - `THR-01`
     - `THR-02`
     - `THR-03`
   - What the first seam-local review should focus on
-    - baseline backend choice once implementation exists
+    - `api:openai` as the landed proof target
     - compatibility matrix and no-fallback assertions
     - Linux/macOS/Windows evidence expectations
     - smoke/manual proof ownership

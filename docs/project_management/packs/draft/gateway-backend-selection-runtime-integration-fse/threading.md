@@ -2,16 +2,16 @@
 
 ## Execution horizon summary
 
-- **Active seam**: none currently
-  - `SEAM-2` is landed and closed out, and no other seam has been promoted into active execution yet.
-- **Next seam**: `SEAM-3`
-  - This seam can now promote from the published `THR-02` runtime handoff and verify parity and rollout posture against landed upstream truth.
-- **Future seams**: none currently queued beyond `SEAM-3`
+- **Active seam**: `SEAM-3`
+  - This seam now consumes a revalidated `THR-02` handoff and is the only active execution target in the pack.
+- **Next seam**: none currently queued
+  - No safe later seam exists in this pack after `SEAM-3`, so `next_seam` remains `null`.
+- **Future seams**: none currently queued beyond the active seam
 
 Horizon policy for this pack:
 
 - `SEAM-2` already satisfied its seam-exit gate and published `THR-02` in `governance/seam-2-closeout.md`
-- the next seam may now start from that published handoff once it is promoted into active execution
+- the active seam now executes from that published handoff because promotion revalidated it against current runtime and test surfaces
 - no later seam is queued until a safe post-`SEAM-3` target is intentionally added
 
 ## Contract registry
@@ -99,10 +99,10 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-03`, `C-04`
   - **Purpose**: land one integrated runtime realization path that parity and rollout can verify without inventing binding, capability, auth, or artifact behavior.
-  - **State**: `published`
+  - **State**: `revalidated`
   - **Revalidation trigger**: binding lookup rules, capability gates, auth handoff validation, runtime payload shapes, artifact naming, readiness semantics, or restart behavior changes.
-  - **Satisfied by**: `governance/seam-2-closeout.md` plus evidence that shell, `world-agent`, and shared agent-api surfaces implement the published adapter-protocol and runtime-owned schema surfaces without widening unrelated external ownership.
-  - **Notes**: this thread was published by the landed `SEAM-2` closeout once the bounded multi-backend runtime handoff (`cli:codex` plus `api:openai`) passed tests and seam-exit review. `SEAM-3` must revalidate against that closeout before execution.
+  - **Satisfied by**: `governance/seam-2-closeout.md` plus evidence that shell, `world-agent`, and shared agent-api surfaces still implement the published adapter-protocol and runtime-owned schema surfaces without widening unrelated external ownership.
+  - **Notes**: this thread was published by the landed `SEAM-2` closeout once the bounded multi-backend runtime handoff (`cli:codex` plus `api:openai`) passed tests and seam-exit review. It is now `revalidated` because active `SEAM-3` checked that closeout against live runtime/test surfaces and its seam-local `review.md`.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-3`
@@ -112,7 +112,7 @@ Horizon policy for this pack:
   - **State**: `defined`
   - **Revalidation trigger**: first-additional-backend baseline changes, parity matrix changes, unsupported-backend failure posture changes, or `cli:codex` regression guarantees change.
   - **Satisfied by**: `governance/seam-3-closeout.md` plus validation evidence across Linux/macOS/Windows once a later additional backend is intentionally chosen.
-  - **Notes**: this thread is intentionally deferred; it is not a blocker for the current execution target.
+  - **Notes**: this thread is the outbound publication target for the active seam. The proof target is now `api:openai`, but `THR-03` remains `defined` until `SEAM-3` lands parity evidence and closeout.
 
 ## Dependency graph
 
@@ -132,8 +132,8 @@ flowchart LR
    - landed adapter lookup, capability gating, auth validation, config render, manifests, readiness, and restart behavior using the revalidated `SEAM-1` handoff
    - published `THR-02` from closeout once the bounded request/auth shape and `api:openai` proof target were verified
 3. `SEAM-3` third:
-   - validate parity and rollout from the now-published `THR-02` handoff
-   - choose and prove an additional backend only when the project is ready for that rollout step
+   - validate parity and rollout from the revalidated `THR-02` handoff
+   - execute against the named additional-backend proof target `api:openai` while keeping unsupported-backend handling explicit
 
 ## Workstreams
 

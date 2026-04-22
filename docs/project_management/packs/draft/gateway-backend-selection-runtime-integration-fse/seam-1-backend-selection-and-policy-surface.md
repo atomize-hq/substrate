@@ -3,7 +3,7 @@ seam_id: SEAM-1
 seam_slug: backend-selection-and-policy-surface
 type: integration
 status: landed
-execution_horizon: active
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -119,7 +119,7 @@ open_remediations: []
   - Safety depends on failing closed before runtime launch and keeping gateway-local state out of authorization truth.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - this seam was the initial active boundary because shell adoption of `C-01` / `C-02` was the last missing upstream execution boundary before adapter/runtime work; it is now landed.
+    - this seam is now `future` only because it has left the forward planning window; it remains landed and continues to supply the published `THR-01` handoff to downstream seams.
   - Which threads matter most
     - `THR-01`
   - What the first seam-local review should focus on

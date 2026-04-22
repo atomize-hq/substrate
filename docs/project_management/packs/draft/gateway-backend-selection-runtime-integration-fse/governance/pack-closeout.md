@@ -1,7 +1,7 @@
 # Pack Closeout - gateway-backend-selection-runtime-integration
 
 - **Pack status**: active implementation pack
-- **Current execution target**: advance `SEAM-3` from the now-published `THR-02` runtime handoff
+- **Current execution target**: execute active `SEAM-3` from the revalidated `THR-02` runtime handoff
 - **Remaining open seams**:
   - `SEAM-3`
 - **Open remediations still blocking current-seam closeout**:

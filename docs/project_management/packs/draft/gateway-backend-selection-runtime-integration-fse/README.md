@@ -10,7 +10,7 @@ Execution outcome:
 
 - `SEAM-1` narrows and locks the backend-selection and policy-evaluation inputs that the code must consume, then lands consumer alignment and proof in shell, broker, config, and tests.
 - `SEAM-2` implements integrated adapter lookup, capability gating, auth handoff validation, runtime config generation, managed artifacts, and lifecycle behavior from that upstream truth.
-- `SEAM-3` proves parity, validation, and rollout behavior after the runtime path exists, including a future first additional integrated backend.
+- `SEAM-3` proves parity, validation, and rollout behavior after the runtime path exists, using the named first additional integrated backend proof target `api:openai`.
 
 Restated scope and assumptions:
 
@@ -30,20 +30,20 @@ Start here:
 
 Execution horizon:
 
-- Active seam: none currently
-- Next seam: `SEAM-3`
-- Future seam(s): none currently queued beyond `SEAM-3`
+- Active seam: `SEAM-3`
+- Next seam: none currently queued
+- Future seam(s): none currently queued beyond the active seam
 
 Horizon inference:
 
 - `SEAM-2` is landed because it published `THR-02` with a bounded multi-backend runtime handoff and passed its seam-exit gate.
-- `SEAM-3` is next because parity and rollout proof should now consume that published runtime handoff rather than run ahead of it.
-- No later seam is queued behind `SEAM-3` in the current pack.
+- `SEAM-3` is active because promotion revalidated the published `THR-02` handoff, confirmed that `api:openai` remains the named proof target in live repo surfaces, and refreshed seam-local execution planning.
+- No later seam is queued behind `SEAM-3` in the current pack, so `next_seam` remains `null`.
 
 Policy:
 
-- no seam is currently active because the previous execution target landed and closed out cleanly
-- the next seam can now start from the published `THR-02` runtime handoff
+- `SEAM-3` is the only active seam because the previous execution target landed and closed out cleanly
+- the active seam now executes from the revalidated `THR-02` runtime handoff
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that still need a narrow contract-alignment slice may reserve `S00` for that boundary work before implementation slices
 - future seams remain deferred until their execution preconditions exist
@@ -60,4 +60,4 @@ Current pack posture:
 
 - `SEAM-1` is landed and closed out as the published selection/policy handoff.
 - `SEAM-2` is landed and closed out as the published runtime realization handoff.
-- `SEAM-3` remains queued as the next seam and may now promote from the published `THR-02` handoff.
+- `SEAM-3` is active and `exec-ready`: its seam-local review bundle now revalidates the published `THR-02` handoff against the live runtime/test surfaces, and no later seam is queued behind it.

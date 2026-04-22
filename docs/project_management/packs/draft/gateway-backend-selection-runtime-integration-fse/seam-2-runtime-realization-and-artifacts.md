@@ -2,8 +2,8 @@
 seam_id: SEAM-2
 seam_slug: runtime-realization-and-artifacts
 type: integration
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -24,12 +24,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -131,11 +131,11 @@ open_remediations: []
   - De-risk plan:
     - treat config path, manifest path, and managed log inspectability as one owned runtime-artifact surface
 - **Rollout / safety**:
-  - This seam is now `active` and `exec-ready` because the selection/inventory truth published through `SEAM-1`, and the remaining work is code, tests, and artifact validation rather than more contract invention.
-  - Safety depends on consuming published `SEAM-1` truth rather than backfilling it inside runtime code, and on preserving the existing fail-closed policy boundary while widening runtime support.
+  - This seam landed safely by consuming published `SEAM-1` truth rather than backfilling it inside runtime code, and by preserving the existing fail-closed policy boundary while widening runtime support.
+  - It now sits outside the forward planning window because the runtime handoff is closed out and published for `SEAM-3`.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `active` because it is the immediate downstream execution target after `THR-01` published, and the seam-local review now makes the remaining work executable.
+    - this seam is now `future` only because it has left the forward planning window; it remains landed and continues to publish `THR-02` to `SEAM-3`.
   - Which threads matter most
     - `THR-01`
     - `THR-02`
@@ -146,7 +146,7 @@ open_remediations: []
     - explicit no-fallback behavior for unsupported backends
     - tests needed to prove sync/status/restart keep the selected backend stable
   - Why deeper planning stays provisional
-    - deeper planning no longer stays provisional; the seam basis is current, the review bundle passed, and the seam should now execute directly against the landed handoff
+    - deeper planning is no longer provisional: the seam basis became current before execution, and closeout now records the landed handoff that downstream promotion consumes
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
     - none required for execution; this seam should consume the existing canonical contracts rather than create new blocker docs
