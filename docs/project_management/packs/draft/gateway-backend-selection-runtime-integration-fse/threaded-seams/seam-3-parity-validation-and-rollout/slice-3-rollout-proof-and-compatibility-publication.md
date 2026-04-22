@@ -30,7 +30,7 @@ open_remediations: []
 - **User/system value**:
   - Makes the parity result consumable without turning rollout guidance into a shadow contract system.
 - **Scope (in/out)**:
-  - In: compatibility notes, rollout proof framing, and closeout-ready evidence references for operators and reviewers
+  - In: compatibility-spec publication, rollout proof framing, and evidence references for operators and reviewers
   - Out: new operator semantics, new status fields, or platform-specific support promises beyond the named proof target
 - **Acceptance criteria**:
   - rollout and compatibility surfaces name `api:openai` as the first additional-backend proof target
@@ -42,7 +42,7 @@ open_remediations: []
   - `THR-03`
   - `C-05`
 - **Verification**:
-  - closeout review across compatibility and rollout surfaces plus evidence references
+  - review of the compatibility-spec publication and rollout framing against upstream parity and platform evidence
 - **Rollout/safety**:
   - do not let rollout prose imply broader support or surface-area widening than the evidence actually proves
 - **Review surface refs**:
@@ -52,10 +52,10 @@ open_remediations: []
 #### S3.T1 - Make rollout publication evidence-backed
 
 - **Outcome**:
-  - rollout and compatibility notes consume evidence from S1 and S2 rather than inventing new contract truth.
+  - rollout and compatibility publication consume upstream evidence rather than inventing new contract truth.
 - **Inputs/outputs**:
-  - Inputs: automated parity matrix, platform evidence bundle, canonical runtime parity contract
-  - Outputs: evidence-backed compatibility and rollout surfaces
+  - Inputs: upstream automated parity evidence, upstream platform evidence, canonical runtime parity contract
+  - Outputs: evidence-backed compatibility publication and rollout framing
 - **Thread/contract refs**:
   - `THR-03`
   - `C-05`
@@ -66,14 +66,14 @@ open_remediations: []
   - closeout can publish `THR-03` without adding a new shadow contract or support matrix
   - rollout surfaces read as evidence-backed adoption guidance rather than speculative future planning
 - **Test notes**:
-  - verify rollout references line up with automated and platform evidence targets
+  - verify rollout references line up with upstream automated and platform evidence targets
 - **Risk/rollback notes**:
   - vague rollout prose will undermine the proof bundle even if tests and smoke evidence land correctly
 
 Checklist:
 - Implement:
-  - publish rollout and compatibility proof from evidence
+  - publish compatibility-spec and rollout framing from evidence
 - Test:
-  - confirm every support claim traces back to S1 or S2 evidence
+  - confirm every support claim traces back to upstream parity and platform evidence
 - Validate:
   - confirm rollout surfaces stay subordinate to canonical contracts
