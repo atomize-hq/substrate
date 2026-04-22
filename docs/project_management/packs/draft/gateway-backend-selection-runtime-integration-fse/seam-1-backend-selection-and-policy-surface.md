@@ -86,9 +86,7 @@ open_remediations:
   - `crates/shell/tests/world_gateway.rs`
   - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
   - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/contract.md`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/policy-spec.md`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md`
+  - future subordinate ADR-0046 support docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`, if created later
 - **Verification**:
   - `C-01` and `C-02` are already published; this seam verifies shell adoption, not fresh contract publication.
   - Current pre-exec gate posture is:
@@ -97,10 +95,11 @@ open_remediations:
     - `revalidation: passed` because the current shell still preserves the main failure buckets and Codex auth precedence rules, even though generic backend realization remains unimplemented.
     - `status: exec-ready` is now justified because the pre-exec gates all pass, the basis remains `current`, and the remaining open remediations target seam exit and closeout publication rather than the `decomposed -> exec-ready` transition.
   - Later seam-local verification should prove:
-    - `validate_gateway_lifecycle_config` and `build_gateway_request` reject empty, malformed, unknown, or disallowed selected backends before runtime dispatch
+    - `validate_gateway_lifecycle_config` and `build_gateway_request` reject empty, malformed, unknown, or disallowed selected backends before runtime dispatch, with landed evidence captured by `world_gateway_missing_inventory_uses_exit_code_2_before_socket_dispatch`, `world_gateway_inventory_filename_id_mismatch_uses_exit_code_2`, and `world_gateway_allowlist_denial_uses_exit_code_5`
     - `resolve_integrated_auth_payload` and `resolve_cli_codex_integrated_auth` enforce env-primary/file-fallback/no-mixed-source auth precedence
-    - `ensure_backend_allowed` and `ensure_env_name_allowed` preserve policy-denial behavior without weakening fail-closed posture
+    - `ensure_backend_allowed` and `ensure_env_name_allowed` preserve policy-denial behavior without weakening fail-closed posture, with landed evidence captured by `world_gateway_env_auth_blocked_by_policy_denies_without_file_fallback` in addition to the existing auth precedence tests
     - `crates/shell/tests/world_gateway.rs` proves the distinction between invalid integration, policy denial, component unavailable, and transient runtime failure where the shell owns that distinction
+    - any later subordinate ADR-0046 support docs remain descriptive implementation notes and do not compete with canonical `docs/contracts/` ownership
 - **Canonical contract refs**:
   - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
   - `docs/contracts/substrate-gateway-policy-evaluation.md`

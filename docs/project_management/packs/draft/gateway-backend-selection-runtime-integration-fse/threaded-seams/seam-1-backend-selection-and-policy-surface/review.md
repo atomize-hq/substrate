@@ -43,10 +43,10 @@ flowchart TB
 
 ## Likely mismatch hotspots
 
-- `docs/contracts/substrate-gateway-backend-adapter-selection.md` already publishes inventory roots, filename/id invariants, and selection order, but `crates/shell/src/builtins/world_gateway.rs` still does not realize those rules generically before runtime dispatch.
-- `docs/contracts/substrate-gateway-policy-evaluation.md` already publishes env-primary precedence, but shell tests still need explicit coverage for “both env and file exist; env wins without merge.”
-- `crates/shell/src/builtins/world_gateway.rs` still keeps runtime lifecycle reachable for non-`cli:codex` backends without proving inventory-backed shell validation first, leaving the runtime to surface invalid-integration cases that should become shell-owned where possible.
-- Supporting ADR-0046 docs can easily drift into acting as canonical publication surfaces unless they are explicitly aligned behind the `docs/contracts/` refs.
+- `docs/contracts/substrate-gateway-backend-adapter-selection.md` already publishes inventory roots, filename/id invariants, and selection order, and the landed shell evidence for that rule is now split across `world_gateway_missing_inventory_uses_exit_code_2_before_socket_dispatch`, `world_gateway_inventory_filename_id_mismatch_uses_exit_code_2`, and `world_gateway_allowlist_denial_uses_exit_code_5`.
+- `docs/contracts/substrate-gateway-policy-evaluation.md` already publishes env-primary precedence, and the landed shell evidence for that rule is now split across `world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file`, `world_gateway_status_prefers_allowed_env_auth_over_host_auth_file`, `world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override`, `world_gateway_host_credential_policy_denials_use_exit_code_5`, and `world_gateway_incomplete_env_override_uses_exit_code_2`.
+- `crates/shell/src/builtins/world_gateway.rs` now proves inventory-backed shell validation at the boundary, and any remaining runtime-owned cases are limited to adapter binding, capability, or availability questions outside this seam.
+- Any future ADR-0046 support docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/` must remain subordinate implementation notes, not current canonical surfaces.
 
 ## Pre-exec findings
 
@@ -54,9 +54,10 @@ flowchart TB
 - The contract gate passes. Canonical `C-01` and `C-02` already publish the selection, inventory, precedence, and fail-closed rules this seam needs.
 - `REM-001` and `REM-002` remain only as seam-exit follow-through: the canonical contracts already publish the rules; the remaining work is shell adoption, supporting-doc alignment, and landed evidence capture before closeout can publish `THR-01`.
 - Revalidation passes against current repo evidence:
-  - `crates/shell/src/builtins/world_gateway.rs` still keeps invalid integration, policy denial, transient runtime failure, and component unavailability distinct at the shell boundary.
+  - `crates/shell/src/builtins/world_gateway.rs` keeps invalid integration, policy denial, transient runtime failure, and component unavailability distinct at the shell boundary.
   - `crates/shell/src/builtins/world_gateway.rs` still enforces fail-closed posture for disabled or host-only gateway lifecycle use before dispatch.
-  - `crates/shell/src/builtins/world_gateway.rs` still prefers allowlisted env auth material when an access token is present and falls back to the allowlisted host credential file only when env auth is absent; partial env material still fails as invalid integration.
+  - `crates/shell/src/builtins/world_gateway.rs` prefers allowlisted env auth material when an access token is present and falls back to the allowlisted host credential file only when env auth is absent; partial env material still fails as invalid integration.
+  - `crates/shell/tests/world_gateway.rs` gives the seam concrete drift-guard evidence through `world_gateway_missing_inventory_uses_exit_code_2_before_socket_dispatch`, `world_gateway_inventory_filename_id_mismatch_uses_exit_code_2`, `world_gateway_allowlist_denial_uses_exit_code_5`, `world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file`, `world_gateway_status_prefers_allowed_env_auth_over_host_auth_file`, `world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override`, `world_gateway_host_credential_policy_denials_use_exit_code_5`, `world_gateway_incomplete_env_override_uses_exit_code_2`, and `world_gateway_env_auth_blocked_by_policy_denies_without_file_fallback`.
 - No blocking pre-exec remediations remain open against the `decomposed -> exec-ready` transition, so the seam is ready to execute even though seam-exit publication work is still pending.
 - No new pre-exec remediation is opened by this review refresh. The missing work is implementation and evidence, not fresh contract publication.
 - The likely failure mode is downstream runtime work inheriting too much shell-owned validation from the current `cli:codex` path.

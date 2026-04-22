@@ -22,6 +22,7 @@ Review focus:
 
 - confirms the selected-backend source of truth and deny-by-default gate order
 - confirms inventory identity and filename consistency checks happen before adapter dispatch
+- confirms the landing evidence for those selection rules is carried by `world_gateway_missing_inventory_uses_exit_code_2_before_socket_dispatch`, `world_gateway_inventory_filename_id_mismatch_uses_exit_code_2`, and `world_gateway_allowlist_denial_uses_exit_code_5`
 - confirms invalid selection, policy denial, and dependency unavailable remain distinct
 - unlocks `SEAM-2` by fixing the upstream handoff it must consume
 
@@ -42,6 +43,7 @@ flowchart TB
 Review focus:
 
 - confirms env-primary, file-fallback-only auth precedence is preserved in implementation
+- confirms the landing evidence for that rule is carried by `world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file`, `world_gateway_status_prefers_allowed_env_auth_over_host_auth_file`, `world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override`, `world_gateway_host_credential_policy_denials_use_exit_code_5`, `world_gateway_incomplete_env_override_uses_exit_code_2`, and `world_gateway_env_auth_blocked_by_policy_denies_without_file_fallback`
 - confirms runtime realization stays inside the existing typed lifecycle boundary
 - confirms managed config, manifest, and log artifacts stay part of the runtime-owned execution path
 - unlocks `SEAM-2` implementation slices for adapter-driven launch, readiness, and restart behavior
