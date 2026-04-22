@@ -57,9 +57,9 @@ open_remediations:
     - current shell-side request construction and policy gating in `crates/shell/src/builtins/world_gateway.rs`
     - external authorities in `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`
   - Outputs:
-    - one landed ADR-0046 delta in `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/contract.md`
-    - one landed ADR-0046 delta in `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/policy-spec.md`
-    - one landed ADR-0046 delta in `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md`
+    - canonical contract publication in `docs/contracts/substrate-gateway-backend-adapter-selection.md`
+    - canonical contract publication in `docs/contracts/substrate-gateway-policy-evaluation.md`
+    - aligned supporting ADR-0046 docs in `contract.md`, `policy-spec.md`, and `env-vars-spec.md`
     - downstream-ready selection/policy truth carried by `THR-01`
 - **Key invariants / rules**:
   - backend ids remain stable `<kind>:<name>` selectors only
@@ -71,7 +71,7 @@ open_remediations:
   - Direct blockers:
     - none inside the pack
   - Transitive blockers:
-    - external authorities in ADR-0040/0041 and `docs/contracts/*` must remain evidence-only, not silently overwritten by local planning prose
+    - external authorities in ADR-0040/0041 must remain evidence inputs, and canonical publication under `docs/contracts/*` must not be bypassed by local planning prose
   - Direct consumers:
     - `SEAM-2`
     - `SEAM-3`
@@ -87,21 +87,16 @@ open_remediations:
   - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
   - `docs/contracts/substrate-gateway-policy-evaluation.md`
 - **Verification**:
-  - This seam produces owned contracts `C-01` and `C-02` through the feature-local ADR-0046 docs `contract.md`, `policy-spec.md`, and `env-vars-spec.md`. Verification at seam-brief depth is those feature-local deltas becoming concrete enough for seam-local planning and implementation: exact selection order, inventory discoverability, allowlist order, auth precedence, and failure-taxonomy boundaries.
-  - The consumed external authorities under `docs/contracts/*` remain evidence and compatibility checks; verification here does not require editing them.
+  - This seam produces owned contracts `C-01` and `C-02` by clarifying and, when needed, updating the canonical contract refs `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`. Verification at seam-brief depth is those canonical surfaces becoming concrete enough for seam-local planning and implementation: exact selection order, inventory discoverability, allowlist order, auth precedence, and failure-taxonomy boundaries.
+  - The feature-local ADR-0046 docs `contract.md`, `policy-spec.md`, and `env-vars-spec.md` remain supporting planning and implementation surfaces; they are not the canonical publication endpoints.
   - Later seam-local verification should prove:
     - selection remains on existing config/policy roots
     - deny-by-default allowlisting happens before adapter dispatch
     - backend inventory roots and filename rules are explicit
     - auth precedence and policy gates are explicit rather than Codex-only side effects
 - **Canonical contract refs**:
-  - Owned feature-local outputs:
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/contract.md`
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/policy-spec.md`
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md`
-  - Consumed external authorities:
-    - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-    - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
+  - `docs/contracts/substrate-gateway-policy-evaluation.md`
 - **Risks / unknowns**:
   - Risk:
     - current code only proves a Codex-specific auth precedence path, not a general integrated contract
@@ -132,8 +127,8 @@ open_remediations:
     - whether `S00` is needed to freeze the contract before implementation slices begin
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
-    - `C-01` via `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/contract.md`
-    - `C-02` via `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/policy-spec.md` and `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md`
+    - `C-01` via `docs/contracts/substrate-gateway-backend-adapter-selection.md`
+    - `C-02` via `docs/contracts/substrate-gateway-policy-evaluation.md`
   - Threads likely to advance:
     - `THR-01`
   - Review-surface areas likely to shift after landing:
@@ -143,4 +138,4 @@ open_remediations:
   - Downstream seams most likely to require revalidation:
     - `SEAM-2`
     - `SEAM-3`
-  - Seam exit should record the landed feature-local outputs and their compatibility against consumed external authorities; it does not require editing the external authorities themselves.
+  - Seam exit should record canonical contract publication under `docs/contracts/` plus any aligned supporting ADR-0046 docs used to implement or verify the change.

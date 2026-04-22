@@ -30,7 +30,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S00
   related_thread: THR-01
   related_contract: C-02
-  related_artifact: docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md
+  related_artifact: docs/contracts/substrate-gateway-policy-evaluation.md
   severity: blocking
   status: open
   owner_seam: SEAM-1
@@ -38,8 +38,8 @@ Future remediation entries must use the canonical fields from the extractor gove
     - seam: SEAM-1
       field: status
       value: exec-ready
-  summary: auth precedence between env material and host credential files is not yet published in the feature-local ADR-0046 delta docs as integrated lifecycle contract truth
-  required_fix: publish one explicit precedence rule in the feature-local ADR-0046 docs for authorized env material versus authorized host credential file reads and align shell/runtime consumers to it
+  summary: auth precedence between env material and host credential files is not yet clarified in the canonical policy-evaluation contract for integrated lifecycle truth
+  required_fix: clarify one explicit precedence rule in `docs/contracts/substrate-gateway-policy-evaluation.md` first, then align supporting ADR-0046 policy and env-var docs plus shell and runtime consumers to it
   resolution_evidence: []
 ```
 
@@ -51,7 +51,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S00
   related_thread: THR-01
   related_contract: C-01
-  related_artifact: docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/policy-spec.md
+  related_artifact: docs/contracts/substrate-gateway-backend-adapter-selection.md
   severity: blocking
   status: open
   owner_seam: SEAM-1
@@ -60,7 +60,7 @@ Future remediation entries must use the canonical fields from the extractor gove
       field: status
       value: exec-ready
   summary: backend inventory roots and filename rules are not yet fixed as integrated realization contract truth
-  required_fix: publish one explicit inventory-root and filename/id rule set in the feature-local ADR-0046 docs before downstream runtime planning relies on filesystem semantics
+  required_fix: clarify one explicit inventory-root and filename/id rule set in `docs/contracts/substrate-gateway-backend-adapter-selection.md` first, then align supporting ADR-0046 policy and filesystem docs before downstream runtime planning relies on it
   resolution_evidence: []
 ```
 
@@ -72,7 +72,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S00
   related_thread: THR-02
   related_contract: C-03
-  related_artifact: docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-protocol-spec.md
+  related_artifact: docs/contracts/substrate-gateway-backend-adapter-protocol.md
   severity: blocking
   status: open
   owner_seam: SEAM-2
@@ -81,7 +81,7 @@ Future remediation entries must use the canonical fields from the extractor gove
       field: status
       value: exec-ready
   summary: missing integrated adapter binding classification is unresolved for the integrated runtime protocol
-  required_fix: publish one explicit classification in the feature-local ADR-0046 docs for missing or unsupported integrated adapter bindings and align runtime failure handling to it
+  required_fix: clarify one explicit classification in `docs/contracts/substrate-gateway-backend-adapter-protocol.md` first, then align supporting ADR-0046 protocol docs and runtime failure handling to it
   resolution_evidence: []
 ```
 
@@ -93,7 +93,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S00
   related_thread: THR-02
   related_contract: C-04
-  related_artifact: docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md
+  related_artifact: docs/contracts/substrate-gateway-backend-adapter-schema.md
   severity: blocking
   status: open
   owner_seam: SEAM-2
@@ -102,7 +102,7 @@ Future remediation entries must use the canonical fields from the extractor gove
       field: status
       value: exec-ready
   summary: missing auth handoff material classification is unresolved after policy permits the read path
-  required_fix: publish one explicit classification in the feature-local ADR-0046 docs for missing integrated auth handoff material and align shell and world-agent handling to it
+  required_fix: clarify one explicit classification in `docs/contracts/substrate-gateway-backend-adapter-schema.md` first, then align supporting ADR-0046 schema docs plus shell and world-agent handling to it
   resolution_evidence: []
 ```
 
@@ -114,7 +114,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S00
   related_thread: THR-02
   related_contract: C-04
-  related_artifact: docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md
+  related_artifact: docs/contracts/substrate-gateway-backend-adapter-schema.md
   severity: blocking
   status: open
   owner_seam: SEAM-2
@@ -123,7 +123,7 @@ Future remediation entries must use the canonical fields from the extractor gove
       field: status
       value: exec-ready
   summary: the integrated auth handoff delivery rule into the runtime is still unresolved between env-only, file-only, or one fixed mixed model with explicit precedence
-  required_fix: publish one explicit integrated auth handoff delivery model in the feature-local ADR-0046 docs and align protocol, schema, and runtime wiring to it
+  required_fix: clarify one explicit integrated auth handoff delivery model in `docs/contracts/substrate-gateway-backend-adapter-schema.md` first, then align supporting ADR-0046 protocol/schema docs and runtime wiring to it
   resolution_evidence: []
 ```
 
@@ -135,7 +135,7 @@ Future remediation entries must use the canonical fields from the extractor gove
   related_slice: S00
   related_thread: THR-03
   related_contract: C-05
-  related_artifact: docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/compatibility-spec.md
+  related_artifact: docs/contracts/substrate-gateway-integrated-runtime-compatibility.md
   severity: blocking
   status: open
   owner_seam: SEAM-3
@@ -144,7 +144,7 @@ Future remediation entries must use the canonical fields from the extractor gove
       field: status
       value: exec-ready
   summary: the first supported non-cli:codex integrated backend id is not yet pinned for parity, compatibility, and rollout proof
-  required_fix: name the first supported additional integrated backend id in the feature-local ADR-0046 docs and use it consistently in parity tests, manual validation, smoke scripts, and compatibility evidence
+  required_fix: publish the first supported additional integrated backend baseline in `docs/contracts/substrate-gateway-integrated-runtime-compatibility.md` first, then align supporting ADR-0046 compatibility, parity, playbook, and smoke evidence to it
   resolution_evidence: []
 ```
 

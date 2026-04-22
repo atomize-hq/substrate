@@ -60,9 +60,9 @@ open_remediations:
     - current world-agent runtime manager behavior in `crates/world-agent/src/gateway_runtime.rs`
     - current lifecycle request shape in `crates/agent-api-types/src/lib.rs`
   - Outputs:
-    - one landed ADR-0046 delta in `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-protocol-spec.md`
-    - one landed ADR-0046 delta in `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md`
-    - one landed ADR-0046 delta in `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/filesystem-semantics-spec.md`
+    - canonical contract publication in `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+    - canonical contract publication in `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+    - aligned supporting ADR-0046 docs in `gateway-runtime-adapter-protocol-spec.md`, `gateway-runtime-adapter-schema-spec.md`, and `filesystem-semantics-spec.md`
     - explicit classification for missing binding and missing auth material carried by `THR-02`
     - one fixed integrated auth handoff delivery rule carried by `THR-02`
 - **Key invariants / rules**:
@@ -94,8 +94,8 @@ open_remediations:
   - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
 - **Verification**:
   - This seam consumes upstream contracts `C-01` and `C-02`; verification may depend on accepted upstream evidence for selection order, policy gates, auth precedence, and inventory rules.
-  - This seam produces owned contracts `C-03` and `C-04` through the feature-local ADR-0046 docs `gateway-runtime-adapter-protocol-spec.md`, `gateway-runtime-adapter-schema-spec.md`, and `filesystem-semantics-spec.md`. Verification at seam-brief depth is those feature-local deltas becoming concrete enough for seam-local planning and implementation: binding lookup, capability taxonomy, auth handoff shapes, auth handoff delivery-model rules, artifact semantics, and runtime ordering.
-  - The consumed external authorities under `docs/contracts/*` remain compatibility dependencies; verification here does not require editing them.
+  - This seam produces owned contracts `C-03` and `C-04` by clarifying and, when needed, updating the canonical contract refs `docs/contracts/substrate-gateway-backend-adapter-protocol.md` and `docs/contracts/substrate-gateway-backend-adapter-schema.md`. Verification at seam-brief depth is those canonical surfaces becoming concrete enough for seam-local planning and implementation: binding lookup, capability taxonomy, auth handoff shapes, auth handoff delivery-model rules, artifact semantics, and runtime ordering.
+  - The feature-local ADR-0046 docs `gateway-runtime-adapter-protocol-spec.md`, `gateway-runtime-adapter-schema-spec.md`, and `filesystem-semantics-spec.md` remain supporting planning and implementation surfaces; they are not the canonical publication endpoints.
   - Later seam-local verification should prove:
     - missing binding and missing auth material are classified explicitly
     - the integrated runtime uses one explicit auth handoff delivery rule: env-only, file-only, or one fixed mixed model with explicit precedence
@@ -103,14 +103,8 @@ open_remediations:
     - managed artifacts have fixed roots, names, and inspectability rules
     - restart preserves the selected backend contract instead of re-deriving behavior ad hoc
 - **Canonical contract refs**:
-  - Owned feature-local outputs:
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-protocol-spec.md`
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md`
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/filesystem-semantics-spec.md`
-  - Consumed external authorities:
-    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
-    - `docs/contracts/substrate-gateway-runtime-parity.md`
+  - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+  - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
 - **Risks / unknowns**:
   - Risk:
     - the current request and runtime types only expose `cli_codex`, so widening the integrated path can accidentally entrench one-off variants instead of one adapter-owned shape
@@ -149,8 +143,8 @@ open_remediations:
     - under the provisional matrix, this seam still has contract-authority impact and non-trivial coupling to upstream semantics, so any deeper planning must stay provisional until `SEAM-1` publishes explicit truth
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
-    - `C-03` via `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-protocol-spec.md`
-    - `C-04` via `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md` and `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/filesystem-semantics-spec.md`
+    - `C-03` via `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+    - `C-04` via `docs/contracts/substrate-gateway-backend-adapter-schema.md`
   - Threads likely to advance:
     - `THR-02`
   - Review-surface areas likely to shift after landing:
@@ -159,4 +153,4 @@ open_remediations:
     - artifact path map
   - Downstream seams most likely to require revalidation:
     - `SEAM-3`
-  - Seam exit should record the landed feature-local outputs and their compatibility against consumed external authorities; it does not require editing the external authorities themselves.
+  - Seam exit should record canonical contract publication under `docs/contracts/` plus any aligned supporting ADR-0046 docs used to implement or verify the change.

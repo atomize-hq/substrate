@@ -14,11 +14,11 @@
   - `THR-02`
   - `THR-03`
 - **Downstream stale triggers still requiring attention**:
-  - selection order, auth precedence, and backend inventory rules are not yet published in the feature-local ADR-0046 docs
-  - runtime binding and auth classifications are not yet published in the feature-local ADR-0046 docs
-  - the integrated auth handoff delivery rule is not yet published in the feature-local ADR-0046 docs
-  - the first additional integrated backend baseline is not yet fixed in the feature-local ADR-0046 docs
+  - selection order, auth precedence, and backend inventory rules are not yet clarified in canonical contract refs under `docs/contracts/`
+  - runtime binding and auth classifications are not yet clarified in canonical contract refs under `docs/contracts/`
+  - the integrated auth handoff delivery rule is not yet clarified in canonical contract refs under `docs/contracts/`
+  - the first additional integrated backend baseline is not yet published in `docs/contracts/substrate-gateway-integrated-runtime-compatibility.md`
 - **Evidence summary**:
-  - `governance/seam-1-closeout.md` is reserved for the landed feature-local backend-selection and policy-evaluation outputs plus compatibility checks against consumed external authorities
-  - `governance/seam-2-closeout.md` is reserved for the landed feature-local runtime realization and artifact outputs plus compatibility checks against consumed external authorities
-  - `governance/seam-3-closeout.md` is reserved for the landed feature-local parity, validation, and rollout outputs plus compatibility checks against consumed external authorities
+  - `governance/seam-1-closeout.md` is reserved for canonical publication under `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`, plus supporting ADR-0046 evidence
+  - `governance/seam-2-closeout.md` is reserved for canonical publication under `docs/contracts/substrate-gateway-backend-adapter-protocol.md` and `docs/contracts/substrate-gateway-backend-adapter-schema.md`, plus supporting ADR-0046 evidence
+  - `governance/seam-3-closeout.md` is reserved for canonical publication under `docs/contracts/substrate-gateway-integrated-runtime-compatibility.md`, plus supporting ADR-0046 and runtime-parity evidence

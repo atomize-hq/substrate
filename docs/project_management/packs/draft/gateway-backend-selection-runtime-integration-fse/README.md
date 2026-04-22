@@ -4,17 +4,18 @@ Source: `docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-r
 
 This pack captures a governance-ready v2.5 seam extraction for ADR-0046 using the existing pre-planning pack as basis. It intentionally stays one level above seam-local decomposition: no seam-local planning docs, slice files, candidate subslices, or execution units are created here.
 
-Publication model for this pack:
+Canonical publication model for this pack:
 
-- This pack intentionally uses the feature-local ADR-0046 docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/` as the seam-owned publication targets.
-- This is an intentional repo-local variation from the extractor template because the pre-planning manifest assigns the ADR-0046 deltas to those feature-local docs.
-- External `docs/contracts/*` gateway docs remain consumed authorities and evidence only in this pack.
+- seam-owned contract publication targets live under `docs/contracts/`
+- feature-local ADR-0046 docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/` remain planning, implementation, and verification support surfaces
+- existing gateway contract docs under `docs/contracts/*` stay durable canonical refs when they already own the relevant surface
+- `C-05` uses one expected new canonical ref, `docs/contracts/substrate-gateway-integrated-runtime-compatibility.md`, because the current runtime-parity contract does not cleanly own the rollout and additional-backend compatibility publication surface by itself
 
 Restated scope and assumptions:
 
 - Realize ADR-0041 backend selection inside the integrated gateway lifecycle without reopening ADR-0040 ownership, ADR-0042 identity-tuple posture, or ADR-0043 tuple-policy work.
 - Keep `status`, `sync`, and `restart` as the existing operator entrypoints while moving the integrated lifecycle from one hardcoded `cli:codex` path toward inventory-backed backend realization.
-- Treat ADR-0040, ADR-0041, and the current `docs/contracts/*` gateway docs as external authorities and evidence, not editable ownership surfaces or seam-owned publication targets for this extraction.
+- Treat ADR-0040 and ADR-0041 as external authorities and evidence, and treat the existing gateway docs under `docs/contracts/*` as durable canonical contract refs where they already own the relevant surface.
 - Keep `status --json`, tuple metadata, and tuple-policy surfaces out of scope for this pack.
 - Repo evidence still shows only a Codex-shaped integrated auth/runtime path today, so unresolved expansion points remain explicit remediations rather than inferred decisions.
 - `GBSRI-*` ids and `seam-planning/*.md` paths are lineage only in this run; they inform the seam map but are not required outputs.
@@ -46,8 +47,8 @@ Policy:
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that own undefined contracts may reserve `S00` as a contract-definition boundary slice once seam-local planning begins
 - future seams remain seam briefs
-- seam-owned ADR-0046 deltas publish into the feature-local docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`
-- external `docs/contracts/*` docs remain descriptive authoritative dependencies and must remain descriptive-only
+- canonical contract artifacts live under `docs/contracts/`
+- feature-local ADR-0046 docs remain supporting planning and implementation surfaces
 
 Source-pack crosswalk:
 

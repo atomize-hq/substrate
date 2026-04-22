@@ -33,11 +33,13 @@ This scaffold is reserved for the post-exec closeout once the next seam lands.
 
 - **Source artifact**: `../threaded-seams/seam-2-runtime-realization-and-artifacts/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
-  - expected feature-local owned outputs:
+  - expected canonical contract publications:
+    - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
+    - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - supporting evidence may include aligned ADR-0046 docs:
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-protocol-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/filesystem-semantics-spec.md`
-  - consumed external authorities remain evidence only and should be cited as compatibility checks rather than edited outputs
 - **Contracts published or changed**:
   - expected: `C-03`, `C-04`
 - **Threads published / advanced**:

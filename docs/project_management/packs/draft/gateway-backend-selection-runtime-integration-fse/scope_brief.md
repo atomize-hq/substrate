@@ -35,15 +35,15 @@ execution_horizon:
   - The active seam, next seam, and future seam each have one clear purpose, explicit touch surfaces, and a credible verification path.
   - The six unresolved pre-planning items are represented as explicit open remediations and risks rather than silently normalized into contract truth.
   - Threading, review surfaces, and governance scaffolds make downstream seam-local planning possible without creating seam-local artifacts in this run.
-  - The pack stays compatible with ADR-0046 while keeping ADR-0040/0041 and `docs/contracts/*` as external authorities and remapping seam-owned outputs to the feature-local ADR-0046 docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`.
+  - The pack stays compatible with ADR-0046 while publishing seam-owned contract truth into durable canonical refs under `docs/contracts/` and treating feature-local ADR-0046 docs as supporting planning and implementation surfaces.
 - **Constraints**:
   - Keep lifecycle state separate from basis freshness.
   - Seam briefs stay `status: proposed`; no seam is decomposed here.
   - `SEAM-1` is the only seam eligible for authoritative downstream planning by default.
   - `SEAM-2` may later receive seam-local review and only provisional deeper planning because unresolved upstream authority questions still affect runtime contract shape.
   - `SEAM-3` remains a future seam brief until upstream contracts and the first additional backend baseline are concrete.
-  - Feature-local docs for ADR-0046 deltas are the owned publication targets; this is an intentional repo-local variation from the extractor template because the pre-planning manifest assigns ownership there.
-  - External `docs/contracts/*` docs remain consumed authoritative dependencies only.
+  - Canonical contract publication targets live under `docs/contracts/`.
+  - Feature-local ADR-0046 docs remain supporting planning and implementation surfaces, not canonical publication targets.
   - Planning IDs remain confined to planning/governance artifacts.
 - **External systems / dependencies**:
   - `docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md`

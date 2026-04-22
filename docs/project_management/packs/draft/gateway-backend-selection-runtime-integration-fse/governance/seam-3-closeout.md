@@ -33,11 +33,13 @@ This scaffold is reserved for the post-exec closeout once the future seam lands.
 
 - **Source artifact**: `../threaded-seams/seam-3-parity-validation-and-rollout/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
-  - expected feature-local owned outputs:
+  - expected canonical contract publication:
+    - `docs/contracts/substrate-gateway-integrated-runtime-compatibility.md`
+  - supporting evidence may include aligned ADR-0046 docs and existing parity authorities:
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/platform-parity-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/compatibility-spec.md`
     - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/manual_testing_playbook.md`
-  - consumed external authorities remain evidence only and should be cited as compatibility checks rather than edited outputs
+    - `docs/contracts/substrate-gateway-runtime-parity.md`
 - **Contracts published or changed**:
   - expected: `C-05`
 - **Threads published / advanced**:

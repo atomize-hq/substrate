@@ -60,9 +60,8 @@ open_remediations:
     - current parity tests in `crates/world-agent/tests/gateway_runtime_parity.rs`
     - current shell command-path tests in `crates/shell/tests/world_gateway.rs`
   - Outputs:
-    - one landed ADR-0046 delta in `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/platform-parity-spec.md`
-    - one landed ADR-0046 delta in `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/compatibility-spec.md`
-    - one landed ADR-0046 delta in `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/manual_testing_playbook.md`
+    - canonical contract publication in `docs/contracts/substrate-gateway-integrated-runtime-compatibility.md`
+    - aligned supporting ADR-0046 docs in `platform-parity-spec.md`, `compatibility-spec.md`, and `manual_testing_playbook.md`
     - one future parity and rollout contract carried by `THR-03`
     - one named additional-backend proof target
     - one explicit no-fallback posture for unsupported integrated backends
@@ -95,22 +94,15 @@ open_remediations:
   - `crates/shell/tests/world_gateway.rs`
 - **Verification**:
   - This seam consumes upstream contracts `C-01`, `C-02`, `C-03`, and `C-04`; verification may depend on accepted upstream evidence for selection truth, runtime realization truth, and published classifications.
-  - This seam produces owned contract `C-05` through the feature-local ADR-0046 docs `platform-parity-spec.md`, `compatibility-spec.md`, and `manual_testing_playbook.md`. Verification at seam-brief depth is that those feature-local deltas become concrete enough for seam-local planning and implementation: baseline backend set, explicit failure matrix, and platform evidence obligations.
-  - The consumed external authorities under `docs/contracts/*` remain compatibility dependencies; verification here does not require editing them.
+  - This seam produces owned contract `C-05` by publishing durable compatibility and rollout truth to `docs/contracts/substrate-gateway-integrated-runtime-compatibility.md`. Verification at seam-brief depth is that this canonical surface becomes concrete enough for seam-local planning and implementation: baseline backend set, explicit failure matrix, unsupported-backend posture, and platform evidence obligations.
+  - The feature-local ADR-0046 docs `platform-parity-spec.md`, `compatibility-spec.md`, and `manual_testing_playbook.md` remain supporting planning and implementation surfaces, while `docs/contracts/substrate-gateway-runtime-parity.md` remains a consumed authority for the existing lifecycle/status parity baseline.
   - Later seam-local verification should prove:
     - `cli:codex` remains non-regressed
     - one additional integrated backend is named and exercised end to end
     - unsupported backends fail explicitly across Linux/macOS/Windows
     - rollout posture does not rely on widened status or tuple surfaces
 - **Canonical contract refs**:
-  - Owned feature-local outputs:
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/platform-parity-spec.md`
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/compatibility-spec.md`
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/manual_testing_playbook.md`
-  - Consumed external authorities:
-    - `docs/contracts/substrate-gateway-runtime-parity.md`
-    - `docs/contracts/substrate-gateway-operator-contract.md`
-    - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - `docs/contracts/substrate-gateway-integrated-runtime-compatibility.md`
 - **Risks / unknowns**:
   - Risk:
     - parity planning can start without a fixed additional-backend baseline and then hardcode the wrong fixtures, smoke assertions, or rollout promise
@@ -142,7 +134,7 @@ open_remediations:
     - keeping tuple/status widening out of the proof seam
 - **Expected seam-exit concerns**:
   - Contracts likely to publish:
-    - `C-05` via `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/platform-parity-spec.md`, `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/compatibility-spec.md`, and `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/manual_testing_playbook.md`
+    - `C-05` via `docs/contracts/substrate-gateway-integrated-runtime-compatibility.md`
   - Threads likely to advance:
     - `THR-03`
   - Review-surface areas likely to shift after landing:
@@ -151,4 +143,4 @@ open_remediations:
     - smoke coverage map
   - Downstream seams most likely to require revalidation:
     - downstream execution or release-governance packs rather than another seam inside this pack
-  - Seam exit should record the landed feature-local outputs and their compatibility against consumed external authorities; it does not require editing the external authorities themselves.
+  - Seam exit should record canonical contract publication under `docs/contracts/substrate-gateway-integrated-runtime-compatibility.md` plus any supporting ADR-0046 docs and validation evidence used to land it.
