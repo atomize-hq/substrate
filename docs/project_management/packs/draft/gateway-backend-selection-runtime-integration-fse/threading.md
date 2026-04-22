@@ -92,10 +92,10 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: make the existing selection and policy contracts executable in repo consumers so runtime realization does not infer truth from the current Codex-only path.
-  - **State**: `published`
+  - **State**: `defined`
   - **Revalidation trigger**: selection order, backend inventory rules, allowlist semantics, auth precedence, or policy failure taxonomy changes.
   - **Satisfied by**: `governance/seam-1-closeout.md` plus evidence that shell, broker, config/policy surfaces, and supporting ADR-0046 docs align to `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`.
-  - **Notes**: this thread is already published at the canonical-contract level; `SEAM-1` exists to align consumers and close the remaining narrow ambiguity, not to invent new ownership.
+  - **Notes**: the canonical contracts are already published, but the thread itself remains `defined` until `SEAM-1` lands the repo-consumer alignment and the closeout records `THR-01` as `published`.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-2`

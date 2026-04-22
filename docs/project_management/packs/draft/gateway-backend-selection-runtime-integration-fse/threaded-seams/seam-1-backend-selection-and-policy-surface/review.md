@@ -52,11 +52,12 @@ flowchart TB
 
 - The review gate passes. The selected-backend and auth-boundary diagrams still expose falsifiable product-facing flows, and the out-of-scope line against tuple/status widening remains explicit.
 - The contract gate passes. Canonical `C-01` and `C-02` already publish the selection, inventory, precedence, and fail-closed rules this seam needs.
-- `REM-001` remains only as seam-local landing and seam-exit follow-through: the canonical policy contract already publishes the rule; the remaining work is shell/supporting-doc adoption and evidence.
+- `REM-001` and `REM-002` remain only as seam-exit follow-through: the canonical contracts already publish the rules; the remaining work is shell adoption, supporting-doc alignment, and landed evidence capture before closeout can publish `THR-01`.
 - Revalidation passes against current repo evidence:
   - `crates/shell/src/builtins/world_gateway.rs` still keeps invalid integration, policy denial, transient runtime failure, and component unavailability distinct at the shell boundary.
   - `crates/shell/src/builtins/world_gateway.rs` still enforces fail-closed posture for disabled or host-only gateway lifecycle use before dispatch.
   - `crates/shell/src/builtins/world_gateway.rs` still prefers allowlisted env auth material when an access token is present and falls back to the allowlisted host credential file only when env auth is absent; partial env material still fails as invalid integration.
+- No blocking pre-exec remediations remain open against the `decomposed -> exec-ready` transition, so the seam is ready to execute even though seam-exit publication work is still pending.
 - No new pre-exec remediation is opened by this review refresh. The missing work is implementation and evidence, not fresh contract publication.
 - The likely failure mode is downstream runtime work inheriting too much shell-owned validation from the current `cli:codex` path.
 
@@ -69,7 +70,10 @@ flowchart TB
   - the latest shell gateway implementation still matches the documented selection boundary and failure buckets before execution starts
   - no external upstream closeout or contract publication changed this seam's basis outside the planned stale triggers
 - **Opened remediations**:
-  - none; rely only on carried seam-exit follow-through `REM-001`
+  - none
+- **Carried seam-exit follow-through**:
+  - `REM-001`
+  - `REM-002`
 
 ## Planned seam-exit gate focus
 

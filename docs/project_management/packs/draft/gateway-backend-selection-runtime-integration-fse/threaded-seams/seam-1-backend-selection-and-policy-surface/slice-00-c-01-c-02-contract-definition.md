@@ -1,9 +1,9 @@
 ---
 slice_id: S00
 seam_id: SEAM-1
-slice_kind: implementation
+slice_kind: contract_definition
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
@@ -26,6 +26,7 @@ contracts_consumed:
   - C-02
 open_remediations:
   - REM-001
+  - REM-002
 ---
 ### S00 - Confirm the published `C-01` / `C-02` baseline and lock the implementation boundary
 

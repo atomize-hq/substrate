@@ -2,7 +2,7 @@
 seam_id: SEAM-1
 seam_slug: backend-selection-and-policy-surface
 type: integration
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
@@ -30,6 +30,7 @@ seam_exit_gate:
   status: pending
 open_remediations:
   - REM-001
+  - REM-002
 ---
 
 # SEAM-1 - Backend selection and policy surface
@@ -94,6 +95,7 @@ open_remediations:
     - `review: passed` because the seam-local review bundle still exposes falsifiable selected-backend and auth-boundary flows.
     - `contract: passed` because canonical `docs/contracts/` refs already publish the selection, inventory, precedence, and fail-closed rules this seam needs.
     - `revalidation: passed` because the current shell still preserves the main failure buckets and Codex auth precedence rules, even though generic backend realization remains unimplemented.
+    - `status: exec-ready` is now justified because the pre-exec gates all pass, the basis remains `current`, and the remaining open remediations target seam exit and closeout publication rather than the `decomposed -> exec-ready` transition.
   - Later seam-local verification should prove:
     - `validate_gateway_lifecycle_config` and `build_gateway_request` reject empty, malformed, unknown, or disallowed selected backends before runtime dispatch
     - `resolve_integrated_auth_payload` and `resolve_cli_codex_integrated_auth` enforce env-primary/file-fallback/no-mixed-source auth precedence

@@ -1,6 +1,6 @@
 ---
 seam_id: SEAM-1
-status: decomposed
+status: exec-ready
 closeout_version: v1
 seam_exit_gate:
   source_ref: ../threaded-seams/seam-1-backend-selection-and-policy-surface/slice-99-seam-exit-gate.md
@@ -25,7 +25,7 @@ open_remediations:
 # Closeout - SEAM-1 Backend selection and policy surface
 
 This scaffold is reserved for the post-exec closeout once the active seam lands.
-The seam is now decomposed at `../threaded-seams/seam-1-backend-selection-and-policy-surface/`.
+The seam is now `exec-ready` at `../threaded-seams/seam-1-backend-selection-and-policy-surface/`, but the seam-exit gate remains pending until landing evidence and closeout publication are recorded.
 
 ## Seam-exit gate record
 
@@ -52,9 +52,11 @@ The seam is now decomposed at `../threaded-seams/seam-1-backend-selection-and-po
   - `REM-001`
   - `REM-002`
 - **Promotion blockers**:
-  - open blocking remediations prevent promotion readiness
+  - post-exec landing and closeout remain pending
+  - `THR-01` is not yet published in closeout
+  - `REM-001` and `REM-002` remain open as seam-exit follow-through until landing evidence resolves them
 - **Promotion readiness**:
-  - blocked until `REM-001` and `REM-002` resolve and the seam-exit gate passes
+  - blocked until landing evidence is recorded, `THR-01` is published, `REM-001` and `REM-002` resolve, and the seam-exit gate passes
 
 ## Post-exec gate disposition
 

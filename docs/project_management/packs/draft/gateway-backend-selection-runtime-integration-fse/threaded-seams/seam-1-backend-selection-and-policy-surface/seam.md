@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-1
 seam_slug: backend-selection-and-policy-surface
-status: decomposed
+status: exec-ready
 execution_horizon: active
 plan_version: v1
 basis:
@@ -29,6 +29,7 @@ seam_exit_gate:
   status: pending
 open_remediations:
   - REM-001
+  - REM-002
 ---
 # SEAM-1 - Backend selection and policy surface
 
@@ -61,7 +62,7 @@ open_remediations:
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md`
 - **Verification**:
   - This seam **consumes** published `C-01` and `C-02` and turns them into shell behavior plus evidence.
-  - Readiness means `SEAM-2` can consume `THR-01` without inferring missing semantics from the current `cli:codex` implementation.
+  - Readiness means `SEAM-1` can execute without inventing further contract truth, so `THR-01` has a deterministic publication target for `SEAM-2` once landing evidence exists.
   - Verification for this seam centers on:
     - `validate_gateway_lifecycle_config` rejects empty or disallowed lifecycle posture before dispatch
     - `build_gateway_request` keeps selection on existing config/policy roots and passes only an allowed backend id to the runtime boundary
@@ -72,7 +73,7 @@ open_remediations:
   - `docs/contracts/substrate-gateway-policy-evaluation.md`
 - **Basis posture**:
   - Currentness:
-    - `current` because `SEAM-1` has no inbound closeout dependency and the seam is being decomposed against the latest extracted pack state plus the current shell implementation evidence.
+    - `current` because `SEAM-1` has no inbound closeout dependency and the seam plan still matches the latest extracted pack state plus the current shell implementation evidence.
   - Upstream closeouts assumed:
     - none
   - Required threads:
@@ -109,7 +110,7 @@ open_remediations:
   - `C-01`
   - `C-02`
 - **Expected threads to publish / advance**:
-  - `THR-01`: `identified` -> `published`
+  - `THR-01`: `defined` -> `published`
 - **Likely downstream stale triggers**:
   - selection or inventory validation behavior changes at the shell boundary
   - auth precedence or no-host-fallback rules change
@@ -135,7 +136,8 @@ open_remediations:
   - `SEAM-1` -> `SEAM-2` via `THR-01` carrying `C-01` and `C-02`
   - `SEAM-1` -> `SEAM-3` via `THR-01` carrying `C-01` and `C-02`
 - **Execution posture**:
-  - The seam remains `status: decomposed`: the seam-local review, contract, and revalidation gates all pass. Remaining work is implementation, conformance, and seam-exit evidence, with `REM-001` carried only as landing/closeout alignment.
+  - The seam is now `status: exec-ready`: the seam-local review, contract, and revalidation gates all pass, the basis remains `current`, and no open remediation blocks the `decomposed -> exec-ready` transition.
+  - Remaining open remediations (`REM-001`, `REM-002`) are carried only as landing and seam-exit follow-through before `THR-01` can be published in closeout.
 - **Slicing strategy**:
   - baseline check, then shell selection implementation, then shell auth implementation, then conformance, then explicit seam exit
 

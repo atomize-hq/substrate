@@ -3,7 +3,7 @@ slice_id: S2
 seam_id: SEAM-1
 slice_kind: implementation
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current

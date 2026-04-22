@@ -3,7 +3,7 @@ slice_id: S1
 seam_id: SEAM-1
 slice_kind: implementation
 execution_horizon: active
-status: decomposed
+status: exec-ready
 plan_version: v1
 basis:
   currentness: current
@@ -24,7 +24,8 @@ contracts_produced:
   - C-01
 contracts_consumed:
   - C-01
-open_remediations: []
+open_remediations:
+  - REM-002
 ---
 ### S1 - Land selection order and inventory truth at the shell boundary
 
