@@ -2,16 +2,16 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-2`
-  - This seam implements the adapter-driven runtime path from the now-landed `SEAM-1` handoff.
+- **Active seam**: none currently
+  - `SEAM-2` is landed and closed out, and no other seam has been promoted into active execution yet.
 - **Next seam**: `SEAM-3`
-  - This seam verifies parity and rollout posture after `SEAM-2` lands runtime realization and publishes `THR-02`.
+  - This seam can now promote from the published `THR-02` runtime handoff and verify parity and rollout posture against landed upstream truth.
 - **Future seams**: none currently queued beyond `SEAM-3`
 
 Horizon policy for this pack:
 
-- only the active seam gets authoritative downstream deep planning by default
-- the next seam starts after `SEAM-2` publishes `THR-02` and records closeout evidence
+- `SEAM-2` already satisfied its seam-exit gate and published `THR-02` in `governance/seam-2-closeout.md`
+- the next seam may now start from that published handoff once it is promoted into active execution
 - no later seam is queued until a safe post-`SEAM-3` target is intentionally added
 
 ## Contract registry
@@ -99,10 +99,10 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-3`
   - **Carried contract IDs**: `C-03`, `C-04`
   - **Purpose**: land one integrated runtime realization path that parity and rollout can verify without inventing binding, capability, auth, or artifact behavior.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: binding lookup rules, capability gates, auth handoff validation, runtime payload shapes, artifact naming, readiness semantics, or restart behavior changes.
   - **Satisfied by**: `governance/seam-2-closeout.md` plus evidence that shell, `world-agent`, and shared agent-api surfaces implement the published adapter-protocol and runtime-owned schema surfaces without widening unrelated external ownership.
-  - **Notes**: this thread must not publish tuple metadata or status-schema widening as part of runtime realization.
+  - **Notes**: this thread was published by the landed `SEAM-2` closeout once the bounded multi-backend runtime handoff (`cli:codex` plus `api:openai`) passed tests and seam-exit review. `SEAM-3` must revalidate against that closeout before execution.
 
 - **Thread ID**: `THR-03`
   - **Producer seam**: `SEAM-3`
@@ -129,10 +129,10 @@ flowchart LR
    - lock the selection and policy handoff in implementation surfaces
    - publish `THR-01` and record the closeout evidence that retired `REM-001` / `REM-002`
 2. `SEAM-2` second:
-   - implement adapter lookup, capability gating, auth validation, config render, manifests, readiness, and restart behavior using the revalidated `SEAM-1` handoff
-   - any schema hardening happens only as needed to land runtime behavior
+   - landed adapter lookup, capability gating, auth validation, config render, manifests, readiness, and restart behavior using the revalidated `SEAM-1` handoff
+   - published `THR-02` from closeout once the bounded request/auth shape and `api:openai` proof target were verified
 3. `SEAM-3` third:
-   - validate parity and rollout after the runtime path exists
+   - validate parity and rollout from the now-published `THR-02` handoff
    - choose and prove an additional backend only when the project is ready for that rollout step
 
 ## Workstreams

@@ -55,9 +55,9 @@ This scaffold is reserved for the post-exec closeout once the future seam lands.
 - **Remediation disposition**:
   - no seam-local pre-exec contract remediations should remain; record any carried-forward validation gaps here if they emerge during landing
 - **Promotion blockers**:
-  - promotion remains blocked until upstream implementation lands and parity/rollout proof is complete
+  - upstream publication prerequisites are now satisfied; promotion remains blocked only until `SEAM-3` lands its own parity/rollout proof and passes its seam-exit gate
 - **Promotion readiness**:
-  - blocked until `THR-01` and `THR-02` publish, one additional backend exists in landed code, and the seam-exit gate passes
+  - blocked until this seam lands parity/rollout evidence, records `THR-03`, and passes its seam-exit gate
 
 ## Post-exec gate disposition
 

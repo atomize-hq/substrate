@@ -30,20 +30,20 @@ Start here:
 
 Execution horizon:
 
-- Active seam: `SEAM-2`
+- Active seam: none currently
 - Next seam: `SEAM-3`
 - Future seam(s): none currently queued beyond `SEAM-3`
 
 Horizon inference:
 
-- `SEAM-2` is active because `SEAM-1` published `THR-01`, the selection and policy handoff is now landed, and the remaining work is executable runtime realization rather than more contract alignment.
-- `SEAM-3` is next because parity and rollout proof should follow the runtime path that `SEAM-2` lands, not run ahead of it.
+- `SEAM-2` is landed because it published `THR-02` with a bounded multi-backend runtime handoff and passed its seam-exit gate.
+- `SEAM-3` is next because parity and rollout proof should now consume that published runtime handoff rather than run ahead of it.
 - No later seam is queued behind `SEAM-3` in the current pack.
 
 Policy:
 
-- only the active seam is eligible for authoritative downstream deep planning by default
-- the next seam starts after `SEAM-2` lands runtime realization and publishes `THR-02`
+- no seam is currently active because the previous execution target landed and closed out cleanly
+- the next seam can now start from the published `THR-02` runtime handoff
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that still need a narrow contract-alignment slice may reserve `S00` for that boundary work before implementation slices
 - future seams remain deferred until their execution preconditions exist
@@ -59,5 +59,5 @@ Source-pack crosswalk:
 Current pack posture:
 
 - `SEAM-1` is landed and closed out as the published selection/policy handoff.
-- `SEAM-2` is now the active execution seam with seam-local planning and pre-exec review in place.
-- `SEAM-3` remains queued as the next seam and does not deep-plan until `THR-02` publishes.
+- `SEAM-2` is landed and closed out as the published runtime realization handoff.
+- `SEAM-3` remains queued as the next seam and may now promote from the published `THR-02` handoff.

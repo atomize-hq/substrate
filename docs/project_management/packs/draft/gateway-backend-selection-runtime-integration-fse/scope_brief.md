@@ -4,7 +4,7 @@ pack_version: v1
 pack_status: extracted
 source_ref: docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md + docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/pre-planning/
 execution_horizon:
-  active_seam: SEAM-2
+  active_seam: null
   next_seam: SEAM-3
 ---
 
@@ -41,9 +41,9 @@ execution_horizon:
 - **Constraints**:
   - Keep lifecycle state separate from basis freshness.
   - `SEAM-1` is landed evidence now, not an open execution target.
-  - `SEAM-2` is the active execution target and should proceed as implementation work against the published selection/policy handoff rather than reopen contract publication.
+  - `SEAM-2` is landed evidence now, not an open execution target.
   - `SEAM-2` does not require a contract-definition `S00`; the protocol and schema baselines already exist canonically under `docs/contracts/`.
-  - `SEAM-3` is the next validation/rollout seam and begins only after runtime realization exists and `THR-02` publishes.
+  - `SEAM-3` is the next validation/rollout seam and may now promote from the published `THR-02` handoff.
   - Canonical contract artifacts live under `docs/contracts/`, but this pack does not assume broad new contract publication work.
   - Feature-local ADR-0046 docs remain supporting implementation and verification surfaces.
   - Planning IDs remain confined to planning/governance artifacts.
@@ -70,14 +70,14 @@ execution_horizon:
   - `crates/world-agent/tests/gateway_runtime_parity.rs`
   - `crates/shell/tests/world_gateway.rs`
 - **Known unknowns / risks**:
-  - The first supported non-`cli:codex` integrated backend id is still a later rollout decision, not part of the current execution target.
-  - Shared payload surfaces still publish only `cli_codex` integrated auth today, so `SEAM-2` will have to decide how much schema change is needed to support more than one integrated backend.
+  - The first supported non-`cli:codex` integrated backend proof target is now `api:openai`, but broader rollout compatibility beyond that proof target remains later `SEAM-3` work.
+  - Shared payload surfaces now support bounded `cli_codex` and `api_env` auth handoff, but any future backend needing another bounded facet remains later rollout/runtime work.
   - Current runtime launch still exports auth material through env-based child-process injection, which is compatible with current policy rules but not the stronger deferred secret-channel direction.
   - macOS remains guest-managed for runtime lifecycle even though the host control path works; parity proof still has to account for that posture.
 - **Assumptions**:
-  - Current integrated runtime code is decisive that only `cli:codex` is implemented today:
-    - `crates/world-agent/src/gateway_runtime.rs` rejects any default backend other than `cli:codex`
-    - `crates/shell/src/builtins/world_gateway.rs` only constructs `integrated_auth.cli_codex`
-    - `crates/agent-api-types/src/lib.rs` only publishes a `cli_codex` integrated auth payload variant today
+  - Current integrated runtime code now proves one bounded multi-backend handoff:
+    - `crates/world-agent/src/gateway_runtime.rs` resolves explicit bindings for `cli:codex` and `api:openai`
+    - `crates/shell/src/builtins/world_gateway.rs` constructs either `integrated_auth.cli_codex` or bounded `integrated_auth.api_env` from the resolved inventory-backed backend entry
+    - `crates/agent-api-types/src/lib.rs` publishes a closed `GatewayIntegratedAuthPayloadV1` that validates both supported auth facets before runtime execution
   - The selection and policy contracts already own most of the normative truth this feature needs; the remaining contract work is narrow alignment, not a fresh publication phase.
   - The pre-planning pack remains valid lineage, but this pack is now execution-oriented rather than extraction-oriented.
