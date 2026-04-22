@@ -2,16 +2,16 @@
 
 ## Execution horizon summary
 
-- **Active seam**: `SEAM-3`
-  - This seam now consumes a revalidated `THR-02` handoff and is the only active execution target in the pack.
+- **Active seam**: none
+  - The terminal conformance seam has landed and left the forward planning window.
 - **Next seam**: none currently queued
   - No safe later seam exists in this pack after `SEAM-3`, so `next_seam` remains `null`.
-- **Future seams**: none currently queued beyond the active seam
+- **Future seams**: `SEAM-1`, `SEAM-2`, `SEAM-3`
 
 Horizon policy for this pack:
 
 - `SEAM-2` already satisfied its seam-exit gate and published `THR-02` in `governance/seam-2-closeout.md`
-- the active seam now executes from that published handoff because promotion revalidated it against current runtime and test surfaces
+- `SEAM-3` has now landed with a passed seam-exit gate and published `THR-03`
 - no later seam is queued until a safe post-`SEAM-3` target is intentionally added
 
 ## Contract registry
@@ -74,9 +74,9 @@ Horizon policy for this pack:
   - **Definition**: parity and rollout proof for the selected-backend lifecycle: Linux/macOS/Windows validation expectations, `cli:codex` regression floor, explicit unsupported-backend behavior, and later first-additional-backend proof.
   - **Canonical contract ref**: `docs/contracts/substrate-gateway-runtime-parity.md`
   - **Supporting feature-local surfaces**:
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/platform-parity-spec.md`
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/compatibility-spec.md`
-    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/manual_testing_playbook.md`
+    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/platform-parity-spec.md`
+    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/compatibility-spec.md`
+    - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/manual_testing_playbook.md`
   - **Consumed external authorities**:
     - `docs/contracts/substrate-gateway-operator-contract.md`
     - `docs/contracts/substrate-gateway-policy-evaluation.md`
@@ -88,7 +88,7 @@ Horizon policy for this pack:
   - **Producer seam**: `SEAM-1`
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`
-  - **Purpose**: make the existing selection and policy contracts executable in repo consumers so runtime realization does not infer truth from the current Codex-only path.
+  - **Purpose**: make the existing selection and policy contracts executable in repo consumers so runtime realization does not infer truth from the older Codex-only path.
   - **State**: `revalidated`
   - **Revalidation trigger**: selection order, backend inventory rules, allowlist semantics, auth precedence, or policy failure taxonomy changes.
   - **Satisfied by**: `governance/seam-1-closeout.md` plus evidence that shell, broker, config/policy surfaces, and any later subordinate ADR-0046 support docs align to `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`.
@@ -108,11 +108,11 @@ Horizon policy for this pack:
   - **Producer seam**: `SEAM-3`
   - **Consumer seam(s)**: none inside this pack
   - **Carried contract IDs**: `C-05`
-  - **Purpose**: verify parity and later rollout posture after the runtime path exists.
-  - **State**: `defined`
+  - **Purpose**: publish parity and rollout posture after the runtime path exists.
+  - **State**: `published`
   - **Revalidation trigger**: first-additional-backend baseline changes, parity matrix changes, unsupported-backend failure posture changes, or `cli:codex` regression guarantees change.
-  - **Satisfied by**: `governance/seam-3-closeout.md` plus validation evidence across Linux/macOS/Windows once a later additional backend is intentionally chosen.
-  - **Notes**: this thread is the outbound publication target for the active seam. The proof target is now `api:openai`, but `THR-03` remains `defined` until `SEAM-3` lands parity evidence and closeout.
+  - **Satisfied by**: `governance/seam-3-closeout.md` plus the landed parity, platform, and rollout evidence surfaces under the `-fse` pack.
+  - **Notes**: this thread is now published from the landed parity seam. The proof target is `api:openai`, `cli:codex` remains the regression floor, and unsupported backends remain explicit with no fallback.
 
 ## Dependency graph
 
@@ -132,8 +132,8 @@ flowchart LR
    - landed adapter lookup, capability gating, auth validation, config render, manifests, readiness, and restart behavior using the revalidated `SEAM-1` handoff
    - published `THR-02` from closeout once the bounded request/auth shape and `api:openai` proof target were verified
 3. `SEAM-3` third:
-   - validate parity and rollout from the revalidated `THR-02` handoff
-   - execute against the named additional-backend proof target `api:openai` while keeping unsupported-backend handling explicit
+  - validated parity and rollout from the revalidated `THR-02` handoff
+  - landed the named additional-backend proof target `api:openai` while keeping unsupported-backend handling explicit
 
 ## Workstreams
 
@@ -150,3 +150,4 @@ flowchart LR
 Workstream note:
 
 - These lanes follow the old `GBSRI-*` lineage but the current pack treats them as execution work, not seam-extraction outputs.
+- No seam currently owns the forward planning window because the terminal parity seam has landed.

@@ -1,22 +1,22 @@
 # Pack Closeout - gateway-backend-selection-runtime-integration
 
-- **Pack status**: active implementation pack
-- **Current execution target**: execute active `SEAM-3` from the revalidated `THR-02` runtime handoff
+- **Pack status**: landed implementation pack
+- **Current execution target**: none; the terminal parity seam has landed and left the forward planning window
 - **Remaining open seams**:
-  - `SEAM-3`
+  - none inside this pack
 - **Open remediations still blocking current-seam closeout**:
   - none
 - **Deferred follow-ons not blocking current-seam closeout**:
-  - `REM-005`
+  - none
 - **Threads still not closed**:
   - `THR-03`
 - **Downstream stale triggers still requiring attention**:
   - runtime binding behavior, bounded auth payload shape, runtime config render, readiness semantics, or managed artifact behavior change relative to the published `THR-02` handoff
-  - first-additional-backend baseline or platform validation expectations change during later rollout work
+  - first-additional-backend baseline or platform validation expectations change during later downstream rollout work
 - **Evidence summary**:
   - `governance/seam-1-closeout.md` records the published selection/policy handoff
   - `governance/seam-2-closeout.md` records the published runtime realization handoff, including the first supported non-`cli:codex` proof target (`api:openai`)
-  - `governance/seam-3-closeout.md` remains reserved for later parity/rollout evidence
+  - `governance/seam-3-closeout.md` records the landed parity, validation, rollout, and seam-exit evidence for `THR-03`
 - **Non-expansion checks**:
   - no tuple metadata or tuple-policy widening is smuggled into backend selection or runtime realization
   - no `status --json` widening is treated as part of this pack

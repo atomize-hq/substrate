@@ -4,7 +4,7 @@ pack_version: v1
 pack_status: extracted
 source_ref: docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md + docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/pre-planning/
 execution_horizon:
-  active_seam: SEAM-3
+  active_seam: null
   next_seam: null
 ---
 
@@ -15,7 +15,7 @@ execution_horizon:
   - Consume the landed `SEAM-1` selection/policy handoff and use it to drive runtime realization in `SEAM-2`, then later parity proof in `SEAM-3`.
 - **Why now**:
   - ADR-0046 already defines the intended implementation seam, and the repo already has canonical selection, policy, protocol, and runtime-parity contracts.
-  - The actual gap is execution: `world-agent` and shell still realize only a Codex-specific runtime path, so the pack needs to drive implementation rather than produce more contract/governance scaffolding.
+  - The actual gap was execution: `world-agent` and shell needed to move beyond a Codex-specific runtime path, so the pack drove implementation rather than more contract/governance scaffolding.
 - **Primary user(s) + JTBD**:
   - Substrate maintainers who need one execution spine for moving from a Codex-only integrated lifecycle to an inventory-backed multi-adapter posture.
   - Shell, world-agent, broker, and docs owners who need one agreed handoff from selection/policy truth into runtime realization and then into validation.
@@ -25,7 +25,7 @@ execution_horizon:
   - `SEAM-1`: consumer alignment in broker, shell, config/policy surfaces, and supporting ADR-0046 docs so downstream runtime work consumes one fixed handoff.
   - `SEAM-2`: runtime realization and artifacts for an integrated adapter path, including binding lookup, capability gating, auth handoff validation, config render, managed artifact semantics, launch, readiness, and restart ordering.
   - `SEAM-3`: parity, validation, and rollout proof for Linux, macOS, and Windows, including the `cli:codex` regression floor, explicit unsupported-backend behavior, and the named first-additional-backend proof target `api:openai`.
-  - Execution-oriented threading, review surfaces, and remediation tracking that make the active seam executable instead of re-opening already-published contract ownership.
+  - Execution-oriented threading, review surfaces, and remediation tracking that made the active seam executable instead of re-opening already-published contract ownership.
 - **Out-of-scope**:
   - Reopening ADR-0040, ADR-0041, ADR-0042, or ADR-0043 ownership.
   - Widening `substrate world gateway status --json`, tuple metadata, or tuple-policy surfaces.
@@ -43,7 +43,7 @@ execution_horizon:
   - `SEAM-1` is landed evidence now, not an open execution target.
   - `SEAM-2` is landed evidence now, not an open execution target.
   - `SEAM-2` does not require a contract-definition `S00`; the protocol and schema baselines already exist canonically under `docs/contracts/`.
-  - `SEAM-3` is the active validation/rollout seam and is now `exec-ready` from the revalidated `THR-02` handoff.
+  - `SEAM-3` has landed and closed out after publishing parity, validation, and rollout evidence from the revalidated `THR-02` handoff.
   - Canonical contract artifacts live under `docs/contracts/`, but this pack does not assume broad new contract publication work.
   - Feature-local ADR-0046 docs remain supporting implementation and verification surfaces.
   - Planning IDs remain confined to planning/governance artifacts.
@@ -70,7 +70,7 @@ execution_horizon:
   - `crates/world-agent/tests/gateway_runtime_parity.rs`
   - `crates/shell/tests/world_gateway.rs`
 - **Known unknowns / risks**:
-  - The first supported non-`cli:codex` integrated backend proof target is now `api:openai`, but broader rollout compatibility beyond that proof target remains later `SEAM-3` work.
+  - The first supported non-`cli:codex` integrated backend proof target is now `api:openai`, but broader rollout compatibility beyond that proof target remains later downstream rollout work.
   - Shared payload surfaces now support bounded `cli_codex` and `api_env` auth handoff, but any future backend needing another bounded facet remains later rollout/runtime work.
   - Current runtime launch still exports auth material through env-based child-process injection, which is compatible with current policy rules but not the stronger deferred secret-channel direction.
   - macOS remains guest-managed for runtime lifecycle even though the host control path works; parity proof still has to account for that posture.

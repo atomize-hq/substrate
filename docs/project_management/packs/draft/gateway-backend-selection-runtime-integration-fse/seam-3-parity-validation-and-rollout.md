@@ -2,8 +2,8 @@
 seam_id: SEAM-3
 seam_slug: parity-validation-and-rollout
 type: conformance
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v2
 basis:
   currentness: current
@@ -26,12 +26,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 
@@ -128,7 +128,7 @@ open_remediations: []
   - De-risk plan:
     - keep this seam anchored to the landed `THR-02` handoff and re-run revalidation if runtime truth or the named proof target changes before landing
 - **Rollout / safety**:
-  - This seam is now `active` and `exec-ready` because parity and rollout proof should verify landed upstream implementation rather than race ahead of it, and the required runtime handoff has been revalidated.
+  - This seam has now landed because parity and rollout proof verified the landed upstream implementation without widening the operator or status surfaces.
   - Safety depends on keeping `cli:codex` as the regression floor while proving explicit no-fallback behavior for unsupported backends.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`

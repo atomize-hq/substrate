@@ -18,7 +18,7 @@ Restated scope and assumptions:
 - Keep `status`, `sync`, and `restart` as the existing operator entrypoints while moving the integrated lifecycle from one hardcoded `cli:codex` path toward inventory-backed backend realization.
 - Treat the existing gateway contract docs under `docs/contracts/*` as durable upstream refs that constrain implementation.
 - Keep `status --json`, tuple metadata, tuple-policy surfaces, and secret-channel redesign out of scope for this pack.
-- Repo evidence still shows only a Codex-shaped integrated auth/runtime path today, so this pack is centered on making selection and runtime behavior real for more than one backend id rather than publishing more governance structure.
+- Repo evidence now includes a bounded multi-backend integrated auth/runtime handoff, so this pack records how selection, runtime behavior, and parity proof were made concrete without publishing a second contract system.
 
 Start here:
 
@@ -30,20 +30,19 @@ Start here:
 
 Execution horizon:
 
-- Active seam: `SEAM-3`
+- Active seam: none
 - Next seam: none currently queued
-- Future seam(s): none currently queued beyond the active seam
+- Future seam(s): `SEAM-1`, `SEAM-2`, `SEAM-3`
 
 Horizon inference:
 
 - `SEAM-2` is landed because it published `THR-02` with a bounded multi-backend runtime handoff and passed its seam-exit gate.
-- `SEAM-3` is active because promotion revalidated the published `THR-02` handoff, confirmed that `api:openai` remains the named proof target in live repo surfaces, and refreshed seam-local execution planning.
-- No later seam is queued behind `SEAM-3` in the current pack, so `next_seam` remains `null`.
+- `SEAM-3` has now landed with a passed seam-exit gate after attaching parity, platform, and rollout proof to the canonical runtime parity contract.
+- No later seam is queued behind `SEAM-3` in the current pack, so the forward window is now empty.
 
 Policy:
 
-- `SEAM-3` is the only active seam because the previous execution target landed and closed out cleanly
-- the active seam now executes from the revalidated `THR-02` runtime handoff
+- no seam currently owns the forward planning window because the terminal conformance seam has landed
 - active and next seams must eventually terminate in a dedicated final `S99` `seam-exit-gate` slice once seam-local planning begins
 - seams that still need a narrow contract-alignment slice may reserve `S00` for that boundary work before implementation slices
 - future seams remain deferred until their execution preconditions exist
@@ -60,4 +59,5 @@ Current pack posture:
 
 - `SEAM-1` is landed and closed out as the published selection/policy handoff.
 - `SEAM-2` is landed and closed out as the published runtime realization handoff.
-- `SEAM-3` is active and `exec-ready`: its seam-local review bundle now revalidates the published `THR-02` handoff against the live runtime/test surfaces, and no later seam is queued behind it.
+- `SEAM-3` is landed and closed out as the published parity, validation, and rollout handoff.
+- No active seam remains in this pack unless a new extraction or downstream follow-on pack is introduced.

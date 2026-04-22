@@ -1,8 +1,8 @@
 ---
 seam_id: SEAM-3
 seam_slug: parity-validation-and-rollout
-status: exec-ready
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
   currentness: current
@@ -25,12 +25,12 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
+  status: passed
 open_remediations: []
 ---
 # SEAM-3 - Parity, validation, and rollout
@@ -146,8 +146,8 @@ open_remediations: []
   - `SEAM-2` -> `SEAM-3` via `THR-02` carrying `C-03` and `C-04`
   - `SEAM-3` -> downstream rollout/release governance via `THR-03` carrying `C-05`
 - **Execution posture**:
-  - The seam is now `status: exec-ready`: seam-local review, contract, and revalidation gates all pass, the basis is current, and the remaining work is bounded conformance, validation, and rollout publication.
-  - `THR-02` has been revalidated for this seam, while `THR-03` remains the outbound publication target for closeout.
+  - The seam is now `status: landed`: the parity matrix, platform evidence, rollout publication, and seam-exit closeout have all landed against the current basis.
+  - `THR-02` remains revalidated for this seam, and `THR-03` is now published from the seam closeout.
 - **Slicing strategy**:
   - lock the automated parity matrix first, then platform evidence and unsupported-backend validation, then rollout publication surfaces, then explicit seam exit
 

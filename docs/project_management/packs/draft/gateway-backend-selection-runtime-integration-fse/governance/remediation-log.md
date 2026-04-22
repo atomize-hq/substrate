@@ -29,21 +29,7 @@ Future remediation entries must use the canonical fields from the extractor gove
 ## Deferred follow-ons (not pack blockers)
 
 ```yaml
-- remediation_id: REM-005
-  origin_phase: post_exec
-  source_gate: revalidation
-  related_seam: SEAM-3
-  related_slice: S01
-  related_thread: THR-03
-  related_contract: C-05
-  related_artifact: docs/contracts/substrate-gateway-runtime-parity.md
-  severity: medium
-  status: deferred
-  owner_seam: SEAM-3
-  blocked_targets: []
-  summary: the first supported non-`cli:codex` integrated backend baseline is a later validation and rollout decision, not a blocker on the current implementation pack
-  required_fix: once a named additional backend is intentionally selected, add parity evidence and rollout proof across Linux/macOS/Windows
-  resolution_evidence: []
+[]
 ```
 
 ## Resolved remediations
@@ -131,6 +117,28 @@ Future remediation entries must use the canonical fields from the extractor gove
     - `crates/shell/src/builtins/world_gateway.rs` now emits backend-aware integrated auth from resolved inventory instead of suppressing all non-`cli:codex` auth handoff
     - `cargo test -p agent-api-types -- --nocapture`
     - `cargo test -p shell --test world_gateway -- --nocapture`
+
+- remediation_id: REM-005
+  origin_phase: post_exec
+  source_gate: revalidation
+  related_seam: SEAM-3
+  related_slice: S01
+  related_thread: THR-03
+  related_contract: C-05
+  related_artifact: docs/contracts/substrate-gateway-runtime-parity.md
+  severity: medium
+  status: resolved
+  owner_seam: SEAM-3
+  blocked_targets: []
+  summary: the first supported non-`cli:codex` integrated backend baseline is now fixed as `api:openai`, with landed parity and rollout evidence across Linux/macOS/Windows
+  required_fix: none inside the current implementation pack
+  resolution_evidence:
+    - `0b372f6e` made the supported backend matrix explicit in the runtime and shell parity suites
+    - `cdf5db5d` landed platform parity, manual testing, and smoke evidence under the `-fse` pack
+    - `3b8a988a` landed the compatibility publication surface bounded to `cli:codex`, `api:openai`, and explicit unsupported-backend handling
+    - `4822e70a` published the seam-exit gate and `THR-03` closeout record
+    - `cargo test -p shell --test world_gateway -- --nocapture`
+    - `SUBSTRATE_BIN=target/debug/substrate bash docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/smoke/macos-smoke.sh`
 ```
 
 ## Retired remediations
