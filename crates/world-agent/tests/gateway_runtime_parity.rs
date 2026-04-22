@@ -63,6 +63,9 @@ fn gateway_request_with_backend(cwd: &Path, backend_id: &str) -> GatewayLifecycl
         backend_id.to_string(),
     );
     request.env = Some(env);
+    if backend_id != "cli:codex" {
+        request.integrated_auth = None;
+    }
     request
 }
 
@@ -657,6 +660,88 @@ async fn gateway_restart_recycles_the_runtime() {
     );
     assert_eq!(read_launch_count(&launch_count_path), 2);
     assert_process_exited(initial_pid);
+}
+
+#[tokio::test]
+async fn gateway_unbound_lifecycle_actions_do_not_fall_back_to_running_codex_runtime() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = TempDir::new().unwrap();
+    let (binary, pid_dir, launch_count_path) = tracking_gateway_binary(&temp_dir, "continuity", 0);
+    let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
+    let Some(service) = service_or_skip() else {
+        return;
+    };
+    let codex_request = gateway_request(temp_dir.path());
+    let unbound_request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+
+    let sync_response = service
+        .gateway_sync(codex_request.clone())
+        .await
+        .expect("initial codex gateway sync");
+    assert_eq!(sync_response.status, GatewayStatusV1::Available);
+    let initial_pid = wait_for_pid(&pid_dir, 1);
+    assert_eq!(read_launch_count(&launch_count_path), 1);
+    assert_eq!(
+        service
+            .gateway_runtime_pid_for_test(&codex_request)
+            .expect("codex runtime pid lookup"),
+        Some(initial_pid),
+    );
+    assert_eq!(
+        service
+            .gateway_runtime_pid_for_test(&unbound_request)
+            .expect("unbound runtime pid lookup"),
+        None,
+    );
+
+    let unbound_status = service
+        .gateway_status(unbound_request.clone())
+        .await
+        .expect("unbound status");
+    assert_eq!(unbound_status.status, GatewayStatusV1::Unavailable);
+    assert!(unbound_status.client_wiring.is_none());
+
+    let unbound_restart = service
+        .gateway_restart(unbound_request.clone())
+        .await
+        .expect("unbound restart");
+    assert_eq!(unbound_restart.status, GatewayStatusV1::Unavailable);
+    assert!(unbound_restart.client_wiring.is_none());
+    assert_eq!(read_launch_count(&launch_count_path), 1);
+
+    let codex_status = service
+        .gateway_status(codex_request.clone())
+        .await
+        .expect("codex status after unbound lifecycle actions");
+    assert_eq!(codex_status.status, GatewayStatusV1::Available);
+    assert_eq!(
+        service
+            .gateway_runtime_pid_for_test(&codex_request)
+            .expect("codex runtime pid lookup after unbound actions"),
+        Some(initial_pid),
+    );
+
+    let restart_response = service
+        .gateway_restart(codex_request.clone())
+        .await
+        .expect("codex restart");
+    assert_eq!(restart_response.status, GatewayStatusV1::Available);
+    let restarted_pid = wait_for_pid(&pid_dir, 2);
+    assert_ne!(restarted_pid, initial_pid);
+    assert_eq!(read_launch_count(&launch_count_path), 2);
+    assert_process_exited(initial_pid);
+    assert_eq!(
+        service
+            .gateway_runtime_pid_for_test(&codex_request)
+            .expect("codex runtime pid lookup after restart"),
+        Some(restarted_pid),
+    );
+    assert_eq!(
+        service
+            .gateway_runtime_pid_for_test(&unbound_request)
+            .expect("unbound runtime pid lookup after restart"),
+        None,
+    );
 }
 
 #[tokio::test]

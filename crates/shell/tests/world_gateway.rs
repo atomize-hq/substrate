@@ -143,7 +143,96 @@ impl Drop for RecordedGatewayRequestSocket {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct RecordedGatewayLifecycleRequest {
+    path: String,
+    body: JsonValue,
+}
+
+struct RecordedGatewayLifecycleSocket {
+    _temp: TempDir,
+    socket_path: PathBuf,
+    recorded_requests: Arc<Mutex<Vec<RecordedGatewayLifecycleRequest>>>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl RecordedGatewayLifecycleSocket {
+    fn start(
+        status: JsonValue,
+        sync: JsonValue,
+        restart: JsonValue,
+        expected_requests: usize,
+    ) -> Self {
+        let temp = short_socket_tempdir("sub-gwrl-");
+        let socket_path = temp.path().join("agent.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind lifecycle capture socket");
+        let recorded_requests = Arc::new(Mutex::new(Vec::new()));
+        let recorded_requests_for_thread = recorded_requests.clone();
+
+        let handle = thread::spawn(move || {
+            for _ in 0..expected_requests {
+                let (mut stream, _) = listener.accept().expect("accept lifecycle capture request");
+                let request = read_http_request(&mut stream).expect("read lifecycle HTTP request");
+                let first_line = request.header.lines().next().unwrap_or_default();
+                let path = first_line
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_string();
+                let body =
+                    serde_json::from_slice(&request.body).expect("parse lifecycle request JSON");
+                recorded_requests_for_thread
+                    .lock()
+                    .expect("lock recorded lifecycle requests")
+                    .push(RecordedGatewayLifecycleRequest {
+                        path: path.clone(),
+                        body,
+                    });
+
+                let response = match path.as_str() {
+                    "/v1/gateway/status" => &status,
+                    "/v1/gateway/sync" => &sync,
+                    "/v1/gateway/restart" => &restart,
+                    _ => panic!("unexpected lifecycle path: {path}"),
+                };
+                write_http_json_response(&mut stream, &response.to_string())
+                    .expect("write lifecycle capture response");
+            }
+        });
+
+        Self {
+            _temp: temp,
+            socket_path,
+            recorded_requests,
+            handle: Some(handle),
+        }
+    }
+
+    fn socket_path(&self) -> &Path {
+        &self.socket_path
+    }
+
+    fn recorded_requests(&mut self) -> Vec<RecordedGatewayLifecycleRequest> {
+        if let Some(handle) = self.handle.take() {
+            handle.join().expect("join lifecycle capture thread");
+        }
+        self.recorded_requests
+            .lock()
+            .expect("lock recorded lifecycle requests")
+            .clone()
+    }
+}
+
+impl Drop for RecordedGatewayLifecycleSocket {
+    fn drop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
 struct HttpRequest {
+    header: String,
     body: Vec<u8>,
 }
 
@@ -158,7 +247,7 @@ fn read_http_request(stream: &mut UnixStream) -> std::io::Result<HttpRequest> {
         }
     }
 
-    let header = String::from_utf8_lossy(&header_bytes);
+    let header = String::from_utf8_lossy(&header_bytes).into_owned();
     let content_length = header
         .lines()
         .find_map(|line| {
@@ -176,7 +265,7 @@ fn read_http_request(stream: &mut UnixStream) -> std::io::Result<HttpRequest> {
         stream.read_exact(&mut body)?;
     }
 
-    Ok(HttpRequest { body })
+    Ok(HttpRequest { header, body })
 }
 
 fn write_http_json_response(stream: &mut UnixStream, body: &str) -> std::io::Result<()> {
@@ -949,6 +1038,79 @@ fn world_gateway_status_prefers_allowed_env_auth_over_host_auth_file() {
         request.pointer("/integrated_auth/cli_codex/access_token"),
         Some(&json!("token-from-env"))
     );
+}
+
+#[test]
+fn world_gateway_lifecycle_requests_preserve_selected_backend_without_codex_fallback() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let available = json!({
+        "status": "available",
+        "client_wiring": {
+            "openai_base_url": "http://gateway.test/openai",
+            "anthropic_base_url": "http://gateway.test/anthropic"
+        }
+    });
+    let mut socket =
+        RecordedGatewayLifecycleSocket::start(available.clone(), available.clone(), available, 3);
+
+    let mut status = fixture.command();
+    status
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .args(["world", "gateway", "status", "--json"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("\"status\":\"available\""));
+
+    let mut sync = fixture.command();
+    sync.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .args(["world", "gateway", "sync"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains(
+            "substrate world gateway sync: available",
+        ));
+
+    let mut restart = fixture.command();
+    restart
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .args(["world", "gateway", "restart"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains(
+            "substrate world gateway restart: available",
+        ));
+
+    let requests = socket.recorded_requests();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[0].path, "/v1/gateway/status");
+    assert_eq!(requests[1].path, "/v1/gateway/sync");
+    assert_eq!(requests[2].path, "/v1/gateway/restart");
+
+    for request in requests {
+        assert_eq!(
+            request.body.pointer("/env/SUBSTRATE_LLM_DEFAULT_BACKEND"),
+            Some(&json!("api:openai")),
+            "lifecycle request should preserve the selected backend",
+        );
+        assert_eq!(
+            request.body.pointer("/integrated_auth"),
+            None,
+            "non-Codex lifecycle requests should not synthesize Codex auth",
+        );
+    }
 }
 
 #[test]
