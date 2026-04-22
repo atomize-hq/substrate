@@ -888,6 +888,58 @@ fn world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override
 }
 
 #[test]
+fn world_gateway_status_prefers_allowed_env_auth_over_host_auth_file() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
+    fixture.write_global_policy(gateway_policy_with_codex_env_override());
+    fixture.write_codex_auth_state(
+        r#"{
+  "account_id": "acct_file_explicit",
+  "access_token": "token-from-file"
+}"#,
+    );
+
+    let mut socket = RecordedGatewayRequestSocket::start(json!({
+        "status": "available",
+        "client_wiring": {
+            "openai_base_url": "http://gateway.test/openai",
+            "anthropic_base_url": "http://gateway.test/anthropic"
+        }
+    }));
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .env(
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
+            "acct_env_explicit",
+        )
+        .env(
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+            "token-from-env",
+        )
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains(
+            "substrate world gateway status: available",
+        ));
+
+    let request = socket.recorded_request();
+    assert_eq!(
+        request.pointer("/integrated_auth/cli_codex/account_id"),
+        Some(&json!("acct_env_explicit"))
+    );
+    assert_eq!(
+        request.pointer("/integrated_auth/cli_codex/access_token"),
+        Some(&json!("token-from-env"))
+    );
+}
+
+#[test]
 fn world_gateway_host_credential_policy_denials_use_exit_code_5() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_codex_backend());
@@ -950,6 +1002,43 @@ fn world_gateway_incomplete_env_override_uses_exit_code_2() {
         .code(2)
         .stderr(predicate::str::contains(
             "substrate world gateway status: invalid integration",
+        ));
+}
+
+#[test]
+fn world_gateway_env_auth_blocked_by_policy_denies_without_file_fallback() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
+    fixture.write_global_policy(gateway_policy_with_codex_host_credentials());
+    fixture.write_codex_auth_state(
+        r#"{
+  "account_id": "acct_file_explicit",
+  "access_token": "token-from-file"
+}"#,
+    );
+
+    let temp = short_socket_tempdir("sub-gwa-");
+    let missing_socket_path = temp.path().join("missing.sock");
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket_path)
+        .env(
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
+            "acct_env_blocked",
+        )
+        .env(
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+            "token-from-env",
+        )
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: policy or safety failure",
         ));
 }
 
