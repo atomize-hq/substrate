@@ -100,14 +100,23 @@ Checklist:
   - keep policy explanations and fail-closed behavior Substrate-owned
   - preserve the boundary that gateway-local config, admin, and persistence are not trusted policy inputs
   - make the precedence rule explicit rather than leaving the current `cli:codex` branch as accidental truth
+  - state explicitly that precedence chooses the handoff content, not the long-term host-to-world carrier; current env delivery may remain as v1 transport, while the preferred additive direction is a secret-channel payload plus inherited FD/pipe auth bundle
 - **Acceptance criteria**:
-  - env material and host credential file handling cannot both be interpreted as primary
+  - complete allowlisted env auth material is primary, host credential file reads are fallback-only when env auth is absent, and mixed-source completion is forbidden
+  - partial env auth remains invalid integration rather than silent file fallback
   - no-host-fallback when in-world execution is required stays explicit
   - trusted-input boundaries remain aligned across canonical and supporting docs
 - **Test notes**:
   - compare contract text to the current shell env/file selection behavior
 - **Risk/rollback notes**:
   - if precedence is left ambiguous, `REM-001` remains blocking and downstream runtime auth shaping cannot become deterministic
+
+- **Verification plan**:
+  - Preserve `world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file`, `world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override`, `world_gateway_incomplete_env_override_uses_exit_code_2`, and `world_gateway_host_credential_policy_denials_use_exit_code_5` in `crates/shell/tests/world_gateway.rs`.
+  - Add `world_gateway_status_prefers_allowed_env_auth_over_host_auth_file` in `crates/shell/tests/world_gateway.rs` so both sources can exist on the host while env-token presence still suppresses file-derived substitution.
+  - Preserve `integrated_source_requires_substrate_handoff` and `integrated_source_does_not_read_local_auth_files` in `crates/gateway/src/auth/codex_auth_context.rs` so integrated mode never reintroduces local auth-file fallback.
+  - Cover edge cases: env token with optional account id, file-only auth state, account-id-only env, policy-denied host credential file read, and integrated runtime missing or incomplete handoff.
+  - Pass/fail: env token present means the request carries env-derived auth only; env absent means allowed file fallback can populate the handoff; partial env fails as invalid integration; blocked file reads fail as policy denial; integrated mode rejects missing handoff before any local auth-file read.
 
 Checklist:
 - Implement:

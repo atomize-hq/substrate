@@ -133,7 +133,7 @@ flowchart LR
 
 1. `SEAM-1` first:
    - backend selection, allowlisting, auth precedence, and inventory semantics are upstream truth for everything else
-   - unresolved items `REM-001` and `REM-002` make this seam the current blocker
+   - `REM-002` keeps this seam as the current pre-exec blocker; `REM-001` remains carried open for landing and seam-exit alignment after the `C-02` rule publication
 2. `SEAM-2` second:
    - runtime realization can only become authoritative after `SEAM-1` publishes the selection/policy boundary
    - unresolved items `REM-003`, `REM-004`, and `REM-006` keep this seam provisional until the active seam handoff exists

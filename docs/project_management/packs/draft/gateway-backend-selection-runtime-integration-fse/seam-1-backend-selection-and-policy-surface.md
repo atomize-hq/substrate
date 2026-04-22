@@ -2,24 +2,25 @@
 seam_id: SEAM-1
 seam_slug: backend-selection-and-policy-surface
 type: integration
-status: proposed
+status: decomposed
 execution_horizon: active
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
-  required_threads: []
+  required_threads:
+    - THR-01
   stale_triggers:
     - backend inventory roots or filename rules publish outside this seam
     - auth precedence becomes explicit in a contract or code path outside this seam
     - selection taxonomy drifts between ADR-0046, code, and external contract docs
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: failed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -89,6 +90,10 @@ open_remediations:
 - **Verification**:
   - This seam produces owned contracts `C-01` and `C-02` by clarifying and, when needed, updating the canonical contract refs `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`. Verification at seam-brief depth is those canonical surfaces becoming concrete enough for seam-local planning and implementation: exact selection order, inventory discoverability, allowlist order, auth precedence, and failure-taxonomy boundaries.
   - The feature-local ADR-0046 docs `contract.md`, `policy-spec.md`, and `env-vars-spec.md` remain supporting planning and implementation surfaces; they are not the canonical publication endpoints.
+  - Current pre-exec gate posture is:
+    - `review: passed` because the seam-local review bundle still exposes falsifiable selected-backend and auth-boundary flows.
+    - `contract: failed` because the canonical selection contract still leaves inventory discoverability roots and filename/id invariants under-specified enough to keep `REM-002` open; `REM-001` is now carried as landing and seam-exit alignment work after the canonical `C-02` precedence rule was published.
+    - `revalidation: passed` because the latest shell gateway implementation still matches the active seam's current basis on selection boundary ordering, distinct failure buckets, fail-closed posture, and env-first Codex auth sourcing.
   - Later seam-local verification should prove:
     - selection remains on existing config/policy roots
     - deny-by-default allowlisting happens before adapter dispatch

@@ -17,9 +17,9 @@ basis:
     - selection order, failure taxonomy, or trusted-input boundaries drift between canonical docs, supporting ADR-0046 docs, and `crates/shell/src/builtins/world_gateway.rs`
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: failed
+    revalidation: passed
   post_exec:
     landing: pending
     closeout: pending
@@ -136,7 +136,7 @@ open_remediations:
   - `SEAM-1` -> `SEAM-2` via `THR-01` carrying `C-01` and `C-02`
   - `SEAM-1` -> `SEAM-3` via `THR-01` carrying `C-01` and `C-02`
 - **Execution posture**:
-  - The seam stays `status: decomposed` until the seam-local review is signed off, the owned contracts are concrete enough to clear `REM-001` and `REM-002`, and revalidation confirms the shell/code basis still matches the plan.
+  - The seam remains `status: decomposed`: the seam-local review is now signed off and the shell/code basis revalidation passes, `REM-002` still blocks `gates.pre_exec.contract`, and `REM-001` remains open as landing and seam-exit alignment work against the published `C-02` rule.
 - **Slicing strategy**:
   - contract-first, then dependency-first implementation, then conformance, then explicit seam exit
 

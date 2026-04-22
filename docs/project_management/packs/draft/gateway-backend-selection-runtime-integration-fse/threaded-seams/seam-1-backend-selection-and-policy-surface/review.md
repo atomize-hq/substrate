@@ -44,29 +44,34 @@ flowchart TB
 ## Likely mismatch hotspots
 
 - `docs/contracts/substrate-gateway-backend-adapter-selection.md` already names a one-file-per-backend model, but it does not yet pin the discoverability roots tightly enough to satisfy `REM-002`.
-- `docs/contracts/substrate-gateway-policy-evaluation.md` names governed inputs and fail-closed behavior, but it does not yet resolve env-versus-file precedence tightly enough to satisfy `REM-001`.
+- `docs/contracts/substrate-gateway-policy-evaluation.md` now publishes the env-primary precedence rule for `REM-001`, but supporting ADR-0046 docs and landed consumers can still drift away from that canonical rule before seam exit.
 - `crates/shell/src/builtins/world_gateway.rs` currently makes env material win over file material for `cli:codex`; if canonical docs do not either codify or deliberately replace that rule, `THR-01` remains unpublished in practice.
 - Supporting ADR-0046 docs can easily drift into acting as canonical publication surfaces unless they are explicitly aligned behind the `docs/contracts/` refs.
 
 ## Pre-exec findings
 
-- Existing blocking remediations remain authoritative for this seam:
-  - `REM-001` blocks `exec-ready` until `C-02` pins one explicit auth precedence rule in `docs/contracts/substrate-gateway-policy-evaluation.md`.
-  - `REM-002` blocks `exec-ready` until `C-01` pins backend inventory discoverability roots and filename/id invariants in `docs/contracts/substrate-gateway-backend-adapter-selection.md`.
-- No additional pre-exec remediation is opened by this review bundle. The current seam-local plan is bounded correctly; the unresolved issues are already captured in the governance log with seam-local ownership.
+- The review gate passes. The selected-backend and auth-boundary diagrams still expose falsifiable product-facing flows, and the out-of-scope line against tuple/status widening remains explicit.
+- The contract gate remains blocked by the existing seam-owned remediation `REM-002`, because `docs/contracts/substrate-gateway-backend-adapter-selection.md` still names a one-file-per-backend inventory model without publishing the discoverability roots and filename/id invariants tightly enough for downstream runtime work to consume without local invention.
+- `REM-001` stays open as seam-local landing and seam-exit follow-through: the canonical policy contract now publishes one explicit precedence rule between allowlisted env material and allowlisted host credential files, but supporting ADR-0046 docs plus landed shell/runtime consumers still need to align to that published rule.
+- Revalidation passes against current repo evidence:
+  - `crates/shell/src/builtins/world_gateway.rs` still keeps invalid integration, policy denial, transient runtime failure, and component unavailability distinct at the shell boundary.
+  - `crates/shell/src/builtins/world_gateway.rs` still enforces fail-closed posture for disabled or host-only gateway lifecycle use before dispatch.
+  - `crates/shell/src/builtins/world_gateway.rs` still prefers allowlisted env auth material when an access token is present and falls back to the allowlisted host credential file only when env auth is absent; partial env material still fails as invalid integration.
+- No additional pre-exec remediation is opened by this review refresh. The current seam-local plan remains bounded correctly; the unresolved issues are already captured in the governance log with seam-local ownership.
 - The likely failure mode is not missing code alone; it is downstream runtime planning silently inheriting incomplete selection or auth semantics from the current `cli:codex` path.
 
 ## Pre-exec gate disposition
 
-- **Review gate**: pending
-- **Contract gate concerns**:
-  - `REM-001`
+- **Review gate**: passed
+- **Contract gate**: failed
+- **Contract gate blockers**:
   - `REM-002`
-- **Revalidation prerequisites**:
-  - confirm the latest shell gateway implementation still matches the documented selection order and failure buckets before execution starts
-  - confirm no external contract publication has already changed inventory roots, filename rules, or auth precedence outside this seam's planned basis
+- **Revalidation gate**: passed
+- **Revalidation evidence**:
+  - the latest shell gateway implementation still matches the documented selection boundary and failure buckets before execution starts
+  - no external upstream closeout or contract publication changed this seam's basis outside the planned stale triggers
 - **Opened remediations**:
-  - none; rely on carried blockers `REM-001` and `REM-002`
+  - none; rely on carried blocker `REM-002` plus carried seam-exit follow-through `REM-001`
 
 ## Planned seam-exit gate focus
 

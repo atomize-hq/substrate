@@ -2,7 +2,7 @@
 
 Source: `docs/project_management/adrs/draft/ADR-0046-gateway-backend-selection-runtime-integration.md` + `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/pre-planning/`
 
-This pack captures a governance-ready v2.5 seam extraction for ADR-0046 using the existing pre-planning pack as basis. It intentionally stays one level above seam-local decomposition: no seam-local planning docs, slice files, candidate subslices, or execution units are created here.
+This pack captures a governance-ready v2.5 seam extraction for ADR-0046 using the existing pre-planning pack as basis. The pack has since advanced far enough for seam-local planning on the active seam: `SEAM-1` now owns `threaded-seams/seam-1-backend-selection-and-policy-surface/`, while `SEAM-2` and `SEAM-3` remain at seam-brief depth and no authoritative sub-slices have been created yet.
 
 Canonical publication model for this pack:
 

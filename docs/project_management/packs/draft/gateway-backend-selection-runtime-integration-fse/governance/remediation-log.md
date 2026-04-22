@@ -36,11 +36,13 @@ Future remediation entries must use the canonical fields from the extractor gove
   owner_seam: SEAM-1
   blocked_targets:
     - seam: SEAM-1
-      field: status
-      value: exec-ready
-  summary: auth precedence between env material and host credential files is not yet clarified in the canonical policy-evaluation contract for integrated lifecycle truth
-  required_fix: clarify one explicit precedence rule in `docs/contracts/substrate-gateway-policy-evaluation.md` first, then align supporting ADR-0046 policy and env-var docs plus shell and runtime consumers to it
-  resolution_evidence: []
+      field: seam_exit_gate.status
+      value: passed
+  summary: the canonical policy-evaluation contract now pins env-primary auth precedence for integrated lifecycle truth; the remaining open work is landing aligned ADR-0046 policy/env-var docs and consumer adoption behind that published rule
+  required_fix: keep the published env-primary, file-fallback-only, no-mixed-source rule aligned in supporting ADR-0046 policy/env-var docs plus shell and runtime consumers before `SEAM-1` closes and publishes `THR-01`
+  resolution_evidence:
+    - docs/contracts/substrate-gateway-policy-evaluation.md now states that complete allowlisted env auth material is primary, host credential files are fallback-only when env auth is absent, and partial env auth fails closed as invalid integration
+    - threaded-seams/seam-1-backend-selection-and-policy-surface/slice-00-c-01-c-02-contract-definition.md now records the owner execution checklist and verification plan for the remaining landing work
 ```
 
 ```yaml
