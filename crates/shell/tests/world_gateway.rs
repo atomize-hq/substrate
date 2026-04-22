@@ -200,8 +200,7 @@ impl RecordedGatewayLifecycleSocket {
             listener
                 .set_nonblocking(true)
                 .expect("set lifecycle capture nonblocking");
-            let mut accepted = 0usize;
-            for _ in 0..expected_requests {
+            for (accepted, _) in (0..expected_requests).enumerate() {
                 let request_deadline = Instant::now() + SOCKET_REQUEST_TIMEOUT;
                 let (mut stream, _) = loop {
                     match listener.accept() {
@@ -223,7 +222,6 @@ impl RecordedGatewayLifecycleSocket {
                 stream
                     .set_nonblocking(false)
                     .expect("set lifecycle capture stream blocking");
-                accepted += 1;
                 let request = read_http_request(&mut stream).expect("read lifecycle HTTP request");
                 let first_line = request.header.lines().next().unwrap_or_default();
                 let path = first_line
