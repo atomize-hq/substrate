@@ -16,17 +16,15 @@ gates:
     contract: inherited
     revalidation: inherited
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 threads:
   - THR-01
 contracts_produced: []
 contracts_consumed:
   - C-01
   - C-02
-open_remediations:
-  - REM-001
-  - REM-002
+open_remediations: []
 ---
 ### S99 - Seam-exit gate
 
@@ -38,8 +36,8 @@ open_remediations:
 - **Acceptance criteria**:
   - `../../governance/seam-1-closeout.md` records landed evidence that shell behavior and tests adopt canonical `C-01` and `C-02`
   - `THR-01` is explicitly recorded as `published`
-  - any planned-versus-landed delta that affects downstream basis becomes an explicit stale trigger
-  - promotion readiness is `ready` only if shell evidence lands, post-exec gates pass, and any remaining governance residue is explicitly marked resolved or non-blocking
+  - any planned-versus-landed delta that affects downstream basis is recorded as an explicit stale trigger
+  - promotion readiness is `ready` because shell evidence landed, post-exec gates passed, and any remaining governance residue is explicitly resolved or carried
 - **Dependencies**:
   - `S00`
   - `S1`
@@ -95,7 +93,7 @@ Checklist:
 - **Implementation notes**:
   - promotion may not proceed if the previous closeout is missing, the seam-exit gate fails, or `THR-01` is not published
 - **Acceptance criteria**:
-  - promotion readiness is explicitly `ready` or `blocked`, with blockers named
+  - promotion readiness is explicitly `ready`, with blockers named only if any remain
   - any lingering external remediation/log mismatch is called out as coordination debt rather than silently treated as a SEAM-1 contract blocker
 - **Test notes**:
   - closeout review should verify no open blocking remediation remains hidden

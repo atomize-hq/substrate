@@ -1,11 +1,11 @@
 ---
 seam_id: SEAM-1
-status: exec-ready
+status: landed
 closeout_version: v1
 seam_exit_gate:
   source_ref: ../threaded-seams/seam-1-backend-selection-and-policy-surface/slice-99-seam-exit-gate.md
-  status: pending
-  promotion_readiness: blocked
+  status: passed
+  promotion_readiness: ready
 basis:
   currentness: current
   upstream_closeouts: []
@@ -15,26 +15,29 @@ basis:
     - revalidate downstream seams if selection order, auth precedence, inventory roots, or filename rules change
 gates:
   post_exec:
-    landing: pending
-    closeout: pending
-open_remediations:
-  - REM-001
-  - REM-002
+    landing: passed
+    closeout: passed
+open_remediations: []
 ---
 
 # Closeout - SEAM-1 Backend selection and policy surface
 
-This scaffold is reserved for the post-exec closeout once the active seam lands.
-The seam is now `exec-ready` at `../threaded-seams/seam-1-backend-selection-and-policy-surface/`, but the seam-exit gate remains pending until landing evidence and closeout publication are recorded.
+This closeout records the landed post-exec state for `SEAM-1`.
+The seam is now `exec-ready` at `../threaded-seams/seam-1-backend-selection-and-policy-surface/`, and the seam-exit gate has been published with closeout evidence recorded.
 
 ## Seam-exit gate record
 
 - **Source artifact**: `../threaded-seams/seam-1-backend-selection-and-policy-surface/slice-99-seam-exit-gate.md`
 - **Landed evidence**:
-  - expected canonical contract alignment evidence:
-    - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-    - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - supporting evidence may include future ADR-0046 docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`, but only as future subordinate implementation notes that defer to canonical `docs/contracts/` truth
+  - canonical contract alignment evidence recorded by landed implementation:
+    - `c12b8fd3` - inventory-backed selection gate, shared inventory validation, `world_gateway` and `agents_validate` coverage
+    - `ca799c1c` - env-wins and env-blocked-no-fallback auth tests
+    - `f13e82e9` - drift-guard and closeout evidence targets aligned, stale support-doc references downgraded
+  - validation commands that previously passed on the landed state:
+    - `cargo fmt --all`
+    - `cargo test -p shell --test world_gateway -- --nocapture`
+    - `cargo test -p shell --test agents_validate -- --nocapture`
+  - supporting evidence may include future ADR-0046 docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`, but only as future subordinate implementation notes that defer to canonical `docs/contracts/` truth and do not compete with it
   - current shell drift-guard evidence targets:
     - `crates/shell/tests/world_gateway.rs`
     - `world_gateway_missing_inventory_uses_exit_code_2_before_socket_dispatch`
@@ -49,31 +52,28 @@ The seam is now `exec-ready` at `../threaded-seams/seam-1-backend-selection-and-
 - **Contracts consumed or narrowly aligned**:
   - expected: `C-01`, `C-02`
 - **Threads published / advanced**:
-  - expected: `THR-01`
+  - `THR-01`
 - **Review-surface delta**:
-  - to be recorded after landing; any delta in the missing non-fse ADR-0046 support-doc path is a future subordinate documentation issue, not a contract-truth change
+  - no downstream basis change; any future non-fse ADR-0046 support-doc delta is a future subordinate documentation issue, not a contract-truth change
 - **Planned-vs-landed delta**:
-  - to be recorded after landing
+  - landed shell behavior and tests matched the published selection and policy rules; S99 only recorded publication and closeout
 - **Downstream stale triggers raised**:
-  - to be recorded after landing
+  - selection order, inventory roots, auth precedence, or failure taxonomy changes
 - **Remediation disposition**:
-  - `REM-001`
-  - `REM-002`
+  - `REM-001` resolved
+  - `REM-002` resolved
 - **Promotion blockers**:
-  - post-exec landing and closeout remain pending
-  - `THR-01` is not yet published in closeout
-  - `REM-001` and `REM-002` remain open as seam-exit follow-through until landing evidence resolves them
+  - none
 - **Current evidence note**:
   - do not infer current support-doc ownership from the missing non-fse ADR-0046 path; any such docs remain future subordinate material until explicitly created
 - **Promotion readiness**:
-  - blocked until landing evidence is recorded, `THR-01` is published, `REM-001` and `REM-002` resolve, and the seam-exit gate passes
+  - ready
 
 ## Post-exec gate disposition
 
-- **Landing gate**: pending
-- **Closeout gate**: pending
+- **Landing gate**: passed
+- **Closeout gate**: passed
 - **Unresolved remediations**:
-  - `REM-001`
-  - `REM-002`
+  - none
 - **Carried-forward remediations**:
-  - none yet
+  - none

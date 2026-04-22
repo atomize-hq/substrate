@@ -23,46 +23,7 @@ Future remediation entries must use the canonical fields from the extractor gove
 ## Open remediations
 
 ```yaml
-- remediation_id: REM-001
-  origin_phase: pre_exec
-  source_gate: contract
-  related_seam: SEAM-1
-  related_slice: S00
-  related_thread: THR-01
-  related_contract: C-02
-  related_artifact: docs/contracts/substrate-gateway-policy-evaluation.md
-  severity: medium
-  status: open
-  owner_seam: SEAM-1
-  blocked_targets:
-    - seam: SEAM-1
-      field: seam_exit_gate.status
-      value: passed
-  summary: the canonical policy-evaluation contract already pins env-primary, file-fallback-only auth precedence; the remaining work is consumer and supporting-doc alignment behind that published rule
-  required_fix: keep shell, runtime, and supporting ADR-0046 policy/env-var surfaces aligned to the published env-primary, file-fallback-only, no-mixed-source rule before `SEAM-1` closes
-  resolution_evidence:
-    - docs/contracts/substrate-gateway-policy-evaluation.md states that complete allowlisted env auth material is primary, host credential files are fallback-only when env auth is absent, and partial env auth fails closed as invalid integration
-```
-
-```yaml
-- remediation_id: REM-002
-  origin_phase: pre_exec
-  source_gate: contract
-  related_seam: SEAM-1
-  related_slice: S00
-  related_thread: THR-01
-  related_contract: C-01
-  related_artifact: docs/contracts/substrate-gateway-backend-adapter-selection.md
-  severity: medium
-  status: open
-  owner_seam: SEAM-1
-  blocked_targets:
-    - seam: SEAM-1
-      field: seam_exit_gate.status
-      value: passed
-  summary: the selection contract already fixes stable backend ids, one-file-per-backend posture, and filename/id consistency, but the repo still needs one explicit implementation-alignment read on actual inventory-root usage so downstream runtime work does not infer it from the current Codex-only path
-  required_fix: align supporting ADR-0046 docs and `SEAM-1` implementation evidence to one explicit inventory discovery/root and filename/id consistency rule set without widening the selection surface
-  resolution_evidence: []
+[]
 ```
 
 ## Deferred follow-ons (not pack blockers)
@@ -119,6 +80,52 @@ Future remediation entries must use the canonical fields from the extractor gove
   summary: the first supported non-`cli:codex` integrated backend baseline is a later validation and rollout decision, not a blocker on the current implementation pack
   required_fix: once a named additional backend is intentionally selected, add parity evidence and rollout proof across Linux/macOS/Windows
   resolution_evidence: []
+```
+
+## Resolved remediations
+
+```yaml
+- remediation_id: REM-001
+  origin_phase: pre_exec
+  source_gate: contract
+  related_seam: SEAM-1
+  related_slice: S00
+  related_thread: THR-01
+  related_contract: C-02
+  related_artifact: docs/contracts/substrate-gateway-policy-evaluation.md
+  severity: medium
+  status: resolved
+  owner_seam: SEAM-1
+  blocked_targets: []
+  summary: the canonical policy-evaluation contract already pins env-primary, file-fallback-only auth precedence; the remaining work was consumer and supporting-doc alignment behind that published rule
+  required_fix: none inside the current execution target
+  resolution_evidence:
+    - `ca799c1c` landed env-wins and env-blocked-no-fallback auth tests in the shell gateway path
+    - `f13e82e9` downgraded stale support-doc references to subordinate material and aligned closeout evidence targets
+    - `cargo test -p shell --test world_gateway -- --nocapture`
+    - `cargo test -p shell --test agents_validate -- --nocapture`
+    - future ADR-0046 support docs remain subordinate implementation notes under the canonical `docs/contracts/` policy truth
+
+- remediation_id: REM-002
+  origin_phase: pre_exec
+  source_gate: contract
+  related_seam: SEAM-1
+  related_slice: S00
+  related_thread: THR-01
+  related_contract: C-01
+  related_artifact: docs/contracts/substrate-gateway-backend-adapter-selection.md
+  severity: medium
+  status: resolved
+  owner_seam: SEAM-1
+  blocked_targets: []
+  summary: the selection contract already fixes stable backend ids, one-file-per-backend posture, and filename/id consistency, and the landed shell evidence now proves that implementation alignment
+  required_fix: none inside the current execution target
+  resolution_evidence:
+    - `c12b8fd3` landed the inventory-backed selection gate and shared inventory validation in shell code and tests
+    - `f13e82e9` aligned closeout evidence targets and downgraded stale support-doc references to subordinate material
+    - `cargo test -p shell --test world_gateway -- --nocapture`
+    - `cargo test -p shell --test agents_validate -- --nocapture`
+    - any later ADR-0046 support docs remain subordinate to canonical `docs/contracts/` truth rather than expanding the selection surface
 ```
 
 ## Retired remediations

@@ -12,7 +12,7 @@
 Horizon policy for this pack:
 
 - only the active seam gets authoritative downstream deep planning by default
-- the next seam starts after `SEAM-1` closes the remaining alignment work and lands implementation evidence
+- the next seam starts after `SEAM-1` publishes `THR-01` and records closeout evidence
 - the future seam remains deferred until runtime realization exists and a later rollout baseline is intentional rather than speculative
 
 ## Contract registry
@@ -90,10 +90,10 @@ Horizon policy for this pack:
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-3`
   - **Carried contract IDs**: `C-01`, `C-02`
   - **Purpose**: make the existing selection and policy contracts executable in repo consumers so runtime realization does not infer truth from the current Codex-only path.
-  - **State**: `defined`
+  - **State**: `published`
   - **Revalidation trigger**: selection order, backend inventory rules, allowlist semantics, auth precedence, or policy failure taxonomy changes.
   - **Satisfied by**: `governance/seam-1-closeout.md` plus evidence that shell, broker, config/policy surfaces, and any later subordinate ADR-0046 support docs align to `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`.
-  - **Notes**: the canonical contracts are already published, and the thread remains `defined` until `SEAM-1` records closeout evidence and the closeout marks `THR-01` as `published`.
+  - **Notes**: the canonical contracts are already published, and the thread is `published` because `SEAM-1` recorded closeout evidence and the closeout marks `THR-01` as `published`.
 
 - **Thread ID**: `THR-02`
   - **Producer seam**: `SEAM-2`
@@ -128,7 +128,7 @@ flowchart LR
 
 1. `SEAM-1` first:
    - lock the selection and policy handoff in implementation surfaces
-   - finish the narrow `REM-001` / `REM-002` alignment work and land consumer evidence
+   - publish `THR-01` and record the closeout evidence that retired `REM-001` / `REM-002`
 2. `SEAM-2` second:
    - implement adapter lookup, capability gating, auth validation, config render, manifests, readiness, and restart behavior using the `SEAM-1` handoff
    - any schema hardening happens only as needed to land runtime behavior

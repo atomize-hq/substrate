@@ -1,7 +1,7 @@
 ---
 seam_id: SEAM-1
 seam_slug: backend-selection-and-policy-surface
-status: exec-ready
+status: landed
 execution_horizon: active
 plan_version: v1
 basis:
@@ -21,15 +21,13 @@ gates:
     contract: passed
     revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
-open_remediations:
-  - REM-001
-  - REM-002
+  status: passed
+open_remediations: []
 ---
 # SEAM-1 - Backend selection and policy surface
 
@@ -118,7 +116,7 @@ open_remediations:
   - landed shell updates in `crates/shell/src/builtins/world_gateway.rs`
   - landed shell tests in `crates/shell/tests/world_gateway.rs`
   - supporting ADR-0046 doc alignment only if those files are later created; they remain implementation notes subordinate to canonical `docs/contracts/`
-  - recorded remediation disposition for any remaining landing-only follow-through, including `REM-001`
+  - recorded remediation disposition for landing-only follow-through, including resolution or explicit carry status for `REM-001` and `REM-002`
 
 ## Slice index
 
@@ -134,8 +132,8 @@ open_remediations:
   - `SEAM-1` -> `SEAM-2` via `THR-01` carrying `C-01` and `C-02`
   - `SEAM-1` -> `SEAM-3` via `THR-01` carrying `C-01` and `C-02`
 - **Execution posture**:
-  - The seam is now `status: exec-ready`: the seam-local review, contract, and revalidation gates all pass, the basis remains `current`, and no open remediation blocks the `decomposed -> exec-ready` transition.
-  - Remaining open remediations (`REM-001`, `REM-002`) are carried only as landing and seam-exit follow-through before `THR-01` can be published in closeout.
+  - The seam is now `status: landed`: the seam-local review, contract, and revalidation gates all pass, the basis remains `current`, and the seam-exit gate has landed and closed out cleanly.
+  - `THR-01` is published in closeout, and `REM-001` / `REM-002` are no longer open blockers on the `decomposed -> exec-ready` transition.
 - **Slicing strategy**:
   - baseline check, then shell selection implementation, then shell auth implementation, then conformance, then explicit seam exit
 
