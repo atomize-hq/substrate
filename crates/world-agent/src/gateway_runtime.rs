@@ -1,6 +1,6 @@
 use agent_api_types::{
-    GatewayCliCodexIntegratedAuthV1, GatewayClientWiringV1, GatewayLifecycleResponseV1,
-    GatewayStatusV1,
+    GatewayCliCodexIntegratedAuthV1, GatewayClientWiringV1, GatewayIntegratedAuthPayloadV1,
+    GatewayLifecycleResponseV1, GatewayStatusV1,
 };
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -186,12 +186,13 @@ pub(crate) struct GatewayRuntimeStartContext {
     pub require_cgroup_attach: bool,
     pub control: GatewayControlSettings,
     pub binding: &'static GatewayBackendBinding,
-    pub integrated_auth: Option<GatewayCliCodexIntegratedAuthV1>,
+    pub integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct GatewayRuntimeManifest {
     world_id: String,
+    backend_id: String,
     pid: u32,
     pid_start_time_ticks: u64,
     port: u16,
@@ -209,6 +210,7 @@ enum ManagedGatewayProcess {
 #[derive(Debug, Clone)]
 struct ManagedGatewayRuntime {
     world_id: String,
+    backend_id: String,
     port: u16,
     runtime_dir: PathBuf,
     config_path: PathBuf,
@@ -247,6 +249,7 @@ impl ManagedGatewayRuntime {
     fn persist_manifest(&self) -> Result<()> {
         let manifest = GatewayRuntimeManifest {
             world_id: self.world_id.clone(),
+            backend_id: self.backend_id.clone(),
             pid: self.pid()?,
             pid_start_time_ticks: self.pid_start_time_ticks,
             port: self.port,
@@ -310,12 +313,13 @@ impl GatewayRuntimeManager {
     pub(crate) async fn status(
         &self,
         world_id: &str,
+        backend_id: &str,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
         if let Some(state) = self.lifecycle_state_for_world(world_id) {
             return Err(lifecycle_status_transient_failure(world_id, state));
         }
 
-        let Some(runtime) = self.runtime_for_world_or_manifest(world_id) else {
+        let Some(runtime) = self.runtime_for_world_or_manifest(world_id, backend_id) else {
             return Ok(unavailable_response());
         };
 
@@ -326,7 +330,7 @@ impl GatewayRuntimeManager {
                 return Err(lifecycle_status_transient_failure(world_id, state));
             }
             GatewayRuntimeState::ProvisionedStopped | GatewayRuntimeState::AbsentComponent => {
-                self.remove_runtime(world_id);
+                self.remove_runtime(world_id, backend_id);
                 unavailable_response()
             }
         })
@@ -356,14 +360,16 @@ impl GatewayRuntimeManager {
         ready_timeout: Duration,
         lifecycle: Option<&Arc<GatewayLifecycleWorldState>>,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
-        if let Some(runtime) = self.runtime_for_world_or_manifest(&ctx.world_id) {
+        if let Some(runtime) =
+            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.binding.backend_id)
+        {
             match self.observe_runtime_state(&runtime).await? {
                 GatewayRuntimeState::Ready => return Ok(available_response(runtime.port)),
                 GatewayRuntimeState::Starting | GatewayRuntimeState::RestartInProgress => {
                     return self.wait_until_ready(runtime, ready_timeout).await;
                 }
                 GatewayRuntimeState::ProvisionedStopped | GatewayRuntimeState::AbsentComponent => {
-                    self.remove_runtime(&ctx.world_id);
+                    self.remove_runtime(&ctx.world_id, ctx.binding.backend_id);
                 }
             }
         }
@@ -382,7 +388,10 @@ impl GatewayRuntimeManager {
                 if let Some(runtime) = self.take_runtime(&world_id) {
                     let _ = stop_runtime(runtime);
                 }
-                delete_runtime_manifest(&manifest_path_for_world(&world_id));
+                delete_runtime_manifest(&manifest_path_for_world(
+                    &world_id,
+                    ctx.binding.backend_id,
+                ));
                 Err(err)
             }
         }
@@ -396,10 +405,15 @@ impl GatewayRuntimeManager {
         let _world_guard = lifecycle.op_lock.lock().await;
         let _restart_state = lifecycle.scoped_state(GatewayRuntimeState::RestartInProgress);
 
-        if let Some(existing) = self.runtime_for_world_or_manifest(&ctx.world_id) {
+        if let Some(existing) =
+            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.binding.backend_id)
+        {
             existing.set_state(GatewayRuntimeState::RestartInProgress);
             self.take_runtime(&ctx.world_id);
-            delete_runtime_manifest(&manifest_path_for_world(&ctx.world_id));
+            delete_runtime_manifest(&manifest_path_for_world(
+                &ctx.world_id,
+                ctx.binding.backend_id,
+            ));
             stop_runtime(existing)
                 .with_context(|| format!("failed to stop gateway runtime for {}", ctx.world_id))
                 .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
@@ -446,9 +460,13 @@ impl GatewayRuntimeManager {
             .and_then(|state| state.state())
     }
 
-    fn runtime_for_world_or_manifest(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
+    fn runtime_for_world_or_manifest(
+        &self,
+        world_id: &str,
+        backend_id: &str,
+    ) -> Option<ManagedGatewayRuntime> {
         self.runtime_for_world(world_id)
-            .or_else(|| self.recover_runtime(world_id))
+            .or_else(|| self.recover_runtime(world_id, backend_id))
     }
 
     fn insert_runtime(&self, runtime: ManagedGatewayRuntime) {
@@ -457,9 +475,9 @@ impl GatewayRuntimeManager {
         }
     }
 
-    fn remove_runtime(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
+    fn remove_runtime(&self, world_id: &str, backend_id: &str) -> Option<ManagedGatewayRuntime> {
         let runtime = self.take_runtime(world_id);
-        delete_runtime_manifest(&manifest_path_for_world(world_id));
+        delete_runtime_manifest(&manifest_path_for_world(world_id, backend_id));
         runtime
     }
 
@@ -470,8 +488,8 @@ impl GatewayRuntimeManager {
             .and_then(|mut guard| guard.remove(world_id))
     }
 
-    fn recover_runtime(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
-        let manifest_path = manifest_path_for_world(world_id);
+    fn recover_runtime(&self, world_id: &str, backend_id: &str) -> Option<ManagedGatewayRuntime> {
+        let manifest_path = manifest_path_for_world(world_id, backend_id);
         let manifest = match read_runtime_manifest(&manifest_path) {
             Ok(manifest) => manifest,
             Err(_) => {
@@ -479,15 +497,14 @@ impl GatewayRuntimeManager {
                 return None;
             }
         };
-        let runtime_dir_matches = manifest_path
-            .parent()
-            .is_some_and(|parent| parent == manifest.runtime_dir);
+        let expected_runtime_dir = runtime_dir_for_world(world_id, backend_id);
         let artifacts_exist = manifest.runtime_dir.is_dir() && manifest.config_path.is_file();
         let start_time_matches = read_pid_start_time_ticks(manifest.pid)
             .map(|start_time| start_time == manifest.pid_start_time_ticks)
             .unwrap_or(false);
         if manifest.world_id != world_id
-            || !runtime_dir_matches
+            || manifest.backend_id != backend_id
+            || manifest.runtime_dir != expected_runtime_dir
             || !artifacts_exist
             || !pid_is_running(manifest.pid)
             || !start_time_matches
@@ -499,6 +516,7 @@ impl GatewayRuntimeManager {
 
         let runtime = ManagedGatewayRuntime {
             world_id: manifest.world_id,
+            backend_id: manifest.backend_id,
             port: manifest.port,
             runtime_dir: manifest.runtime_dir,
             config_path: manifest.config_path,
@@ -577,7 +595,7 @@ fn start_runtime(
 ) -> Result<ManagedGatewayRuntime, GatewayRuntimeFailure> {
     validate_binding_capabilities(ctx.binding)?;
     let port = pick_free_port().map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
-    let runtime_dir = runtime_dir_for_world(&ctx.world_id);
+    let runtime_dir = runtime_dir_for_world(&ctx.world_id, ctx.binding.backend_id);
     let home_dir = runtime_dir.join("home");
     ensure_directory_with_mode(&runtime_dir, GATEWAY_RUNTIME_DIR_MODE)
         .with_context(|| {
@@ -651,10 +669,11 @@ fn start_runtime(
     let world_id = ctx.world_id;
     let runtime = ManagedGatewayRuntime {
         world_id: world_id.clone(),
+        backend_id: ctx.binding.backend_id.to_string(),
         port,
         runtime_dir,
         config_path,
-        manifest_path: manifest_path_for_world(&world_id),
+        manifest_path: manifest_path_for_world(&world_id, ctx.binding.backend_id),
         pid_start_time_ticks,
         process: Arc::new(Mutex::new(ManagedGatewayProcess::Child(child))),
         state: Arc::new(RwLock::new(GatewayRuntimeState::Starting)),
@@ -734,8 +753,8 @@ fn resolve_gateway_binary() -> Result<Option<PathBuf>, GatewayRuntimeFailure> {
     Ok(None)
 }
 
-fn runtime_dir_for_world(world_id: &str) -> PathBuf {
-    gateway_runtime_root_dir().join(world_id)
+fn runtime_dir_for_world(world_id: &str, backend_id: &str) -> PathBuf {
+    backend_runtime_root_dir(backend_id).join(world_id)
 }
 
 fn gateway_runtime_root_dir() -> PathBuf {
@@ -755,8 +774,24 @@ fn gateway_runtime_root_dir() -> PathBuf {
     temp_dir
 }
 
-fn manifest_path_for_world(world_id: &str) -> PathBuf {
-    runtime_dir_for_world(world_id).join(GATEWAY_RUNTIME_MANIFEST_NAME)
+fn backend_runtime_root_dir(backend_id: &str) -> PathBuf {
+    let path = gateway_runtime_root_dir().join(runtime_backend_dir_name(backend_id));
+    let _ = ensure_directory_with_mode(&path, GATEWAY_RUNTIME_DIR_MODE);
+    path
+}
+
+fn runtime_backend_dir_name(backend_id: &str) -> String {
+    backend_id
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' | ':' => ch,
+            _ => '_',
+        })
+        .collect()
+}
+
+fn manifest_path_for_world(world_id: &str, backend_id: &str) -> PathBuf {
+    runtime_dir_for_world(world_id, backend_id).join(GATEWAY_RUNTIME_MANIFEST_NAME)
 }
 
 fn write_runtime_manifest(path: &Path, manifest: &GatewayRuntimeManifest) -> Result<()> {
@@ -815,11 +850,8 @@ fn delete_runtime_manifest(path: &Path) {
     }
 }
 
-fn render_integrated_config(
-    port: u16,
-    binding: &GatewayBackendBinding,
-) -> Result<String, GatewayRuntimeFailure> {
-    Ok(format!(
+fn render_integrated_config(port: u16, binding: &GatewayBackendBinding) -> String {
+    format!(
         r#"[server]
 host = "127.0.0.1"
 port = {port}
@@ -847,7 +879,7 @@ actual_model = "{actual_model}"
         routed_model = binding.routed_model,
         provider_name = binding.provider_name,
         actual_model = binding.actual_model,
-    ))
+    )
 }
 
 struct ResolvedCodexAuth {
@@ -857,10 +889,25 @@ struct ResolvedCodexAuth {
 
 fn resolve_integrated_auth_handoff(
     binding: &GatewayBackendBinding,
-    auth: Option<GatewayCliCodexIntegratedAuthV1>,
+    auth: Option<GatewayIntegratedAuthPayloadV1>,
 ) -> Result<ResolvedCodexAuth, GatewayRuntimeFailure> {
+    let Some(auth) = auth else {
+        return Err(GatewayRuntimeFailure::invalid_integration(format!(
+            "missing request-provided integrated auth handoff for {}",
+            binding.backend_id
+        )));
+    };
+
+    if auth.backend_id.trim() != binding.backend_id {
+        return Err(GatewayRuntimeFailure::invalid_integration(format!(
+            "request-provided integrated auth payload for '{}' does not match selected backend '{}'",
+            auth.backend_id.trim(),
+            binding.backend_id
+        )));
+    }
+
     match binding.auth_kind {
-        GatewayIntegratedAuthKind::CliCodex => resolve_codex_auth_handoff(auth),
+        GatewayIntegratedAuthKind::CliCodex => resolve_codex_auth_handoff(auth.cli_codex),
     }
 }
 
@@ -1123,7 +1170,7 @@ fn lifecycle_status_transient_failure(
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
-    use agent_api_types::GatewayCliCodexIntegratedAuthV1;
+    use agent_api_types::{GatewayCliCodexIntegratedAuthV1, GatewayIntegratedAuthPayloadV1};
     use once_cell::sync::Lazy;
     use std::io::{Read, Write};
     use std::os::unix::fs::PermissionsExt;
@@ -1182,9 +1229,12 @@ mod tests {
                 default_backend: binding.backend_id.to_string(),
             },
             binding,
-            integrated_auth: Some(GatewayCliCodexIntegratedAuthV1 {
-                account_id: Some("acct_test".to_string()),
-                access_token: "header.payload.signature".to_string(),
+            integrated_auth: Some(GatewayIntegratedAuthPayloadV1 {
+                backend_id: binding.backend_id.to_string(),
+                cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                    account_id: Some("acct_test".to_string()),
+                    access_token: "header.payload.signature".to_string(),
+                }),
             }),
         }
     }
@@ -1545,7 +1595,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
             "capability gate should explain the missing requirement: {err}"
         );
         assert!(
-            !runtime_dir_for_world(world_id).exists(),
+            !runtime_dir_for_world(world_id, MISSING_CAPABILITY_BINDING.backend_id).exists(),
             "pre-spawn capability gating should not create runtime artifacts"
         );
     }
@@ -1586,6 +1636,9 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         .expect("create runtime");
 
         assert_mode(&runtime_root, GATEWAY_RUNTIME_DIR_MODE);
+        let backend_root = backend_runtime_root_dir(DEFAULT_BACKEND);
+        assert_mode(&backend_root, GATEWAY_RUNTIME_DIR_MODE);
+        assert_eq!(runtime.runtime_dir.parent(), Some(backend_root.as_path()));
         assert_mode(&runtime.runtime_dir, GATEWAY_RUNTIME_DIR_MODE);
         assert_mode(&runtime.runtime_dir.join("home"), GATEWAY_RUNTIME_DIR_MODE);
         assert_mode(&runtime.config_path, GATEWAY_RUNTIME_FILE_MODE);
@@ -1695,7 +1748,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         wait_for_pid(&pid_dir, 1);
 
         let err = manager
-            .status("status-start")
+            .status("status-start", DEFAULT_BACKEND)
             .await
             .expect_err("status should surface a transient start failure");
         assert!(
@@ -1738,7 +1791,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 
         let deadline = Instant::now() + Duration::from_secs(1);
         let err = loop {
-            match manager.status("restart-start").await {
+            match manager.status("restart-start", DEFAULT_BACKEND).await {
                 Err(err) => break err,
                 Ok(response) => {
                     assert_ne!(response.status, GatewayStatusV1::Unavailable);

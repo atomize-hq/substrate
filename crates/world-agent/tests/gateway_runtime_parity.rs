@@ -46,6 +46,7 @@ fn gateway_request(cwd: &Path) -> GatewayLifecycleRequestV1 {
             allowed_domains: Vec::new(),
         }),
         integrated_auth: Some(GatewayIntegratedAuthPayloadV1 {
+            backend_id: "cli:codex".to_string(),
             cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
                 account_id: Some("acct_test".to_string()),
                 access_token: "header.payload.signature".to_string(),

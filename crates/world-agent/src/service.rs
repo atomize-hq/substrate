@@ -1046,7 +1046,10 @@ impl WorldAgentService {
 
             return self
                 .gateway_runtime
-                .status(&binding.runtime_id)
+                .status(
+                    &binding.runtime_id,
+                    binding.start_context.binding.backend_id,
+                )
                 .await
                 .map_err(gateway_runtime_error);
         }
@@ -1449,16 +1452,35 @@ impl WorldAgentService {
         let control =
             GatewayControlSettings::from_request_env(env_ref).map_err(gateway_runtime_error)?;
         let selected_backend = control.default_backend.clone();
+        let integrated_auth = match req.integrated_auth.as_ref() {
+            Some(payload) => {
+                let payload_backend = payload.backend_id.trim();
+                if payload_backend.is_empty() {
+                    return Err(gateway_runtime_error(
+                        GatewayRuntimeFailure::invalid_integration(
+                            "request-provided integrated auth payload is missing backend_id",
+                        ),
+                    ));
+                }
+                if payload_backend != selected_backend {
+                    return Err(gateway_runtime_error(GatewayRuntimeFailure::invalid_integration(
+                        format!(
+                            "request-provided integrated auth payload for '{}' does not match selected backend '{}'",
+                            payload_backend, selected_backend
+                        ),
+                    )));
+                }
+                Some(payload.clone())
+            }
+            None => None,
+        };
 
         Ok(PreparedGatewayRuntimeRequest {
             project_dir,
             world_spec,
             control,
             selected_backend,
-            integrated_auth: req
-                .integrated_auth
-                .as_ref()
-                .and_then(|payload| payload.cli_codex.clone()),
+            integrated_auth,
         })
     }
 
@@ -1577,7 +1599,7 @@ struct PreparedGatewayRuntimeRequest {
     world_spec: WorldSpec,
     control: GatewayControlSettings,
     selected_backend: String,
-    integrated_auth: Option<agent_api_types::GatewayCliCodexIntegratedAuthV1>,
+    integrated_auth: Option<agent_api_types::GatewayIntegratedAuthPayloadV1>,
 }
 
 #[cfg(target_os = "linux")]
@@ -1796,6 +1818,7 @@ mod gateway_runtime_binding_tests {
                 allowed_domains: Vec::new(),
             }),
             integrated_auth: Some(GatewayIntegratedAuthPayloadV1 {
+                backend_id: "cli:codex".to_string(),
                 cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
                     account_id: Some("acct_test".to_string()),
                     access_token: "header.payload.signature".to_string(),
@@ -1813,6 +1836,25 @@ mod gateway_runtime_binding_tests {
         );
         request.env = Some(env);
         request
+    }
+
+    #[test]
+    fn request_preparation_rejects_integrated_auth_for_different_backend() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+        let mut request = gateway_request_with_backend(temp_dir.path(), "cli:codex");
+        request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+            backend_id: "api:openai".to_string(),
+            cli_codex: None,
+        });
+
+        let err = service
+            .prepare_gateway_runtime_request(&request)
+            .expect_err("mismatched auth payload should fail");
+        assert!(
+            err.to_string().contains("does not match selected backend"),
+            "unexpected error: {err:#}"
+        );
     }
 
     #[test]

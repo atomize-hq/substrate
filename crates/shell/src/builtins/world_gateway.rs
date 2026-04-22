@@ -352,7 +352,8 @@ fn resolve_integrated_auth_payload(
         return Ok(None);
     }
 
-    if effective_config.llm.routing.default_backend.trim() != CLI_CODEX_BACKEND {
+    let selected_backend = effective_config.llm.routing.default_backend.trim();
+    if selected_backend != CLI_CODEX_BACKEND {
         return Ok(None);
     }
 
@@ -363,6 +364,7 @@ fn resolve_integrated_auth_payload(
     )?;
 
     Ok(Some(GatewayIntegratedAuthPayloadV1 {
+        backend_id: selected_backend.to_string(),
         cli_codex: Some(resolve_cli_codex_integrated_auth(effective_policy)?),
     }))
 }

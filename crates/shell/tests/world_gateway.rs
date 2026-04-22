@@ -834,6 +834,10 @@ fn world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file() {
 
     let request = socket.recorded_request();
     assert_eq!(
+        request.pointer("/integrated_auth/backend_id"),
+        Some(&json!("cli:codex"))
+    );
+    assert_eq!(
         request.pointer("/integrated_auth/cli_codex/account_id"),
         Some(&json!("acct_file_explicit"))
     );
@@ -877,6 +881,10 @@ fn world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override
         .stdout(predicate::str::contains("\"status\":\"available\""));
 
     let request = socket.recorded_request();
+    assert_eq!(
+        request.pointer("/integrated_auth/backend_id"),
+        Some(&json!("cli:codex"))
+    );
     assert_eq!(
         request.pointer("/integrated_auth/cli_codex/account_id"),
         Some(&json!("acct_env_explicit"))
@@ -929,6 +937,10 @@ fn world_gateway_status_prefers_allowed_env_auth_over_host_auth_file() {
         ));
 
     let request = socket.recorded_request();
+    assert_eq!(
+        request.pointer("/integrated_auth/backend_id"),
+        Some(&json!("cli:codex"))
+    );
     assert_eq!(
         request.pointer("/integrated_auth/cli_codex/account_id"),
         Some(&json!("acct_env_explicit"))
