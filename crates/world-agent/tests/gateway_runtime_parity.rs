@@ -54,6 +54,17 @@ fn gateway_request(cwd: &Path) -> GatewayLifecycleRequestV1 {
     }
 }
 
+fn gateway_request_with_backend(cwd: &Path, backend_id: &str) -> GatewayLifecycleRequestV1 {
+    let mut request = gateway_request(cwd);
+    let mut env = request.env.take().unwrap_or_default();
+    env.insert(
+        "SUBSTRATE_LLM_DEFAULT_BACKEND".to_string(),
+        backend_id.to_string(),
+    );
+    request.env = Some(env);
+    request
+}
+
 fn service_or_skip() -> Option<WorldAgentService> {
     match WorldAgentService::new() {
         Ok(service) => Some(service),
@@ -509,6 +520,36 @@ async fn gateway_status_returns_unavailable_before_sync() {
 
     assert_eq!(response.status, GatewayStatusV1::Unavailable);
     assert!(response.client_wiring.is_none());
+}
+
+#[tokio::test]
+async fn missing_backend_binding_returns_unavailable_for_lifecycle_actions() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = TempDir::new().unwrap();
+    let binary = fake_gateway_binary(&temp_dir);
+    let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
+    let Some(service) = service_or_skip() else {
+        return;
+    };
+    let request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+
+    let status = service
+        .gateway_status(request.clone())
+        .await
+        .expect("gateway status");
+    assert_eq!(status.status, GatewayStatusV1::Unavailable);
+
+    let sync = service
+        .gateway_sync(request.clone())
+        .await
+        .expect("gateway sync");
+    assert_eq!(sync.status, GatewayStatusV1::Unavailable);
+
+    let restart = service
+        .gateway_restart(request)
+        .await
+        .expect("gateway restart");
+    assert_eq!(restart.status, GatewayStatusV1::Unavailable);
 }
 
 #[tokio::test]

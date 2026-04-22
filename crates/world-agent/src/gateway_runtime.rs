@@ -40,6 +40,8 @@ const GATEWAY_RUNTIME_MANIFEST_NAME: &str = "runtime.json";
 const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(8);
 const GATEWAY_RUNTIME_DIR_MODE: u32 = 0o750;
 const GATEWAY_RUNTIME_FILE_MODE: u32 = 0o640;
+const REQUIRED_GATEWAY_CAPABILITIES: &[&str] =
+    &["agent_api.run", "agent_api.events", "agent_api.events.live"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -93,14 +95,62 @@ impl GatewayControlSettings {
             .map(|value| value.trim().to_string())
             .unwrap_or_else(|| DEFAULT_BACKEND.to_string());
 
-        if default_backend != DEFAULT_BACKEND {
+        if default_backend.is_empty() {
             return Err(GatewayRuntimeFailure::invalid_integration(format!(
-                "default backend '{}' is not supported by the integrated gateway lifecycle yet",
-                default_backend
+                "{} must be a non-empty backend id",
+                GATEWAY_REQUEST_DEFAULT_BACKEND_ENV
             )));
         }
 
         Ok(Self { default_backend })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GatewayIntegratedAuthKind {
+    CliCodex,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GatewayBackendBinding {
+    pub(crate) backend_id: &'static str,
+    pub(crate) routed_model: &'static str,
+    pub(crate) actual_model: &'static str,
+    pub(crate) provider_name: &'static str,
+    pub(crate) advertised_capabilities: &'static [&'static str],
+    pub(crate) required_capabilities: &'static [&'static str],
+    auth_kind: GatewayIntegratedAuthKind,
+}
+
+const CLI_CODEX_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
+    backend_id: DEFAULT_BACKEND,
+    routed_model: DEFAULT_ROUTED_MODEL,
+    actual_model: DEFAULT_ACTUAL_MODEL,
+    provider_name: DEFAULT_PROVIDER_NAME,
+    advertised_capabilities: &[
+        "agent_api.run",
+        "agent_api.events",
+        "agent_api.events.live",
+        "agent_api.exec.non_interactive",
+        "agent_api.exec.add_dirs.v1",
+        "agent_api.session.resume.v1",
+        "agent_api.session.fork.v1",
+        "agent_api.session.handle.v1",
+        "agent_api.control.cancel.v1",
+        "agent_api.tools.structured.v1",
+        "agent_api.tools.results.v1",
+        "agent_api.artifacts.final_text.v1",
+    ],
+    required_capabilities: REQUIRED_GATEWAY_CAPABILITIES,
+    auth_kind: GatewayIntegratedAuthKind::CliCodex,
+};
+
+pub(crate) fn resolve_gateway_backend_binding(
+    backend_id: &str,
+) -> Option<&'static GatewayBackendBinding> {
+    match backend_id {
+        DEFAULT_BACKEND => Some(&CLI_CODEX_BACKEND_BINDING),
+        _ => None,
     }
 }
 
@@ -135,6 +185,7 @@ pub(crate) struct GatewayRuntimeStartContext {
     pub cgroup_path: PathBuf,
     pub require_cgroup_attach: bool,
     pub control: GatewayControlSettings,
+    pub binding: &'static GatewayBackendBinding,
     pub integrated_auth: Option<GatewayCliCodexIntegratedAuthV1>,
 }
 
@@ -524,6 +575,7 @@ fn start_runtime(
     binary_path: PathBuf,
     ctx: GatewayRuntimeStartContext,
 ) -> Result<ManagedGatewayRuntime, GatewayRuntimeFailure> {
+    validate_binding_capabilities(ctx.binding)?;
     let port = pick_free_port().map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
     let runtime_dir = runtime_dir_for_world(&ctx.world_id);
     let home_dir = runtime_dir.join("home");
@@ -545,7 +597,7 @@ fn start_runtime(
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
     let config_path = runtime_dir.join("config.toml");
-    let config = render_integrated_config(port, &ctx.control.default_backend)?;
+    let config = render_integrated_config(port, ctx.binding);
     write_file_with_mode(&config_path, config.as_bytes(), GATEWAY_RUNTIME_FILE_MODE)
         .with_context(|| format!("failed to write {}", config_path.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
@@ -559,7 +611,7 @@ fn start_runtime(
         .with_context(|| format!("failed to create {}", stderr_log.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
-    let auth = resolve_codex_auth_handoff(ctx.integrated_auth)?;
+    let auth = resolve_integrated_auth_handoff(ctx.binding, ctx.integrated_auth)?;
 
     let mut command = Command::new(&binary_path);
     command
@@ -765,15 +817,8 @@ fn delete_runtime_manifest(path: &Path) {
 
 fn render_integrated_config(
     port: u16,
-    default_backend: &str,
+    binding: &GatewayBackendBinding,
 ) -> Result<String, GatewayRuntimeFailure> {
-    if default_backend != DEFAULT_BACKEND {
-        return Err(GatewayRuntimeFailure::invalid_integration(format!(
-            "unsupported integrated backend '{}'",
-            default_backend
-        )));
-    }
-
     Ok(format!(
         r#"[server]
 host = "127.0.0.1"
@@ -799,15 +844,24 @@ priority = 1
 provider = "{provider_name}"
 actual_model = "{actual_model}"
 "#,
-        routed_model = DEFAULT_ROUTED_MODEL,
-        provider_name = DEFAULT_PROVIDER_NAME,
-        actual_model = DEFAULT_ACTUAL_MODEL,
+        routed_model = binding.routed_model,
+        provider_name = binding.provider_name,
+        actual_model = binding.actual_model,
     ))
 }
 
 struct ResolvedCodexAuth {
     account_id: Option<String>,
     access_token: String,
+}
+
+fn resolve_integrated_auth_handoff(
+    binding: &GatewayBackendBinding,
+    auth: Option<GatewayCliCodexIntegratedAuthV1>,
+) -> Result<ResolvedCodexAuth, GatewayRuntimeFailure> {
+    match binding.auth_kind {
+        GatewayIntegratedAuthKind::CliCodex => resolve_codex_auth_handoff(auth),
+    }
 }
 
 fn resolve_codex_auth_handoff(
@@ -836,6 +890,25 @@ fn resolve_codex_auth_handoff(
         account_id,
         access_token,
     })
+}
+
+fn validate_binding_capabilities(
+    binding: &GatewayBackendBinding,
+) -> Result<(), GatewayRuntimeFailure> {
+    for capability in binding.required_capabilities {
+        if !binding
+            .advertised_capabilities
+            .iter()
+            .any(|advertised| advertised == capability)
+        {
+            return Err(GatewayRuntimeFailure::transient(format!(
+                "backend '{}' does not advertise required capability '{}'",
+                binding.backend_id, capability
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 fn parse_bool_env(
@@ -1057,6 +1130,15 @@ mod tests {
     use tempfile::TempDir;
 
     static ENV_LOCK: Lazy<AsyncMutex<()>> = Lazy::new(|| AsyncMutex::new(()));
+    const MISSING_CAPABILITY_BINDING: GatewayBackendBinding = GatewayBackendBinding {
+        backend_id: "test:missing-capability",
+        routed_model: "broken",
+        actual_model: "broken",
+        provider_name: "broken-provider",
+        advertised_capabilities: &["agent_api.events"],
+        required_capabilities: REQUIRED_GATEWAY_CAPABILITIES,
+        auth_kind: GatewayIntegratedAuthKind::CliCodex,
+    };
 
     struct EnvGuard {
         key: &'static str,
@@ -1082,14 +1164,24 @@ mod tests {
     }
 
     fn start_context(project_dir: &Path, world_id: &str) -> GatewayRuntimeStartContext {
+        let binding = resolve_gateway_backend_binding(DEFAULT_BACKEND).expect("codex binding");
+        start_context_with_binding(project_dir, world_id, binding)
+    }
+
+    fn start_context_with_binding(
+        project_dir: &Path,
+        world_id: &str,
+        binding: &'static GatewayBackendBinding,
+    ) -> GatewayRuntimeStartContext {
         GatewayRuntimeStartContext {
             world_id: world_id.to_string(),
             project_dir: project_dir.to_path_buf(),
             cgroup_path: project_dir.join("missing-cgroup"),
             require_cgroup_attach: false,
             control: GatewayControlSettings {
-                default_backend: DEFAULT_BACKEND.to_string(),
+                default_backend: binding.backend_id.to_string(),
             },
+            binding,
             integrated_auth: Some(GatewayCliCodexIntegratedAuthV1 {
                 account_id: Some("acct_test".to_string()),
                 access_token: "header.payload.signature".to_string(),
@@ -1409,6 +1501,52 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         assert!(
             matches!(err, GatewayRuntimeFailure::InvalidIntegration(_)),
             "unexpected error: {err:?}"
+        );
+    }
+
+    #[test]
+    fn nonempty_unbound_backend_is_accepted_as_selected_input() {
+        let mut env = HashMap::new();
+        env.insert(
+            GATEWAY_REQUEST_DEFAULT_BACKEND_ENV.to_string(),
+            "api:openai".to_string(),
+        );
+
+        let control =
+            GatewayControlSettings::from_request_env(Some(&env)).expect("selected backend");
+        assert_eq!(control.default_backend, "api:openai");
+    }
+
+    #[test]
+    fn binding_lookup_returns_none_for_unbound_backend() {
+        assert!(resolve_gateway_backend_binding("api:openai").is_none());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn capability_gate_fails_before_runtime_artifacts_are_created() {
+        let _env_lock = ENV_LOCK.lock().await;
+        let temp_dir = TempDir::new().unwrap();
+        let runtime_root = temp_dir.path().join("runtime-root");
+        let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
+        let world_id = "missing-capability";
+
+        let err = start_runtime(
+            temp_dir.path().join("missing-binary"),
+            start_context_with_binding(temp_dir.path(), world_id, &MISSING_CAPABILITY_BINDING),
+        )
+        .expect_err("capability gate should fail before spawn");
+
+        assert!(
+            matches!(err, GatewayRuntimeFailure::Transient(_)),
+            "unexpected error: {err:?}"
+        );
+        assert!(
+            err.to_string().contains("required capability"),
+            "capability gate should explain the missing requirement: {err}"
+        );
+        assert!(
+            !runtime_dir_for_world(world_id).exists(),
+            "pre-spawn capability gating should not create runtime artifacts"
         );
     }
 
