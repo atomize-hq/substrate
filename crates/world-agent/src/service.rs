@@ -1454,22 +1454,11 @@ impl WorldAgentService {
         let selected_backend = control.default_backend.clone();
         let integrated_auth = match req.integrated_auth.as_ref() {
             Some(payload) => {
-                let payload_backend = payload.backend_id.trim();
-                if payload_backend.is_empty() {
-                    return Err(gateway_runtime_error(
-                        GatewayRuntimeFailure::invalid_integration(
-                            "request-provided integrated auth payload is missing backend_id",
-                        ),
-                    ));
-                }
-                if payload_backend != selected_backend {
-                    return Err(gateway_runtime_error(GatewayRuntimeFailure::invalid_integration(
-                        format!(
-                            "request-provided integrated auth payload for '{}' does not match selected backend '{}'",
-                            payload_backend, selected_backend
-                        ),
-                    )));
-                }
+                payload
+                    .validate_for_selected_backend(&selected_backend)
+                    .map_err(|message| {
+                        gateway_runtime_error(GatewayRuntimeFailure::invalid_integration(message))
+                    })?;
                 Some(payload.clone())
             }
             None => None,
@@ -1478,7 +1467,6 @@ impl WorldAgentService {
         Ok(PreparedGatewayRuntimeRequest {
             project_dir,
             world_spec,
-            control,
             selected_backend,
             integrated_auth,
         })
@@ -1536,14 +1524,13 @@ impl WorldAgentService {
                 project_dir: prepared.project_dir,
                 cgroup_path,
                 require_cgroup_attach: true,
-                control: prepared.control,
                 binding,
                 integrated_auth: prepared.integrated_auth,
             },
         }))
     }
 
-    #[cfg(all(target_os = "linux", test))]
+    #[cfg(target_os = "linux")]
     pub fn gateway_runtime_pid_for_test(
         &self,
         req: &GatewayLifecycleRequestV1,
@@ -1561,7 +1548,7 @@ impl WorldAgentService {
         Ok(self.gateway_runtime.pid_for_world(&binding.runtime_id))
     }
 
-    #[cfg(all(target_os = "linux", test))]
+    #[cfg(target_os = "linux")]
     pub fn forget_gateway_runtime_for_test(&self, req: &GatewayLifecycleRequestV1) -> Result<()> {
         let prepared = self.prepare_gateway_runtime_request(req)?;
         let Some(binding) = self
@@ -1597,7 +1584,6 @@ impl WorldAgentService {
 struct PreparedGatewayRuntimeRequest {
     project_dir: PathBuf,
     world_spec: WorldSpec,
-    control: GatewayControlSettings,
     selected_backend: String,
     integrated_auth: Option<agent_api_types::GatewayIntegratedAuthPayloadV1>,
 }
@@ -1633,7 +1619,6 @@ impl ResolvedGatewayRuntimeBinding {
                 project_dir: prepared.project_dir,
                 cgroup_path: PathBuf::from("/nonexistent"),
                 require_cgroup_attach: false,
-                control: prepared.control,
                 binding,
                 integrated_auth: prepared.integrated_auth,
             },
@@ -1784,10 +1769,11 @@ mod pending_diff_id_tests {
 mod gateway_runtime_binding_tests {
     use super::*;
     use agent_api_types::{
-        GatewayCliCodexIntegratedAuthV1, GatewayIntegratedAuthPayloadV1, PolicySnapshotV3,
-        PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
-        WorldNetworkRoutingV1,
+        GatewayApiEnvIntegratedAuthV1, GatewayCliCodexIntegratedAuthV1,
+        GatewayIntegratedAuthPayloadV1, PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3,
+        PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldNetworkRoutingV1,
     };
+    use serde_json::json;
     use tempfile::TempDir;
 
     fn minimal_policy_snapshot() -> PolicySnapshotV3 {
@@ -1823,6 +1809,7 @@ mod gateway_runtime_binding_tests {
                     account_id: Some("acct_test".to_string()),
                     access_token: "header.payload.signature".to_string(),
                 }),
+                api_env: None,
             }),
         }
     }
@@ -1843,9 +1830,12 @@ mod gateway_runtime_binding_tests {
         let temp_dir = TempDir::new().unwrap();
         let service = WorldAgentService::new().expect("service");
         let mut request = gateway_request_with_backend(temp_dir.path(), "cli:codex");
+        let mut env = HashMap::new();
+        env.insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
         request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
             backend_id: "api:openai".to_string(),
             cli_codex: None,
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
         });
 
         let err = service
@@ -1916,6 +1906,16 @@ mod gateway_runtime_binding_tests {
     }
 
     #[test]
+    fn request_preparation_accepts_valid_cli_codex() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+
+        service
+            .prepare_gateway_runtime_request(&gateway_request(temp_dir.path()))
+            .expect("valid cli:codex payload should prepare");
+    }
+
+    #[test]
     fn non_isolated_binding_uses_synthetic_runtime_key() {
         let temp_dir = TempDir::new().unwrap();
         let service = WorldAgentService::new().expect("service");
@@ -1943,11 +1943,16 @@ mod gateway_runtime_binding_tests {
     fn missing_backend_binding_returns_none_without_invalid_integration() {
         let temp_dir = TempDir::new().unwrap();
         let service = WorldAgentService::new().expect("service");
+        let mut request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+        let mut env = HashMap::new();
+        env.insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
+        request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+            backend_id: "api:openai".to_string(),
+            cli_codex: None,
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
+        });
         let prepared = service
-            .prepare_gateway_runtime_request(&gateway_request_with_backend(
-                temp_dir.path(),
-                "api:openai",
-            ))
+            .prepare_gateway_runtime_request(&request)
             .expect("prepared request");
         let binding = service
             .resolve_gateway_runtime_binding(
@@ -1982,6 +1987,82 @@ mod gateway_runtime_binding_tests {
             .expect("binding resolution");
 
         assert!(binding.is_none());
+    }
+
+    #[test]
+    fn request_preparation_rejects_unknown_lifecycle_request_fields() {
+        let err = serde_json::from_value::<GatewayLifecycleRequestV1>(json!({
+            "profile": null,
+            "cwd": "/tmp",
+            "env": null,
+            "agent_id": "gateway-binding-test",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": { "enabled": true, "allow_list": ["."], "deny_list": [] }
+                }
+            },
+            "world_network": {
+                "isolate_network": false,
+                "allowed_domains": []
+            },
+            "integrated_auth": {
+                "backend_id": "cli:codex",
+                "cli_codex": {
+                    "access_token": "header.payload.signature"
+                }
+            },
+            "unexpected": true
+        }))
+        .expect_err("unknown request field should fail");
+
+        assert!(err.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn request_preparation_rejects_multi_facet_payloads() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+        let mut request = gateway_request(temp_dir.path());
+        let mut env = HashMap::new();
+        env.insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
+        request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+            backend_id: "cli:codex".to_string(),
+            cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                account_id: Some("acct_test".to_string()),
+                access_token: "header.payload.signature".to_string(),
+            }),
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
+        });
+
+        let err = service
+            .prepare_gateway_runtime_request(&request)
+            .expect_err("multi-facet payload should fail");
+        assert!(err.to_string().contains("exactly one auth facet"));
+    }
+
+    #[test]
+    fn request_preparation_rejects_blank_required_values() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+        let mut request = gateway_request(temp_dir.path());
+        request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+            backend_id: "cli:codex".to_string(),
+            cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                account_id: Some("acct_test".to_string()),
+                access_token: "   ".to_string(),
+            }),
+            api_env: None,
+        });
+
+        let err = service
+            .prepare_gateway_runtime_request(&request)
+            .expect_err("blank required value should fail");
+        assert!(err.to_string().contains("empty cli_codex.access_token"));
     }
 }
 

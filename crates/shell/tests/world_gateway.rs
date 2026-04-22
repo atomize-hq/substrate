@@ -341,6 +341,24 @@ config:
 "#
 }
 
+fn gateway_inventory_for_openai_multi_env() -> &'static str {
+    r#"version: 1
+id: openai
+config:
+  enabled: true
+  kind: api
+  api:
+    base_url: https://api.openai.com/v1
+    auth:
+      env:
+        - OPENAI_API_KEY
+        - OPENAI_ORG_ID
+  capabilities:
+    llm: true
+    mcp_client: false
+"#
+}
+
 fn gateway_policy_with_codex_host_credentials() -> &'static str {
     r#"id: "gateway-policy"
 name: "gateway-policy"
@@ -394,6 +412,43 @@ world_fs:
 llm:
   allowed_backends:
     - "api:openai"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#
+}
+
+fn gateway_policy_with_openai_env_override() -> &'static str {
+    r#"id: "gateway-policy"
+name: "gateway-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
+
+llm:
+  allowed_backends:
+    - "api:openai"
+  secrets:
+    env_allowed:
+      - "OPENAI_API_KEY"
+      - "OPENAI_ORG_ID"
 
 net_allowed: []
 cmd_allowed: []
@@ -1111,6 +1166,123 @@ fn world_gateway_lifecycle_requests_preserve_selected_backend_without_codex_fall
             "non-Codex lifecycle requests should not synthesize Codex auth",
         );
     }
+}
+
+#[test]
+fn world_gateway_lifecycle_requests_emit_api_env_auth_when_allowed() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_env_override());
+
+    let available = json!({
+        "status": "available",
+        "client_wiring": {
+            "openai_base_url": "http://gateway.test/openai",
+            "anthropic_base_url": "http://gateway.test/anthropic"
+        }
+    });
+    let mut socket =
+        RecordedGatewayLifecycleSocket::start(available.clone(), available.clone(), available, 3);
+
+    let mut status = fixture.command();
+    status
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .env("OPENAI_API_KEY", "sk-openai-proof")
+        .args(["world", "gateway", "status", "--json"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("\"status\":\"available\""));
+
+    let mut sync = fixture.command();
+    sync.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .env("OPENAI_API_KEY", "sk-openai-proof")
+        .args(["world", "gateway", "sync"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains(
+            "substrate world gateway sync: available",
+        ));
+
+    let mut restart = fixture.command();
+    restart
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .env("OPENAI_API_KEY", "sk-openai-proof")
+        .args(["world", "gateway", "restart"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains(
+            "substrate world gateway restart: available",
+        ));
+
+    let requests = socket.recorded_requests();
+    assert_eq!(requests.len(), 3);
+    for request in requests {
+        assert_eq!(
+            request.body.pointer("/integrated_auth/backend_id"),
+            Some(&json!("api:openai"))
+        );
+        assert_eq!(
+            request
+                .body
+                .pointer("/integrated_auth/api_env/env/OPENAI_API_KEY"),
+            Some(&json!("sk-openai-proof"))
+        );
+        assert_eq!(
+            request.body.pointer("/integrated_auth/cli_codex"),
+            None,
+            "api backends must not emit the cli_codex auth facet",
+        );
+    }
+}
+
+#[test]
+fn world_gateway_openai_env_auth_blocked_by_policy_uses_exit_code_5() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("OPENAI_API_KEY", "sk-openai-proof")
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: policy or safety failure",
+        ));
+}
+
+#[test]
+fn world_gateway_openai_incomplete_env_auth_uses_exit_code_2() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai_multi_env());
+    fixture.write_global_policy(gateway_policy_with_openai_env_override());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("OPENAI_API_KEY", "sk-openai-proof")
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: invalid integration",
+        ));
 }
 
 #[test]

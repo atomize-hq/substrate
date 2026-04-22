@@ -1,30 +1,22 @@
 # Pack Closeout - gateway-backend-selection-runtime-integration
 
 - **Pack status**: active implementation pack
-- **Current execution target**: close `SEAM-1`, then advance `SEAM-2`
+- **Current execution target**: advance `SEAM-3` from the now-published `THR-02` runtime handoff
 - **Remaining open seams**:
-  - `SEAM-1`
-  - `SEAM-2`
-  - `SEAM-3` is intentionally deferred until runtime realization exists and a named additional backend is selected
+  - `SEAM-3`
 - **Open remediations still blocking current-seam closeout**:
-  - `REM-001`
-  - `REM-002`
+  - none
 - **Deferred follow-ons not blocking current-seam closeout**:
-  - `REM-003`
-  - `REM-004`
   - `REM-005`
 - **Threads still not closed**:
-  - `THR-01`
-  - `THR-02`
   - `THR-03`
 - **Downstream stale triggers still requiring attention**:
-  - selection order, allowlist behavior, trusted-input boundaries, or auth precedence change in the canonical contracts or implementation surfaces
-  - adapter lookup, capability requirements, auth payload shapes, runtime config render, readiness semantics, or managed artifact behavior change during `SEAM-2`
+  - runtime binding behavior, bounded auth payload shape, runtime config render, readiness semantics, or managed artifact behavior change relative to the published `THR-02` handoff
   - first-additional-backend baseline or platform validation expectations change during later rollout work
 - **Evidence summary**:
-  - `governance/seam-1-closeout.md` should record selection/policy consumer alignment in shell, broker, config/policy surfaces, supporting ADR-0046 docs, and test evidence
-  - `governance/seam-2-closeout.md` should record runtime realization evidence in shell, `world-agent`, shared agent-api surfaces, and validation commands/tests
-  - `governance/seam-3-closeout.md` is reserved for later parity/rollout evidence once a named additional backend exists
+  - `governance/seam-1-closeout.md` records the published selection/policy handoff
+  - `governance/seam-2-closeout.md` records the published runtime realization handoff, including the first supported non-`cli:codex` proof target (`api:openai`)
+  - `governance/seam-3-closeout.md` remains reserved for later parity/rollout evidence
 - **Non-expansion checks**:
   - no tuple metadata or tuple-policy widening is smuggled into backend selection or runtime realization
   - no `status --json` widening is treated as part of this pack

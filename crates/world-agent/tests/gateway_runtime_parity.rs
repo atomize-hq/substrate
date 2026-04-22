@@ -1,9 +1,10 @@
 #![cfg(target_os = "linux")]
 
 use agent_api_types::{
-    GatewayCliCodexIntegratedAuthV1, GatewayIntegratedAuthPayloadV1, GatewayLifecycleRequestV1,
-    GatewayStatusV1, PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
-    PolicySnapshotWorldFsWriteV3, WorldNetworkRoutingV1,
+    GatewayApiEnvIntegratedAuthV1, GatewayCliCodexIntegratedAuthV1, GatewayIntegratedAuthPayloadV1,
+    GatewayLifecycleRequestV1, GatewayStatusV1, PolicySnapshotV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    WorldNetworkRoutingV1,
 };
 use once_cell::sync::Lazy;
 use std::fs;
@@ -51,6 +52,7 @@ fn gateway_request(cwd: &Path) -> GatewayLifecycleRequestV1 {
                 account_id: Some("acct_test".to_string()),
                 access_token: "header.payload.signature".to_string(),
             }),
+            api_env: None,
         }),
     }
 }
@@ -63,7 +65,15 @@ fn gateway_request_with_backend(cwd: &Path, backend_id: &str) -> GatewayLifecycl
         backend_id.to_string(),
     );
     request.env = Some(env);
-    if backend_id != "cli:codex" {
+    if backend_id == "api:openai" {
+        let mut env = std::collections::HashMap::new();
+        env.insert("OPENAI_API_KEY".to_string(), "sk-openai-proof".to_string());
+        request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+            backend_id: backend_id.to_string(),
+            cli_codex: None,
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
+        });
+    } else if backend_id != "cli:codex" {
         request.integrated_auth = None;
     }
     request
@@ -106,7 +116,12 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if [ -z "${SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}" ]; then
+if grep -q 'api_key = "\$OPENAI_API_KEY"' "$config"; then
+  if [ -z "${OPENAI_API_KEY:-}" ]; then
+    echo "missing OpenAI API key env" >&2
+    exit 65
+  fi
+elif [ -z "${SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}" ]; then
   echo "missing Codex access token env" >&2
   exit 65
 fi
@@ -207,7 +222,12 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
+if grep -q 'api_key = "\$OPENAI_API_KEY"' "$config"; then
+  if [ -z "${{OPENAI_API_KEY:-}}" ]; then
+    echo "missing OpenAI API key env" >&2
+    exit 65
+  fi
+elif [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
   echo "missing Codex access token env" >&2
   exit 65
 fi
@@ -264,7 +284,12 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
+if grep -q 'api_key = "\$OPENAI_API_KEY"' "$config"; then
+  if [ -z "${{OPENAI_API_KEY:-}}" ]; then
+    echo "missing OpenAI API key env" >&2
+    exit 65
+  fi
+elif [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
   echo "missing Codex access token env" >&2
   exit 65
 fi
@@ -332,7 +357,12 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
+if grep -q 'api_key = "\$OPENAI_API_KEY"' "$config"; then
+  if [ -z "${{OPENAI_API_KEY:-}}" ]; then
+    echo "missing OpenAI API key env" >&2
+    exit 65
+  fi
+elif [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
   echo "missing Codex access token env" >&2
   exit 65
 fi
@@ -396,12 +426,14 @@ fn hanging_gateway_binary(temp_dir: &TempDir) -> (PathBuf, PathBuf) {
         format!(
             r#"#!/bin/sh
 set -eu
+config=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     start)
       shift
       ;;
     --config)
+      config="$2"
       shift 2
       ;;
     *)
@@ -409,7 +441,12 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
-if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
+if grep -q 'api_key = "\$OPENAI_API_KEY"' "$config"; then
+  if [ -z "${{OPENAI_API_KEY:-}}" ]; then
+    echo "missing OpenAI API key env" >&2
+    exit 65
+  fi
+elif [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
   echo "missing Codex access token env" >&2
   exit 65
 fi
@@ -535,7 +572,7 @@ async fn missing_backend_binding_returns_unavailable_for_lifecycle_actions() {
     let Some(service) = service_or_skip() else {
         return;
     };
-    let request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+    let request = gateway_request_with_backend(temp_dir.path(), "api:anthropic");
 
     let status = service
         .gateway_status(request.clone())
@@ -603,6 +640,46 @@ async fn gateway_sync_makes_status_available_and_is_idempotent() {
 }
 
 #[tokio::test]
+async fn gateway_openai_sync_makes_status_available_and_is_idempotent() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = TempDir::new().unwrap();
+    let (binary, pid_dir, launch_count_path) =
+        tracking_gateway_binary(&temp_dir, "openai-idempotent", 0);
+    let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
+    let Some(service) = service_or_skip() else {
+        return;
+    };
+    let request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+
+    let status_before_sync = service
+        .gateway_status(request.clone())
+        .await
+        .expect("gateway status");
+    assert_eq!(status_before_sync.status, GatewayStatusV1::Unavailable);
+
+    let sync_response = service
+        .gateway_sync(request.clone())
+        .await
+        .expect("gateway sync");
+    assert_eq!(sync_response.status, GatewayStatusV1::Available);
+    let first_pid = wait_for_pid(&pid_dir, 1);
+
+    let status_response = service
+        .gateway_status(request.clone())
+        .await
+        .expect("gateway status after sync");
+    assert_eq!(status_response.status, GatewayStatusV1::Available);
+
+    let second_sync = service
+        .gateway_sync(request.clone())
+        .await
+        .expect("idempotent gateway sync");
+    assert_eq!(second_sync.status, GatewayStatusV1::Available);
+    assert_eq!(read_launch_count(&launch_count_path), 1);
+    assert_eq!(first_pid, wait_for_pid(&pid_dir, 1));
+}
+
+#[tokio::test]
 async fn gateway_sync_succeeds_against_strict_health_server() {
     let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
@@ -663,6 +740,36 @@ async fn gateway_restart_recycles_the_runtime() {
 }
 
 #[tokio::test]
+async fn gateway_openai_restart_recycles_the_runtime() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = TempDir::new().unwrap();
+    let (binary, pid_dir, launch_count_path) =
+        tracking_gateway_binary(&temp_dir, "openai-restart", 0);
+    let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
+    let Some(service) = service_or_skip() else {
+        return;
+    };
+    let request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+
+    service
+        .gateway_sync(request.clone())
+        .await
+        .expect("initial gateway sync");
+    let initial_pid = wait_for_pid(&pid_dir, 1);
+
+    let restart_response = service
+        .gateway_restart(request.clone())
+        .await
+        .expect("gateway restart");
+    assert_eq!(restart_response.status, GatewayStatusV1::Available);
+
+    let restarted_pid = wait_for_pid(&pid_dir, 2);
+    assert_ne!(initial_pid, restarted_pid);
+    assert_eq!(read_launch_count(&launch_count_path), 2);
+    assert_process_exited(initial_pid);
+}
+
+#[tokio::test]
 async fn gateway_unbound_lifecycle_actions_do_not_fall_back_to_running_codex_runtime() {
     let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
@@ -672,7 +779,7 @@ async fn gateway_unbound_lifecycle_actions_do_not_fall_back_to_running_codex_run
         return;
     };
     let codex_request = gateway_request(temp_dir.path());
-    let unbound_request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+    let unbound_request = gateway_request_with_backend(temp_dir.path(), "api:anthropic");
 
     let sync_response = service
         .gateway_sync(codex_request.clone())
@@ -790,6 +897,54 @@ async fn gateway_manifest_recovery_restores_status_sync_and_restart() {
         restarted_pid, initial_pid,
         "restart should stop the recovered pid and replace it"
     );
+    assert_eq!(read_launch_count(&launch_count_path), 2);
+    assert_process_exited(initial_pid);
+}
+
+#[tokio::test]
+async fn gateway_openai_manifest_recovery_restores_status_sync_and_restart() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = TempDir::new().unwrap();
+    let (binary, pid_dir, launch_count_path) =
+        tracking_gateway_binary(&temp_dir, "openai-recovery", 0);
+    let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
+    let Some(service) = service_or_skip() else {
+        return;
+    };
+    let request = gateway_request_with_backend(temp_dir.path(), "api:openai");
+
+    service
+        .gateway_sync(request.clone())
+        .await
+        .expect("initial gateway sync");
+    let initial_pid = wait_for_pid(&pid_dir, 1);
+    drop(service);
+
+    let Some(service) = service_or_skip() else {
+        return;
+    };
+
+    let status_response = service
+        .gateway_status(request.clone())
+        .await
+        .expect("status via recovered manifest");
+    assert_eq!(status_response.status, GatewayStatusV1::Available);
+    assert_eq!(read_launch_count(&launch_count_path), 1);
+
+    let sync_response = service
+        .gateway_sync(request.clone())
+        .await
+        .expect("sync via recovered manifest");
+    assert_eq!(sync_response.status, GatewayStatusV1::Available);
+    assert_eq!(read_launch_count(&launch_count_path), 1);
+
+    let restart_response = service
+        .gateway_restart(request.clone())
+        .await
+        .expect("restart via recovered manifest");
+    assert_eq!(restart_response.status, GatewayStatusV1::Available);
+    let restarted_pid = wait_for_pid(&pid_dir, 2);
+    assert_ne!(restarted_pid, initial_pid);
     assert_eq!(read_launch_count(&launch_count_path), 2);
     assert_process_exited(initial_pid);
 }

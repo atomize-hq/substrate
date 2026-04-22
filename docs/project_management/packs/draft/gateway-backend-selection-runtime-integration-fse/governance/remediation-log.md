@@ -29,42 +29,6 @@ Future remediation entries must use the canonical fields from the extractor gove
 ## Deferred follow-ons (not pack blockers)
 
 ```yaml
-- remediation_id: REM-003
-  origin_phase: exec
-  source_gate: implementation
-  related_seam: SEAM-2
-  related_slice: S01
-  related_thread: THR-02
-  related_contract: C-03
-  related_artifact: docs/contracts/substrate-gateway-backend-adapter-protocol.md
-  severity: medium
-  status: deferred
-  owner_seam: SEAM-2
-  blocked_targets: []
-  summary: adapter lookup, capability gating, and missing-binding handling are implementation work under the already-published protocol contract
-  required_fix: land runtime behavior and tests that implement the published adapter-resolution and capability-gating rules for more than `cli:codex`
-  resolution_evidence: []
-```
-
-```yaml
-- remediation_id: REM-004
-  origin_phase: exec
-  source_gate: implementation
-  related_seam: SEAM-2
-  related_slice: S01
-  related_thread: THR-02
-  related_contract: C-04
-  related_artifact: docs/contracts/substrate-gateway-backend-adapter-schema.md
-  severity: medium
-  status: deferred
-  owner_seam: SEAM-2
-  blocked_targets: []
-  summary: shared payload and artifact surfaces may need schema hardening to support more than the current `cli_codex` integrated auth path, but that is a `SEAM-2` implementation concern rather than a pack-level contract blocker
-  required_fix: widen or normalize the needed shared types only as required to land multi-backend integrated runtime behavior
-  resolution_evidence: []
-```
-
-```yaml
 - remediation_id: REM-005
   origin_phase: post_exec
   source_gate: revalidation
@@ -126,6 +90,47 @@ Future remediation entries must use the canonical fields from the extractor gove
     - `cargo test -p shell --test world_gateway -- --nocapture`
     - `cargo test -p shell --test agents_validate -- --nocapture`
     - any later ADR-0046 support docs remain subordinate to canonical `docs/contracts/` truth rather than expanding the selection surface
+
+- remediation_id: REM-003
+  origin_phase: exec
+  source_gate: implementation
+  related_seam: SEAM-2
+  related_slice: S01
+  related_thread: THR-02
+  related_contract: C-03
+  related_artifact: docs/contracts/substrate-gateway-backend-adapter-protocol.md
+  severity: medium
+  status: resolved
+  owner_seam: SEAM-2
+  blocked_targets: []
+  summary: adapter lookup, capability gating, and missing-binding handling are implementation work under the already-published protocol contract
+  required_fix: none inside the current execution target
+  resolution_evidence:
+    - `crates/world-agent/src/gateway_runtime.rs` now binds both `cli:codex` and `api:openai` through an explicit runtime registry with binding-driven config render and auth injection
+    - `crates/world-agent/tests/gateway_runtime_parity.rs` now proves `api:openai` through unavailable-before-sync, sync/status/idempotent, restart, manifest recovery, and explicit no-fallback behavior
+    - `cargo test -p world-agent --lib -- --nocapture`
+    - `limactl shell substrate -- bash -lc 'cd /Users/spensermcconnell/__Active_Code/atomize-hq/substrate && CARGO_TARGET_DIR=/tmp/substrate-target cargo test -p world-agent --test gateway_runtime_parity -- --nocapture'`
+
+- remediation_id: REM-004
+  origin_phase: exec
+  source_gate: implementation
+  related_seam: SEAM-2
+  related_slice: S01
+  related_thread: THR-02
+  related_contract: C-04
+  related_artifact: docs/contracts/substrate-gateway-backend-adapter-schema.md
+  severity: medium
+  status: resolved
+  owner_seam: SEAM-2
+  blocked_targets: []
+  summary: shared payload and artifact surfaces needed schema hardening to support more than the current `cli_codex` integrated auth path
+  required_fix: none inside the current execution target
+  resolution_evidence:
+    - `crates/agent-api-types/src/lib.rs` now hardens `GatewayLifecycleRequestV1` with `deny_unknown_fields` and adds the closed backend-neutral `api_env` auth facet beside `cli_codex`
+    - `crates/world-agent/src/service.rs` now validates request-provided auth at the shared boundary before runtime execution
+    - `crates/shell/src/builtins/world_gateway.rs` now emits backend-aware integrated auth from resolved inventory instead of suppressing all non-`cli:codex` auth handoff
+    - `cargo test -p agent-api-types -- --nocapture`
+    - `cargo test -p shell --test world_gateway -- --nocapture`
 ```
 
 ## Retired remediations

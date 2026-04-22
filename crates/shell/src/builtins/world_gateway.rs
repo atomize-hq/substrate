@@ -8,8 +8,8 @@ use crate::execution::pw;
 use crate::execution::{WorldGatewayAction, WorldGatewayCmd, WorldGatewayStatusArgs};
 use agent_api_client::AgentClient;
 use agent_api_types::{
-    GatewayCliCodexIntegratedAuthV1, GatewayIntegratedAuthPayloadV1, GatewayLifecycleRequestV1,
-    GatewayLifecycleResponseV1, GatewayStatusV1,
+    GatewayApiEnvIntegratedAuthV1, GatewayCliCodexIntegratedAuthV1, GatewayIntegratedAuthPayloadV1,
+    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, GatewayStatusV1,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -237,10 +237,12 @@ fn build_gateway_request() -> anyhow::Result<GatewayLifecycleRequestV1> {
     let (effective_policy, _) =
         substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
             .map_err(|err| config_model::user_error(err.to_string()))?;
-    validate_gateway_backend_selection(&cwd, &effective_config, &effective_policy)?;
+    let backend_entry =
+        validate_gateway_backend_selection(&cwd, &effective_config, &effective_policy)?;
     let network_policy = resolve_world_network_policy_for_cwd(&cwd)?;
     let world_network = request_world_network_routing(&network_policy);
-    let integrated_auth = resolve_integrated_auth_payload(&effective_config, &effective_policy)?;
+    let integrated_auth =
+        resolve_integrated_auth_payload(&effective_config, &effective_policy, &backend_entry)?;
     let gateway_mode = match effective_config.llm.gateway.mode {
         LlmGatewayMode::InWorld => "in_world",
         LlmGatewayMode::HostOnly => "host_only",
@@ -278,9 +280,9 @@ fn validate_gateway_backend_selection(
     cwd: &std::path::Path,
     effective_config: &config_model::SubstrateConfig,
     effective_policy: &substrate_broker::Policy,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<agent_inventory::AgentInventoryEntryV1> {
     let selected_backend = effective_config.llm.routing.default_backend.trim();
-    agent_inventory::resolve_gateway_backend_inventory_entry(
+    let entry = agent_inventory::resolve_gateway_backend_inventory_entry(
         cwd,
         selected_backend,
         effective_policy,
@@ -291,7 +293,7 @@ fn validate_gateway_backend_selection(
         "llm.allowed_backends",
         selected_backend,
     )?;
-    Ok(())
+    Ok(entry)
 }
 
 fn validate_gateway_lifecycle_config(
@@ -345,6 +347,7 @@ fn config_key_is_explicit(
 fn resolve_integrated_auth_payload(
     effective_config: &config_model::SubstrateConfig,
     effective_policy: &substrate_broker::Policy,
+    backend_entry: &agent_inventory::AgentInventoryEntryV1,
 ) -> anyhow::Result<Option<GatewayIntegratedAuthPayloadV1>> {
     if !effective_config.llm.gateway.enabled
         || effective_config.llm.gateway.mode != LlmGatewayMode::InWorld
@@ -353,20 +356,19 @@ fn resolve_integrated_auth_payload(
     }
 
     let selected_backend = effective_config.llm.routing.default_backend.trim();
-    if selected_backend != CLI_CODEX_BACKEND {
-        return Ok(None);
+    match backend_entry.file.config.kind {
+        agent_inventory::AgentConfigKind::Cli if selected_backend == CLI_CODEX_BACKEND => {
+            Ok(Some(GatewayIntegratedAuthPayloadV1 {
+                backend_id: selected_backend.to_string(),
+                cli_codex: Some(resolve_cli_codex_integrated_auth(effective_policy)?),
+                api_env: None,
+            }))
+        }
+        agent_inventory::AgentConfigKind::Cli => Ok(None),
+        agent_inventory::AgentConfigKind::Api => {
+            resolve_api_env_integrated_auth(selected_backend, backend_entry, effective_policy)
+        }
     }
-
-    ensure_backend_allowed(
-        &effective_policy.llm_allowed_backends,
-        "llm.allowed_backends",
-        CLI_CODEX_BACKEND,
-    )?;
-
-    Ok(Some(GatewayIntegratedAuthPayloadV1 {
-        backend_id: selected_backend.to_string(),
-        cli_codex: Some(resolve_cli_codex_integrated_auth(effective_policy)?),
-    }))
 }
 
 fn resolve_cli_codex_integrated_auth(
@@ -427,6 +429,47 @@ fn resolve_cli_codex_integrated_auth(
         account_id,
         access_token,
     })
+}
+
+fn resolve_api_env_integrated_auth(
+    selected_backend: &str,
+    backend_entry: &agent_inventory::AgentInventoryEntryV1,
+    effective_policy: &substrate_broker::Policy,
+) -> anyhow::Result<Option<GatewayIntegratedAuthPayloadV1>> {
+    let Some(api_config) = backend_entry.file.config.api.as_ref() else {
+        return Ok(None);
+    };
+
+    let mut present_env = HashMap::new();
+    let mut missing_env = Vec::new();
+    for env_name in &api_config.auth.env {
+        match read_trimmed_env(env_name)
+            .map_err(|err| gateway_invalid_integration_error(err.to_string()))?
+        {
+            Some(value) => {
+                ensure_env_name_allowed(effective_policy, env_name)?;
+                present_env.insert(env_name.clone(), value);
+            }
+            None => missing_env.push(env_name.clone()),
+        }
+    }
+
+    if present_env.is_empty() {
+        return Ok(None);
+    }
+
+    if !missing_env.is_empty() {
+        return Err(gateway_invalid_integration_error(format!(
+            "integrated API env auth for {selected_backend} is incomplete: missing {}",
+            missing_env.join(", ")
+        )));
+    }
+
+    Ok(Some(GatewayIntegratedAuthPayloadV1 {
+        backend_id: selected_backend.to_string(),
+        cli_codex: None,
+        api_env: Some(GatewayApiEnvIntegratedAuthV1 { env: present_env }),
+    }))
 }
 
 fn ensure_backend_allowed(
@@ -499,6 +542,24 @@ fn read_trimmed_env(key: &str) -> anyhow::Result<Option<String>> {
         Err(std::env::VarError::NotPresent) => Ok(None),
         Err(err) => Err(anyhow::anyhow!("failed to read {key}: {err}")),
     }
+}
+
+#[cfg(target_os = "linux")]
+fn build_gateway_client() -> anyhow::Result<AgentClient> {
+    let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_WORLD_SOCKET_PATH));
+    AgentClient::unix_socket(socket_path)
+}
+
+#[cfg(target_os = "windows")]
+fn build_gateway_client() -> anyhow::Result<AgentClient> {
+    pw::windows::build_agent_client()
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn build_gateway_client() -> anyhow::Result<AgentClient> {
+    anyhow::bail!("gateway runtime client is unsupported on this platform")
 }
 
 fn gateway_invalid_integration_error(message: impl Into<String>) -> anyhow::Error {
@@ -610,24 +671,6 @@ fn classify_and_print_gateway_error(command: &str, err: anyhow::Error) -> i32 {
 
 fn error_has_marker(err: &anyhow::Error, marker: &str) -> bool {
     err.chain().any(|cause| cause.to_string().contains(marker))
-}
-
-#[cfg(target_os = "linux")]
-fn build_gateway_client() -> anyhow::Result<AgentClient> {
-    let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_WORLD_SOCKET_PATH));
-    AgentClient::unix_socket(socket_path)
-}
-
-#[cfg(target_os = "windows")]
-fn build_gateway_client() -> anyhow::Result<AgentClient> {
-    pw::windows::build_agent_client()
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-fn build_gateway_client() -> anyhow::Result<AgentClient> {
-    anyhow::bail!("gateway runtime client is unsupported on this platform")
 }
 
 #[derive(Clone, Copy)]
