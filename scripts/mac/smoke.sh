@@ -121,8 +121,6 @@ cleanup_host_gateway_smoke_auth() {
 }
 
 run_gateway_lifecycle_proof() {
-  local substrate_bin="${1:-${SUBSTRATE_BIN}}"
-  local substrate_home="${2:-}"
   local auth_state=""
   local cleanup_auth=0
   local status_json=""
@@ -137,29 +135,15 @@ run_gateway_lifecycle_proof() {
   trap 'if [[ ${cleanup_auth} -eq 1 ]]; then cleanup_host_gateway_smoke_auth; fi' RETURN
 
   pushd "${REPO_ROOT}" >/dev/null
-  if [[ -n "${substrate_home}" ]]; then
-    env SUBSTRATE_HOME="${substrate_home}" SUBSTRATE_ROOT="${substrate_home}" \
-      "${substrate_bin}" world gateway sync
-    status_json="$(env SUBSTRATE_HOME="${substrate_home}" SUBSTRATE_ROOT="${substrate_home}" \
-      "${substrate_bin}" world gateway status --json)"
-  else
-    "${substrate_bin}" world gateway sync
-    status_json="$("${substrate_bin}" world gateway status --json)"
-  fi
+  "${SUBSTRATE_BIN}" world gateway sync
+  status_json="$("${SUBSTRATE_BIN}" world gateway status --json)"
   printf '%s\n' "${status_json}" | jq -e '
     .status == "available" and
     .client_wiring.openai_base_url == .client_wiring.anthropic_base_url
   ' >/dev/null
 
-  if [[ -n "${substrate_home}" ]]; then
-    env SUBSTRATE_HOME="${substrate_home}" SUBSTRATE_ROOT="${substrate_home}" \
-      "${substrate_bin}" world gateway restart
-    status_json="$(env SUBSTRATE_HOME="${substrate_home}" SUBSTRATE_ROOT="${substrate_home}" \
-      "${substrate_bin}" world gateway status --json)"
-  else
-    "${substrate_bin}" world gateway restart
-    status_json="$("${substrate_bin}" world gateway status --json)"
-  fi
+  "${SUBSTRATE_BIN}" world gateway restart
+  status_json="$("${SUBSTRATE_BIN}" world gateway status --json)"
   base_url="$(printf '%s\n' "${status_json}" | jq -r '.client_wiring.openai_base_url')"
   port="$(printf '%s\n' "${base_url}" | sed -n 's#http://127\.0\.0\.1:\([0-9][0-9]*\)$#\1#p')"
   popd >/dev/null
