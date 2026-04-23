@@ -7,15 +7,15 @@ set -euo pipefail
 # - 3: missing local prerequisites
 
 if [[ "$(uname -s)" != "Linux" ]]; then
-  echo "SKIP: LAITDP1 linux smoke is supported only on Linux"
+  echo "SKIP: LAITDP linux smoke is supported only on Linux"
   exit 0
 fi
 
 slice_id="${SUBSTRATE_SMOKE_SLICE_ID:-LAITDP1}"
 case "$slice_id" in
-  LAITDP1) ;;
+  LAITDP1 | LAITDP2) ;;
   *)
-    echo "FAIL: unsupported SUBSTRATE_SMOKE_SLICE_ID=$slice_id (expected LAITDP1)" >&2
+    echo "FAIL: unsupported SUBSTRATE_SMOKE_SLICE_ID=$slice_id (expected LAITDP1 or LAITDP2)" >&2
     exit 2
     ;;
 esac
@@ -56,4 +56,17 @@ run_test "world_gateway_status_json_keeps_tuple_metadata_when_runtime_is_unavail
 run_test "world_gateway_status_human_output_uses_contract_label_order"
 run_test "world_gateway_status_human_output_omits_missing_optional_fields_without_placeholders"
 
-echo "OK: LAITDP1 linux smoke"
+if [[ "$slice_id" == "LAITDP2" ]]; then
+  echo "INFO: running agent-api-types LAITDP2 parity tests"
+  (
+    cd "$repo_root"
+    cargo test -p agent-api-types laitdp2_ -- --nocapture
+  )
+  echo "INFO: running gateway integrated auth validation tests"
+  (
+    cd "$repo_root"
+    cargo test -p agent-api-types gateway_integrated_auth_validation -- --nocapture
+  )
+fi
+
+echo "OK: $slice_id linux smoke"
