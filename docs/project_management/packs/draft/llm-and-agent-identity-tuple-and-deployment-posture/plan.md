@@ -43,6 +43,11 @@
 - `LAITDP1` and `LAITDP2` use the full boundary model: `*-integ-core`, `*-integ-linux`, `*-integ-macos`, `*-integ-windows`, and final `*-integ`.
 - `LAITDP0` stays a normal schema-v4 slice with `LAITDP0-integ` as the only integration merge task.
 
+## Execution Gate
+- `F0-exec-preflight` is the first task for this pack.
+- It fills `execution_preflight_report.md`, re-confirms `quality_gate_report.md` stays `ACCEPT`, reruns the pack validators on the orchestration checkout, and verifies `LAITDP0-code` and `LAITDP0-test` remain blocked on preflight completion.
+- This pack uses the standard execution-gate lane expected by the triad wrapper prompts and automation helpers.
+
 ## Validation Discipline
 - Run `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture"`.
 - Run `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture"`.

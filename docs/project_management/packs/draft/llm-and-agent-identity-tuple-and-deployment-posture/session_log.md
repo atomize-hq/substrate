@@ -51,3 +51,87 @@
   - Keep the pack on the orchestration branch and start execution only through the generated triad tasks.
   - Run `CP1-ci-checkpoint` only after `LAITDP1-integ-core` is green.
   - Run `CP2-ci-checkpoint` only after `LAITDP2-integ-core` is green.
+
+## START — 2026-04-23T13:35:19Z — planning — initial gate scaffolding (superseded)
+- Feature: `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/`
+- Branch: `feat/llm-and-agent-identity-tuple-and-deployment-posture`
+- Goal: add a missing custom pack-local initial gate and wire it in as the first task without enabling the separate execution-preflight lane.
+- Inputs read:
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/quality_gate_report.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md`
+  - `docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md`
+  - `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+  - `docs/project_management/system/templates/kickoff/kickoff_exec_preflight.md.tmpl`
+
+## END — 2026-04-23T13:37:02Z — planning — initial gate scaffolding (superseded)
+- Summary of changes:
+  - Added a temporary feature-level kickoff prompt for a custom pack-local initial gate.
+  - Added a temporary ops task to `tasks.json` as the first task in the pack.
+  - Blocked `LAITDP0-code` and `LAITDP0-test` on that custom gate.
+  - Updated `plan.md` and `quality_gate_report.md` to document the custom gate and keep the ownership story aligned with `meta.execution_gates=false`.
+- Files created or modified:
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/` (temporary custom initial-gate prompt; removed later)
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/quality_gate_report.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md`
+- Validation commands run (with results):
+  - `jq -e . docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json >/dev/null` → `0` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture"` → `0` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture"` → `0` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture"` → `0` → `PASS`
+  - `rg -n '^RECOMMENDATION: ACCEPT$|Recommendation: \`ACCEPT\`' docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/quality_gate_report.md` → matches present → `PASS`
+  - `jq -r '.tasks[] | select(.id=="LAITDP0-code" or .id=="LAITDP0-test") | [.id, (.depends_on | join(","))] | @tsv' docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json` → both rows depend on the custom initial gate → `PASS`
+  - `jq -r '.meta.execution_gates' docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json` → `false` → `PASS`
+  - `make planning-micro-lint FEATURE_DIR="docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture" OWNED_PATHS="plan.md tasks.json session_log.md quality_gate_report.md kickoff_prompts"` → `0` → `PASS`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - This custom gate was later superseded by the standard `F0-exec-preflight` gate.
+
+## START — 2026-04-23T13:45:22Z — planning — execution gate correction
+- Feature: `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/`
+- Branch: `feat/llm-and-agent-identity-tuple-and-deployment-posture`
+- Goal: replace the superseded custom pack-local initial-gate approach with the standard `F0-exec-preflight` execution gate required by the wrapper/task automation flow.
+- Inputs read:
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/quality_gate_report.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/execution_preflight_report.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md`
+  - `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
+  - `docs/project_management/system/scripts/task_start.sh`
+  - `docs/project_management/system/prompts/triad_wrappers/triad_wrapper.md`
+  - `docs/project_management/system/prompts/triad_wrappers/triad_unified_wrapper_checkpoint_aware.md`
+
+## END — 2026-04-23T13:45:22Z — planning — execution gate correction
+- Summary of changes:
+  - Replaced the superseded custom initial-gate flow with standard `F0-exec-preflight` wiring in the pack task graph and kickoff prompts.
+  - Added `execution_preflight_report.md` plus the standard `kickoff_prompts/F0-exec-preflight.md`.
+  - Added slice closeout reports for `LAITDP0` through `LAITDP2` so final integration tasks satisfy schema-v4 closeout requirements.
+  - Removed the obsolete custom initial-gate prompt file so the pack carries a single execution-gate story.
+- Files created or modified:
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/quality_gate_report.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/execution_preflight_report.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/F0-exec-preflight.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/kickoff_prompts/LAITDP0-integ.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-integ.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-closeout_report.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-closeout_report.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-closeout_report.md`
+- Validation commands run (with results):
+  - `jq -e . docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json >/dev/null` → `0` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture"` → `0` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture"` → `0` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture"` → `0` → `PASS`
+  - `make planning-micro-lint FEATURE_DIR="docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture" OWNED_PATHS="plan.md tasks.json session_log.md quality_gate_report.md execution_preflight_report.md kickoff_prompts slices/LAITDP0 slices/LAITDP1 slices/LAITDP2"` → `0` → `PASS`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Run `F0-exec-preflight` on the orchestration checkout before starting `LAITDP0-code` or `LAITDP0-test`.

@@ -18,9 +18,11 @@ Do not edit planning docs inside the worktree.
 - Do not merge planning-doc changes from the orchestration branch into this worktree.
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, and `make integ-checks`.
 - Verify `CP2-ci-checkpoint` is complete and recorded in `session_log.md`.
+- Complete the slice closeout gate report:
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-closeout_report.md`
 
 ## End Checklist
 1. Ensure the merged state is committed and local integration gates are green.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="LAITDP2-integ"`.
-3. Hand off merge notes and any residual risks to the operator.
+3. Hand off merge notes, closeout-report updates, and any residual risks to the operator.
 4. Do not delete the worktree.

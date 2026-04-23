@@ -7,7 +7,7 @@
       "docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md"
     ],
     "cross_platform": true,
-    "execution_gates": false,
+    "execution_gates": true,
     "automation": {
       "enabled": true,
       "orchestration_branch": "feat/llm-and-agent-identity-tuple-and-deployment-posture"
@@ -28,6 +28,46 @@
     ]
   },
   "tasks": [
+    {
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate (feature start)",
+      "type": "ops",
+      "phase": "F0",
+      "status": "pending",
+      "description": "Run the execution preflight gate before LAITDP0 begins.",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/quality_gate_report.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/execution_preflight_report.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/manual_testing_playbook.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/F0-exec-preflight.md"
+      ],
+      "acceptance_criteria": [
+        "The execution preflight report is completed with a clear recommendation.",
+        "The planning quality gate remains `ACCEPT` and the task graph validates cleanly before LAITDP0 begins."
+      ],
+      "start_checklist": [
+        "Verify the orchestration checkout is on the feature branch.",
+        "Read plan.md, tasks.json, session_log.md, quality_gate_report.md, and the kickoff prompt.",
+        "Confirm `quality_gate_report.md` still says `RECOMMENDATION: ACCEPT`.",
+        "Complete execution_preflight_report.md with ACCEPT/REVISE and required fixes"
+      ],
+      "end_checklist": [
+        "Complete: docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/execution_preflight_report.md",
+        "Record the gate summary in session_log.md.",
+        "Mark this task completed in tasks.json before starting LAITDP0."
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": [],
+      "concurrent_with": []
+    },
     {
       "id": "LAITDP0-code",
       "name": "LAITDP0 slice (code)",
@@ -71,7 +111,9 @@
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp0-code",
       "integration_task": "LAITDP0-integ",
       "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/kickoff_prompts/LAITDP0-code.md",
-      "depends_on": [],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
       "concurrent_with": [
         "LAITDP0-test"
       ],
@@ -123,7 +165,9 @@
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp0-test",
       "integration_task": "LAITDP0-integ",
       "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/kickoff_prompts/LAITDP0-test.md",
-      "depends_on": [],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
       "concurrent_with": [
         "LAITDP0-code"
       ],
@@ -144,6 +188,7 @@
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-closeout_report.md",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md",
         "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
@@ -170,6 +215,7 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests.",
         "make integ-checks",
+        "Complete slice closeout gate report: docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP0-integ\"",
         "Update tasks.json and session_log.md on the orchestration branch."
       ],
@@ -307,6 +353,7 @@
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-closeout_report.md",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
         "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
@@ -522,6 +569,7 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests.",
         "make integ-checks",
+        "Complete slice closeout gate report: docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP1-integ\"",
         "Update tasks.json and session_log.md on the orchestration branch."
       ],
@@ -663,6 +711,7 @@
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-closeout_report.md",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
         "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
@@ -878,6 +927,7 @@
         "cargo clippy --workspace --all-targets -- -D warnings",
         "Run relevant tests.",
         "make integ-checks",
+        "Complete slice closeout gate report: docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-closeout_report.md",
         "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP2-integ\"",
         "Update tasks.json and session_log.md on the orchestration branch."
       ],
