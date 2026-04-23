@@ -359,3 +359,23 @@
   - Feature smoke: run `24855623241` — `https://github.com/atomize-hq/substrate/actions/runs/24855623241` — `failure` on `linux`, `macos`
 - Remediation:
   - Platform-fix task dependencies were corrected from `["LAITDP2-integ-core","CP2-ci-checkpoint"]` to `["LAITDP2-integ-core"]` before starting failing platform tasks.
+
+## END — 2026-04-23T20:09:51Z — integration — LAITDP2-integ-linux
+- HEAD: `64577d4cc833530cd7a291a8699d6c1248b33ace`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP2/integ-linux/last_message.md`
+- GitHub smoke evidence: run `24856003420` — `https://github.com/atomize-hq/substrate/actions/runs/24856003420` — `success` on `linux`
+- Checks:
+  - `SUBSTRATE_SMOKE_SLICE_ID=LAITDP2 SUBSTRATE_SMOKE_REPO_ROOT="$PWD" bash scripts/ci/feature-smoke/llm-and-agent-identity-tuple-and-deployment-posture/linux-smoke.sh`
+  - `cargo fmt`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - `make triad-task-finish TASK_ID="LAITDP2-integ-linux"`
+
+## END — 2026-04-23T20:09:51Z — integration — LAITDP2-integ-macos
+- HEAD: `21c6fb2708da414343475b7898e43a602c411856`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP2/integ-macos/last_message.md`
+- GitHub smoke evidence: run `24856162669` — `https://github.com/atomize-hq/substrate/actions/runs/24856162669` — `success` on `macos`
+- Checks:
+  - `SUBSTRATE_SMOKE_SLICE_ID=LAITDP2 SUBSTRATE_SMOKE_REPO_ROOT="$PWD" bash scripts/ci/feature-smoke/llm-and-agent-identity-tuple-and-deployment-posture/macos-smoke.sh` (local Linux host correctly skipped Darwin-only execution)
+  - `cargo test -p agent-api-types laitdp2_ -- --nocapture`
+  - `cargo test -p agent-api-types gateway_integrated_auth_validation -- --nocapture`
+  - `make triad-task-finish TASK_ID="LAITDP2-integ-macos"`
