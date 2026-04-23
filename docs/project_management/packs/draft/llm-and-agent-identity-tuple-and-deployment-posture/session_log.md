@@ -246,3 +246,13 @@
   - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json`
   - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md`
   - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md`
+- Checkpoint dispatch evidence:
+  - Compile parity: run `24845202359` — `https://github.com/atomize-hq/substrate/actions/runs/24845202359` — `failure` on `ubuntu-24.04`, `macos-14`, `windows-2022`
+  - Feature smoke: run `24845358473` — `https://github.com/atomize-hq/substrate/actions/runs/24845358473` — `failure` on `linux`, `macos`
+- Resume notes:
+  - `LAITDP1-integ-linux` was already marked `in_progress` without live pid or persisted log artifacts.
+  - Platform-fix task dependencies were corrected from `["LAITDP1-integ-core","CP1-ci-checkpoint"]` to `["LAITDP1-integ-core"]` before relaunching the failing platform tasks.
+
+## END — 2026-04-23T16:03:03Z — integration — LAITDP1-integ-core
+- HEAD: `6361b04e352b7cb8aafb7804b51985fb59bb0891`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP1/integ-core/last_message.md`

@@ -385,7 +385,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP1-integ-core\""
       ],
-  "status": "completed",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-core"
     },
@@ -395,8 +395,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "LAITDP1-integ-core",
-        "CP1-ci-checkpoint"
+        "LAITDP1-integ-core"
       ],
       "description": "Green the LAITDP1 platform-fix branch for Linux after CP1.",
       "end_checklist": [
@@ -432,7 +431,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP1-integ-linux\""
       ],
-  "status": "in_progress",
+      "status": "in_progress",
       "type": "integration",
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-linux"
     },
@@ -442,8 +441,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "LAITDP1-integ-core",
-        "CP1-ci-checkpoint"
+        "LAITDP1-integ-core"
       ],
       "description": "Green the LAITDP1 platform-fix branch for macOS after CP1.",
       "end_checklist": [
@@ -490,8 +488,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "LAITDP1-integ-core",
-        "CP1-ci-checkpoint"
+        "LAITDP1-integ-core"
       ],
       "description": "Resolve Windows CI parity follow-up work for LAITDP1 after CP1 when fixes are required.",
       "end_checklist": [
