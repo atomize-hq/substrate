@@ -113,6 +113,13 @@ Full planning will create or refine these docs:
 - `slices/LAITDP1/LAITDP1-spec.md`
 - `slices/LAITDP2/LAITDP2-spec.md`
 
+## Contract lock decisions adopted for downstream planning
+
+- `identity_tuple` and `placement_posture` are the canonical machine-readable object names owned by `identity-tuple-schema-spec.md`.
+- `direct_provider_path` records host-only direct provider fulfillment without `substrate_gateway` mediation and requires `host_only` when tuple and posture objects are published together.
+- `provider` and `auth_authority` use independent omission semantics. Omission is encoded by field absence, never by `null`, empty strings, or placeholder tokens.
+- `telemetry-spec.md` owns placement and projection of `identity_tuple` and `placement_posture`. It does not redefine object names, token grammar, or omission rules.
+
 ## Coverage matrix (surface → authoritative doc)
 
 | Surface | Authoritative doc | What must be explicitly defined |
@@ -124,12 +131,12 @@ Full planning will create or refine these docs:
 | Config and policy file families, patch locations, and precedence order | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md` | file locations, precedence order, and the deny-by-default policy posture already in force |
 | Existing key-path definitions for `llm.gateway.mode`, `llm.fail_closed.routing`, `llm.secrets.env_allowed`, and `agents.host_credentials.read.allowed_backends` | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md` | key paths, types, defaults, and merge strategy |
 | Backend id format and the rule that backend ids stay adapter/runtime selectors rather than tuple substitutes | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md` | `<kind>:<name>` format and the non-equivalence boundary against tuple semantics |
-| Operator-visible meaning of `client`, `router`, `provider`, `auth_authority`, and `protocol` | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md` | singular operator meaning for each tuple field |
-| Operator-visible meaning of `in_world`, `host_only`, and `host_to_world_bridge` | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md` | singular operator meaning for each posture token and the transport-only meaning of the bridge |
+| Operator-visible meaning of `client`, `router`, `provider`, `auth_authority`, and `protocol` | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md` | singular operator meaning for each tuple field, including the current router ids `substrate_gateway` and `direct_provider_path` |
+| Operator-visible meaning of `in_world`, `host_only`, and `host_to_world_bridge` | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md` | singular operator meaning for each posture token, the transport-only meaning of the bridge, and the rule that `direct_provider_path` requires `host_only` |
 | Additive human-readable status and diagnostics wording for tuple and placement metadata on existing gateway entrypoints | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md` | rendered wording, no-new-command rule, and exit-taxonomy reuse |
 | Example credential-source paths named by ADR-0042, including `~/.codex/auth.json`, as illustrative examples rather than new Substrate-owned path contracts | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md` | illustrative-only rule and boundary against new filesystem contract scope |
-| Machine-readable identity-tuple object shape | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md` | field list, field types, defaults, and absence semantics |
-| Machine-readable placement-posture object shape | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md` | value set, related facets, defaults, and absence semantics |
+| Machine-readable identity-tuple object shape | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md` | canonical object name `identity_tuple`, required and optional fields, token grammar, and omission semantics |
+| Machine-readable placement-posture object shape | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md` | canonical object name `placement_posture`, `execution` value set, bridge facet, defaults, and omission semantics |
 | Canonical token grammar for tuple ids | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md` | lowercase snake_case rules for `client`, `router`, `provider`, and `auth_authority`; lowercase dotted rule for `protocol` |
 | Machine-readable compatibility posture for future tuple-field additions | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md` | additive-field rules and non-breaking extension boundary |
 | Routing-hint request semantics and provider-selection decision flow | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/policy-spec.md` | evaluation inputs, ordering, and accepted-hint behavior |
@@ -137,8 +144,8 @@ Full planning will create or refine these docs:
 | Direct-provider fulfillment permission boundary and its interaction with router identity and placement posture | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/policy-spec.md` | explicit permission rule, policy gate, and router/posture interaction |
 | Bridge transport-only enforcement at the policy layer | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/policy-spec.md` | no-second-control-plane rule and no implicit authority escalation |
 | Tuple-axis policy key paths under `llm.constraints.*` | `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md` | key names, defaults, narrowing behavior, and the boundary against ADR-0042 |
-| Additive trace field family for tuple metadata | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md` | field names, field types, defaults, and absence semantics for trace publication |
-| Additive machine-readable status and diagnostics field placement for tuple metadata outside `client_wiring.*` | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md` | field placement, publication rules, and boundary against the externally owned status envelope |
+| Additive trace field family for tuple metadata | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md` | placement and projection rules for `identity_tuple` and `placement_posture` in trace publication |
+| Additive machine-readable status and diagnostics field placement for tuple metadata outside `client_wiring.*` | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md` | top-level placement of `identity_tuple` and `placement_posture`, publication rules, and boundary against the externally owned status envelope |
 | Redaction and non-secret rules for tuple metadata in trace, status, and diagnostics | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md` | redaction rules, secret absence, and safe publication bounds |
 | Canonical trace vocabulary and correlation keys reused by this feature | `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md` | correlation vocabulary, join keys, and trace-authority boundary |
 | Rule that tuple metadata augments rather than replaces the canonical trace vocabulary | `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md` | augmentation-only rule and collision avoidance with canonical keys |
