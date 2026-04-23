@@ -379,3 +379,16 @@
   - `cargo test -p agent-api-types laitdp2_ -- --nocapture`
   - `cargo test -p agent-api-types gateway_integrated_auth_validation -- --nocapture`
   - `make triad-task-finish TASK_ID="LAITDP2-integ-macos"`
+
+## END — 2026-04-23T20:19:55Z — checkpoint — CP2-ci-checkpoint
+- Candidate checkout SHA: `b6e116e5a70a110f3eebac26fa4b5a8a409d9ce9`
+- Combined candidate branch: `llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-cp2-candidate`
+- Checkpoint dispatch evidence:
+  - Compile parity rerun: run `24856456031` — `https://github.com/atomize-hq/substrate/actions/runs/24856456031` — `success` on `macos-14`, `ubuntu-24.04`, `windows-2022`
+  - Feature smoke rerun: run `24856587425` — `https://github.com/atomize-hq/substrate/actions/runs/24856587425` — `success` on `linux`, `macos`
+- Additional preserved evidence:
+  - Initial compile parity run `24855498756` passed for candidate `974565f5bbd6f2d39a02d5cd385f1fc5d9579cd9`.
+  - Initial feature smoke run `24855623241` failed for candidate `974565f5bbd6f2d39a02d5cd385f1fc5d9579cd9` because the repo-level smoke scripts still rejected `SUBSTRATE_SMOKE_SLICE_ID=LAITDP2`.
+  - Linux-only follow-up smoke run `24856003420` passed for `LAITDP2-integ-linux`.
+  - macOS-only follow-up smoke run `24856162669` passed for `LAITDP2-integ-macos`.
+- Result: CP2 is green and `CP2-ci-checkpoint` is marked `completed`.

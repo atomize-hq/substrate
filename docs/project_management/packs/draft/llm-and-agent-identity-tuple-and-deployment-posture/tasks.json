@@ -1014,7 +1014,7 @@
         "Read the checkpoint plan, tasks.json, and session log.",
         "Compute the checkpoint checkout SHA from `LAITDP2-integ-core`."
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     },
