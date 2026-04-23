@@ -261,3 +261,6 @@
   - `LAITDP1-integ-core` advanced to `6361b04e352b7cb8aafb7804b51985fb59bb0891`.
   - Existing CP1 runs `24845202359` and `24845358473` validate older SHA `12a4dddc13f57b1f624a214917a2c73f87ae4f70` and are stale for checkpoint closeout.
   - CP1 will be re-dispatched against `6361b04e352b7cb8aafb7804b51985fb59bb0891` before any additional platform-fix branching decisions are finalized.
+- Refreshed checkpoint dispatch evidence for candidate `6361b04e352b7cb8aafb7804b51985fb59bb0891`:
+  - Compile parity rerun: run `24845569932` — `https://github.com/atomize-hq/substrate/actions/runs/24845569932` — `failure` on `ubuntu-24.04`, `macos-14`, `windows-2022`
+  - Feature smoke rerun: run `24845639004` — `https://github.com/atomize-hq/substrate/actions/runs/24845639004` — `failure` on `linux`, `macos`
