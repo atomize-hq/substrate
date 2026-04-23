@@ -40,6 +40,7 @@ Canonical slice ids selected for this feature:
 ### Create
 - `crates/common/src/identity.rs`
 - `scripts/ci/feature-smoke/llm-and-agent-identity-tuple-and-deployment-posture/linux-smoke.sh`
+- `scripts/ci/feature-smoke/llm-and-agent-identity-tuple-and-deployment-posture/macos-smoke.sh`
 
 ### Edit
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md`
