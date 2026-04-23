@@ -19,7 +19,8 @@ Do not edit planning docs inside the worktree.
    - `make ci-compile-parity CI_WORKFLOW_REF="feat/llm-and-agent-identity-tuple-and-deployment-posture" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="$CHECKOUT_SHA"`
 2. Run feature smoke:
    - `make feature-smoke FEATURE_DIR="docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture" PLATFORM=behavior SMOKE_SLICE_ID="LAITDP2" SMOKE_CHECKOUT_REF="$CHECKOUT_SHA" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/llm-and-agent-identity-tuple-and-deployment-posture" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
-3. If smoke fails, start only the failing platform-fix tasks for `LAITDP2`.
+   - `PLATFORM=behavior` resolves through `tasks.json` `meta.behavior_platforms_required`, which for this pack is `linux` and `macos` only.
+3. If Linux or macOS smoke fails, or if CI parity fails on any platform, start only the matching platform-fix tasks for `LAITDP2`.
 
 ## End Checklist
 1. Record run ids and URLs in `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md`.

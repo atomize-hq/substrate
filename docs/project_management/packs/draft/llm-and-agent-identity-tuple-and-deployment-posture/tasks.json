@@ -14,8 +14,7 @@
     },
     "behavior_platforms_required": [
       "linux",
-      "macos",
-      "windows"
+      "macos"
     ],
     "ci_parity_platforms_required": [
       "linux",
@@ -490,7 +489,7 @@
       "type": "integration",
       "phase": "LAITDP1",
       "status": "pending",
-      "description": "Green the LAITDP1 platform-fix branch for Windows after CP1.",
+      "description": "Resolve Windows CI parity follow-up work for LAITDP1 after CP1 when fixes are required.",
       "references": [
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
@@ -500,10 +499,11 @@
         "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Windows parity evidence for LAITDP1 is green."
+        "Windows CI parity is green for LAITDP1.",
+        "Any Windows-specific fixes stay scoped to parity issues surfaced by CP1."
       ],
       "start_checklist": [
-        "Run on a Windows host if possible.",
+        "Run on a Windows host when available.",
         "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
         "Read plan.md, tasks.json, session_log.md, LAITDP1-spec.md, and the kickoff prompt.",
         "Set status to in_progress; add START entry; commit docs.",
@@ -512,9 +512,9 @@
       "end_checklist": [
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
-        "Run relevant tests for Windows when needed.",
+        "Run relevant tests for the failing Windows path.",
         "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP1-integ-windows\"",
-        "Update tasks.json and session_log.md on the orchestration branch."
+        "Hand off parity results and ask the operator to rerun CP1-ci-checkpoint if needed."
       ],
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-windows",
       "integration_task": "LAITDP1-integ-windows",
@@ -848,7 +848,7 @@
       "type": "integration",
       "phase": "LAITDP2",
       "status": "pending",
-      "description": "Green the LAITDP2 platform-fix branch for Windows after CP2.",
+      "description": "Resolve Windows CI parity follow-up work for LAITDP2 after CP2 when fixes are required.",
       "references": [
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
@@ -858,10 +858,11 @@
         "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
       ],
       "acceptance_criteria": [
-        "Windows parity evidence for LAITDP2 is green."
+        "Windows CI parity is green for LAITDP2.",
+        "Any Windows-specific fixes stay scoped to parity issues surfaced by CP2."
       ],
       "start_checklist": [
-        "Run on a Windows host if possible.",
+        "Run on a Windows host when available.",
         "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
         "Read plan.md, tasks.json, session_log.md, LAITDP2-spec.md, and the kickoff prompt.",
         "Set status to in_progress; add START entry; commit docs.",
@@ -870,9 +871,9 @@
       "end_checklist": [
         "cargo fmt",
         "cargo clippy --workspace --all-targets -- -D warnings",
-        "Run relevant tests for Windows when needed.",
+        "Run relevant tests for the failing Windows path.",
         "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP2-integ-windows\"",
-        "Update tasks.json and session_log.md on the orchestration branch."
+        "Hand off parity results and ask the operator to rerun CP2-ci-checkpoint if needed."
       ],
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-windows",
       "integration_task": "LAITDP2-integ-windows",

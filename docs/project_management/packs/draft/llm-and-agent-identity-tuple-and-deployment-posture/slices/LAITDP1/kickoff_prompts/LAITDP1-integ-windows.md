@@ -1,7 +1,7 @@
 # Kickoff: LAITDP1-integ-windows (integration platform-fix — windows)
 
 ## Scope
-- Resolve Windows follow-up work after `CP1-ci-checkpoint`.
+- Resolve Windows CI parity follow-up work after `CP1-ci-checkpoint`.
 - This task may modify production code or tests as needed to restore Windows parity for `LAITDP1`.
 - Spec: `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md`
 
@@ -18,9 +18,10 @@ Do not edit planning docs inside the worktree.
 - Merge `LAITDP1-integ-core` into this worktree before making Windows fixes.
 - Keep fixes narrow and limited to Windows parity issues surfaced by CP1.
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, and relevant tests.
+- This task is parity-only. Do not dispatch feature smoke from this task.
 
 ## End Checklist
-1. Ensure Windows parity is green and capture the run id or command evidence from CP1 follow-up work.
+1. Ensure Windows CI parity is green and capture the run id or command evidence from CP1 follow-up work.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="LAITDP1-integ-windows"`.
-3. Hand off Windows notes and evidence to the operator.
+3. Hand off Windows notes and evidence to the operator and ask for a checkpoint rerun if parity needs confirmation.
 4. Do not delete the worktree.

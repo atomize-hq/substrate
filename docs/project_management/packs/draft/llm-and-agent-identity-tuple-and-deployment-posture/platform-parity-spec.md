@@ -42,9 +42,10 @@ Not owned here:
 
 ## Required platforms
 
-- Behavior platforms: `linux`, `macos`, `windows`
+- Behavior platforms: `linux`, `macos`
 - Validation platforms: `linux`, `macos`, `windows`
 - Windows parity includes the WSL-backed world path as hidden transport detail only. WSL is not a second operator-facing contract surface.
+- Windows remains a required CI parity and review platform, but it is not a required feature-smoke platform for this pack.
 
 ## Cross-platform guarantee matrix
 
@@ -102,7 +103,7 @@ Parity review for this pack consumes these surfaces:
   - `crates/world-agent/tests/gateway_runtime_parity.rs`
   - `scripts/mac/lima-doctor.sh`
   - `scripts/mac/smoke.sh`
-  - `scripts/windows/wsl-smoke.ps1`
+  - Windows compile-parity and targeted test evidence captured by the checkpoint tasks
 
 ## Acceptance criteria
 

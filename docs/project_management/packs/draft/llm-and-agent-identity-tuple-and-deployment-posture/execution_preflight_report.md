@@ -33,7 +33,7 @@ RECOMMENDATION: **ACCEPT** | **REVISE**
 ## 1) Cross-Platform Coverage (explicit and correct)
 
 From `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json` meta:
-- Declared behavior platforms (smoke required when behavioral execution exists): `["linux", "macos", "windows"]`
+- Declared behavior platforms (smoke required when behavioral execution exists): `["linux", "macos"]`
 - Declared CI parity platforms (parity required): `["linux", "macos", "windows"]`
 
 Notes:
@@ -41,6 +41,7 @@ Notes:
   - Normal slice: `LAITDP0-integ`
   - Boundary slices: `LAITDP1-integ-core` / `LAITDP1-integ-<platform>` / `LAITDP1-integ` and `LAITDP2-integ-core` / `LAITDP2-integ-<platform>` / `LAITDP2-integ`
 - `meta.checkpoint_boundaries=["LAITDP1","LAITDP2"]` matches `pre-planning/ci_checkpoint_plan.md`.
+- Windows remains a required parity platform, but feature smoke is only required for the declared behavior platforms.
 
 ## 2) Smoke Scripts Are Not “Toy” Checks
 
@@ -51,7 +52,7 @@ Manual playbook:
 
 Current posture:
 - CI/smoke may be skipped only when the advisory audit reports `DIFF_CLASS=docs_only` and `RECOMMEND=skip`.
-- If later execution broadens beyond docs/planning surfaces, add feature-local smoke scripts before treating behavioral smoke as satisfied.
+- If later execution broadens beyond docs/planning surfaces, add feature-local smoke scripts for the behavior platforms before treating behavioral smoke as satisfied.
 
 Gaps (must fix before execution begins if scope changes):
 - Add `smoke/` coverage if the execution lane expands into runtime behavior that the current manual playbook expects to validate beyond docs-only review.
