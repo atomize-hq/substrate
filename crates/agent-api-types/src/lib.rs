@@ -860,7 +860,7 @@ impl GatewayIntegratedAuthPayloadV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "GatewayLifecycleRequestDef")]
 pub struct GatewayLifecycleRequestV1 {
     pub profile: Option<String>,
     pub cwd: Option<String>,
@@ -871,6 +871,57 @@ pub struct GatewayLifecycleRequestV1 {
     pub world_network: Option<WorldNetworkRoutingV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_tuple: Option<IdentityTuple>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement_posture: Option<PlacementPosture>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GatewayLifecycleRequestDef {
+    profile: Option<String>,
+    cwd: Option<String>,
+    env: Option<HashMap<String, String>>,
+    agent_id: String,
+    policy_snapshot: PolicySnapshotV3,
+    #[serde(default)]
+    world_network: Option<WorldNetworkRoutingV1>,
+    #[serde(default)]
+    integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
+    #[serde(default)]
+    identity_tuple: Option<IdentityTuple>,
+    #[serde(default)]
+    placement_posture: Option<PlacementPosture>,
+}
+
+impl GatewayLifecycleRequestV1 {
+    pub fn validate_identity_contract(&self) -> Result<(), String> {
+        validate_identity_tuple_and_placement_posture(
+            self.identity_tuple.as_ref(),
+            self.placement_posture.as_ref(),
+        )
+    }
+}
+
+impl TryFrom<GatewayLifecycleRequestDef> for GatewayLifecycleRequestV1 {
+    type Error = String;
+
+    fn try_from(value: GatewayLifecycleRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            profile: value.profile,
+            cwd: value.cwd,
+            env: value.env,
+            agent_id: value.agent_id,
+            policy_snapshot: value.policy_snapshot,
+            world_network: value.world_network,
+            integrated_auth: value.integrated_auth,
+            identity_tuple: value.identity_tuple,
+            placement_posture: value.placement_posture,
+        };
+        request.validate_identity_contract()?;
+        Ok(request)
+    }
 }
 
 pub fn validate_gateway_integrated_auth_payload(
@@ -1262,6 +1313,58 @@ mod tests {
         .expect_err("invalid routing/posture combination should fail");
 
         assert!(err.to_string().contains("host_to_world_bridge"));
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_keeps_tuple_metadata_top_level_when_unavailable() {
+        let response = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "unavailable",
+            "identity_tuple": {
+                "client": "codex",
+                "router": "substrate_gateway",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect("unavailable lifecycle response should keep additive tuple metadata");
+
+        let roundtrip = serde_json::to_value(&response).expect("serialize lifecycle response");
+        assert_eq!(roundtrip.pointer("/status"), Some(&json!("unavailable")));
+        assert_eq!(roundtrip.pointer("/client_wiring"), None);
+        assert_eq!(
+            roundtrip.pointer("/identity_tuple/client"),
+            Some(&json!("codex"))
+        );
+        assert_eq!(
+            roundtrip.pointer("/placement_posture/execution"),
+            Some(&json!("in_world"))
+        );
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_rejects_secret_like_tuple_values() {
+        let err = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "available",
+            "identity_tuple": {
+                "client": "codex",
+                "router": "substrate_gateway",
+                "provider": "https://api.openai.com/v1",
+                "auth_authority": "~/.codex/auth.json",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect_err("secret-like tuple metadata should fail validation");
+
+        let error_text = err.to_string();
+        assert!(
+            error_text.contains("provider") || error_text.contains("auth_authority"),
+            "expected validation error to cite the rejected tuple fields, got: {error_text}"
+        );
     }
 
     #[test]

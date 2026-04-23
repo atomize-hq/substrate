@@ -22,6 +22,36 @@ fn matches_backend_name(value: &str) -> bool {
         })
 }
 
+fn matches_identity_snake_case_id(value: &str) -> bool {
+    let mut bytes = value.bytes();
+    match bytes.next() {
+        Some(byte) if byte.is_ascii_lowercase() => {}
+        _ => return false,
+    }
+
+    let mut prev_underscore = false;
+    for byte in bytes {
+        match byte {
+            b'a'..=b'z' | b'0'..=b'9' => prev_underscore = false,
+            b'_' if !prev_underscore => prev_underscore = true,
+            _ => return false,
+        }
+    }
+
+    !prev_underscore
+}
+
+fn matches_identity_dotted_id(value: &str) -> bool {
+    let mut saw_dot = false;
+    for segment in value.split('.') {
+        if !matches_identity_snake_case_id(segment) {
+            return false;
+        }
+        saw_dot = true;
+    }
+    saw_dot && value.contains('.')
+}
+
 pub fn validate_backend_id(value: &str) -> Result<(), String> {
     let trimmed = value.trim();
     let Some((kind, name)) = trimmed.split_once(':') else {
@@ -39,6 +69,30 @@ pub fn validate_backend_id(value: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn validate_snake_case_id(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if matches_identity_snake_case_id(trimmed) {
+        Ok(())
+    } else {
+        Err(format!(
+            "invalid snake_case id '{}'; expected lowercase snake_case id",
+            trimmed
+        ))
+    }
+}
+
+pub fn validate_dotted_id(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if matches_identity_dotted_id(trimmed) {
+        Ok(())
+    } else {
+        Err(format!(
+            "invalid dotted id '{}'; expected lowercase dotted id",
+            trimmed
+        ))
+    }
+}
+
 fn validate_backend_ids(values: &[String], key: &str) -> Result<(), String> {
     for value in values {
         validate_backend_id(value).map_err(|_| {
@@ -52,11 +106,47 @@ fn validate_backend_ids(values: &[String], key: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_snake_case_ids(values: &[String], key: &str) -> Result<(), String> {
+    for value in values {
+        validate_snake_case_id(value).map_err(|_| {
+            format!(
+                "invalid {} entry '{}'; expected lowercase snake_case id",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_dotted_ids(values: &[String], key: &str) -> Result<(), String> {
+    for value in values {
+        validate_dotted_id(value).map_err(|_| {
+            format!(
+                "invalid {} entry '{}'; expected lowercase dotted id",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
 fn intersect_ordered(lhs: &[String], rhs: &[String]) -> Vec<String> {
     lhs.iter()
         .filter(|value| rhs.iter().any(|other| other == *value))
         .cloned()
         .collect()
+}
+
+fn narrow_constraints(lhs: &[String], rhs: &[String]) -> Vec<String> {
+    if lhs.is_empty() {
+        return rhs.to_vec();
+    }
+    if rhs.is_empty() {
+        return lhs.to_vec();
+    }
+    intersect_ordered(lhs, rhs)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -177,6 +267,7 @@ struct LlmPolicyFileV1 {
     fail_closed: LlmFailClosedPolicyFileV1,
     require_approval: bool,
     allowed_backends: Vec<String>,
+    constraints: LlmConstraintsPolicyFileV1,
     secrets: LlmSecretsPolicyFileV1,
 }
 
@@ -190,6 +281,15 @@ struct LlmFailClosedPolicyFileV1 {
 #[serde(deny_unknown_fields)]
 struct LlmSecretsPolicyFileV1 {
     env_allowed: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LlmConstraintsPolicyFileV1 {
+    routers: Vec<String>,
+    providers: Vec<String>,
+    protocols: Vec<String>,
+    auth_authorities: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -240,6 +340,7 @@ struct RawLlmPolicyV1 {
     fail_closed: RawLlmFailClosedPolicyV1,
     require_approval: bool,
     allowed_backends: Vec<String>,
+    constraints: RawLlmConstraintsPolicyV1,
     secrets: RawLlmSecretsPolicyV1,
 }
 
@@ -259,6 +360,15 @@ impl Default for RawLlmFailClosedPolicyV1 {
 #[serde(default, deny_unknown_fields)]
 struct RawLlmSecretsPolicyV1 {
     env_allowed: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct RawLlmConstraintsPolicyV1 {
+    routers: Vec<String>,
+    providers: Vec<String>,
+    protocols: Vec<String>,
+    auth_authorities: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
@@ -334,6 +444,10 @@ pub struct Policy {
     pub llm_fail_closed_routing: bool, // llm.fail_closed.routing
     pub llm_require_approval: bool,    // llm.require_approval
     pub llm_allowed_backends: Vec<String>, // llm.allowed_backends
+    pub llm_constraints_routers: Vec<String>, // llm.constraints.routers
+    pub llm_constraints_providers: Vec<String>, // llm.constraints.providers
+    pub llm_constraints_protocols: Vec<String>, // llm.constraints.protocols
+    pub llm_constraints_auth_authorities: Vec<String>, // llm.constraints.auth_authorities
     pub llm_secrets_env_allowed: Vec<String>, // llm.secrets.env_allowed
 
     // Agents
@@ -389,6 +503,10 @@ impl Default for Policy {
             llm_fail_closed_routing: true,
             llm_require_approval: false,
             llm_allowed_backends: Vec::new(),
+            llm_constraints_routers: Vec::new(),
+            llm_constraints_providers: Vec::new(),
+            llm_constraints_protocols: Vec::new(),
+            llm_constraints_auth_authorities: Vec::new(),
             llm_secrets_env_allowed: Vec::new(),
             agents_allowed_backends: Vec::new(),
             agents_fail_closed_routing: true,
@@ -657,6 +775,22 @@ impl Policy {
         self.llm_require_approval = self.llm_require_approval || other.llm_require_approval;
         self.llm_allowed_backends =
             intersect_ordered(&self.llm_allowed_backends, &other.llm_allowed_backends);
+        self.llm_constraints_routers = narrow_constraints(
+            &self.llm_constraints_routers,
+            &other.llm_constraints_routers,
+        );
+        self.llm_constraints_providers = narrow_constraints(
+            &self.llm_constraints_providers,
+            &other.llm_constraints_providers,
+        );
+        self.llm_constraints_protocols = narrow_constraints(
+            &self.llm_constraints_protocols,
+            &other.llm_constraints_protocols,
+        );
+        self.llm_constraints_auth_authorities = narrow_constraints(
+            &self.llm_constraints_auth_authorities,
+            &other.llm_constraints_auth_authorities,
+        );
         self.llm_secrets_env_allowed = intersect_ordered(
             &self.llm_secrets_env_allowed,
             &other.llm_secrets_env_allowed,
@@ -809,6 +943,10 @@ impl<'de> Deserialize<'de> for Policy {
             llm_fail_closed_routing: raw.llm.fail_closed.routing,
             llm_require_approval: raw.llm.require_approval,
             llm_allowed_backends: raw.llm.allowed_backends,
+            llm_constraints_routers: raw.llm.constraints.routers,
+            llm_constraints_providers: raw.llm.constraints.providers,
+            llm_constraints_protocols: raw.llm.constraints.protocols,
+            llm_constraints_auth_authorities: raw.llm.constraints.auth_authorities,
             llm_secrets_env_allowed: raw.llm.secrets.env_allowed,
             agents_allowed_backends: raw.agents.allowed_backends,
             agents_fail_closed_routing: raw.agents.fail_closed.routing,
@@ -836,6 +974,23 @@ impl<'de> Deserialize<'de> for Policy {
         };
         validate_backend_ids(&policy.llm_allowed_backends, "llm.allowed_backends")
             .map_err(serde::de::Error::custom)?;
+        validate_snake_case_ids(&policy.llm_constraints_routers, "llm.constraints.routers")
+            .map_err(serde::de::Error::custom)?;
+        validate_snake_case_ids(
+            &policy.llm_constraints_providers,
+            "llm.constraints.providers",
+        )
+        .map_err(serde::de::Error::custom)?;
+        validate_dotted_ids(
+            &policy.llm_constraints_protocols,
+            "llm.constraints.protocols",
+        )
+        .map_err(serde::de::Error::custom)?;
+        validate_snake_case_ids(
+            &policy.llm_constraints_auth_authorities,
+            "llm.constraints.auth_authorities",
+        )
+        .map_err(serde::de::Error::custom)?;
         validate_backend_ids(&policy.agents_allowed_backends, "agents.allowed_backends")
             .map_err(serde::de::Error::custom)?;
         validate_backend_ids(
@@ -889,6 +1044,12 @@ impl Serialize for Policy {
                 },
                 require_approval: self.llm_require_approval,
                 allowed_backends: self.llm_allowed_backends.clone(),
+                constraints: LlmConstraintsPolicyFileV1 {
+                    routers: self.llm_constraints_routers.clone(),
+                    providers: self.llm_constraints_providers.clone(),
+                    protocols: self.llm_constraints_protocols.clone(),
+                    auth_authorities: self.llm_constraints_auth_authorities.clone(),
+                },
                 secrets: LlmSecretsPolicyFileV1 {
                     env_allowed: self.llm_secrets_env_allowed.clone(),
                 },

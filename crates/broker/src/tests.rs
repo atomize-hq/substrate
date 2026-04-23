@@ -112,6 +112,12 @@ fn effective_policy_display_json_v3(policy: &Policy) -> serde_json::Value {
             },
             "require_approval": policy.llm_require_approval,
             "allowed_backends": &policy.llm_allowed_backends,
+            "constraints": {
+                "routers": &policy.llm_constraints_routers,
+                "providers": &policy.llm_constraints_providers,
+                "protocols": &policy.llm_constraints_protocols,
+                "auth_authorities": &policy.llm_constraints_auth_authorities,
+            },
             "secrets": {
                 "env_allowed": &policy.llm_secrets_env_allowed,
             },
