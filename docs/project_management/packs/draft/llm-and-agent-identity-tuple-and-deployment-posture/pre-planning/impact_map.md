@@ -38,7 +38,7 @@ Canonical slice ids selected for this feature:
 ## Touch set (explicit)
 
 ### Create
-- None
+- `crates/common/src/identity.rs`
 
 ### Edit
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md`
@@ -92,7 +92,6 @@ Canonical slice ids selected for this feature:
 - `docs/USAGE.md`
 - `crates/agent-api-types/src/lib.rs`
 - `crates/common/src/agent_events.rs`
-- `crates/common/src/identity.rs`
 - `crates/common/src/lib.rs`
 - `crates/shell/src/builtins/world_gateway.rs`
 - `crates/common/tests/agent_hub_event_envelope_schema.rs`
