@@ -92,6 +92,7 @@ Canonical slice ids selected for this feature:
 - `docs/USAGE.md`
 - `crates/agent-api-types/src/lib.rs`
 - `crates/shell/src/builtins/world_gateway.rs`
+- `crates/common/tests/agent_hub_event_envelope_schema.rs`
 - `crates/shell/tests/world_gateway.rs`
 - `crates/world-agent/src/gateway_runtime.rs`
 - `crates/world-agent/src/service.rs`
