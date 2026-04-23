@@ -256,3 +256,8 @@
 ## END — 2026-04-23T16:03:03Z — integration — LAITDP1-integ-core
 - HEAD: `6361b04e352b7cb8aafb7804b51985fb59bb0891`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP1/integ-core/last_message.md`
+
+- Checkpoint candidate update — 2026-04-23T16:03:54Z:
+  - `LAITDP1-integ-core` advanced to `6361b04e352b7cb8aafb7804b51985fb59bb0891`.
+  - Existing CP1 runs `24845202359` and `24845358473` validate older SHA `12a4dddc13f57b1f624a214917a2c73f87ae4f70` and are stale for checkpoint closeout.
+  - CP1 will be re-dispatched against `6361b04e352b7cb8aafb7804b51985fb59bb0891` before any additional platform-fix branching decisions are finalized.
