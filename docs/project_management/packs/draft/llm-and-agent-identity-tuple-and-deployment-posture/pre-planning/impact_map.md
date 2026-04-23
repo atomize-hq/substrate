@@ -101,6 +101,7 @@ Canonical slice ids selected for this feature:
 - `crates/shell/src/execution/policy_cmd.rs`
 - `crates/shell/src/execution/policy_model.rs`
 - `crates/common/tests/agent_hub_event_envelope_schema.rs`
+- `crates/shell/tests/replay_world.rs`
 - `crates/shell/tests/world_gateway.rs`
 - `crates/world-agent/src/gateway_runtime.rs`
 - `crates/world-agent/src/service.rs`
