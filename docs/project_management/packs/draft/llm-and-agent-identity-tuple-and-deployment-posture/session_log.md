@@ -203,3 +203,7 @@
 ## END — 2026-04-23T14:20:32Z — test — LAITDP0-test
 - HEAD: `7807a6149eb48d5777429b941a6a405b44bda986`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP0/test/last_message.md`
+
+## START — 2026-04-23T14:20:32Z — integration — LAITDP0-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture" TASK_ID="LAITDP0-integ" LAUNCH_CODEX=1`
