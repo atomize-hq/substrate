@@ -354,3 +354,8 @@
   - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md`
 - Preflight:
   - Skipped local smoke preflight because `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/smoke/` is absent.
+- Checkpoint dispatch evidence:
+  - Compile parity: run `24855498756` — `https://github.com/atomize-hq/substrate/actions/runs/24855498756` — `success` on `macos-14`, `ubuntu-24.04`, `windows-2022`
+  - Feature smoke: run `24855623241` — `https://github.com/atomize-hq/substrate/actions/runs/24855623241` — `failure` on `linux`, `macos`
+- Remediation:
+  - Platform-fix task dependencies were corrected from `["LAITDP2-integ-core","CP2-ci-checkpoint"]` to `["LAITDP2-integ-core"]` before starting failing platform tasks.

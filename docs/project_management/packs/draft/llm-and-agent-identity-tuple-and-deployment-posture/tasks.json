@@ -751,8 +751,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "LAITDP2-integ-core",
-        "CP2-ci-checkpoint"
+        "LAITDP2-integ-core"
       ],
       "description": "Green the LAITDP2 platform-fix branch for Linux after CP2.",
       "end_checklist": [
@@ -788,7 +787,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP2-integ-linux\""
       ],
-      "status": "in_progress",
+      "status": "pending",
       "type": "integration",
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-linux"
     },
@@ -798,8 +797,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "LAITDP2-integ-core",
-        "CP2-ci-checkpoint"
+        "LAITDP2-integ-core"
       ],
       "description": "Green the LAITDP2 platform-fix branch for macOS after CP2.",
       "end_checklist": [
@@ -846,8 +844,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "LAITDP2-integ-core",
-        "CP2-ci-checkpoint"
+        "LAITDP2-integ-core"
       ],
       "description": "Resolve Windows CI parity follow-up work for LAITDP2 after CP2 when fixes are required.",
       "end_checklist": [
@@ -1017,7 +1014,7 @@
         "Read the checkpoint plan, tasks.json, and session log.",
         "Compute the checkpoint checkout SHA from `LAITDP2-integ-core`."
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "ops",
       "worktree": null
     },
