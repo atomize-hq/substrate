@@ -5,6 +5,10 @@ use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::identity::{
+    validate_identity_tuple_and_placement_posture, IdentityTuple, PlacementPosture,
+};
+
 pub const AGENT_EVENT_CHANNEL_MAX_BYTES: usize = 64;
 
 /// Canonical set of agent event categories.
@@ -91,17 +95,11 @@ pub struct AgentEvent {
     )]
     pub channel: Option<String>,
 
-    // Tuple-compatible metadata (optional; semantics delegated to later ADRs)
+    // Tuple-compatible metadata (optional)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub client: Option<String>,
+    pub identity_tuple: Option<IdentityTuple>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub router: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub auth_authority: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub protocol: Option<String>,
+    pub placement_posture: Option<PlacementPosture>,
 
     // Legacy field (v1 producers should omit)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -152,11 +150,8 @@ impl AgentEvent {
             cmd_id: None,
             span_id: None,
             channel: None,
-            client: None,
-            router: None,
-            provider: None,
-            auth_authority: None,
-            protocol: None,
+            identity_tuple: None,
+            placement_posture: None,
             project: None,
         };
         let channel = event.channel.take();
@@ -218,6 +213,13 @@ impl AgentEvent {
                 "stream": if is_stderr { "stderr" } else { "stdout" },
                 "chunk": chunk.into(),
             }),
+        )
+    }
+
+    pub fn validate_identity_contract(&self) -> Result<(), String> {
+        validate_identity_tuple_and_placement_posture(
+            self.identity_tuple.as_ref(),
+            self.placement_posture.as_ref(),
         )
     }
 }

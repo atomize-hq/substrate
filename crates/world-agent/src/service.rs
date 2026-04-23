@@ -1315,11 +1315,8 @@ impl WorldAgentService {
                                 cmd_id: None,
                                 span_id: Some(span_id.clone()),
                                 channel: None,
-                                client: None,
-                                router: None,
-                                provider: None,
-                                auth_authority: None,
-                                protocol: None,
+                                identity_tuple: None,
+                                placement_posture: None,
                                 project: None,
                                 data: serde_json::json!({
                                     "world_fs_strategy_primary": primary.as_str(),
@@ -1575,6 +1572,8 @@ impl WorldAgentService {
             GatewayLifecycleResponseV1 {
                 status: GatewayStatusV1::Unavailable,
                 client_wiring: None,
+                identity_tuple: None,
+                placement_posture: None,
             }
         }
     }
