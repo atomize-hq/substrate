@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "feature": "llm-and-agent-identity-tuple-and-deployment-posture",
+  "strict_touch_validation": true,
+  "adr_paths": [
+    "docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md"
+  ]
+}
