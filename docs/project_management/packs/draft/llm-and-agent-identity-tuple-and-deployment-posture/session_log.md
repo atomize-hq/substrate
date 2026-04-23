@@ -392,3 +392,24 @@
   - Linux-only follow-up smoke run `24856003420` passed for `LAITDP2-integ-linux`.
   - macOS-only follow-up smoke run `24856162669` passed for `LAITDP2-integ-macos`.
 - Result: CP2 is green and `CP2-ci-checkpoint` is marked `completed`.
+
+## START — 2026-04-23T20:19:55Z — integration — LAITDP2-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture" SLICE_ID="LAITDP2" LAUNCH_CODEX=1`
+- Inputs:
+  - Core integration branch `llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-core`
+  - Platform fix branches `llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-linux` and `llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-macos`
+  - Windows no-op bookkeeping from orchestration branch
+
+## END — 2026-04-23T20:32:02Z — integration — LAITDP2-integ
+- HEAD: `0a34949f14cd1691b869cf8b3ab74f38edded7b3`
+- Merge commit on orchestration branch: `7e8c5fa82b37154a03a7eb001196d53776f34c4d`
+- Closeout docs commit on orchestration branch: `1931f78f3b9b25de78d2bf7923a79a0fc4c037b2`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP2/integ/last_message.md`
+- Checks:
+  - `cargo fmt`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - Targeted LAITDP2 tests and Linux/macOS smoke script checks
+  - `make integ-checks`
+  - `make triad-task-finish TASK_ID="LAITDP2-integ"`
+- Result: final integration is merged to orchestration and `LAITDP2-integ` is marked `completed`.
