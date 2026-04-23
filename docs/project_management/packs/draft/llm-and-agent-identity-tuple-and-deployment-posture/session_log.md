@@ -187,3 +187,11 @@
 - Next steps:
   - `LAITDP0-code` and `LAITDP0-test` may begin because the preflight recommendation is `ACCEPT`.
   - Do not claim feature smoke coverage until a later non-docs execution lane adds the required `smoke/` evidence and CI audit records.
+
+## START — 2026-04-23T14:08:50Z — code — LAITDP0-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture" SLICE_ID="LAITDP0"`
+
+## START — 2026-04-23T14:08:50Z — test — LAITDP0-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture" SLICE_ID="LAITDP0"`
