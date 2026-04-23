@@ -859,6 +859,25 @@ impl GatewayIntegratedAuthPayloadV1 {
     }
 }
 
+pub fn validate_gateway_backend_id_selector(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    let Some((kind, name)) = trimmed.split_once(':') else {
+        return Err(format!(
+            "invalid gateway backend_id '{}'; expected <kind>:<name>",
+            trimmed
+        ));
+    };
+
+    if !matches_backend_kind(kind) || !matches_backend_name(name) || name.contains(':') {
+        return Err(format!(
+            "invalid gateway backend_id '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+            trimmed
+        ));
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "GatewayLifecycleRequestDef")]
 pub struct GatewayLifecycleRequestV1 {
@@ -928,9 +947,13 @@ pub fn validate_gateway_integrated_auth_payload(
     payload: &GatewayIntegratedAuthPayloadV1,
 ) -> Result<(), String> {
     let backend_id = payload.backend_id.trim();
-    if backend_id.is_empty() {
-        return Err("request-provided integrated auth payload is missing backend_id".to_string());
-    }
+    validate_gateway_backend_id_selector(backend_id).map_err(|err| {
+        if backend_id.is_empty() {
+            "request-provided integrated auth payload is missing backend_id".to_string()
+        } else {
+            err
+        }
+    })?;
 
     let cli_codex = payload.cli_codex.as_ref();
     let api_env = payload.api_env.as_ref();
@@ -1010,6 +1033,20 @@ pub fn validate_gateway_integrated_auth_payload(
     }
 
     Ok(())
+}
+
+fn matches_backend_kind(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+fn matches_backend_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' || byte == b'-'
+        })
 }
 
 pub fn validate_gateway_integrated_auth_payload_for_selected_backend(
