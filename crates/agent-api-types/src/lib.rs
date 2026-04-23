@@ -860,7 +860,7 @@ impl GatewayIntegratedAuthPayloadV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "GatewayLifecycleRequestDef")]
 pub struct GatewayLifecycleRequestV1 {
     pub profile: Option<String>,
     pub cwd: Option<String>,
@@ -871,6 +871,57 @@ pub struct GatewayLifecycleRequestV1 {
     pub world_network: Option<WorldNetworkRoutingV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_tuple: Option<IdentityTuple>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement_posture: Option<PlacementPosture>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GatewayLifecycleRequestDef {
+    profile: Option<String>,
+    cwd: Option<String>,
+    env: Option<HashMap<String, String>>,
+    agent_id: String,
+    policy_snapshot: PolicySnapshotV3,
+    #[serde(default)]
+    world_network: Option<WorldNetworkRoutingV1>,
+    #[serde(default)]
+    integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
+    #[serde(default)]
+    identity_tuple: Option<IdentityTuple>,
+    #[serde(default)]
+    placement_posture: Option<PlacementPosture>,
+}
+
+impl GatewayLifecycleRequestV1 {
+    pub fn validate_identity_contract(&self) -> Result<(), String> {
+        validate_identity_tuple_and_placement_posture(
+            self.identity_tuple.as_ref(),
+            self.placement_posture.as_ref(),
+        )
+    }
+}
+
+impl TryFrom<GatewayLifecycleRequestDef> for GatewayLifecycleRequestV1 {
+    type Error = String;
+
+    fn try_from(value: GatewayLifecycleRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            profile: value.profile,
+            cwd: value.cwd,
+            env: value.env,
+            agent_id: value.agent_id,
+            policy_snapshot: value.policy_snapshot,
+            world_network: value.world_network,
+            integrated_auth: value.integrated_auth,
+            identity_tuple: value.identity_tuple,
+            placement_posture: value.placement_posture,
+        };
+        request.validate_identity_contract()?;
+        Ok(request)
+    }
 }
 
 pub fn validate_gateway_integrated_auth_payload(

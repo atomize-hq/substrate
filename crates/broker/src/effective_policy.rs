@@ -1,6 +1,6 @@
 use crate::policy::{
-    validate_backend_id, Policy, WorldFsDenyEnforcement, WorldFsDimensionPolicy,
-    WorldFsEnforcement, WorldFsIsolation,
+    validate_backend_id, validate_dotted_id, validate_snake_case_id, Policy,
+    WorldFsDenyEnforcement, WorldFsDimensionPolicy, WorldFsEnforcement, WorldFsIsolation,
 };
 use anyhow::{anyhow, Context, Result};
 use serde::ser::SerializeMap;
@@ -78,6 +78,8 @@ pub struct LlmPatch {
     pub require_approval: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_backends: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "LlmConstraintsPatch::is_empty")]
+    pub constraints: LlmConstraintsPatch,
     #[serde(skip_serializing_if = "LlmSecretsPatch::is_empty")]
     pub secrets: LlmSecretsPatch,
 }
@@ -87,6 +89,7 @@ impl LlmPatch {
         self.fail_closed.is_empty()
             && self.require_approval.is_none()
             && self.allowed_backends.is_none()
+            && self.constraints.is_empty()
             && self.secrets.is_empty()
     }
 }
@@ -114,6 +117,28 @@ pub struct LlmSecretsPatch {
 impl LlmSecretsPatch {
     fn is_empty(&self) -> bool {
         self.env_allowed.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct LlmConstraintsPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub providers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_authorities: Option<Vec<String>>,
+}
+
+impl LlmConstraintsPatch {
+    fn is_empty(&self) -> bool {
+        self.routers.is_none()
+            && self.providers.is_none()
+            && self.protocols.is_none()
+            && self.auth_authorities.is_none()
     }
 }
 
@@ -426,6 +451,19 @@ pub fn parse_policy_patch_yaml(path: &Path, raw: &str) -> Result<PolicyPatch> {
 
 fn validate_policy_patch(patch: &PolicyPatch) -> std::result::Result<(), String> {
     validate_backend_id_list_opt(&patch.llm.allowed_backends, "llm.allowed_backends")?;
+    validate_snake_case_id_list_opt(&patch.llm.constraints.routers, "llm.constraints.routers")?;
+    validate_snake_case_id_list_opt(
+        &patch.llm.constraints.providers,
+        "llm.constraints.providers",
+    )?;
+    validate_dotted_id_list_opt(
+        &patch.llm.constraints.protocols,
+        "llm.constraints.protocols",
+    )?;
+    validate_snake_case_id_list_opt(
+        &patch.llm.constraints.auth_authorities,
+        "llm.constraints.auth_authorities",
+    )?;
     validate_backend_id_list_opt(&patch.agents.allowed_backends, "agents.allowed_backends")?;
     validate_backend_id_list_opt(
         &patch.agents.host_credentials.read.allowed_backends,
@@ -445,6 +483,44 @@ fn validate_backend_id_list_opt(
         validate_backend_id(value).map_err(|_| {
             format!(
                 "invalid {} entry '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_snake_case_id_list_opt(
+    values: &Option<Vec<String>>,
+    key: &str,
+) -> std::result::Result<(), String> {
+    let Some(values) = values else {
+        return Ok(());
+    };
+    for value in values {
+        validate_snake_case_id(value).map_err(|_| {
+            format!(
+                "invalid {} entry '{}'; expected lowercase snake_case id",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_dotted_id_list_opt(
+    values: &Option<Vec<String>>,
+    key: &str,
+) -> std::result::Result<(), String> {
+    let Some(values) = values else {
+        return Ok(());
+    };
+    for value in values {
+        validate_dotted_id(value).map_err(|_| {
+            format!(
+                "invalid {} entry '{}'; expected lowercase dotted id",
                 key,
                 value.trim()
             )
@@ -898,6 +974,90 @@ pub fn resolve_effective_policy_with_explain(
                 merge_strategy: "replace".to_string(),
                 sources: vec![explain_source(
                     llm_allowed_backends_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (llm_constraints_routers, llm_constraints_routers_src) = resolve_replace(
+        effective.llm_constraints_routers.clone(),
+        global_patch.llm.constraints.routers.clone(),
+        workspace_patch.and_then(|p| p.llm.constraints.routers.clone()),
+        workspace_enabled,
+    );
+    effective.llm_constraints_routers = llm_constraints_routers;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "llm.constraints.routers".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    llm_constraints_routers_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (llm_constraints_providers, llm_constraints_providers_src) = resolve_replace(
+        effective.llm_constraints_providers.clone(),
+        global_patch.llm.constraints.providers.clone(),
+        workspace_patch.and_then(|p| p.llm.constraints.providers.clone()),
+        workspace_enabled,
+    );
+    effective.llm_constraints_providers = llm_constraints_providers;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "llm.constraints.providers".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    llm_constraints_providers_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (llm_constraints_protocols, llm_constraints_protocols_src) = resolve_replace(
+        effective.llm_constraints_protocols.clone(),
+        global_patch.llm.constraints.protocols.clone(),
+        workspace_patch.and_then(|p| p.llm.constraints.protocols.clone()),
+        workspace_enabled,
+    );
+    effective.llm_constraints_protocols = llm_constraints_protocols;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "llm.constraints.protocols".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    llm_constraints_protocols_src,
+                    &global_path,
+                    workspace_path,
+                )],
+            },
+        );
+    }
+
+    let (llm_constraints_auth_authorities, llm_constraints_auth_authorities_src) = resolve_replace(
+        effective.llm_constraints_auth_authorities.clone(),
+        global_patch.llm.constraints.auth_authorities.clone(),
+        workspace_patch.and_then(|p| p.llm.constraints.auth_authorities.clone()),
+        workspace_enabled,
+    );
+    effective.llm_constraints_auth_authorities = llm_constraints_auth_authorities;
+    if let Some(keys) = &mut explain_keys {
+        keys.insert(
+            "llm.constraints.auth_authorities".to_string(),
+            PolicyExplainKey {
+                merge_strategy: "replace".to_string(),
+                sources: vec![explain_source(
+                    llm_constraints_auth_authorities_src,
                     &global_path,
                     workspace_path,
                 )],
@@ -1389,6 +1549,18 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     if let Some(v) = &patch.llm.allowed_backends {
         target.llm_allowed_backends = v.clone();
     }
+    if let Some(v) = &patch.llm.constraints.routers {
+        target.llm_constraints_routers = v.clone();
+    }
+    if let Some(v) = &patch.llm.constraints.providers {
+        target.llm_constraints_providers = v.clone();
+    }
+    if let Some(v) = &patch.llm.constraints.protocols {
+        target.llm_constraints_protocols = v.clone();
+    }
+    if let Some(v) = &patch.llm.constraints.auth_authorities {
+        target.llm_constraints_auth_authorities = v.clone();
+    }
     if let Some(v) = &patch.llm.secrets.env_allowed {
         target.llm_secrets_env_allowed = v.clone();
     }
@@ -1638,6 +1810,19 @@ fn validate_and_finalize_effective_policy(policy: &mut Policy) -> Result<()> {
     }
 
     validate_backend_id_list(&policy.llm_allowed_backends, "llm.allowed_backends")?;
+    validate_snake_case_id_list(&policy.llm_constraints_routers, "llm.constraints.routers")?;
+    validate_snake_case_id_list(
+        &policy.llm_constraints_providers,
+        "llm.constraints.providers",
+    )?;
+    validate_dotted_id_list(
+        &policy.llm_constraints_protocols,
+        "llm.constraints.protocols",
+    )?;
+    validate_snake_case_id_list(
+        &policy.llm_constraints_auth_authorities,
+        "llm.constraints.auth_authorities",
+    )?;
     validate_backend_id_list(&policy.agents_allowed_backends, "agents.allowed_backends")?;
     validate_backend_id_list(
         &policy.agents_host_credentials_read_allowed_backends,
@@ -1652,6 +1837,32 @@ fn validate_backend_id_list(values: &[String], key: &str) -> Result<()> {
         validate_backend_id(value).map_err(|_| {
             anyhow!(
                 "invalid {} entry '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_snake_case_id_list(values: &[String], key: &str) -> Result<()> {
+    for value in values {
+        validate_snake_case_id(value).map_err(|_| {
+            anyhow!(
+                "invalid {} entry '{}'; expected lowercase snake_case id",
+                key,
+                value.trim()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_dotted_id_list(values: &[String], key: &str) -> Result<()> {
+    for value in values {
+        validate_dotted_id(value).map_err(|_| {
+            anyhow!(
+                "invalid {} entry '{}'; expected lowercase dotted id",
                 key,
                 value.trim()
             )
