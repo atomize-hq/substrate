@@ -796,8 +796,15 @@ fn world_gateway_status_json_uses_typed_runtime_contract() {
         .args(["world", "gateway", "status", "--json"])
         .assert()
         .code(0)
+        .stdout(predicate::str::contains("\"status\":\"available\""))
         .stdout(predicate::str::contains(
-            "{\"status\":\"available\",\"client_wiring\":{\"openai_base_url\":\"http://gateway.test/openai\",\"anthropic_base_url\":\"http://gateway.test/anthropic\"}}",
+            "\"client_wiring\":{\"openai_base_url\":\"http://gateway.test/openai\",\"anthropic_base_url\":\"http://gateway.test/anthropic\"}",
+        ))
+        .stdout(predicate::str::contains(
+            "\"identity_tuple\":{\"client\":\"human\",\"router\":\"substrate_gateway\",\"protocol\":\"openai.responses\",\"provider\":\"openai\"}",
+        ))
+        .stdout(predicate::str::contains(
+            "\"placement_posture\":{\"execution\":\"in_world\"}",
         ))
         .stderr(predicate::str::is_empty());
 }
@@ -818,7 +825,13 @@ fn world_gateway_status_json_preserves_unavailable_shape_from_runtime() {
         .args(["world", "gateway", "status", "--json"])
         .assert()
         .code(4)
-        .stdout("{\"status\":\"unavailable\"}\n")
+        .stdout(predicate::str::contains("\"status\":\"unavailable\""))
+        .stdout(predicate::str::contains(
+            "\"identity_tuple\":{\"client\":\"human\",\"router\":\"substrate_gateway\",\"protocol\":\"openai.responses\",\"provider\":\"openai\"}",
+        ))
+        .stdout(predicate::str::contains(
+            "\"placement_posture\":{\"execution\":\"in_world\"}",
+        ))
         .stderr(predicate::str::is_empty());
 }
 

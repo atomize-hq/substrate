@@ -9,7 +9,8 @@ use crate::execution::{WorldGatewayAction, WorldGatewayCmd, WorldGatewayStatusAr
 use agent_api_client::AgentClient;
 use agent_api_types::{
     GatewayApiEnvIntegratedAuthV1, GatewayCliCodexIntegratedAuthV1, GatewayIntegratedAuthPayloadV1,
-    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, GatewayStatusV1,
+    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, GatewayStatusV1, IdentityTuple,
+    PlacementExecution, PlacementPosture,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -29,8 +30,19 @@ const EXIT_TRANSIENT_FAILURE: i32 = 3;
 const EXIT_COMPONENT_UNAVAILABLE: i32 = 4;
 const EXIT_POLICY_FAILURE: i32 = 5;
 const CLI_CODEX_BACKEND: &str = "cli:codex";
+const API_OPENAI_BACKEND: &str = "api:openai";
+const API_ANTHROPIC_BACKEND: &str = "api:anthropic";
+const SUBSTRATE_GATEWAY_ROUTER: &str = "substrate_gateway";
 const CODEX_ACCOUNT_ID_ENV: &str = "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID";
 const CODEX_ACCESS_TOKEN_ENV: &str = "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN";
+const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
+const ANTHROPIC_API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
+
+struct GatewayLifecycleRequestContext {
+    request: GatewayLifecycleRequestV1,
+    identity_tuple: Option<IdentityTuple>,
+    placement_posture: Option<PlacementPosture>,
+}
 
 pub fn run(cmd: &WorldGatewayCmd) -> i32 {
     match run_inner(cmd) {
@@ -61,11 +73,19 @@ fn run_typed_action_with_status_args(
     args: &WorldGatewayStatusArgs,
 ) -> anyhow::Result<i32> {
     let response = if world_routing_disabled() {
-        synthesized_unavailable_response()
+        build_gateway_request_context()
+            .map(|context| synthesized_unavailable_response(&context))
+            .unwrap_or_else(|_| synthesized_unavailable_response_without_context())
     } else {
-        match call_gateway_action(GatewayAction::Status) {
+        let request_context = match build_gateway_request_context() {
+            Ok(context) => context,
+            Err(err) => return Ok(classify_and_print_gateway_error(command, err)),
+        };
+        match call_gateway_action(GatewayAction::Status, &request_context) {
             Ok(response) => response,
-            Err(err) if error_is_component_unavailable(&err) => synthesized_unavailable_response(),
+            Err(err) if error_is_component_unavailable(&err) => {
+                synthesized_unavailable_response(&request_context)
+            }
             Err(err) => return Ok(classify_and_print_gateway_error(command, err)),
         }
     };
@@ -78,6 +98,7 @@ fn run_typed_action_with_status_args(
                 "{}: unavailable (required gateway/world component unavailable)",
                 command_for_status(command, args)
             );
+            print_status_identity_metadata_to_stderr(&response);
         }
         return Ok(EXIT_COMPONENT_UNAVAILABLE);
     }
@@ -86,6 +107,7 @@ fn run_typed_action_with_status_args(
         println!("{}", serde_json::to_string(&response)?);
     } else {
         println!("{command}: available");
+        print_status_identity_metadata(&response);
     }
 
     Ok(0)
@@ -93,67 +115,75 @@ fn run_typed_action_with_status_args(
 
 fn run_typed_action(command: &str, action: GatewayAction) -> anyhow::Result<i32> {
     let response = if world_routing_disabled() {
-        synthesized_unavailable_response()
+        build_gateway_request_context()
+            .map(|context| synthesized_unavailable_response(&context))
+            .unwrap_or_else(|_| synthesized_unavailable_response_without_context())
     } else {
-        match call_gateway_action(action) {
+        let request_context = match build_gateway_request_context() {
+            Ok(context) => context,
+            Err(err) => return Ok(classify_and_print_gateway_error(command, err)),
+        };
+        match call_gateway_action(action, &request_context) {
             Ok(response) => response,
-            Err(err) if error_is_component_unavailable(&err) => synthesized_unavailable_response(),
+            Err(err) if error_is_component_unavailable(&err) => {
+                synthesized_unavailable_response(&request_context)
+            }
             Err(err) => return Ok(classify_and_print_gateway_error(command, err)),
         }
     };
 
     if response.status == GatewayStatusV1::Unavailable {
-        return Ok(emit_unavailable(command));
+        return Ok(emit_unavailable(command, &response));
     }
 
     println!("{command}: available");
+    print_status_identity_metadata(&response);
     Ok(0)
 }
 
-fn call_gateway_action(action: GatewayAction) -> anyhow::Result<GatewayLifecycleResponseV1> {
+fn call_gateway_action(
+    action: GatewayAction,
+    request_context: &GatewayLifecycleRequestContext,
+) -> anyhow::Result<GatewayLifecycleResponseV1> {
     #[cfg(target_os = "macos")]
     {
-        let request = build_gateway_request()?;
         let client = build_macos_gateway_client()?;
 
-        match action {
+        let response = match action {
             GatewayAction::Status => client
                 .client
-                .gateway_status(request)
-                .await_result()
-                .and_then(validate_gateway_response),
+                .gateway_status(request_context.request.clone())
+                .await_result(),
             GatewayAction::Sync => client
                 .client
-                .gateway_sync(request)
-                .await_result()
-                .and_then(validate_gateway_response),
+                .gateway_sync(request_context.request.clone())
+                .await_result(),
             GatewayAction::Restart => client
                 .client
-                .gateway_restart(request)
-                .await_result()
-                .and_then(validate_gateway_response),
-        }
+                .gateway_restart(request_context.request.clone())
+                .await_result(),
+        }?;
+
+        return augment_gateway_response(response, request_context);
     }
 
     #[cfg(not(target_os = "macos"))]
     {
-        let request = build_gateway_request()?;
         let client = build_gateway_client()?;
 
-        match action {
+        let response = match action {
             GatewayAction::Status => client
-                .gateway_status(request)
-                .await_result()
-                .and_then(validate_gateway_response),
+                .gateway_status(request_context.request.clone())
+                .await_result(),
             GatewayAction::Sync => client
-                .gateway_sync(request)
-                .await_result()
-                .and_then(validate_gateway_response),
+                .gateway_sync(request_context.request.clone())
+                .await_result(),
             GatewayAction::Restart => client
-                .gateway_restart(request)
-                .await_result()
-                .and_then(validate_gateway_response),
-        }
+                .gateway_restart(request_context.request.clone())
+                .await_result(),
+        }?;
+
+        augment_gateway_response(response, request_context)
     }
 }
 
@@ -247,7 +277,7 @@ fn probe_gateway_caps_uds(path: &std::path::Path) -> bool {
     }
 }
 
-fn build_gateway_request() -> anyhow::Result<GatewayLifecycleRequestV1> {
+fn build_gateway_request_context() -> anyhow::Result<GatewayLifecycleRequestContext> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let (effective_config, config_explain) = config_model::resolve_effective_config_with_explain(
         &cwd,
@@ -286,15 +316,244 @@ fn build_gateway_request() -> anyhow::Result<GatewayLifecycleRequestV1> {
         effective_config.llm.routing.default_backend.clone(),
     );
 
-    Ok(GatewayLifecycleRequestV1 {
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let selected_backend = effective_config
+        .llm
+        .routing
+        .default_backend
+        .trim()
+        .to_string();
+    let identity_tuple = Some(derive_gateway_identity_tuple(
+        &agent_id,
+        &effective_policy,
+        &selected_backend,
+        integrated_auth.as_ref(),
+    )?);
+    let placement_posture = Some(derive_gateway_placement_posture(&effective_config)?);
+
+    let request = GatewayLifecycleRequestV1 {
         profile: None,
         cwd: Some(cwd.display().to_string()),
         env: Some(env),
-        agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string()),
+        agent_id,
         policy_snapshot: network_policy.snapshot,
         world_network: Some(world_network),
         integrated_auth,
+        identity_tuple,
+        placement_posture,
+    };
+    request
+        .validate_identity_contract()
+        .map_err(gateway_invalid_integration_error)?;
+
+    Ok(GatewayLifecycleRequestContext {
+        identity_tuple: request.identity_tuple.clone(),
+        placement_posture: request.placement_posture.clone(),
+        request,
     })
+}
+
+fn derive_gateway_identity_tuple(
+    agent_id: &str,
+    effective_policy: &substrate_broker::Policy,
+    selected_backend: &str,
+    integrated_auth: Option<&GatewayIntegratedAuthPayloadV1>,
+) -> anyhow::Result<IdentityTuple> {
+    let protocol = match selected_backend {
+        CLI_CODEX_BACKEND | API_OPENAI_BACKEND => "openai.responses",
+        API_ANTHROPIC_BACKEND => "anthropic.messages",
+        other => {
+            return Err(gateway_invalid_integration_error(format!(
+                "unsupported backend '{}' for gateway identity tuple publication",
+                other
+            )));
+        }
+    };
+    let provider = match selected_backend {
+        CLI_CODEX_BACKEND | API_OPENAI_BACKEND => Some("openai".to_string()),
+        API_ANTHROPIC_BACKEND => Some("anthropic".to_string()),
+        _ => None,
+    };
+    let auth_authority = integrated_auth.and_then(|auth| {
+        if auth.cli_codex.is_some() {
+            Some("codex_subscription".to_string())
+        } else if let Some(api_env) = auth.api_env.as_ref() {
+            if api_env.env.contains_key(OPENAI_API_KEY_ENV) {
+                Some("openai_api_key".to_string())
+            } else if api_env.env.contains_key(ANTHROPIC_API_KEY_ENV) {
+                Some("anthropic_api_key".to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    });
+
+    let tuple = IdentityTuple {
+        client: resolve_originating_client(agent_id),
+        router: SUBSTRATE_GATEWAY_ROUTER.to_string(),
+        protocol: protocol.to_string(),
+        provider,
+        auth_authority,
+    };
+
+    enforce_identity_constraint(
+        "llm.constraints.routers",
+        "routing authority",
+        Some(tuple.router.as_str()),
+        &effective_policy.llm_constraints_routers,
+    )?;
+    enforce_identity_constraint(
+        "llm.constraints.protocols",
+        "protocol",
+        Some(tuple.protocol.as_str()),
+        &effective_policy.llm_constraints_protocols,
+    )?;
+    enforce_identity_constraint(
+        "llm.constraints.providers",
+        "provider",
+        tuple.provider.as_deref(),
+        &effective_policy.llm_constraints_providers,
+    )?;
+    enforce_identity_constraint(
+        "llm.constraints.auth_authorities",
+        "auth authority",
+        tuple.auth_authority.as_deref(),
+        &effective_policy.llm_constraints_auth_authorities,
+    )?;
+    tuple
+        .validate()
+        .map_err(gateway_invalid_integration_error)?;
+    Ok(tuple)
+}
+
+fn derive_gateway_placement_posture(
+    effective_config: &config_model::SubstrateConfig,
+) -> anyhow::Result<PlacementPosture> {
+    let posture = PlacementPosture {
+        execution: match effective_config.llm.gateway.mode {
+            LlmGatewayMode::InWorld => PlacementExecution::InWorld,
+            LlmGatewayMode::HostOnly => PlacementExecution::HostOnly,
+        },
+        host_to_world_bridge: None,
+    };
+    posture
+        .validate()
+        .map_err(gateway_invalid_integration_error)?;
+    Ok(posture)
+}
+
+fn resolve_originating_client(agent_id: &str) -> String {
+    let trimmed = agent_id.trim();
+    if trimmed.is_empty() {
+        return "human".to_string();
+    }
+
+    let normalized = trimmed.to_ascii_lowercase().replace('-', "_");
+    let valid = normalized
+        .bytes()
+        .enumerate()
+        .all(|(idx, byte)| match byte {
+            b'a'..=b'z' => true,
+            b'0'..=b'9' => idx > 0,
+            b'_' => idx > 0,
+            _ => false,
+        })
+        && !normalized.ends_with('_')
+        && !normalized.contains("__");
+
+    if valid {
+        normalized
+    } else {
+        "human".to_string()
+    }
+}
+
+fn enforce_identity_constraint(
+    policy_key: &str,
+    label: &str,
+    value: Option<&str>,
+    allowed: &[String],
+) -> anyhow::Result<()> {
+    if allowed.is_empty() {
+        return Ok(());
+    }
+
+    let Some(value) = value else {
+        return Err(gateway_policy_blocked_error(format!(
+            "effective gateway {label} is unresolved while {policy_key} is constrained"
+        )));
+    };
+
+    if allowed.iter().any(|candidate| candidate == value) {
+        Ok(())
+    } else {
+        Err(gateway_policy_blocked_error(format!(
+            "effective gateway {label} '{}' is not allowlisted by {}",
+            value, policy_key
+        )))
+    }
+}
+
+fn augment_gateway_response(
+    mut response: GatewayLifecycleResponseV1,
+    request_context: &GatewayLifecycleRequestContext,
+) -> anyhow::Result<GatewayLifecycleResponseV1> {
+    if response.identity_tuple.is_none() {
+        response.identity_tuple = request_context.identity_tuple.clone();
+    }
+    if response.placement_posture.is_none() {
+        response.placement_posture = request_context.placement_posture.clone();
+    }
+    validate_gateway_response(response)
+}
+
+fn print_status_identity_metadata(response: &GatewayLifecycleResponseV1) {
+    print_status_identity_metadata_impl(response, false);
+}
+
+fn print_status_identity_metadata_to_stderr(response: &GatewayLifecycleResponseV1) {
+    print_status_identity_metadata_impl(response, true);
+}
+
+fn print_status_identity_metadata_impl(response: &GatewayLifecycleResponseV1, stderr: bool) {
+    let emit = |line: &str, stderr: bool| {
+        if stderr {
+            eprintln!("{line}");
+        } else {
+            println!("{line}");
+        }
+    };
+
+    if let Some(identity_tuple) = response.identity_tuple.as_ref() {
+        emit(
+            &format!("originating client: {}", identity_tuple.client),
+            stderr,
+        );
+        emit(
+            &format!("routing authority: {}", identity_tuple.router),
+            stderr,
+        );
+        if let Some(provider) = identity_tuple.provider.as_deref() {
+            emit(&format!("fulfillment provider: {provider}"), stderr);
+        }
+        if let Some(auth_authority) = identity_tuple.auth_authority.as_deref() {
+            emit(&format!("auth authority: {auth_authority}"), stderr);
+        }
+        emit(&format!("protocol: {}", identity_tuple.protocol), stderr);
+    }
+
+    if let Some(placement_posture) = response.placement_posture.as_ref() {
+        let execution = match placement_posture.execution {
+            PlacementExecution::InWorld => "in_world",
+            PlacementExecution::HostOnly => "host_only",
+        };
+        emit(&format!("deployment posture: {execution}"), stderr);
+        if placement_posture.host_to_world_bridge == Some(true) {
+            emit("bridge transport: host_to_world_bridge", stderr);
+        }
+    }
 }
 
 fn validate_gateway_backend_selection(
@@ -600,7 +859,18 @@ fn world_routing_disabled() -> bool {
         )
 }
 
-fn synthesized_unavailable_response() -> GatewayLifecycleResponseV1 {
+fn synthesized_unavailable_response(
+    request_context: &GatewayLifecycleRequestContext,
+) -> GatewayLifecycleResponseV1 {
+    GatewayLifecycleResponseV1 {
+        status: GatewayStatusV1::Unavailable,
+        client_wiring: None,
+        identity_tuple: request_context.identity_tuple.clone(),
+        placement_posture: request_context.placement_posture.clone(),
+    }
+}
+
+fn synthesized_unavailable_response_without_context() -> GatewayLifecycleResponseV1 {
     GatewayLifecycleResponseV1 {
         status: GatewayStatusV1::Unavailable,
         client_wiring: None,
@@ -677,8 +947,9 @@ fn command_for_status<'a>(command: &'a str, args: &WorldGatewayStatusArgs) -> &'
     }
 }
 
-fn emit_unavailable(command: &str) -> i32 {
+fn emit_unavailable(command: &str, response: &GatewayLifecycleResponseV1) -> i32 {
     eprintln!("{command}: unavailable (required gateway/world component unavailable)");
+    print_status_identity_metadata_to_stderr(response);
     EXIT_COMPONENT_UNAVAILABLE
 }
 
