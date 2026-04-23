@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use substrate_common::agent_events::AgentEvent;
 pub use substrate_common::{
-    FsDiff, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry, WorldFsMode,
+    validate_identity_tuple_and_placement_posture, FsDiff, IdentityTuple, PlacementExecution,
+    PlacementPosture, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry,
+    WorldFsMode,
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -995,6 +997,19 @@ pub struct GatewayLifecycleResponseV1 {
     pub status: GatewayStatusV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_wiring: Option<GatewayClientWiringV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_tuple: Option<IdentityTuple>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement_posture: Option<PlacementPosture>,
+}
+
+impl GatewayLifecycleResponseV1 {
+    pub fn validate_identity_contract(&self) -> Result<(), String> {
+        validate_identity_tuple_and_placement_posture(
+            self.identity_tuple.as_ref(),
+            self.placement_posture.as_ref(),
+        )
+    }
 }
 
 /// Streaming frame describing incremental execution output.

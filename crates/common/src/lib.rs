@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 pub mod agent_events;
 pub mod fs_diff;
+pub mod identity;
 pub mod manager_manifest;
 pub mod paths;
 pub mod settings;
@@ -12,6 +13,10 @@ pub mod world_exec_guard;
 
 pub use agent_events::{AgentEvent, AgentEventKind};
 pub use fs_diff::FsDiff;
+pub use identity::{
+    validate_identity_tuple_and_placement_posture, IdentityTuple, PlacementExecution,
+    PlacementPosture,
+};
 pub use manager_manifest::{
     DetectSpec, GuestSpec, InitSpec, InstallClass, InstallSpec, ManagerManifest, ManagerSpec,
     Platform, RegexPattern, SystemPackagesSpec, MANAGER_MANIFEST_VERSION,

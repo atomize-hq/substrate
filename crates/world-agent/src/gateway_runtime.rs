@@ -1227,6 +1227,8 @@ fn available_response(port: u16) -> GatewayLifecycleResponseV1 {
             openai_base_url: base_url.clone(),
             anthropic_base_url: base_url,
         }),
+        identity_tuple: None,
+        placement_posture: None,
     }
 }
 
@@ -1234,6 +1236,8 @@ pub(crate) fn unavailable_response() -> GatewayLifecycleResponseV1 {
     GatewayLifecycleResponseV1 {
         status: GatewayStatusV1::Unavailable,
         client_wiring: None,
+        identity_tuple: None,
+        placement_posture: None,
     }
 }
 

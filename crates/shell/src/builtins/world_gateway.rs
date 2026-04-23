@@ -117,9 +117,21 @@ fn call_gateway_action(action: GatewayAction) -> anyhow::Result<GatewayLifecycle
         let client = build_macos_gateway_client()?;
 
         match action {
-            GatewayAction::Status => client.client.gateway_status(request).await_result(),
-            GatewayAction::Sync => client.client.gateway_sync(request).await_result(),
-            GatewayAction::Restart => client.client.gateway_restart(request).await_result(),
+            GatewayAction::Status => client
+                .client
+                .gateway_status(request)
+                .await_result()
+                .and_then(validate_gateway_response),
+            GatewayAction::Sync => client
+                .client
+                .gateway_sync(request)
+                .await_result()
+                .and_then(validate_gateway_response),
+            GatewayAction::Restart => client
+                .client
+                .gateway_restart(request)
+                .await_result()
+                .and_then(validate_gateway_response),
         }
     }
 
@@ -129,9 +141,18 @@ fn call_gateway_action(action: GatewayAction) -> anyhow::Result<GatewayLifecycle
         let client = build_gateway_client()?;
 
         match action {
-            GatewayAction::Status => client.gateway_status(request).await_result(),
-            GatewayAction::Sync => client.gateway_sync(request).await_result(),
-            GatewayAction::Restart => client.gateway_restart(request).await_result(),
+            GatewayAction::Status => client
+                .gateway_status(request)
+                .await_result()
+                .and_then(validate_gateway_response),
+            GatewayAction::Sync => client
+                .gateway_sync(request)
+                .await_result()
+                .and_then(validate_gateway_response),
+            GatewayAction::Restart => client
+                .gateway_restart(request)
+                .await_result()
+                .and_then(validate_gateway_response),
         }
     }
 }
@@ -583,7 +604,18 @@ fn synthesized_unavailable_response() -> GatewayLifecycleResponseV1 {
     GatewayLifecycleResponseV1 {
         status: GatewayStatusV1::Unavailable,
         client_wiring: None,
+        identity_tuple: None,
+        placement_posture: None,
     }
+}
+
+fn validate_gateway_response(
+    response: GatewayLifecycleResponseV1,
+) -> anyhow::Result<GatewayLifecycleResponseV1> {
+    response
+        .validate_identity_contract()
+        .map_err(gateway_invalid_integration_error)?;
+    Ok(response)
 }
 
 fn error_is_component_unavailable(err: &anyhow::Error) -> bool {
