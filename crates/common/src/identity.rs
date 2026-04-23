@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "IdentityTupleDef")]
 pub struct IdentityTuple {
     pub client: String,
     pub router: String,
@@ -11,6 +12,17 @@ pub struct IdentityTuple {
     pub provider: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth_authority: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct IdentityTupleDef {
+    client: String,
+    router: String,
+    protocol: String,
+    #[serde(default)]
+    provider: Option<String>,
+    #[serde(default)]
+    auth_authority: Option<String>,
 }
 
 impl IdentityTuple {
@@ -32,10 +44,18 @@ pub enum PlacementExecution {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "PlacementPostureDef")]
 pub struct PlacementPosture {
     pub execution: PlacementExecution,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_to_world_bridge: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct PlacementPostureDef {
+    execution: PlacementExecution,
+    #[serde(default)]
+    host_to_world_bridge: Option<bool>,
 }
 
 impl PlacementPosture {
@@ -56,6 +76,35 @@ impl PlacementPosture {
         }
 
         Ok(())
+    }
+}
+
+impl TryFrom<IdentityTupleDef> for IdentityTuple {
+    type Error = String;
+
+    fn try_from(value: IdentityTupleDef) -> Result<Self, Self::Error> {
+        let tuple = Self {
+            client: value.client,
+            router: value.router,
+            protocol: value.protocol,
+            provider: value.provider,
+            auth_authority: value.auth_authority,
+        };
+        tuple.validate()?;
+        Ok(tuple)
+    }
+}
+
+impl TryFrom<PlacementPostureDef> for PlacementPosture {
+    type Error = String;
+
+    fn try_from(value: PlacementPostureDef) -> Result<Self, Self::Error> {
+        let posture = Self {
+            execution: value.execution,
+            host_to_world_bridge: value.host_to_world_bridge,
+        };
+        posture.validate()?;
+        Ok(posture)
     }
 }
 

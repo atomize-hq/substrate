@@ -63,6 +63,7 @@ impl From<MessageEventKind> for AgentEventKind {
 
 /// Structured envelope for asynchronous agent updates.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(try_from = "AgentEventDef")]
 pub struct AgentEvent {
     pub ts: DateTime<Utc>,
     pub kind: AgentEventKind,
@@ -104,6 +105,36 @@ pub struct AgentEvent {
     // Legacy field (v1 producers should omit)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct AgentEventDef {
+    ts: DateTime<Utc>,
+    kind: AgentEventKind,
+    data: serde_json::Value,
+    agent_id: String,
+    orchestration_session_id: String,
+    run_id: String,
+    #[serde(default)]
+    backend_id: Option<String>,
+    #[serde(default)]
+    thread_id: Option<String>,
+    #[serde(default)]
+    role: Option<String>,
+    #[serde(default)]
+    world_id: Option<String>,
+    #[serde(default)]
+    cmd_id: Option<String>,
+    #[serde(default)]
+    span_id: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_sanitized_channel")]
+    channel: Option<String>,
+    #[serde(default)]
+    identity_tuple: Option<IdentityTuple>,
+    #[serde(default)]
+    placement_posture: Option<PlacementPosture>,
+    #[serde(default)]
+    project: Option<String>,
 }
 
 impl AgentEvent {
@@ -221,6 +252,33 @@ impl AgentEvent {
             self.identity_tuple.as_ref(),
             self.placement_posture.as_ref(),
         )
+    }
+}
+
+impl TryFrom<AgentEventDef> for AgentEvent {
+    type Error = String;
+
+    fn try_from(value: AgentEventDef) -> Result<Self, Self::Error> {
+        let event = Self {
+            ts: value.ts,
+            kind: value.kind,
+            data: value.data,
+            agent_id: value.agent_id,
+            orchestration_session_id: value.orchestration_session_id,
+            run_id: value.run_id,
+            backend_id: value.backend_id,
+            thread_id: value.thread_id,
+            role: value.role,
+            world_id: value.world_id,
+            cmd_id: value.cmd_id,
+            span_id: value.span_id,
+            channel: value.channel,
+            identity_tuple: value.identity_tuple,
+            placement_posture: value.placement_posture,
+            project: value.project,
+        };
+        event.validate_identity_contract()?;
+        Ok(event)
     }
 }
 

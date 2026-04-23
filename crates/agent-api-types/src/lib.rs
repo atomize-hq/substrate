@@ -993,6 +993,7 @@ pub struct GatewayClientWiringV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "GatewayLifecycleResponseDef")]
 pub struct GatewayLifecycleResponseV1 {
     pub status: GatewayStatusV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1003,12 +1004,38 @@ pub struct GatewayLifecycleResponseV1 {
     pub placement_posture: Option<PlacementPosture>,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct GatewayLifecycleResponseDef {
+    status: GatewayStatusV1,
+    #[serde(default)]
+    client_wiring: Option<GatewayClientWiringV1>,
+    #[serde(default)]
+    identity_tuple: Option<IdentityTuple>,
+    #[serde(default)]
+    placement_posture: Option<PlacementPosture>,
+}
+
 impl GatewayLifecycleResponseV1 {
     pub fn validate_identity_contract(&self) -> Result<(), String> {
         validate_identity_tuple_and_placement_posture(
             self.identity_tuple.as_ref(),
             self.placement_posture.as_ref(),
         )
+    }
+}
+
+impl TryFrom<GatewayLifecycleResponseDef> for GatewayLifecycleResponseV1 {
+    type Error = String;
+
+    fn try_from(value: GatewayLifecycleResponseDef) -> Result<Self, Self::Error> {
+        let response = Self {
+            status: value.status,
+            client_wiring: value.client_wiring,
+            identity_tuple: value.identity_tuple,
+            placement_posture: value.placement_posture,
+        };
+        response.validate_identity_contract()?;
+        Ok(response)
     }
 }
 
@@ -1132,7 +1159,7 @@ pub enum WorldDoctorWorldFsStrategyProbeResultV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     fn valid_cli_codex_payload() -> GatewayIntegratedAuthPayloadV1 {
         GatewayIntegratedAuthPayloadV1 {
@@ -1180,6 +1207,61 @@ mod tests {
         .expect_err("unknown request field should fail");
 
         assert!(err.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_round_trips_canonical_identity_objects() {
+        let response = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "available",
+            "client_wiring": {
+                "openai_base_url": "http://127.0.0.1:4040",
+                "anthropic_base_url": "http://127.0.0.1:4040"
+            },
+            "identity_tuple": {
+                "client": "codex",
+                "router": "substrate_gateway",
+                "provider": "openai",
+                "auth_authority": "codex_subscription",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect("valid lifecycle response should deserialize");
+
+        let roundtrip = serde_json::to_value(&response).expect("serialize lifecycle response");
+        assert_eq!(
+            roundtrip
+                .pointer("/identity_tuple/router")
+                .and_then(Value::as_str),
+            Some("substrate_gateway")
+        );
+        assert_eq!(
+            roundtrip
+                .pointer("/placement_posture/execution")
+                .and_then(Value::as_str),
+            Some("in_world")
+        );
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_rejects_direct_provider_path_with_bridge_transport() {
+        let err = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "available",
+            "identity_tuple": {
+                "client": "codex",
+                "router": "direct_provider_path",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "host_only",
+                "host_to_world_bridge": true
+            }
+        }))
+        .expect_err("invalid routing/posture combination should fail");
+
+        assert!(err.to_string().contains("host_to_world_bridge"));
     }
 
     #[test]
