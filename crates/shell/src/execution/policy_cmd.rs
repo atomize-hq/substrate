@@ -487,6 +487,7 @@ struct LlmEffectiveDisplayV1 {
     fail_closed: LlmFailClosedEffectiveDisplayV1,
     require_approval: bool,
     allowed_backends: Vec<String>,
+    constraints: LlmConstraintsEffectiveDisplayV1,
     secrets: LlmSecretsEffectiveDisplayV1,
 }
 
@@ -500,6 +501,15 @@ struct LlmFailClosedEffectiveDisplayV1 {
 #[serde(deny_unknown_fields)]
 struct LlmSecretsEffectiveDisplayV1 {
     env_allowed: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(deny_unknown_fields)]
+struct LlmConstraintsEffectiveDisplayV1 {
+    routers: Vec<String>,
+    providers: Vec<String>,
+    protocols: Vec<String>,
+    auth_authorities: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -607,6 +617,12 @@ fn display_policy_v3(policy: &Policy) -> Result<EffectivePolicyDisplayV3<'_>> {
             },
             require_approval: policy.llm_require_approval,
             allowed_backends: policy.llm_allowed_backends.clone(),
+            constraints: LlmConstraintsEffectiveDisplayV1 {
+                routers: policy.llm_constraints_routers.clone(),
+                providers: policy.llm_constraints_providers.clone(),
+                protocols: policy.llm_constraints_protocols.clone(),
+                auth_authorities: policy.llm_constraints_auth_authorities.clone(),
+            },
             secrets: LlmSecretsEffectiveDisplayV1 {
                 env_allowed: policy.llm_secrets_env_allowed.clone(),
             },
