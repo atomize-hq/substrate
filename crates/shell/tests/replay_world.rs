@@ -4,6 +4,7 @@
 mod support;
 
 use serde_json::{json, Value};
+use serial_test::serial;
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -1918,6 +1919,7 @@ fn replay_agent_fallback_uses_caged_project_dir() {
 }
 
 #[test]
+#[serial]
 fn replay_retries_copydiff_roots_and_dedupes_warnings() {
     let fixture = ShellEnvFixture::new();
     let trace = trace_path(&fixture);

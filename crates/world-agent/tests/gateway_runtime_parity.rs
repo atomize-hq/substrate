@@ -75,6 +75,8 @@ fn gateway_request(cwd: &Path) -> GatewayLifecycleRequestV1 {
             }),
             api_env: None,
         }),
+        identity_tuple: None,
+        placement_posture: None,
     }
 }
 
