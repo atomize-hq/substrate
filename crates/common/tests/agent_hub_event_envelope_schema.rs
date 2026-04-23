@@ -162,3 +162,192 @@ fn alert_constructor_emits_required_alert_fields() {
         Some("world restart required before continuing")
     );
 }
+
+#[test]
+fn tuple_publication_uses_canonical_object_names_and_required_fields() {
+    let value = json!({
+        "ts": "2026-04-05T00:00:00Z",
+        "kind": "status",
+        "agent_id": "demo-agent",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "backend_id": "cli:codex",
+        "data": { "message": "ok" },
+        "identity_tuple": {
+            "client": "codex",
+            "router": "substrate_gateway",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "protocol": "openai.responses"
+        },
+        "placement_posture": {
+            "execution": "in_world"
+        }
+    });
+
+    let event: AgentEvent = serde_json::from_value(value).expect("deserialize AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    for key in ["client", "router", "protocol"] {
+        assert!(
+            roundtrip
+                .pointer(&format!("/identity_tuple/{key}"))
+                .is_some(),
+            "expected required tuple field `{key}` under `/identity_tuple`; got: {roundtrip}"
+        );
+    }
+
+    assert_eq!(
+        roundtrip
+            .pointer("/identity_tuple/client")
+            .and_then(Value::as_str),
+        Some("codex")
+    );
+    assert_eq!(
+        roundtrip
+            .pointer("/identity_tuple/router")
+            .and_then(Value::as_str),
+        Some("substrate_gateway")
+    );
+    assert_eq!(
+        roundtrip
+            .pointer("/identity_tuple/provider")
+            .and_then(Value::as_str),
+        Some("openai")
+    );
+    assert_eq!(
+        roundtrip
+            .pointer("/identity_tuple/auth_authority")
+            .and_then(Value::as_str),
+        Some("codex_subscription")
+    );
+    assert_eq!(
+        roundtrip
+            .pointer("/identity_tuple/protocol")
+            .and_then(Value::as_str),
+        Some("openai.responses")
+    );
+    assert_eq!(
+        roundtrip
+            .pointer("/placement_posture/execution")
+            .and_then(Value::as_str),
+        Some("in_world")
+    );
+    assert_eq!(
+        roundtrip.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex"),
+        "backend_id should remain a separate selector, not substitute for tuple fields: {roundtrip}"
+    );
+
+    for legacy_key in ["client", "router", "provider", "auth_authority", "protocol"] {
+        assert!(
+            roundtrip.get(legacy_key).is_none(),
+            "tuple metadata should publish under canonical objects, not as legacy flat `{legacy_key}` fields: {roundtrip}"
+        );
+    }
+}
+
+#[test]
+fn tuple_optional_fields_omit_by_field_absence_only() {
+    let value = json!({
+        "ts": "2026-04-05T00:00:00Z",
+        "kind": "status",
+        "agent_id": "demo-agent",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "data": { "message": "ok" },
+        "identity_tuple": {
+            "client": "codex",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses"
+        },
+        "placement_posture": {
+            "execution": "in_world"
+        }
+    });
+
+    let event: AgentEvent = serde_json::from_value(value).expect("deserialize AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert!(
+        roundtrip.get("identity_tuple").is_some(),
+        "expected canonical identity tuple object to be preserved: {roundtrip}"
+    );
+    assert!(
+        roundtrip.pointer("/identity_tuple/provider").is_none(),
+        "provider must omit by field absence only when unresolved: {roundtrip}"
+    );
+    assert!(
+        roundtrip
+            .pointer("/identity_tuple/auth_authority")
+            .is_none(),
+        "auth_authority must omit by field absence only when unresolved: {roundtrip}"
+    );
+    assert!(
+        !roundtrip.to_string().contains("unknown"),
+        "optional tuple omissions must not be backfilled with placeholder text: {roundtrip}"
+    );
+    assert!(
+        !roundtrip.to_string().contains("\"provider\":null"),
+        "optional tuple omissions must not serialize as null: {roundtrip}"
+    );
+    assert!(
+        !roundtrip.to_string().contains("\"auth_authority\":null"),
+        "optional tuple omissions must not serialize as null: {roundtrip}"
+    );
+}
+
+#[test]
+fn tuple_ids_reject_backend_grammar_uppercase_and_placeholder_tokens() {
+    let invalid = json!({
+        "ts": "2026-04-05T00:00:00Z",
+        "kind": "status",
+        "agent_id": "demo-agent",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "data": { "message": "ok" },
+        "identity_tuple": {
+            "client": "Codex",
+            "router": "api:openai",
+            "provider": "unknown",
+            "auth_authority": "n/a",
+            "protocol": "openai_responses"
+        },
+        "placement_posture": {
+            "execution": "host_only"
+        }
+    });
+
+    let result: Result<AgentEvent, _> = serde_json::from_value(invalid);
+    assert!(
+        result.is_err(),
+        "expected tuple token validation to reject uppercase ids, backend-id grammar, placeholder omissions, and non-dotted protocols"
+    );
+}
+
+#[test]
+fn direct_provider_path_requires_host_only_without_bridge_transport() {
+    let invalid = json!({
+        "ts": "2026-04-05T00:00:00Z",
+        "kind": "status",
+        "agent_id": "demo-agent",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "data": { "message": "ok" },
+        "identity_tuple": {
+            "client": "codex",
+            "router": "direct_provider_path",
+            "protocol": "openai.responses"
+        },
+        "placement_posture": {
+            "execution": "in_world",
+            "host_to_world_bridge": true
+        }
+    });
+
+    let result: Result<AgentEvent, _> = serde_json::from_value(invalid);
+    assert!(
+        result.is_err(),
+        "expected direct_provider_path to be rejected unless placement_posture.execution=host_only and bridge transport is absent"
+    );
+}
