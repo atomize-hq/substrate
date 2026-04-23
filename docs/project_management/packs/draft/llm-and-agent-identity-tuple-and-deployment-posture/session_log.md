@@ -235,3 +235,14 @@
 ## END — 2026-04-23T15:55:16Z — integration — LAITDP1-integ-core
 - HEAD: `12a4dddc13f57b1f624a214917a2c73f87ae4f70`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP1/integ-core/last_message.md`
+
+## START — 2026-04-23T15:56:00Z — checkpoint — CP1-ci-checkpoint
+- Feature: `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/`
+- Branch: `feat/llm-and-agent-identity-tuple-and-deployment-posture`
+- Goal: run the CP1 compile-parity and feature-smoke checkpoint gates for boundary slice `LAITDP1`.
+- Candidate checkout SHA: `12a4dddc13f57b1f624a214917a2c73f87ae4f70`
+- Inputs read:
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md`
