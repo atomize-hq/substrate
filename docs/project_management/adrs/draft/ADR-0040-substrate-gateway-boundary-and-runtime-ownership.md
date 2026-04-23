@@ -43,7 +43,7 @@ The committed operator contract that downstream slices should treat as live sour
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f912ab8be5245a70ba603bc6547c3b62e05c59492af2c7c9d27c3d898f664a50
+ADR_BODY_SHA256: 8c69b5599428dc1e6d1d488999e3bfb8a35485187cbef0da67cdb52ebb958a4f
 
 ### Changes (operator-facing)
 - Clarify the runtime boundary between Substrate and `substrate-gateway`

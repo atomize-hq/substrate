@@ -25,6 +25,9 @@ Concrete rules:
 - Policy placement, fail-closed routing, secret delivery, and trust-boundary rules remain governed by `docs/contracts/substrate-gateway-policy-evaluation.md`.
 - The operator command family and exit taxonomy remain governed by `docs/contracts/substrate-gateway-operator-contract.md`, including exit `4` for the required gateway/world component unavailable posture.
 - Linux, macOS, and Windows must present one operator-facing lifecycle/status contract even when the underlying world transport differs.
+- This contract governs lifecycle/status semantics for whichever integrated backends the
+  implementation and compatibility surfaces currently support; it does not itself promote a
+  backend into the supported set.
 - The lifecycle launcher must honor the public `substrate-gateway` CLI contract when starting the runtime. Runtime bootstrap must not rely on a private argv layout or place gateway-global flags in positions the gateway CLI does not accept.
 - Runtime readiness truth is the managed gateway health endpoint: `GET /health` on the managed runtime endpoint returning HTTP `200`.
 - The readiness probe must behave like a normal HTTP client for that endpoint; it must not depend on private transport assumptions such as the server tolerating an early half-close on the client write side before it sends the response.
@@ -41,6 +44,9 @@ Concrete rules:
 
 - This contract does not define the operator command family or exit codes beyond consuming them from the operator contract.
 - This contract does not define `status --json` fields beyond consuming the published schema contract.
+- This contract does not publish the supported integrated-backend matrix or require a first
+  additional-backend rollout baseline before lifecycle/status semantics are considered contract
+  complete.
 - This contract does not define provider, planner, or executor internals inside `substrate-gateway`.
 - This contract does not pull provisioning behavior into gateway lifecycle/status ownership.
 - This contract does not replace `docs/WORLD.md`, `docs/INSTALLATION.md`, or the Windows/macOS world setup guides as the source of transport and provisioning detail.

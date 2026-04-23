@@ -14,6 +14,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 use substrate_shell::execution::{Cli, SubCommands, WorldAction, WorldGatewayAction};
 use tempfile::TempDir;
 
@@ -21,6 +22,10 @@ use tempfile::TempDir;
 mod socket;
 
 use socket::{AgentSocket, SocketResponse};
+
+const SOCKET_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const REGRESSION_FLOOR_BACKEND_ID: &str = "cli:codex";
+const FIRST_ADDITIONAL_BACKEND_ID: &str = "api:openai";
 
 fn short_socket_tempdir(prefix: &str) -> TempDir {
     tempfile::Builder::new()
@@ -58,7 +63,10 @@ impl GatewayAuthFixture {
         cmd.current_dir(&self.workspace_root)
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
-            .env("SUBSTRATE_HOME", &self.substrate_home);
+            .env("SUBSTRATE_HOME", &self.substrate_home)
+            .env_remove("OPENAI_API_KEY")
+            .env_remove("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID")
+            .env_remove("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN");
         cmd
     }
 
@@ -74,6 +82,12 @@ impl GatewayAuthFixture {
         let auth_dir = self.home.join(".codex");
         fs::create_dir_all(&auth_dir).expect("create .codex auth dir");
         fs::write(auth_dir.join("auth.json"), contents).expect("write auth.json");
+    }
+
+    fn write_global_agent_inventory(&self, name: &str, contents: &str) {
+        let agents_dir = self.substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("create global agent inventory dir");
+        fs::write(agents_dir.join(name), contents).expect("write agent inventory file");
     }
 }
 
@@ -93,7 +107,28 @@ impl RecordedGatewayRequestSocket {
         let recorded_request_for_thread = recorded_request.clone();
 
         let handle = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().expect("accept gateway capture request");
+            listener
+                .set_nonblocking(true)
+                .expect("set gateway capture nonblocking");
+            let deadline = Instant::now() + SOCKET_REQUEST_TIMEOUT;
+            let (mut stream, _) = loop {
+                match listener.accept() {
+                    Ok(pair) => break pair,
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(
+                            Instant::now() < deadline,
+                            "timed out waiting for gateway capture request"
+                        );
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(err) => panic!("accept gateway capture request: {err}"),
+                }
+            };
+            // Accepted Unix streams can inherit the listener's nonblocking flag on macOS.
+            // Switch back to blocking IO so request reads don't fail mid-body with WouldBlock.
+            stream
+                .set_nonblocking(false)
+                .expect("set gateway capture stream blocking");
             let request = read_http_request(&mut stream).expect("read gateway HTTP request");
             let json: JsonValue =
                 serde_json::from_slice(&request.body).expect("parse gateway request JSON");
@@ -137,7 +172,119 @@ impl Drop for RecordedGatewayRequestSocket {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct RecordedGatewayLifecycleRequest {
+    path: String,
+    body: JsonValue,
+}
+
+struct RecordedGatewayLifecycleSocket {
+    _temp: TempDir,
+    socket_path: PathBuf,
+    recorded_requests: Arc<Mutex<Vec<RecordedGatewayLifecycleRequest>>>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl RecordedGatewayLifecycleSocket {
+    fn start(
+        status: JsonValue,
+        sync: JsonValue,
+        restart: JsonValue,
+        expected_requests: usize,
+    ) -> Self {
+        let temp = short_socket_tempdir("sub-gwrl-");
+        let socket_path = temp.path().join("agent.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind lifecycle capture socket");
+        let recorded_requests = Arc::new(Mutex::new(Vec::new()));
+        let recorded_requests_for_thread = recorded_requests.clone();
+
+        let handle = thread::spawn(move || {
+            listener
+                .set_nonblocking(true)
+                .expect("set lifecycle capture nonblocking");
+            for (accepted, _) in (0..expected_requests).enumerate() {
+                let request_deadline = Instant::now() + SOCKET_REQUEST_TIMEOUT;
+                let (mut stream, _) = loop {
+                    match listener.accept() {
+                        Ok(pair) => break pair,
+                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                            assert!(
+                                Instant::now() < request_deadline,
+                                "timed out waiting for lifecycle capture request {}/{}",
+                                accepted + 1,
+                                expected_requests
+                            );
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(err) => panic!("accept lifecycle capture request: {err}"),
+                    }
+                };
+                // Accepted Unix streams can inherit the listener's nonblocking flag on macOS.
+                // Switch back to blocking IO so request reads don't fail mid-body with WouldBlock.
+                stream
+                    .set_nonblocking(false)
+                    .expect("set lifecycle capture stream blocking");
+                let request = read_http_request(&mut stream).expect("read lifecycle HTTP request");
+                let first_line = request.header.lines().next().unwrap_or_default();
+                let path = first_line
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or_default()
+                    .to_string();
+                let body =
+                    serde_json::from_slice(&request.body).expect("parse lifecycle request JSON");
+                recorded_requests_for_thread
+                    .lock()
+                    .expect("lock recorded lifecycle requests")
+                    .push(RecordedGatewayLifecycleRequest {
+                        path: path.clone(),
+                        body,
+                    });
+
+                let response = match path.as_str() {
+                    "/v1/gateway/status" => &status,
+                    "/v1/gateway/sync" => &sync,
+                    "/v1/gateway/restart" => &restart,
+                    _ => panic!("unexpected lifecycle path: {path}"),
+                };
+                write_http_json_response(&mut stream, &response.to_string())
+                    .expect("write lifecycle capture response");
+            }
+        });
+
+        Self {
+            _temp: temp,
+            socket_path,
+            recorded_requests,
+            handle: Some(handle),
+        }
+    }
+
+    fn socket_path(&self) -> &Path {
+        &self.socket_path
+    }
+
+    fn recorded_requests(&mut self) -> Vec<RecordedGatewayLifecycleRequest> {
+        if let Some(handle) = self.handle.take() {
+            handle.join().expect("join lifecycle capture thread");
+        }
+        self.recorded_requests
+            .lock()
+            .expect("lock recorded lifecycle requests")
+            .clone()
+    }
+}
+
+impl Drop for RecordedGatewayLifecycleSocket {
+    fn drop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
 struct HttpRequest {
+    header: String,
     body: Vec<u8>,
 }
 
@@ -152,7 +299,7 @@ fn read_http_request(stream: &mut UnixStream) -> std::io::Result<HttpRequest> {
         }
     }
 
-    let header = String::from_utf8_lossy(&header_bytes);
+    let header = String::from_utf8_lossy(&header_bytes).into_owned();
     let content_length = header
         .lines()
         .find_map(|line| {
@@ -170,7 +317,7 @@ fn read_http_request(stream: &mut UnixStream) -> std::io::Result<HttpRequest> {
         stream.read_exact(&mut body)?;
     }
 
-    Ok(HttpRequest { body })
+    Ok(HttpRequest { header, body })
 }
 
 fn write_http_json_response(stream: &mut UnixStream, body: &str) -> std::io::Result<()> {
@@ -198,6 +345,129 @@ fn gateway_config_with_empty_backend() -> &'static str {
     "llm:\n  enabled: true\n  gateway:\n    enabled: true\n  routing:\n    default_backend: \"\"\n"
 }
 
+fn assert_gateway_lifecycle_backend(request: &RecordedGatewayLifecycleRequest, backend_id: &str) {
+    assert_eq!(
+        request.body.pointer("/env/SUBSTRATE_LLM_DEFAULT_BACKEND"),
+        Some(&json!(backend_id)),
+        "lifecycle request should preserve the selected backend",
+    );
+}
+
+fn assert_gateway_lifecycle_no_integrated_auth(request: &RecordedGatewayLifecycleRequest) {
+    assert_eq!(
+        request.body.pointer("/integrated_auth"),
+        None,
+        "non-Codex lifecycle requests should not synthesize Codex auth",
+    );
+}
+
+fn assert_gateway_lifecycle_cli_codex_auth(
+    request: &RecordedGatewayLifecycleRequest,
+    account_id: &str,
+    access_token: &str,
+) {
+    assert_eq!(
+        request.body.pointer("/integrated_auth/backend_id"),
+        Some(&json!(REGRESSION_FLOOR_BACKEND_ID))
+    );
+    assert_eq!(
+        request
+            .body
+            .pointer("/integrated_auth/cli_codex/account_id"),
+        Some(&json!(account_id))
+    );
+    assert_eq!(
+        request
+            .body
+            .pointer("/integrated_auth/cli_codex/access_token"),
+        Some(&json!(access_token))
+    );
+}
+
+fn assert_gateway_lifecycle_api_env_auth(request: &RecordedGatewayLifecycleRequest, api_key: &str) {
+    assert_eq!(
+        request.body.pointer("/integrated_auth/backend_id"),
+        Some(&json!(FIRST_ADDITIONAL_BACKEND_ID))
+    );
+    assert_eq!(
+        request
+            .body
+            .pointer("/integrated_auth/api_env/env/OPENAI_API_KEY"),
+        Some(&json!(api_key))
+    );
+    assert_eq!(
+        request.body.pointer("/integrated_auth/cli_codex"),
+        None,
+        "api backends must not emit the cli_codex auth facet",
+    );
+}
+
+fn gateway_inventory_for_codex() -> &'static str {
+    r#"version: 1
+id: codex
+config:
+  enabled: true
+  kind: cli
+  cli:
+    binary: codex
+  capabilities:
+    llm: true
+    mcp_client: false
+"#
+}
+
+fn gateway_inventory_for_openai() -> &'static str {
+    r#"version: 1
+id: openai
+config:
+  enabled: true
+  kind: api
+  api:
+    base_url: https://api.openai.com/v1
+    auth:
+      env:
+        - OPENAI_API_KEY
+  capabilities:
+    llm: true
+    mcp_client: false
+"#
+}
+
+fn gateway_inventory_with_id_mismatch() -> &'static str {
+    r#"version: 1
+id: openai-wrong
+config:
+  enabled: true
+  kind: api
+  api:
+    base_url: https://api.openai.com/v1
+    auth:
+      env:
+        - OPENAI_API_KEY
+  capabilities:
+    llm: true
+    mcp_client: false
+"#
+}
+
+fn gateway_inventory_for_openai_multi_env() -> &'static str {
+    r#"version: 1
+id: openai
+config:
+  enabled: true
+  kind: api
+  api:
+    base_url: https://api.openai.com/v1
+    auth:
+      env:
+        - OPENAI_API_KEY
+        - OPENAI_ORG_ID
+  capabilities:
+    llm: true
+    mcp_client: false
+"#
+}
+
 fn gateway_policy_with_codex_host_credentials() -> &'static str {
     r#"id: "gateway-policy"
 name: "gateway-policy"
@@ -218,6 +488,76 @@ agents:
     read:
       allowed_backends:
         - "cli:codex"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#
+}
+
+fn gateway_policy_with_openai_backend() -> &'static str {
+    r#"id: "gateway-policy"
+name: "gateway-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
+
+llm:
+  allowed_backends:
+    - "api:openai"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#
+}
+
+fn gateway_policy_with_openai_env_override() -> &'static str {
+    r#"id: "gateway-policy"
+name: "gateway-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
+
+llm:
+  allowed_backends:
+    - "api:openai"
+  secrets:
+    env_allowed:
+      - "OPENAI_API_KEY"
+      - "OPENAI_ORG_ID"
 
 net_allowed: []
 cmd_allowed: []
@@ -445,6 +785,8 @@ fn world_gateway_status_json_uses_typed_runtime_contract() {
     let (_temp, _socket, socket_path) = gateway_socket_fixture();
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -465,6 +807,8 @@ fn world_gateway_status_json_preserves_unavailable_shape_from_runtime() {
     let (_temp, _socket, socket_path) = gateway_unavailable_socket_fixture();
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -499,6 +843,8 @@ fn world_gateway_missing_socket_is_classified_as_absent_state() {
     let missing_socket_path = temp.path().join("missing.sock");
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -518,6 +864,8 @@ fn world_gateway_connection_refused_is_classified_as_transient_runtime_failure()
     let (_temp, socket_path) = stale_gateway_socket_path();
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -545,6 +893,8 @@ fn world_gateway_http_failures_bubble_as_errors() {
     );
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -570,6 +920,8 @@ fn world_gateway_invalid_integration_uses_exit_code_2() {
     );
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -597,6 +949,8 @@ fn world_gateway_transient_runtime_failures_use_exit_code_3() {
     );
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -624,6 +978,8 @@ fn world_gateway_policy_failures_use_exit_code_5() {
     );
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
 
     let mut cmd = fixture.command();
     cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
@@ -639,9 +995,68 @@ fn world_gateway_policy_failures_use_exit_code_5() {
 }
 
 #[test]
+fn world_gateway_missing_inventory_uses_exit_code_2_before_socket_dispatch() {
+    let temp = short_socket_tempdir("sub-gwmiss-");
+    let missing_socket_path = temp.path().join("missing.sock");
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket_path)
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: invalid integration",
+        ));
+}
+
+#[test]
+fn world_gateway_inventory_filename_id_mismatch_uses_exit_code_2() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_with_id_mismatch());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: invalid integration",
+        ));
+}
+
+#[test]
+fn world_gateway_allowlist_denial_uses_exit_code_5() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_codex_host_credentials());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: policy or safety failure",
+        ));
+}
+
+#[test]
 fn world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
     fixture.write_global_policy(gateway_policy_with_codex_host_credentials());
     fixture.write_codex_auth_state(
         r#"{
@@ -672,6 +1087,10 @@ fn world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file() {
 
     let request = socket.recorded_request();
     assert_eq!(
+        request.pointer("/integrated_auth/backend_id"),
+        Some(&json!("cli:codex"))
+    );
+    assert_eq!(
         request.pointer("/integrated_auth/cli_codex/account_id"),
         Some(&json!("acct_file_explicit"))
     );
@@ -685,6 +1104,7 @@ fn world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file() {
 fn world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
     fixture.write_global_policy(gateway_policy_with_codex_env_override());
 
     let mut socket = RecordedGatewayRequestSocket::start(json!({
@@ -715,6 +1135,10 @@ fn world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override
 
     let request = socket.recorded_request();
     assert_eq!(
+        request.pointer("/integrated_auth/backend_id"),
+        Some(&json!("cli:codex"))
+    );
+    assert_eq!(
         request.pointer("/integrated_auth/cli_codex/account_id"),
         Some(&json!("acct_env_explicit"))
     );
@@ -725,9 +1149,234 @@ fn world_gateway_status_builds_integrated_auth_payload_from_allowed_env_override
 }
 
 #[test]
+fn world_gateway_status_prefers_allowed_env_auth_over_host_auth_file() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
+    fixture.write_global_policy(gateway_policy_with_codex_env_override());
+    fixture.write_codex_auth_state(
+        r#"{
+  "account_id": "acct_file_explicit",
+  "access_token": "token-from-file"
+}"#,
+    );
+
+    let mut socket = RecordedGatewayRequestSocket::start(json!({
+        "status": "available",
+        "client_wiring": {
+            "openai_base_url": "http://gateway.test/openai",
+            "anthropic_base_url": "http://gateway.test/anthropic"
+        }
+    }));
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .env(
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
+            "acct_env_explicit",
+        )
+        .env(
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+            "token-from-env",
+        )
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains(
+            "substrate world gateway status: available",
+        ));
+
+    let request = socket.recorded_request();
+    assert_eq!(
+        request.pointer("/integrated_auth/backend_id"),
+        Some(&json!("cli:codex"))
+    );
+    assert_eq!(
+        request.pointer("/integrated_auth/cli_codex/account_id"),
+        Some(&json!("acct_env_explicit"))
+    );
+    assert_eq!(
+        request.pointer("/integrated_auth/cli_codex/access_token"),
+        Some(&json!("token-from-env"))
+    );
+}
+
+#[test]
+fn world_gateway_lifecycle_requests_preserve_selected_backend_without_codex_fallback() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let available = json!({
+        "status": "available",
+        "client_wiring": {
+            "openai_base_url": "http://gateway.test/openai",
+            "anthropic_base_url": "http://gateway.test/anthropic"
+        }
+    });
+    let mut socket =
+        RecordedGatewayLifecycleSocket::start(available.clone(), available.clone(), available, 3);
+
+    let mut status = fixture.command();
+    status
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .args(["world", "gateway", "status", "--json"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("\"status\":\"available\""));
+
+    let mut sync = fixture.command();
+    sync.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .args(["world", "gateway", "sync"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains(
+            "substrate world gateway sync: available",
+        ));
+
+    let mut restart = fixture.command();
+    restart
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .args(["world", "gateway", "restart"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains(
+            "substrate world gateway restart: available",
+        ));
+
+    let requests = socket.recorded_requests();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[0].path, "/v1/gateway/status");
+    assert_eq!(requests[1].path, "/v1/gateway/sync");
+    assert_eq!(requests[2].path, "/v1/gateway/restart");
+
+    for request in requests {
+        assert_gateway_lifecycle_backend(&request, FIRST_ADDITIONAL_BACKEND_ID);
+        assert_gateway_lifecycle_no_integrated_auth(&request);
+    }
+}
+
+#[test]
+fn world_gateway_lifecycle_requests_emit_api_env_auth_when_allowed() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_env_override());
+
+    let available = json!({
+        "status": "available",
+        "client_wiring": {
+            "openai_base_url": "http://gateway.test/openai",
+            "anthropic_base_url": "http://gateway.test/anthropic"
+        }
+    });
+    let mut socket =
+        RecordedGatewayLifecycleSocket::start(available.clone(), available.clone(), available, 3);
+
+    let mut status = fixture.command();
+    status
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .env("OPENAI_API_KEY", "sk-openai-proof")
+        .args(["world", "gateway", "status", "--json"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains("\"status\":\"available\""));
+
+    let mut sync = fixture.command();
+    sync.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .env("OPENAI_API_KEY", "sk-openai-proof")
+        .args(["world", "gateway", "sync"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains(
+            "substrate world gateway sync: available",
+        ));
+
+    let mut restart = fixture.command();
+    restart
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+        .env("OPENAI_API_KEY", "sk-openai-proof")
+        .args(["world", "gateway", "restart"])
+        .assert()
+        .code(0)
+        .stdout(predicate::str::contains(
+            "substrate world gateway restart: available",
+        ));
+
+    let requests = socket.recorded_requests();
+    assert_eq!(requests.len(), 3);
+    for request in requests {
+        assert_gateway_lifecycle_api_env_auth(&request, "sk-openai-proof");
+    }
+}
+
+#[test]
+fn world_gateway_openai_env_auth_blocked_by_policy_uses_exit_code_5() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("OPENAI_API_KEY", "sk-openai-proof")
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: policy or safety failure",
+        ));
+}
+
+#[test]
+fn world_gateway_openai_incomplete_env_auth_uses_exit_code_2() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai_multi_env());
+    fixture.write_global_policy(gateway_policy_with_openai_env_override());
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("OPENAI_API_KEY", "sk-openai-proof")
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: invalid integration",
+        ));
+}
+
+#[test]
 fn world_gateway_host_credential_policy_denials_use_exit_code_5() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
     fixture.write_global_policy(gateway_policy_missing_host_credentials_gate());
     fixture.write_codex_auth_state(
         r#"{
@@ -770,6 +1419,7 @@ fn world_gateway_config_disabled_stays_policy_blocked() {
 fn world_gateway_incomplete_env_override_uses_exit_code_2() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
     fixture.write_global_policy(gateway_policy_with_codex_env_override());
 
     let mut cmd = fixture.command();
@@ -789,6 +1439,43 @@ fn world_gateway_incomplete_env_override_uses_exit_code_2() {
 }
 
 #[test]
+fn world_gateway_env_auth_blocked_by_policy_denies_without_file_fallback() {
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
+    fixture.write_global_policy(gateway_policy_with_codex_host_credentials());
+    fixture.write_codex_auth_state(
+        r#"{
+  "account_id": "acct_file_explicit",
+  "access_token": "token-from-file"
+}"#,
+    );
+
+    let temp = short_socket_tempdir("sub-gwa-");
+    let missing_socket_path = temp.path().join("missing.sock");
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket_path)
+        .env(
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
+            "acct_env_blocked",
+        )
+        .env(
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+            "token-from-env",
+        )
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: policy or safety failure",
+        ));
+}
+
+#[test]
 fn world_gateway_empty_default_backend_uses_exit_code_2() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_empty_backend());
@@ -804,4 +1491,107 @@ fn world_gateway_empty_default_backend_uses_exit_code_2() {
         .stderr(predicate::str::contains(
             "substrate world gateway status: invalid integration",
         ));
+}
+
+#[test]
+fn world_gateway_backend_matrix_keeps_regression_floor_and_first_proof_target_visible() {
+    let cases = [
+        (
+            REGRESSION_FLOOR_BACKEND_ID,
+            gateway_config_with_codex_backend(),
+            gateway_inventory_for_codex(),
+            gateway_policy_with_codex_host_credentials(),
+            None,
+        ),
+        (
+            FIRST_ADDITIONAL_BACKEND_ID,
+            gateway_config_with_generic_backend(),
+            gateway_inventory_for_openai(),
+            gateway_policy_with_openai_env_override(),
+            Some("sk-openai-proof"),
+        ),
+    ];
+
+    for (backend_id, config, inventory, policy, api_key) in cases {
+        let fixture = GatewayAuthFixture::new();
+        fixture.write_global_config(config);
+        fixture.write_global_agent_inventory(
+            if backend_id == REGRESSION_FLOOR_BACKEND_ID {
+                "codex.yaml"
+            } else {
+                "openai.yaml"
+            },
+            inventory,
+        );
+        fixture.write_global_policy(policy);
+        if let Some(api_key) = api_key {
+            let available = json!({
+                "status": "available",
+                "client_wiring": {
+                    "openai_base_url": "http://gateway.test/openai",
+                    "anthropic_base_url": "http://gateway.test/anthropic"
+                }
+            });
+            let mut socket = RecordedGatewayLifecycleSocket::start(
+                available.clone(),
+                available.clone(),
+                available,
+                1,
+            );
+
+            let mut cmd = fixture.command();
+            cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+                .env("SUBSTRATE_WORLD_ENABLED", "1")
+                .env("SUBSTRATE_WORLD", "enabled")
+                .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+                .env("OPENAI_API_KEY", api_key)
+                .args(["world", "gateway", "status"])
+                .assert()
+                .code(0);
+
+            let requests = socket.recorded_requests();
+            assert_eq!(requests.len(), 1);
+            assert_gateway_lifecycle_backend(&requests[0], backend_id);
+            assert_gateway_lifecycle_api_env_auth(&requests[0], api_key);
+        } else {
+            fixture.write_codex_auth_state(
+                r#"{
+  "account_id": "acct_file_explicit",
+  "access_token": "token-from-file"
+}"#,
+            );
+
+            let available = json!({
+                "status": "available",
+                "client_wiring": {
+                    "openai_base_url": "http://gateway.test/openai",
+                    "anthropic_base_url": "http://gateway.test/anthropic"
+                }
+            });
+            let mut socket = RecordedGatewayLifecycleSocket::start(
+                available.clone(),
+                available.clone(),
+                available,
+                1,
+            );
+
+            let mut cmd = fixture.command();
+            cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+                .env("SUBSTRATE_WORLD_ENABLED", "1")
+                .env("SUBSTRATE_WORLD", "enabled")
+                .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+                .args(["world", "gateway", "status"])
+                .assert()
+                .code(0);
+
+            let requests = socket.recorded_requests();
+            assert_eq!(requests.len(), 1);
+            assert_gateway_lifecycle_backend(&requests[0], backend_id);
+            assert_gateway_lifecycle_cli_codex_auth(
+                &requests[0],
+                "acct_file_explicit",
+                "token-from-file",
+            );
+        }
+    }
 }

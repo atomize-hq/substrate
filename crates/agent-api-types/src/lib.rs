@@ -833,12 +833,32 @@ pub struct GatewayCliCodexIntegratedAuthV1 {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct GatewayIntegratedAuthPayloadV1 {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cli_codex: Option<GatewayCliCodexIntegratedAuthV1>,
+pub struct GatewayApiEnvIntegratedAuthV1 {
+    pub env: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayIntegratedAuthPayloadV1 {
+    pub backend_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli_codex: Option<GatewayCliCodexIntegratedAuthV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_env: Option<GatewayApiEnvIntegratedAuthV1>,
+}
+
+impl GatewayIntegratedAuthPayloadV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_gateway_integrated_auth_payload(self)
+    }
+
+    pub fn validate_for_selected_backend(&self, selected_backend: &str) -> Result<(), String> {
+        validate_gateway_integrated_auth_payload_for_selected_backend(self, selected_backend)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GatewayLifecycleRequestV1 {
     pub profile: Option<String>,
     pub cwd: Option<String>,
@@ -849,6 +869,112 @@ pub struct GatewayLifecycleRequestV1 {
     pub world_network: Option<WorldNetworkRoutingV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
+}
+
+pub fn validate_gateway_integrated_auth_payload(
+    payload: &GatewayIntegratedAuthPayloadV1,
+) -> Result<(), String> {
+    let backend_id = payload.backend_id.trim();
+    if backend_id.is_empty() {
+        return Err("request-provided integrated auth payload is missing backend_id".to_string());
+    }
+
+    let cli_codex = payload.cli_codex.as_ref();
+    let api_env = payload.api_env.as_ref();
+    let facet_count = usize::from(cli_codex.is_some()) + usize::from(api_env.is_some());
+
+    if facet_count != 1 {
+        return Err(format!(
+            "request-provided integrated auth payload must contain exactly one auth facet (found {facet_count})"
+        ));
+    }
+
+    if let Some(cli_codex) = cli_codex {
+        if backend_id != "cli:codex" {
+            return Err(format!(
+                "request-provided integrated auth payload for '{}' uses incompatible auth facet 'cli_codex'",
+                backend_id
+            ));
+        }
+
+        if cli_codex
+            .account_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            return Err(
+                "request-provided integrated auth payload contains empty cli_codex.account_id"
+                    .to_string(),
+            );
+        }
+
+        if cli_codex.access_token.trim().is_empty() {
+            return Err(
+                "request-provided integrated auth payload contains empty cli_codex.access_token"
+                    .to_string(),
+            );
+        }
+    }
+
+    if let Some(api_env) = api_env {
+        if !backend_id.starts_with("api:") {
+            return Err(format!(
+                "request-provided integrated auth payload for '{}' uses incompatible auth facet 'api_env'",
+                backend_id
+            ));
+        }
+
+        if api_env.env.is_empty() {
+            return Err(
+                "request-provided integrated auth payload contains empty api_env.env".to_string(),
+            );
+        }
+
+        for (name, value) in &api_env.env {
+            let trimmed_name = name.trim();
+            if trimmed_name.is_empty() {
+                return Err(
+                    "request-provided integrated auth payload contains blank api_env env name"
+                        .to_string(),
+                );
+            }
+            if trimmed_name != name
+                || trimmed_name.contains(char::is_whitespace)
+                || trimmed_name.contains('=')
+            {
+                return Err(format!(
+                    "request-provided integrated auth payload contains invalid api_env env name '{}'",
+                    name
+                ));
+            }
+            if value.trim().is_empty() {
+                return Err(format!(
+                    "request-provided integrated auth payload contains empty api_env value for '{}'",
+                    name
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn validate_gateway_integrated_auth_payload_for_selected_backend(
+    payload: &GatewayIntegratedAuthPayloadV1,
+    selected_backend: &str,
+) -> Result<(), String> {
+    validate_gateway_integrated_auth_payload(payload)?;
+
+    let selected_backend = selected_backend.trim();
+    if payload.backend_id.trim() != selected_backend {
+        return Err(format!(
+            "request-provided integrated auth payload for '{}' does not match selected backend '{}'",
+            payload.backend_id.trim(),
+            selected_backend
+        ));
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -991,6 +1117,153 @@ pub enum WorldDoctorWorldFsStrategyProbeResultV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    fn valid_cli_codex_payload() -> GatewayIntegratedAuthPayloadV1 {
+        GatewayIntegratedAuthPayloadV1 {
+            backend_id: "cli:codex".to_string(),
+            cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                account_id: Some("acct_test".to_string()),
+                access_token: "header.payload.signature".to_string(),
+            }),
+            api_env: None,
+        }
+    }
+
+    fn valid_api_openai_payload() -> GatewayIntegratedAuthPayloadV1 {
+        let mut env = HashMap::new();
+        env.insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
+
+        GatewayIntegratedAuthPayloadV1 {
+            backend_id: "api:openai".to_string(),
+            cli_codex: None,
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
+        }
+    }
+
+    #[test]
+    fn gateway_lifecycle_request_rejects_unknown_fields() {
+        let err = serde_json::from_value::<GatewayLifecycleRequestV1>(json!({
+            "profile": null,
+            "cwd": "/tmp",
+            "env": null,
+            "agent_id": "tester",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": { "enabled": true, "allow_list": ["."], "deny_list": [] }
+                }
+            },
+            "world_network": null,
+            "integrated_auth": null,
+            "unexpected": true
+        }))
+        .expect_err("unknown request field should fail");
+
+        assert!(err.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_unknown_facet_fields() {
+        let err = serde_json::from_value::<GatewayIntegratedAuthPayloadV1>(json!({
+            "backend_id": "api:openai",
+            "api_env": {
+                "env": {
+                    "OPENAI_API_KEY": "sk-test"
+                },
+                "unexpected": true
+            }
+        }))
+        .expect_err("unknown facet field should fail");
+
+        assert!(err.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_multi_facet_payloads() {
+        let mut payload = valid_cli_codex_payload();
+        let mut env = HashMap::new();
+        env.insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
+        payload.api_env = Some(GatewayApiEnvIntegratedAuthV1 { env });
+
+        let err = payload
+            .validate()
+            .expect_err("multi-facet payload should fail");
+        assert!(err.contains("exactly one auth facet"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_facet_backend_mismatch() {
+        let mut payload = valid_cli_codex_payload();
+        payload.backend_id = "api:openai".to_string();
+
+        let err = payload.validate().expect_err("mismatch should fail");
+        assert!(err.contains("incompatible auth facet"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_missing_facet_payloads() {
+        let payload = GatewayIntegratedAuthPayloadV1 {
+            backend_id: "api:openai".to_string(),
+            cli_codex: None,
+            api_env: None,
+        };
+
+        let err = payload
+            .validate()
+            .expect_err("missing-facet payload should fail");
+        assert!(err.contains("exactly one auth facet"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_blank_required_values() {
+        let mut payload = valid_api_openai_payload();
+        payload
+            .api_env
+            .as_mut()
+            .expect("api_env")
+            .env
+            .insert("OPENAI_API_KEY".to_string(), "   ".to_string());
+
+        let err = payload
+            .validate()
+            .expect_err("blank required value should fail");
+        assert!(err.contains("empty api_env value"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_invalid_api_env_names() {
+        let mut payload = valid_api_openai_payload();
+        payload
+            .api_env
+            .as_mut()
+            .expect("api_env")
+            .env
+            .insert("OPENAI API KEY".to_string(), "sk-test".to_string());
+
+        let err = payload
+            .validate()
+            .expect_err("invalid api env name should fail");
+        assert!(err.contains("invalid api_env env name"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_accepts_valid_cli_codex() {
+        valid_cli_codex_payload()
+            .validate()
+            .expect("valid cli:codex");
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_accepts_valid_api_openai() {
+        valid_api_openai_payload()
+            .validate()
+            .expect("valid api:openai");
+    }
 
     #[test]
     fn serialize_stream_frame_roundtrip() {

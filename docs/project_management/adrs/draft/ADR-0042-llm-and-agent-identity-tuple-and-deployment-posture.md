@@ -18,8 +18,11 @@ clarification layer that precedes later Agent Hub updates and any additive confi
 
 - Foundational config/policy surface:
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md`
-  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
+  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
+- Semantic planning pack:
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/spec_manifest.md`
 - Foundational output/event and trace contracts:
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
@@ -40,7 +43,7 @@ clarification layer that precedes later Agent Hub updates and any additive confi
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f0b37fcabdbb0bceeffb8ca91e9ecd51bb5fb9ee57fc928f51c7ca1f934b7256
+ADR_BODY_SHA256: be8c5ba2879ad83e60b07302276e35a343c05e73d5c35c2eeea885b2f3ab2df8
 ### Changes (operator-facing)
 - Replace overloaded backend-id interpretation with an explicit identity tuple
   - Existing: operator-facing docs and traces can accidentally collapse client origin, router authority, upstream provider, auth authority, and protocol shape into one overloaded backend label.

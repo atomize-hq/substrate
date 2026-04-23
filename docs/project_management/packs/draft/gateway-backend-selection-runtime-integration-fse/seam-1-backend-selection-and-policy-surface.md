@@ -2,133 +2,135 @@
 seam_id: SEAM-1
 seam_slug: backend-selection-and-policy-surface
 type: integration
-status: proposed
-execution_horizon: active
+status: landed
+execution_horizon: future
 plan_version: v1
 basis:
-  currentness: provisional
+  currentness: current
   source_scope_ref: scope_brief.md
   source_scope_version: v1
   upstream_closeouts: []
-  required_threads: []
+  required_threads:
+    - THR-01
   stale_triggers:
-    - backend inventory roots or filename rules publish outside this seam
-    - auth precedence becomes explicit in a contract or code path outside this seam
-    - selection taxonomy drifts between ADR-0046, code, and external contract docs
+    - canonical `C-01` or `C-02` rules change outside this seam
+    - shell selection or auth-resolution logic changes outside the planned slice order
+    - failure-bucket wording drifts between shell docs, shell tests, and runtime markers
 gates:
   pre_exec:
-    review: pending
-    contract: pending
-    revalidation: pending
+    review: passed
+    contract: passed
+    revalidation: passed
   post_exec:
-    landing: pending
-    closeout: pending
+    landing: passed
+    closeout: passed
 seam_exit_gate:
   required: true
   planned_location: S99
-  status: pending
-open_remediations:
-  - REM-001
-  - REM-002
+  status: passed
+open_remediations: []
 ---
 
 # SEAM-1 - Backend selection and policy surface
 
 - **Goal / value**:
-  - Freeze the integrated lifecycle truth for backend selection and policy evaluation before downstream runtime work proceeds.
-  - Turn the current Codex-only implementation evidence into an explicit contract boundary rather than leaving selection, precedence, and inventory semantics implied by one code path.
+  - Realize the already-published backend-selection and policy-evaluation contracts at the shell boundary so downstream runtime work consumes executable behavior instead of Codex-only side effects.
+  - Close the gap between published `C-01` / `C-02` truth and current shell behavior, tests, and seam-exit evidence.
 - **Scope**
   - In:
-    - selected backend resolution from existing config and policy
-    - deny-by-default backend allowlisting
-    - backend-id grammar and trusted-input boundary
-    - backend inventory lookup roots and filename/id rules
-    - auth-source precedence between env material and host credential files
-    - policy distinction between invalid integration, policy denial, and dependency unavailable at the selection boundary
+    - shell-side selected-backend validation from existing config, policy, and inventory posture
+    - deny-by-default backend allowlisting before runtime dispatch
+    - shell-side adoption of published inventory roots, filename/id invariants, and failure buckets from `C-01`
+    - shell-side adoption of published env-primary/file-fallback precedence and fail-closed policy rules from `C-02`
+    - deterministic tests and drift guards for `crates/shell/src/builtins/world_gateway.rs`
+    - minimum supporting ADR-0046 alignment needed so implementation docs defer to canonical `docs/contracts/` refs
   - Out:
-    - integrated adapter binding metadata and capability gates
-    - adapter-specific auth payload schemas
-    - runtime config rendering and artifact naming
-    - parity validation and rollout proof
-    - tuple metadata, tuple-policy keys, or `status --json` widening
+    - new canonical contract publication for `C-01` or `C-02`
+    - integrated adapter binding metadata and capability gates inside `crates/world-agent/src/gateway_runtime.rs`
+    - runtime config rendering, managed artifact naming, or process lifecycle ownership
+    - tuple metadata, tuple-policy keys, status-schema widening, or secret-channel redesign
 - **Primary interfaces**
   - Inputs:
     - ADR-0046 goals and non-goals
-    - current shell-side request construction and policy gating in `crates/shell/src/builtins/world_gateway.rs`
-    - external authorities in `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`
+    - canonical `C-01` in `docs/contracts/substrate-gateway-backend-adapter-selection.md`
+    - canonical `C-02` in `docs/contracts/substrate-gateway-policy-evaluation.md`
+    - shell request construction and validation in `crates/shell/src/builtins/world_gateway.rs`
+    - shell lifecycle tests in `crates/shell/tests/world_gateway.rs`
   - Outputs:
-    - canonical contract publication in `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-    - canonical contract publication in `docs/contracts/substrate-gateway-policy-evaluation.md`
-    - aligned supporting ADR-0046 docs in `contract.md`, `policy-spec.md`, and `env-vars-spec.md`
-    - downstream-ready selection/policy truth carried by `THR-01`
+    - landed shell behavior that matches the published `C-01` / `C-02` rules
+    - deterministic shell tests covering selection, precedence, and failure-bucket behavior
+    - aligned supporting ADR-0046 docs that clearly defer to canonical `docs/contracts/` ownership
+    - closeout-ready `THR-01` evidence for `SEAM-2` and `SEAM-3`
 - **Key invariants / rules**:
   - backend ids remain stable `<kind>:<name>` selectors only
   - gateway-local config, admin mutation, and persistence are not trusted authorization inputs
   - selection must stay on existing ADR-0027 config/policy roots
   - this seam must not widen `status --json` or pull ADR-0042/0043 surfaces into scope
-  - selection and policy truth must be explicit enough that downstream runtime planning does not infer taxonomy from hardcoded Codex branches
+  - shell behavior must adopt published contract truth instead of treating current `cli:codex` branches as implicit authority
 - **Dependencies**
   - Direct blockers:
     - none inside the pack
   - Transitive blockers:
-    - external authorities in ADR-0040/0041 must remain evidence inputs, and canonical publication under `docs/contracts/*` must not be bypassed by local planning prose
+    - canonical `C-01` / `C-02` remain authoritative and must not be shadowed by feature-local prose
   - Direct consumers:
     - `SEAM-2`
     - `SEAM-3`
   - Derived consumers:
     - shell gateway requests
-    - policy review
-    - validation and rollout artifacts
+    - downstream runtime realization
+    - closeout and rollout artifacts
 - **Touch surface**:
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/contract.md`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/policy-spec.md`
-  - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md`
   - `crates/shell/src/builtins/world_gateway.rs`
+  - `crates/shell/tests/world_gateway.rs`
   - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
   - `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - future subordinate ADR-0046 support docs under `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/`, if created later
 - **Verification**:
-  - This seam produces owned contracts `C-01` and `C-02` by clarifying and, when needed, updating the canonical contract refs `docs/contracts/substrate-gateway-backend-adapter-selection.md` and `docs/contracts/substrate-gateway-policy-evaluation.md`. Verification at seam-brief depth is those canonical surfaces becoming concrete enough for seam-local planning and implementation: exact selection order, inventory discoverability, allowlist order, auth precedence, and failure-taxonomy boundaries.
-  - The feature-local ADR-0046 docs `contract.md`, `policy-spec.md`, and `env-vars-spec.md` remain supporting planning and implementation surfaces; they are not the canonical publication endpoints.
+  - `C-01` and `C-02` are already published; this seam verifies shell adoption, not fresh contract publication.
+  - Current pre-exec gate posture is:
+    - `review: passed` because the seam-local review bundle still exposes falsifiable selected-backend and auth-boundary flows.
+    - `contract: passed` because canonical `docs/contracts/` refs already publish the selection, inventory, precedence, and fail-closed rules this seam needs.
+    - `revalidation: passed` because the current shell still preserves the main failure buckets and Codex auth precedence rules, even though generic backend realization remains unimplemented.
+    - `status: landed` is now justified because the seam-exit gate passed, `THR-01` published, post-exec gates passed, and `REM-001` / `REM-002` were resolved in closeout.
   - Later seam-local verification should prove:
-    - selection remains on existing config/policy roots
-    - deny-by-default allowlisting happens before adapter dispatch
-    - backend inventory roots and filename rules are explicit
-    - auth precedence and policy gates are explicit rather than Codex-only side effects
+    - `validate_gateway_lifecycle_config` and `build_gateway_request` reject empty, malformed, unknown, or disallowed selected backends before runtime dispatch, with landed evidence captured by `world_gateway_missing_inventory_uses_exit_code_2_before_socket_dispatch`, `world_gateway_inventory_filename_id_mismatch_uses_exit_code_2`, and `world_gateway_allowlist_denial_uses_exit_code_5`
+    - `resolve_integrated_auth_payload` and `resolve_cli_codex_integrated_auth` enforce env-primary/file-fallback/no-mixed-source auth precedence
+    - `ensure_backend_allowed` and `ensure_env_name_allowed` preserve policy-denial behavior without weakening fail-closed posture, with landed evidence captured by `world_gateway_env_auth_blocked_by_policy_denies_without_file_fallback` in addition to the existing auth precedence tests
+    - `crates/shell/tests/world_gateway.rs` proves the distinction between invalid integration, policy denial, component unavailable, and transient runtime failure where the shell owns that distinction
+    - any later subordinate ADR-0046 support docs remain descriptive implementation notes and do not compete with canonical `docs/contracts/` ownership
 - **Canonical contract refs**:
   - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
   - `docs/contracts/substrate-gateway-policy-evaluation.md`
 - **Risks / unknowns**:
   - Risk:
-    - current code only proves a Codex-specific auth precedence path, not a general integrated contract
+    - current shell behavior still special-cases `cli:codex` and does not yet realize generic inventory-backed backend validation
   - De-risk plan:
-    - publish explicit precedence and selection rules before downstream runtime protocol/schema work starts
+    - land shell-side selection checks and deterministic tests before handing off to runtime realization
   - Risk:
-    - missing backend inventory roots or filename rules will force runtime work to invent filesystem semantics locally
+    - supporting ADR-0046 docs may continue reading like competing contract owners instead of implementation notes
   - De-risk plan:
-    - treat discoverability and filename invariants as first-class active-seam contract work
+    - align supporting docs behind canonical `docs/contracts/` refs during conformance slices
   - Risk:
-    - adjacent docs may tempt downstream work to widen tuple or status surfaces here
+    - shell and runtime may classify the same failure differently at the world boundary
   - De-risk plan:
-    - keep ADR-0042/0043 and `status --json` widening explicit out-of-scope checks in seam-local review
+    - keep shell-owned buckets explicit and hand runtime-owned availability/binding questions to `SEAM-2`
 - **Rollout / safety**:
-  - This seam is the safest active starting point because it fixes trusted-input and failure-taxonomy boundaries before runtime expansion.
-  - Safety depends on failing closed and preventing gateway-local state from becoming authorization truth.
+  - This seam landed safely by tightening shell-side validation and evidence without widening operator surface area.
+  - Safety depends on failing closed before runtime launch and keeping gateway-local state out of authorization truth.
 - **Downstream decomposition context**:
   - Why this seam is `active`, `next`, or `future`
-    - `active` because its unresolved authority questions block every downstream seam.
+    - this seam is now `future` only because it has left the forward planning window; it remains landed and continues to supply the published `THR-01` handoff to downstream seams.
   - Which threads matter most
     - `THR-01`
   - What the first seam-local review should focus on
-    - backend selection order
-    - allowlist timing
-    - inventory roots and filename rules
-    - auth precedence
-    - out-of-scope checks for tuple/status widening
-    - whether `S00` is needed to freeze the contract before implementation slices begin
+    - whether shell validation matches published selection order
+    - whether auth precedence remains env-primary and fail-closed
+    - whether new tests prove shell-owned failure buckets deterministically
+    - whether supporting ADR-0046 docs are clearly non-canonical
 - **Expected seam-exit concerns**:
-  - Contracts likely to publish:
-    - `C-01` via `docs/contracts/substrate-gateway-backend-adapter-selection.md`
-    - `C-02` via `docs/contracts/substrate-gateway-policy-evaluation.md`
+  - Contracts likely to consume:
+    - `C-01`
+    - `C-02`
   - Threads likely to advance:
     - `THR-01`
   - Review-surface areas likely to shift after landing:
@@ -138,4 +140,4 @@ open_remediations:
   - Downstream seams most likely to require revalidation:
     - `SEAM-2`
     - `SEAM-3`
-  - Seam exit should record canonical contract publication under `docs/contracts/` plus any aligned supporting ADR-0046 docs used to implement or verify the change.
+  - Seam exit should record landed shell behavior, test evidence, and any supporting ADR alignment used to verify adoption of `C-01` / `C-02`.

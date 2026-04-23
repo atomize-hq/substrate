@@ -17,10 +17,12 @@ This ADR is a minimal additive follow-on to ADR-0027. It keeps the existing file
 
 - Semantic model:
   - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/spec_manifest.md`
 - Config/policy foundation:
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md`
-  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
+  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 - Expected planning-pack outputs:
   - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md`
   - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json`
@@ -41,7 +43,7 @@ This ADR is a minimal additive follow-on to ADR-0027. It keeps the existing file
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: cdbcd3b47a2dcc20fdce2662742614eb1a8484429895bd7d7052405de93b8cba
+ADR_BODY_SHA256: a5cb101ea0bbea3046eb3adc0a061e0f069750d7bb8bef72e5574027b205bc6c
 ### Changes (operator-facing)
 - Add tuple-axis policy constraints without creating a new config system
   - Existing: `llm.allowed_backends` and `agents.allowed_backends` gate backend ids, but they do not let operators state router, provider, protocol, or auth-authority constraints independently.

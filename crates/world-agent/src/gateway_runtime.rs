@@ -1,6 +1,6 @@
 use agent_api_types::{
-    GatewayCliCodexIntegratedAuthV1, GatewayClientWiringV1, GatewayLifecycleResponseV1,
-    GatewayStatusV1,
+    GatewayCliCodexIntegratedAuthV1, GatewayClientWiringV1, GatewayIntegratedAuthPayloadV1,
+    GatewayLifecycleResponseV1, GatewayStatusV1,
 };
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -29,17 +29,29 @@ const GATEWAY_MODE_HOST_ONLY: &str = "host_only";
 
 const CODEX_ACCOUNT_ID_ENV: &str = "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID";
 const CODEX_ACCESS_TOKEN_ENV: &str = "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN";
+const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 const GATEWAY_BINARY_OVERRIDE_ENV: &str = "SUBSTRATE_GATEWAY_BINARY";
 const HEALTH_PATH: &str = "/health";
 const DEFAULT_BACKEND: &str = "cli:codex";
+const API_OPENAI_BACKEND: &str = "api:openai";
 const DEFAULT_ROUTED_MODEL: &str = "codex";
 const DEFAULT_ACTUAL_MODEL: &str = "codex-mini-latest";
 const DEFAULT_PROVIDER_NAME: &str = "openai-codex";
+const OPENAI_ROUTED_MODEL: &str = "gpt-4.1-mini";
+const OPENAI_ACTUAL_MODEL: &str = "gpt-4.1-mini";
+const OPENAI_PROVIDER_NAME: &str = "openai-api";
 const GATEWAY_RUNTIME_ROOT_DIR: &str = "substrate-gateway-runtime";
 const GATEWAY_RUNTIME_MANIFEST_NAME: &str = "runtime.json";
 const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(8);
 const GATEWAY_RUNTIME_DIR_MODE: u32 = 0o750;
 const GATEWAY_RUNTIME_FILE_MODE: u32 = 0o640;
+const KNOWN_GATEWAY_AUTH_ENV_VARS: &[&str] = &[
+    CODEX_ACCOUNT_ID_ENV,
+    CODEX_ACCESS_TOKEN_ENV,
+    OPENAI_API_KEY_ENV,
+];
+const REQUIRED_GATEWAY_CAPABILITIES: &[&str] =
+    &["agent_api.run", "agent_api.events", "agent_api.events.live"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -93,15 +105,92 @@ impl GatewayControlSettings {
             .map(|value| value.trim().to_string())
             .unwrap_or_else(|| DEFAULT_BACKEND.to_string());
 
-        if default_backend != DEFAULT_BACKEND {
+        if default_backend.is_empty() {
             return Err(GatewayRuntimeFailure::invalid_integration(format!(
-                "default backend '{}' is not supported by the integrated gateway lifecycle yet",
-                default_backend
+                "{} must be a non-empty backend id",
+                GATEWAY_REQUEST_DEFAULT_BACKEND_ENV
             )));
         }
 
         Ok(Self { default_backend })
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GatewayIntegratedAuthKind {
+    CliCodex,
+    ApiEnv,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum GatewayProviderAuthConfig {
+    OAuth { oauth_provider: &'static str },
+    ApiKey { env_var: &'static str },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GatewayBackendBinding {
+    pub(crate) backend_id: &'static str,
+    pub(crate) routed_model: &'static str,
+    pub(crate) actual_model: &'static str,
+    pub(crate) provider_name: &'static str,
+    pub(crate) provider_type: &'static str,
+    pub(crate) advertised_capabilities: &'static [&'static str],
+    pub(crate) required_capabilities: &'static [&'static str],
+    provider_auth: GatewayProviderAuthConfig,
+    auth_kind: GatewayIntegratedAuthKind,
+}
+
+const CLI_CODEX_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
+    backend_id: DEFAULT_BACKEND,
+    routed_model: DEFAULT_ROUTED_MODEL,
+    actual_model: DEFAULT_ACTUAL_MODEL,
+    provider_name: DEFAULT_PROVIDER_NAME,
+    provider_type: "openai",
+    advertised_capabilities: &[
+        "agent_api.run",
+        "agent_api.events",
+        "agent_api.events.live",
+        "agent_api.exec.non_interactive",
+        "agent_api.exec.add_dirs.v1",
+        "agent_api.session.resume.v1",
+        "agent_api.session.fork.v1",
+        "agent_api.session.handle.v1",
+        "agent_api.control.cancel.v1",
+        "agent_api.tools.structured.v1",
+        "agent_api.tools.results.v1",
+        "agent_api.artifacts.final_text.v1",
+    ],
+    required_capabilities: REQUIRED_GATEWAY_CAPABILITIES,
+    provider_auth: GatewayProviderAuthConfig::OAuth {
+        oauth_provider: DEFAULT_PROVIDER_NAME,
+    },
+    auth_kind: GatewayIntegratedAuthKind::CliCodex,
+};
+
+const API_OPENAI_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding {
+    backend_id: API_OPENAI_BACKEND,
+    routed_model: OPENAI_ROUTED_MODEL,
+    actual_model: OPENAI_ACTUAL_MODEL,
+    provider_name: OPENAI_PROVIDER_NAME,
+    provider_type: "openai",
+    advertised_capabilities: CLI_CODEX_BACKEND_BINDING.advertised_capabilities,
+    required_capabilities: REQUIRED_GATEWAY_CAPABILITIES,
+    provider_auth: GatewayProviderAuthConfig::ApiKey {
+        env_var: OPENAI_API_KEY_ENV,
+    },
+    auth_kind: GatewayIntegratedAuthKind::ApiEnv,
+};
+
+const GATEWAY_BACKEND_BINDINGS: &[GatewayBackendBinding] =
+    &[CLI_CODEX_BACKEND_BINDING, API_OPENAI_BACKEND_BINDING];
+
+pub(crate) fn resolve_gateway_backend_binding(
+    backend_id: &str,
+) -> Option<&'static GatewayBackendBinding> {
+    GATEWAY_BACKEND_BINDINGS
+        .iter()
+        .find(|binding| binding.backend_id == backend_id)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -134,13 +223,14 @@ pub(crate) struct GatewayRuntimeStartContext {
     pub project_dir: PathBuf,
     pub cgroup_path: PathBuf,
     pub require_cgroup_attach: bool,
-    pub control: GatewayControlSettings,
-    pub integrated_auth: Option<GatewayCliCodexIntegratedAuthV1>,
+    pub binding: &'static GatewayBackendBinding,
+    pub integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct GatewayRuntimeManifest {
     world_id: String,
+    backend_id: String,
     pid: u32,
     pid_start_time_ticks: u64,
     port: u16,
@@ -158,6 +248,7 @@ enum ManagedGatewayProcess {
 #[derive(Debug, Clone)]
 struct ManagedGatewayRuntime {
     world_id: String,
+    backend_id: String,
     port: u16,
     runtime_dir: PathBuf,
     config_path: PathBuf,
@@ -196,6 +287,7 @@ impl ManagedGatewayRuntime {
     fn persist_manifest(&self) -> Result<()> {
         let manifest = GatewayRuntimeManifest {
             world_id: self.world_id.clone(),
+            backend_id: self.backend_id.clone(),
             pid: self.pid()?,
             pid_start_time_ticks: self.pid_start_time_ticks,
             port: self.port,
@@ -259,12 +351,13 @@ impl GatewayRuntimeManager {
     pub(crate) async fn status(
         &self,
         world_id: &str,
+        backend_id: &str,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
         if let Some(state) = self.lifecycle_state_for_world(world_id) {
             return Err(lifecycle_status_transient_failure(world_id, state));
         }
 
-        let Some(runtime) = self.runtime_for_world_or_manifest(world_id) else {
+        let Some(runtime) = self.runtime_for_world_or_manifest(world_id, backend_id) else {
             return Ok(unavailable_response());
         };
 
@@ -275,7 +368,7 @@ impl GatewayRuntimeManager {
                 return Err(lifecycle_status_transient_failure(world_id, state));
             }
             GatewayRuntimeState::ProvisionedStopped | GatewayRuntimeState::AbsentComponent => {
-                self.remove_runtime(world_id);
+                self.remove_runtime(world_id, backend_id);
                 unavailable_response()
             }
         })
@@ -305,14 +398,16 @@ impl GatewayRuntimeManager {
         ready_timeout: Duration,
         lifecycle: Option<&Arc<GatewayLifecycleWorldState>>,
     ) -> Result<GatewayLifecycleResponseV1, GatewayRuntimeFailure> {
-        if let Some(runtime) = self.runtime_for_world_or_manifest(&ctx.world_id) {
+        if let Some(runtime) =
+            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.binding.backend_id)
+        {
             match self.observe_runtime_state(&runtime).await? {
                 GatewayRuntimeState::Ready => return Ok(available_response(runtime.port)),
                 GatewayRuntimeState::Starting | GatewayRuntimeState::RestartInProgress => {
                     return self.wait_until_ready(runtime, ready_timeout).await;
                 }
                 GatewayRuntimeState::ProvisionedStopped | GatewayRuntimeState::AbsentComponent => {
-                    self.remove_runtime(&ctx.world_id);
+                    self.remove_runtime(&ctx.world_id, ctx.binding.backend_id);
                 }
             }
         }
@@ -322,6 +417,7 @@ impl GatewayRuntimeManager {
             return Ok(unavailable_response());
         };
 
+        let backend_id = ctx.binding.backend_id;
         let runtime = start_runtime(binary_path, ctx)?;
         let world_id = runtime.world_id.clone();
         self.insert_runtime(runtime.clone());
@@ -331,7 +427,7 @@ impl GatewayRuntimeManager {
                 if let Some(runtime) = self.take_runtime(&world_id) {
                     let _ = stop_runtime(runtime);
                 }
-                delete_runtime_manifest(&manifest_path_for_world(&world_id));
+                delete_runtime_manifest(&manifest_path_for_world(&world_id, backend_id));
                 Err(err)
             }
         }
@@ -345,10 +441,15 @@ impl GatewayRuntimeManager {
         let _world_guard = lifecycle.op_lock.lock().await;
         let _restart_state = lifecycle.scoped_state(GatewayRuntimeState::RestartInProgress);
 
-        if let Some(existing) = self.runtime_for_world_or_manifest(&ctx.world_id) {
+        if let Some(existing) =
+            self.runtime_for_world_or_manifest(&ctx.world_id, ctx.binding.backend_id)
+        {
             existing.set_state(GatewayRuntimeState::RestartInProgress);
             self.take_runtime(&ctx.world_id);
-            delete_runtime_manifest(&manifest_path_for_world(&ctx.world_id));
+            delete_runtime_manifest(&manifest_path_for_world(
+                &ctx.world_id,
+                ctx.binding.backend_id,
+            ));
             stop_runtime(existing)
                 .with_context(|| format!("failed to stop gateway runtime for {}", ctx.world_id))
                 .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
@@ -358,13 +459,11 @@ impl GatewayRuntimeManager {
             .await
     }
 
-    #[cfg(test)]
     pub(crate) fn pid_for_world(&self, world_id: &str) -> Option<u32> {
         let runtime = self.runtime_for_world(world_id)?;
         runtime.pid().ok()
     }
 
-    #[cfg(test)]
     pub(crate) fn forget_runtime_for_test(&self, world_id: &str) {
         let _ = self.take_runtime(world_id);
     }
@@ -395,9 +494,13 @@ impl GatewayRuntimeManager {
             .and_then(|state| state.state())
     }
 
-    fn runtime_for_world_or_manifest(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
+    fn runtime_for_world_or_manifest(
+        &self,
+        world_id: &str,
+        backend_id: &str,
+    ) -> Option<ManagedGatewayRuntime> {
         self.runtime_for_world(world_id)
-            .or_else(|| self.recover_runtime(world_id))
+            .or_else(|| self.recover_runtime(world_id, backend_id))
     }
 
     fn insert_runtime(&self, runtime: ManagedGatewayRuntime) {
@@ -406,9 +509,9 @@ impl GatewayRuntimeManager {
         }
     }
 
-    fn remove_runtime(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
+    fn remove_runtime(&self, world_id: &str, backend_id: &str) -> Option<ManagedGatewayRuntime> {
         let runtime = self.take_runtime(world_id);
-        delete_runtime_manifest(&manifest_path_for_world(world_id));
+        delete_runtime_manifest(&manifest_path_for_world(world_id, backend_id));
         runtime
     }
 
@@ -419,8 +522,8 @@ impl GatewayRuntimeManager {
             .and_then(|mut guard| guard.remove(world_id))
     }
 
-    fn recover_runtime(&self, world_id: &str) -> Option<ManagedGatewayRuntime> {
-        let manifest_path = manifest_path_for_world(world_id);
+    fn recover_runtime(&self, world_id: &str, backend_id: &str) -> Option<ManagedGatewayRuntime> {
+        let manifest_path = manifest_path_for_world(world_id, backend_id);
         let manifest = match read_runtime_manifest(&manifest_path) {
             Ok(manifest) => manifest,
             Err(_) => {
@@ -428,15 +531,14 @@ impl GatewayRuntimeManager {
                 return None;
             }
         };
-        let runtime_dir_matches = manifest_path
-            .parent()
-            .is_some_and(|parent| parent == manifest.runtime_dir);
+        let expected_runtime_dir = runtime_dir_for_world(world_id, backend_id);
         let artifacts_exist = manifest.runtime_dir.is_dir() && manifest.config_path.is_file();
         let start_time_matches = read_pid_start_time_ticks(manifest.pid)
             .map(|start_time| start_time == manifest.pid_start_time_ticks)
             .unwrap_or(false);
         if manifest.world_id != world_id
-            || !runtime_dir_matches
+            || manifest.backend_id != backend_id
+            || manifest.runtime_dir != expected_runtime_dir
             || !artifacts_exist
             || !pid_is_running(manifest.pid)
             || !start_time_matches
@@ -448,6 +550,7 @@ impl GatewayRuntimeManager {
 
         let runtime = ManagedGatewayRuntime {
             world_id: manifest.world_id,
+            backend_id: manifest.backend_id,
             port: manifest.port,
             runtime_dir: manifest.runtime_dir,
             config_path: manifest.config_path,
@@ -524,8 +627,9 @@ fn start_runtime(
     binary_path: PathBuf,
     ctx: GatewayRuntimeStartContext,
 ) -> Result<ManagedGatewayRuntime, GatewayRuntimeFailure> {
+    validate_binding_capabilities(ctx.binding)?;
     let port = pick_free_port().map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
-    let runtime_dir = runtime_dir_for_world(&ctx.world_id);
+    let runtime_dir = runtime_dir_for_world(&ctx.world_id, ctx.binding.backend_id);
     let home_dir = runtime_dir.join("home");
     ensure_directory_with_mode(&runtime_dir, GATEWAY_RUNTIME_DIR_MODE)
         .with_context(|| {
@@ -545,7 +649,7 @@ fn start_runtime(
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
     let config_path = runtime_dir.join("config.toml");
-    let config = render_integrated_config(port, &ctx.control.default_backend)?;
+    let config = render_integrated_config(port, ctx.binding);
     write_file_with_mode(&config_path, config.as_bytes(), GATEWAY_RUNTIME_FILE_MODE)
         .with_context(|| format!("failed to write {}", config_path.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
@@ -559,7 +663,7 @@ fn start_runtime(
         .with_context(|| format!("failed to create {}", stderr_log.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
-    let auth = resolve_codex_auth_handoff(ctx.integrated_auth)?;
+    let auth = resolve_integrated_auth_handoff(ctx.binding, ctx.integrated_auth)?;
 
     let mut command = Command::new(&binary_path);
     command
@@ -570,13 +674,13 @@ fn start_runtime(
         .env("HOME", &home_dir)
         .env(GATEWAY_LAUNCH_MODE_ENV, GATEWAY_MODE_IN_WORLD)
         .env(GATEWAY_LAUNCH_CONFIG_PATH_ENV, &config_path)
-        .env(GATEWAY_LAUNCH_DISABLE_TOKEN_PERSISTENCE_ENV, "1")
-        .env(CODEX_ACCESS_TOKEN_ENV, auth.access_token);
+        .env(GATEWAY_LAUNCH_DISABLE_TOKEN_PERSISTENCE_ENV, "1");
 
-    if let Some(account_id) = auth.account_id {
-        command.env(CODEX_ACCOUNT_ID_ENV, account_id);
-    } else {
-        command.env_remove(CODEX_ACCOUNT_ID_ENV);
+    for env_key in KNOWN_GATEWAY_AUTH_ENV_VARS {
+        command.env_remove(env_key);
+    }
+    for (env_key, value) in auth.env_vars {
+        command.env(env_key, value);
     }
     append_gateway_start_args(&mut command, &config_path);
 
@@ -599,10 +703,11 @@ fn start_runtime(
     let world_id = ctx.world_id;
     let runtime = ManagedGatewayRuntime {
         world_id: world_id.clone(),
+        backend_id: ctx.binding.backend_id.to_string(),
         port,
         runtime_dir,
         config_path,
-        manifest_path: manifest_path_for_world(&world_id),
+        manifest_path: manifest_path_for_world(&world_id, ctx.binding.backend_id),
         pid_start_time_ticks,
         process: Arc::new(Mutex::new(ManagedGatewayProcess::Child(child))),
         state: Arc::new(RwLock::new(GatewayRuntimeState::Starting)),
@@ -682,8 +787,8 @@ fn resolve_gateway_binary() -> Result<Option<PathBuf>, GatewayRuntimeFailure> {
     Ok(None)
 }
 
-fn runtime_dir_for_world(world_id: &str) -> PathBuf {
-    gateway_runtime_root_dir().join(world_id)
+fn runtime_dir_for_world(world_id: &str, backend_id: &str) -> PathBuf {
+    backend_runtime_root_dir(backend_id).join(world_id)
 }
 
 fn gateway_runtime_root_dir() -> PathBuf {
@@ -703,8 +808,24 @@ fn gateway_runtime_root_dir() -> PathBuf {
     temp_dir
 }
 
-fn manifest_path_for_world(world_id: &str) -> PathBuf {
-    runtime_dir_for_world(world_id).join(GATEWAY_RUNTIME_MANIFEST_NAME)
+fn backend_runtime_root_dir(backend_id: &str) -> PathBuf {
+    let path = gateway_runtime_root_dir().join(runtime_backend_dir_name(backend_id));
+    let _ = ensure_directory_with_mode(&path, GATEWAY_RUNTIME_DIR_MODE);
+    path
+}
+
+fn runtime_backend_dir_name(backend_id: &str) -> String {
+    backend_id
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' | ':' => ch,
+            _ => '_',
+        })
+        .collect()
+}
+
+fn manifest_path_for_world(world_id: &str, backend_id: &str) -> PathBuf {
+    runtime_dir_for_world(world_id, backend_id).join(GATEWAY_RUNTIME_MANIFEST_NAME)
 }
 
 fn write_runtime_manifest(path: &Path, manifest: &GatewayRuntimeManifest) -> Result<()> {
@@ -763,18 +884,9 @@ fn delete_runtime_manifest(path: &Path) {
     }
 }
 
-fn render_integrated_config(
-    port: u16,
-    default_backend: &str,
-) -> Result<String, GatewayRuntimeFailure> {
-    if default_backend != DEFAULT_BACKEND {
-        return Err(GatewayRuntimeFailure::invalid_integration(format!(
-            "unsupported integrated backend '{}'",
-            default_backend
-        )));
-    }
-
-    Ok(format!(
+fn render_integrated_config(port: u16, binding: &GatewayBackendBinding) -> String {
+    let provider_auth = render_provider_auth_config(binding);
+    format!(
         r#"[server]
 host = "127.0.0.1"
 port = {port}
@@ -785,9 +897,8 @@ default = "{routed_model}"
 
 [[providers]]
 name = "{provider_name}"
-provider_type = "openai"
-auth_type = "oauth"
-oauth_provider = "{provider_name}"
+provider_type = "{provider_type}"
+{provider_auth}
 models = ["{actual_model}"]
 enabled = true
 
@@ -799,20 +910,57 @@ priority = 1
 provider = "{provider_name}"
 actual_model = "{actual_model}"
 "#,
-        routed_model = DEFAULT_ROUTED_MODEL,
-        provider_name = DEFAULT_PROVIDER_NAME,
-        actual_model = DEFAULT_ACTUAL_MODEL,
-    ))
+        routed_model = binding.routed_model,
+        provider_name = binding.provider_name,
+        provider_type = binding.provider_type,
+        provider_auth = provider_auth,
+        actual_model = binding.actual_model,
+    )
 }
 
-struct ResolvedCodexAuth {
-    account_id: Option<String>,
-    access_token: String,
+fn render_provider_auth_config(binding: &GatewayBackendBinding) -> String {
+    match binding.provider_auth {
+        GatewayProviderAuthConfig::OAuth { oauth_provider } => {
+            format!("auth_type = \"oauth\"\noauth_provider = \"{oauth_provider}\"")
+        }
+        GatewayProviderAuthConfig::ApiKey { env_var } => {
+            format!("auth_type = \"apikey\"\napi_key = \"${env_var}\"")
+        }
+    }
+}
+
+struct ResolvedGatewayAuthHandoff {
+    env_vars: Vec<(&'static str, String)>,
+}
+
+fn resolve_integrated_auth_handoff(
+    binding: &GatewayBackendBinding,
+    auth: Option<GatewayIntegratedAuthPayloadV1>,
+) -> Result<ResolvedGatewayAuthHandoff, GatewayRuntimeFailure> {
+    let Some(auth) = auth else {
+        return Err(GatewayRuntimeFailure::invalid_integration(format!(
+            "missing request-provided integrated auth handoff for {}",
+            binding.backend_id
+        )));
+    };
+
+    if auth.backend_id.trim() != binding.backend_id {
+        return Err(GatewayRuntimeFailure::invalid_integration(format!(
+            "request-provided integrated auth payload for '{}' does not match selected backend '{}'",
+            auth.backend_id.trim(),
+            binding.backend_id
+        )));
+    }
+
+    match binding.auth_kind {
+        GatewayIntegratedAuthKind::CliCodex => resolve_codex_auth_handoff(auth.cli_codex.clone()),
+        GatewayIntegratedAuthKind::ApiEnv => resolve_api_env_auth_handoff(binding, &auth),
+    }
 }
 
 fn resolve_codex_auth_handoff(
     auth: Option<GatewayCliCodexIntegratedAuthV1>,
-) -> Result<ResolvedCodexAuth, GatewayRuntimeFailure> {
+) -> Result<ResolvedGatewayAuthHandoff, GatewayRuntimeFailure> {
     let Some(auth) = auth else {
         return Err(GatewayRuntimeFailure::invalid_integration(
             "missing request-provided integrated auth handoff for cli:codex",
@@ -832,10 +980,68 @@ fn resolve_codex_auth_handoff(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    Ok(ResolvedCodexAuth {
-        account_id,
-        access_token,
+    let mut env_vars = vec![(CODEX_ACCESS_TOKEN_ENV, access_token)];
+    if let Some(account_id) = account_id {
+        env_vars.push((CODEX_ACCOUNT_ID_ENV, account_id));
+    }
+
+    Ok(ResolvedGatewayAuthHandoff { env_vars })
+}
+
+fn resolve_api_env_auth_handoff(
+    binding: &GatewayBackendBinding,
+    auth: &GatewayIntegratedAuthPayloadV1,
+) -> Result<ResolvedGatewayAuthHandoff, GatewayRuntimeFailure> {
+    let GatewayProviderAuthConfig::ApiKey { env_var } = binding.provider_auth else {
+        return Err(GatewayRuntimeFailure::invalid_integration(format!(
+            "backend '{}' is not configured for api env auth",
+            binding.backend_id
+        )));
+    };
+
+    let Some(api_env) = auth.api_env.as_ref() else {
+        return Err(GatewayRuntimeFailure::invalid_integration(format!(
+            "missing request-provided integrated auth handoff for {} (expected api_env '{}')",
+            binding.backend_id, env_var
+        )));
+    };
+
+    let Some(value) = api_env.env.get(env_var) else {
+        return Err(GatewayRuntimeFailure::invalid_integration(format!(
+            "request-provided integrated auth payload for '{}' is missing api_env '{}'",
+            auth.backend_id, env_var
+        )));
+    };
+    let value = value.trim().to_string();
+    if value.is_empty() {
+        return Err(GatewayRuntimeFailure::invalid_integration(format!(
+            "request-provided api_env '{}' is empty",
+            env_var
+        )));
+    }
+
+    Ok(ResolvedGatewayAuthHandoff {
+        env_vars: vec![(env_var, value)],
     })
+}
+
+fn validate_binding_capabilities(
+    binding: &GatewayBackendBinding,
+) -> Result<(), GatewayRuntimeFailure> {
+    for capability in binding.required_capabilities {
+        if !binding
+            .advertised_capabilities
+            .iter()
+            .any(|advertised| advertised == capability)
+        {
+            return Err(GatewayRuntimeFailure::transient(format!(
+                "backend '{}' does not advertise required capability '{}'",
+                binding.backend_id, capability
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 fn parse_bool_env(
@@ -1050,13 +1256,29 @@ fn lifecycle_status_transient_failure(
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
-    use agent_api_types::GatewayCliCodexIntegratedAuthV1;
+    use agent_api_types::{
+        GatewayApiEnvIntegratedAuthV1, GatewayCliCodexIntegratedAuthV1,
+        GatewayIntegratedAuthPayloadV1,
+    };
     use once_cell::sync::Lazy;
     use std::io::{Read, Write};
     use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
 
     static ENV_LOCK: Lazy<AsyncMutex<()>> = Lazy::new(|| AsyncMutex::new(()));
+    const MISSING_CAPABILITY_BINDING: GatewayBackendBinding = GatewayBackendBinding {
+        backend_id: "test:missing-capability",
+        routed_model: "broken",
+        actual_model: "broken",
+        provider_name: "broken-provider",
+        provider_type: "openai",
+        advertised_capabilities: &["agent_api.events"],
+        required_capabilities: REQUIRED_GATEWAY_CAPABILITIES,
+        provider_auth: GatewayProviderAuthConfig::OAuth {
+            oauth_provider: "broken-provider",
+        },
+        auth_kind: GatewayIntegratedAuthKind::CliCodex,
+    };
 
     struct EnvGuard {
         key: &'static str,
@@ -1082,18 +1304,49 @@ mod tests {
     }
 
     fn start_context(project_dir: &Path, world_id: &str) -> GatewayRuntimeStartContext {
+        let binding = resolve_gateway_backend_binding(DEFAULT_BACKEND).expect("codex binding");
+        start_context_with_binding(project_dir, world_id, binding)
+    }
+
+    fn start_context_with_binding(
+        project_dir: &Path,
+        world_id: &str,
+        binding: &'static GatewayBackendBinding,
+    ) -> GatewayRuntimeStartContext {
         GatewayRuntimeStartContext {
             world_id: world_id.to_string(),
             project_dir: project_dir.to_path_buf(),
             cgroup_path: project_dir.join("missing-cgroup"),
             require_cgroup_attach: false,
-            control: GatewayControlSettings {
-                default_backend: DEFAULT_BACKEND.to_string(),
-            },
-            integrated_auth: Some(GatewayCliCodexIntegratedAuthV1 {
-                account_id: Some("acct_test".to_string()),
-                access_token: "header.payload.signature".to_string(),
+            binding,
+            integrated_auth: integrated_auth_for_binding(binding),
+        }
+    }
+
+    fn integrated_auth_for_binding(
+        binding: &GatewayBackendBinding,
+    ) -> Option<GatewayIntegratedAuthPayloadV1> {
+        match binding.backend_id {
+            DEFAULT_BACKEND => Some(GatewayIntegratedAuthPayloadV1 {
+                backend_id: binding.backend_id.to_string(),
+                cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                    account_id: Some("acct_test".to_string()),
+                    access_token: "header.payload.signature".to_string(),
+                }),
+                api_env: None,
             }),
+            API_OPENAI_BACKEND => Some(openai_integrated_auth_payload("sk-openai-test")),
+            _ => None,
+        }
+    }
+
+    fn openai_integrated_auth_payload(api_key: &str) -> GatewayIntegratedAuthPayloadV1 {
+        let mut env = HashMap::new();
+        env.insert(OPENAI_API_KEY_ENV.to_string(), api_key.to_string());
+        GatewayIntegratedAuthPayloadV1 {
+            backend_id: API_OPENAI_BACKEND.to_string(),
+            cli_codex: None,
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
         }
     }
 
@@ -1413,6 +1666,91 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
     }
 
     #[test]
+    fn nonempty_unbound_backend_is_accepted_as_selected_input() {
+        let mut env = HashMap::new();
+        env.insert(
+            GATEWAY_REQUEST_DEFAULT_BACKEND_ENV.to_string(),
+            "api:anthropic".to_string(),
+        );
+
+        let control =
+            GatewayControlSettings::from_request_env(Some(&env)).expect("selected backend");
+        assert_eq!(control.default_backend, "api:anthropic");
+    }
+
+    #[test]
+    fn binding_lookup_includes_explicit_openai_proof_target() {
+        let binding = resolve_gateway_backend_binding(API_OPENAI_BACKEND).expect("openai binding");
+        assert_eq!(binding.backend_id, API_OPENAI_BACKEND);
+        assert_eq!(binding.provider_name, OPENAI_PROVIDER_NAME);
+    }
+
+    #[test]
+    fn binding_lookup_returns_none_for_unbound_backend() {
+        assert!(resolve_gateway_backend_binding("api:anthropic").is_none());
+    }
+
+    #[test]
+    fn integrated_config_rendering_is_binding_driven() {
+        let codex_binding =
+            resolve_gateway_backend_binding(DEFAULT_BACKEND).expect("codex binding");
+        let codex_config = render_integrated_config(4317, codex_binding);
+        assert!(codex_config.contains("auth_type = \"oauth\""));
+        assert!(codex_config.contains("oauth_provider = \"openai-codex\""));
+        assert!(!codex_config.contains("api_key = \"$OPENAI_API_KEY\""));
+
+        let openai_binding =
+            resolve_gateway_backend_binding(API_OPENAI_BACKEND).expect("openai binding");
+        let openai_config = render_integrated_config(4318, openai_binding);
+        assert!(openai_config.contains("auth_type = \"apikey\""));
+        assert!(openai_config.contains("api_key = \"$OPENAI_API_KEY\""));
+        assert!(!openai_config.contains("oauth_provider ="));
+    }
+
+    #[test]
+    fn openai_auth_handoff_uses_api_env_when_available() {
+        let binding = resolve_gateway_backend_binding(API_OPENAI_BACKEND).expect("openai binding");
+        let auth = resolve_integrated_auth_handoff(
+            binding,
+            Some(openai_integrated_auth_payload("sk-openai-proof")),
+        )
+        .expect("openai auth handoff");
+
+        assert_eq!(
+            auth.env_vars,
+            vec![(OPENAI_API_KEY_ENV, "sk-openai-proof".to_string())]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn capability_gate_fails_before_runtime_artifacts_are_created() {
+        let _env_lock = ENV_LOCK.lock().await;
+        let temp_dir = TempDir::new().unwrap();
+        let runtime_root = temp_dir.path().join("runtime-root");
+        let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
+        let world_id = "missing-capability";
+
+        let err = start_runtime(
+            temp_dir.path().join("missing-binary"),
+            start_context_with_binding(temp_dir.path(), world_id, &MISSING_CAPABILITY_BINDING),
+        )
+        .expect_err("capability gate should fail before spawn");
+
+        assert!(
+            matches!(err, GatewayRuntimeFailure::Transient(_)),
+            "unexpected error: {err:?}"
+        );
+        assert!(
+            err.to_string().contains("required capability"),
+            "capability gate should explain the missing requirement: {err}"
+        );
+        assert!(
+            !runtime_dir_for_world(world_id, MISSING_CAPABILITY_BINDING.backend_id).exists(),
+            "pre-spawn capability gating should not create runtime artifacts"
+        );
+    }
+
+    #[test]
     fn gateway_health_probe_accepts_server_that_rejects_half_closed_clients() {
         let port = start_strict_health_server();
         assert!(
@@ -1448,6 +1786,9 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         .expect("create runtime");
 
         assert_mode(&runtime_root, GATEWAY_RUNTIME_DIR_MODE);
+        let backend_root = backend_runtime_root_dir(DEFAULT_BACKEND);
+        assert_mode(&backend_root, GATEWAY_RUNTIME_DIR_MODE);
+        assert_eq!(runtime.runtime_dir.parent(), Some(backend_root.as_path()));
         assert_mode(&runtime.runtime_dir, GATEWAY_RUNTIME_DIR_MODE);
         assert_mode(&runtime.runtime_dir.join("home"), GATEWAY_RUNTIME_DIR_MODE);
         assert_mode(&runtime.config_path, GATEWAY_RUNTIME_FILE_MODE);
@@ -1557,7 +1898,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         wait_for_pid(&pid_dir, 1);
 
         let err = manager
-            .status("status-start")
+            .status("status-start", DEFAULT_BACKEND)
             .await
             .expect_err("status should surface a transient start failure");
         assert!(
@@ -1600,7 +1941,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 
         let deadline = Instant::now() + Duration::from_secs(1);
         let err = loop {
-            match manager.status("restart-start").await {
+            match manager.status("restart-start", DEFAULT_BACKEND).await {
                 Err(err) => break err,
                 Ok(response) => {
                     assert_ne!(response.status, GatewayStatusV1::Unavailable);
