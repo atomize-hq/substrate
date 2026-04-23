@@ -734,17 +734,17 @@
       "id": "agent_hub_concurrent_execution_output_routing",
       "title": "Agent hub concurrent execution output routing",
       "branch": "feat/agent-hub-concurrent-execution-output-routing",
-      "directory": "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing",
-      "plan": "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/plan.md",
+      "directory": "docs/project_management/packs/implemented/agent-hub-concurrent-execution-output-routing",
+      "plan": "docs/project_management/packs/implemented/agent-hub-concurrent-execution-output-routing/plan.md",
       "status": "completed",
       "sequence": [
         {
           "id": "OR0",
-          "spec": "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR0-spec.md"
+          "spec": "docs/project_management/packs/implemented/agent-hub-concurrent-execution-output-routing/OR0-spec.md"
         },
         {
           "id": "OR1",
-          "spec": "docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/OR1-spec.md"
+          "spec": "docs/project_management/packs/implemented/agent-hub-concurrent-execution-output-routing/OR1-spec.md"
         }
       ],
       "notes": [
@@ -758,17 +758,17 @@
       "id": "llm_and_agent_config_policy_surface",
       "title": "LLM and agent config/policy surface",
       "branch": "feat/llm-and-agent-config-policy-surface",
-      "directory": "docs/project_management/packs/active/llm_and_agent_config_policy_surface",
-      "plan": "docs/project_management/packs/active/llm_and_agent_config_policy_surface/plan.md",
+      "directory": "docs/project_management/packs/implemented/llm_and_agent_config_policy_surface",
+      "plan": "docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/plan.md",
       "status": "completed",
       "sequence": [
         {
           "id": "LACP0",
-          "spec": "docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP0-spec.md"
+          "spec": "docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/LACP0-spec.md"
         },
         {
           "id": "LACP1",
-          "spec": "docs/project_management/packs/active/llm_and_agent_config_policy_surface/LACP1-spec.md"
+          "spec": "docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/LACP1-spec.md"
         }
       ],
       "notes": [
@@ -781,22 +781,50 @@
       "id": "dev_install_world_agent_staging",
       "title": "Dev install world-agent staging (enable later workflow)",
       "branch": "feat/dev-install-world-agent-staging",
-      "directory": "docs/project_management/packs/draft/dev-install-world-agent-staging",
-      "plan": "docs/project_management/packs/draft/dev-install-world-agent-staging/plan.md",
+      "directory": "docs/project_management/packs/implemented/dev-install-world-agent-staging",
+      "plan": "docs/project_management/packs/implemented/dev-install-world-agent-staging/plan.md",
       "status": "completed",
       "sequence": [
         {
           "id": "DIWAS0",
-          "spec": "docs/project_management/packs/draft/dev-install-world-agent-staging/slices/DIWAS0/DIWAS0-spec.md"
+          "spec": "docs/project_management/packs/implemented/dev-install-world-agent-staging/slices/DIWAS0/DIWAS0-spec.md"
         },
         {
           "id": "DIWAS1",
-          "spec": "docs/project_management/packs/draft/dev-install-world-agent-staging/slices/DIWAS1/DIWAS1-spec.md"
+          "spec": "docs/project_management/packs/implemented/dev-install-world-agent-staging/slices/DIWAS1/DIWAS1-spec.md"
         }
       ],
       "notes": [
         "Implements ADR-0035: Linux dev-install with --no-world stages world-agent and substrate world enable fails fast with a deterministic remediation when the staged artifact is missing.",
         "Coordinates with ADR-0034 helper discovery robustness; prefer landing helper staging first to reduce merge conflict risk on shared installer/world-enable surfaces."
+      ]
+    },
+    {
+      "order": 41.3,
+      "id": "llm_and_agent_identity_tuple_and_deployment_posture",
+      "title": "LLM and agent identity tuple and deployment posture",
+      "branch": "feat/llm-and-agent-identity-tuple-and-deployment-posture",
+      "directory": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture",
+      "plan": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "LAITDP0",
+          "spec": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-spec.md"
+        },
+        {
+          "id": "LAITDP1",
+          "spec": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md"
+        },
+        {
+          "id": "LAITDP2",
+          "spec": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0042: explicit identity tuple semantics plus deployment-posture vocabulary without overloading backend_id.",
+        "Sequenced after ADR-0040 and ADR-0041 alignment because tuple semantics depend on the gateway boundary and backend-adapter ownership lines staying stable.",
+        "Pairs with ADR-0043 for tuple-axis policy keys; this pack owns tuple meaning, publication, compatibility posture, and validation boundaries."
       ]
     }
   ]

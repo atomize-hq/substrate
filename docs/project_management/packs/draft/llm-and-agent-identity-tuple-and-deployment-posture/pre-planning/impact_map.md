@@ -38,6 +38,9 @@ Canonical slice ids selected for this feature:
 ## Touch set (explicit)
 
 ### Create
+- None
+
+### Edit
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/minimal_spec_draft.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/workstream_triage.md`
@@ -54,16 +57,29 @@ Canonical slice ids selected for this feature:
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/platform-parity-spec.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/compatibility-spec.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/manual_testing_playbook.md`
-- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-spec.md`
-- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md`
-- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/CP1-ci-checkpoint.md`
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/CP2-ci-checkpoint.md`
-- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/kickoff_prompts/`
-- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/`
-- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/`
-
-### Edit
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/FZ-feature-cleanup.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-spec.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/kickoff_prompts/LAITDP0-code.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/kickoff_prompts/LAITDP0-test.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/kickoff_prompts/LAITDP0-integ.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-code.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-test.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-integ-core.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-integ-linux.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-integ-macos.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-integ-windows.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-integ.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-code.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-test.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ-core.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ-linux.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ-macos.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ-windows.md`
+- `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ.md`
 - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
 - `docs/contracts/substrate-gateway-operator-contract.md`
 - `docs/contracts/substrate-gateway-status-schema.md`
