@@ -1,25 +1,24 @@
-**Warning: Pre-Planning Only. This document will be superseded by downstream FSE planning or decomposition.**
+**Warning: Pre-Planning Only. This document will be superseded by full planning.**
 
-# llm-and-agent-identity-tuple-and-deployment-posture minimal spec draft
+# llm-and-agent-identity-tuple-and-deployment-posture — minimal spec draft
 
 ## Scope and authority
 
-This draft defines only the pack-level alignment backbone for ADR-0042 and the pre-planning inputs under `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/`.
+This draft defines the pack-level defaults, invariants, and draft slice skeleton for ADR-0042 under `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/`.
 
-This draft is allowed to define:
+This draft defines:
 - cross-cutting defaults for identity-tuple vocabulary and placement-posture vocabulary
-- precedence and authority boundaries reused from ADR-0027 and the existing gateway contract docs
-- fail-closed, security, and redaction invariants that every downstream spec must preserve
-- downstream seam boundaries and the draft seam skeleton used for later seam planning
-- unresolved choices that block deterministic downstream seam planning
+- reused precedence and authority boundaries from ADR-0027 and the existing gateway contract docs
+- fail-closed, security, and redaction invariants that every later planning artifact preserves
+- the draft slice skeleton that full planning expands into plan, task, and slice-spec artifacts
+- explicit follow-ups that block deterministic full planning
 
 This draft does not define:
 - execution tasks
 - kickoff prompts
-- ownership of runtime worktrees
-- detailed implementation sequencing
-- runtime patch order
-- implementation checklists
+- worktree ownership
+- implementation patch order
+- closeout checklists
 
 Authority boundaries for this feature:
 - `contract.md` owns the operator-visible meaning of `client`, `router`, `provider`, `auth_authority`, `protocol`, `in_world`, `host_only`, and `host_to_world_bridge`, plus additive human-readable status wording and the illustrative-only rule for example auth paths.
@@ -69,9 +68,10 @@ Effective policy precedence reused from the implemented ADR-0027 contract:
 2. Global policy patch at `$SUBSTRATE_HOME/policy.yaml`
 3. Built-in defaults
 
-Precedence rules downstream docs must preserve:
-- Tuple and posture semantics are interpreted from the effective ADR-0027 config and policy result. This feature adds no new config files, policy files, env vars, or CLI override channels.
-- Existing wiring env vars and example credential paths are non-authoritative inputs for this pack-level draft. They remain output surfaces or illustrative examples unless an external owner already defines them.
+Precedence rules downstream docs preserve:
+- Tuple and posture semantics are interpreted from the effective ADR-0027 config and policy result.
+- This feature adds no new config files, policy files, env vars, or CLI override channels.
+- Existing wiring env vars and example credential paths remain non-authoritative inputs unless an external owner already defines them.
 - `llm.gateway.mode`, `llm.fail_closed.routing`, `llm.secrets.env_allowed`, and `agents.host_credentials.read.allowed_backends` remain the only relevant existing key paths in this lane.
 - `status --json`, diagnostics, and trace publication remain additive layers over existing owners rather than replacement authorities.
 
@@ -110,7 +110,7 @@ Security and redaction invariants:
   - `5`: safety or policy violation on the existing gateway command family
 - This work does not require new exit codes.
 
-## Cross-cutting seams and constraints
+## Cross-cutting constraints
 
 Shared constraints for every downstream doc:
 - Preserve the adopted tuple vocabulary and placement-posture vocabulary from ADR-0042.
@@ -124,68 +124,58 @@ Shared constraints for every downstream doc:
 - Keep pure-agent tuple-publication follow-on work in ADR-0044 and toolbox-specific tuple-publication follow-on work in ADR-0045.
 - Keep backend-selection realization work in ADR-0046 while this pack owns tuple and posture semantics.
 - Keep Linux, macOS, and Windows operator-visible tuple semantics identical.
-- Keep downstream docs aligned so `ci_checkpoint_plan.md` can group checkpoints around the same seam boundaries and `workstream_triage.md` does not redefine owners.
 
-## Follow-ups for downstream seam planning and decomposition
+## Follow-ups for full planning
 
-- Resolve the canonical router identity for host-only direct-provider fulfillment. ADR-0042 uses `direct_provider_path` in one example and also states that `host_only` is a mode of the router rather than a second standing authority.
+- Resolve the canonical router identity for host-only direct-provider fulfillment.
 - Freeze the exact top-level status and diagnostic field families that carry tuple and posture metadata outside `client_wiring.*`.
 - Freeze the exact trace field family and field placement that augment ADR-0028 correlation keys without replacing them.
 - Resolve absence semantics for `provider` and `auth_authority` when routing-hint validation ends before provider selection.
 - Resolve absence semantics for `provider` and `auth_authority` when agent-only or toolbox-adjacent flows reuse the same tuple vocabulary.
 - Confirm the exact additive human-readable wording for tuple and posture display on the existing gateway status surfaces.
 - Confirm the exact parity proof and validation evidence that show `host_to_world_bridge` leaves `net_allowed` governance unchanged across Linux, macOS, and Windows.
-- Record any proposed deviation from the three-seam baseline in downstream seam planning before the skeleton changes.
 
-## Draft downstream seam skeleton (pre-planning only)
+## Draft slice skeleton (pre-planning only)
 
-Draft seam prefix: `LAITDP`
+Slice prefix (draft): `LAITDP`
 
-Disclaimer: `draft; may split/merge during downstream FSE planning or decomposition`
+Accepted draft slice count: `3`
 
-Baseline seam count from `spec_manifest.md`: 3 draft seams. This draft keeps that baseline unchanged.
+- slice_id: `LAITDP0`
+  - name: `identity_contract_and_schema`
+  - intent: lock operator wording, tuple vocabulary, placement-posture vocabulary, machine-readable tuple-shape boundaries, and illustrative-path rules without reopening existing gateway status-envelope ownership
+  - likely owned or touched surfaces:
+    - `contract.md`
+    - `identity-tuple-schema-spec.md`
+    - `docs/contracts/substrate-gateway-operator-contract.md`
+    - `docs/contracts/substrate-gateway-status-schema.md`
+    - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
+    - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 
-### Seam 1
+- slice_id: `LAITDP1`
+  - name: `policy_and_observability_alignment`
+  - intent: align routing-hint evaluation, direct-provider permission boundaries, tuple-publication field families, redaction rules, and trace and status owner boundaries without reopening ADR-0027 key ownership or ADR-0043 tuple-axis policy ownership
+  - likely owned or touched surfaces:
+    - `policy-spec.md`
+    - `telemetry-spec.md`
+    - `docs/contracts/substrate-gateway-policy-evaluation.md`
+    - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
+    - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
+    - `docs/contracts/substrate-gateway-status-schema.md`
+    - `docs/TRACE.md`
 
-- `draft_seam_id`: `LAITDP-01`
-- `name`: `identity-contract-and-schema`
-- `intent`: Lock operator wording, tuple vocabulary, placement-posture vocabulary, machine-readable tuple-shape boundaries, and illustrative-path rules without reopening existing gateway status-envelope ownership.
-- `likely owned or touched surfaces`:
-  - `contract.md`
-  - `identity-tuple-schema-spec.md`
-  - `docs/contracts/substrate-gateway-operator-contract.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
-  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
+- slice_id: `LAITDP2`
+  - name: `platform_rollout_and_validation`
+  - intent: lock platform parity, terminology rollout, compatibility proof, validation evidence, and bridge transport invariants across Linux, macOS, and Windows
+  - likely owned or touched surfaces:
+    - `platform-parity-spec.md`
+    - `compatibility-spec.md`
+    - `manual_testing_playbook.md`
+    - `pre-planning/ci_checkpoint_plan.md`
+    - `docs/contracts/substrate-gateway-runtime-parity.md`
+    - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+    - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 
-### Seam 2
-
-- `draft_seam_id`: `LAITDP-02`
-- `name`: `policy-and-observability-alignment`
-- `intent`: Align routing-hint evaluation, direct-provider permission boundaries, tuple-publication field families, redaction rules, and trace and status owner boundaries without reopening ADR-0027 key ownership or ADR-0043 tuple-axis policy ownership.
-- `likely owned or touched surfaces`:
-  - `policy-spec.md`
-  - `telemetry-spec.md`
-  - `docs/contracts/substrate-gateway-policy-evaluation.md`
-  - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-  - `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`
-  - `docs/contracts/substrate-gateway-status-schema.md`
-  - `docs/TRACE.md`
-
-### Seam 3
-
-- `draft_seam_id`: `LAITDP-03`
-- `name`: `platform-rollout-and-validation`
-- `intent`: Lock platform parity, terminology rollout, compatibility proof, validation evidence, and bridge transport invariants across Linux, macOS, and Windows.
-- `likely owned or touched surfaces`:
-  - `platform-parity-spec.md`
-  - `compatibility-spec.md`
-  - `manual_testing_playbook.md`
-  - `pre-planning/ci_checkpoint_plan.md`
-  - `docs/contracts/substrate-gateway-runtime-parity.md`
-  - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-  - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
-
-`ci_checkpoint_plan.md` may use this draft seam list when proposing checkpoint groups.
+`ci_checkpoint_plan.md` groups checkpoints around this draft slice spine.
 
 `workstream_triage.md` may recommend edits to this skeleton, but it does not own this file.
