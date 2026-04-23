@@ -39,6 +39,7 @@ Canonical slice ids selected for this feature:
 
 ### Create
 - `crates/common/src/identity.rs`
+- `scripts/ci/feature-smoke/llm-and-agent-identity-tuple-and-deployment-posture/linux-smoke.sh`
 
 ### Edit
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md`
@@ -90,6 +91,7 @@ Canonical slice ids selected for this feature:
 - `docs/CONFIGURATION.md`
 - `docs/TRACE.md`
 - `docs/USAGE.md`
+- `.github/workflows/feature-smoke.yml`
 - `crates/agent-api-types/src/lib.rs`
 - `crates/broker/src/effective_policy.rs`
 - `crates/broker/src/lib.rs`
