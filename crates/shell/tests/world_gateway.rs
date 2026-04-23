@@ -702,6 +702,23 @@ fn gateway_socket_fixture() -> (TempDir, AgentSocket, std::path::PathBuf) {
     (temp, socket, socket_path)
 }
 
+fn gateway_socket_fixture_with_status(
+    status: JsonValue,
+) -> (TempDir, AgentSocket, std::path::PathBuf) {
+    let temp = short_socket_tempdir("sub-gwc-");
+    let socket_path = temp.path().join("agent.sock");
+    let socket = AgentSocket::start(
+        &socket_path,
+        SocketResponse::GatewayLifecycle {
+            status: status.clone(),
+            sync: status.clone(),
+            restart: status,
+        },
+    );
+
+    (temp, socket, socket_path)
+}
+
 fn gateway_unavailable_socket_fixture() -> (TempDir, AgentSocket, std::path::PathBuf) {
     let temp = short_socket_tempdir("sub-gwu-");
     let socket_path = temp.path().join("agent.sock");
@@ -810,6 +827,68 @@ fn world_gateway_status_json_uses_typed_runtime_contract() {
 }
 
 #[test]
+fn world_gateway_status_json_publishes_tuple_and_posture_as_top_level_siblings() {
+    let (_temp, _socket, socket_path) = gateway_socket_fixture_with_status(json!({
+        "status": "available",
+        "client_wiring": {
+            "openai_base_url": "http://gateway.test/openai",
+            "anthropic_base_url": "http://gateway.test/anthropic"
+        },
+        "identity_tuple": {
+            "client": "codex",
+            "router": "substrate_gateway",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "protocol": "openai.responses"
+        },
+        "placement_posture": {
+            "execution": "in_world"
+        }
+    }));
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let mut cmd = fixture.command();
+    let assert = cmd
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args(["world", "gateway", "status", "--json"])
+        .assert()
+        .code(0)
+        .stderr(predicate::str::is_empty());
+
+    let stdout =
+        String::from_utf8(assert.get_output().stdout.clone()).expect("gateway status stdout utf8");
+    let parsed: JsonValue = serde_json::from_str(stdout.trim()).expect("parse gateway status json");
+
+    assert_eq!(parsed.pointer("/status"), Some(&json!("available")));
+    assert_eq!(
+        parsed.pointer("/identity_tuple/client"),
+        Some(&json!("codex"))
+    );
+    assert_eq!(
+        parsed.pointer("/identity_tuple/router"),
+        Some(&json!("substrate_gateway"))
+    );
+    assert_eq!(
+        parsed.pointer("/placement_posture/execution"),
+        Some(&json!("in_world"))
+    );
+    assert!(
+        parsed.pointer("/client_wiring/identity_tuple").is_none(),
+        "identity tuple must stay top-level, not nested under client_wiring: {parsed}"
+    );
+    assert!(
+        parsed.pointer("/client_wiring/placement_posture").is_none(),
+        "placement posture must stay top-level, not nested under client_wiring: {parsed}"
+    );
+}
+
+#[test]
 fn world_gateway_status_json_preserves_unavailable_shape_from_runtime() {
     let (_temp, _socket, socket_path) = gateway_unavailable_socket_fixture();
     let fixture = GatewayAuthFixture::new();
@@ -833,6 +912,173 @@ fn world_gateway_status_json_preserves_unavailable_shape_from_runtime() {
             "\"placement_posture\":{\"execution\":\"in_world\"}",
         ))
         .stderr(predicate::str::is_empty());
+}
+
+#[test]
+fn world_gateway_status_json_keeps_tuple_metadata_when_runtime_is_unavailable() {
+    let (_temp, _socket, socket_path) = gateway_socket_fixture_with_status(json!({
+        "status": "unavailable",
+        "identity_tuple": {
+            "client": "codex",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses"
+        },
+        "placement_posture": {
+            "execution": "in_world"
+        }
+    }));
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let mut cmd = fixture.command();
+    let assert = cmd
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args(["world", "gateway", "status", "--json"])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::is_empty());
+
+    let stdout =
+        String::from_utf8(assert.get_output().stdout.clone()).expect("gateway status stdout utf8");
+    let parsed: JsonValue = serde_json::from_str(stdout.trim()).expect("parse gateway status json");
+
+    assert_eq!(parsed.pointer("/status"), Some(&json!("unavailable")));
+    assert_eq!(parsed.pointer("/client_wiring"), None);
+    assert_eq!(
+        parsed.pointer("/identity_tuple/client"),
+        Some(&json!("codex"))
+    );
+    assert_eq!(
+        parsed.pointer("/placement_posture/execution"),
+        Some(&json!("in_world"))
+    );
+}
+
+#[test]
+fn world_gateway_status_human_output_uses_contract_label_order() {
+    let (_temp, _socket, socket_path) = gateway_socket_fixture_with_status(json!({
+        "status": "available",
+        "client_wiring": {
+            "openai_base_url": "http://gateway.test/openai",
+            "anthropic_base_url": "http://gateway.test/anthropic"
+        },
+        "identity_tuple": {
+            "client": "codex",
+            "router": "substrate_gateway",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "protocol": "openai.responses"
+        },
+        "placement_posture": {
+            "execution": "in_world",
+            "host_to_world_bridge": true
+        }
+    }));
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let mut cmd = fixture.command();
+    let assert = cmd
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(0)
+        .stderr(predicate::str::is_empty());
+
+    let stdout =
+        String::from_utf8(assert.get_output().stdout.clone()).expect("gateway status stdout utf8");
+    let ordered_lines = [
+        "originating client: codex",
+        "routing authority: substrate_gateway",
+        "fulfillment provider: openai",
+        "auth authority: codex_subscription",
+        "protocol: openai.responses",
+        "deployment posture: in_world",
+        "bridge transport: host_to_world_bridge",
+    ];
+    let mut cursor = 0usize;
+    for line in ordered_lines {
+        let relative = stdout[cursor..]
+            .find(line)
+            .unwrap_or_else(|| panic!("missing ordered status line `{line}` in stdout: {stdout}"));
+        cursor += relative + line.len();
+    }
+    assert!(
+        !stdout.contains("backend:"),
+        "human-readable status must not rename routing authority to backend: {stdout}"
+    );
+}
+
+#[test]
+fn world_gateway_status_human_output_omits_missing_optional_fields_without_placeholders() {
+    let (_temp, _socket, socket_path) = gateway_socket_fixture_with_status(json!({
+        "status": "available",
+        "client_wiring": {
+            "openai_base_url": "http://gateway.test/openai",
+            "anthropic_base_url": "http://gateway.test/anthropic"
+        },
+        "identity_tuple": {
+            "client": "codex",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses"
+        },
+        "placement_posture": {
+            "execution": "host_only"
+        }
+    }));
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let mut cmd = fixture.command();
+    let assert = cmd
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(0)
+        .stderr(predicate::str::is_empty());
+
+    let stdout =
+        String::from_utf8(assert.get_output().stdout.clone()).expect("gateway status stdout utf8");
+    for expected in [
+        "originating client: codex",
+        "routing authority: substrate_gateway",
+        "protocol: openai.responses",
+        "deployment posture: host_only",
+    ] {
+        assert!(
+            stdout.contains(expected),
+            "missing expected status line `{expected}` in stdout: {stdout}"
+        );
+    }
+    for unexpected in [
+        "fulfillment provider:",
+        "auth authority:",
+        "bridge transport:",
+        "unknown",
+        "n/a",
+        "host gateway",
+        "backend:",
+    ] {
+        assert!(
+            !stdout.contains(unexpected),
+            "stdout must omit placeholder or renamed fields `{unexpected}`: {stdout}"
+        );
+    }
 }
 
 #[test]

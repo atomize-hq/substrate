@@ -1316,6 +1316,58 @@ mod tests {
     }
 
     #[test]
+    fn gateway_lifecycle_response_keeps_tuple_metadata_top_level_when_unavailable() {
+        let response = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "unavailable",
+            "identity_tuple": {
+                "client": "codex",
+                "router": "substrate_gateway",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect("unavailable lifecycle response should keep additive tuple metadata");
+
+        let roundtrip = serde_json::to_value(&response).expect("serialize lifecycle response");
+        assert_eq!(roundtrip.pointer("/status"), Some(&json!("unavailable")));
+        assert_eq!(roundtrip.pointer("/client_wiring"), None);
+        assert_eq!(
+            roundtrip.pointer("/identity_tuple/client"),
+            Some(&json!("codex"))
+        );
+        assert_eq!(
+            roundtrip.pointer("/placement_posture/execution"),
+            Some(&json!("in_world"))
+        );
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_rejects_secret_like_tuple_values() {
+        let err = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "available",
+            "identity_tuple": {
+                "client": "codex",
+                "router": "substrate_gateway",
+                "provider": "https://api.openai.com/v1",
+                "auth_authority": "~/.codex/auth.json",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect_err("secret-like tuple metadata should fail validation");
+
+        let error_text = err.to_string();
+        assert!(
+            error_text.contains("provider") || error_text.contains("auth_authority"),
+            "expected validation error to cite the rejected tuple fields, got: {error_text}"
+        );
+    }
+
+    #[test]
     fn gateway_integrated_auth_validation_rejects_unknown_facet_fields() {
         let err = serde_json::from_value::<GatewayIntegratedAuthPayloadV1>(json!({
             "backend_id": "api:openai",
