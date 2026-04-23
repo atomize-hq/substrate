@@ -164,7 +164,7 @@ fn call_gateway_action(
                 .await_result(),
         }?;
 
-        return augment_gateway_response(response, request_context);
+        augment_gateway_response(response, request_context)
     }
 
     #[cfg(not(target_os = "macos"))]
