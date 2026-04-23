@@ -341,3 +341,16 @@
   - `make integ-checks`
   - `make triad-task-finish TASK_ID="LAITDP2-integ-core"`
 - Result: `LAITDP2-code` and `LAITDP2-test` are merged into `LAITDP2-integ-core`; core integration is ready for `CP2-ci-checkpoint`.
+
+## START — 2026-04-23T19:47:19Z — checkpoint — CP2-ci-checkpoint
+- Feature: `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/`
+- Branch: `feat/llm-and-agent-identity-tuple-and-deployment-posture`
+- Goal: run the CP2 compile-parity and feature-smoke checkpoint gates for boundary slice `LAITDP2`.
+- Candidate checkout SHA: `974565f5bbd6f2d39a02d5cd385f1fc5d9579cd9`
+- Inputs read:
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md`
+- Preflight:
+  - Skipped local smoke preflight because `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/smoke/` is absent.

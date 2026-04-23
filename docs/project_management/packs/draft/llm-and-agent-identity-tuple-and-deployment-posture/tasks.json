@@ -788,7 +788,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP2-integ-linux\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-linux"
     },
