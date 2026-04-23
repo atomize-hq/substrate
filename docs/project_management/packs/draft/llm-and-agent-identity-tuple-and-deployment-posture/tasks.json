@@ -32,7 +32,7 @@
       "name": "Execution preflight gate (feature start)",
       "type": "ops",
       "phase": "F0",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Run the execution preflight gate before LAITDP0 begins.",
       "references": [
         "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
