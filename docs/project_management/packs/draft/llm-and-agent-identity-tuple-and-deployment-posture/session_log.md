@@ -289,3 +289,20 @@
 - Additional red evidence preserved:
   - Feature smoke run `24852953495` — `https://github.com/atomize-hq/substrate/actions/runs/24852953495` — `failure` because the workflow fallback was only present on the candidate branch; GitHub loads workflow files from the workflow ref, so `.github/workflows/feature-smoke.yml` and repo-level smoke scripts were committed to orchestration in `d96695de0a05468b6a079348eb090bfa3e196484`.
 - Result: CP1 is green and `CP1-ci-checkpoint` is marked `completed`.
+
+## START — 2026-04-23T19:01:42Z — integration — LAITDP1-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture" SLICE_ID="LAITDP1" LAUNCH_CODEX=1`
+- Resume note:
+  - Codex startup failed before writing `--output-last-message` because the local npm Codex install was missing optional dependency `@openai/codex-linux-x64`; the already-created final worktree was continued manually.
+
+## END — 2026-04-23T19:10:28Z — integration — LAITDP1-integ
+- HEAD: `436c2deabafeb778d2be14c6a07df935230c38b7`
+- Merge commit on orchestration branch: `84edb1aa40f97121c12480e0fff77af51c172099`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP1/integ/last_message.md`
+- Checks:
+  - `cargo fmt --all -- --check`
+  - `cargo test -p shell --test world_gateway -- --nocapture`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - `make integ-checks`
+- Result: `make triad-task-finish TASK_ID="LAITDP1-integ"` completed and merged `llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ` to orchestration with `MERGED_TO_ORCH=true`.
