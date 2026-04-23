@@ -351,3 +351,90 @@ fn direct_provider_path_requires_host_only_without_bridge_transport() {
         "expected direct_provider_path to be rejected unless placement_posture.execution=host_only and bridge transport is absent"
     );
 }
+
+#[test]
+fn trace_tuple_metadata_preserves_existing_join_keys() {
+    let value = json!({
+        "ts": "2026-04-05T00:00:00Z",
+        "kind": "status",
+        "agent_id": "demo-agent",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "backend_id": "cli:codex",
+        "world_id": "wld_test",
+        "cmd_id": "cmd_test",
+        "span_id": "spn_test",
+        "data": { "message": "ok" },
+        "identity_tuple": {
+            "client": "codex",
+            "router": "substrate_gateway",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "protocol": "openai.responses"
+        },
+        "placement_posture": {
+            "execution": "in_world"
+        }
+    });
+
+    let event: AgentEvent = serde_json::from_value(value).expect("deserialize AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert_eq!(
+        roundtrip.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        roundtrip.get("world_id").and_then(Value::as_str),
+        Some("wld_test")
+    );
+    assert_eq!(
+        roundtrip.get("cmd_id").and_then(Value::as_str),
+        Some("cmd_test")
+    );
+    assert_eq!(
+        roundtrip.get("span_id").and_then(Value::as_str),
+        Some("spn_test")
+    );
+    assert_eq!(
+        roundtrip
+            .pointer("/identity_tuple/router")
+            .and_then(Value::as_str),
+        Some("substrate_gateway"),
+        "tuple metadata should augment existing join keys instead of replacing them: {roundtrip}"
+    );
+    assert_eq!(
+        roundtrip
+            .pointer("/placement_posture/execution")
+            .and_then(Value::as_str),
+        Some("in_world")
+    );
+}
+
+#[test]
+fn tuple_publication_rejects_secret_like_values_and_credential_paths() {
+    let invalid = json!({
+        "ts": "2026-04-05T00:00:00Z",
+        "kind": "status",
+        "agent_id": "demo-agent",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "data": { "message": "ok" },
+        "identity_tuple": {
+            "client": "codex",
+            "router": "substrate_gateway",
+            "provider": "https://api.openai.com/v1",
+            "auth_authority": "~/.codex/auth.json",
+            "protocol": "openai.responses"
+        },
+        "placement_posture": {
+            "execution": "in_world"
+        }
+    });
+
+    let result: Result<AgentEvent, _> = serde_json::from_value(invalid);
+    assert!(
+        result.is_err(),
+        "expected tuple publication to reject endpoint URLs and raw credential paths instead of serializing secret-adjacent values"
+    );
+}
