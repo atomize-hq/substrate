@@ -316,3 +316,28 @@
   - `make triad-task-finish TASK_ID="LAITDP2-test"`
 - Resume note:
   - `LAITDP2-code` was already marked `completed` before this resume but no `logs/LAITDP2/code/` artifacts or local `laitdp2-code` branch were present.
+
+## END — 2026-04-23T19:47:19Z — code — LAITDP2-code
+- HEAD: `769d28062df85bd332f287034b2d6bac13f32487`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP2/code/last_message.md`
+- Checks:
+  - `cargo fmt`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - `cargo test -p agent-api-types gateway_integrated_auth_validation`
+  - `cargo test -p substrate-common --test agent_hub_event_envelope_schema`
+  - `cargo test -p world-agent default_backend`
+  - `make triad-task-finish TASK_ID="LAITDP2-code"`
+- Resume note:
+  - The task was force-started after discovering that prior completed bookkeeping had no code branch or `logs/LAITDP2/code/` artifacts.
+
+## END — 2026-04-23T19:47:19Z — integration — LAITDP2-integ-core
+- HEAD: `974565f5bbd6f2d39a02d5cd385f1fc5d9579cd9`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP2/integ-core/last_message.md`
+- Checks:
+  - `cargo fmt`
+  - `cargo test -p agent-api-types laitdp2_ -- --nocapture`
+  - `cargo test -p agent-api-types gateway_integrated_auth_validation`
+  - `cargo test -p world-agent default_backend`
+  - `make integ-checks`
+  - `make triad-task-finish TASK_ID="LAITDP2-integ-core"`
+- Result: `LAITDP2-code` and `LAITDP2-test` are merged into `LAITDP2-integ-core`; core integration is ready for `CP2-ci-checkpoint`.
