@@ -282,7 +282,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" SLICE_ID=\"LAITDP1\""
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "code",
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-code"
     },
@@ -336,7 +336,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" SLICE_ID=\"LAITDP1\""
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "test",
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-test"
     },
