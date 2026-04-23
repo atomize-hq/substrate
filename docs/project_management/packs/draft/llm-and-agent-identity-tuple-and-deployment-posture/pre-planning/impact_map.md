@@ -94,6 +94,7 @@ Canonical slice ids selected for this feature:
 - `crates/broker/src/effective_policy.rs`
 - `crates/broker/src/lib.rs`
 - `crates/broker/src/policy.rs`
+- `crates/broker/src/tests.rs`
 - `crates/common/src/agent_events.rs`
 - `crates/common/src/lib.rs`
 - `crates/shell/src/builtins/world_gateway.rs`
