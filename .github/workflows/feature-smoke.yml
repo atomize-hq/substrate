@@ -506,7 +506,20 @@ jobs:
         run: |
           set -euo pipefail
           export SUBSTRATE_BIN="$GITHUB_WORKSPACE/target/debug/substrate"
-          bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
+
+          feature_dir="${{ inputs.feature_dir }}"
+          smoke_script="${feature_dir}/smoke/macos-smoke.sh"
+          if [[ ! -f "${smoke_script}" ]]; then
+            feature_slug="$(basename "${feature_dir}")"
+            smoke_script="scripts/ci/feature-smoke/${feature_slug}/macos-smoke.sh"
+          fi
+
+          if [[ ! -f "${smoke_script}" ]]; then
+            echo "ERROR: macOS smoke script not found for ${feature_dir}" >&2
+            exit 1
+          fi
+
+          bash "${smoke_script}"
 
   macos_self_hosted:
     needs: feature_meta
@@ -583,7 +596,20 @@ jobs:
         run: |
           set -euo pipefail
           export SUBSTRATE_BIN="$PWD/target/debug/substrate"
-          bash "${{ inputs.feature_dir }}/smoke/macos-smoke.sh"
+
+          feature_dir="${{ inputs.feature_dir }}"
+          smoke_script="${feature_dir}/smoke/macos-smoke.sh"
+          if [[ ! -f "${smoke_script}" ]]; then
+            feature_slug="$(basename "${feature_dir}")"
+            smoke_script="scripts/ci/feature-smoke/${feature_slug}/macos-smoke.sh"
+          fi
+
+          if [[ ! -f "${smoke_script}" ]]; then
+            echo "ERROR: macOS smoke script not found for ${feature_dir}" >&2
+            exit 1
+          fi
+
+          bash "${smoke_script}"
 
   windows_hosted:
     needs: feature_meta
