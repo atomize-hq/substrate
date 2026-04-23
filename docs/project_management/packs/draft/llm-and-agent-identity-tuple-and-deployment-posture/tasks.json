@@ -431,7 +431,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP1-integ-linux\""
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-linux"
     },
@@ -477,7 +477,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP1-integ-macos\""
       ],
-  "status": "in_progress",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-macos"
     },
@@ -524,7 +524,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP1-integ-windows\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-windows"
     },
@@ -637,7 +637,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" SLICE_ID=\"LAITDP2\""
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "code",
       "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-code"
     },
@@ -979,7 +979,7 @@
         "Read the checkpoint plan, tasks.json, and session log.",
         "Compute the checkpoint checkout SHA from `LAITDP1-integ-core`."
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     },

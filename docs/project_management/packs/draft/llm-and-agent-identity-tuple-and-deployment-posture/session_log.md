@@ -264,3 +264,28 @@
 - Refreshed checkpoint dispatch evidence for candidate `6361b04e352b7cb8aafb7804b51985fb59bb0891`:
   - Compile parity rerun: run `24845569932` — `https://github.com/atomize-hq/substrate/actions/runs/24845569932` — `failure` on `ubuntu-24.04`, `macos-14`, `windows-2022`
   - Feature smoke rerun: run `24845639004` — `https://github.com/atomize-hq/substrate/actions/runs/24845639004` — `failure` on `linux`, `macos`
+
+## END — 2026-04-23T19:00:00Z — integration — LAITDP1-integ-linux
+- HEAD: `570d50c9f8e374231fb87b53fa0c3fa68bb65697`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP1/integ-linux/last_message.md`
+- Reconciliation: task finish evidence was already present; `tasks.json` bookkeeping was stale and has been corrected to `completed`.
+
+## END — 2026-04-23T19:00:00Z — integration — LAITDP1-integ-macos
+- HEAD: `ee220c819894dfca846fe19cdfc56a73dda754d2`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP1/integ-macos/last_message.md`
+- Summary: added the repo-level macOS smoke entrypoint and workflow fallback; finished with `make triad-task-finish TASK_ID="LAITDP1-integ-macos"`.
+
+## END — 2026-04-23T19:00:00Z — integration — LAITDP1-integ-windows
+- HEAD: `63d5002dfb96f256ed39d85d68bd35eca299fddd`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP1/integ-windows/last_message.md`
+- Summary: no Windows-specific fix was required; CP1 compile parity passed on `windows-2022` in run `24852935050`.
+
+## END — 2026-04-23T19:00:00Z — checkpoint — CP1-ci-checkpoint
+- Candidate checkout SHA: `3304edb4f1f5a397aa3ebb79d1739b9376e33be2`
+- Combined candidate branch: `llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-cp1-candidate`
+- Checkpoint dispatch evidence:
+  - Compile parity: run `24852935050` — `https://github.com/atomize-hq/substrate/actions/runs/24852935050` — `success` on `macos-14`, `ubuntu-24.04`, `windows-2022`
+  - Feature smoke: run `24853141023` — `https://github.com/atomize-hq/substrate/actions/runs/24853141023` — `success` on `linux`, `macos`
+- Additional red evidence preserved:
+  - Feature smoke run `24852953495` — `https://github.com/atomize-hq/substrate/actions/runs/24852953495` — `failure` because the workflow fallback was only present on the candidate branch; GitHub loads workflow files from the workflow ref, so `.github/workflows/feature-smoke.yml` and repo-level smoke scripts were committed to orchestration in `d96695de0a05468b6a079348eb090bfa3e196484`.
+- Result: CP1 is green and `CP1-ci-checkpoint` is marked `completed`.
