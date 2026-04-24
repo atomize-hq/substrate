@@ -119,8 +119,8 @@ Canonical slice ids selected for this feature:
     - the concrete inspection cases named by ADR-0043
     - the one-owner-per-surface validation checklist
   - Must define:
-    - the exact commands and expected results for `substrate config show --explain`
-    - the exact commands and expected results for `substrate policy current show --explain`
+    - the exact commands and expected results for `substrate policy current show --explain` and `substrate policy current show --json --explain`
+    - the exact commands and expected results for `smoke/linux-smoke.sh`, `smoke/macos-smoke.sh`, and `smoke/windows-smoke.ps1`
     - the exact deny-case assertions for disallowed router, provider, protocol, and auth-authority combinations
     - the exact review posture for the Codex example path `~/.codex/auth.json` as validation input only, not as a new Substrate-owned path contract
 
@@ -191,8 +191,8 @@ Canonical slice ids selected for this feature:
 | Interaction between tuple-axis constraints and `agents.host_credentials.read.allowed_backends` | `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/policy-spec.md` | host credential-read gating during tuple-aware routing |
 | Interaction between tuple-axis constraints, `net_allowed`, and transport bridge usage | `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/policy-spec.md` | egress-boundary invariants and transport-only bridge rule in policy evaluation |
 | Deny taxonomy for router mismatch, provider mismatch, protocol mismatch, and auth-authority mismatch | `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/policy-spec.md` | deny classes, error posture, and explanation requirements |
-| Effective merged config view exposes the new keys on `substrate config show` and `substrate config show --explain` | `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/contract.md` | exact rendered output obligations and provenance visibility |
-| Effective merged policy view exposes the new keys on `substrate policy current show` and `substrate policy current show --explain` | `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/contract.md` | exact rendered output obligations and provenance visibility |
+| Existing config inspection command family `substrate config ...` remains config-root inspection only on `substrate config show` and `substrate config show --explain` | `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md` | config-root inspection remains available, but tuple-policy ownership and provenance do not move off the policy view |
+| Effective merged policy view on `substrate policy current show` and `substrate policy current show --explain` is the sole authoritative tuple-policy surface | `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/contract.md` | exact rendered output obligations and provenance visibility for `llm.constraints.*` |
 | Exit-code reuse for invalid tuple-axis schema input | `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/contract.md` | exact mapping to the canonical taxonomy for schema-invalid input |
 | Exit-code reuse for tuple-axis policy denial | `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/contract.md` | exact mapping to the canonical taxonomy for policy-denied execution |
 | Cross-platform guarantee for identical tuple-axis policy semantics on Linux, macOS, and Windows | `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/contract.md` | parity guarantee and validation reference |

@@ -73,7 +73,9 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-01)",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-02)"
       ],
       "ac_ids": [
         "AC-ITPS0-01",
@@ -123,7 +125,9 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-01)",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-02)"
       ],
       "ac_ids": [
         "AC-ITPS0-01",
@@ -173,7 +177,9 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-closeout_report.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-closeout_report.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-01)",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-02)"
       ],
       "ac_ids": [
         "AC-ITPS0-01",
@@ -224,7 +230,9 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-closeout_report.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-closeout_report.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-01)",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-02)"
       ],
       "ac_ids": [
         "AC-ITPS1-01",
@@ -274,7 +282,9 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-01)",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-02)"
       ],
       "ac_ids": [
         "AC-ITPS1-01",
@@ -323,7 +333,9 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-01)",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md (DR-ITPS-02)"
       ],
       "ac_ids": [
         "AC-ITPS1-01",
@@ -619,6 +631,7 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/manual_testing_playbook.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-closeout_report.md"
       ],
       "acceptance_criteria": [
@@ -660,10 +673,12 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/manual_testing_playbook.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/linux-smoke.sh"
       ],
       "acceptance_criteria": [
-        "Linux smoke is green for ITPS3 and any platform-specific fixes are committed."
+        "Linux smoke is green for ITPS3 using docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/linux-smoke.sh and any platform-specific fixes are committed."
       ],
       "start_checklist": [
         "Run on a Linux host if possible.",
@@ -673,7 +688,7 @@
       "end_checklist": [
         "Merge the ITPS3-integ-core branch before validating Linux.",
         "Run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings; run targeted tests as needed.",
-        "Run platform smoke for Linux, record the run id/URL, and keep fixes scoped to Linux behavior or parity.",
+        "Run bash docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/linux-smoke.sh locally or dispatch the same script through make feature-smoke FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" PLATFORM=linux; record the run id/URL.",
         "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS3-integ-linux\""
       ],
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ-linux",
@@ -703,10 +718,12 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/manual_testing_playbook.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/macos-smoke.sh"
       ],
       "acceptance_criteria": [
-        "macOS smoke is green for ITPS3 and any platform-specific fixes are committed."
+        "macOS smoke is green for ITPS3 using docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/macos-smoke.sh and any platform-specific fixes are committed."
       ],
       "start_checklist": [
         "Run on a macOS host if possible.",
@@ -716,7 +733,7 @@
       "end_checklist": [
         "Merge the ITPS3-integ-core branch before validating macOS.",
         "Run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings; run targeted tests as needed.",
-        "Run platform smoke for macOS, record the run id/URL, and keep fixes scoped to macOS behavior or parity.",
+        "Run bash docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/macos-smoke.sh locally or dispatch the same script through make feature-smoke FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" PLATFORM=macos; record the run id/URL.",
         "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS3-integ-macos\""
       ],
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ-macos",
@@ -746,10 +763,12 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/manual_testing_playbook.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/windows-smoke.ps1"
       ],
       "acceptance_criteria": [
-        "Windows smoke is green for ITPS3 and any platform-specific fixes are committed."
+        "Windows smoke is green for ITPS3 using docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/windows-smoke.ps1 and any platform-specific fixes are committed."
       ],
       "start_checklist": [
         "Run on a Windows host if possible.",
@@ -759,7 +778,7 @@
       "end_checklist": [
         "Merge the ITPS3-integ-core branch before validating Windows.",
         "Run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings; run targeted tests as needed.",
-        "Run platform smoke for Windows, record the run id/URL, and keep fixes scoped to Windows behavior or parity.",
+        "Run pwsh -File docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/windows-smoke.ps1 locally or dispatch the same script through make feature-smoke FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" PLATFORM=windows; record the run id/URL.",
         "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS3-integ-windows\""
       ],
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ-windows",
@@ -789,7 +808,8 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/manual_testing_playbook.md"
       ],
       "ac_ids": [
         "AC-ITPS3-01",
@@ -840,11 +860,15 @@
       "references": [
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/manual_testing_playbook.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/linux-smoke.sh",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/macos-smoke.sh",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/windows-smoke.ps1",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md"
       ],
       "acceptance_criteria": [
-        "Checkpoint CI gates are executed or skipped per ci-audit, and evidence is recorded in session_log.md."
+        "Checkpoint CI gates are executed or skipped per ci-audit, the behavior smoke entrypoints smoke/linux-smoke.sh, smoke/macos-smoke.sh, and smoke/windows-smoke.ps1 are the referenced validation scripts, and evidence is recorded in session_log.md."
       ],
       "start_checklist": [
         "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
@@ -852,7 +876,7 @@
         "Set the task to in_progress and add a START entry in session_log.md."
       ],
       "end_checklist": [
-        "Run compile parity plus behavioral smoke per the checkpoint plan, using ci-audit to avoid redundant dispatch.",
+        "Run compile parity plus behavioral smoke per the checkpoint plan, using ci-audit to avoid redundant dispatch and treating docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/linux-smoke.sh, docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/macos-smoke.sh, and docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/windows-smoke.ps1 as the required behavior-platform entrypoints.",
         "Record run ids/URLs or ci-audit skip evidence in session_log.md.",
         "Set the task to completed and add an END entry in session_log.md."
       ],

@@ -31,6 +31,9 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/telemetry-spec.md`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/compatibility-spec.md`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/manual_testing_playbook.md`
+- `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/linux-smoke.sh`
+- `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/macos-smoke.sh`
+- `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/windows-smoke.ps1`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md`

@@ -10,6 +10,7 @@
 - Planning docs are edited only on the orchestration checkout.
 - Slice tasks use canonical kickoff paths under `slices/<SLICE_ID>/kickoff_prompts/`.
 - Feature-level ops tasks use canonical kickoff paths under `kickoff_prompts/`.
+- Behavior-platform smoke entrypoints live under `smoke/` and remain the required Linux, macOS, and Windows validation scripts for this pack.
 - `ITPS0` through `ITPS2` use the schema v4 non-boundary shape: `code`, `test`, `integ`.
 - `ITPS3` uses the schema v4 checkpoint-boundary shape: `code`, `test`, `integ-core`, `integ-linux`, `integ-macos`, `integ-windows`, `integ`.
 
@@ -45,6 +46,7 @@
 - `plan.md`
 - `tasks.json`
 - `session_log.md`
+- `smoke/`
 - `kickoff_prompts/`
 - `slices/ITPS0/kickoff_prompts/`
 - `slices/ITPS1/kickoff_prompts/`

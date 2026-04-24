@@ -28,6 +28,42 @@ mkdir -p "$SUBSTRATE_HOME"
 mkdir -p .substrate
 ```
 
+## Smoke entrypoints
+
+Use these scripts for repeatable platform smoke before drilling into the manual matrix:
+
+- Linux:
+
+```bash
+bash docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/linux-smoke.sh
+```
+
+Expected results:
+- exit code `0`
+- `stdout` contains `OK: adr-0027-identity-tuple-policy-surface linux smoke passed`
+
+- macOS:
+
+```bash
+bash docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/macos-smoke.sh
+```
+
+Expected results:
+- exit code `0`
+- `stdout` contains `OK: adr-0027-identity-tuple-policy-surface macos smoke passed`
+
+- Windows:
+
+```powershell
+pwsh -File docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/smoke/windows-smoke.ps1
+```
+
+Expected results:
+- exit code `0`
+- `stdout` contains `OK: adr-0027-identity-tuple-policy-surface windows smoke passed`
+
+Use sections 1 through 8 below as the debugging path when a smoke script fails.
+
 ## Manual review matrix
 
 ### 1) Effective merged policy view
