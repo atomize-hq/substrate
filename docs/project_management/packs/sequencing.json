@@ -858,6 +858,38 @@
         "Sequenced after the ADR-0042 semantic pack because tuple meaning, identity_tuple publication, and placement_posture vocabulary remain externally owned there.",
         "Extends the implemented ADR-0027 pack with policy evaluation, telemetry, compatibility, and validation closure without introducing a second config system or backend-id surrogate semantics."
       ]
+    },
+    {
+      "order": 41.5,
+      "id": "agent_hub_core_successor_identity_tuple_compatible",
+      "title": "Agent hub core successor identity-tuple compatible",
+      "branch": "feat/agent-hub-core-successor-identity-tuple-compatible",
+      "directory": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible",
+      "plan": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+      "status": "not_started",
+      "sequence": [
+        {
+          "id": "AHCSITC0",
+          "spec": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC0/AHCSITC0-spec.md"
+        },
+        {
+          "id": "AHCSITC1",
+          "spec": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC1/AHCSITC1-spec.md"
+        },
+        {
+          "id": "AHCSITC2",
+          "spec": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/AHCSITC2-spec.md"
+        },
+        {
+          "id": "AHCSITC3",
+          "spec": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/AHCSITC3-spec.md"
+        }
+      ],
+      "notes": [
+        "Implements ADR-0044: successor agent-hub operator surfaces, session visibility, fail-closed control-plane gating, telemetry publication, parity closure, and ADR-0025 supersession without changing tuple meaning.",
+        "Sequenced after ADR-0042 and ADR-0043 because identity-tuple semantics and tuple-axis policy gates remain externally owned and are consumed as inputs here.",
+        "Feeds the downstream toolbox and gateway-integration ADR work by locking the core list, status, doctor, and backend_id compatibility contract first."
+      ]
     }
   ]
 }

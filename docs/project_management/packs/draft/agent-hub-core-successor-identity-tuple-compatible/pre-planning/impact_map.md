@@ -39,8 +39,12 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible"` (strict packs only).
 
 ### Create
+- None
+
+### Edit
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/impact_map.md`
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md`
+- `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/spec_manifest.md`
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md`
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/agent-hub-session-protocol-spec.md`
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/policy-spec.md`
@@ -55,9 +59,6 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC1/AHCSITC1-spec.md`
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/AHCSITC2-spec.md`
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/AHCSITC3-spec.md`
-
-### Edit
-- `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/spec_manifest.md`
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json`
 - `docs/project_management/packs/sequencing.json`
 - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
@@ -68,6 +69,11 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/CONFIGURATION.md`
 - `docs/USAGE.md`
 - `docs/TRACE.md`
+- `scripts/linux/world-provision.sh`
+- `scripts/mac/lima-warm.sh`
+- `scripts/mac/smoke.sh`
+- `scripts/windows/wsl-warm.ps1`
+- `scripts/windows/wsl-smoke.ps1`
 - `crates/shell/src/execution/cli.rs`
 - `crates/shell/src/execution/agents_cmd.rs`
 - `crates/shell/src/execution/agent_inventory.rs`
