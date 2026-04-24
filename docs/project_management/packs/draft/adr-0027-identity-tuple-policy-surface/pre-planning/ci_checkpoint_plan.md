@@ -3,15 +3,18 @@
 This file defines when cross-platform CI gates run for this feature during pre-planning.
 
 Standard:
+
 - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/impact_map.md`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/spec_manifest.md`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/minimal_spec_draft.md`
 
 ## Operator rules
+
 - This plan is authoritative for checkpoint cadence during pre-planning.
 - If slice ids, platform scope, or checkpoint boundaries change, update this plan first.
 - `tasks.json` already carries the required schema v4 automation baseline and the full Linux, macOS, and Windows CI-parity and behavior-platform scope for this draft pack.
@@ -19,11 +22,12 @@ Standard:
 - Mechanical validation is deferred until `tasks.json` contains real slice integration tasks and the checkpoint ops task.
 
 ## Applicability
+
 - Checkpoint planning applies because the authoritative inputs define one cross-platform tuple-policy contract across Linux, macOS, and Windows.
 - `impact_map.md` ties the feature to broker policy parsing, shell denial and explain surfaces, trace publication, and operator documentation parity.
 - `spec_manifest.md` keeps the feature on two contiguous slices that together close the contract, schema, policy, telemetry, compatibility, and validation surfaces.
 
-## Machine-readable plan (draft slice ids; not mechanically validated yet)
+## Machine-readable plan (draft; not yet mechanically validated)
 
 ```json
 {
@@ -51,6 +55,7 @@ Standard:
 ## Human-readable rationale
 
 ### CP1 (`ITPS0` through `ITPS1`)
+
 - Code-grounded boundary:
   - `ITPS0` owns the additive `llm.constraints.*` contract and schema surface, the authoritative explain surface, and naming and precedence rules.
   - `ITPS1` owns ordered policy evaluation, tuple-axis deny semantics, telemetry publication, compatibility guarantees, and validation closure.
@@ -73,6 +78,7 @@ Standard:
   - `ci_testing = "full"`: run at `CP1` because this is the only checkpoint and it closes the full contract-to-behavior seam.
 
 ## Follow-ups
+
 - Add real slice tasks to `tasks.json` for `ITPS0` and `ITPS1`.
 - Add `CP1-ci-checkpoint` to `tasks.json` with dependencies anchored to the ending slice integration task.
 - Set `tasks.json` `meta.checkpoint_boundaries = ["ITPS1"]`.
