@@ -565,7 +565,7 @@
         "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" SLICE_ID=\"ITPS3\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "code",
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-code"
     },
@@ -613,7 +613,7 @@
         "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" SLICE_ID=\"ITPS3\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "test",
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-test"
     },
