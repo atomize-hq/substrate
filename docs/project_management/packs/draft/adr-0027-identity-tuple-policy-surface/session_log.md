@@ -16,3 +16,11 @@
 ## START — 2026-04-24T13:36:49Z — test — ITPS0-test
 - Dispatch:
   - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface" SLICE_ID="ITPS0"`
+
+## END — 2026-04-24T13:42:55Z — code — ITPS0-code
+- HEAD: `266e30a994feece9f52a83c921a1df40ed3773ae`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/logs/ITPS0/code/last_message.md`
+
+## END — 2026-04-24T13:42:55Z — test — ITPS0-test
+- HEAD: `992552bcd12ebd24a8446eec6f253055f59bc57e`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/logs/ITPS0/test/last_message.md`
