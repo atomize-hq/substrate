@@ -869,6 +869,7 @@ world_fs:
 }
 
 mod c0_policy_patch_only_broker_effective_resolution {
+    use crate::{validate_dotted_id, validate_snake_case_id};
     use serial_test::serial;
     use std::ffi::OsString;
     use std::path::{Path, PathBuf};
@@ -959,6 +960,18 @@ mod c0_policy_patch_only_broker_effective_resolution {
             .prefix(prefix)
             .tempdir_in(base)
             .expect("failed to allocate integration test temp dir")
+    }
+
+    fn repo_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("canonicalize repo root")
+    }
+
+    fn read_repo_file(relative: &str) -> String {
+        std::fs::read_to_string(repo_root().join(relative))
+            .unwrap_or_else(|err| panic!("read {relative}: {err}"))
     }
 
     struct Fixture {
@@ -1147,6 +1160,108 @@ world_fs:
             Some("substrate.policy.explain.v1"),
             "unexpected explain kind: {explain}"
         );
+    }
+
+    #[test]
+    fn c0_itps0_contract_doc_locks_authoritative_surface_exit_codes_and_deny_patterns() {
+        let contract = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/contract.md",
+        );
+
+        for needle in [
+            "`substrate policy current show --explain` is the authoritative merged inspection surface for `llm.constraints.*`.",
+            "tuple-policy publication reuses the existing `identity_tuple` and `placement_posture` field family",
+            "tuple-policy schema invalidity maps to `2`",
+            "tuple-axis mismatch denial maps to `5`",
+            "effective gateway routing authority 'substrate_gateway' is not allowlisted by llm.constraints.routers",
+            "effective gateway protocol '<protocol>' is not allowlisted by llm.constraints.protocols",
+            "effective gateway provider '<provider>' is not allowlisted by llm.constraints.providers",
+            "effective gateway auth authority '<auth_authority>' is not allowlisted by llm.constraints.auth_authorities",
+        ] {
+            assert!(
+                contract.contains(needle),
+                "expected ITPS0 contract to contain {needle:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn c0_itps0_schema_doc_locks_owned_keys_defaults_replace_semantics_and_client_omission() {
+        let schema = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tuple-policy-schema-spec.md",
+        );
+
+        for needle in [
+            "`llm.constraints.routers`",
+            "`llm.constraints.providers`",
+            "`llm.constraints.protocols`",
+            "`llm.constraints.auth_authorities`",
+            "workspace patch replaces the same global key",
+            "Effective meaning of `[]`:\n- unconstrained on that axis",
+            "`client` is not a standalone policy key in v1.",
+            "- `llm.constraints.clients`",
+        ] {
+            assert!(
+                schema.contains(needle),
+                "expected ITPS0 schema spec to contain {needle:?}"
+            );
+        }
+        assert!(
+            !schema.contains("| `llm.constraints.clients` |"),
+            "schema spec must not introduce llm.constraints.clients as a canonical key"
+        );
+    }
+
+    #[test]
+    fn c0_itps0_schema_examples_match_snake_case_and_dotted_id_validators() {
+        for value in [
+            "substrate_gateway",
+            "openai",
+            "azure_openai",
+            "codex_subscription",
+            "openai_api_key",
+        ] {
+            validate_snake_case_id(value)
+                .unwrap_or_else(|err| panic!("expected valid snake_case id {value:?}: {err}"));
+        }
+        for value in [
+            "Substrate_Gateway",
+            "openai-responses",
+            "_openai",
+            "openai__api",
+            "openai_",
+        ] {
+            let err = validate_snake_case_id(value)
+                .expect_err("expected invalid snake_case example to fail");
+            assert!(
+                err.contains("expected lowercase snake_case id"),
+                "unexpected snake_case validation error for {value:?}: {err}"
+            );
+        }
+
+        for value in [
+            "openai.responses",
+            "openai.chat_completions",
+            "anthropic.messages",
+            "uaa.agent_session",
+        ] {
+            validate_dotted_id(value)
+                .unwrap_or_else(|err| panic!("expected valid dotted id {value:?}: {err}"));
+        }
+        for value in [
+            "openai",
+            "OpenAI.responses",
+            "openai..responses",
+            "openai.responses_v1.",
+            "openai.responses-v1",
+        ] {
+            let err =
+                validate_dotted_id(value).expect_err("expected invalid dotted-id example to fail");
+            assert!(
+                err.contains("expected lowercase dotted id"),
+                "unexpected dotted-id validation error for {value:?}: {err}"
+            );
+        }
     }
 
     #[test]
@@ -1399,6 +1514,117 @@ workflow:
             explain_layers(&explain, "workflow.router.allowed_rule_ids"),
             vec!["workspace_patch".to_string()]
         );
+    }
+
+    #[test]
+    #[serial]
+    fn c0_policy_current_show_explain_treats_empty_tuple_constraint_lists_as_workspace_replacements(
+    ) {
+        for (key, pointer, global_value) in [
+            (
+                "llm.constraints.routers",
+                "/llm/constraints/routers",
+                "substrate_gateway",
+            ),
+            (
+                "llm.constraints.providers",
+                "/llm/constraints/providers",
+                "openai",
+            ),
+            (
+                "llm.constraints.protocols",
+                "/llm/constraints/protocols",
+                "openai.responses",
+            ),
+            (
+                "llm.constraints.auth_authorities",
+                "/llm/constraints/auth_authorities",
+                "openai_api_key",
+            ),
+        ] {
+            let fixture = Fixture::new();
+            fixture.write_workspace_marker();
+            fixture.write_global_policy(&format!(
+                "llm:\n  constraints:\n    {}:\n      - {}\n",
+                key.rsplit('.').next().expect("constraint leaf key"),
+                global_value
+            ));
+            fixture.write_workspace_policy(&format!(
+                "llm:\n  constraints:\n    {}: []\n",
+                key.rsplit('.').next().expect("constraint leaf key")
+            ));
+
+            let cwd = fixture.child_dir();
+            let output =
+                fixture.run_substrate(&cwd, &["policy", "current", "show", "--json", "--explain"]);
+            assert!(
+                output.status.success(),
+                "policy current show --explain should succeed for {key}: {output:?}"
+            );
+
+            let json: serde_json::Value =
+                serde_json::from_slice(&output.stdout).expect("policy JSON parse");
+            assert_eq!(
+                json.pointer(pointer),
+                Some(&serde_json::Value::Array(Vec::new())),
+                "expected workspace [] to replace global tuple constraint for {key}: {json}"
+            );
+
+            let explain: serde_json::Value =
+                serde_json::from_slice(&output.stderr).expect("policy explain JSON parse");
+            assert_eq!(
+                explain_layers(&explain, key),
+                vec!["workspace_patch".to_string()],
+                "expected explain provenance to show workspace replacement for {key}"
+            );
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn c0_policy_global_set_rejects_invalid_or_unknown_tuple_constraint_updates_with_exit_2() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+        let cwd = fixture.child_dir();
+
+        for (update, expected_hint) in [
+            (
+                "llm.constraints.routers=[\"Substrate_Gateway\"]",
+                "llm.constraints.routers",
+            ),
+            (
+                "llm.constraints.providers=[\"openai-responses\"]",
+                "llm.constraints.providers",
+            ),
+            (
+                "llm.constraints.protocols=[\"openai\"]",
+                "llm.constraints.protocols",
+            ),
+            (
+                "llm.constraints.auth_authorities=[\"OpenAI_API_Key\"]",
+                "llm.constraints.auth_authorities",
+            ),
+            (
+                "llm.constraints.clients=[\"human\"]",
+                "llm.constraints.clients",
+            ),
+        ] {
+            let output =
+                fixture.run_substrate(&cwd, &["policy", "global", "set", "--json", update]);
+            assert_eq!(
+                output.status.code(),
+                Some(2),
+                "tuple-constraint update should exit 2 for {update}: {output:?}"
+            );
+
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains(expected_hint)
+                    || stderr.contains("invalid")
+                    || stderr.contains("unknown field"),
+                "stderr should explain the tuple-constraint failure for {update}\nstderr: {stderr}"
+            );
+        }
     }
 
     #[test]
