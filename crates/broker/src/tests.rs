@@ -1531,17 +1531,11 @@ world_fs:
                 serde_json::json!(["ITPS3-code", "ITPS3-test"]),
             ),
             ("CP1-ci-checkpoint", serde_json::json!(["ITPS3-integ-core"])),
-            (
-                "ITPS3-integ-linux",
-                serde_json::json!(["ITPS3-integ-core", "CP1-ci-checkpoint"]),
-            ),
-            (
-                "ITPS3-integ-macos",
-                serde_json::json!(["ITPS3-integ-core", "CP1-ci-checkpoint"]),
-            ),
+            ("ITPS3-integ-linux", serde_json::json!(["ITPS3-integ-core"])),
+            ("ITPS3-integ-macos", serde_json::json!(["ITPS3-integ-core"])),
             (
                 "ITPS3-integ-windows",
-                serde_json::json!(["ITPS3-integ-core", "CP1-ci-checkpoint"]),
+                serde_json::json!(["ITPS3-integ-core"]),
             ),
             (
                 "ITPS3-integ",
