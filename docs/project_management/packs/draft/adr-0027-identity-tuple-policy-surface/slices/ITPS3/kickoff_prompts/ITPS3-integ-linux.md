@@ -1,7 +1,7 @@
 # Kickoff: ITPS3-integ-linux (integration platform-fix — linux)
 
 ## Scope
-- Validate and fix Linux behavior or parity issues after the `CP1-ci-checkpoint` result is known.
+- Validate and fix Linux behavior or parity issues once checkpoint evidence identifies Linux as still needing fixes.
 - Spec: `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md`
 
 ## Start Checklist
@@ -9,7 +9,7 @@ Do not edit planning docs inside the worktree.
 
 1. Verify the worktree is `wt/adr-0027-identity-tuple-policy-surface-itps3-integ-linux` on branch `adr-0027-identity-tuple-policy-surface-itps3-integ-linux`.
 2. Read `plan.md`, `tasks.json`, `session_log.md`, the slice spec, `pre-planning/ci_checkpoint_plan.md`, and this prompt.
-3. Confirm both `ITPS3-integ-core` and `CP1-ci-checkpoint` are complete before proceeding.
+3. Confirm `ITPS3-integ-core` is complete and checkpoint evidence shows Linux still needs fixes; `CP1-ci-checkpoint` may still be `in_progress` while platform-fix work is landing.
 
 ## Requirements
 - Merge the `ITPS3-integ-core` branch into this worktree before validating Linux.
