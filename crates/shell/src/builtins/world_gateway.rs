@@ -249,9 +249,9 @@ fn resolve_macos_gateway_client_endpoint() -> MacosGatewayClientEndpoint {
 
     let default_sock = macos_default_world_socket_path();
 
-    if default_sock.exists() && probe_gateway_caps_uds(&default_sock) {
-        MacosGatewayClientEndpoint::Unix(default_sock)
-    } else if substrate_home_is_explicitly_set() {
+    if substrate_home_is_explicitly_set()
+        || (default_sock.exists() && probe_gateway_caps_uds(&default_sock))
+    {
         MacosGatewayClientEndpoint::Unix(default_sock)
     } else {
         MacosGatewayClientEndpoint::Tcp {
