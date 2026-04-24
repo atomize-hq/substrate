@@ -144,3 +144,20 @@
 - Checkpoint dispatch evidence:
   - Compile parity: run `24902859334` — `https://github.com/atomize-hq/substrate/actions/runs/24902859334` — `success` on `macos-14`, `ubuntu-24.04`, `windows-2022`
   - Feature smoke: run `24902858949` — `https://github.com/atomize-hq/substrate/actions/runs/24902858949` — `success` on `linux`, `macos`
+
+## START — 2026-04-24T17:33:44Z — integration — ITPS3-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface" SLICE_ID="ITPS3" LAUNCH_CODEX=1`
+
+## END — 2026-04-24T17:45:20Z — integration — ITPS3-integ
+- HEAD: `c0d1f4a49f1a3c83e6ffce7335f4e70831d33588`
+- Validation:
+  - `cargo fmt --all` → `PASS`
+  - `cargo clippy --workspace --all-targets -- -D warnings` → `PASS`
+  - `cargo test -p substrate-broker --lib -- --nocapture` → `PASS`
+  - `cargo test -p shell --test world_gateway -- --nocapture` → `PASS`
+  - `make integ-checks` → `PASS`
+- Notes:
+  - The headless Codex launch stalled without producing a substantive final message, so the wrapper completed the final integration manually from the existing worktree and then ran `make triad-task-finish TASK_ID="ITPS3-integ"`.
+  - `CP1-ci-checkpoint` evidence was consumed from the completed checkpoint closeout above; the checkpoint-validated candidate remained `adbbd6bc46807f0c988301ad83b14bcbc8806ee3`.
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/logs/ITPS3/integ/last_message.md`
