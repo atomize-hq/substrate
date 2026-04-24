@@ -25,7 +25,9 @@ Authoring standards:
 Canonical slice ids selected for this feature:
 - Slice prefix: `ITPS`
 - `ITPS0` — publish the additive contract and schema lock for `llm.constraints.*`
-- `ITPS1` — publish policy-evaluation, telemetry, compatibility, and validation closure
+- `ITPS1` — publish policy-evaluation ordering, deny taxonomy, and explain-surface closure
+- `ITPS2` — publish telemetry publication and compatibility closure
+- `ITPS3` — publish manual validation, CI checkpoint alignment, and promotion closure
 
 ## Required documents (authoritative)
 
@@ -127,14 +129,14 @@ Canonical slice ids selected for this feature:
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md`
   - Role: required Planning Pack artifact
   - Must define:
-    - sequencing for `ITPS0` and `ITPS1`
+    - sequencing for `ITPS0`, `ITPS1`, `ITPS2`, and `ITPS3`
     - validation gates and doc dependencies
     - the rule that this feature remains documentation-driven until promotion completes
 
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json`
   - Role: required Planning Pack artifact
   - Must define:
-    - triad tasks aligned to `ITPS0` and `ITPS1`
+    - triad tasks aligned to `ITPS0`, `ITPS1`, `ITPS2`, and `ITPS3`
     - acceptance criteria tied to the selected local specs
     - deterministic branch, worktree, and validation wiring for downstream execution
 
@@ -148,9 +150,23 @@ Canonical slice ids selected for this feature:
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md`
   - Role: canonical slice spec required by the standard
   - Must define:
-    - the policy-evaluation, telemetry, compatibility, and validation work for the feature
-    - the acceptance criteria for deny semantics and trace publication
+    - the policy-evaluation ordering, deny taxonomy, and explain-surface closure for the feature
+    - the acceptance criteria for deny semantics and authoritative explain output
     - the out-of-scope boundary that keeps tuple semantics external to ADR-0042
+
+- `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS2/ITPS2-spec.md`
+  - Role: canonical slice spec required by the standard
+  - Must define:
+    - the telemetry-publication and compatibility-closure work for the feature
+    - the acceptance criteria for tuple-aware trace publication and additive rollout guarantees
+    - the out-of-scope boundary that keeps policy-ordering semantics in `ITPS1`
+
+- `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md`
+  - Role: canonical slice spec required by the standard
+  - Must define:
+    - the manual-validation, CI-checkpoint-alignment, and promotion-closure work for the feature
+    - the acceptance criteria for cross-platform validation coverage and checkpoint wiring
+    - the out-of-scope boundary that keeps telemetry-field ownership in `ITPS2`
 
 ## Coverage matrix (surface → authoritative doc)
 
@@ -236,7 +252,7 @@ Canonical slice ids selected for this feature:
 - Define the exact promotion and closeout steps.
 
 ### `tasks.json`
-- Define exact triad tasks for `ITPS0` and `ITPS1`.
+- Define exact triad tasks for `ITPS0`, `ITPS1`, `ITPS2`, and `ITPS3`.
 - Define exact acceptance criteria linked to the selected local specs.
 - Define exact validation commands and task wiring.
 
@@ -246,9 +262,19 @@ Canonical slice ids selected for this feature:
 - Define the exact out-of-scope boundary for unchanged ADR-0027 surfaces.
 
 ### `slices/ITPS1/ITPS1-spec.md`
-- Define the exact policy, telemetry, compatibility, and validation scope.
-- Define the exact acceptance criteria for deny semantics and trace publication.
+- Define the exact policy-evaluation ordering, deny taxonomy, and explain-surface scope.
+- Define the exact acceptance criteria for deny semantics and authoritative explain output.
 - Define the exact out-of-scope boundary for tuple semantics owned by ADR-0042.
+
+### `slices/ITPS2/ITPS2-spec.md`
+- Define the exact telemetry-publication and compatibility-closure scope.
+- Define the exact acceptance criteria for tuple-aware trace publication and additive rollout behavior.
+- Define the exact out-of-scope boundary for policy-ordering work owned by `ITPS1`.
+
+### `slices/ITPS3/ITPS3-spec.md`
+- Define the exact manual-validation, CI-checkpoint-alignment, and promotion-closure scope.
+- Define the exact acceptance criteria for cross-platform validation coverage and checkpoint wiring.
+- Define the exact out-of-scope boundary for telemetry-field ownership held by `ITPS2`.
 
 ## Explicitly unselected doc classes
 

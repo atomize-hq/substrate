@@ -34,6 +34,8 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md`
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md`
+- `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS2/ITPS2-spec.md`
+- `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md`
 
 ### Edit
 - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/spec_manifest.md`
