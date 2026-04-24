@@ -24,3 +24,7 @@
 ## END — 2026-04-24T13:42:55Z — test — ITPS0-test
 - HEAD: `992552bcd12ebd24a8446eec6f253055f59bc57e`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/logs/ITPS0/test/last_message.md`
+
+## START — 2026-04-24T13:42:55Z — integration — ITPS0-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface" TASK_ID="ITPS0-integ" LAUNCH_CODEX=1`
