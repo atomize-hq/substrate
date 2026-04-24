@@ -23,8 +23,16 @@
 {
   "pws_index_version": 2,
   "slice_prefix": "ITPS",
-  "accepted_slice_order": ["ITPS0", "ITPS1", "ITPS2", "ITPS3"],
-  "draft_slice_order": ["ITPS0", "ITPS1"],
+  "accepted_slice_order": [
+    "ITPS0",
+    "ITPS1",
+    "ITPS2",
+    "ITPS3"
+  ],
+  "draft_slice_order": [
+    "ITPS0",
+    "ITPS1"
+  ],
   "pws": [
     {
       "id": "ITPS-PWS-contract",
@@ -43,7 +51,9 @@
     {
       "id": "ITPS-PWS-runtime_fail_early",
       "role": "runtime_fail_early",
-      "depends_on": ["ITPS-PWS-contract"],
+      "depends_on": [
+        "ITPS-PWS-contract"
+      ],
       "assumes": [
         "backend ids remain adapter gates rather than tuple surrogates",
         "fail_closed routing stays in the ordered evaluation path"
@@ -57,7 +67,10 @@
     {
       "id": "ITPS-PWS-implementation_seams",
       "role": "implementation",
-      "depends_on": ["ITPS-PWS-contract", "ITPS-PWS-runtime_fail_early"],
+      "depends_on": [
+        "ITPS-PWS-contract",
+        "ITPS-PWS-runtime_fail_early"
+      ],
       "assumes": [
         "broker, shell, and trace seams stay split in the final slice inventory",
         "telemetry publication reuses identity_tuple and placement_posture"
@@ -70,7 +83,10 @@
     {
       "id": "ITPS-PWS-docs_validation",
       "role": "docs_validation",
-      "depends_on": ["ITPS-PWS-contract", "ITPS-PWS-runtime_fail_early"],
+      "depends_on": [
+        "ITPS-PWS-contract",
+        "ITPS-PWS-runtime_fail_early"
+      ],
       "assumes": [
         "manual validation keeps Codex auth paths as validation-only examples",
         "cross-platform parity remains Linux plus macOS plus Windows"
@@ -102,7 +118,13 @@
         "slices/ITPS0/kickoff_prompts/",
         "slices/ITPS1/kickoff_prompts/",
         "slices/ITPS2/kickoff_prompts/",
-        "slices/ITPS3/kickoff_prompts/"
+        "slices/ITPS3/kickoff_prompts/",
+        "pre-planning/ci_checkpoint_plan.md",
+        "execution_preflight_report.md",
+        "slices/ITPS0/ITPS0-closeout_report.md",
+        "slices/ITPS1/ITPS1-closeout_report.md",
+        "slices/ITPS2/ITPS2-closeout_report.md",
+        "slices/ITPS3/ITPS3-closeout_report.md"
       ]
     }
   ]
