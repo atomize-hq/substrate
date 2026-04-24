@@ -202,10 +202,15 @@ fn build_macos_gateway_client() -> anyhow::Result<MacosGatewayClient> {
         });
     }
 
-    let default_sock = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".substrate/sock/agent.sock");
+    let default_sock = macos_default_world_socket_path();
     if default_sock.exists() && probe_gateway_caps_uds(&default_sock) {
+        return Ok(MacosGatewayClient {
+            client: AgentClient::unix_socket(default_sock)?,
+            _forwarding: None,
+        });
+    }
+
+    if substrate_home_is_explicitly_set() {
         return Ok(MacosGatewayClient {
             client: AgentClient::unix_socket(default_sock)?,
             _forwarding: None,
@@ -242,11 +247,11 @@ fn resolve_macos_gateway_client_endpoint() -> MacosGatewayClientEndpoint {
         return MacosGatewayClientEndpoint::Unix(std::path::PathBuf::from(socket_path));
     }
 
-    let default_sock = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".substrate/sock/agent.sock");
+    let default_sock = macos_default_world_socket_path();
 
     if default_sock.exists() && probe_gateway_caps_uds(&default_sock) {
+        MacosGatewayClientEndpoint::Unix(default_sock)
+    } else if substrate_home_is_explicitly_set() {
         MacosGatewayClientEndpoint::Unix(default_sock)
     } else {
         MacosGatewayClientEndpoint::Tcp {
@@ -275,6 +280,22 @@ fn probe_gateway_caps_uds(path: &std::path::Path) -> bool {
             .contains(" 200 "),
         _ => false,
     }
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn substrate_home_is_explicitly_set() -> bool {
+    std::env::var_os("SUBSTRATE_HOME").is_some_and(|value| !value.is_empty())
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn macos_default_world_socket_path() -> PathBuf {
+    substrate_common::paths::substrate_home()
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".substrate")
+        })
+        .join("sock/agent.sock")
 }
 
 fn build_gateway_request_context() -> anyhow::Result<GatewayLifecycleRequestContext> {
@@ -1095,7 +1116,24 @@ mod tests {
 
 #[cfg(test)]
 mod classification_tests {
-    use super::error_is_component_unavailable;
+    use super::{
+        error_is_component_unavailable, macos_default_world_socket_path,
+        substrate_home_is_explicitly_set,
+    };
+
+    fn with_env_var<T>(key: &str, value: Option<&std::ffi::OsStr>, f: impl FnOnce() -> T) -> T {
+        let prev = std::env::var_os(key);
+        match value {
+            Some(value) => std::env::set_var(key, value),
+            None => std::env::remove_var(key),
+        }
+        let result = f();
+        match prev {
+            Some(value) => std::env::set_var(key, value),
+            None => std::env::remove_var(key),
+        }
+        result
+    }
 
     #[test]
     fn component_unavailable_includes_macos_forwarding_bootstrap_failures() {
@@ -1110,5 +1148,19 @@ mod classification_tests {
                 "expected macOS bootstrap error to classify as component unavailable: {message}"
             );
         }
+    }
+
+    #[test]
+    fn macos_default_world_socket_path_respects_explicit_substrate_home() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let substrate_home = temp.path().join("isolated-substrate-home");
+
+        with_env_var("SUBSTRATE_HOME", Some(substrate_home.as_os_str()), || {
+            assert!(substrate_home_is_explicitly_set());
+            assert_eq!(
+                macos_default_world_socket_path(),
+                substrate_home.join("sock/agent.sock")
+            );
+        });
     }
 }
