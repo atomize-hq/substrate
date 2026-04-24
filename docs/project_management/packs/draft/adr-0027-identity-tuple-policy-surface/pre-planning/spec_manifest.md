@@ -29,7 +29,7 @@ Canonical slice ids selected for this feature:
 - `ITPS2` — publish telemetry publication and compatibility closure
 - `ITPS3` — publish manual validation, CI checkpoint alignment, and promotion closure
 
-## Required documents (authoritative)
+## Required spec documents (authoritative)
 
 ### Current pre-planning artifact produced in this lane
 

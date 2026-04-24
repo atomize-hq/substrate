@@ -43,7 +43,7 @@ clarification layer that precedes later Agent Hub updates and any additive confi
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: be8c5ba2879ad83e60b07302276e35a343c05e73d5c35c2eeea885b2f3ab2df8
+ADR_BODY_SHA256: 51fd84175744539955168c2a9aa657d1fc69c9923a9a84295c22d8697847df20
 ### Changes (operator-facing)
 - Replace overloaded backend-id interpretation with an explicit identity tuple
   - Existing: operator-facing docs and traces can accidentally collapse client origin, router authority, upstream provider, auth authority, and protocol shape into one overloaded backend label.
