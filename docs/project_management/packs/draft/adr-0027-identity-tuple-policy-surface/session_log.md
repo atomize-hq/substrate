@@ -108,3 +108,14 @@
 ## START — 2026-04-24T16:58:28Z — checkpoint — CP1-ci-checkpoint
 - Dispatch:
   - `cat "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/kickoff_prompts/CP1-ci-checkpoint.md"`
+
+## START — 2026-04-24T17:13:58Z — integration — ITPS3-integ-macos
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface" TASK_ID="ITPS3-integ-macos" LAUNCH_CODEX=1`
+
+## END — 2026-04-24T17:22:33Z — integration — ITPS3-integ-macos
+- HEAD: `167f7c51da958127da4631de6de1c240919b16ca`
+- Smoke evidence:
+  - failed macOS smoke: `24902282231` (`https://github.com/atomize-hq/substrate/actions/runs/24902282231`)
+  - passed macOS smoke: `24902490594` (`https://github.com/atomize-hq/substrate/actions/runs/24902490594`)
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/logs/ITPS3/integ-macos/last_message.md`
