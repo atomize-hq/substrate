@@ -104,3 +104,7 @@
 ## END — 2026-04-24T16:57:13Z — integration — ITPS3-integ-core
 - HEAD: `d1210f3890e85f041ac2eb8147cd200c66454f87`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/logs/ITPS3/integ-core/last_message.md`
+
+## START — 2026-04-24T16:58:28Z — checkpoint — CP1-ci-checkpoint
+- Dispatch:
+  - `cat "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/kickoff_prompts/CP1-ci-checkpoint.md"`
