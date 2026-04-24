@@ -17,10 +17,843 @@
       "orchestration_branch": "feat/adr-0027-identity-tuple-policy-surface"
     },
     "slice_spec_version": 2,
+    "execution_gates": false,
     "feature": "adr-0027-identity-tuple-policy-surface",
     "adr_paths": [
       "docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md"
+    ],
+    "checkpoint_boundaries": [
+      "ITPS3"
     ]
   },
-  "tasks": []
+  "tasks": [
+    {
+      "id": "ITPS0-code",
+      "name": "ITPS0 slice (code)",
+      "type": "code",
+      "phase": "ITPS0",
+      "status": "pending",
+      "description": "Implement the ITPS0 production changes without adding new tests.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS0-01",
+        "AC-ITPS0-02",
+        "AC-ITPS0-03",
+        "AC-ITPS0-04",
+        "AC-ITPS0-05",
+        "AC-ITPS0-06",
+        "AC-ITPS0-07",
+        "AC-ITPS0-08"
+      ],
+      "acceptance_criteria": [
+        "Implements the behaviors required by ac_ids in slices/ITPS0/ITPS0-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" SLICE_ID=\"ITPS0\""
+      ],
+      "end_checklist": [
+        "Run targeted baseline tests before and after the change; keep outcomes stable or improved.",
+        "Run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS0-code\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps0-code",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps0-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "integration_task": "ITPS0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/kickoff_prompts/ITPS0-code.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "ITPS0-test"
+      ]
+    },
+    {
+      "id": "ITPS0-test",
+      "name": "ITPS0 slice (test)",
+      "type": "test",
+      "phase": "ITPS0",
+      "status": "pending",
+      "description": "Add or update tests for ITPS0 without changing production code.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS0-01",
+        "AC-ITPS0-02",
+        "AC-ITPS0-03",
+        "AC-ITPS0-04",
+        "AC-ITPS0-05",
+        "AC-ITPS0-06",
+        "AC-ITPS0-07",
+        "AC-ITPS0-08"
+      ],
+      "acceptance_criteria": [
+        "Adds or updates tests that enforce the behaviors required by ac_ids in slices/ITPS0/ITPS0-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" SLICE_ID=\"ITPS0\""
+      ],
+      "end_checklist": [
+        "Run cargo fmt plus the targeted tests you add or change.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS0-test\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps0-test",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps0-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "integration_task": "ITPS0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/kickoff_prompts/ITPS0-test.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "ITPS0-code"
+      ]
+    },
+    {
+      "id": "ITPS0-integ",
+      "name": "ITPS0 slice (integration)",
+      "type": "integration",
+      "phase": "ITPS0",
+      "status": "pending",
+      "description": "Integrate ITPS0 code and tests and finish the slice locally.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS0-01",
+        "AC-ITPS0-02",
+        "AC-ITPS0-03",
+        "AC-ITPS0-04",
+        "AC-ITPS0-05",
+        "AC-ITPS0-06",
+        "AC-ITPS0-07",
+        "AC-ITPS0-08"
+      ],
+      "acceptance_criteria": [
+        "Merged code and tests satisfy the behaviors required by ac_ids in slices/ITPS0/ITPS0-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS0-integ\""
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, relevant tests, and make integ-checks.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS0-integ\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps0-integ",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps0-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true,
+      "integration_task": "ITPS0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/kickoff_prompts/ITPS0-integ.md",
+      "depends_on": [
+        "ITPS0-code",
+        "ITPS0-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "ITPS1-code",
+      "name": "ITPS1 slice (code)",
+      "type": "code",
+      "phase": "ITPS1",
+      "status": "pending",
+      "description": "Implement the ITPS1 production changes without adding new tests.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS1-01",
+        "AC-ITPS1-02",
+        "AC-ITPS1-03",
+        "AC-ITPS1-04",
+        "AC-ITPS1-05",
+        "AC-ITPS1-06",
+        "AC-ITPS1-07",
+        "AC-ITPS1-08"
+      ],
+      "acceptance_criteria": [
+        "Implements the behaviors required by ac_ids in slices/ITPS1/ITPS1-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" SLICE_ID=\"ITPS1\""
+      ],
+      "end_checklist": [
+        "Run targeted baseline tests before and after the change; keep outcomes stable or improved.",
+        "Run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS1-code\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps1-code",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps1-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "integration_task": "ITPS1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/kickoff_prompts/ITPS1-code.md",
+      "depends_on": [
+        "ITPS0-integ"
+      ],
+      "concurrent_with": [
+        "ITPS1-test"
+      ]
+    },
+    {
+      "id": "ITPS1-test",
+      "name": "ITPS1 slice (test)",
+      "type": "test",
+      "phase": "ITPS1",
+      "status": "pending",
+      "description": "Add or update tests for ITPS1 without changing production code.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS1-01",
+        "AC-ITPS1-02",
+        "AC-ITPS1-03",
+        "AC-ITPS1-04",
+        "AC-ITPS1-05",
+        "AC-ITPS1-06",
+        "AC-ITPS1-07",
+        "AC-ITPS1-08"
+      ],
+      "acceptance_criteria": [
+        "Adds or updates tests that enforce the behaviors required by ac_ids in slices/ITPS1/ITPS1-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" SLICE_ID=\"ITPS1\""
+      ],
+      "end_checklist": [
+        "Run cargo fmt plus the targeted tests you add or change.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS1-test\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps1-test",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps1-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "integration_task": "ITPS1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/kickoff_prompts/ITPS1-test.md",
+      "depends_on": [
+        "ITPS0-integ"
+      ],
+      "concurrent_with": [
+        "ITPS1-code"
+      ]
+    },
+    {
+      "id": "ITPS1-integ",
+      "name": "ITPS1 slice (integration)",
+      "type": "integration",
+      "phase": "ITPS1",
+      "status": "pending",
+      "description": "Integrate ITPS1 code and tests and finish the slice locally.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS1-01",
+        "AC-ITPS1-02",
+        "AC-ITPS1-03",
+        "AC-ITPS1-04",
+        "AC-ITPS1-05",
+        "AC-ITPS1-06",
+        "AC-ITPS1-07",
+        "AC-ITPS1-08"
+      ],
+      "acceptance_criteria": [
+        "Merged code and tests satisfy the behaviors required by ac_ids in slices/ITPS1/ITPS1-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS1-integ\""
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, relevant tests, and make integ-checks.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS1-integ\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps1-integ",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps1-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true,
+      "integration_task": "ITPS1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/kickoff_prompts/ITPS1-integ.md",
+      "depends_on": [
+        "ITPS1-code",
+        "ITPS1-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "ITPS2-code",
+      "name": "ITPS2 slice (code)",
+      "type": "code",
+      "phase": "ITPS2",
+      "status": "pending",
+      "description": "Implement the ITPS2 production changes without adding new tests.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS2/ITPS2-spec.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS2-01",
+        "AC-ITPS2-02",
+        "AC-ITPS2-03",
+        "AC-ITPS2-04",
+        "AC-ITPS2-05",
+        "AC-ITPS2-06",
+        "AC-ITPS2-07"
+      ],
+      "acceptance_criteria": [
+        "Implements the behaviors required by ac_ids in slices/ITPS2/ITPS2-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" SLICE_ID=\"ITPS2\""
+      ],
+      "end_checklist": [
+        "Run targeted baseline tests before and after the change; keep outcomes stable or improved.",
+        "Run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS2-code\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps2-code",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps2-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "integration_task": "ITPS2-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS2/kickoff_prompts/ITPS2-code.md",
+      "depends_on": [
+        "ITPS1-integ"
+      ],
+      "concurrent_with": [
+        "ITPS2-test"
+      ]
+    },
+    {
+      "id": "ITPS2-test",
+      "name": "ITPS2 slice (test)",
+      "type": "test",
+      "phase": "ITPS2",
+      "status": "pending",
+      "description": "Add or update tests for ITPS2 without changing production code.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS2/ITPS2-spec.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS2-01",
+        "AC-ITPS2-02",
+        "AC-ITPS2-03",
+        "AC-ITPS2-04",
+        "AC-ITPS2-05",
+        "AC-ITPS2-06",
+        "AC-ITPS2-07"
+      ],
+      "acceptance_criteria": [
+        "Adds or updates tests that enforce the behaviors required by ac_ids in slices/ITPS2/ITPS2-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" SLICE_ID=\"ITPS2\""
+      ],
+      "end_checklist": [
+        "Run cargo fmt plus the targeted tests you add or change.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS2-test\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps2-test",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps2-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "integration_task": "ITPS2-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS2/kickoff_prompts/ITPS2-test.md",
+      "depends_on": [
+        "ITPS1-integ"
+      ],
+      "concurrent_with": [
+        "ITPS2-code"
+      ]
+    },
+    {
+      "id": "ITPS2-integ",
+      "name": "ITPS2 slice (integration)",
+      "type": "integration",
+      "phase": "ITPS2",
+      "status": "pending",
+      "description": "Integrate ITPS2 code and tests and finish the slice locally.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS2/ITPS2-spec.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS2-01",
+        "AC-ITPS2-02",
+        "AC-ITPS2-03",
+        "AC-ITPS2-04",
+        "AC-ITPS2-05",
+        "AC-ITPS2-06",
+        "AC-ITPS2-07"
+      ],
+      "acceptance_criteria": [
+        "Merged code and tests satisfy the behaviors required by ac_ids in slices/ITPS2/ITPS2-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS2-integ\""
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, relevant tests, and make integ-checks.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS2-integ\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps2-integ",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps2-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true,
+      "integration_task": "ITPS2-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS2/kickoff_prompts/ITPS2-integ.md",
+      "depends_on": [
+        "ITPS2-code",
+        "ITPS2-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "ITPS3-code",
+      "name": "ITPS3 slice (code)",
+      "type": "code",
+      "phase": "ITPS3",
+      "status": "pending",
+      "description": "Implement the ITPS3 production changes without adding new tests.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS3-01",
+        "AC-ITPS3-02",
+        "AC-ITPS3-03",
+        "AC-ITPS3-04",
+        "AC-ITPS3-05",
+        "AC-ITPS3-06",
+        "AC-ITPS3-07"
+      ],
+      "acceptance_criteria": [
+        "Implements the behaviors required by ac_ids in slices/ITPS3/ITPS3-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" SLICE_ID=\"ITPS3\""
+      ],
+      "end_checklist": [
+        "Run targeted baseline tests before and after the change; keep outcomes stable or improved.",
+        "Run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS3-code\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-code",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps3-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "integration_task": "ITPS3-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/kickoff_prompts/ITPS3-code.md",
+      "depends_on": [
+        "ITPS2-integ"
+      ],
+      "concurrent_with": [
+        "ITPS3-test"
+      ]
+    },
+    {
+      "id": "ITPS3-test",
+      "name": "ITPS3 slice (test)",
+      "type": "test",
+      "phase": "ITPS3",
+      "status": "pending",
+      "description": "Add or update tests for ITPS3 without changing production code.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS3-01",
+        "AC-ITPS3-02",
+        "AC-ITPS3-03",
+        "AC-ITPS3-04",
+        "AC-ITPS3-05",
+        "AC-ITPS3-06",
+        "AC-ITPS3-07"
+      ],
+      "acceptance_criteria": [
+        "Adds or updates tests that enforce the behaviors required by ac_ids in slices/ITPS3/ITPS3-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, and the kickoff prompt.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" SLICE_ID=\"ITPS3\""
+      ],
+      "end_checklist": [
+        "Run cargo fmt plus the targeted tests you add or change.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS3-test\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-test",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps3-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "integration_task": "ITPS3-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/kickoff_prompts/ITPS3-test.md",
+      "depends_on": [
+        "ITPS2-integ"
+      ],
+      "concurrent_with": [
+        "ITPS3-code"
+      ]
+    },
+    {
+      "id": "ITPS3-integ-core",
+      "name": "ITPS3 slice (integration core)",
+      "type": "integration",
+      "phase": "ITPS3",
+      "status": "pending",
+      "description": "Merge ITPS3 code and tests, make the slice green on the primary dev platform, and hand off to checkpoint CI.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Core integration state is green under make integ-checks and ready for CP1 checkpoint CI."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, the checkpoint plan, and the kickoff prompt.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS3-integ-core\""
+      ],
+      "end_checklist": [
+        "Run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, relevant tests, and make integ-checks.",
+        "Finish the core branch before starting CP1-ci-checkpoint from the orchestration checkout.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS3-integ-core\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ-core",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps3-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false,
+      "integration_task": "ITPS3-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/kickoff_prompts/ITPS3-integ-core.md",
+      "depends_on": [
+        "ITPS3-code",
+        "ITPS3-test"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "ITPS3-integ-linux",
+      "name": "ITPS3 slice (integration linux)",
+      "type": "integration",
+      "phase": "ITPS3",
+      "status": "pending",
+      "description": "Platform-fix integration task for Linux behavior smoke and parity after the CP1 checkpoint.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Linux smoke is green for ITPS3 and any platform-specific fixes are committed."
+      ],
+      "start_checklist": [
+        "Run on a Linux host if possible.",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, the checkpoint plan, and the kickoff prompt.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS3-integ-linux\" TASK_PLATFORM=linux"
+      ],
+      "end_checklist": [
+        "Merge the ITPS3-integ-core branch before validating Linux.",
+        "Run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings; run targeted tests as needed.",
+        "Run platform smoke for Linux, record the run id/URL, and keep fixes scoped to Linux behavior or parity.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS3-integ-linux\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ-linux",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps3-integ-linux",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false,
+      "integration_task": "ITPS3-integ-linux",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/kickoff_prompts/ITPS3-integ-linux.md",
+      "depends_on": [
+        "ITPS3-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "linux"
+    },
+    {
+      "id": "ITPS3-integ-macos",
+      "name": "ITPS3 slice (integration macos)",
+      "type": "integration",
+      "phase": "ITPS3",
+      "status": "pending",
+      "description": "Platform-fix integration task for macOS behavior smoke and parity after the CP1 checkpoint.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "macOS smoke is green for ITPS3 and any platform-specific fixes are committed."
+      ],
+      "start_checklist": [
+        "Run on a macOS host if possible.",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, the checkpoint plan, and the kickoff prompt.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS3-integ-macos\" TASK_PLATFORM=macos"
+      ],
+      "end_checklist": [
+        "Merge the ITPS3-integ-core branch before validating macOS.",
+        "Run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings; run targeted tests as needed.",
+        "Run platform smoke for macOS, record the run id/URL, and keep fixes scoped to macOS behavior or parity.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS3-integ-macos\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ-macos",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps3-integ-macos",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false,
+      "integration_task": "ITPS3-integ-macos",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/kickoff_prompts/ITPS3-integ-macos.md",
+      "depends_on": [
+        "ITPS3-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "macos"
+    },
+    {
+      "id": "ITPS3-integ-windows",
+      "name": "ITPS3 slice (integration windows)",
+      "type": "integration",
+      "phase": "ITPS3",
+      "status": "pending",
+      "description": "Platform-fix integration task for Windows behavior smoke and parity after the CP1 checkpoint.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "Windows smoke is green for ITPS3 and any platform-specific fixes are committed."
+      ],
+      "start_checklist": [
+        "Run on a Windows host if possible.",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, the checkpoint plan, and the kickoff prompt.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS3-integ-windows\" TASK_PLATFORM=windows"
+      ],
+      "end_checklist": [
+        "Merge the ITPS3-integ-core branch before validating Windows.",
+        "Run cargo fmt and cargo clippy --workspace --all-targets -- -D warnings; run targeted tests as needed.",
+        "Run platform smoke for Windows, record the run id/URL, and keep fixes scoped to Windows behavior or parity.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS3-integ-windows\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ-windows",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps3-integ-windows",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "merge_to_orchestration": false,
+      "integration_task": "ITPS3-integ-windows",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/kickoff_prompts/ITPS3-integ-windows.md",
+      "depends_on": [
+        "ITPS3-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "windows"
+    },
+    {
+      "id": "ITPS3-integ",
+      "name": "ITPS3 slice (integration final)",
+      "type": "integration",
+      "phase": "ITPS3",
+      "status": "pending",
+      "description": "Finalize ITPS3 after checkpoint CI by merging any platform-fix branches and closing the slice.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md"
+      ],
+      "ac_ids": [
+        "AC-ITPS3-01",
+        "AC-ITPS3-02",
+        "AC-ITPS3-03",
+        "AC-ITPS3-04",
+        "AC-ITPS3-05",
+        "AC-ITPS3-06",
+        "AC-ITPS3-07"
+      ],
+      "acceptance_criteria": [
+        "Final merged integration state satisfies the behaviors required by ac_ids in slices/ITPS3/ITPS3-spec.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, the slice spec, the checkpoint plan, and the kickoff prompt.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS3-integ\""
+      ],
+      "end_checklist": [
+        "Merge any platform-fix branches, then run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, relevant tests, and make integ-checks.",
+        "Confirm CP1-ci-checkpoint completed and is recorded in session_log.md before finishing the final aggregator.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS3-integ\""
+      ],
+      "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ",
+      "git_branch": "adr-0027-identity-tuple-policy-surface-itps3-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true,
+      "integration_task": "ITPS3-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/kickoff_prompts/ITPS3-integ.md",
+      "depends_on": [
+        "ITPS3-integ-core",
+        "ITPS3-integ-linux",
+        "ITPS3-integ-macos",
+        "ITPS3-integ-windows"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "CP1-ci-checkpoint",
+      "name": "CI checkpoint after ITPS3",
+      "type": "ops",
+      "phase": "CP1",
+      "status": "pending",
+      "description": "Run compile parity and behavioral smoke after the ITPS3 core integration branch is ready.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md"
+      ],
+      "acceptance_criteria": [
+        "Checkpoint CI gates are executed or skipped per ci-audit, and evidence is recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read pre-planning/ci_checkpoint_plan.md and confirm the checkpoint boundary slice is ITPS3.",
+        "Set the task to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Run compile parity plus behavioral smoke per the checkpoint plan, using ci-audit to avoid redundant dispatch.",
+        "Record run ids/URLs or ci-audit skip evidence in session_log.md.",
+        "Set the task to completed and add an END entry in session_log.md."
+      ],
+      "worktree": null,
+      "git_branch": "adr-0027-identity-tuple-policy-surface-cp1-ci-checkpoint",
+      "required_make_targets": [],
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/kickoff_prompts/CP1-ci-checkpoint.md",
+      "depends_on": [
+        "ITPS3-integ-core"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup (worktrees + branches)",
+      "type": "ops",
+      "phase": "FZ",
+      "status": "pending",
+      "description": "Remove retained worktrees and prune local task branches after the feature is complete.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "make triad-feature-cleanup"
+      ],
+      "acceptance_criteria": [
+        "All retained worktrees are removed or intentionally kept, and the cleanup summary is recorded in session_log.md."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Confirm all slice and checkpoint tasks are completed and merged as intended.",
+        "Set the task to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Run the dry run and real triad-feature-cleanup commands from the orchestration checkout.",
+        "Paste the cleanup summary into session_log.md.",
+        "Set the task to completed and add an END entry in session_log.md."
+      ],
+      "worktree": null,
+      "git_branch": "adr-0027-identity-tuple-policy-surface-feature-cleanup",
+      "required_make_targets": [],
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": [
+        "ITPS3-integ"
+      ],
+      "concurrent_with": []
+    }
+  ]
 }
