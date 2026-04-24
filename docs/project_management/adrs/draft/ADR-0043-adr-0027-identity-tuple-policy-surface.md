@@ -18,7 +18,7 @@ This ADR is a minimal additive follow-on to ADR-0027. It keeps the existing file
 - Semantic model:
   - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
   - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md`
-  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/spec_manifest.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md`
 - Config/policy foundation:
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`

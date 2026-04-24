@@ -18,9 +18,11 @@ Do not edit planning docs inside the worktree.
 - Merge the code and test branches into this worktree.
 - Run: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, and `make integ-checks`.
 - Cross-platform checkpoint tasks do not run from this task.
+- Complete the slice closeout gate report:
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-closeout_report.md`
 
 ## End Checklist
 1. Ensure the merged state is committed and local integration gates are green.
 2. From inside the worktree, run: `make triad-task-finish TASK_ID="LAITDP0-integ"`.
-3. Hand off the local integration commands and outcomes to the operator.
+3. Hand off the local integration commands and closeout-report updates to the operator.
 4. Do not delete the worktree.

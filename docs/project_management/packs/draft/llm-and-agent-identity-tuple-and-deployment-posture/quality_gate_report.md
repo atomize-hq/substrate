@@ -4,7 +4,7 @@ RECOMMENDATION: ACCEPT
 
 ## Status
 - Recommendation: `ACCEPT`
-- Reason: the pack now has the accepted slice order, schema-v4 checkpoint boundaries, validator-backed `ac_ids`, and kickoff prompts for every populated task id.
+- Reason: the pack now has the accepted slice order, schema-v4 checkpoint boundaries, standard execution-gate scaffolding, validator-backed `ac_ids`, and kickoff prompts for every populated task id.
 
 ## Mechanical checks
 - `jq -e . docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json >/dev/null` → `0` → `PASS`
@@ -15,6 +15,8 @@ RECOMMENDATION: ACCEPT
 
 ## Review checklist
 - `plan.md` locks the accepted slice order and the `CP1` / `CP2` checkpoint rule.
+- `F0-exec-preflight` and `execution_preflight_report.md` exist and block `LAITDP0-code` plus `LAITDP0-test`.
+- Each final `*-integ` task references its slice closeout report.
 - `tasks.json` keeps automation enabled and keeps the accepted slice set intact.
 - Slice-task `ac_ids` match `LAITDP0` through `LAITDP2` exactly.
 - Every populated `kickoff_prompt` path points at a real file under the allowlisted directories.

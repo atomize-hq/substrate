@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use substrate_common::agent_events::AgentEvent;
 pub use substrate_common::{
-    FsDiff, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry, WorldFsMode,
+    validate_identity_tuple_and_placement_posture, FsDiff, IdentityTuple, PlacementExecution,
+    PlacementPosture, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry,
+    WorldFsMode,
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -857,8 +859,27 @@ impl GatewayIntegratedAuthPayloadV1 {
     }
 }
 
+pub fn validate_gateway_backend_id_selector(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    let Some((kind, name)) = trimmed.split_once(':') else {
+        return Err(format!(
+            "invalid gateway backend_id '{}'; expected <kind>:<name>",
+            trimmed
+        ));
+    };
+
+    if !matches_backend_kind(kind) || !matches_backend_name(name) || name.contains(':') {
+        return Err(format!(
+            "invalid gateway backend_id '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+            trimmed
+        ));
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "GatewayLifecycleRequestDef")]
 pub struct GatewayLifecycleRequestV1 {
     pub profile: Option<String>,
     pub cwd: Option<String>,
@@ -869,15 +890,70 @@ pub struct GatewayLifecycleRequestV1 {
     pub world_network: Option<WorldNetworkRoutingV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_tuple: Option<IdentityTuple>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement_posture: Option<PlacementPosture>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GatewayLifecycleRequestDef {
+    profile: Option<String>,
+    cwd: Option<String>,
+    env: Option<HashMap<String, String>>,
+    agent_id: String,
+    policy_snapshot: PolicySnapshotV3,
+    #[serde(default)]
+    world_network: Option<WorldNetworkRoutingV1>,
+    #[serde(default)]
+    integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
+    #[serde(default)]
+    identity_tuple: Option<IdentityTuple>,
+    #[serde(default)]
+    placement_posture: Option<PlacementPosture>,
+}
+
+impl GatewayLifecycleRequestV1 {
+    pub fn validate_identity_contract(&self) -> Result<(), String> {
+        validate_identity_tuple_and_placement_posture(
+            self.identity_tuple.as_ref(),
+            self.placement_posture.as_ref(),
+        )
+    }
+}
+
+impl TryFrom<GatewayLifecycleRequestDef> for GatewayLifecycleRequestV1 {
+    type Error = String;
+
+    fn try_from(value: GatewayLifecycleRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            profile: value.profile,
+            cwd: value.cwd,
+            env: value.env,
+            agent_id: value.agent_id,
+            policy_snapshot: value.policy_snapshot,
+            world_network: value.world_network,
+            integrated_auth: value.integrated_auth,
+            identity_tuple: value.identity_tuple,
+            placement_posture: value.placement_posture,
+        };
+        request.validate_identity_contract()?;
+        Ok(request)
+    }
 }
 
 pub fn validate_gateway_integrated_auth_payload(
     payload: &GatewayIntegratedAuthPayloadV1,
 ) -> Result<(), String> {
     let backend_id = payload.backend_id.trim();
-    if backend_id.is_empty() {
-        return Err("request-provided integrated auth payload is missing backend_id".to_string());
-    }
+    validate_gateway_backend_id_selector(backend_id).map_err(|err| {
+        if backend_id.is_empty() {
+            "request-provided integrated auth payload is missing backend_id".to_string()
+        } else {
+            err
+        }
+    })?;
 
     let cli_codex = payload.cli_codex.as_ref();
     let api_env = payload.api_env.as_ref();
@@ -959,6 +1035,20 @@ pub fn validate_gateway_integrated_auth_payload(
     Ok(())
 }
 
+fn matches_backend_kind(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+fn matches_backend_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' || byte == b'-'
+        })
+}
+
 pub fn validate_gateway_integrated_auth_payload_for_selected_backend(
     payload: &GatewayIntegratedAuthPayloadV1,
     selected_backend: &str,
@@ -991,10 +1081,50 @@ pub struct GatewayClientWiringV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "GatewayLifecycleResponseDef")]
 pub struct GatewayLifecycleResponseV1 {
     pub status: GatewayStatusV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_wiring: Option<GatewayClientWiringV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_tuple: Option<IdentityTuple>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement_posture: Option<PlacementPosture>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct GatewayLifecycleResponseDef {
+    status: GatewayStatusV1,
+    #[serde(default)]
+    client_wiring: Option<GatewayClientWiringV1>,
+    #[serde(default)]
+    identity_tuple: Option<IdentityTuple>,
+    #[serde(default)]
+    placement_posture: Option<PlacementPosture>,
+}
+
+impl GatewayLifecycleResponseV1 {
+    pub fn validate_identity_contract(&self) -> Result<(), String> {
+        validate_identity_tuple_and_placement_posture(
+            self.identity_tuple.as_ref(),
+            self.placement_posture.as_ref(),
+        )
+    }
+}
+
+impl TryFrom<GatewayLifecycleResponseDef> for GatewayLifecycleResponseV1 {
+    type Error = String;
+
+    fn try_from(value: GatewayLifecycleResponseDef) -> Result<Self, Self::Error> {
+        let response = Self {
+            status: value.status,
+            client_wiring: value.client_wiring,
+            identity_tuple: value.identity_tuple,
+            placement_posture: value.placement_posture,
+        };
+        response.validate_identity_contract()?;
+        Ok(response)
+    }
 }
 
 /// Streaming frame describing incremental execution output.
@@ -1117,7 +1247,37 @@ pub enum WorldDoctorWorldFsStrategyProbeResultV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use std::fs;
+    use std::path::Path;
+
+    use serde_json::{json, Value};
+
+    const LAITDP2_CLIENT: &str = "codex";
+    const LAITDP2_ROUTER: &str = "substrate_gateway";
+    const LAITDP2_PROVIDER: &str = "openai";
+    const LAITDP2_AUTH_AUTHORITY: &str = "codex_subscription";
+    const LAITDP2_PROTOCOL: &str = "openai.responses";
+
+    #[derive(Clone, Copy)]
+    struct Laitdp2PlatformCase {
+        platform: &'static str,
+        hidden_transport: &'static str,
+    }
+
+    const LAITDP2_PLATFORM_CASES: [Laitdp2PlatformCase; 3] = [
+        Laitdp2PlatformCase {
+            platform: "linux",
+            hidden_transport: "unix_socket",
+        },
+        Laitdp2PlatformCase {
+            platform: "macos",
+            hidden_transport: "lima_forwarding",
+        },
+        Laitdp2PlatformCase {
+            platform: "windows",
+            hidden_transport: "wsl_named_pipe_or_tcp",
+        },
+    ];
 
     fn valid_cli_codex_payload() -> GatewayIntegratedAuthPayloadV1 {
         GatewayIntegratedAuthPayloadV1 {
@@ -1139,6 +1299,23 @@ mod tests {
             cli_codex: None,
             api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
         }
+    }
+
+    fn laitdp2_policy_snapshot_with_restrictive_net_allowed() -> Value {
+        json!({
+            "schema_version": 3,
+            "net_allowed": ["api.openai.com"],
+            "world_fs": {
+                "host_visible": true,
+                "fail_closed": { "routing": false },
+                "caged_required": false,
+                "write": {
+                    "enabled": true,
+                    "allow_list": ["."],
+                    "deny_list": []
+                }
+            }
+        })
     }
 
     #[test]
@@ -1165,6 +1342,424 @@ mod tests {
         .expect_err("unknown request field should fail");
 
         assert!(err.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_round_trips_canonical_identity_objects() {
+        let response = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "available",
+            "client_wiring": {
+                "openai_base_url": "http://127.0.0.1:4040",
+                "anthropic_base_url": "http://127.0.0.1:4040"
+            },
+            "identity_tuple": {
+                "client": "codex",
+                "router": "substrate_gateway",
+                "provider": "openai",
+                "auth_authority": "codex_subscription",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect("valid lifecycle response should deserialize");
+
+        let roundtrip = serde_json::to_value(&response).expect("serialize lifecycle response");
+        assert_eq!(
+            roundtrip
+                .pointer("/identity_tuple/router")
+                .and_then(Value::as_str),
+            Some("substrate_gateway")
+        );
+        assert_eq!(
+            roundtrip
+                .pointer("/placement_posture/execution")
+                .and_then(Value::as_str),
+            Some("in_world")
+        );
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_rejects_direct_provider_path_with_bridge_transport() {
+        let err = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "available",
+            "identity_tuple": {
+                "client": "codex",
+                "router": "direct_provider_path",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "host_only",
+                "host_to_world_bridge": true
+            }
+        }))
+        .expect_err("invalid routing/posture combination should fail");
+
+        assert!(err.to_string().contains("host_to_world_bridge"));
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_keeps_tuple_metadata_top_level_when_unavailable() {
+        let response = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "unavailable",
+            "identity_tuple": {
+                "client": "codex",
+                "router": "substrate_gateway",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect("unavailable lifecycle response should keep additive tuple metadata");
+
+        let roundtrip = serde_json::to_value(&response).expect("serialize lifecycle response");
+        assert_eq!(roundtrip.pointer("/status"), Some(&json!("unavailable")));
+        assert_eq!(roundtrip.pointer("/client_wiring"), None);
+        assert_eq!(
+            roundtrip.pointer("/identity_tuple/client"),
+            Some(&json!("codex"))
+        );
+        assert_eq!(
+            roundtrip.pointer("/placement_posture/execution"),
+            Some(&json!("in_world"))
+        );
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_rejects_secret_like_tuple_values() {
+        let err = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "available",
+            "identity_tuple": {
+                "client": "codex",
+                "router": "substrate_gateway",
+                "provider": "https://api.openai.com/v1",
+                "auth_authority": "~/.codex/auth.json",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect_err("secret-like tuple metadata should fail validation");
+
+        let error_text = err.to_string();
+        assert!(
+            error_text.contains("provider") || error_text.contains("auth_authority"),
+            "expected validation error to cite the rejected tuple fields, got: {error_text}"
+        );
+    }
+
+    #[test]
+    fn laitdp2_lifecycle_response_publishes_one_tuple_and_posture_meaning_across_platforms() {
+        let mut canonical_tuple = None;
+        let mut canonical_posture = None;
+
+        for case in LAITDP2_PLATFORM_CASES {
+            let response = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+                "status": "available",
+                "client_wiring": {
+                    "openai_base_url": "http://gateway.test/openai",
+                    "anthropic_base_url": "http://gateway.test/anthropic"
+                },
+                "identity_tuple": {
+                    "client": LAITDP2_CLIENT,
+                    "router": LAITDP2_ROUTER,
+                    "provider": LAITDP2_PROVIDER,
+                    "auth_authority": LAITDP2_AUTH_AUTHORITY,
+                    "protocol": LAITDP2_PROTOCOL
+                },
+                "placement_posture": {
+                    "execution": "in_world",
+                    "host_to_world_bridge": true
+                }
+            }))
+            .unwrap_or_else(|err| {
+                panic!(
+                    "{} should accept the shared tuple/posture contract despite hidden {} transport: {err}",
+                    case.platform, case.hidden_transport
+                )
+            });
+
+            let roundtrip = serde_json::to_value(response).expect("serialize lifecycle response");
+            let tuple = roundtrip
+                .pointer("/identity_tuple")
+                .cloned()
+                .expect("identity tuple is published");
+            let posture = roundtrip
+                .pointer("/placement_posture")
+                .cloned()
+                .expect("placement posture is published");
+
+            assert_eq!(
+                tuple.pointer("/client").and_then(Value::as_str),
+                Some(LAITDP2_CLIENT)
+            );
+            assert_eq!(
+                tuple.pointer("/router").and_then(Value::as_str),
+                Some(LAITDP2_ROUTER)
+            );
+            assert_eq!(
+                tuple.pointer("/provider").and_then(Value::as_str),
+                Some(LAITDP2_PROVIDER)
+            );
+            assert_eq!(
+                tuple.pointer("/auth_authority").and_then(Value::as_str),
+                Some(LAITDP2_AUTH_AUTHORITY)
+            );
+            assert_eq!(
+                tuple.pointer("/protocol").and_then(Value::as_str),
+                Some(LAITDP2_PROTOCOL)
+            );
+            assert_eq!(
+                posture.pointer("/execution").and_then(Value::as_str),
+                Some("in_world")
+            );
+            assert_eq!(
+                posture
+                    .pointer("/host_to_world_bridge")
+                    .and_then(Value::as_bool),
+                Some(true)
+            );
+
+            if let Some(expected) = canonical_tuple.as_ref() {
+                assert_eq!(
+                    &tuple, expected,
+                    "{} must not give tuple vocabulary platform-specific meaning",
+                    case.platform
+                );
+            } else {
+                canonical_tuple = Some(tuple);
+            }
+
+            if let Some(expected) = canonical_posture.as_ref() {
+                assert_eq!(
+                    &posture, expected,
+                    "{} must not give placement posture platform-specific meaning",
+                    case.platform
+                );
+            } else {
+                canonical_posture = Some(posture);
+            }
+
+            assert!(
+                roundtrip.pointer("/client_wiring/identity_tuple").is_none(),
+                "{} must keep additive tuple metadata outside client_wiring: {roundtrip}",
+                case.platform
+            );
+            assert!(
+                roundtrip
+                    .pointer("/client_wiring/placement_posture")
+                    .is_none(),
+                "{} must keep additive placement metadata outside client_wiring: {roundtrip}",
+                case.platform
+            );
+        }
+    }
+
+    #[test]
+    fn laitdp2_direct_provider_path_posture_invariants_are_platform_independent() {
+        for case in LAITDP2_PLATFORM_CASES {
+            for invalid_posture in [
+                json!({ "execution": "in_world" }),
+                json!({ "execution": "host_only", "host_to_world_bridge": true }),
+            ] {
+                let result = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+                    "status": "available",
+                    "identity_tuple": {
+                        "client": LAITDP2_CLIENT,
+                        "router": "direct_provider_path",
+                        "protocol": LAITDP2_PROTOCOL
+                    },
+                    "placement_posture": invalid_posture
+                }));
+
+                assert!(
+                    result.is_err(),
+                    "{} must reject direct_provider_path unless execution=host_only and bridge transport is absent",
+                    case.platform
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn laitdp2_bridge_transport_does_not_rewrite_router_or_in_world_net_allowed_governance() {
+        for case in LAITDP2_PLATFORM_CASES {
+            let request = serde_json::from_value::<GatewayLifecycleRequestV1>(json!({
+                "profile": null,
+                "cwd": "/workspace",
+                "env": {},
+                "agent_id": LAITDP2_CLIENT,
+                "policy_snapshot": laitdp2_policy_snapshot_with_restrictive_net_allowed(),
+                "world_network": {
+                    "isolate_network": true,
+                    "allowed_domains": ["api.openai.com"]
+                },
+                "integrated_auth": null,
+                "identity_tuple": {
+                    "client": LAITDP2_CLIENT,
+                    "router": LAITDP2_ROUTER,
+                    "provider": LAITDP2_PROVIDER,
+                    "auth_authority": LAITDP2_AUTH_AUTHORITY,
+                    "protocol": LAITDP2_PROTOCOL
+                },
+                "placement_posture": {
+                    "execution": "in_world",
+                    "host_to_world_bridge": true
+                }
+            }))
+            .unwrap_or_else(|err| {
+                panic!(
+                    "{} should allow bridge transport only as transport detail: {err}",
+                    case.platform
+                )
+            });
+
+            let roundtrip = serde_json::to_value(request).expect("serialize lifecycle request");
+            assert_eq!(
+                roundtrip
+                    .pointer("/identity_tuple/router")
+                    .and_then(Value::as_str),
+                Some(LAITDP2_ROUTER),
+                "{} must not convert bridge transport into router identity",
+                case.platform
+            );
+            assert_eq!(
+                roundtrip
+                    .pointer("/policy_snapshot/net_allowed")
+                    .and_then(Value::as_array)
+                    .expect("net_allowed array"),
+                &[json!("api.openai.com")],
+                "{} must preserve policy net_allowed when bridge transport participates",
+                case.platform
+            );
+            assert_eq!(
+                roundtrip
+                    .pointer("/world_network/allowed_domains")
+                    .and_then(Value::as_array)
+                    .expect("allowed domains array"),
+                &[json!("api.openai.com")],
+                "{} must preserve runtime network isolation request when bridge transport participates",
+                case.platform
+            );
+        }
+    }
+
+    #[test]
+    fn laitdp2_backend_id_remains_adapter_selector_not_tuple_semantics() {
+        let request = serde_json::from_value::<GatewayLifecycleRequestV1>(json!({
+            "profile": null,
+            "cwd": "/workspace",
+            "env": {},
+            "agent_id": LAITDP2_CLIENT,
+            "policy_snapshot": laitdp2_policy_snapshot_with_restrictive_net_allowed(),
+            "world_network": null,
+            "integrated_auth": {
+                "backend_id": "cli:codex",
+                "cli_codex": {
+                    "account_id": "acct_test",
+                    "access_token": "test-token"
+                }
+            },
+            "identity_tuple": {
+                "client": LAITDP2_CLIENT,
+                "router": LAITDP2_ROUTER,
+                "provider": LAITDP2_PROVIDER,
+                "auth_authority": LAITDP2_AUTH_AUTHORITY,
+                "protocol": LAITDP2_PROTOCOL
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect("backend_id selector should coexist with separate tuple semantics");
+
+        let roundtrip = serde_json::to_value(request).expect("serialize lifecycle request");
+        assert_eq!(
+            roundtrip
+                .pointer("/integrated_auth/backend_id")
+                .and_then(Value::as_str),
+            Some("cli:codex")
+        );
+        assert_eq!(
+            roundtrip
+                .pointer("/identity_tuple/client")
+                .and_then(Value::as_str),
+            Some(LAITDP2_CLIENT)
+        );
+        assert_eq!(
+            roundtrip
+                .pointer("/identity_tuple/router")
+                .and_then(Value::as_str),
+            Some(LAITDP2_ROUTER)
+        );
+        assert_eq!(
+            roundtrip
+                .pointer("/identity_tuple/auth_authority")
+                .and_then(Value::as_str),
+            Some(LAITDP2_AUTH_AUTHORITY)
+        );
+        assert!(
+            !roundtrip
+                .pointer("/identity_tuple")
+                .expect("identity tuple")
+                .to_string()
+                .contains("cli:codex"),
+            "backend_id grammar must not substitute for tuple fields: {roundtrip}"
+        );
+
+        let invalid_tuple = serde_json::from_value::<GatewayLifecycleRequestV1>(json!({
+            "profile": null,
+            "cwd": "/workspace",
+            "env": {},
+            "agent_id": LAITDP2_CLIENT,
+            "policy_snapshot": laitdp2_policy_snapshot_with_restrictive_net_allowed(),
+            "world_network": null,
+            "integrated_auth": null,
+            "identity_tuple": {
+                "client": "cli:codex",
+                "router": "direct_provider_path",
+                "protocol": LAITDP2_PROTOCOL
+            },
+            "placement_posture": {
+                "execution": "host_only"
+            }
+        }));
+        assert!(
+            invalid_tuple.is_err(),
+            "tuple fields must reject backend-id grammar so backend_id cannot become semantic identity"
+        );
+    }
+
+    #[test]
+    fn laitdp2_manual_review_playbook_names_required_evidence() {
+        let playbook_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            "../../docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/manual_testing_playbook.md",
+        );
+        let playbook =
+            fs::read_to_string(&playbook_path).expect("manual testing playbook should be readable");
+
+        for required in [
+            "One-owner-per-surface audit",
+            "Tuple meanings and wording",
+            "Machine-readable schema ownership",
+            "Policy and telemetry owner lines",
+            "Platform parity and compatibility",
+            "Claude Code pointed at `substrate_gateway`",
+            "Codex using Responses API and `~/.codex/auth.json`",
+            "Pre-provider-selection publication",
+            "Search for overloaded backend wording",
+            "Search for bridge wording that implies a second control plane",
+            "Search for status-schema drift",
+            "Search for stale active or backup references presented as current owners",
+        ] {
+            assert!(
+                playbook.contains(required),
+                "manual review playbook must include `{required}` as LAITDP2 validation evidence"
+            );
+        }
     }
 
     #[test]

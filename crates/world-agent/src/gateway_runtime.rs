@@ -1,6 +1,6 @@
 use agent_api_types::{
-    GatewayCliCodexIntegratedAuthV1, GatewayClientWiringV1, GatewayIntegratedAuthPayloadV1,
-    GatewayLifecycleResponseV1, GatewayStatusV1,
+    validate_gateway_backend_id_selector, GatewayCliCodexIntegratedAuthV1, GatewayClientWiringV1,
+    GatewayIntegratedAuthPayloadV1, GatewayLifecycleResponseV1, GatewayStatusV1,
 };
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -105,12 +105,16 @@ impl GatewayControlSettings {
             .map(|value| value.trim().to_string())
             .unwrap_or_else(|| DEFAULT_BACKEND.to_string());
 
-        if default_backend.is_empty() {
-            return Err(GatewayRuntimeFailure::invalid_integration(format!(
-                "{} must be a non-empty backend id",
-                GATEWAY_REQUEST_DEFAULT_BACKEND_ENV
-            )));
-        }
+        validate_gateway_backend_id_selector(&default_backend).map_err(|err| {
+            if default_backend.is_empty() {
+                GatewayRuntimeFailure::invalid_integration(format!(
+                    "{} must be a non-empty backend id",
+                    GATEWAY_REQUEST_DEFAULT_BACKEND_ENV
+                ))
+            } else {
+                GatewayRuntimeFailure::invalid_integration(err)
+            }
+        })?;
 
         Ok(Self { default_backend })
     }
@@ -1227,6 +1231,8 @@ fn available_response(port: u16) -> GatewayLifecycleResponseV1 {
             openai_base_url: base_url.clone(),
             anthropic_base_url: base_url,
         }),
+        identity_tuple: None,
+        placement_posture: None,
     }
 }
 
@@ -1234,6 +1240,8 @@ pub(crate) fn unavailable_response() -> GatewayLifecycleResponseV1 {
     GatewayLifecycleResponseV1 {
         status: GatewayStatusV1::Unavailable,
         client_wiring: None,
+        identity_tuple: None,
+        placement_posture: None,
     }
 }
 

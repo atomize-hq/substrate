@@ -1041,23 +1041,27 @@ impl WorldAgentService {
                 )
                 .map_err(gateway_runtime_error)?
             else {
-                return Ok(Self::gateway_unavailable_response());
+                return Self::attach_gateway_request_metadata(
+                    Self::gateway_unavailable_response(),
+                    &req,
+                );
             };
 
-            return self
+            let response = self
                 .gateway_runtime
                 .status(
                     &binding.runtime_id,
                     binding.start_context.binding.backend_id,
                 )
                 .await
-                .map_err(gateway_runtime_error);
+                .map_err(gateway_runtime_error)?;
+
+            Self::attach_gateway_request_metadata(response, &req)
         }
 
         #[cfg(not(target_os = "linux"))]
         {
-            let _ = req;
-            Ok(Self::gateway_unavailable_response())
+            Self::attach_gateway_request_metadata(Self::gateway_unavailable_response(), &req)
         }
     }
 
@@ -1073,20 +1077,24 @@ impl WorldAgentService {
                 .resolve_gateway_runtime_binding(prepared, GatewayRuntimeBindingMode::EnsureSession)
                 .map_err(gateway_runtime_error)?
             else {
-                return Ok(Self::gateway_unavailable_response());
+                return Self::attach_gateway_request_metadata(
+                    Self::gateway_unavailable_response(),
+                    &req,
+                );
             };
 
-            return self
+            let response = self
                 .gateway_runtime
                 .sync(binding.start_context)
                 .await
-                .map_err(gateway_runtime_error);
+                .map_err(gateway_runtime_error)?;
+
+            Self::attach_gateway_request_metadata(response, &req)
         }
 
         #[cfg(not(target_os = "linux"))]
         {
-            let _ = req;
-            Ok(Self::gateway_unavailable_response())
+            Self::attach_gateway_request_metadata(Self::gateway_unavailable_response(), &req)
         }
     }
 
@@ -1105,20 +1113,24 @@ impl WorldAgentService {
                 )
                 .map_err(gateway_runtime_error)?
             else {
-                return Ok(Self::gateway_unavailable_response());
+                return Self::attach_gateway_request_metadata(
+                    Self::gateway_unavailable_response(),
+                    &req,
+                );
             };
 
-            return self
+            let response = self
                 .gateway_runtime
                 .restart(binding.start_context)
                 .await
-                .map_err(gateway_runtime_error);
+                .map_err(gateway_runtime_error)?;
+
+            Self::attach_gateway_request_metadata(response, &req)
         }
 
         #[cfg(not(target_os = "linux"))]
         {
-            let _ = req;
-            Ok(Self::gateway_unavailable_response())
+            Self::attach_gateway_request_metadata(Self::gateway_unavailable_response(), &req)
         }
     }
 
@@ -1315,11 +1327,8 @@ impl WorldAgentService {
                                 cmd_id: None,
                                 span_id: Some(span_id.clone()),
                                 channel: None,
-                                client: None,
-                                router: None,
-                                provider: None,
-                                auth_authority: None,
-                                protocol: None,
+                                identity_tuple: None,
+                                placement_posture: None,
                                 project: None,
                                 data: serde_json::json!({
                                     "world_fs_strategy_primary": primary.as_str(),
@@ -1427,6 +1436,8 @@ impl WorldAgentService {
         &self,
         req: &GatewayLifecycleRequestV1,
     ) -> Result<PreparedGatewayRuntimeRequest> {
+        req.validate_identity_contract()
+            .map_err(|err| anyhow!("gateway_invalid_integration: {err}"))?;
         let cwd = req
             .cwd
             .as_ref()
@@ -1575,8 +1586,26 @@ impl WorldAgentService {
             GatewayLifecycleResponseV1 {
                 status: GatewayStatusV1::Unavailable,
                 client_wiring: None,
+                identity_tuple: None,
+                placement_posture: None,
             }
         }
+    }
+
+    fn attach_gateway_request_metadata(
+        mut response: GatewayLifecycleResponseV1,
+        req: &GatewayLifecycleRequestV1,
+    ) -> Result<GatewayLifecycleResponseV1> {
+        if response.identity_tuple.is_none() {
+            response.identity_tuple = req.identity_tuple.clone();
+        }
+        if response.placement_posture.is_none() {
+            response.placement_posture = req.placement_posture.clone();
+        }
+        response
+            .validate_identity_contract()
+            .map_err(|err| anyhow!("gateway_invalid_integration: {err}"))?;
+        Ok(response)
     }
 }
 
@@ -1812,6 +1841,8 @@ mod gateway_runtime_binding_tests {
                 }),
                 api_env: None,
             }),
+            identity_tuple: None,
+            placement_posture: None,
         }
     }
 

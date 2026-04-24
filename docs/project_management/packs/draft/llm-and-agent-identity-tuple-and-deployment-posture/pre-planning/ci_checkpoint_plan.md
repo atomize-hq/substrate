@@ -15,6 +15,7 @@ Standard:
 - This plan is authoritative for checkpoint cadence during pre-planning.
 - If slice ids, platform scope, or checkpoint boundaries change, update this plan first.
 - When full planning writes `tasks.json`, set `meta.checkpoint_boundaries` to `["LAITDP1", "LAITDP2"]`.
+- When full planning writes `tasks.json`, set `meta.behavior_platforms_required` to `["linux", "macos"]` and `meta.ci_parity_platforms_required` to `["linux", "macos", "windows"]`.
 - Before work that depends on widened tuple publication moves forward, run document validation against the selected pre-planning artifacts and the authored docs attached to `LAITDP0` and `LAITDP1`.
 - At every checkpoint, run micro-lint and ambiguity scans across every authored markdown file that lands inside the checkpoint boundary.
 
@@ -22,8 +23,8 @@ Standard:
 - Checkpoint planning applies to this feature because the authoritative inputs lock Linux, macOS, and Windows parity for tuple and placement-posture semantics and reuse security-sensitive routing, status, and trace surfaces.
 - Later verification falls into three layers:
   - compile parity on shared gateway runtime, shell, and trace publication surfaces
-  - targeted feature smoke on gateway status publication and unavailable-shape behavior
-  - deeper CI and manual parity review when platform rollout and validation evidence land
+  - targeted feature smoke on gateway status publication and unavailable-shape behavior for the behavior platforms only (`linux`, `macos`)
+  - deeper CI and manual parity review, including Windows CI parity, when platform rollout and validation evidence land
 
 ## Machine-readable plan (linted)
 
@@ -55,7 +56,7 @@ Standard:
         "feature_smoke": true,
         "ci_testing": "deeper"
       },
-      "rationale": "Run the parity and rollout checkpoint after platform-rollout and validation evidence land. This checkpoint closes the compatibility and manual-validation surfaces for Linux, macOS, and Windows."
+      "rationale": "Run the parity and rollout checkpoint after platform-rollout and validation evidence land. This checkpoint closes Linux and macOS behavior smoke plus Linux, macOS, and Windows CI parity and manual-validation surfaces."
     }
   ]
 }
@@ -83,7 +84,7 @@ Standard:
 - Slices: `LAITDP2`
 - Code-grounded boundary: `minimal_spec_draft.md` assigns `LAITDP2` to platform parity, compatibility proof, terminology rollout, validation evidence, and bridge transport invariants across Linux, macOS, and Windows.
 - Stabilized surfaces:
-  - Linux, macOS, and Windows parity guarantees for tuple and placement-posture semantics
+  - Linux and macOS required behavior smoke plus Linux, macOS, and Windows parity guarantees for tuple and placement-posture semantics
   - the bridge transport-only invariant
   - the compatibility posture for retiring overloaded backend terminology
   - the manual validation evidence that proves one owner per surface

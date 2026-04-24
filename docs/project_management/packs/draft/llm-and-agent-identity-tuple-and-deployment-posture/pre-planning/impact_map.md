@@ -38,7 +38,9 @@ Canonical slice ids selected for this feature:
 ## Touch set (explicit)
 
 ### Create
-- None
+- `crates/common/src/identity.rs`
+- `scripts/ci/feature-smoke/llm-and-agent-identity-tuple-and-deployment-posture/linux-smoke.sh`
+- `scripts/ci/feature-smoke/llm-and-agent-identity-tuple-and-deployment-posture/macos-smoke.sh`
 
 ### Edit
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md`
@@ -90,8 +92,19 @@ Canonical slice ids selected for this feature:
 - `docs/CONFIGURATION.md`
 - `docs/TRACE.md`
 - `docs/USAGE.md`
+- `.github/workflows/feature-smoke.yml`
 - `crates/agent-api-types/src/lib.rs`
+- `crates/broker/src/effective_policy.rs`
+- `crates/broker/src/lib.rs`
+- `crates/broker/src/policy.rs`
+- `crates/broker/src/tests.rs`
+- `crates/common/src/agent_events.rs`
+- `crates/common/src/lib.rs`
 - `crates/shell/src/builtins/world_gateway.rs`
+- `crates/shell/src/execution/policy_cmd.rs`
+- `crates/shell/src/execution/policy_model.rs`
+- `crates/common/tests/agent_hub_event_envelope_schema.rs`
+- `crates/shell/tests/replay_world.rs`
 - `crates/shell/tests/world_gateway.rs`
 - `crates/world-agent/src/gateway_runtime.rs`
 - `crates/world-agent/src/service.rs`
