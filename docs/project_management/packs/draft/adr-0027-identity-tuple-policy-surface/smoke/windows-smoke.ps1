@@ -23,6 +23,19 @@ function Invoke-ExpectExit([int]$ExpectedExit, [string]$CommandName, [string[]]$
   }
 }
 
+function Invoke-Capture([string]$CommandName, [string[]]$Arguments) {
+  $stdoutPath = Join-Path $tmpRoot ([System.Guid]::NewGuid().ToString() + ".stdout")
+  $stderrPath = Join-Path $tmpRoot ([System.Guid]::NewGuid().ToString() + ".stderr")
+  $proc = Start-Process -FilePath $CommandName -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+  return [pscustomobject]@{
+    ExitCode = $proc.ExitCode
+    StdoutPath = $stdoutPath
+    StderrPath = $stderrPath
+    Stdout = Get-Content -Raw -Path $stdoutPath
+    Stderr = Get-Content -Raw -Path $stderrPath
+  }
+}
+
 if (-not $IsWindows) {
   Write-Error "adr-0027-identity-tuple-policy-surface: windows smoke is supported only on Windows"
   exit 4
@@ -83,7 +96,29 @@ try {
   Invoke-ExpectExit 0 $SubstrateBin @("workspace", "init", "--force")
   Invoke-ExpectExit 0 $SubstrateBin @("config", "global", "init", "--force")
   Invoke-ExpectExit 0 $SubstrateBin @("policy", "global", "init", "--force")
-  Invoke-ExpectExit 0 $SubstrateBin @("policy", "current", "show", "--json", "--explain")
+  Invoke-ExpectExit 0 $SubstrateBin @("policy", "global", "set", "--json", 'llm.constraints.providers=["openai"]')
+  Invoke-ExpectExit 0 $SubstrateBin @("policy", "global", "set", "--json", 'llm.constraints.protocols=["openai.responses"]')
+  $policyView = Invoke-Capture $SubstrateBin @("policy", "current", "show", "--json", "--explain")
+  if ($policyView.ExitCode -ne 0) {
+    throw "policy current show --json --explain failed with exit $($policyView.ExitCode)`nSTDOUT:`n$($policyView.Stdout)`nSTDERR:`n$($policyView.Stderr)"
+  }
+  $policyJson = $policyView.Stdout | ConvertFrom-Json
+  if (($policyJson.llm.constraints.providers -join ",") -ne "openai") {
+    throw "expected llm.constraints.providers to contain openai"
+  }
+  if (($policyJson.llm.constraints.protocols -join ",") -ne "openai.responses") {
+    throw "expected llm.constraints.protocols to contain openai.responses"
+  }
+  $explainJson = $policyView.Stderr | ConvertFrom-Json
+  if ($explainJson.kind -ne "substrate.policy.explain.v1") {
+    throw "expected explain kind substrate.policy.explain.v1"
+  }
+  if ($explainJson.keys.'llm.constraints.providers'.sources[0].layer -ne "global_patch") {
+    throw "expected providers provenance to come from global_patch"
+  }
+  if ($explainJson.keys.'llm.constraints.protocols'.sources[0].layer -ne "global_patch") {
+    throw "expected protocols provenance to come from global_patch"
+  }
   Invoke-ExpectExit 2 $SubstrateBin @("policy", "global", "set", "--json", 'llm.constraints.providers=["OpenAI"]')
   Invoke-ExpectExit 2 $SubstrateBin @("policy", "global", "set", "--json", 'llm.constraints.protocols=["openai"]')
 
