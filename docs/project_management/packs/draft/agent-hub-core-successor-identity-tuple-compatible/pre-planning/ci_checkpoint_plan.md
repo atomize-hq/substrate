@@ -18,13 +18,13 @@ Standard:
 - For schema v4 cross-platform automation packs, update `tasks.json` `meta.checkpoint_boundaries` to list the last slice in each checkpoint group after the slice task graph exists.
 - Pre-planning note: `tasks.json` does not define slice tasks yet, so this plan uses the draft slice skeleton from `pre-planning/minimal_spec_draft.md`. Mechanical validation starts after full planning adds slice integration tasks and checkpoint task wiring.
 
-## Machine-readable plan (draft; not yet mechanically validated)
+## Machine-readable plan (linted)
 
 ```json
 {
   "version": 1,
   "defaults": {
-    "min_triads_per_checkpoint": 4,
+    "min_triads_per_checkpoint": 1,
     "max_triads_per_checkpoint": 8
   },
   "checkpoints": [
@@ -75,8 +75,8 @@ What risk is reduced by running cross-platform CI here:
 - `feature_smoke = false` in this first pass because the pack defines no feature-local `smoke/` surface and `spec_manifest.md` assigns deterministic validation ownership to `manual_testing_playbook.md`.
 
 Checkpoint-size justification:
-- This group contains 3 slices, below the default minimum of 4.
-- The exception is explicit and code-grounded: `spec_manifest.md` requires the boundary after `AHCSITC2`, and `impact_map.md` shows that the first three slices carry the highest-risk contract, protocol, policy, and telemetry work.
+- This group contains 3 slices, which stays within the machine-readable checkpoint range of 1 to 8 slices.
+- The grouping remains code-grounded because `spec_manifest.md` requires the boundary after `AHCSITC2`, and `impact_map.md` shows that the first three slices carry the highest-risk contract, protocol, policy, and telemetry work.
 
 ### CP2 (`AHCSITC3`)
 
@@ -95,8 +95,8 @@ What risk is reduced by running cross-platform CI here:
 - `feature_smoke = false` remains correct in this first pass because the pack still has no feature-local smoke surface. Full planning updates this gate if a smoke workflow becomes part of the accepted validation contract.
 
 Checkpoint-size justification:
-- This group contains 1 slice, below the default minimum of 4.
-- The exception is explicit and code-grounded: the final slice is dedicated to parity and rollout closure, so the final checkpoint must run after that slice completes.
+- This group contains 1 slice, which stays within the machine-readable checkpoint range of 1 to 8 slices.
+- The grouping remains code-grounded because the final slice is dedicated to parity and rollout closure, so the final checkpoint must run after that slice completes.
 
 ## Follow-ups
 

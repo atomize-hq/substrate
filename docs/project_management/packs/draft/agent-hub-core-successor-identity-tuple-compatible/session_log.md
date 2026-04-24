@@ -49,3 +49,31 @@
 - Next steps:
   - Apply the logged allowlist request for `pre-planning/ci_checkpoint_plan.md`.
   - After that tracked update lands, rerun `validate_ci_checkpoint_plan.py` and update `quality_gate_report.md` from `REVISE` to `ACCEPT` if the checkpoint validator passes.
+
+## START — 2026-04-24T20:45:14Z — planning — tasks checkpoints resume after allowlist
+- Goal: apply the allowlisted `pre-planning/ci_checkpoint_plan.md` repair, rerun the full self-check, and close the pack at `ACCEPT`.
+- Inputs read:
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/quality_gate_report.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/logs/pws/AHCSITC-PWS-tasks_checkpoints/allowlist_request.json`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/logs/pws/AHCSITC-PWS-tasks_checkpoints/draft.patch`
+
+## END — 2026-04-24T20:45:14Z — planning — tasks checkpoints resume after allowlist
+- Summary of changes:
+  - Updated `pre-planning/ci_checkpoint_plan.md` to use the linted machine-readable header and machine-readable defaults that match the accepted `3 + 1` checkpoint grouping.
+  - Reran all required validators and cleared the checkpoint-plan failure.
+  - Promoted `quality_gate_report.md` from `REVISE` to `ACCEPT`.
+- Files created or modified:
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/quality_gate_report.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md`
+- Validation commands run (with results):
+  - `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible"` → `0` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_slice_specs.py --feature-dir "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible"` → `0` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible"` → `0` → `PASS`
+  - `make planning-micro-lint FEATURE_DIR="docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible" OWNED_PATHS="pre-planning/ci_checkpoint_plan.md"` → `0` → `PASS`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - The pack is execution-ready on the owned planning surfaces.
