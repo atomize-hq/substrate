@@ -906,6 +906,9 @@ fn error_is_component_unavailable(err: &anyhow::Error) -> bool {
             || msg.contains("listener missing")
             || msg.contains("no such file or directory")
             || msg.contains("failed to open named pipe")
+            || msg.contains("no forwarding transport available")
+            || msg.contains("lima ssh config not found")
+            || msg.contains("limactl not found")
     })
 }
 
@@ -1087,5 +1090,25 @@ mod tests {
                 }
             })
         });
+    }
+}
+
+#[cfg(test)]
+mod classification_tests {
+    use super::error_is_component_unavailable;
+
+    #[test]
+    fn component_unavailable_includes_macos_forwarding_bootstrap_failures() {
+        for message in [
+            "No forwarding transport available. Run scripts/mac/lima-doctor.sh",
+            "Lima SSH config not found at: /Users/test/.lima/substrate/ssh.config",
+            "limactl not found. Install Lima with: brew install lima",
+        ] {
+            let err = anyhow::anyhow!(message);
+            assert!(
+                error_is_component_unavailable(&err),
+                "expected macOS bootstrap error to classify as component unavailable: {message}"
+            );
+        }
     }
 }
