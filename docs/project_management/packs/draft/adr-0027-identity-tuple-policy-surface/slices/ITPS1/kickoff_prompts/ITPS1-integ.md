@@ -15,8 +15,9 @@ Do not edit planning docs inside the worktree.
 - Merge the code and test branches for ITPS1.
 - Ensure the integrated state satisfies `AC-ITPS1-01` through `AC-ITPS1-08`.
 - Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, and `make integ-checks`.
+- Complete `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-closeout_report.md`.
 
 ## End Checklist
 1. Run `make triad-task-finish TASK_ID="ITPS1-integ"` inside the worktree.
-2. Hand off the green commands and outcomes.
+2. Hand off the green commands, outcomes, and closeout report status.
 3. Do not edit planning docs inside the worktree.

@@ -27,7 +27,7 @@ Standard:
 - `impact_map.md` ties the feature to broker policy parsing, shell denial and explain surfaces, trace publication, and operator documentation parity.
 - `spec_manifest.md` keeps the feature on four contiguous slices that together close the contract, schema, policy, telemetry, compatibility, validation, checkpoint-alignment, and promotion surfaces.
 
-## Machine-readable plan (draft; not yet mechanically validated)
+## Machine-readable plan (linted)
 
 ```json
 {

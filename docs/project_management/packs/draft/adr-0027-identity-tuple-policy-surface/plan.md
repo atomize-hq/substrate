@@ -30,14 +30,16 @@
 - `CP1-ci-checkpoint` validates the `ITPS3-integ-core` branch SHA and covers Linux, macOS, and Windows behavior scope.
 - No earlier slice gets platform-fix fanout or a second checkpoint boundary.
 
-## Execution-gate note
-- `meta.execution_gates` is intentionally `false` in the current tracked pack because the required tracked outputs are outside the dispatcher allowlist:
-  - `execution_preflight_report.md`
+## Execution gates
+- `meta.execution_gates` is enabled.
+- `F0-exec-preflight` runs before `ITPS0-code` or `ITPS0-test`.
+- The preflight report lives at `execution_preflight_report.md`.
+- Each slice final integration task completes its own closeout report:
   - `slices/ITPS0/ITPS0-closeout_report.md`
   - `slices/ITPS1/ITPS1-closeout_report.md`
   - `slices/ITPS2/ITPS2-closeout_report.md`
   - `slices/ITPS3/ITPS3-closeout_report.md`
-- An allowlist request for those optional execution-gate surfaces is recorded under `logs/pws/ITPS-PWS-tasks_checkpoints/`.
+- `CP1-ci-checkpoint` still runs only after `ITPS3-integ-core`; execution gates do not change the checkpoint boundary or slice order.
 
 ## Owned outputs
 - `plan.md`

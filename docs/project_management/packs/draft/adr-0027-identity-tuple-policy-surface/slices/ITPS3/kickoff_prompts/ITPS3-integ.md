@@ -15,8 +15,9 @@ Do not edit planning docs inside the worktree.
 - Merge any platform-fix branches into the final aggregator worktree.
 - Ensure the final merged state satisfies `AC-ITPS3-01` through `AC-ITPS3-07`.
 - Run `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, relevant tests, and `make integ-checks`.
+- Complete `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-closeout_report.md`.
 
 ## End Checklist
 1. Confirm `CP1-ci-checkpoint` evidence is already recorded in `session_log.md`.
 2. Run `make triad-task-finish TASK_ID="ITPS3-integ"` inside the worktree.
-3. Hand off the merged result for feature cleanup.
+3. Hand off the merged result and closeout report status for feature cleanup.

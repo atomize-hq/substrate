@@ -17,7 +17,7 @@
       "orchestration_branch": "feat/adr-0027-identity-tuple-policy-surface"
     },
     "slice_spec_version": 2,
-    "execution_gates": false,
+    "execution_gates": true,
     "feature": "adr-0027-identity-tuple-policy-surface",
     "adr_paths": [
       "docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md"
@@ -27,6 +27,41 @@
     ]
   },
   "tasks": [
+    {
+      "id": "F0-exec-preflight",
+      "name": "Execution preflight gate",
+      "type": "ops",
+      "phase": "F0",
+      "status": "pending",
+      "description": "Run the execution preflight gate before any slice triad starts.",
+      "references": [
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/execution_preflight_report.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md"
+      ],
+      "acceptance_criteria": [
+        "execution_preflight_report.md records a concrete ACCEPT or REVISE recommendation."
+      ],
+      "start_checklist": [
+        "Run: make triad-orch-ensure FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\"",
+        "Read plan.md, tasks.json, session_log.md, execution_preflight_report.md, and the kickoff prompt.",
+        "Set the task to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Fill execution_preflight_report.md with the recommendation and required follow-ups.",
+        "Set the task to completed and add an END entry in session_log.md.",
+        "Commit the documentation changes on the orchestration checkout."
+      ],
+      "worktree": null,
+      "git_branch": "adr-0027-identity-tuple-policy-surface-f0-exec-preflight",
+      "required_make_targets": [],
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/kickoff_prompts/F0-exec-preflight.md",
+      "depends_on": [],
+      "concurrent_with": []
+    },
     {
       "id": "ITPS0-code",
       "name": "ITPS0 slice (code)",
@@ -70,7 +105,9 @@
       ],
       "integration_task": "ITPS0-integ",
       "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/kickoff_prompts/ITPS0-code.md",
-      "depends_on": [],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
       "concurrent_with": [
         "ITPS0-test"
       ]
@@ -117,7 +154,9 @@
       ],
       "integration_task": "ITPS0-integ",
       "kickoff_prompt": "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/kickoff_prompts/ITPS0-test.md",
-      "depends_on": [],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
       "concurrent_with": [
         "ITPS0-code"
       ]
@@ -133,7 +172,8 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS0/ITPS0-closeout_report.md"
       ],
       "ac_ids": [
         "AC-ITPS0-01",
@@ -155,6 +195,7 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, relevant tests, and make integ-checks.",
+        "Complete slices/ITPS0/ITPS0-closeout_report.md.",
         "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS0-integ\""
       ],
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps0-integ",
@@ -182,7 +223,8 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS1/ITPS1-closeout_report.md"
       ],
       "ac_ids": [
         "AC-ITPS1-01",
@@ -303,6 +345,7 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, relevant tests, and make integ-checks.",
+        "Complete slices/ITPS1/ITPS1-closeout_report.md.",
         "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS1-integ\""
       ],
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps1-integ",
@@ -330,7 +373,8 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS2/ITPS2-spec.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS2/ITPS2-spec.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS2/ITPS2-closeout_report.md"
       ],
       "ac_ids": [
         "AC-ITPS2-01",
@@ -448,6 +492,7 @@
       ],
       "end_checklist": [
         "Run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, relevant tests, and make integ-checks.",
+        "Complete slices/ITPS2/ITPS2-closeout_report.md.",
         "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS2-integ\""
       ],
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps2-integ",
@@ -573,7 +618,8 @@
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/session_log.md",
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
-        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md"
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-closeout_report.md"
       ],
       "acceptance_criteria": [
         "Core integration state is green under make integ-checks and ready for CP1 checkpoint CI."
@@ -765,6 +811,7 @@
       "end_checklist": [
         "Merge any platform-fix branches, then run cargo fmt, cargo clippy --workspace --all-targets -- -D warnings, relevant tests, and make integ-checks.",
         "Confirm CP1-ci-checkpoint completed and is recorded in session_log.md before finishing the final aggregator.",
+        "Complete slices/ITPS3/ITPS3-closeout_report.md.",
         "From inside the worktree: make triad-task-finish TASK_ID=\"ITPS3-integ\""
       ],
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ",
