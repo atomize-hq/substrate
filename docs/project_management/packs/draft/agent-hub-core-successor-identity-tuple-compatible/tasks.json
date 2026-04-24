@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "schema_version": 4,
+    "cross_platform": true,
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "behavior_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/agent-hub-core-successor-identity-tuple-compatible"
+    },
+    "slice_spec_version": 2,
+    "feature": "agent-hub-core-successor-identity-tuple-compatible",
+    "adr_paths": [
+      "docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md"
+    ]
+  },
+  "tasks": []
+}
