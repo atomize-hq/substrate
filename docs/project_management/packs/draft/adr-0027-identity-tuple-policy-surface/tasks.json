@@ -700,7 +700,7 @@
         "Read plan.md, tasks.json, session_log.md, the slice spec, the checkpoint plan, and the kickoff prompt.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS3-integ-linux\" TASK_PLATFORM=linux"
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ-linux"
     },
@@ -787,7 +787,7 @@
         "Read plan.md, tasks.json, session_log.md, the slice spec, the checkpoint plan, and the kickoff prompt.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS3-integ-windows\" TASK_PLATFORM=windows"
       ],
-      "status": "pending",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ-windows"
     },
@@ -880,7 +880,7 @@
         "Read pre-planning/ci_checkpoint_plan.md and confirm the checkpoint boundary slice is ITPS3.",
         "Set the task to in_progress and add a START entry in session_log.md."
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "ops",
       "worktree": null
     },

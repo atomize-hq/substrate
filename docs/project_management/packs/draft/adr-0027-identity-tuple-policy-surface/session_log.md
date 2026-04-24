@@ -119,3 +119,28 @@
   - failed macOS smoke: `24902282231` (`https://github.com/atomize-hq/substrate/actions/runs/24902282231`)
   - passed macOS smoke: `24902490594` (`https://github.com/atomize-hq/substrate/actions/runs/24902490594`)
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/logs/ITPS3/integ-macos/last_message.md`
+
+- Checkpoint dispatch evidence for `CHECKOUT_SHA=d1210f3890e85f041ac2eb8147cd200c66454f87`:
+  - Local Linux smoke preflight on the orchestration host → `PASS`
+  - Compile parity run `24901653332` → `PASS` (`https://github.com/atomize-hq/substrate/actions/runs/24901653332`)
+  - Feature smoke run `24901653291` → `FAIL` on `macos` (`https://github.com/atomize-hq/substrate/actions/runs/24901653291`)
+
+- Checkpoint evidence refresh for `CHECKOUT_SHA=167f7c51da958127da4631de6de1c240919b16ca`:
+  - Local Linux smoke preflight on the orchestration host → `PASS`
+  - macOS-only smoke run `24902490594` → `PASS` (`https://github.com/atomize-hq/substrate/actions/runs/24902490594`)
+  - Feature smoke run `24902710720` → `PASS` on `linux`, `macos` (`https://github.com/atomize-hq/substrate/actions/runs/24902710720`)
+  - Compile parity run `24902710730` → `FAIL` on `macos-14`, `ubuntu-24.04`, `windows-2022` because Clippy flagged `clippy::if_same_then_else` in `crates/shell/src/builtins/world_gateway.rs` (`https://github.com/atomize-hq/substrate/actions/runs/24902710730`)
+
+- Checkpoint candidate update — 2026-04-24T17:32:46Z:
+  - `ITPS3-integ-macos` advanced to `adbbd6bc46807f0c988301ad83b14bcbc8806ee3` after the compile-parity-only fix in `crates/shell/src/builtins/world_gateway.rs`.
+  - Local Linux smoke preflight on the orchestration host for `CHECKOUT_SHA=adbbd6bc46807f0c988301ad83b14bcbc8806ee3` → `PASS`
+
+- Checkpoint evidence refresh for `CHECKOUT_SHA=adbbd6bc46807f0c988301ad83b14bcbc8806ee3`:
+  - Feature smoke run `24902858949` → `PASS` on `linux`, `macos` (`https://github.com/atomize-hq/substrate/actions/runs/24902858949`)
+  - Compile parity run `24902859334` → `PASS` on `macos-14`, `ubuntu-24.04`, `windows-2022` (`https://github.com/atomize-hq/substrate/actions/runs/24902859334`)
+
+## END — 2026-04-24T17:32:46Z — checkpoint — CP1-ci-checkpoint
+- Candidate checkout SHA: `adbbd6bc46807f0c988301ad83b14bcbc8806ee3`
+- Checkpoint dispatch evidence:
+  - Compile parity: run `24902859334` — `https://github.com/atomize-hq/substrate/actions/runs/24902859334` — `success` on `macos-14`, `ubuntu-24.04`, `windows-2022`
+  - Feature smoke: run `24902858949` — `https://github.com/atomize-hq/substrate/actions/runs/24902858949` — `success` on `linux`, `macos`
