@@ -31,7 +31,7 @@
       "name": "Execution preflight gate",
       "type": "ops",
       "phase": "F0",
-      "status": "pending",
+      "status": "completed",
       "description": "Run the execution preflight gate before any slice triad starts.",
       "references": [
         "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md",
