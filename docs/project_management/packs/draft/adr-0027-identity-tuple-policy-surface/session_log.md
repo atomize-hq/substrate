@@ -100,3 +100,7 @@
 ## START — 2026-04-24T16:46:28Z — integration — ITPS3-integ-core
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface" TASK_ID="ITPS3-integ-core" LAUNCH_CODEX=1`
+
+## END — 2026-04-24T16:57:13Z — integration — ITPS3-integ-core
+- HEAD: `d1210f3890e85f041ac2eb8147cd200c66454f87`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/logs/ITPS3/integ-core/last_message.md`

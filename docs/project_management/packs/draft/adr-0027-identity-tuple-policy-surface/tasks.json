@@ -656,7 +656,7 @@
         "Read plan.md, tasks.json, session_log.md, the slice spec, the checkpoint plan, and the kickoff prompt.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS3-integ-core\""
       ],
-      "status": "in_progress",
+      "status": "completed",
       "type": "integration",
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ-core"
     },
