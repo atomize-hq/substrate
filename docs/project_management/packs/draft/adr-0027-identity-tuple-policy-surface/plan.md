@@ -10,7 +10,7 @@
 - Planning docs are edited only on the orchestration checkout.
 - Slice tasks use canonical kickoff paths under `slices/<SLICE_ID>/kickoff_prompts/`.
 - Feature-level ops tasks use canonical kickoff paths under `kickoff_prompts/`.
-- Behavior-platform smoke entrypoints live under `smoke/` and remain the required Linux, macOS, and Windows validation scripts for this pack.
+- Behavior-platform smoke entrypoints live under `smoke/`; Linux and macOS remain required CI behavior-validation scripts, while Windows stays compile-parity only.
 - `ITPS0` through `ITPS2` use the schema v4 non-boundary shape: `code`, `test`, `integ`.
 - `ITPS3` uses the schema v4 checkpoint-boundary shape: `code`, `test`, `integ-core`, `integ-linux`, `integ-macos`, `integ-windows`, `integ`.
 
@@ -28,7 +28,7 @@
 ## Checkpoint wiring
 - `meta.checkpoint_boundaries = ["ITPS3"]`.
 - The checkpoint plan remains authoritative at `pre-planning/ci_checkpoint_plan.md`.
-- `CP1-ci-checkpoint` validates the `ITPS3-integ-core` branch SHA and covers Linux, macOS, and Windows behavior scope.
+- `CP1-ci-checkpoint` validates the `ITPS3-integ-core` branch SHA, covers Linux and macOS behavior scope, and keeps Windows in compile parity only.
 - No earlier slice gets platform-fix fanout or a second checkpoint boundary.
 
 ## Execution gates

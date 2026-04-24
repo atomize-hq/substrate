@@ -12,7 +12,7 @@ Do not edit planning docs inside the worktree.
 3. Confirm this task waits for `ITPS3-integ-core`.
 
 ## Requirements
-- Use the checkpoint plan as the source of truth for compile-parity and behavioral-smoke dispatch.
+- Use the checkpoint plan as the source of truth for compile-parity dispatch on Linux, macOS, and Windows, and for behavioral-smoke dispatch on Linux and macOS only.
 - Record run ids, URLs, or ci-audit skip evidence in `session_log.md`.
 - Do not change slice ordering, checkpoint boundaries, or automation posture from this task.
 

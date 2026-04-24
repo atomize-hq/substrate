@@ -30,7 +30,7 @@ mkdir -p .substrate
 
 ## Smoke entrypoints
 
-Use these scripts for repeatable platform smoke before drilling into the manual matrix:
+Use these scripts for repeatable platform smoke before drilling into the manual matrix. Linux and macOS are the required CI behavior-smoke entrypoints; Windows smoke remains optional manual evidence for this pack.
 
 - Linux:
 

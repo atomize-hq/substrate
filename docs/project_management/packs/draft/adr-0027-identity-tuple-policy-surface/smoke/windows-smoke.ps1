@@ -37,8 +37,12 @@ Write-Output "== Doc contract checks =="
 $tasksPath = Join-Path $FeatureDir "tasks.json"
 $tasksDoc = Get-Content -Raw -Path $tasksPath | ConvertFrom-Json
 $behaviorPlatforms = @($tasksDoc.meta.behavior_platforms_required)
-if (($behaviorPlatforms -join ",") -ne "linux,macos,windows") {
-  throw "expected behavior_platforms_required to be linux,macos,windows"
+if (($behaviorPlatforms -join ",") -ne "linux,macos") {
+  throw "expected behavior_platforms_required to be linux,macos"
+}
+$parityPlatforms = @($tasksDoc.meta.ci_parity_platforms_required)
+if (($parityPlatforms -join ",") -ne "linux,macos,windows") {
+  throw "expected ci_parity_platforms_required to be linux,macos,windows"
 }
 
 $requiredDecisionTasks = @(

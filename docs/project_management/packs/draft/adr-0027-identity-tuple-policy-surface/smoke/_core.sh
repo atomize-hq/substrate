@@ -23,7 +23,10 @@ expect_exit() {
 }
 
 echo "== Doc contract checks =="
-jq -e '.meta.behavior_platforms_required == ["linux","macos","windows"]' "$FEATURE_DIR/tasks.json" >/dev/null
+jq -e '
+  .meta.behavior_platforms_required == ["linux","macos"]
+  and .meta.ci_parity_platforms_required == ["linux","macos","windows"]
+' "$FEATURE_DIR/tasks.json" >/dev/null
 jq -e '
   [
     .tasks[]
