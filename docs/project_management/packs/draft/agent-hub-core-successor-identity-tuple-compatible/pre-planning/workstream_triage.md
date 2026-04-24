@@ -125,7 +125,8 @@
         "slices/AHCSITC0/kickoff_prompts/",
         "slices/AHCSITC1/kickoff_prompts/",
         "slices/AHCSITC2/kickoff_prompts/",
-        "slices/AHCSITC3/kickoff_prompts/"
+        "slices/AHCSITC3/kickoff_prompts/",
+        "pre-planning/ci_checkpoint_plan.md"
       ]
     }
   ]
