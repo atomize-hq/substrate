@@ -784,8 +784,9 @@ fn ensure_env_name_allowed(
 }
 
 fn codex_auth_state_path() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
+    dirs::home_dir()
+        .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
+        .or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".codex")
         .join("auth.json")
