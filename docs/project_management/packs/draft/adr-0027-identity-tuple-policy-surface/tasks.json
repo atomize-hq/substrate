@@ -666,8 +666,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "ITPS3-integ-core",
-        "CP1-ci-checkpoint"
+        "ITPS3-integ-core"
       ],
       "description": "Platform-fix integration task for Linux behavior smoke and parity after the CP1 checkpoint.",
       "end_checklist": [
@@ -701,7 +700,7 @@
         "Read plan.md, tasks.json, session_log.md, the slice spec, the checkpoint plan, and the kickoff prompt.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface\" TASK_ID=\"ITPS3-integ-linux\" TASK_PLATFORM=linux"
       ],
-      "status": "in_progress",
+      "status": "pending",
       "type": "integration",
       "worktree": "wt/adr-0027-identity-tuple-policy-surface-itps3-integ-linux"
     },
@@ -711,8 +710,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "ITPS3-integ-core",
-        "CP1-ci-checkpoint"
+        "ITPS3-integ-core"
       ],
       "description": "Platform-fix integration task for macOS behavior smoke and parity after the CP1 checkpoint.",
       "end_checklist": [
@@ -756,8 +754,7 @@
       ],
       "concurrent_with": [],
       "depends_on": [
-        "ITPS3-integ-core",
-        "CP1-ci-checkpoint"
+        "ITPS3-integ-core"
       ],
       "description": "Platform-fix integration task for Windows compile parity after the CP1 checkpoint.",
       "end_checklist": [
@@ -883,7 +880,7 @@
         "Read pre-planning/ci_checkpoint_plan.md and confirm the checkpoint boundary slice is ITPS3.",
         "Set the task to in_progress and add a START entry in session_log.md."
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "ops",
       "worktree": null
     },
