@@ -962,6 +962,62 @@ fn world_gateway_status_json_publishes_tuple_and_posture_as_top_level_siblings()
 }
 
 #[test]
+fn world_gateway_status_allow_path_omits_deny_only_policy_detail_fields() {
+    let (_temp, _socket, socket_path) = gateway_socket_fixture_with_status(json!({
+        "status": "available",
+        "client_wiring": {
+            "openai_base_url": "http://gateway.test/openai",
+            "anthropic_base_url": "http://gateway.test/anthropic"
+        },
+        "identity_tuple": {
+            "client": "codex",
+            "router": "substrate_gateway",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "protocol": "openai.responses"
+        },
+        "placement_posture": {
+            "execution": "in_world"
+        }
+    }));
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(gateway_policy_with_openai_backend());
+
+    let mut cmd = fixture.command();
+    let assert = cmd
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args(["world", "gateway", "status", "--json"])
+        .assert()
+        .code(0)
+        .stderr(predicate::str::is_empty());
+
+    let stdout =
+        String::from_utf8(assert.get_output().stdout.clone()).expect("gateway status stdout utf8");
+    let parsed: JsonValue = serde_json::from_str(stdout.trim()).expect("parse gateway status json");
+
+    assert_eq!(parsed.pointer("/status"), Some(&json!("available")));
+    assert_eq!(
+        parsed.pointer("/identity_tuple/router"),
+        Some(&json!("substrate_gateway"))
+    );
+    assert_eq!(
+        parsed.pointer("/placement_posture/execution"),
+        Some(&json!("in_world"))
+    );
+    for deny_only_pointer in ["/tuple_policy", "/denied_by", "/detail", "/policy_decision"] {
+        assert!(
+            parsed.pointer(deny_only_pointer).is_none(),
+            "allow-path status output must omit deny-only field `{deny_only_pointer}`: {parsed}"
+        );
+    }
+}
+
+#[test]
 fn world_gateway_status_json_preserves_unavailable_shape_from_runtime() {
     let (_temp, _socket, socket_path) = gateway_unavailable_socket_fixture();
     let fixture = GatewayAuthFixture::new();
@@ -1513,6 +1569,9 @@ fn world_gateway_tuple_narrowing_denies_provider_before_auth() {
         .args(["world", "gateway", "status"])
         .assert()
         .code(5)
+        .stderr(predicate::str::contains(
+            "substrate world gateway status: policy or safety failure",
+        ))
         .stderr(predicate::str::contains(
             "effective gateway provider 'openai' is not allowlisted by llm.constraints.providers",
         ))
@@ -2104,5 +2163,96 @@ fn world_gateway_backend_matrix_keeps_regression_floor_and_first_proof_target_vi
                 "token-from-file",
             );
         }
+    }
+}
+
+#[test]
+fn world_gateway_empty_tuple_constraints_preserve_backend_selection_and_operator_workflow() {
+    let empty_constraints_policy = gateway_policy_with_openai_runtime_constraints(
+        &["api:openai"],
+        &["OPENAI_API_KEY"],
+        &[],
+        &[],
+        &[],
+        &[],
+    );
+    let cases = [
+        (
+            "constraints absent",
+            gateway_policy_with_openai_env_override().to_string(),
+        ),
+        ("constraints empty", empty_constraints_policy),
+    ];
+
+    for (case_name, policy) in cases {
+        let fixture = GatewayAuthFixture::new();
+        fixture.write_global_config(gateway_config_with_generic_backend());
+        fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+        fixture.write_global_policy(&policy);
+
+        let available = json!({
+            "status": "available",
+            "client_wiring": {
+                "openai_base_url": "http://gateway.test/openai",
+                "anthropic_base_url": "http://gateway.test/anthropic"
+            }
+        });
+        let mut socket = RecordedGatewayLifecycleSocket::start(
+            available.clone(),
+            available.clone(),
+            available,
+            1,
+        );
+
+        let mut cmd = fixture.command();
+        let assert = cmd
+            .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+            .env("SUBSTRATE_WORLD_ENABLED", "1")
+            .env("SUBSTRATE_WORLD", "enabled")
+            .env("SUBSTRATE_WORLD_SOCKET", socket.socket_path())
+            .env("OPENAI_API_KEY", "sk-openai-proof")
+            .args(["world", "gateway", "status", "--json"])
+            .assert()
+            .code(0)
+            .stderr(predicate::str::is_empty());
+
+        let stdout = String::from_utf8(assert.get_output().stdout.clone())
+            .expect("gateway status stdout utf8");
+        let parsed: JsonValue =
+            serde_json::from_str(stdout.trim()).expect("parse gateway status json");
+        assert_eq!(
+            parsed.pointer("/status"),
+            Some(&json!("available")),
+            "{case_name} should preserve status availability"
+        );
+        assert_eq!(
+            parsed.pointer("/identity_tuple/router"),
+            Some(&json!("substrate_gateway")),
+            "{case_name} should preserve tuple-aware routing metadata"
+        );
+        assert_eq!(
+            parsed.pointer("/identity_tuple/provider"),
+            Some(&json!("openai")),
+            "{case_name} should preserve tuple-aware provider metadata"
+        );
+        assert_eq!(
+            parsed.pointer("/identity_tuple/protocol"),
+            Some(&json!("openai.responses")),
+            "{case_name} should preserve tuple-aware protocol metadata"
+        );
+        assert_eq!(
+            parsed.pointer("/placement_posture/execution"),
+            Some(&json!("in_world")),
+            "{case_name} should preserve operator-visible placement posture"
+        );
+
+        let requests = socket.recorded_requests();
+        assert_eq!(
+            requests.len(),
+            1,
+            "{case_name} should dispatch one status request"
+        );
+        assert_gateway_lifecycle_backend(&requests[0], FIRST_ADDITIONAL_BACKEND_ID);
+        assert_gateway_lifecycle_api_env_auth(&requests[0], "sk-openai-proof");
     }
 }
