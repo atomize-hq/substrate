@@ -288,12 +288,16 @@ fn build_gateway_request_context() -> anyhow::Result<GatewayLifecycleRequestCont
     let (effective_policy, _) =
         substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
             .map_err(|err| config_model::user_error(err.to_string()))?;
+    let selected_backend = effective_config
+        .llm
+        .routing
+        .default_backend
+        .trim()
+        .to_string();
     let backend_entry =
-        validate_gateway_backend_selection(&cwd, &effective_config, &effective_policy)?;
+        validate_gateway_backend_selection(&cwd, &effective_policy, &selected_backend)?;
     let network_policy = resolve_world_network_policy_for_cwd(&cwd)?;
     let world_network = request_world_network_routing(&network_policy);
-    let integrated_auth =
-        resolve_integrated_auth_payload(&effective_config, &effective_policy, &backend_entry)?;
     let gateway_mode = match effective_config.llm.gateway.mode {
         LlmGatewayMode::InWorld => "in_world",
         LlmGatewayMode::HostOnly => "host_only",
@@ -317,18 +321,21 @@ fn build_gateway_request_context() -> anyhow::Result<GatewayLifecycleRequestCont
     );
 
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let selected_backend = effective_config
-        .llm
-        .routing
-        .default_backend
-        .trim()
-        .to_string();
-    let identity_tuple = Some(derive_gateway_identity_tuple(
-        &agent_id,
-        &effective_policy,
-        &selected_backend,
-        integrated_auth.as_ref(),
-    )?);
+    let mut identity_tuple =
+        derive_gateway_identity_tuple(&agent_id, &effective_policy, &selected_backend)?;
+    let integrated_auth =
+        resolve_integrated_auth_payload(&effective_config, &effective_policy, &backend_entry)?;
+    identity_tuple.auth_authority = derive_gateway_auth_authority(integrated_auth.as_ref());
+    enforce_identity_constraint(
+        "llm.constraints.auth_authorities",
+        "auth authority",
+        identity_tuple.auth_authority.as_deref(),
+        &effective_policy.llm_constraints_auth_authorities,
+    )?;
+    identity_tuple
+        .validate()
+        .map_err(gateway_invalid_integration_error)?;
+    let identity_tuple = Some(identity_tuple);
     let placement_posture = Some(derive_gateway_placement_posture(&effective_config)?);
 
     let request = GatewayLifecycleRequestV1 {
@@ -357,7 +364,6 @@ fn derive_gateway_identity_tuple(
     agent_id: &str,
     effective_policy: &substrate_broker::Policy,
     selected_backend: &str,
-    integrated_auth: Option<&GatewayIntegratedAuthPayloadV1>,
 ) -> anyhow::Result<IdentityTuple> {
     let protocol = match selected_backend {
         CLI_CODEX_BACKEND | API_OPENAI_BACKEND => "openai.responses",
@@ -374,28 +380,12 @@ fn derive_gateway_identity_tuple(
         API_ANTHROPIC_BACKEND => Some("anthropic".to_string()),
         _ => None,
     };
-    let auth_authority = integrated_auth.and_then(|auth| {
-        if auth.cli_codex.is_some() {
-            Some("codex_subscription".to_string())
-        } else if let Some(api_env) = auth.api_env.as_ref() {
-            if api_env.env.contains_key(OPENAI_API_KEY_ENV) {
-                Some("openai_api_key".to_string())
-            } else if api_env.env.contains_key(ANTHROPIC_API_KEY_ENV) {
-                Some("anthropic_api_key".to_string())
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    });
-
     let tuple = IdentityTuple {
         client: resolve_originating_client(agent_id),
         router: SUBSTRATE_GATEWAY_ROUTER.to_string(),
         protocol: protocol.to_string(),
         provider,
-        auth_authority,
+        auth_authority: None,
     };
 
     enforce_identity_constraint(
@@ -416,16 +406,27 @@ fn derive_gateway_identity_tuple(
         tuple.provider.as_deref(),
         &effective_policy.llm_constraints_providers,
     )?;
-    enforce_identity_constraint(
-        "llm.constraints.auth_authorities",
-        "auth authority",
-        tuple.auth_authority.as_deref(),
-        &effective_policy.llm_constraints_auth_authorities,
-    )?;
-    tuple
-        .validate()
-        .map_err(gateway_invalid_integration_error)?;
     Ok(tuple)
+}
+
+fn derive_gateway_auth_authority(
+    integrated_auth: Option<&GatewayIntegratedAuthPayloadV1>,
+) -> Option<String> {
+    integrated_auth.and_then(|auth| {
+        if auth.cli_codex.is_some() {
+            Some("codex_subscription".to_string())
+        } else if let Some(api_env) = auth.api_env.as_ref() {
+            if api_env.env.contains_key(OPENAI_API_KEY_ENV) {
+                Some("openai_api_key".to_string())
+            } else if api_env.env.contains_key(ANTHROPIC_API_KEY_ENV) {
+                Some("anthropic_api_key".to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    })
 }
 
 fn derive_gateway_placement_posture(
@@ -558,10 +559,9 @@ fn print_status_identity_metadata_impl(response: &GatewayLifecycleResponseV1, st
 
 fn validate_gateway_backend_selection(
     cwd: &std::path::Path,
-    effective_config: &config_model::SubstrateConfig,
     effective_policy: &substrate_broker::Policy,
+    selected_backend: &str,
 ) -> anyhow::Result<agent_inventory::AgentInventoryEntryV1> {
-    let selected_backend = effective_config.llm.routing.default_backend.trim();
     let entry = agent_inventory::resolve_gateway_backend_inventory_entry(
         cwd,
         selected_backend,

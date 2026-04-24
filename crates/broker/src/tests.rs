@@ -1349,6 +1349,64 @@ world_fs:
     }
 
     #[test]
+    fn c1_itps1_policy_spec_locks_runtime_order_fail_early_rules_and_failure_buckets() {
+        let policy_spec = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/policy-spec.md",
+        );
+
+        for needle in [
+            "1. Validate gateway lifecycle config:",
+            "2. Resolve the selected backend inventory entry and apply `llm.allowed_backends` before tuple derivation begins.",
+            "4. Apply tuple-axis narrowing in this exact order:",
+            "- `llm.constraints.routers`",
+            "- `llm.constraints.protocols`",
+            "- `llm.constraints.providers`",
+            "- `llm.constraints.auth_authorities`",
+            "- blocked env auth is a policy denial",
+            "- partial env auth is invalid integration",
+            "- If the selected backend id is absent from `llm.allowed_backends`, evaluation stops before tuple-axis narrowing.",
+            "\"<backend_id> is not allowlisted by effective policy llm.allowed_backends\"",
+            "\"effective gateway routing authority '<value>' is not allowlisted by llm.constraints.routers\"",
+            "\"effective gateway protocol '<value>' is not allowlisted by llm.constraints.protocols\"",
+            "\"effective gateway provider is unresolved while llm.constraints.providers is constrained\"",
+            "\"effective gateway provider '<value>' is not allowlisted by llm.constraints.providers\"",
+            "\"effective gateway auth authority is unresolved while llm.constraints.auth_authorities is constrained\"",
+            "\"effective gateway auth authority '<value>' is not allowlisted by llm.constraints.auth_authorities\"",
+            "- the required world or gateway socket is missing",
+            "- connection refused",
+            "- timeout",
+            "- `substrate policy current show --explain` is the authoritative merged inspection surface for `llm.constraints.*`.",
+            "- Explain output for tuple-aware denials must identify the exact policy key that denied the route.",
+        ] {
+            assert!(
+                policy_spec.contains(needle),
+                "expected ITPS1 policy spec to contain {needle:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn c1_itps1_decision_register_locks_tuple_family_reuse_and_explain_surface_ownership() {
+        let decision_register = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md",
+        );
+
+        for needle in [
+            "### DR-ITPS-01 — Tuple-policy publication family (`identity_tuple` reuse vs trace-only tuple shape)",
+            "- **Selected:** Option A — Reuse `identity_tuple` and `placement_posture` across status, diagnostics, and trace.",
+            "One tuple vocabulary preserves semantic ownership and prevents schema drift across deny, status, and trace surfaces.",
+            "### DR-ITPS-02 — Authoritative inspection surface for `llm.constraints.*` (`policy current show --explain` vs config view)",
+            "- **Selected:** Option A — `substrate policy current show --explain` is the authoritative merged inspection surface.",
+            "Tuple-axis constraints are policy keys, and the policy effective view is already the merged explain surface that carries their provenance.",
+        ] {
+            assert!(
+                decision_register.contains(needle),
+                "expected ITPS1 decision register to contain {needle:?}"
+            );
+        }
+    }
+
+    #[test]
     #[serial]
     fn c0_policy_global_set_rejects_unknown_and_invalid_lacp0_updates_with_exit_2() {
         let fixture = Fixture::new();

@@ -65,6 +65,8 @@ impl GatewayAuthFixture {
             .env("USERPROFILE", &self.home)
             .env("SUBSTRATE_HOME", &self.substrate_home)
             .env_remove("OPENAI_API_KEY")
+            .env_remove("OPENAI_ORG_ID")
+            .env_remove("ANTHROPIC_API_KEY")
             .env_remove("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID")
             .env_remove("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN");
         cmd
@@ -645,6 +647,77 @@ limits:
 
 metadata: {}
 "#
+}
+
+fn yaml_list(items: &[&str], indent: usize) -> String {
+    let prefix = " ".repeat(indent);
+    if items.is_empty() {
+        format!("{prefix}[]\n")
+    } else {
+        items
+            .iter()
+            .map(|item| format!("{prefix}- \"{item}\"\n"))
+            .collect()
+    }
+}
+
+fn gateway_policy_with_openai_runtime_constraints(
+    allowed_backends: &[&str],
+    env_allowed: &[&str],
+    routers: &[&str],
+    protocols: &[&str],
+    providers: &[&str],
+    auth_authorities: &[&str],
+) -> String {
+    let mut policy = format!(
+        r#"id: "gateway-policy"
+name: "gateway-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
+
+llm:
+  allowed_backends:
+{}  constraints:
+    routers:
+{}    protocols:
+{}    providers:
+{}    auth_authorities:
+{}"#,
+        yaml_list(allowed_backends, 4),
+        yaml_list(routers, 6),
+        yaml_list(protocols, 6),
+        yaml_list(providers, 6),
+        yaml_list(auth_authorities, 6),
+    );
+    if !env_allowed.is_empty() {
+        policy.push_str("  secrets:\n    env_allowed:\n");
+        policy.push_str(&yaml_list(env_allowed, 6));
+    }
+    policy.push_str(
+        r#"
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#,
+    );
+    policy
 }
 
 fn parse_world_gateway_status_json() -> Cli {
@@ -1312,6 +1385,175 @@ fn world_gateway_allowlist_denial_uses_exit_code_5() {
 }
 
 #[test]
+fn world_gateway_backend_allowlist_denial_happens_before_tuple_narrowing() {
+    let temp = short_socket_tempdir("sub-gw-order-backend-");
+    let missing_socket_path = temp.path().join("missing.sock");
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(&gateway_policy_with_openai_runtime_constraints(
+        &["cli:codex"],
+        &[],
+        &["direct_provider_path"],
+        &["anthropic.messages"],
+        &["anthropic"],
+        &["anthropic_api_key"],
+    ));
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket_path)
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "api:openai is not allowlisted by effective policy llm.allowed_backends",
+        ))
+        .stderr(predicate::str::contains("llm.constraints.routers").not())
+        .stderr(predicate::str::contains("llm.constraints.protocols").not())
+        .stderr(predicate::str::contains("llm.constraints.providers").not())
+        .stderr(predicate::str::contains("llm.constraints.auth_authorities").not())
+        .stderr(predicate::str::contains("required gateway/world component unavailable").not());
+}
+
+#[test]
+fn world_gateway_tuple_narrowing_denies_router_before_deeper_axes() {
+    let temp = short_socket_tempdir("sub-gw-order-router-");
+    let missing_socket_path = temp.path().join("missing.sock");
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(&gateway_policy_with_openai_runtime_constraints(
+        &["api:openai"],
+        &[],
+        &["direct_provider_path"],
+        &["anthropic.messages"],
+        &["anthropic"],
+        &["anthropic_api_key"],
+    ));
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket_path)
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "effective gateway routing authority 'substrate_gateway' is not allowlisted by llm.constraints.routers",
+        ))
+        .stderr(predicate::str::contains("llm.constraints.protocols").not())
+        .stderr(predicate::str::contains("llm.constraints.providers").not())
+        .stderr(predicate::str::contains("llm.constraints.auth_authorities").not())
+        .stderr(predicate::str::contains(
+            "required gateway/world component unavailable",
+        )
+        .not());
+}
+
+#[test]
+fn world_gateway_tuple_narrowing_denies_protocol_before_provider_and_auth() {
+    let temp = short_socket_tempdir("sub-gw-order-protocol-");
+    let missing_socket_path = temp.path().join("missing.sock");
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(&gateway_policy_with_openai_runtime_constraints(
+        &["api:openai"],
+        &[],
+        &["substrate_gateway"],
+        &["anthropic.messages"],
+        &["anthropic"],
+        &["anthropic_api_key"],
+    ));
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket_path)
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "effective gateway protocol 'openai.responses' is not allowlisted by llm.constraints.protocols",
+        ))
+        .stderr(predicate::str::contains("llm.constraints.providers").not())
+        .stderr(predicate::str::contains("llm.constraints.auth_authorities").not())
+        .stderr(predicate::str::contains(
+            "required gateway/world component unavailable",
+        )
+        .not());
+}
+
+#[test]
+fn world_gateway_tuple_narrowing_denies_provider_before_auth() {
+    let temp = short_socket_tempdir("sub-gw-order-provider-");
+    let missing_socket_path = temp.path().join("missing.sock");
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(&gateway_policy_with_openai_runtime_constraints(
+        &["api:openai"],
+        &[],
+        &["substrate_gateway"],
+        &["openai.responses"],
+        &["anthropic"],
+        &["anthropic_api_key"],
+    ));
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket_path)
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "effective gateway provider 'openai' is not allowlisted by llm.constraints.providers",
+        ))
+        .stderr(predicate::str::contains("llm.constraints.auth_authorities").not())
+        .stderr(predicate::str::contains("required gateway/world component unavailable").not());
+}
+
+#[test]
+fn world_gateway_tuple_narrowing_denies_unresolved_auth_authority() {
+    let temp = short_socket_tempdir("sub-gw-order-auth-");
+    let missing_socket_path = temp.path().join("missing.sock");
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_generic_backend());
+    fixture.write_global_agent_inventory("openai.yaml", gateway_inventory_for_openai());
+    fixture.write_global_policy(&gateway_policy_with_openai_runtime_constraints(
+        &["api:openai"],
+        &[],
+        &["substrate_gateway"],
+        &["openai.responses"],
+        &["openai"],
+        &["openai_api_key"],
+    ));
+
+    let mut cmd = fixture.command();
+    cmd.env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket_path)
+        .args(["world", "gateway", "status"])
+        .assert()
+        .code(5)
+        .stderr(predicate::str::contains(
+            "effective gateway auth authority is unresolved while llm.constraints.auth_authorities is constrained",
+        ))
+        .stderr(predicate::str::contains(
+            "required gateway/world component unavailable",
+        )
+        .not());
+}
+
+#[test]
 fn world_gateway_sync_builds_integrated_auth_payload_from_host_auth_file() {
     let fixture = GatewayAuthFixture::new();
     fixture.write_global_config(gateway_config_with_codex_backend());
@@ -1607,6 +1849,9 @@ fn world_gateway_openai_env_auth_blocked_by_policy_uses_exit_code_5() {
         .assert()
         .code(5)
         .stderr(predicate::str::contains(
+            "OPENAI_API_KEY is not allowlisted by effective policy llm.secrets.env_allowed",
+        ))
+        .stderr(predicate::str::contains(
             "substrate world gateway status: policy or safety failure",
         ));
 }
@@ -1626,6 +1871,9 @@ fn world_gateway_openai_incomplete_env_auth_uses_exit_code_2() {
         .args(["world", "gateway", "status"])
         .assert()
         .code(2)
+        .stderr(predicate::str::contains(
+            "integrated API env auth for api:openai is incomplete: missing OPENAI_ORG_ID",
+        ))
         .stderr(predicate::str::contains(
             "substrate world gateway status: invalid integration",
         ));
@@ -1729,6 +1977,10 @@ fn world_gateway_env_auth_blocked_by_policy_denies_without_file_fallback() {
         .args(["world", "gateway", "status"])
         .assert()
         .code(5)
+        .stderr(predicate::str::contains(
+            "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN is not allowlisted by effective policy llm.secrets.env_allowed",
+        ))
+        .stderr(predicate::str::contains("failed to read Codex auth state").not())
         .stderr(predicate::str::contains(
             "substrate world gateway status: policy or safety failure",
         ));
