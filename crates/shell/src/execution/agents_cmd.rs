@@ -1,5 +1,5 @@
 use crate::execution::agent_inventory::{
-    discover_agent_files, load_effective_agent_inventory, validate_agent_file,
+    discover_agent_files, load_effective_agent_inventory, validate_agent_file, AgentCapabilitiesV1,
     AgentInventoryEntryV1,
 };
 use crate::execution::cli::{
@@ -350,6 +350,18 @@ struct StatusReportJson<'a> {
 struct SessionProjection {
     last_event_ts: DateTime<Utc>,
     session: StatusSessionJson,
+    source: SessionProjectionSource,
+}
+
+#[derive(Clone)]
+struct SessionProjectionSource {
+    orchestration_session_id: String,
+    agent_id: String,
+    run_id: String,
+    ts: DateTime<Utc>,
+    is_world_scoped: bool,
+    has_top_level_world_id: bool,
+    has_top_level_world_generation: bool,
 }
 
 #[derive(Clone)]
@@ -405,26 +417,14 @@ fn build_status_report<'a>(
         );
 
         if let Some(session_key) = pure_session_key(&event) {
-            let mut world_id = None;
-            let mut world_generation = None;
-            if scope == AgentExecutionScope::World {
-                let maybe_world_id = event.world_id.clone();
-                let maybe_world_generation = event.world_generation.or_else(|| {
-                    event
-                        .data
-                        .get("world_generation")
-                        .and_then(serde_json::Value::as_u64)
-                });
-                if maybe_world_id.is_some() && maybe_world_generation.is_some() {
-                    world_id = maybe_world_id;
-                    world_generation = maybe_world_generation;
-                }
-            }
+            let orchestration_session_id = session_key.0.clone();
+            let world_id = event.world_id.clone();
+            let world_generation = event.world_generation;
 
             let projection = SessionProjection {
                 last_event_ts: event.ts,
                 session: StatusSessionJson {
-                    orchestration_session_id: session_key.0.clone(),
+                    orchestration_session_id: orchestration_session_id.clone(),
                     agent_id: entry.file.id.clone(),
                     backend_id: entry.derived_backend_id(),
                     client: entry.file.id.clone(),
@@ -435,8 +435,25 @@ fn build_status_report<'a>(
                     },
                     role: role.map(ToOwned::to_owned),
                     last_event_at: event.ts.to_rfc3339(),
-                    world_id,
-                    world_generation,
+                    world_id: if scope == AgentExecutionScope::World {
+                        world_id.clone()
+                    } else {
+                        None
+                    },
+                    world_generation: if scope == AgentExecutionScope::World {
+                        world_generation
+                    } else {
+                        None
+                    },
+                },
+                source: SessionProjectionSource {
+                    orchestration_session_id,
+                    agent_id: entry.file.id.clone(),
+                    run_id: event.run_id.clone(),
+                    ts: event.ts,
+                    is_world_scoped: scope == AgentExecutionScope::World,
+                    has_top_level_world_id: world_id.is_some(),
+                    has_top_level_world_generation: world_generation.is_some(),
                 },
             };
 
@@ -454,16 +471,31 @@ fn build_status_report<'a>(
         }
     }
 
-    let filtered_sessions: Vec<StatusSessionJson> = sessions
-        .into_values()
-        .filter(|projection| {
-            matches_scope(
-                scope_from_label(projection.session.execution.scope),
-                args.scope,
-            ) && matches_role(projection.session.role.as_deref(), role_filter)
-        })
-        .map(|projection| projection.session)
-        .collect();
+    let mut filtered_sessions = Vec::new();
+    for projection in sessions.into_values() {
+        if !matches_scope(
+            scope_from_label(projection.session.execution.scope),
+            args.scope,
+        ) || !matches_role(projection.session.role.as_deref(), role_filter)
+        {
+            continue;
+        }
+
+        if projection.source.is_world_scoped
+            && (!projection.source.has_top_level_world_id
+                || !projection.source.has_top_level_world_generation)
+        {
+            return Err(config_model::user_error(format!(
+                "malformed world identity on newest selected world-scoped pure-agent status event: agent_id={} orchestration_session_id={} run_id={} ts={} requires top-level world_id and world_generation",
+                projection.source.agent_id,
+                projection.source.orchestration_session_id,
+                projection.source.run_id,
+                projection.source.ts.to_rfc3339(),
+            )));
+        }
+
+        filtered_sessions.push(projection.session);
+    }
 
     let allowed_parents: BTreeSet<(String, String)> = filtered_sessions
         .iter()
@@ -1108,7 +1140,38 @@ fn validate_orchestrator_selection<'a>(
         ));
     }
 
+    if entry.file.config.protocol.as_deref() != Some(PURE_AGENT_PROTOCOL) {
+        return Err(format!(
+            "orchestrator agent '{}' does not advertise protocol '{}'",
+            orchestrator_agent_id, PURE_AGENT_PROTOCOL
+        ));
+    }
+
+    if let Some(capability) =
+        missing_required_orchestrator_capability(&entry.file.config.capabilities)
+    {
+        return Err(format!(
+            "orchestrator agent '{}' is missing required capability '{}'",
+            orchestrator_agent_id, capability
+        ));
+    }
+
     Ok(entry)
+}
+
+fn missing_required_orchestrator_capability(
+    capabilities: &AgentCapabilitiesV1,
+) -> Option<&'static str> {
+    [
+        ("session_start", capabilities.session_start),
+        ("session_resume", capabilities.session_resume),
+        ("session_fork", capabilities.session_fork),
+        ("session_stop", capabilities.session_stop),
+        ("status_snapshot", capabilities.status_snapshot),
+        ("event_stream", capabilities.event_stream),
+    ]
+    .into_iter()
+    .find_map(|(name, enabled)| (!enabled).then_some(name))
 }
 
 fn policy_allowlist_failure(

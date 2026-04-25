@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
-use substrate_broker::{validate_backend_id, Policy, WorldFsDenyEnforcement};
+use substrate_broker::{validate_backend_id, validate_dotted_id, Policy, WorldFsDenyEnforcement};
 use substrate_common::derive_agent_backend_id;
 use substrate_common::paths as substrate_paths;
 
@@ -26,6 +26,8 @@ pub(crate) struct AgentConfigV1 {
     #[serde(default = "default_true")]
     pub enabled: bool,
     pub kind: AgentConfigKind,
+    #[serde(default)]
+    pub protocol: Option<String>,
     #[serde(default)]
     pub execution: AgentExecutionConfigV1,
     #[serde(default)]
@@ -84,6 +86,12 @@ pub(crate) struct AgentApiAuthConfigV1 {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentCapabilitiesV1 {
+    pub session_start: bool,
+    pub session_resume: bool,
+    pub session_fork: bool,
+    pub session_stop: bool,
+    pub status_snapshot: bool,
+    pub event_stream: bool,
     pub llm: bool,
     pub mcp_client: bool,
 }
@@ -350,9 +358,39 @@ fn validate_agent_config(path: &Path, config: &AgentConfigV1) -> Result<()> {
         }
     }
 
+    if let Some(protocol) = &config.protocol {
+        let trimmed = protocol.trim();
+        if trimmed.is_empty() {
+            return Err(config_model::user_error(format!(
+                "invalid agent file in {}: config.protocol must not be empty",
+                path.display()
+            )));
+        }
+        if trimmed != protocol {
+            return Err(config_model::user_error(format!(
+                "invalid agent file in {}: config.protocol must not include leading or trailing whitespace",
+                path.display()
+            )));
+        }
+        validate_dotted_id(protocol).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid agent file in {}: config.protocol '{}' must be a lowercase dotted id",
+                path.display(),
+                protocol
+            ))
+        })?;
+    }
+
+    let _ = &config.protocol;
     let _ = config.execution.scope;
     let _ = config.cli.as_ref().and_then(|cli| cli.mode);
     let _ = config.enabled;
+    let _ = config.capabilities.session_start;
+    let _ = config.capabilities.session_resume;
+    let _ = config.capabilities.session_fork;
+    let _ = config.capabilities.session_stop;
+    let _ = config.capabilities.status_snapshot;
+    let _ = config.capabilities.event_stream;
     let _ = config.capabilities.llm;
     let _ = config.capabilities.mcp_client;
 

@@ -9,6 +9,8 @@ use std::path::PathBuf;
 use std::process::Output;
 use tempfile::TempDir;
 
+const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
+
 struct AgentSuccessorFixture {
     _temp: TempDir,
     home: PathBuf,
@@ -116,6 +118,18 @@ impl AgentSuccessorFixture {
     }
 
     fn seed_inventory_for_doctor_contract(&self) {
+        self.seed_doctor_prereqs();
+        self.write_agent_file(
+            "claude_code.yaml",
+            &cli_agent_file("claude_code", "host", true, true, true),
+        );
+        self.write_agent_file(
+            "helper.yaml",
+            &cli_agent_file("helper", "host", false, true, true),
+        );
+    }
+
+    fn seed_doctor_prereqs(&self) {
         self.write_global_config_patch(
             r#"agents:
   enabled: true
@@ -130,14 +144,6 @@ impl AgentSuccessorFixture {
     - cli:helper
 "#,
         );
-        self.write_agent_file(
-            "claude_code.yaml",
-            &cli_agent_file("claude_code", "host", true, true, true),
-        );
-        self.write_agent_file(
-            "helper.yaml",
-            &cli_agent_file("helper", "host", false, true, true),
-        );
     }
 }
 
@@ -148,9 +154,59 @@ fn cli_agent_file(
     mcp_client: bool,
     enabled: bool,
 ) -> String {
-    format!(
-        "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: {enabled}\n  execution:\n    scope: {scope}\n  cli:\n    binary: {agent_id}\n    mode: persistent\n  capabilities:\n    llm: {llm}\n    mcp_client: {mcp_client}\n"
+    cli_agent_file_with_session_contract(
+        agent_id,
+        scope,
+        llm,
+        mcp_client,
+        enabled,
+        Some(PURE_AGENT_PROTOCOL),
+        None,
+        None,
     )
+}
+
+fn cli_agent_file_with_session_contract(
+    agent_id: &str,
+    scope: &str,
+    llm: bool,
+    mcp_client: bool,
+    enabled: bool,
+    protocol: Option<&str>,
+    false_capability: Option<&str>,
+    omitted_capability: Option<&str>,
+) -> String {
+    assert!(
+        false_capability.is_none()
+            || omitted_capability.is_none()
+            || false_capability != omitted_capability,
+        "a capability cannot be both explicit-false and omitted"
+    );
+
+    let mut body =
+        format!("version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: {enabled}\n");
+    if let Some(protocol) = protocol {
+        body.push_str(&format!("  protocol: {protocol}\n"));
+    }
+    body.push_str(&format!(
+        "  execution:\n    scope: {scope}\n  cli:\n    binary: {agent_id}\n    mode: persistent\n  capabilities:\n"
+    ));
+    for capability in [
+        "session_start",
+        "session_resume",
+        "session_fork",
+        "session_stop",
+        "status_snapshot",
+        "event_stream",
+    ] {
+        if omitted_capability == Some(capability) {
+            continue;
+        }
+        let value = false_capability != Some(capability);
+        body.push_str(&format!("    {capability}: {value}\n"));
+    }
+    body.push_str(&format!("    llm: {llm}\n    mcp_client: {mcp_client}\n"));
+    body
 }
 
 fn repo_root() -> PathBuf {
@@ -167,6 +223,81 @@ fn read_repo_file(path: &str) -> String {
 
 fn parse_json_output(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON")
+}
+
+fn assert_malformed_world_identity_failure(
+    output: &Output,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    run_id: &str,
+    ts: &str,
+) {
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "status should fail closed on malformed world identity: {output:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).trim().is_empty(),
+        "malformed world identity failures should not print stdout: {output:?}"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for needle in [
+        "malformed world identity",
+        &format!("agent_id={agent_id}"),
+        &format!("orchestration_session_id={orchestration_session_id}"),
+        &format!("run_id={run_id}"),
+        &format!("ts={ts}"),
+    ] {
+        assert!(
+            stderr.contains(needle),
+            "stderr must contain `{needle}` for malformed world identity failures: {stderr}"
+        );
+    }
+}
+
+fn assert_doctor_fails_at_orchestrator_selection(output: &Output, expected_reason: &str) {
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "doctor should fail closed at orchestrator_selection: {output:?}"
+    );
+
+    let json = parse_json_output(output);
+    assert_eq!(json.get("healthy").and_then(Value::as_bool), Some(false));
+    assert_eq!(json.get("fail_closed").and_then(Value::as_bool), Some(true));
+
+    let checks = json["checks"]
+        .as_array()
+        .expect("checks should be an array");
+    let observed: Vec<&str> = checks
+        .iter()
+        .map(|check| {
+            check
+                .pointer("/check")
+                .and_then(Value::as_str)
+                .expect("check id should be a string")
+        })
+        .collect();
+    assert_eq!(
+        observed,
+        vec!["inventory_scan", "orchestrator_selection"],
+        "doctor must stop before policy_allowlist/world_boundary on orchestrator failures: {json}"
+    );
+    assert_eq!(
+        checks[1].pointer("/status").and_then(Value::as_str),
+        Some("fail")
+    );
+    assert_eq!(
+        checks[1].pointer("/reason").and_then(Value::as_str),
+        Some(expected_reason),
+        "doctor must publish the exact orchestrator denial reason: {json}"
+    );
+    assert!(
+        json.get("orchestrator").is_none() || json["orchestrator"].is_null(),
+        "failed orchestrator selection must not publish an orchestrator summary: {json}"
+    );
 }
 
 fn find_session_by_agent<'a>(sessions: &'a [Value], agent_id: &str) -> &'a Value {
@@ -517,6 +648,9 @@ fn agent_status_prefers_newest_pure_session_event_when_trace_lines_are_out_of_or
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_list_and_status_contracts();
+    let orchestration_session_id = "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12";
+    let run_id = "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14";
+    let ts = "2026-04-05T00:00:02+00:00";
     fixture.write_trace_events(&[
         json!({
             "ts": "2026-04-05T00:00:02Z",
@@ -525,8 +659,8 @@ fn agent_status_prefers_newest_pure_session_event_when_trace_lines_are_out_of_or
             "component": "agent-hub",
             "kind": "status",
             "agent_id": "codex",
-            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
-            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": run_id,
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
@@ -541,7 +675,7 @@ fn agent_status_prefers_newest_pure_session_event_when_trace_lines_are_out_of_or
             "component": "agent-hub",
             "kind": "status",
             "agent_id": "codex",
-            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "orchestration_session_id": orchestration_session_id,
             "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
             "backend_id": "cli:codex",
             "client": "codex",
@@ -555,38 +689,118 @@ fn agent_status_prefers_newest_pure_session_event_when_trace_lines_are_out_of_or
     ]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
+    assert_malformed_world_identity_failure(&output, "codex", orchestration_session_id, run_id, ts);
+}
+
+#[test]
+fn agent_status_fails_when_newest_world_scoped_event_omits_top_level_world_id() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    let orchestration_session_id = "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12";
+    let run_id = "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f16";
+    let ts = "2026-04-05T00:00:03+00:00";
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:03Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": run_id,
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "member",
+            "world_generation": 8,
+            "data": { "message": "newest member session event omits top-level world_id" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:02Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "member",
+            "world_id": "wld_stale_0001",
+            "world_generation": 7,
+            "data": { "message": "older event remains fully formed" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert_malformed_world_identity_failure(&output, "codex", orchestration_session_id, run_id, ts);
+}
+
+#[test]
+fn agent_status_scope_host_ignores_filtered_out_malformed_world_rows() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:03Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f17",
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "member",
+            "data": { "message": "filtered-out world row is malformed" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:02Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f18",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "data": { "message": "host-scoped orchestrator row remains valid" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--scope", "host", "--json"]);
     assert!(
         output.status.success(),
-        "status should succeed when pure-agent events arrive out of timestamp order: {output:?}"
+        "host scope should ignore malformed world-scoped rows that are filtered out: {output:?}"
     );
 
     let json = parse_json_output(&output);
     let sessions = json["sessions"]
         .as_array()
         .expect("sessions should be an array");
-    let codex_sessions: Vec<&Value> = sessions
-        .iter()
-        .filter(|session| session.pointer("/agent_id").and_then(Value::as_str) == Some("codex"))
-        .collect();
     assert_eq!(
-        codex_sessions.len(),
+        sessions.len(),
         1,
-        "out-of-order pure-agent events must still collapse to one codex session row: {json}"
+        "--scope host should only emit the host-scoped session row: {json}"
     );
-
-    let codex = codex_sessions[0];
+    let session = find_session_by_agent(sessions, "claude_code");
     assert_eq!(
-        codex.pointer("/last_event_at").and_then(Value::as_str),
-        Some("2026-04-05T00:00:02+00:00"),
-        "the collapsed codex row must use the newest event timestamp rather than later file order: {json}"
-    );
-    assert!(
-        codex.get("world_id").is_none(),
-        "the winning newest projection must not inherit stale world_id from the older event: {json}"
-    );
-    assert!(
-        codex.get("world_generation").is_none(),
-        "the winning newest projection must not inherit stale world_generation from the older event: {json}"
+        session.pointer("/execution/scope").and_then(Value::as_str),
+        Some("host")
     );
 }
 
@@ -826,6 +1040,8 @@ fn agent_status_unsupported_event_roles_fall_back_to_contract_roles() {
             "router": "agent_hub",
             "protocol": "uaa.agent.session",
             "role": "unexpected",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
             "data": { "message": "unsupported role should collapse to null" }
         }),
     ]);
@@ -963,6 +1179,126 @@ fn agent_doctor_json_locks_field_names_omissions_and_check_order() {
         statuses,
         vec!["pass", "pass", "pass", "not_applicable"],
         "host-only doctor fixture should report a not_applicable world boundary after the three required passes: {json}"
+    );
+}
+
+#[test]
+fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_missing() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_doctor_prereqs();
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file_with_session_contract(
+            "claude_code",
+            "host",
+            true,
+            true,
+            true,
+            None,
+            None,
+            None,
+        ),
+    );
+    fixture.write_agent_file(
+        "helper.yaml",
+        &cli_agent_file("helper", "host", false, true, true),
+    );
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert_doctor_fails_at_orchestrator_selection(
+        &output,
+        "orchestrator agent 'claude_code' does not advertise protocol 'uaa.agent.session'",
+    );
+}
+
+#[test]
+fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_wrong() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_doctor_prereqs();
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file_with_session_contract(
+            "claude_code",
+            "host",
+            true,
+            true,
+            true,
+            Some("openai.responses"),
+            None,
+            None,
+        ),
+    );
+    fixture.write_agent_file(
+        "helper.yaml",
+        &cli_agent_file("helper", "host", false, true, true),
+    );
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert_doctor_fails_at_orchestrator_selection(
+        &output,
+        "orchestrator agent 'claude_code' does not advertise protocol 'uaa.agent.session'",
+    );
+}
+
+#[test]
+fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_false() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_doctor_prereqs();
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file_with_session_contract(
+            "claude_code",
+            "host",
+            true,
+            true,
+            true,
+            Some(PURE_AGENT_PROTOCOL),
+            Some("event_stream"),
+            None,
+        ),
+    );
+    fixture.write_agent_file(
+        "helper.yaml",
+        &cli_agent_file("helper", "host", false, true, true),
+    );
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert_doctor_fails_at_orchestrator_selection(
+        &output,
+        "orchestrator agent 'claude_code' is missing required capability 'event_stream'",
+    );
+}
+
+#[test]
+fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_omitted() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_doctor_prereqs();
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file_with_session_contract(
+            "claude_code",
+            "host",
+            true,
+            true,
+            true,
+            Some(PURE_AGENT_PROTOCOL),
+            None,
+            Some("event_stream"),
+        ),
+    );
+    fixture.write_agent_file(
+        "helper.yaml",
+        &cli_agent_file("helper", "host", false, true, true),
+    );
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert_doctor_fails_at_orchestrator_selection(
+        &output,
+        "orchestrator agent 'claude_code' is missing required capability 'event_stream'",
     );
 }
 
