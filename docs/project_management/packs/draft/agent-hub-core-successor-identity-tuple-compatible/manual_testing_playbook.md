@@ -377,6 +377,27 @@ Expected results:
 - the first failing check is `orchestrator_selection`
 - the reason names the exact failing condition from `policy-spec.md`
 
+### Case 7a — `substrate agent doctor` fails closed for policy allowlist denial
+
+Run this case against two fixture variants:
+
+- host-scoped orchestrator whose derived `backend_id` is absent from `agents.allowed_backends`
+- required world-scoped member whose derived `backend_id` is absent from `agents.allowed_backends`
+
+Command:
+
+```bash
+substrate agent doctor --json
+```
+
+Expected results:
+
+- command exits `5`
+- output reports `healthy = false`
+- output reports `fail_closed = true`
+- the first failing check is `policy_allowlist`
+- the reason names the exact failing condition from `policy-spec.md`
+
 ### Case 8 — `substrate agent doctor` fails closed for world-boundary loss
 
 Run this case against two fixture variants:

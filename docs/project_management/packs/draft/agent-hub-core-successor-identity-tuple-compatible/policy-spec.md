@@ -110,7 +110,6 @@ These conditions deny before any member dispatch is considered:
 - `agents.hub.orchestrator_agent_id` is absent
 - the referenced `agent_id` is missing from the effective inventory
 - the referenced inventory item is disabled
-- the derived orchestrator `backend_id` is denied by `agents.allowed_backends`
 - `execution.scope = world`
 - `protocol != uaa.agent.session`
 - any required orchestrator capability is `false`
@@ -120,10 +119,21 @@ The deny explanation must identify the exact failing condition and, when applica
 - `"effective config agents.hub.orchestrator_agent_id is unset"`
 - `"orchestrator agent '<agent_id>' is missing from effective inventory"`
 - `"orchestrator agent '<agent_id>' is disabled in effective inventory"`
-- `"orchestrator backend '<backend_id>' is not allowlisted by effective policy agents.allowed_backends"`
 - `"orchestrator agent '<agent_id>' is world-scoped and host-scoped orchestration is required"`
 - `"orchestrator agent '<agent_id>' does not advertise protocol 'uaa.agent.session'"`
 - `"orchestrator agent '<agent_id>' is missing required capability '<capability>'"`
+
+### Policy allowlist denial
+
+These conditions deny after orchestrator selection succeeds and before any world-boundary check or member dispatch is considered:
+
+- the selected orchestrator derived `backend_id` is denied by `agents.allowed_backends`
+- any required world-scoped member derived `backend_id` is denied by `agents.allowed_backends`
+
+The deny explanation must identify the exact failing condition and the exact policy key:
+
+- `"selected orchestrator backend '<backend_id>' is not allowlisted by effective policy agents.allowed_backends"`
+- `"required world-scoped member backend '<backend_id>' is not allowlisted by effective policy agents.allowed_backends"`
 
 ### Member dispatch denial
 
@@ -202,7 +212,7 @@ These buckets remain distinct in docs, code, and tests.
 ## Acceptance criteria
 
 - Control-plane evaluation uses only the governing inputs named by this spec and rejects event-plane records as authorization inputs.
-- Orchestrator eligibility always checks `agents.allowed_backends` before role, protocol, and capability gates.
+- `substrate agent doctor` evaluates orchestrator host/protocol/capability selection before the `policy_allowlist` phase that checks derived `backend_id` values.
 - A world-scoped orchestrator is always denied.
 - Member dispatch always reapplies `agents.allowed_backends` to the member `backend_id`.
 - World-scoped member dispatch denies when the world boundary is unavailable under fail-closed posture.

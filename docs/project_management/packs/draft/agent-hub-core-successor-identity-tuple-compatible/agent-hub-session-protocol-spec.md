@@ -189,12 +189,13 @@ An inventory item is orchestrator-eligible only when all of these checks pass:
 8. `capabilities.session_stop=true`
 9. `capabilities.status_snapshot=true`
 10. `capabilities.event_stream=true`
-11. the derived `backend_id` is allowed by `agents.allowed_backends`
+
+After orchestrator eligibility succeeds, control-plane policy evaluation separately checks that the selected derived `backend_id` is allowed by `agents.allowed_backends`.
 
 Failure rules:
 - The hub never falls back to a different orchestrator.
 - A world-scoped candidate is invalid even when every other capability check passes.
-- `substrate agent doctor` and every control-plane entrypoint fail closed on any orchestrator-eligibility failure.
+- `substrate agent doctor` and every control-plane entrypoint fail closed on any orchestrator-eligibility or policy-allowlist failure.
 
 ## Member dispatch model
 
