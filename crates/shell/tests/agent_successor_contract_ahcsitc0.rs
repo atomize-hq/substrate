@@ -169,6 +169,13 @@ fn parse_json_output(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON")
 }
 
+fn find_session_by_agent<'a>(sessions: &'a [Value], agent_id: &str) -> &'a Value {
+    sessions
+        .iter()
+        .find(|session| session.pointer("/agent_id").and_then(Value::as_str) == Some(agent_id))
+        .unwrap_or_else(|| panic!("expected session row for agent `{agent_id}`"))
+}
+
 #[test]
 fn plural_agents_namespace_keeps_validate_as_the_only_compatibility_leaf() {
     let fixture = AgentSuccessorFixture::new();
@@ -352,6 +359,244 @@ fn agent_status_json_uses_locked_top_level_field_names() {
     assert!(
         json.get("nested_llm_records").is_some_and(Value::is_array),
         "status output must expose `nested_llm_records` as an array: {json}"
+    );
+}
+
+#[test]
+fn agent_status_preserves_member_roles_and_filters_them_by_contract_label() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "data": { "message": "orchestrator session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "member",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "member session is live" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "unfiltered agent status should succeed for member-role fixtures: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    assert!(
+        json.pointer("/role_filter")
+            .is_some_and(serde_json::Value::is_null),
+        "unfiltered status must publish a null role_filter: {json}"
+    );
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        sessions.len(),
+        2,
+        "unfiltered status should keep both orchestrator and member sessions: {json}"
+    );
+
+    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    assert_eq!(
+        orchestrator.pointer("/role").and_then(Value::as_str),
+        Some("orchestrator"),
+        "orchestrator session must preserve the orchestrator role label: {json}"
+    );
+
+    let member = find_session_by_agent(sessions, "codex");
+    assert_eq!(
+        member.pointer("/role").and_then(Value::as_str),
+        Some("member"),
+        "member session must preserve the member role label: {json}"
+    );
+    assert_eq!(
+        member.pointer("/world_id").and_then(Value::as_str),
+        Some("wld_active_0002"),
+        "world-scoped member status rows must keep world_id: {json}"
+    );
+    assert_eq!(
+        member.pointer("/world_generation").and_then(Value::as_u64),
+        Some(7),
+        "world-scoped member status rows must keep world_generation: {json}"
+    );
+
+    let member_output = fixture.run(&["agent", "status", "--role", "member", "--json"]);
+    assert!(
+        member_output.status.success(),
+        "member-filtered agent status should succeed: {member_output:?}"
+    );
+    let member_json = parse_json_output(&member_output);
+    assert_eq!(
+        member_json.pointer("/role_filter").and_then(Value::as_str),
+        Some("member"),
+        "member-filtered status must report role_filter=member: {member_json}"
+    );
+    let member_sessions = member_json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        member_sessions.len(),
+        1,
+        "--role member should return exactly one member session: {member_json}"
+    );
+    let member_only = find_session_by_agent(member_sessions, "codex");
+    assert_eq!(
+        member_only.pointer("/role").and_then(Value::as_str),
+        Some("member")
+    );
+    assert_eq!(
+        member_only.pointer("/world_id").and_then(Value::as_str),
+        Some("wld_active_0002")
+    );
+    assert_eq!(
+        member_only
+            .pointer("/world_generation")
+            .and_then(Value::as_u64),
+        Some(7)
+    );
+
+    let orchestrator_output = fixture.run(&["agent", "status", "--role", "orchestrator", "--json"]);
+    assert!(
+        orchestrator_output.status.success(),
+        "orchestrator-filtered agent status should succeed: {orchestrator_output:?}"
+    );
+    let orchestrator_json = parse_json_output(&orchestrator_output);
+    assert_eq!(
+        orchestrator_json
+            .pointer("/role_filter")
+            .and_then(Value::as_str),
+        Some("orchestrator"),
+        "orchestrator-filtered status must report role_filter=orchestrator: {orchestrator_json}"
+    );
+    let orchestrator_sessions = orchestrator_json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        orchestrator_sessions.len(),
+        1,
+        "--role orchestrator should return exactly one orchestrator session: {orchestrator_json}"
+    );
+    let orchestrator_only = find_session_by_agent(orchestrator_sessions, "claude_code");
+    assert_eq!(
+        orchestrator_only.pointer("/role").and_then(Value::as_str),
+        Some("orchestrator")
+    );
+}
+
+#[test]
+fn agent_status_unsupported_event_roles_fall_back_to_contract_roles() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "unexpected",
+            "data": { "message": "unsupported role should not leak" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "unexpected",
+            "data": { "message": "unsupported role should collapse to null" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "status should succeed when unsupported event roles are present: {output:?}"
+    );
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+
+    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    assert_eq!(
+        orchestrator.pointer("/role").and_then(Value::as_str),
+        Some("orchestrator"),
+        "unsupported explicit roles for the configured orchestrator must fall back to orchestrator: {json}"
+    );
+
+    let member = find_session_by_agent(sessions, "codex");
+    assert!(
+        member
+            .pointer("/role")
+            .is_some_and(serde_json::Value::is_null),
+        "unsupported explicit roles for non-orchestrators must fall back to null: {json}"
+    );
+
+    let unexpected_output = fixture.run(&["agent", "status", "--role", "unexpected", "--json"]);
+    assert!(
+        unexpected_output.status.success(),
+        "status should not reject unknown role filters even when no rows match: {unexpected_output:?}"
+    );
+    let unexpected_json = parse_json_output(&unexpected_output);
+    assert_eq!(
+        unexpected_json
+            .pointer("/role_filter")
+            .and_then(Value::as_str),
+        Some("unexpected"),
+        "status should echo the requested unexpected role filter: {unexpected_json}"
+    );
+    assert_eq!(
+        unexpected_json["sessions"]
+            .as_array()
+            .expect("sessions should be an array")
+            .len(),
+        0,
+        "unsupported event roles must not become filterable session roles: {unexpected_json}"
     );
 }
 

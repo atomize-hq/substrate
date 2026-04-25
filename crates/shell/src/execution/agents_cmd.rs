@@ -24,6 +24,7 @@ use substrate_common::{AgentEvent, PlacementExecution};
 const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
 const PURE_AGENT_ROUTER: &str = "agent_hub";
 const NESTED_ROUTER: &str = "substrate_gateway";
+const MEMBER_ROLE: &str = "member";
 const ORCHESTRATOR_ROLE: &str = "orchestrator";
 
 pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
@@ -660,6 +661,7 @@ fn role_for_event<'a>(
     effective_config: &'a SubstrateConfig,
 ) -> Option<&'a str> {
     match event.role.as_deref() {
+        Some(MEMBER_ROLE) => Some(MEMBER_ROLE),
         Some(ORCHESTRATOR_ROLE) => Some(ORCHESTRATOR_ROLE),
         _ => role_for_entry(agent_id, effective_config),
     }
