@@ -804,7 +804,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" SLICE_ID=\"AHCSITC3\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "code",
       "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-code"
     },
@@ -859,7 +859,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" SLICE_ID=\"AHCSITC3\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "test",
       "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-test"
     },
