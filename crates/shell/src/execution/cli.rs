@@ -158,6 +158,7 @@ pub enum SubCommands {
     Config(ConfigCmd),
     Policy(PolicyCmd),
     Workspace(WorkspaceCmd),
+    Agent(AgentCmd),
     Agents(AgentsCmd),
     Shim(ShimCmd),
     Health(HealthCmd),
@@ -393,6 +394,66 @@ pub struct PolicySetArgs {
     /// One or more dotted updates (key=value, key+=value, key-=value)
     #[arg(value_name = "UPDATE", required = true)]
     pub updates: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct AgentCmd {
+    #[command(subcommand)]
+    pub action: AgentAction,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "snake_case")]
+pub enum AgentScopeArg {
+    Host,
+    World,
+    Any,
+}
+
+impl AgentScopeArg {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::World => "world",
+            Self::Any => "any",
+        }
+    }
+}
+
+impl Default for AgentScopeArg {
+    fn default() -> Self {
+        Self::Any
+    }
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentViewArgs {
+    /// Emit JSON instead of human-readable output
+    #[arg(long)]
+    pub json: bool,
+    /// Filter rows by execution scope
+    #[arg(long, value_name = "host|world|any", default_value = "any")]
+    pub scope: AgentScopeArg,
+    /// Filter rows by role label
+    #[arg(long, value_name = "ROLE")]
+    pub role: Option<String>,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentDoctorArgs {
+    /// Emit JSON instead of human-readable output
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AgentAction {
+    /// List the effective agent inventory
+    List(AgentViewArgs),
+    /// Show the current pure-agent and nested gateway-backed status view
+    Status(AgentViewArgs),
+    /// Validate deterministic startability of the agent control plane
+    Doctor(AgentDoctorArgs),
 }
 
 #[derive(Args, Debug)]

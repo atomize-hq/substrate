@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 pub mod agent_events;
+pub mod agent_identity;
 pub mod fs_diff;
 pub mod identity;
 pub mod manager_manifest;
@@ -12,6 +13,7 @@ pub mod settings;
 pub mod world_exec_guard;
 
 pub use agent_events::{AgentEvent, AgentEventKind};
+pub use agent_identity::derive_agent_backend_id;
 pub use fs_diff::FsDiff;
 pub use identity::{
     validate_identity_tuple_and_placement_posture, IdentityTuple, PlacementExecution,
