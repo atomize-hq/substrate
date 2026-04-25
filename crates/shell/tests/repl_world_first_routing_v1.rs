@@ -839,8 +839,13 @@ fn c3_drift_restart_restarts_session_and_emits_message() {
     );
     assert_eq!(
         alert.get("world_id").and_then(Value::as_str),
-        Some("wld_stub_0001"),
-        "top-level world_id must point at the pre-restart world: {alert:?}"
+        Some("wld_stub_0002"),
+        "top-level world_id must point at the active replacement world: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("world_generation").and_then(Value::as_u64),
+        Some(1),
+        "top-level world_generation must point at the active replacement generation: {alert:?}"
     );
     assert_eq!(
         alert.pointer("/data/reason").and_then(Value::as_str),
@@ -877,6 +882,10 @@ fn c3_drift_restart_restarts_session_and_emits_message() {
             .and_then(Value::as_u64),
         Some(1),
         "restart alert must capture new generation 1: {alert:?}"
+    );
+    assert!(
+        alert.pointer("/data/world_id").is_none() && alert.pointer("/data/world_generation").is_none(),
+        "restart alerts must keep active world identity at the top level, not duplicate it under data: {alert:?}"
     );
 }
 
@@ -939,6 +948,16 @@ fn c3_startup_drift_restart_emits_world_restarted_alert() {
 
     let alert = alerts[0];
     assert_eq!(
+        alert.get("world_id").and_then(Value::as_str),
+        Some("wld_stub_0002"),
+        "startup restart alert must publish the active replacement world at the top level: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("world_generation").and_then(Value::as_u64),
+        Some(1),
+        "startup restart alert must publish the replacement generation at the top level: {alert:?}"
+    );
+    assert_eq!(
         alert.pointer("/data/reason").and_then(Value::as_str),
         Some("workspace_root_changed"),
         "startup drift restart should classify as workspace_root_changed: {alert:?}"
@@ -968,6 +987,10 @@ fn c3_startup_drift_restart_emits_world_restarted_alert() {
             .and_then(Value::as_u64),
         Some(1),
         "startup drift alert must increment to generation 1: {alert:?}"
+    );
+    assert!(
+        alert.pointer("/data/world_id").is_none() && alert.pointer("/data/world_generation").is_none(),
+        "startup restart alerts must keep active world identity at the top level, not under data: {alert:?}"
     );
 }
 
@@ -1080,6 +1103,11 @@ fn c3_drift_fail_closed_emits_world_restart_required_alert() {
         "top-level world_id must point at the current world: {alert:?}"
     );
     assert_eq!(
+        alert.get("world_generation").and_then(Value::as_u64),
+        Some(0),
+        "top-level world_generation must publish the current generation for fail-closed restart-required alerts: {alert:?}"
+    );
+    assert_eq!(
         alert.pointer("/data/reason").and_then(Value::as_str),
         Some("policy_snapshot_changed"),
         "policy drift fail-closed alert should classify as policy_snapshot_changed: {alert:?}"
@@ -1096,17 +1124,9 @@ fn c3_drift_fail_closed_emits_world_restart_required_alert() {
         Some("restart_world"),
         "restart-required alert must record required_action=restart_world: {alert:?}"
     );
-    assert_eq!(
-        alert.pointer("/data/world_id").and_then(Value::as_str),
-        Some("wld_stub_0001"),
-        "restart-required alert must capture the current world_id: {alert:?}"
-    );
-    assert_eq!(
-        alert
-            .pointer("/data/world_generation")
-            .and_then(Value::as_u64),
-        Some(0),
-        "restart-required alert must capture the current generation: {alert:?}"
+    assert!(
+        alert.pointer("/data/world_id").is_none() && alert.pointer("/data/world_generation").is_none(),
+        "restart-required alerts must keep current world identity at the top level when known: {alert:?}"
     );
 }
 
@@ -1188,6 +1208,16 @@ fn c3_startup_drift_fail_closed_emits_world_restart_required_alert() {
 
     let alert = alerts[0];
     assert_eq!(
+        alert.get("world_id").and_then(Value::as_str),
+        Some("wld_stub_0001"),
+        "startup fail-closed alert must publish the current world id at the top level: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("world_generation").and_then(Value::as_u64),
+        Some(0),
+        "startup fail-closed alert must publish the current generation at the top level: {alert:?}"
+    );
+    assert_eq!(
         alert.pointer("/data/reason").and_then(Value::as_str),
         Some("workspace_root_changed"),
         "startup fail-closed drift should classify as workspace_root_changed: {alert:?}"
@@ -1204,17 +1234,9 @@ fn c3_startup_drift_fail_closed_emits_world_restart_required_alert() {
         Some("restart_world"),
         "startup fail-closed alert must record required_action=restart_world: {alert:?}"
     );
-    assert_eq!(
-        alert.pointer("/data/world_id").and_then(Value::as_str),
-        Some("wld_stub_0001"),
-        "startup fail-closed alert must capture the current world id: {alert:?}"
-    );
-    assert_eq!(
-        alert
-            .pointer("/data/world_generation")
-            .and_then(Value::as_u64),
-        Some(0),
-        "startup fail-closed alert must capture the current generation: {alert:?}"
+    assert!(
+        alert.pointer("/data/world_id").is_none() && alert.pointer("/data/world_generation").is_none(),
+        "startup fail-closed alerts must keep current world identity at the top level when known: {alert:?}"
     );
 }
 
