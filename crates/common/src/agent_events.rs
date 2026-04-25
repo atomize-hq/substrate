@@ -139,6 +139,16 @@ struct AgentEventDef {
     #[serde(default, deserialize_with = "deserialize_sanitized_channel")]
     channel: Option<String>,
     #[serde(default)]
+    client: Option<String>,
+    #[serde(default)]
+    router: Option<String>,
+    #[serde(default)]
+    protocol: Option<String>,
+    #[serde(default)]
+    provider: Option<String>,
+    #[serde(default)]
+    auth_authority: Option<String>,
+    #[serde(default)]
     identity_tuple: Option<IdentityTuple>,
     #[serde(default)]
     placement_posture: Option<PlacementPosture>,
@@ -327,6 +337,19 @@ impl TryFrom<AgentEventDef> for AgentEvent {
     type Error = String;
 
     fn try_from(value: AgentEventDef) -> Result<Self, Self::Error> {
+        let identity_tuple = value.identity_tuple.or_else(|| {
+            let client = value.client?;
+            let router = value.router?;
+            let protocol = value.protocol?;
+            Some(IdentityTuple {
+                client,
+                router,
+                protocol,
+                provider: value.provider,
+                auth_authority: value.auth_authority,
+            })
+        });
+
         let event = Self {
             ts: value.ts,
             kind: value.kind,
@@ -342,7 +365,7 @@ impl TryFrom<AgentEventDef> for AgentEvent {
             cmd_id: value.cmd_id,
             span_id: value.span_id,
             channel: value.channel,
-            identity_tuple: value.identity_tuple,
+            identity_tuple,
             placement_posture: value.placement_posture,
             project: value.project,
         };

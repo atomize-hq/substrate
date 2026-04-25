@@ -1438,11 +1438,6 @@ fn build_world_restart_required_alert(
             serde_json::json!("restart_world"),
         );
         data.insert("on_drift".to_string(), serde_json::json!("fail_closed"));
-        data.insert("world_id".to_string(), serde_json::json!(current_world_id));
-        data.insert(
-            "world_generation".to_string(),
-            serde_json::json!(current_world_generation),
-        );
     }
 
     event
