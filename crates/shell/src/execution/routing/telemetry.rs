@@ -189,7 +189,7 @@ fn append_agent_event_to_trace(config: &ShellConfig, event: &AgentEvent) -> Resu
     let channel = sanitized.channel.take();
     sanitized.set_channel(channel);
 
-    let mut entry = serde_json::to_value(&sanitized)?;
+    let mut entry = sanitized.to_trace_record()?;
     let obj = entry
         .as_object_mut()
         .ok_or_else(|| anyhow::anyhow!("agent event must serialize as a JSON object"))?;
