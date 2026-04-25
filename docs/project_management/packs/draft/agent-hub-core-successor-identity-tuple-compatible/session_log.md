@@ -113,3 +113,11 @@
   - `NONE`
 - Next steps:
   - Use the checkpoint tasks as compile-parity-only gates unless a later planning change explicitly introduces a feature-local smoke surface.
+
+## START — 2026-04-25T01:19:27Z — code — AHCSITC0-code
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible" SLICE_ID="AHCSITC0"`
+
+## START — 2026-04-25T01:19:27Z — test — AHCSITC0-test
+- Dispatch:
+  - `make triad-task-start-complete FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible" SLICE_ID="AHCSITC0"`
