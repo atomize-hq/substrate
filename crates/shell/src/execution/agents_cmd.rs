@@ -10,6 +10,7 @@ use crate::execution::config_model::{
     self, AgentExecutionScope, CliConfigOverrides, SubstrateConfig,
 };
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
@@ -347,6 +348,7 @@ struct StatusReportJson<'a> {
 
 #[derive(Clone)]
 struct SessionProjection {
+    last_event_ts: DateTime<Utc>,
     session: StatusSessionJson,
 }
 
@@ -387,8 +389,20 @@ fn build_status_report<'a>(
         let Some(entry) = context.inventory.get(&event.agent_id) else {
             continue;
         };
-        let role = role_for_event(&event, &entry.file.id, &context.effective_config);
-        let scope = scope_for_event(&event, entry, &context.effective_config);
+        let is_selected_orchestrator =
+            context.effective_config.agents.hub.orchestrator_agent_id == entry.file.id;
+        let role = role_for_event(
+            &event,
+            &entry.file.id,
+            is_selected_orchestrator,
+            &context.effective_config,
+        );
+        let scope = scope_for_event(
+            &event,
+            entry,
+            is_selected_orchestrator,
+            &context.effective_config,
+        );
 
         if let Some(session_key) = pure_session_key(&event) {
             let mut world_id = None;
@@ -408,6 +422,7 @@ fn build_status_report<'a>(
             }
 
             let projection = SessionProjection {
+                last_event_ts: event.ts,
                 session: StatusSessionJson {
                     orchestration_session_id: session_key.0.clone(),
                     agent_id: entry.file.id.clone(),
@@ -425,7 +440,13 @@ fn build_status_report<'a>(
                 },
             };
 
-            sessions.insert(session_key, projection);
+            let should_replace = match sessions.get(&session_key) {
+                Some(existing) => projection.last_event_ts >= existing.last_event_ts,
+                None => true,
+            };
+            if should_replace {
+                sessions.insert(session_key, projection);
+            }
         }
 
         if let Some(projection) = nested_projection(&event, entry) {
@@ -634,8 +655,13 @@ fn nested_projection(
 fn scope_for_event(
     event: &AgentEvent,
     entry: &AgentInventoryEntryV1,
+    is_selected_orchestrator: bool,
     effective_config: &SubstrateConfig,
 ) -> AgentExecutionScope {
+    if is_selected_orchestrator {
+        return entry.effective_scope(effective_config);
+    }
+
     match event
         .placement_posture
         .as_ref()
@@ -658,11 +684,15 @@ fn role_for_entry<'a>(agent_id: &str, effective_config: &'a SubstrateConfig) -> 
 fn role_for_event<'a>(
     event: &'a AgentEvent,
     agent_id: &str,
+    is_selected_orchestrator: bool,
     effective_config: &'a SubstrateConfig,
 ) -> Option<&'a str> {
+    if is_selected_orchestrator {
+        return role_for_entry(agent_id, effective_config);
+    }
+
     match event.role.as_deref() {
         Some(MEMBER_ROLE) => Some(MEMBER_ROLE),
-        Some(ORCHESTRATOR_ROLE) => Some(ORCHESTRATOR_ROLE),
         _ => role_for_entry(agent_id, effective_config),
     }
 }

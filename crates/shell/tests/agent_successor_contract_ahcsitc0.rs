@@ -513,6 +513,284 @@ fn agent_status_preserves_member_roles_and_filters_them_by_contract_label() {
 }
 
 #[test]
+fn agent_status_prefers_newest_pure_session_event_when_trace_lines_are_out_of_order() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:02Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "member",
+            "data": { "message": "newest member session event intentionally omits world fields" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "member",
+            "world_id": "wld_stale_0001",
+            "world_generation": 6,
+            "data": { "message": "older stale member session event arrives later in file order" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "status should succeed when pure-agent events arrive out of timestamp order: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let codex_sessions: Vec<&Value> = sessions
+        .iter()
+        .filter(|session| session.pointer("/agent_id").and_then(Value::as_str) == Some("codex"))
+        .collect();
+    assert_eq!(
+        codex_sessions.len(),
+        1,
+        "out-of-order pure-agent events must still collapse to one codex session row: {json}"
+    );
+
+    let codex = codex_sessions[0];
+    assert_eq!(
+        codex.pointer("/last_event_at").and_then(Value::as_str),
+        Some("2026-04-05T00:00:02+00:00"),
+        "the collapsed codex row must use the newest event timestamp rather than later file order: {json}"
+    );
+    assert!(
+        codex.get("world_id").is_none(),
+        "the winning newest projection must not inherit stale world_id from the older event: {json}"
+    );
+    assert!(
+        codex.get("world_generation").is_none(),
+        "the winning newest projection must not inherit stale world_generation from the older event: {json}"
+    );
+}
+
+#[test]
+fn agent_status_ignores_non_selected_trace_orchestrator_roles() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "data": { "message": "selected orchestrator session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "stale member row claims orchestrator" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "status should succeed when a non-selected agent claims orchestrator: {output:?}"
+    );
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+
+    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    assert_eq!(
+        orchestrator.pointer("/role").and_then(Value::as_str),
+        Some("orchestrator"),
+        "selected orchestrator must remain the only orchestrator session: {json}"
+    );
+
+    let codex = find_session_by_agent(sessions, "codex");
+    assert!(
+        codex
+            .pointer("/role")
+            .is_some_and(serde_json::Value::is_null),
+        "non-selected stale orchestrator rows must collapse to null role: {json}"
+    );
+
+    let orchestrator_output = fixture.run(&["agent", "status", "--role", "orchestrator", "--json"]);
+    assert!(
+        orchestrator_output.status.success(),
+        "orchestrator-filtered status should succeed: {orchestrator_output:?}"
+    );
+    let orchestrator_json = parse_json_output(&orchestrator_output);
+    let orchestrator_sessions = orchestrator_json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        orchestrator_sessions.len(),
+        1,
+        "only the configured orchestrator should match --role orchestrator: {orchestrator_json}"
+    );
+    assert_eq!(
+        find_session_by_agent(orchestrator_sessions, "claude_code")
+            .pointer("/role")
+            .and_then(Value::as_str),
+        Some("orchestrator")
+    );
+
+    let member_output = fixture.run(&["agent", "status", "--role", "member", "--json"]);
+    assert!(
+        member_output.status.success(),
+        "member-filtered status should succeed: {member_output:?}"
+    );
+    let member_json = parse_json_output(&member_output);
+    assert_eq!(
+        member_json.pointer("/role_filter").and_then(Value::as_str),
+        Some("member"),
+        "member-filtered status must echo the requested role filter: {member_json}"
+    );
+    assert_eq!(
+        member_json["sessions"]
+            .as_array()
+            .expect("sessions should be an array")
+            .len(),
+        0,
+        "stale non-selected orchestrator roles must not become filterable member rows: {member_json}"
+    );
+}
+
+#[test]
+fn agent_status_keeps_selected_orchestrator_host_scoped_when_trace_posture_says_in_world() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"agents:
+  allowed_backends:
+    - cli:claude_code
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "host", true, true, true),
+    );
+    fixture.write_trace_events(&[json!({
+        "ts": "2026-04-05T00:00:00Z",
+        "event_type": "agent_event",
+        "session_id": "ses_agent_hub",
+        "component": "agent-hub",
+        "kind": "status",
+        "agent_id": "claude_code",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "backend_id": "cli:claude_code",
+        "client": "claude_code",
+        "router": "agent_hub",
+        "protocol": "uaa.agent.session",
+        "role": "orchestrator",
+        "placement_posture": {
+            "execution": "in_world"
+        },
+        "world_id": "wld_active_0002",
+        "world_generation": 7,
+        "data": { "message": "trace posture should not move the selected orchestrator into world scope" }
+    })]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "status should succeed when the selected orchestrator trace posture says in_world: {output:?}"
+    );
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        sessions.len(),
+        1,
+        "fixture should project exactly one selected orchestrator session: {json}"
+    );
+
+    let orchestrator = &sessions[0];
+    assert_eq!(
+        orchestrator
+            .pointer("/execution/scope")
+            .and_then(Value::as_str),
+        Some("host"),
+        "selected orchestrator status rows must stay host-scoped despite trace posture: {json}"
+    );
+    assert!(
+        orchestrator.get("world_id").is_none(),
+        "host-scoped selected orchestrator rows must omit world_id: {json}"
+    );
+    assert!(
+        orchestrator.get("world_generation").is_none(),
+        "host-scoped selected orchestrator rows must omit world_generation: {json}"
+    );
+
+    let world_output = fixture.run(&["agent", "status", "--scope", "world", "--json"]);
+    assert!(
+        world_output.status.success(),
+        "world-filtered status should succeed: {world_output:?}"
+    );
+    let world_json = parse_json_output(&world_output);
+    assert_eq!(
+        world_json["sessions"]
+            .as_array()
+            .expect("sessions should be an array")
+            .len(),
+        0,
+        "world-filtered status must exclude the selected orchestrator row: {world_json}"
+    );
+}
+
+#[test]
 fn agent_status_unsupported_event_roles_fall_back_to_contract_roles() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
