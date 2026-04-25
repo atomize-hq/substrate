@@ -120,7 +120,7 @@ Canonical slice ids selected for this feature:
     - the one-owner-per-surface validation checklist
   - Must define:
     - the exact commands and expected results for `substrate policy current show --explain` and `substrate policy current show --json --explain`
-    - the exact commands and expected results for `smoke/linux-smoke.sh`, `smoke/macos-smoke.sh`, and `smoke/windows-smoke.ps1`
+    - the exact commands and expected results for required CI behavior smoke via `smoke/linux-smoke.sh` and `smoke/macos-smoke.sh`, plus any optional Windows manual smoke evidence via `smoke/windows-smoke.ps1`
     - the exact deny-case assertions for disallowed router, provider, protocol, and auth-authority combinations
     - the exact review posture for the Codex example path `~/.codex/auth.json` as validation input only, not as a new Substrate-owned path contract
 

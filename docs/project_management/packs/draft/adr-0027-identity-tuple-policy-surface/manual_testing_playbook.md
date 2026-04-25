@@ -30,7 +30,15 @@ mkdir -p .substrate
 
 ## Smoke entrypoints
 
-Use these scripts for repeatable platform smoke before drilling into the manual matrix:
+Use these scripts for repeatable platform smoke before drilling into the manual matrix.
+
+Behavior-platform smoke coverage:
+- Linux and macOS smoke automate the minimal contract subset from sections 1 through 5:
+  - authoritative `substrate policy current show --json --explain` output and explain provenance
+  - schema-invalid tuple-policy rejection
+  - machine-readable `substrate world gateway status --json` tuple publication shape
+  - router and provider mismatch deny wording
+- Windows smoke remains optional manual evidence for this pack and automates only the policy inspection plus schema-invalid checks because Windows is compile-parity only in `tasks.json`.
 
 - Linux:
 
@@ -62,7 +70,7 @@ Expected results:
 - exit code `0`
 - `stdout` contains `OK: adr-0027-identity-tuple-policy-surface windows smoke passed`
 
-Use sections 1 through 8 below as the debugging path when a smoke script fails.
+Use sections 1 through 8 below as the debugging path when a smoke script fails. Smoke covers the minimum runnable subset above; sections 6 through 8 remain the manual extension path for protocol mismatch, auth-authority mismatch, and validation-only auth-file review.
 
 ## Manual review matrix
 
