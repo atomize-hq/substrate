@@ -503,7 +503,7 @@
         "Set status to in_progress; add START entry; commit docs.",
         "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC2-integ-core\""
       ],
-      "status": "pending",
+      "status": "in_progress",
       "type": "integration",
       "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-integ-core"
     },
