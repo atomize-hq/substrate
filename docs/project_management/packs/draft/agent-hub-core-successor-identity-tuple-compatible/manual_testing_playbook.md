@@ -49,7 +49,7 @@ Fixture requirements:
 - the effective inventory contains one host-scoped orchestrator agent selected by `agents.hub.orchestrator_agent_id`
 - the effective inventory contains at least one host-scoped member and one world-scoped member
 - the effective policy allowlists the derived orchestrator and member `backend_id` values under `agents.allowed_backends`
-- the fixture can trigger one nested gateway-backed request so `nested_llm_records` and correlated trace output are non-empty
+- the fixture can trigger at least two nested gateway-backed requests so `nested_llm_records` and correlated trace output are non-empty
 
 Evidence capture requirements:
 
@@ -225,9 +225,9 @@ Expected results:
 - every world-scoped member row includes both `world_id` and `world_generation`
 - every host-scoped row omits both fields
 
-### Case 4 — nested gateway-backed records publish `provider` and `auth_authority` on the nested record only
+### Case 4 — nested gateway-backed records publish `run_id`, `provider`, and `auth_authority` on the nested record only
 
-Trigger one nested gateway-backed request with the feature fixture, then rerun status:
+Trigger two nested gateway-backed requests with the feature fixture, then rerun status:
 
 ```bash
 substrate agent status --json | tee "$artifacts_dir/agent-status-nested.json"
@@ -238,8 +238,10 @@ Assertions:
 ```bash
 jq -e '
   (.nested_llm_records | type == "array") and
-  (length > 0) and
+  (length > 1) and
+  ([.nested_llm_records[].run_id] == ([.nested_llm_records[].run_id] | sort)) and
   all(.nested_llm_records[];
+    (.run_id | type == "string") and
     .router == "substrate_gateway" and
     (.provider | type == "string") and
     (.auth_authority | type == "string") and
@@ -258,12 +260,23 @@ jq -e '
 ' "$artifacts_dir/agent-status-nested.json"
 ```
 
+```bash
+substrate agent status | tee "$artifacts_dir/agent-status-nested.txt"
+```
+
+```bash
+rg -n "run_id=" "$artifacts_dir/agent-status-nested.txt"
+```
+
 Expected results:
 
 - command exits `0`
-- every nested record includes `provider` and `auth_authority`
+- every nested record includes `run_id`, `provider`, and `auth_authority`
+- nested rows stay distinct even when `router`, `provider`, `auth_authority`, and `protocol` match
+- nested rows sort by `run_id` ascending byte order
 - every pure-agent session row omits `provider` and `auth_authority`
 - no nested record includes `world_id` or `world_generation`
+- text output renders distinct `run_id=` values for nested rows
 
 ### Case 5 — canonical trace keeps the same pure-agent versus nested-record split
 
@@ -399,7 +412,7 @@ Pass condition:
 Check:
 
 - `agent-hub-session-protocol-spec.md` owns capability descriptors, session handles, lifecycle states, and the machine-readable status objects
-- this playbook uses the same `sessions` and `nested_llm_records` object names without widening them
+- this playbook uses the same `sessions` and `nested_llm_records` object names and matches the protocol spec's nested `run_id` field
 - world reuse and restart wording in this playbook matches the protocol spec
 
 Pass condition:

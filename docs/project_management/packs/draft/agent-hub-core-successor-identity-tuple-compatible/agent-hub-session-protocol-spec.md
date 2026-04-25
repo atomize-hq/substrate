@@ -303,6 +303,7 @@ This is the exact object shape for each nested record in `substrate agent status
     "orchestration_session_id": "sess_001",
     "agent_id": "codex"
   },
+  "run_id": "run_nested_001",
   "backend_id": "cli:codex",
   "client": "codex",
   "router": "substrate_gateway",
@@ -314,6 +315,7 @@ This is the exact object shape for each nested record in `substrate agent status
 
 Field rules:
 - `parent.orchestration_session_id` and `parent.agent_id` identify the pure-agent session that triggered the nested request.
+- `run_id` is the nested request correlation id and is required on every nested row.
 - `backend_id` remains the parent agent backend id.
 - `client` remains the parent agent id.
 - `router` is exactly `substrate_gateway`.
@@ -341,7 +343,7 @@ Field rules:
 - `sessions[*]` uses `AgentSessionStatusV1` exactly.
 - `nested_llm_records[*]` uses `NestedLlmStatusRecordV1` exactly.
 - `sessions` sort by `orchestration_session_id`, then `agent_id`, ascending byte order.
-- `nested_llm_records` sort by `parent.orchestration_session_id`, then `parent.agent_id`, then nested request correlation id ascending byte order.
+- `nested_llm_records` sort by `parent.orchestration_session_id`, then `parent.agent_id`, then `run_id` ascending byte order.
 
 ## Structured event exchange
 

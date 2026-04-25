@@ -84,7 +84,7 @@ Authoritative inputs:
 - Stable ordering rules:
   - inventory rows sort by `agent_id` ascending byte order
   - session rows sort by `orchestration_session_id`, then `agent_id`, ascending byte order
-  - nested LLM rows sort by parent `(orchestration_session_id, agent_id)`, then by nested request correlation id once `telemetry-spec.md` names that field
+  - nested LLM rows sort by parent `(orchestration_session_id, agent_id)`, then by nested `run_id` ascending byte order
 
 ### `substrate agent list`
 
@@ -196,14 +196,16 @@ Nested LLM render rules:
 - Each nested row renders:
   1. `parent.orchestration_session_id`
   2. `parent.agent_id`
-  3. `backend_id`
-  4. `client`
-  5. `router`
-  6. `provider`
-  7. `auth_authority`
-  8. `protocol`
+  3. `run_id`
+  4. `backend_id`
+  5. `client`
+  6. `router`
+  7. `provider`
+  8. `auth_authority`
+  9. `protocol`
 - `router` renders `substrate_gateway`.
 - `client` renders the parent agent session's `agent_id`.
+- `run_id` renders the nested request correlation id.
 - `provider` and `auth_authority` are required on every nested row.
 - Nested rows omit `world_id` and `world_generation`.
 
@@ -238,6 +240,7 @@ Nested LLM render rules:
         "orchestration_session_id": "sess_001",
         "agent_id": "codex"
       },
+      "run_id": "run_nested_001",
       "backend_id": "cli:codex",
       "client": "codex",
       "router": "substrate_gateway",
@@ -255,6 +258,7 @@ JSON rules:
 - Each pure-agent session object omits `provider` and `auth_authority`.
 - `world_id` and `world_generation` are both present or both absent.
 - `world_generation` is an integer that starts at `0` for a fresh world allocation and increments by `1` on each hub-driven restart of that orchestration session's world.
+- Each nested record includes `run_id` as the nested request correlation id.
 - Each nested record includes `provider` and `auth_authority`.
 - Each nested record omits `world_id` and `world_generation`.
 

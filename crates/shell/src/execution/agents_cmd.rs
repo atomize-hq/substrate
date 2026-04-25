@@ -325,6 +325,7 @@ struct NestedParentJson {
 #[derive(Clone, Serialize)]
 struct NestedLlmRecordJson {
     parent: NestedParentJson,
+    run_id: String,
     backend_id: String,
     client: String,
     router: String,
@@ -351,7 +352,7 @@ struct SessionProjection {
 #[derive(Clone)]
 struct NestedProjection {
     record: NestedLlmRecordJson,
-    sort_key: (String, String, String, String, String, String),
+    sort_key: (String, String, String),
 }
 
 fn build_status_report<'a>(
@@ -379,8 +380,7 @@ fn build_status_report<'a>(
 
     let events = read_trace_agent_events()?;
     let mut sessions = BTreeMap::<(String, String), SessionProjection>::new();
-    let mut nested =
-        BTreeMap::<(String, String, String, String, String, String), NestedProjection>::new();
+    let mut nested = BTreeMap::<(String, String, String), NestedProjection>::new();
 
     for event in events {
         let Some(entry) = context.inventory.get(&event.agent_id) else {
@@ -522,9 +522,10 @@ fn render_status_report(report: &StatusReportJson<'_>, json_mode: bool) -> Resul
         println!("nested_llm_records");
         for record in &report.nested_llm_records {
             println!(
-                "  parent.orchestration_session_id={} | parent.agent_id={} | backend_id={} | client={} | router={} | provider={} | auth_authority={} | protocol={}",
+                "  parent.orchestration_session_id={} | parent.agent_id={} | run_id={} | backend_id={} | client={} | router={} | provider={} | auth_authority={} | protocol={}",
                 record.parent.orchestration_session_id,
                 record.parent.agent_id,
+                record.run_id,
                 record.backend_id,
                 record.client,
                 record.router,
@@ -608,10 +609,7 @@ fn nested_projection(
     let sort_key = (
         event.orchestration_session_id.clone(),
         event.agent_id.clone(),
-        entry.derived_backend_id(),
-        provider.clone(),
-        auth_authority.clone(),
-        tuple.protocol.clone(),
+        event.run_id.clone(),
     );
 
     Some(NestedProjection {
@@ -620,6 +618,7 @@ fn nested_projection(
                 orchestration_session_id: event.orchestration_session_id.clone(),
                 agent_id: event.agent_id.clone(),
             },
+            run_id: event.run_id.clone(),
             backend_id: entry.derived_backend_id(),
             client: event.agent_id.clone(),
             router: NESTED_ROUTER.to_string(),

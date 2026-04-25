@@ -526,7 +526,7 @@ fn ahcsitc3_specs_lock_supersession_parity_and_validation_boundaries() {
         "### Case 1 — `substrate agent list --json` keeps adapter identity and omission rules",
         "### Case 2 — `substrate agent status --json` proves a host-scoped orchestrator",
         "### Case 3 — world-scoped members publish `world_id` and `world_generation`",
-        "### Case 4 — nested gateway-backed records publish `provider` and `auth_authority` on the nested record only",
+        "### Case 4 — nested gateway-backed records publish `run_id`, `provider`, and `auth_authority` on the nested record only",
         "### Case 5 — canonical trace keeps the same pure-agent versus nested-record split",
         "### Case 6 — `substrate agent doctor --json` proves healthy ordered checks",
         "### Case 7 — `substrate agent doctor` fails closed for invalid orchestrator state",
@@ -897,6 +897,10 @@ metadata: {}
         Some("claude_code")
     );
     assert_eq!(
+        record.pointer("/run_id").and_then(Value::as_str),
+        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14")
+    );
+    assert_eq!(
         record.pointer("/router").and_then(Value::as_str),
         Some("substrate_gateway")
     );
@@ -915,6 +919,178 @@ metadata: {}
     assert!(
         record.get("world_id").is_none() && record.get("world_generation").is_none(),
         "nested gateway-backed records must omit world scope fields: {record}"
+    );
+}
+
+#[test]
+fn agent_status_preserves_same_tuple_nested_rows_and_sorts_them_by_run_id() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"id: "ahcsitc2-policy"
+name: "ahcsitc2-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: true
+  write:
+    enabled: true
+
+agents:
+  allowed_backends:
+    - "cli:claude_code"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "world", true, true, true),
+    );
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "pure-agent session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:02Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
+            "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "second nested gateway request completed" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "first nested gateway request completed" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status should preserve multiple same-tuple nested rows in JSON mode: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let nested = json["nested_llm_records"]
+        .as_array()
+        .expect("nested_llm_records should be an array");
+    assert_eq!(
+        nested.len(),
+        2,
+        "same-tuple nested gateway records with different run_id values must stay distinct: {json}"
+    );
+    assert_eq!(
+        nested[0].pointer("/run_id").and_then(Value::as_str),
+        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14")
+    );
+    assert_eq!(
+        nested[1].pointer("/run_id").and_then(Value::as_str),
+        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15")
+    );
+    for record in nested {
+        assert_eq!(
+            record.pointer("/router").and_then(Value::as_str),
+            Some("substrate_gateway")
+        );
+        assert_eq!(
+            record.pointer("/provider").and_then(Value::as_str),
+            Some("openai")
+        );
+        assert_eq!(
+            record.pointer("/auth_authority").and_then(Value::as_str),
+            Some("codex_subscription")
+        );
+        assert_eq!(
+            record.pointer("/protocol").and_then(Value::as_str),
+            Some("openai.responses")
+        );
+        assert!(
+            record.get("world_id").is_none() && record.get("world_generation").is_none(),
+            "nested gateway-backed records must omit world scope fields: {record}"
+        );
+    }
+
+    let text_output = fixture.run(&["agent", "status"]);
+    assert!(
+        text_output.status.success(),
+        "agent status should preserve multiple same-tuple nested rows in text mode: {text_output:?}"
+    );
+    let stdout = String::from_utf8_lossy(&text_output.stdout);
+    assert!(
+        stdout.contains("nested_llm_records"),
+        "text mode should render a nested_llm_records section when nested records exist\nstdout: {stdout}"
+    );
+    let first_idx = stdout
+        .find("run_id=0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14")
+        .expect("text mode should include the lexically first nested run_id");
+    let second_idx = stdout
+        .find("run_id=0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15")
+        .expect("text mode should include the lexically second nested run_id");
+    assert!(
+        first_idx < second_idx,
+        "text mode should sort nested rows by run_id rather than insertion order\nstdout: {stdout}"
     );
 }
 
