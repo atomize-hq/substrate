@@ -93,6 +93,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/shell/tests/agents_validate.rs`
 - `crates/shell/tests/agent_hub_trace_persistence.rs`
 - `crates/shell/tests/repl_world_first_routing_v1.rs`
+- `crates/shell/tests/world_gateway.rs`
 
 ### Deprecate
 - `docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md`
