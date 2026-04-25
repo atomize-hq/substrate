@@ -1218,9 +1218,19 @@ fn world_gateway_status_human_output_omits_missing_optional_fields_without_place
 
 #[test]
 fn world_gateway_disabled_state_skips_typed_runtime_bootstrap() {
-    let (_temp, _socket, socket_path) = gateway_socket_fixture();
+    let (_temp, socket, socket_path) = gateway_socket_fixture();
+    let fixture = GatewayAuthFixture::new();
+    fixture.write_global_config(gateway_config_with_codex_backend());
+    fixture.write_global_agent_inventory("codex.yaml", gateway_inventory_for_codex());
+    fixture.write_global_policy(gateway_policy_with_codex_host_credentials());
+    fixture.write_codex_auth_state(
+        r#"{
+  "account_id": "acct_disabled_state",
+  "access_token": "token-disabled-state"
+}"#,
+    );
 
-    let mut cmd = substrate_shell_driver();
+    let mut cmd = fixture.command();
     let assert = cmd
         .env("SUBSTRATE_WORLD_ENABLED", "0")
         .env("SUBSTRATE_WORLD", "disabled")
@@ -1251,6 +1261,11 @@ fn world_gateway_disabled_state_skips_typed_runtime_bootstrap() {
     assert_eq!(
         parsed.pointer("/placement_posture/execution"),
         Some(&json!("in_world"))
+    );
+    assert_eq!(
+        socket.connection_count(),
+        0,
+        "disabled state must not bootstrap the typed runtime",
     );
 }
 
