@@ -17,7 +17,7 @@ Standard:
 
 - This plan is authoritative for checkpoint cadence during pre-planning.
 - If slice ids, platform scope, or checkpoint boundaries change, update this plan first.
-- `tasks.json` already carries the required schema v4 automation baseline and the full Linux, macOS, and Windows CI-parity and behavior-platform scope for this draft pack.
+- `tasks.json` already carries the required schema v4 automation baseline, Linux/macOS behavior-platform scope, and Linux/macOS/Windows CI compile-parity scope for this draft pack.
 - Full planning must add `CP1-ci-checkpoint` and set `meta.checkpoint_boundaries = ["ITPS3"]` after slice tasks exist.
 - Mechanical validation is deferred until `tasks.json` contains real slice integration tasks and the checkpoint ops task.
 
@@ -46,7 +46,7 @@ Standard:
         "feature_smoke": true,
         "ci_testing": "full"
       },
-      "rationale": "The accepted slice set contains four slices and still closes under one final cross-platform checkpoint. ITPS0 locks the tuple-axis contract and schema surface. ITPS1 closes policy-evaluation ordering, deny taxonomy, and explain-surface closure. ITPS2 closes telemetry publication and compatibility posture. ITPS3 closes manual validation, CI checkpoint alignment, and promotion packaging. Cross-platform validation after ITPS3 covers the completed broker, shell, trace, and operator-contract seam in one pass."
+      "rationale": "The accepted slice set contains four slices and still closes under one final cross-platform checkpoint. ITPS0 locks the tuple-axis contract and schema surface. ITPS1 closes policy-evaluation ordering, deny taxonomy, and explain-surface closure. ITPS2 closes telemetry publication and compatibility posture. ITPS3 closes manual validation, CI checkpoint alignment, and promotion packaging. Cross-platform validation after ITPS3 covers Linux/macOS feature behavior plus Linux/macOS/Windows compile parity across the completed broker, shell, trace, and operator-contract seam in one pass."
     }
   ]
 }
@@ -69,15 +69,15 @@ Standard:
   - tuple-aware allow and deny telemetry publication
   - backend-id compatibility boundary
   - CI checkpoint alignment and promotion packaging
-  - Linux, macOS, and Windows validation closure
+  - Linux and macOS behavior validation plus Windows compile-parity closure
 - Risk reduced at this checkpoint:
   - contract drift between policy docs and effective policy output
   - deny-taxonomy drift across broker and shell surfaces
   - trace-field drift against the selected tuple vocabulary
-  - platform-specific parity regressions in the final operator story
+  - platform-specific parity regressions in the final operator story, including Windows compile-only regressions
 - Gate selection:
   - `compile_parity`: run at `CP1` because the feature touches shared broker, shell, and trace surfaces.
-  - `feature_smoke`: run at `CP1` because the feature claims identical tuple-axis policy behavior on Linux, macOS, and Windows.
+  - `feature_smoke`: run at `CP1` for Linux and macOS because the feature still needs behavior-level checkpoint coverage where the pack requires it.
   - `ci_testing = "full"`: run at `CP1` because this is the only checkpoint and it closes the full contract-to-promotion seam.
 
 ## Follow-ups

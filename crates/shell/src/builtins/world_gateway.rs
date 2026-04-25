@@ -202,10 +202,15 @@ fn build_macos_gateway_client() -> anyhow::Result<MacosGatewayClient> {
         });
     }
 
-    let default_sock = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".substrate/sock/agent.sock");
+    let default_sock = macos_default_world_socket_path();
     if default_sock.exists() && probe_gateway_caps_uds(&default_sock) {
+        return Ok(MacosGatewayClient {
+            client: AgentClient::unix_socket(default_sock)?,
+            _forwarding: None,
+        });
+    }
+
+    if substrate_home_is_explicitly_set() {
         return Ok(MacosGatewayClient {
             client: AgentClient::unix_socket(default_sock)?,
             _forwarding: None,
@@ -242,11 +247,11 @@ fn resolve_macos_gateway_client_endpoint() -> MacosGatewayClientEndpoint {
         return MacosGatewayClientEndpoint::Unix(std::path::PathBuf::from(socket_path));
     }
 
-    let default_sock = dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".substrate/sock/agent.sock");
+    let default_sock = macos_default_world_socket_path();
 
-    if default_sock.exists() && probe_gateway_caps_uds(&default_sock) {
+    if substrate_home_is_explicitly_set()
+        || (default_sock.exists() && probe_gateway_caps_uds(&default_sock))
+    {
         MacosGatewayClientEndpoint::Unix(default_sock)
     } else {
         MacosGatewayClientEndpoint::Tcp {
@@ -277,6 +282,22 @@ fn probe_gateway_caps_uds(path: &std::path::Path) -> bool {
     }
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn substrate_home_is_explicitly_set() -> bool {
+    std::env::var_os("SUBSTRATE_HOME").is_some_and(|value| !value.is_empty())
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn macos_default_world_socket_path() -> PathBuf {
+    substrate_common::paths::substrate_home()
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".substrate")
+        })
+        .join("sock/agent.sock")
+}
+
 fn build_gateway_request_context() -> anyhow::Result<GatewayLifecycleRequestContext> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let (effective_config, config_explain) = config_model::resolve_effective_config_with_explain(
@@ -288,12 +309,16 @@ fn build_gateway_request_context() -> anyhow::Result<GatewayLifecycleRequestCont
     let (effective_policy, _) =
         substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
             .map_err(|err| config_model::user_error(err.to_string()))?;
+    let selected_backend = effective_config
+        .llm
+        .routing
+        .default_backend
+        .trim()
+        .to_string();
     let backend_entry =
-        validate_gateway_backend_selection(&cwd, &effective_config, &effective_policy)?;
+        validate_gateway_backend_selection(&cwd, &effective_policy, &selected_backend)?;
     let network_policy = resolve_world_network_policy_for_cwd(&cwd)?;
     let world_network = request_world_network_routing(&network_policy);
-    let integrated_auth =
-        resolve_integrated_auth_payload(&effective_config, &effective_policy, &backend_entry)?;
     let gateway_mode = match effective_config.llm.gateway.mode {
         LlmGatewayMode::InWorld => "in_world",
         LlmGatewayMode::HostOnly => "host_only",
@@ -317,18 +342,21 @@ fn build_gateway_request_context() -> anyhow::Result<GatewayLifecycleRequestCont
     );
 
     let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
-    let selected_backend = effective_config
-        .llm
-        .routing
-        .default_backend
-        .trim()
-        .to_string();
-    let identity_tuple = Some(derive_gateway_identity_tuple(
-        &agent_id,
-        &effective_policy,
-        &selected_backend,
-        integrated_auth.as_ref(),
-    )?);
+    let mut identity_tuple =
+        derive_gateway_identity_tuple(&agent_id, &effective_policy, &selected_backend)?;
+    let integrated_auth =
+        resolve_integrated_auth_payload(&effective_config, &effective_policy, &backend_entry)?;
+    identity_tuple.auth_authority = derive_gateway_auth_authority(integrated_auth.as_ref());
+    enforce_identity_constraint(
+        "llm.constraints.auth_authorities",
+        "auth authority",
+        identity_tuple.auth_authority.as_deref(),
+        &effective_policy.llm_constraints_auth_authorities,
+    )?;
+    identity_tuple
+        .validate()
+        .map_err(gateway_invalid_integration_error)?;
+    let identity_tuple = Some(identity_tuple);
     let placement_posture = Some(derive_gateway_placement_posture(&effective_config)?);
 
     let request = GatewayLifecycleRequestV1 {
@@ -357,7 +385,6 @@ fn derive_gateway_identity_tuple(
     agent_id: &str,
     effective_policy: &substrate_broker::Policy,
     selected_backend: &str,
-    integrated_auth: Option<&GatewayIntegratedAuthPayloadV1>,
 ) -> anyhow::Result<IdentityTuple> {
     let protocol = match selected_backend {
         CLI_CODEX_BACKEND | API_OPENAI_BACKEND => "openai.responses",
@@ -374,28 +401,12 @@ fn derive_gateway_identity_tuple(
         API_ANTHROPIC_BACKEND => Some("anthropic".to_string()),
         _ => None,
     };
-    let auth_authority = integrated_auth.and_then(|auth| {
-        if auth.cli_codex.is_some() {
-            Some("codex_subscription".to_string())
-        } else if let Some(api_env) = auth.api_env.as_ref() {
-            if api_env.env.contains_key(OPENAI_API_KEY_ENV) {
-                Some("openai_api_key".to_string())
-            } else if api_env.env.contains_key(ANTHROPIC_API_KEY_ENV) {
-                Some("anthropic_api_key".to_string())
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    });
-
     let tuple = IdentityTuple {
         client: resolve_originating_client(agent_id),
         router: SUBSTRATE_GATEWAY_ROUTER.to_string(),
         protocol: protocol.to_string(),
         provider,
-        auth_authority,
+        auth_authority: None,
     };
 
     enforce_identity_constraint(
@@ -416,16 +427,27 @@ fn derive_gateway_identity_tuple(
         tuple.provider.as_deref(),
         &effective_policy.llm_constraints_providers,
     )?;
-    enforce_identity_constraint(
-        "llm.constraints.auth_authorities",
-        "auth authority",
-        tuple.auth_authority.as_deref(),
-        &effective_policy.llm_constraints_auth_authorities,
-    )?;
-    tuple
-        .validate()
-        .map_err(gateway_invalid_integration_error)?;
     Ok(tuple)
+}
+
+fn derive_gateway_auth_authority(
+    integrated_auth: Option<&GatewayIntegratedAuthPayloadV1>,
+) -> Option<String> {
+    integrated_auth.and_then(|auth| {
+        if auth.cli_codex.is_some() {
+            Some("codex_subscription".to_string())
+        } else if let Some(api_env) = auth.api_env.as_ref() {
+            if api_env.env.contains_key(OPENAI_API_KEY_ENV) {
+                Some("openai_api_key".to_string())
+            } else if api_env.env.contains_key(ANTHROPIC_API_KEY_ENV) {
+                Some("anthropic_api_key".to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    })
 }
 
 fn derive_gateway_placement_posture(
@@ -558,10 +580,9 @@ fn print_status_identity_metadata_impl(response: &GatewayLifecycleResponseV1, st
 
 fn validate_gateway_backend_selection(
     cwd: &std::path::Path,
-    effective_config: &config_model::SubstrateConfig,
     effective_policy: &substrate_broker::Policy,
+    selected_backend: &str,
 ) -> anyhow::Result<agent_inventory::AgentInventoryEntryV1> {
-    let selected_backend = effective_config.llm.routing.default_backend.trim();
     let entry = agent_inventory::resolve_gateway_backend_inventory_entry(
         cwd,
         selected_backend,
@@ -784,8 +805,9 @@ fn ensure_env_name_allowed(
 }
 
 fn codex_auth_state_path() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
+    dirs::home_dir()
+        .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
+        .or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("."))
         .join(".codex")
         .join("auth.json")
@@ -905,6 +927,9 @@ fn error_is_component_unavailable(err: &anyhow::Error) -> bool {
             || msg.contains("listener missing")
             || msg.contains("no such file or directory")
             || msg.contains("failed to open named pipe")
+            || msg.contains("no forwarding transport available")
+            || msg.contains("lima ssh config not found")
+            || msg.contains("limactl not found")
     })
 }
 
@@ -1085,6 +1110,57 @@ mod tests {
                     }
                 }
             })
+        });
+    }
+}
+
+#[cfg(test)]
+mod classification_tests {
+    use super::{
+        error_is_component_unavailable, macos_default_world_socket_path,
+        substrate_home_is_explicitly_set,
+    };
+
+    fn with_env_var<T>(key: &str, value: Option<&std::ffi::OsStr>, f: impl FnOnce() -> T) -> T {
+        let prev = std::env::var_os(key);
+        match value {
+            Some(value) => std::env::set_var(key, value),
+            None => std::env::remove_var(key),
+        }
+        let result = f();
+        match prev {
+            Some(value) => std::env::set_var(key, value),
+            None => std::env::remove_var(key),
+        }
+        result
+    }
+
+    #[test]
+    fn component_unavailable_includes_macos_forwarding_bootstrap_failures() {
+        for message in [
+            "No forwarding transport available. Run scripts/mac/lima-doctor.sh",
+            "Lima SSH config not found at: /Users/test/.lima/substrate/ssh.config",
+            "limactl not found. Install Lima with: brew install lima",
+        ] {
+            let err = anyhow::anyhow!(message);
+            assert!(
+                error_is_component_unavailable(&err),
+                "expected macOS bootstrap error to classify as component unavailable: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn macos_default_world_socket_path_respects_explicit_substrate_home() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let substrate_home = temp.path().join("isolated-substrate-home");
+
+        with_env_var("SUBSTRATE_HOME", Some(substrate_home.as_os_str()), || {
+            assert!(substrate_home_is_explicitly_set());
+            assert_eq!(
+                macos_default_world_socket_path(),
+                substrate_home.join("sock/agent.sock")
+            );
         });
     }
 }

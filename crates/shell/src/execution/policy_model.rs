@@ -1741,4 +1741,90 @@ mod tests {
             .to_string()
             .contains("unknown policy key 'world_fs.read_allowlist'"));
     }
+
+    #[test]
+    fn policy_patch_parses_tuple_axes_under_existing_llm_constraints_root() {
+        let path = Path::new("policy.yaml");
+        let patch = parse_policy_patch_yaml(
+            path,
+            r#"
+llm:
+  allowed_backends:
+    - "api:openai"
+  constraints:
+    routers:
+      - "substrate_gateway"
+    providers:
+      - "openai"
+    protocols:
+      - "openai.responses"
+    auth_authorities:
+      - "openai_api_key"
+"#,
+        )
+        .expect("tuple-axis keys should parse under llm.constraints");
+
+        assert_eq!(
+            patch.llm.allowed_backends.as_deref(),
+            Some(&["api:openai".to_string()][..])
+        );
+        assert_eq!(
+            patch.llm.constraints.routers.as_deref(),
+            Some(&["substrate_gateway".to_string()][..])
+        );
+        assert_eq!(
+            patch.llm.constraints.providers.as_deref(),
+            Some(&["openai".to_string()][..])
+        );
+        assert_eq!(
+            patch.llm.constraints.protocols.as_deref(),
+            Some(&["openai.responses".to_string()][..])
+        );
+        assert_eq!(
+            patch.llm.constraints.auth_authorities.as_deref(),
+            Some(&["openai_api_key".to_string()][..])
+        );
+    }
+
+    #[test]
+    fn policy_patch_rejects_second_tuple_policy_roots_and_unknown_tuple_axes() {
+        let path = Path::new("policy.yaml");
+        let invalid_cases = [
+            (
+                r#"
+llm:
+  identity_tuple:
+    providers:
+      - "openai"
+"#,
+                "unknown field `identity_tuple`",
+            ),
+            (
+                r#"
+trace:
+  identity_tuple:
+    provider: "openai"
+"#,
+                "unknown field `trace`",
+            ),
+            (
+                r#"
+llm:
+  constraints:
+    clients:
+      - "codex"
+"#,
+                "unknown field `clients`",
+            ),
+        ];
+
+        for (raw, expected_fragment) in invalid_cases {
+            let err = parse_policy_patch_yaml(path, raw)
+                .expect_err("invalid tuple-policy roots should fail validation");
+            assert!(
+                err.to_string().contains(expected_fragment),
+                "expected `{expected_fragment}` in error, got: {err}"
+            );
+        }
+    }
 }

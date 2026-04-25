@@ -1,0 +1,2 @@
+# Keep Markdown docs byte-stable across platforms for doc-lock tests.
+*.md text eol=lf

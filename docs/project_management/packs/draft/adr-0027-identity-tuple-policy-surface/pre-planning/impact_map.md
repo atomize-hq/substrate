@@ -55,6 +55,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/reference/policy/contract.md`
 - `docs/reference/policy/README.md`
 - `crates/shell/src/execution/policy_cmd.rs`
+- `crates/shell/src/execution/policy_model.rs`
 - `crates/shell/src/builtins/world_gateway.rs`
 - `crates/shell/tests/world_gateway.rs`
 - `crates/broker/src/policy/tests.rs`
