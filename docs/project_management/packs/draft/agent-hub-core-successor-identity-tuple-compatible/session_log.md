@@ -129,3 +129,7 @@
 ## END — 2026-04-25T01:35:24Z — test — AHCSITC0-test
 - HEAD: `c8d7c9488066305762d8d4c000c3f3835c0c3207`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/logs/AHCSITC0/test/last_message.md`
+
+## START — 2026-04-25T01:35:24Z — integration — AHCSITC0-integ
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible" TASK_ID="AHCSITC0-integ" LAUNCH_CODEX=1`
