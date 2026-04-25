@@ -241,3 +241,17 @@
 ## START — 2026-04-25T11:23:11Z — checkpoint — CP2-ci-checkpoint
 - Dispatch:
   - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible" TASK_ID="CP2-ci-checkpoint"`
+
+## END — 2026-04-25T11:27:39Z — checkpoint — CP2-ci-checkpoint
+- Candidate SHA: `c6466f0cc2eeed9f9c62f285ea82ad8d41313452`
+- Advisory CI audit:
+  - `scripts/ci-audit/ci_audit.sh --ledger-path "/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/logs/AHCSITC3/ci-audit/ledger.jsonl" --kind ci-testing --orch-branch "feat/agent-hub-core-successor-identity-tuple-compatible" --head-sha "c6466f0cc2eeed9f9c62f285ea82ad8d41313452"` → `RECOMMEND=run` (`REASON=changes_since_last_green`)
+- Compile parity:
+  - `make ci-compile-parity CI_WORKFLOW_REF="feat/agent-hub-core-successor-identity-tuple-compatible" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="c6466f0cc2eeed9f9c62f285ea82ad8d41313452"` → `RUN_ID=24929777193` → `RUN_URL=https://github.com/atomize-hq/substrate/actions/runs/24929777193` → `CONCLUSION=success`
+  - Passed OSes: `macos-14,ubuntu-24.04,windows-2022`
+  - Failed OSes: `NONE`
+  - Failed jobs: `NONE`
+- CI audit ledger:
+  - `scripts/ci-audit/ci_audit_record.sh --ledger-path "/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/logs/AHCSITC3/ci-audit/ledger.jsonl" --kind ci-testing --mode compile-parity --orch-branch "feat/agent-hub-core-successor-identity-tuple-compatible" --run-id "24929777193" --tested-sha "c6466f0cc2eeed9f9c62f285ea82ad8d41313452"` → `RECORDED=1`
+- Feature smoke:
+  - Not dispatched. `pre-planning/ci_checkpoint_plan.md` and `CP2-ci-checkpoint.md` keep `feature_smoke=false` for this checkpoint, including Windows.
