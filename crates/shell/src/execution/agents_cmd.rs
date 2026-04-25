@@ -16,6 +16,7 @@ use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use substrate_broker::Policy;
 use substrate_common::paths as substrate_paths;
 use substrate_common::{AgentEvent, PlacementExecution};
@@ -723,6 +724,13 @@ struct DoctorReportJson<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     orchestrator: Option<DoctorOrchestratorJson<'a>>,
     checks: Vec<DoctorCheckJson>,
+    #[serde(skip)]
+    world_boundary_exit_code: Option<i32>,
+}
+
+enum RequiredWorldBoundaryState {
+    Ready,
+    Failed { reason: String, exit_code: i32 },
 }
 
 fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
@@ -802,6 +810,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 fail_closed: true,
                 orchestrator: None,
                 checks,
+                world_boundary_exit_code: None,
             });
         }
     };
@@ -817,6 +826,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
             fail_closed: true,
             orchestrator: Some(orchestrator),
             checks,
+            world_boundary_exit_code: None,
         });
     }
     checks.push(DoctorCheckJson {
@@ -826,13 +836,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
     });
 
     if enabled_world_member_exists(&inventory, &effective_config) {
-        if effective_config.world.enabled {
-            checks.push(DoctorCheckJson {
-                check: "world_boundary".to_string(),
-                status: "pass".to_string(),
-                reason: None,
-            });
-        } else {
+        if !effective_config.world.enabled {
             checks.push(DoctorCheckJson {
                 check: "world_boundary".to_string(),
                 status: "fail".to_string(),
@@ -846,7 +850,32 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 fail_closed: true,
                 orchestrator: Some(orchestrator),
                 checks,
+                world_boundary_exit_code: Some(3),
             });
+        }
+
+        match verify_required_world_boundary(cli) {
+            RequiredWorldBoundaryState::Ready => {
+                checks.push(DoctorCheckJson {
+                    check: "world_boundary".to_string(),
+                    status: "pass".to_string(),
+                    reason: None,
+                });
+            }
+            RequiredWorldBoundaryState::Failed { reason, exit_code } => {
+                checks.push(DoctorCheckJson {
+                    check: "world_boundary".to_string(),
+                    status: "fail".to_string(),
+                    reason: Some(reason),
+                });
+                return Ok(DoctorReportJson {
+                    healthy: false,
+                    fail_closed: true,
+                    orchestrator: Some(orchestrator),
+                    checks,
+                    world_boundary_exit_code: Some(exit_code),
+                });
+            }
         }
     } else {
         checks.push(DoctorCheckJson {
@@ -861,6 +890,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
         fail_closed: false,
         orchestrator: Some(orchestrator),
         checks,
+        world_boundary_exit_code: None,
     })
 }
 
@@ -878,6 +908,138 @@ fn failed_doctor_report(
             status: "fail".to_string(),
             reason: Some(reason),
         }],
+        world_boundary_exit_code: None,
+    }
+}
+
+fn verify_required_world_boundary(cli: &Cli) -> RequiredWorldBoundaryState {
+    let exe = match env::current_exe() {
+        Ok(path) => path,
+        Err(err) => {
+            return RequiredWorldBoundaryState::Failed {
+                reason: format!(
+                    "failed to resolve the substrate executable for required world-boundary validation: {err}"
+                ),
+                exit_code: 3,
+            }
+        }
+    };
+
+    let mut command = Command::new(exe);
+    if cli.world {
+        command.arg("--world");
+    } else if cli.no_world {
+        command.arg("--no-world");
+    }
+
+    let output = match command.args(["world", "doctor", "--json"]).output() {
+        Ok(output) => output,
+        Err(err) => {
+            return RequiredWorldBoundaryState::Failed {
+                reason: format!(
+                    "failed to run `substrate world doctor --json` for required world-boundary validation: {err}"
+                ),
+                exit_code: 3,
+            }
+        }
+    };
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let value: serde_json::Value = match serde_json::from_slice(&output.stdout) {
+        Ok(value) => value,
+        Err(err) => {
+            let reason = if stderr.is_empty() {
+                format!(
+                    "required world-boundary validation returned invalid JSON from `substrate world doctor --json`: {err}"
+                )
+            } else {
+                format!(
+                    "required world-boundary validation returned invalid JSON from `substrate world doctor --json`: {err}; stderr: {stderr}"
+                )
+            };
+            return RequiredWorldBoundaryState::Failed {
+                reason,
+                exit_code: 3,
+            };
+        }
+    };
+
+    let world_status = value
+        .pointer("/world/status")
+        .and_then(serde_json::Value::as_str);
+    let ok = output.status.success()
+        && value
+            .get("ok")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(true);
+
+    if ok {
+        return RequiredWorldBoundaryState::Ready;
+    }
+
+    let exit_code = classify_world_boundary_exit_code(output.status.code(), world_status);
+    RequiredWorldBoundaryState::Failed {
+        reason: format_world_boundary_failure_reason(&value, world_status, &stderr, exit_code),
+        exit_code,
+    }
+}
+
+fn classify_world_boundary_exit_code(
+    process_exit_code: Option<i32>,
+    world_status: Option<&str>,
+) -> i32 {
+    match process_exit_code {
+        Some(3) => 3,
+        Some(4) => 4,
+        _ => match world_status {
+            Some("unreachable") => 3,
+            Some("not_provisioned") | Some("missing_prereqs") | Some("unsupported") => 4,
+            _ => 3,
+        },
+    }
+}
+
+fn format_world_boundary_failure_reason(
+    value: &serde_json::Value,
+    world_status: Option<&str>,
+    stderr: &str,
+    exit_code: i32,
+) -> String {
+    let summary = match exit_code {
+        4 => "required world-scoped member posture is unsupported or not provisioned on this platform/build",
+        _ => "required world-scoped member boundary is unavailable",
+    };
+
+    let detail = value
+        .get("world_disable_reason")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| {
+            value
+                .pointer("/host/world_socket/probe_error")
+                .and_then(serde_json::Value::as_str)
+        })
+        .or_else(|| {
+            value
+                .pointer("/host/error")
+                .and_then(serde_json::Value::as_str)
+        })
+        .or_else(|| {
+            value
+                .pointer("/world/landlock/reason")
+                .and_then(serde_json::Value::as_str)
+        })
+        .or_else(|| {
+            value
+                .pointer("/world/world_fs_strategy/probe/failure_reason")
+                .and_then(serde_json::Value::as_str)
+        })
+        .or_else(|| (!stderr.is_empty()).then_some(stderr));
+
+    match (world_status, detail) {
+        (Some(status), Some(detail)) => format!("{summary} (world.status={status}): {detail}"),
+        (Some(status), None) => format!("{summary} (world.status={status})"),
+        (None, Some(detail)) => format!("{summary}: {detail}"),
+        (None, None) => summary.to_string(),
     }
 }
 
@@ -966,7 +1128,7 @@ fn doctor_exit_code(report: &DoctorReportJson<'_>) -> i32 {
 
     match failed_check {
         "policy_allowlist" => 5,
-        "world_boundary" => 3,
+        "world_boundary" => report.world_boundary_exit_code.unwrap_or(3),
         "inventory_scan" | "orchestrator_selection" => 2,
         _ => 1,
     }
