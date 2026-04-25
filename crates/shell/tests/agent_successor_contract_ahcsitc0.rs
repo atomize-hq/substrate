@@ -3,7 +3,7 @@
 mod common;
 
 use common::{substrate_shell_driver, temp_dir};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Output;
@@ -70,6 +70,16 @@ impl AgentSuccessorFixture {
         let agents_dir = self.substrate_home.join("agents");
         fs::create_dir_all(&agents_dir).expect("failed to create agents directory");
         fs::write(agents_dir.join(file_name), contents).expect("failed to write agent file");
+    }
+
+    fn write_trace_events(&self, events: &[Value]) {
+        let trace = self.substrate_home.join("trace.jsonl");
+        let body = events
+            .iter()
+            .map(|event| serde_json::to_string(event).expect("serialize trace event"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(trace, format!("{body}\n")).expect("failed to write trace.jsonl");
     }
 
     fn run(&self, args: &[&str]) -> Output {
@@ -458,5 +468,448 @@ fn docs_usage_and_repo_boundary_match_the_successor_contract() {
     assert!(
         !repo_root().join("crates/agent-hub").exists(),
         "AHCSITC0 must not introduce a new crates/agent-hub package"
+    );
+}
+
+#[test]
+fn agent_doctor_fails_closed_on_world_member_allowlist_before_world_boundary() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"world:
+  enabled: false
+agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"id: "ahcsitc2-policy"
+name: "ahcsitc2-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: true
+  write:
+    enabled: true
+
+agents:
+  allowed_backends:
+    - "cli:claude_code"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "host", true, true, true),
+    );
+    fixture.write_agent_file(
+        "codex.yaml",
+        &cli_agent_file("codex", "world", true, false, true),
+    );
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert_eq!(
+        output.status.code(),
+        Some(5),
+        "doctor should fail on the member backend allowlist before world boundary checks: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    assert_eq!(json.get("healthy").and_then(Value::as_bool), Some(false));
+    assert_eq!(json.get("fail_closed").and_then(Value::as_bool), Some(true));
+
+    let checks = json["checks"]
+        .as_array()
+        .expect("checks should be an array");
+    let observed: Vec<&str> = checks
+        .iter()
+        .map(|check| {
+            check
+                .pointer("/check")
+                .and_then(Value::as_str)
+                .expect("check id should be a string")
+        })
+        .collect();
+    assert_eq!(
+        observed,
+        vec!["inventory_scan", "orchestrator_selection", "policy_allowlist"],
+        "fail-closed routing must stop at the member backend allowlist before world_boundary: {json}"
+    );
+    assert_eq!(
+        checks[2].pointer("/reason").and_then(Value::as_str),
+        Some(
+            "required world-scoped member backend 'cli:codex' is not allowlisted by effective policy agents.allowed_backends"
+        ),
+        "member dispatch must be gated by the derived backend_id before world boundary handling: {json}"
+    );
+}
+
+#[test]
+fn agent_doctor_does_not_treat_trace_records_as_control_plane_authorization() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: ""
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"id: "ahcsitc2-policy"
+name: "ahcsitc2-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: true
+  write:
+    enabled: true
+
+agents:
+  allowed_backends:
+    - "cli:claude_code"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#,
+    );
+    fixture.write_trace_events(&[json!({
+        "ts": "2026-04-05T00:00:00Z",
+        "event_type": "agent_event",
+        "session_id": "ses_trace_only",
+        "component": "agent-hub",
+        "kind": "status",
+        "agent_id": "claude_code",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "backend_id": "cli:claude_code",
+        "client": "claude_code",
+        "router": "agent_hub",
+        "protocol": "uaa.agent.session",
+        "data": { "message": "trace says the orchestrator is healthy" }
+    })]);
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "trace-only observation must not authorize orchestrator selection: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    assert_eq!(json.get("healthy").and_then(Value::as_bool), Some(false));
+    let checks = json["checks"]
+        .as_array()
+        .expect("checks should be an array");
+    assert_eq!(
+        checks[1].pointer("/check").and_then(Value::as_str),
+        Some("orchestrator_selection"),
+        "doctor must still fail at orchestrator selection even when trace records look healthy: {json}"
+    );
+    assert_eq!(
+        checks[1].pointer("/status").and_then(Value::as_str),
+        Some("fail")
+    );
+    assert_eq!(
+        checks[1].pointer("/reason").and_then(Value::as_str),
+        Some("agents.hub.orchestrator_agent_id must select an orchestrator"),
+        "event-plane or trace-plane records must not back-authorize control-plane actions: {json}"
+    );
+}
+
+#[test]
+fn agent_status_uses_top_level_tuple_fields_for_pure_and_nested_records() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"id: "ahcsitc2-policy"
+name: "ahcsitc2-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: true
+  write:
+    enabled: true
+
+agents:
+  allowed_backends:
+    - "cli:claude_code"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "world", true, true, true),
+    );
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "pure-agent session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "nested gateway request completed" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status should stay readable with tuple-compatible trace records: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        sessions.len(),
+        1,
+        "pure-agent records must still project into the status session surface from top-level tuple fields: {json}"
+    );
+    let session = &sessions[0];
+    assert_eq!(
+        session.pointer("/client").and_then(Value::as_str),
+        Some("claude_code")
+    );
+    assert_eq!(
+        session.pointer("/router").and_then(Value::as_str),
+        Some("agent_hub")
+    );
+    assert_eq!(
+        session.pointer("/protocol").and_then(Value::as_str),
+        Some("uaa.agent.session")
+    );
+    assert_eq!(
+        session.pointer("/world_id").and_then(Value::as_str),
+        Some("wld_active_0002"),
+        "world-scoped pure-agent records must publish world_id at the top level: {json}"
+    );
+    assert_eq!(
+        session.pointer("/world_generation").and_then(Value::as_u64),
+        Some(7),
+        "world_generation must stay top-level on world-scoped pure-agent records: {json}"
+    );
+    assert!(
+        session.get("provider").is_none() && session.get("auth_authority").is_none(),
+        "pure-agent status sessions must omit nested gateway tuple fields: {session}"
+    );
+
+    let nested = json["nested_llm_records"]
+        .as_array()
+        .expect("nested_llm_records should be an array");
+    assert_eq!(
+        nested.len(),
+        1,
+        "nested gateway-backed records must remain distinct from pure-agent session rows: {json}"
+    );
+    let record = &nested[0];
+    assert_eq!(
+        record.pointer("/client").and_then(Value::as_str),
+        Some("claude_code")
+    );
+    assert_eq!(
+        record.pointer("/router").and_then(Value::as_str),
+        Some("substrate_gateway")
+    );
+    assert_eq!(
+        record.pointer("/protocol").and_then(Value::as_str),
+        Some("openai.responses")
+    );
+    assert_eq!(
+        record.pointer("/provider").and_then(Value::as_str),
+        Some("openai")
+    );
+    assert_eq!(
+        record.pointer("/auth_authority").and_then(Value::as_str),
+        Some("codex_subscription")
+    );
+    assert!(
+        record.get("world_id").is_none() && record.get("world_generation").is_none(),
+        "nested gateway-backed records must omit world scope fields: {record}"
+    );
+}
+
+#[test]
+fn nested_gateway_policy_does_not_inherit_agent_hub_success_by_implication() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+llm:
+  enabled: true
+  gateway:
+    enabled: true
+  routing:
+    default_backend: cli:codex
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"id: "ahcsitc2-policy"
+name: "ahcsitc2-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: true
+  write:
+    enabled: true
+
+llm:
+  allowed_backends:
+    - "api:openai"
+
+agents:
+  allowed_backends:
+    - "cli:claude_code"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "host", true, true, true),
+    );
+    fixture.write_agent_file(
+        "codex.yaml",
+        &cli_agent_file("codex", "host", true, false, true),
+    );
+
+    let doctor = fixture.run(&["agent", "doctor", "--json"]);
+    assert!(
+        doctor.status.success(),
+        "agent doctor must succeed for the host-scoped orchestrator fixture: {doctor:?}"
+    );
+    let doctor_json = parse_json_output(&doctor);
+    assert_eq!(
+        doctor_json.get("healthy").and_then(Value::as_bool),
+        Some(true)
+    );
+
+    let missing_socket = fixture.workspace_root.join("missing-world.sock");
+    let output = fixture
+        .command()
+        .current_dir(&fixture.workspace_root)
+        .env_remove("SUBSTRATE_OVERRIDE_WORLD")
+        .env("SUBSTRATE_WORLD_ENABLED", "1")
+        .env("SUBSTRATE_WORLD", "enabled")
+        .env("SUBSTRATE_WORLD_SOCKET", &missing_socket)
+        .args(["world", "gateway", "status"])
+        .output()
+        .expect("failed to run world gateway status");
+
+    assert_eq!(
+        output.status.code(),
+        Some(5),
+        "nested gateway approval must remain an independent policy surface after agent-hub success: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cli:codex is not allowlisted by effective policy llm.allowed_backends"),
+        "nested gateway denial must come from llm.allowed_backends, not implied success: {stderr}"
+    );
+    assert!(
+        !stderr.contains("required gateway/world component unavailable"),
+        "gateway allowlist denial must happen before socket/runtime checks: {stderr}"
     );
 }
