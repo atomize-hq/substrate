@@ -306,6 +306,38 @@ fn assert_malformed_nested_parent_correlation_failure(
     }
 }
 
+fn assert_malformed_nested_required_fields_failure(
+    output: &Output,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    run_id: &str,
+    missing_fields: &str,
+) {
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "status should fail closed on malformed selected nested tuple fields: {output:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).trim().is_empty(),
+        "malformed selected nested tuple field failures should not print stdout: {output:?}"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for needle in [
+        "malformed nested tuple on selected status surface",
+        &format!("agent_id={agent_id}"),
+        &format!("orchestration_session_id={orchestration_session_id}"),
+        &format!("run_id={run_id}"),
+        &format!("missing_fields={missing_fields}"),
+    ] {
+        assert!(
+            stderr.contains(needle),
+            "stderr must contain `{needle}` for malformed selected nested tuple field failures: {stderr}"
+        );
+    }
+}
+
 fn assert_doctor_fails_at_orchestrator_selection(output: &Output, expected_reason: &str) {
     assert_eq!(
         output.status.code(),
@@ -2316,6 +2348,164 @@ fn agent_status_fails_closed_when_selected_nested_row_has_unknown_parent_run_id(
 }
 
 #[test]
+fn agent_status_fails_closed_when_selected_nested_row_omits_provider() {
+    let fixture = AgentSuccessorFixture::new();
+    seed_nested_gateway_status_fixture(&fixture);
+    let orchestration_session_id = "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12";
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "pure-agent session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "nested gateway request completed" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert_malformed_nested_required_fields_failure(
+        &output,
+        "claude_code",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+        "provider",
+    );
+}
+
+#[test]
+fn agent_status_fails_closed_when_selected_nested_row_omits_auth_authority() {
+    let fixture = AgentSuccessorFixture::new();
+    seed_nested_gateway_status_fixture(&fixture);
+    let orchestration_session_id = "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12";
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "pure-agent session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "data": { "summary": "nested gateway request completed" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert_malformed_nested_required_fields_failure(
+        &output,
+        "claude_code",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+        "auth_authority",
+    );
+}
+
+#[test]
+fn agent_status_fails_closed_when_selected_nested_row_omits_provider_and_auth_authority() {
+    let fixture = AgentSuccessorFixture::new();
+    seed_nested_gateway_status_fixture(&fixture);
+    let orchestration_session_id = "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12";
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "pure-agent session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "data": { "summary": "nested gateway request completed" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert_malformed_nested_required_fields_failure(
+        &output,
+        "claude_code",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+        "provider,auth_authority",
+    );
+}
+
+#[test]
 fn agent_status_ignores_malformed_nested_rows_when_parent_surface_is_filtered_out() {
     let fixture = AgentSuccessorFixture::new();
     seed_nested_gateway_status_fixture(&fixture);
@@ -2351,8 +2541,6 @@ fn agent_status_ignores_malformed_nested_rows_when_parent_surface_is_filtered_ou
             "client": "claude_code",
             "router": "substrate_gateway",
             "protocol": "openai.responses",
-            "provider": "openai",
-            "auth_authority": "codex_subscription",
             "data": { "summary": "nested gateway request completed" }
         }),
     ]);

@@ -366,9 +366,13 @@ struct SessionProjectionSource {
 
 #[derive(Clone)]
 struct NestedProjection {
-    record: NestedLlmRecordJson,
     sort_key: (String, String, String),
     source: NestedProjectionSource,
+    backend_id: String,
+    client: String,
+    protocol: String,
+    provider: Option<String>,
+    auth_authority: Option<String>,
 }
 
 #[derive(Clone)]
@@ -536,7 +540,34 @@ fn build_status_report<'a>(
         let parent_run_id = projection.source.parent_run_id.as_deref();
         let parent_run_matches_selected = parent_run_id == Some(selected_parent_run_id.as_str());
         if parent_run_matches_selected {
-            filtered_nested.push(projection.record);
+            let missing_fields = missing_required_nested_fields(&projection);
+            if !missing_fields.is_empty() {
+                return Err(config_model::user_error(format!(
+                    "malformed nested tuple on selected status surface: agent_id={} orchestration_session_id={} run_id={} missing_fields={} requires provider and auth_authority on selected nested substrate_gateway status rows",
+                    projection.source.agent_id,
+                    projection.source.orchestration_session_id,
+                    projection.source.run_id,
+                    missing_fields.join(","),
+                )));
+            }
+
+            filtered_nested.push(NestedLlmRecordJson {
+                parent: NestedParentJson {
+                    orchestration_session_id: projection.source.orchestration_session_id.clone(),
+                    agent_id: projection.source.agent_id.clone(),
+                },
+                run_id: projection.source.run_id.clone(),
+                backend_id: projection.backend_id,
+                client: projection.client,
+                router: NESTED_ROUTER.to_string(),
+                provider: projection
+                    .provider
+                    .expect("missing required nested provider already validated"),
+                auth_authority: projection
+                    .auth_authority
+                    .expect("missing required nested auth_authority already validated"),
+                protocol: projection.protocol,
+            });
             continue;
         }
 
@@ -704,8 +735,6 @@ fn nested_projection(
     if tuple.router != NESTED_ROUTER {
         return None;
     }
-    let provider = tuple.provider.clone()?;
-    let auth_authority = tuple.auth_authority.clone()?;
     let sort_key = (
         event.orchestration_session_id.clone(),
         event.agent_id.clone(),
@@ -713,19 +742,6 @@ fn nested_projection(
     );
 
     Some(NestedProjection {
-        record: NestedLlmRecordJson {
-            parent: NestedParentJson {
-                orchestration_session_id: event.orchestration_session_id.clone(),
-                agent_id: event.agent_id.clone(),
-            },
-            run_id: event.run_id.clone(),
-            backend_id: entry.derived_backend_id(),
-            client: event.agent_id.clone(),
-            router: NESTED_ROUTER.to_string(),
-            provider,
-            auth_authority,
-            protocol: tuple.protocol.clone(),
-        },
         sort_key,
         source: NestedProjectionSource {
             orchestration_session_id: event.orchestration_session_id.clone(),
@@ -733,7 +749,23 @@ fn nested_projection(
             run_id: event.run_id.clone(),
             parent_run_id: event.parent_run_id.clone(),
         },
+        backend_id: entry.derived_backend_id(),
+        client: event.agent_id.clone(),
+        protocol: tuple.protocol.clone(),
+        provider: tuple.provider.clone(),
+        auth_authority: tuple.auth_authority.clone(),
     })
+}
+
+fn missing_required_nested_fields(projection: &NestedProjection) -> Vec<&'static str> {
+    let mut missing_fields = Vec::new();
+    if projection.provider.is_none() {
+        missing_fields.push("provider");
+    }
+    if projection.auth_authority.is_none() {
+        missing_fields.push("auth_authority");
+    }
+    missing_fields
 }
 
 fn format_invalid_parent_run_id(parent_run_id: Option<&str>) -> String {
