@@ -11,6 +11,27 @@ use tempfile::TempDir;
 
 const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
 
+#[derive(Clone, Copy)]
+enum CapabilityOverride<'a> {
+    ForceFalse(&'a str),
+    Omit(&'a str),
+}
+
+#[derive(Clone, Copy)]
+struct SessionContractOptions<'a> {
+    protocol: Option<&'a str>,
+    capability_override: Option<CapabilityOverride<'a>>,
+}
+
+impl SessionContractOptions<'_> {
+    const fn default() -> Self {
+        Self {
+            protocol: Some(PURE_AGENT_PROTOCOL),
+            capability_override: None,
+        }
+    }
+}
+
 struct AgentSuccessorFixture {
     _temp: TempDir,
     home: PathBuf,
@@ -160,32 +181,21 @@ fn cli_agent_file(
         llm,
         mcp_client,
         enabled,
-        Some(PURE_AGENT_PROTOCOL),
-        None,
-        None,
+        SessionContractOptions::default(),
     )
 }
 
-fn cli_agent_file_with_session_contract(
+fn cli_agent_file_with_session_contract<'a>(
     agent_id: &str,
     scope: &str,
     llm: bool,
     mcp_client: bool,
     enabled: bool,
-    protocol: Option<&str>,
-    false_capability: Option<&str>,
-    omitted_capability: Option<&str>,
+    options: SessionContractOptions<'a>,
 ) -> String {
-    assert!(
-        false_capability.is_none()
-            || omitted_capability.is_none()
-            || false_capability != omitted_capability,
-        "a capability cannot be both explicit-false and omitted"
-    );
-
     let mut body =
         format!("version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: {enabled}\n");
-    if let Some(protocol) = protocol {
+    if let Some(protocol) = options.protocol {
         body.push_str(&format!("  protocol: {protocol}\n"));
     }
     body.push_str(&format!(
@@ -199,10 +209,17 @@ fn cli_agent_file_with_session_contract(
         "status_snapshot",
         "event_stream",
     ] {
-        if omitted_capability == Some(capability) {
+        if matches!(
+            options.capability_override,
+            Some(CapabilityOverride::Omit(omitted)) if omitted == capability
+        ) {
             continue;
         }
-        let value = false_capability != Some(capability);
+        let value = !matches!(
+            options.capability_override,
+            Some(CapabilityOverride::ForceFalse(false_capability))
+                if false_capability == capability
+        );
         body.push_str(&format!("    {capability}: {value}\n"));
     }
     body.push_str(&format!("    llm: {llm}\n    mcp_client: {mcp_client}\n"));
@@ -257,6 +274,38 @@ fn assert_malformed_world_identity_failure(
     }
 }
 
+fn assert_malformed_nested_parent_correlation_failure(
+    output: &Output,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    run_id: &str,
+    parent_run_id: &str,
+) {
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "status should fail closed on malformed nested parent correlation: {output:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).trim().is_empty(),
+        "malformed nested parent correlation failures should not print stdout: {output:?}"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for needle in [
+        "malformed nested parent correlation on selected status surface",
+        &format!("agent_id={agent_id}"),
+        &format!("orchestration_session_id={orchestration_session_id}"),
+        &format!("run_id={run_id}"),
+        &format!("parent_run_id={parent_run_id}"),
+    ] {
+        assert!(
+            stderr.contains(needle),
+            "stderr must contain `{needle}` for malformed nested parent correlation failures: {stderr}"
+        );
+    }
+}
+
 fn assert_doctor_fails_at_orchestrator_selection(output: &Output, expected_reason: &str) {
     assert_eq!(
         output.status.code(),
@@ -305,6 +354,53 @@ fn find_session_by_agent<'a>(sessions: &'a [Value], agent_id: &str) -> &'a Value
         .iter()
         .find(|session| session.pointer("/agent_id").and_then(Value::as_str) == Some(agent_id))
         .unwrap_or_else(|| panic!("expected session row for agent `{agent_id}`"))
+}
+
+fn seed_nested_gateway_status_fixture(fixture: &AgentSuccessorFixture) {
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"id: "ahcsitc2-policy"
+name: "ahcsitc2-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: true
+  write:
+    enabled: true
+
+agents:
+  allowed_backends:
+    - "cli:claude_code"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "world", true, true, true),
+    );
 }
 
 #[test]
@@ -1195,9 +1291,10 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_missing() {
             true,
             true,
             true,
-            None,
-            None,
-            None,
+            SessionContractOptions {
+                protocol: None,
+                capability_override: None,
+            },
         ),
     );
     fixture.write_agent_file(
@@ -1225,9 +1322,10 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_wrong() {
             true,
             true,
             true,
-            Some("openai.responses"),
-            None,
-            None,
+            SessionContractOptions {
+                protocol: Some("openai.responses"),
+                capability_override: None,
+            },
         ),
     );
     fixture.write_agent_file(
@@ -1255,9 +1353,10 @@ fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_fals
             true,
             true,
             true,
-            Some(PURE_AGENT_PROTOCOL),
-            Some("event_stream"),
-            None,
+            SessionContractOptions {
+                protocol: Some(PURE_AGENT_PROTOCOL),
+                capability_override: Some(CapabilityOverride::ForceFalse("event_stream")),
+            },
         ),
     );
     fixture.write_agent_file(
@@ -1285,9 +1384,10 @@ fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_omit
             true,
             true,
             true,
-            Some(PURE_AGENT_PROTOCOL),
-            None,
-            Some("event_stream"),
+            SessionContractOptions {
+                protocol: Some(PURE_AGENT_PROTOCOL),
+                capability_override: Some(CapabilityOverride::Omit("event_stream")),
+            },
         ),
     );
     fixture.write_agent_file(
@@ -1950,6 +2050,339 @@ metadata: {}
     assert!(
         first_idx < second_idx,
         "text mode should sort nested rows by run_id rather than insertion order\nstdout: {stdout}"
+    );
+}
+
+#[test]
+fn agent_status_ignores_stale_nested_rows_from_historical_parent_runs() {
+    let fixture = AgentSuccessorFixture::new();
+    seed_nested_gateway_status_fixture(&fixture);
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0001",
+            "world_generation": 6,
+            "data": { "message": "older pure-agent session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "stale nested gateway request completed" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:02Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "newest pure-agent session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:03Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f16",
+            "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "current nested gateway request completed" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "status should ignore stale nested rows tied to historical pure-agent runs: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let nested = json["nested_llm_records"]
+        .as_array()
+        .expect("nested_llm_records should be an array");
+    assert_eq!(
+        nested.len(),
+        1,
+        "only nested rows for the winning selected parent run should remain: {json}"
+    );
+    assert_eq!(
+        nested[0].pointer("/run_id").and_then(Value::as_str),
+        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f16")
+    );
+}
+
+#[test]
+fn agent_status_fails_closed_when_selected_nested_row_omits_parent_run_id() {
+    let fixture = AgentSuccessorFixture::new();
+    seed_nested_gateway_status_fixture(&fixture);
+    let orchestration_session_id = "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12";
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "pure-agent session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "nested gateway request completed" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert_malformed_nested_parent_correlation_failure(
+        &output,
+        "claude_code",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+        "<missing>",
+    );
+}
+
+#[test]
+fn agent_status_fails_closed_when_selected_nested_row_has_empty_parent_run_id() {
+    let fixture = AgentSuccessorFixture::new();
+    seed_nested_gateway_status_fixture(&fixture);
+    let orchestration_session_id = "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12";
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "pure-agent session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "parent_run_id": "",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "nested gateway request completed" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert_malformed_nested_parent_correlation_failure(
+        &output,
+        "claude_code",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+        "<empty>",
+    );
+}
+
+#[test]
+fn agent_status_fails_closed_when_selected_nested_row_has_unknown_parent_run_id() {
+    let fixture = AgentSuccessorFixture::new();
+    seed_nested_gateway_status_fixture(&fixture);
+    let orchestration_session_id = "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12";
+    let bad_parent_run_id = "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6faa";
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "pure-agent session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "parent_run_id": bad_parent_run_id,
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "nested gateway request completed" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert_malformed_nested_parent_correlation_failure(
+        &output,
+        "claude_code",
+        orchestration_session_id,
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+        bad_parent_run_id,
+    );
+}
+
+#[test]
+fn agent_status_ignores_malformed_nested_rows_when_parent_surface_is_filtered_out() {
+    let fixture = AgentSuccessorFixture::new();
+    seed_nested_gateway_status_fixture(&fixture);
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_active_0002",
+            "world_generation": 7,
+            "data": { "message": "pure-agent session is live" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "nested gateway request completed" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--role", "member", "--json"]);
+    assert!(
+        output.status.success(),
+        "status should ignore malformed nested rows when the parent pure-agent row is filtered out: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    assert_eq!(
+        json.pointer("/role_filter").and_then(Value::as_str),
+        Some("member")
+    );
+    assert_eq!(
+        json["sessions"]
+            .as_array()
+            .expect("sessions should be an array")
+            .len(),
+        0,
+        "filtered-out parent rows should not remain in the selected output surface: {json}"
+    );
+    assert_eq!(
+        json["nested_llm_records"]
+            .as_array()
+            .expect("nested_llm_records should be an array")
+            .len(),
+        0,
+        "nested rows under filtered-out parents should be ignored rather than failing or emitting output: {json}"
     );
 }
 

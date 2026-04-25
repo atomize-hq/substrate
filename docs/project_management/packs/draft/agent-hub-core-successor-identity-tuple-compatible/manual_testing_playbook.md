@@ -260,6 +260,12 @@ jq -e '
 ' "$artifacts_dir/agent-status-nested.json"
 ```
 
+Expected behavior notes:
+
+- `substrate agent status --json` exits `0` only when nested trace records have valid selected-surface parent correlation.
+- Nested rows tied to older historical pure-agent runs for the same `(orchestration_session_id, agent_id)` pair may be absent from `nested_llm_records`; they are ignored as stale history.
+- If a nested row would otherwise be selected but its source `parent_run_id` is missing, empty, or unknown for that pair, `substrate agent status` fails closed instead of emitting partial output.
+
 ```bash
 substrate agent status | tee "$artifacts_dir/agent-status-nested.txt"
 ```

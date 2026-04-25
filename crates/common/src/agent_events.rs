@@ -78,6 +78,8 @@ pub struct AgentEvent {
     pub agent_id: String,
     pub orchestration_session_id: String,
     pub run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_run_id: Option<String>,
 
     // Attribution + correlation (optional)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -122,6 +124,8 @@ struct AgentEventDef {
     agent_id: String,
     orchestration_session_id: String,
     run_id: String,
+    #[serde(default)]
+    parent_run_id: Option<String>,
     #[serde(default)]
     backend_id: Option<String>,
     #[serde(default)]
@@ -192,6 +196,7 @@ impl AgentEvent {
             kind,
             orchestration_session_id: orchestration_session_id.into(),
             run_id: run_id.into(),
+            parent_run_id: None,
             data,
             backend_id: None,
             thread_id: None,
@@ -357,6 +362,7 @@ impl TryFrom<AgentEventDef> for AgentEvent {
             agent_id: value.agent_id,
             orchestration_session_id: value.orchestration_session_id,
             run_id: value.run_id,
+            parent_run_id: value.parent_run_id,
             backend_id: value.backend_id,
             thread_id: value.thread_id,
             role: value.role,

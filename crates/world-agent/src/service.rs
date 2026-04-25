@@ -1320,6 +1320,7 @@ impl WorldAgentService {
                                 kind: AgentEventKind::Status,
                                 orchestration_session_id: span_id.clone(),
                                 run_id: span_id.clone(),
+                                parent_run_id: None,
                                 backend_id: None,
                                 thread_id: None,
                                 role: None,

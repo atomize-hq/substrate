@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use substrate_common::agent_events::{AgentEvent, MessageEventKind};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use support::{binary_path, ensure_substrate_built, temp_dir};
@@ -375,4 +376,39 @@ fn agent_events_append_flattened_agent_event_records_with_join_keys() {
             "agent_event record must be flattened (no payload wrapper); got: {record:?}"
         );
     }
+}
+
+#[test]
+fn flattened_agent_event_records_retain_parent_run_id_when_present() {
+    let mut event = AgentEvent::message(
+        "nested-agent",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+        MessageEventKind::Status,
+        "nested gateway request completed",
+    );
+    event.parent_run_id = Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13".to_string());
+
+    let mut record = event.to_trace_record().expect("flatten agent event");
+    let obj = record
+        .as_object_mut()
+        .expect("agent event trace record should be an object");
+    obj.insert(
+        "event_type".to_string(),
+        Value::String("agent_event".to_string()),
+    );
+    obj.insert(
+        "session_id".to_string(),
+        Value::String("ses_agent_hub".to_string()),
+    );
+    obj.insert(
+        "component".to_string(),
+        Value::String("agent-hub".to_string()),
+    );
+
+    assert_eq!(
+        record.get("parent_run_id").and_then(Value::as_str),
+        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13"),
+        "flattened agent_event records must retain parent_run_id when present: {record:?}"
+    );
 }

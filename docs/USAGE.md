@@ -81,6 +81,7 @@ Operator-visible identity rules on these surfaces:
 - Pure-agent status rows omit `provider` and `auth_authority`.
 - `world_id` and `world_generation` render only for world-scoped pure-agent session rows.
 - Nested gateway-backed status rows stay separate from pure-agent rows and are the only rows that publish `provider` and `auth_authority`.
+- Nested gateway-backed status rows depend on valid trace-side `parent_run_id` correlation; stale historical nested rows are ignored, and malformed selected-surface rows fail closed.
 
 ## PTY Support
 

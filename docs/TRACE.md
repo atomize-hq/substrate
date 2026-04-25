@@ -159,12 +159,14 @@ Agent-hub successor telemetry keeps adapter identity separate from semantic iden
 - `protocol`: protocol family for the record, such as `uaa.agent.session`.
 - `provider`: nested gateway-backed provider identity only; pure-agent records omit it.
 - `auth_authority`: nested gateway-backed auth authority only; pure-agent records omit it.
+- `parent_run_id`: nested gateway-backed trace correlation only; points at the parent pure-agent `run_id`.
 - `world_id`: world boundary identifier for world-scoped pure-agent records and in-world telemetry families.
 - `world_generation`: generation counter for the active world-scoped pure-agent session or world-backed execution.
 
 Operator-facing omission rules:
 - Pure-agent records keep `client`, `router`, and `protocol`, and omit `provider` plus `auth_authority`.
 - Nested gateway-backed records may add `provider` and `auth_authority`, but they must omit `world_id` and `world_generation`.
+- Nested gateway-backed `agent_event` records carry `parent_run_id` in trace; status consumers ignore stale historical nested rows and fail closed only on malformed selected-surface parent correlation.
 - Host-scoped pure-agent records omit `world_id` and `world_generation`.
 
 ### Router-Derived Event Families (workflow router daemon; Phase 8)

@@ -368,6 +368,15 @@ struct SessionProjectionSource {
 struct NestedProjection {
     record: NestedLlmRecordJson,
     sort_key: (String, String, String),
+    source: NestedProjectionSource,
+}
+
+#[derive(Clone)]
+struct NestedProjectionSource {
+    orchestration_session_id: String,
+    agent_id: String,
+    run_id: String,
+    parent_run_id: Option<String>,
 }
 
 fn build_status_report<'a>(
@@ -396,6 +405,7 @@ fn build_status_report<'a>(
     let events = read_trace_agent_events()?;
     let mut sessions = BTreeMap::<(String, String), SessionProjection>::new();
     let mut nested = BTreeMap::<(String, String, String), NestedProjection>::new();
+    let mut historical_parent_runs = BTreeMap::<(String, String), BTreeSet<String>>::new();
 
     for event in events {
         let Some(entry) = context.inventory.get(&event.agent_id) else {
@@ -417,6 +427,10 @@ fn build_status_report<'a>(
         );
 
         if let Some(session_key) = pure_session_key(&event) {
+            historical_parent_runs
+                .entry(session_key.clone())
+                .or_default()
+                .insert(event.run_id.clone());
             let orchestration_session_id = session_key.0.clone();
             let world_id = event.world_id.clone();
             let world_generation = event.world_generation;
@@ -471,7 +485,7 @@ fn build_status_report<'a>(
         }
     }
 
-    let mut filtered_sessions = Vec::new();
+    let mut filtered_session_projections = Vec::new();
     for projection in sessions.into_values() {
         if !matches_scope(
             scope_from_label(projection.session.execution.scope),
@@ -494,28 +508,60 @@ fn build_status_report<'a>(
             )));
         }
 
-        filtered_sessions.push(projection.session);
+        filtered_session_projections.push(projection);
     }
 
-    let allowed_parents: BTreeSet<(String, String)> = filtered_sessions
+    let selected_parent_runs: BTreeMap<(String, String), String> = filtered_session_projections
         .iter()
-        .map(|session| {
+        .map(|projection| {
             (
-                session.orchestration_session_id.clone(),
-                session.agent_id.clone(),
+                (
+                    projection.source.orchestration_session_id.clone(),
+                    projection.source.agent_id.clone(),
+                ),
+                projection.source.run_id.clone(),
             )
         })
         .collect();
 
-    let filtered_nested: Vec<NestedLlmRecordJson> = nested
-        .into_values()
-        .filter(|projection| {
-            allowed_parents.contains(&(
-                projection.record.parent.orchestration_session_id.clone(),
-                projection.record.parent.agent_id.clone(),
-            ))
-        })
-        .map(|projection| projection.record)
+    let mut filtered_nested = Vec::new();
+    for projection in nested.into_values() {
+        let parent_key = (
+            projection.source.orchestration_session_id.clone(),
+            projection.source.agent_id.clone(),
+        );
+        let Some(selected_parent_run_id) = selected_parent_runs.get(&parent_key) else {
+            continue;
+        };
+        let parent_run_id = projection.source.parent_run_id.as_deref();
+        let parent_run_matches_selected = parent_run_id == Some(selected_parent_run_id.as_str());
+        if parent_run_matches_selected {
+            filtered_nested.push(projection.record);
+            continue;
+        }
+
+        let invalid_parent_run_id = format_invalid_parent_run_id(parent_run_id);
+        let historical_match = parent_run_id.is_some_and(|candidate| {
+            historical_parent_runs
+                .get(&parent_key)
+                .is_some_and(|runs| runs.contains(candidate))
+        });
+        if historical_match {
+            continue;
+        }
+
+        return Err(config_model::user_error(format!(
+            "malformed nested parent correlation on selected status surface: agent_id={} orchestration_session_id={} run_id={} parent_run_id={} requires parent_run_id to match the winning selected pure-agent run or a known historical pure-agent run for the same session",
+            projection.source.agent_id,
+            projection.source.orchestration_session_id,
+            projection.source.run_id,
+            invalid_parent_run_id,
+        )));
+    }
+
+    let filtered_sessions: Vec<StatusSessionJson> = filtered_session_projections
+        .into_iter()
+        .map(|projection| projection.session)
         .collect();
 
     Ok(StatusReportJson {
@@ -681,7 +727,21 @@ fn nested_projection(
             protocol: tuple.protocol.clone(),
         },
         sort_key,
+        source: NestedProjectionSource {
+            orchestration_session_id: event.orchestration_session_id.clone(),
+            agent_id: event.agent_id.clone(),
+            run_id: event.run_id.clone(),
+            parent_run_id: event.parent_run_id.clone(),
+        },
     })
+}
+
+fn format_invalid_parent_run_id(parent_run_id: Option<&str>) -> String {
+    match parent_run_id {
+        Some("") => "<empty>".to_string(),
+        Some(value) => value.to_string(),
+        None => "<missing>".to_string(),
+    }
 }
 
 fn scope_for_event(

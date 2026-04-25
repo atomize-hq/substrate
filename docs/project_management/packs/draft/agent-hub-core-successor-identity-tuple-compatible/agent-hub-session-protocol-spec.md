@@ -320,6 +320,10 @@ Field rules:
 - `client` remains the parent agent id.
 - `router` is exactly `substrate_gateway`.
 - `provider` and `auth_authority` are required.
+- The source nested trace/event record carries `parent_run_id`, but `NestedLlmStatusRecordV1` does not surface it publicly.
+- Status emits a nested row only when that source `parent_run_id` matches the winning selected pure-agent `run_id` for the same `(orchestration_session_id, agent_id)` pair.
+- Nested rows tied to older historical pure-agent runs for the same pair are ignored as stale history.
+- Missing, empty, or otherwise unknown `parent_run_id` on a nested row whose parent pure-agent row is selected causes `substrate agent status` to fail closed.
 - `world_id` and `world_generation` never appear on `NestedLlmStatusRecordV1`.
 
 ### `AgentStatusResponseV1`
