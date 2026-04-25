@@ -7,6 +7,7 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use substrate_broker::{validate_backend_id, Policy, WorldFsDenyEnforcement};
+use substrate_common::derive_agent_backend_id;
 use substrate_common::paths as substrate_paths;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -40,6 +41,15 @@ pub(crate) struct AgentConfigV1 {
 pub(crate) enum AgentConfigKind {
     Cli,
     Api,
+}
+
+impl AgentConfigKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Cli => "cli",
+            Self::Api => "api",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -82,6 +92,35 @@ pub(crate) struct AgentCapabilitiesV1 {
 pub(crate) struct AgentInventoryEntryV1 {
     pub path: PathBuf,
     pub file: AgentFileV1,
+}
+
+impl AgentFileV1 {
+    pub(crate) fn derived_backend_id(&self) -> String {
+        derive_agent_backend_id(self.config.kind.as_str(), &self.id)
+    }
+
+    pub(crate) fn effective_scope(
+        &self,
+        effective_config: &crate::execution::config_model::SubstrateConfig,
+    ) -> crate::execution::config_model::AgentExecutionScope {
+        self.config
+            .execution
+            .scope
+            .unwrap_or(effective_config.agents.defaults.execution.scope)
+    }
+}
+
+impl AgentInventoryEntryV1 {
+    pub(crate) fn derived_backend_id(&self) -> String {
+        self.file.derived_backend_id()
+    }
+
+    pub(crate) fn effective_scope(
+        &self,
+        effective_config: &crate::execution::config_model::SubstrateConfig,
+    ) -> crate::execution::config_model::AgentExecutionScope {
+        self.file.effective_scope(effective_config)
+    }
 }
 
 fn default_true() -> bool {
@@ -159,14 +198,8 @@ pub(crate) fn resolve_gateway_backend_inventory_entry(
         ))
     })?;
 
-    let derived_backend_id = format!(
-        "{}:{}",
-        agent_kind_as_backend_kind(entry.file.config.kind),
-        entry.file.id
-    );
-    if derived_backend_id != trimmed_backend_id
-        || backend_kind != agent_kind_as_backend_kind(entry.file.config.kind)
-    {
+    let derived_backend_id = entry.derived_backend_id();
+    if derived_backend_id != trimmed_backend_id || backend_kind != entry.file.config.kind.as_str() {
         return Err(config_model::user_error(format!(
             "gateway backend '{}' does not match effective inventory item '{}' in {}",
             trimmed_backend_id,
@@ -608,11 +641,4 @@ fn validate_overlay_subset(
         }
     }
     Ok(())
-}
-
-fn agent_kind_as_backend_kind(kind: AgentConfigKind) -> &'static str {
-    match kind {
-        AgentConfigKind::Cli => "cli",
-        AgentConfigKind::Api => "api",
-    }
 }

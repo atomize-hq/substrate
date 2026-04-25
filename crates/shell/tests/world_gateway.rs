@@ -735,11 +735,17 @@ fn assert_gateway_unavailable(args: &[&str], expected_fragment: &str) {
 
 fn assert_gateway_unavailable_json(args: &[&str]) {
     let mut cmd = substrate_shell_driver();
-    cmd.args(args)
+    let assert = cmd
+        .args(args)
         .assert()
         .code(4)
-        .stdout("{\"status\":\"unavailable\"}\n")
         .stderr(predicate::str::is_empty());
+    let stdout =
+        String::from_utf8(assert.get_output().stdout.clone()).expect("gateway status stdout utf8");
+    let parsed: JsonValue =
+        serde_json::from_str(stdout.trim()).expect("parse gateway unavailable json");
+    assert_eq!(parsed.pointer("/status"), Some(&json!("unavailable")));
+    assert_eq!(parsed.pointer("/client_wiring"), None);
 }
 
 fn gateway_socket_fixture() -> (TempDir, AgentSocket, std::path::PathBuf) {
@@ -1215,14 +1221,37 @@ fn world_gateway_disabled_state_skips_typed_runtime_bootstrap() {
     let (_temp, _socket, socket_path) = gateway_socket_fixture();
 
     let mut cmd = substrate_shell_driver();
-    cmd.env("SUBSTRATE_WORLD_ENABLED", "0")
+    let assert = cmd
+        .env("SUBSTRATE_WORLD_ENABLED", "0")
         .env("SUBSTRATE_WORLD", "disabled")
         .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
         .args(["world", "gateway", "status", "--json"])
         .assert()
         .code(4)
-        .stdout("{\"status\":\"unavailable\"}\n")
         .stderr(predicate::str::is_empty());
+
+    let stdout =
+        String::from_utf8(assert.get_output().stdout.clone()).expect("gateway status stdout utf8");
+    let parsed: JsonValue = serde_json::from_str(stdout.trim()).expect("parse gateway status json");
+
+    assert_eq!(parsed.pointer("/status"), Some(&json!("unavailable")));
+    assert_eq!(parsed.pointer("/client_wiring"), None);
+    assert_eq!(
+        parsed.pointer("/identity_tuple/router"),
+        Some(&json!("substrate_gateway"))
+    );
+    assert_eq!(
+        parsed.pointer("/identity_tuple/provider"),
+        Some(&json!("openai"))
+    );
+    assert_eq!(
+        parsed.pointer("/identity_tuple/auth_authority"),
+        Some(&json!("codex_subscription"))
+    );
+    assert_eq!(
+        parsed.pointer("/placement_posture/execution"),
+        Some(&json!("in_world"))
+    );
 }
 
 #[test]
