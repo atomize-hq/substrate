@@ -1324,6 +1324,7 @@ impl WorldAgentService {
                                 thread_id: None,
                                 role: None,
                                 world_id: Some(world.id.clone()),
+                                world_generation: None,
                                 cmd_id: None,
                                 span_id: Some(span_id.clone()),
                                 channel: None,

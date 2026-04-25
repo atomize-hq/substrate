@@ -393,10 +393,12 @@ fn build_status_report<'a>(
             let mut world_generation = None;
             if scope == AgentExecutionScope::World {
                 let maybe_world_id = event.world_id.clone();
-                let maybe_world_generation = event
-                    .data
-                    .get("world_generation")
-                    .and_then(serde_json::Value::as_u64);
+                let maybe_world_generation = event.world_generation.or_else(|| {
+                    event
+                        .data
+                        .get("world_generation")
+                        .and_then(serde_json::Value::as_u64)
+                });
                 if maybe_world_id.is_some() && maybe_world_generation.is_some() {
                     world_id = maybe_world_id;
                     world_generation = maybe_world_generation;

@@ -1,15 +1,20 @@
 use std::fmt;
+use std::io;
 use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::json;
 
 use crate::identity::{
-    validate_identity_tuple_and_placement_posture, IdentityTuple, PlacementPosture,
+    validate_identity_tuple_and_placement_posture, IdentityTuple, PlacementExecution,
+    PlacementPosture,
 };
 
 pub const AGENT_EVENT_CHANNEL_MAX_BYTES: usize = 64;
+const PURE_AGENT_ROUTER: &str = "agent_hub";
+const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
 
 /// Canonical set of agent event categories.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -84,6 +89,8 @@ pub struct AgentEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_generation: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cmd_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub span_id: Option<String>,
@@ -123,6 +130,8 @@ struct AgentEventDef {
     role: Option<String>,
     #[serde(default)]
     world_id: Option<String>,
+    #[serde(default)]
+    world_generation: Option<u64>,
     #[serde(default)]
     cmd_id: Option<String>,
     #[serde(default)]
@@ -178,6 +187,7 @@ impl AgentEvent {
             thread_id: None,
             role: None,
             world_id: None,
+            world_generation: None,
             cmd_id: None,
             span_id: None,
             channel: None,
@@ -253,6 +263,64 @@ impl AgentEvent {
             self.placement_posture.as_ref(),
         )
     }
+
+    pub fn set_pure_agent_telemetry_identity(&mut self, client: impl Into<String>) {
+        if self.identity_tuple.is_none() {
+            self.identity_tuple = Some(IdentityTuple {
+                client: client.into(),
+                router: PURE_AGENT_ROUTER.to_string(),
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                provider: None,
+                auth_authority: None,
+            });
+        }
+
+        if self.placement_posture.is_none() {
+            self.placement_posture = Some(PlacementPosture {
+                execution: if self.world_id.is_some() {
+                    PlacementExecution::InWorld
+                } else {
+                    PlacementExecution::HostOnly
+                },
+                host_to_world_bridge: None,
+            });
+        }
+    }
+
+    pub fn to_trace_record(&self) -> Result<serde_json::Value, serde_json::Error> {
+        let mut entry = serde_json::to_value(self)?;
+        let Some(obj) = entry.as_object_mut() else {
+            return Err(serde_json::Error::io(io::Error::other(
+                "agent event must serialize as a JSON object",
+            )));
+        };
+
+        if let Some(tuple) = self.identity_tuple.as_ref() {
+            obj.insert("client".to_string(), json!(tuple.client));
+            obj.insert("router".to_string(), json!(tuple.router));
+            obj.insert("protocol".to_string(), json!(tuple.protocol));
+
+            match tuple.provider.as_deref() {
+                Some(provider) => {
+                    obj.insert("provider".to_string(), json!(provider));
+                }
+                None => {
+                    obj.remove("provider");
+                }
+            }
+
+            match tuple.auth_authority.as_deref() {
+                Some(auth_authority) => {
+                    obj.insert("auth_authority".to_string(), json!(auth_authority));
+                }
+                None => {
+                    obj.remove("auth_authority");
+                }
+            }
+        }
+
+        Ok(entry)
+    }
 }
 
 impl TryFrom<AgentEventDef> for AgentEvent {
@@ -270,6 +338,7 @@ impl TryFrom<AgentEventDef> for AgentEvent {
             thread_id: value.thread_id,
             role: value.role,
             world_id: value.world_id,
+            world_generation: value.world_generation,
             cmd_id: value.cmd_id,
             span_id: value.span_id,
             channel: value.channel,
