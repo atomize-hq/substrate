@@ -203,3 +203,13 @@
   - `scripts/ci-audit/ci_audit_record.sh --ledger-path "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/logs/AHCSITC2/ci-audit/ledger.jsonl" --kind ci-testing --mode compile-parity --orch-branch "feat/agent-hub-core-successor-identity-tuple-compatible" --run-id "24922568397" --tested-sha "5d8644570b17903550c7992eb931aa9adbec048c"` → `RECORDED=1`
 - Feature smoke:
   - Not dispatched. `pre-planning/ci_checkpoint_plan.md` and `CP1-ci-checkpoint.md` keep `feature_smoke=false` for this checkpoint, including Windows.
+
+## START — 2026-04-25T04:33:55Z — integration-final — AHCSITC2-integ
+- Dispatch:
+  - `make triad-task-start-integ-final FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible" SLICE_ID="AHCSITC2" LAUNCH_CODEX=1`
+
+## END — 2026-04-25T04:43:26Z — integration-final — AHCSITC2-integ
+- HEAD: `61cdc894150b0d9bc197ce5bdf1b211b7e01bda0`
+- Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/logs/AHCSITC2/integ/last_message.md`
+- Merge result:
+  - `make triad-task-finish TASK_ID="AHCSITC2-integ"` → `MERGED_TO_ORCH=true`
