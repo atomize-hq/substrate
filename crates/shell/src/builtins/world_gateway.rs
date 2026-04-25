@@ -1051,13 +1051,15 @@ mod tests {
         });
 
         with_env_var("HOME", Some(home.as_os_str()), || {
-            with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
-                match resolve_macos_gateway_client_endpoint() {
-                    MacosGatewayClientEndpoint::Unix(path) => assert_eq!(path, sock),
-                    MacosGatewayClientEndpoint::Tcp { .. } => {
-                        panic!("expected unix endpoint when host socket exists")
+            with_env_var("SUBSTRATE_HOME", None, || {
+                with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
+                    match resolve_macos_gateway_client_endpoint() {
+                        MacosGatewayClientEndpoint::Unix(path) => assert_eq!(path, sock),
+                        MacosGatewayClientEndpoint::Tcp { .. } => {
+                            panic!("expected unix endpoint when host socket exists")
+                        }
                     }
-                }
+                })
             })
         });
 
@@ -1070,16 +1072,18 @@ mod tests {
         let home = temp.path();
 
         with_env_var("HOME", Some(home.as_os_str()), || {
-            with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
-                match resolve_macos_gateway_client_endpoint() {
-                    MacosGatewayClientEndpoint::Tcp { host, port } => {
-                        assert_eq!(host, "127.0.0.1");
-                        assert_eq!(port, 17788);
+            with_env_var("SUBSTRATE_HOME", None, || {
+                with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
+                    match resolve_macos_gateway_client_endpoint() {
+                        MacosGatewayClientEndpoint::Tcp { host, port } => {
+                            assert_eq!(host, "127.0.0.1");
+                            assert_eq!(port, 17788);
+                        }
+                        MacosGatewayClientEndpoint::Unix(path) => {
+                            panic!("expected tcp fallback when socket is missing, got {path:?}")
+                        }
                     }
-                    MacosGatewayClientEndpoint::Unix(path) => {
-                        panic!("expected tcp fallback when socket is missing, got {path:?}")
-                    }
-                }
+                })
             })
         });
     }
@@ -1116,16 +1120,18 @@ mod tests {
         std::fs::write(&sock, "").expect("create placeholder socket path");
 
         with_env_var("HOME", Some(home.as_os_str()), || {
-            with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
-                match resolve_macos_gateway_client_endpoint() {
-                    MacosGatewayClientEndpoint::Tcp { host, port } => {
-                        assert_eq!(host, "127.0.0.1");
-                        assert_eq!(port, 17788);
+            with_env_var("SUBSTRATE_HOME", None, || {
+                with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
+                    match resolve_macos_gateway_client_endpoint() {
+                        MacosGatewayClientEndpoint::Tcp { host, port } => {
+                            assert_eq!(host, "127.0.0.1");
+                            assert_eq!(port, 17788);
+                        }
+                        MacosGatewayClientEndpoint::Unix(path) => {
+                            panic!("expected tcp fallback when socket is stale, got {path:?}")
+                        }
                     }
-                    MacosGatewayClientEndpoint::Unix(path) => {
-                        panic!("expected tcp fallback when socket is stale, got {path:?}")
-                    }
-                }
+                })
             })
         });
     }
