@@ -80,11 +80,13 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/shell/src/execution/agent_inventory.rs`
 - `crates/shell/src/execution/agent_events.rs`
 - `crates/shell/src/execution/routing/telemetry.rs`
+- `crates/shell/src/repl/async_repl.rs`
 - `crates/common/src/agent_events.rs`
 - `crates/common/src/lib.rs`
 - `crates/common/tests/agent_hub_event_envelope_schema.rs`
 - `crates/trace/src/span.rs`
 - `crates/trace/src/tests.rs`
+- `crates/world-agent/src/service.rs`
 - `crates/agent-api-types/src/lib.rs`
 - `crates/agent-api-client/src/lib.rs`
 - `crates/agent-api-core/src/lib.rs`
