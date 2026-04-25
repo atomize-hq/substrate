@@ -39,7 +39,8 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - To compute pack-derived Work Lift v1 from this Touch Set: `make pm-lift-pack PACK="docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible"` (strict packs only).
 
 ### Create
-- None
+- `crates/common/src/agent_identity.rs`
+- `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
 
 ### Edit
 - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/impact_map.md`
@@ -80,12 +81,15 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/shell/src/execution/agent_events.rs`
 - `crates/shell/src/execution/routing/telemetry.rs`
 - `crates/common/src/agent_events.rs`
+- `crates/common/src/lib.rs`
 - `crates/common/tests/agent_hub_event_envelope_schema.rs`
 - `crates/trace/src/span.rs`
 - `crates/trace/src/tests.rs`
 - `crates/agent-api-types/src/lib.rs`
 - `crates/agent-api-client/src/lib.rs`
 - `crates/agent-api-core/src/lib.rs`
+- `crates/shell/src/execution/invocation/plan.rs`
+- `crates/shell/src/execution/mod.rs`
 - `crates/shell/tests/agents_validate.rs`
 - `crates/shell/tests/agent_hub_trace_persistence.rs`
 - `crates/shell/tests/repl_world_first_routing_v1.rs`
