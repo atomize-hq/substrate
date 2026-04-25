@@ -198,8 +198,8 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
   - Conflict: no
   - Resolution (explicit): ADR-0046 remains on gateway runtime integration; ADR-0044 keeps nested requests on the existing gateway policy path and does not widen gateway ownership.
 
-### Relevant Planning Packs (queued/unimplemented)
-- Planning Pack: `docs/project_management/packs/active/agent-hub-concurrent-execution-output-routing/`
+### Relevant Planning Packs (landed + live draft lineage)
+- Planning Pack: `docs/project_management/packs/implemented/agent-hub-concurrent-execution-output-routing/`
   - Overlap surfaces: agent-event envelope, `backend_id`, `world_id`, world restart alerts, and trace flattening.
   - Conflict: no
   - Resolution (explicit): that pack remains the transport and trace owner, while ADR-0044 adds successor hub inventory, status, doctor, and nested-record interpretation on top of the existing event plane.
@@ -214,15 +214,25 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
   - Conflict: no
   - Resolution (explicit): that pack owns tuple-policy semantics and deny publication; ADR-0044 only names the boundary that nested LLM requests reuse those gates.
 
-- Planning Pack: `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/`
-  - Overlap surfaces: gateway ownership boundary, typed lifecycle and status surfaces, and the rule that gateway ownership does not spread into a second control plane.
+- Planning Pack: `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership-fse/`
+  - Overlap surfaces: gateway ownership boundary, the seam-2 `status --json` / `client_wiring.*` owner line, typed runtime/status parity, and the rule that gateway ownership does not spread into a second control plane.
   - Conflict: no
-  - Resolution (explicit): ADR-0044 reuses gateway ownership for nested request routing and does not create new gateway operator commands or gateway-local config roots.
+  - Resolution (explicit): treat the `-fse` seam pack as the live planning lineage; ADR-0044 reuses its gateway ownership boundary for nested request routing and does not create new gateway operator commands or gateway-local config roots.
+
+- Planning Pack: `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/`
+  - Overlap surfaces: backward-compatible publication path for the gateway operator, policy-evaluation, runtime-parity, and status-schema contracts already mirrored out of the seam pack.
+  - Conflict: no
+  - Resolution (explicit): use this legacy pack path only when the published contract docs are the authority being cited; live planning lineage stays with `substrate-gateway-boundary-and-runtime-ownership-fse`.
 
 - Planning Pack: `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/`
   - Overlap surfaces: backend adapter identity, capability gating, and `backend_id` stability.
   - Conflict: no
   - Resolution (explicit): that pack remains the backend-adapter owner, while ADR-0044 keeps `backend_id` as the agent-side allowlist and attribution token derived from agent inventory.
+
+- Planning Pack: `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/`
+  - Overlap surfaces: inventory-backed backend selection, capability gating, adapter-driven runtime realization, and the nested-request execution path that later pure-agent sessions will call through.
+  - Conflict: no
+  - Resolution (explicit): ADR-0046 remains the live gateway-runtime follow-on. ADR-0044 depends on its stable backend-id and nested-request boundary, but does not implement the multi-adapter gateway runtime seam itself.
 
 - Planning Pack: `docs/project_management/_archived/next/agent_hub_core/`
   - Overlap surfaces: backend-id derivation, explicit orchestrator selection, shared-world reuse, and restart alert taxonomy.
@@ -234,6 +244,17 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
   - Conflict: yes
   - Resolution (explicit): treat the archived toolbox pack as historical evidence only; the live toolbox dependency chain is ADR-0045 plus ADR-0044.
 
+## Downstream sequence after this pack
+
+This pack closes the successor Agent Hub contract boundary only. Continuing toward fuller AI functionality still requires:
+
+- `docs/project_management/packs/draft/orchestration-toolbox-mcp/` or the eventual ADR-0045 successor pack directory
+  - Why next: ADR-0045 depends on ADR-0044’s canonical `substrate agent ...` namespace plus the locked orchestrator/session/back-end-id semantics from this pack before toolbox status/env/tool-call surfaces can land cleanly.
+- `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/`
+  - Why next: ADR-0046 is the adjacent runtime-realization seam that moves the integrated gateway beyond the current `cli:codex` proof path and makes nested multi-backend LLM execution real rather than merely contract-compatible.
+- Execution of the ADR-0042 and ADR-0043 packs before AHCSITC implementation work if those upstream semantic packs remain unlanded
+  - Why prerequisite: ADR-0044 consumes tuple meaning and tuple-policy gates; it does not redefine them.
+
 ## Follow-ups (explicit)
 
 - Decision Register entries required:
@@ -242,8 +263,5 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
   - `DR-AHCSITC-03` — lock nested LLM publication on a separate correlated record instead of mutating the base pure-agent record.
 
 - Spec updates required (if any):
-  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/spec_manifest.md` — replace the unresolved `crates/agent-hub` owner wording with the selected existing-crate owner set and note that no new crate lands in this feature boundary.
-  - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md` — align the command namespace, remove ambiguous modal wording, and replace the unresolved `crates/agent-hub` implementation path with the selected existing-crate owner set.
-  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md` — align toolbox dependency wording with the selected successor implementation placement and the canonical `substrate agent ...` namespace.
   - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/telemetry-spec.md` — pin the exact publication path for `world_generation` before execution work changes the envelope or trace flattening.
   - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md` — tighten any additional new test-file paths if execution work introduces dedicated command or session-protocol tests beyond the existing test files listed in the touch set.

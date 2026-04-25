@@ -23,10 +23,12 @@ Authoring standards:
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
   - `docs/contracts/substrate-gateway-operator-contract.md`
+  - `docs/contracts/substrate-gateway-backend-adapter-selection.md`
   - `docs/contracts/substrate-gateway-policy-evaluation.md`
   - `docs/contracts/substrate-gateway-runtime-parity.md`
   - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
   - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
+  - `docs/contracts/substrate-gateway-status-schema.md`
 
 ## Slice IDs (canonical)
 
@@ -60,7 +62,7 @@ Canonical slice ids selected for this feature:
     - the downstream implications across agent hub, shell, trace, gateway, and policy surfaces
     - the cross-pack conflict map against ADR-0017, ADR-0028, ADR-0040, ADR-0041, ADR-0042, and ADR-0043
   - Must define:
-    - the exact implementation paths under `crates/agent-hub`, `crates/shell`, `crates/trace`, and any `crates/agent-api-*` packages touched by the selected slices
+    - the exact implementation paths under `crates/shell`, `crates/common`, `crates/trace`, and any `crates/agent-api-*` packages touched by the selected slices, with no new `crates/agent-hub` crate introduced in this feature boundary
     - the exact docs and contract files that require synchronized updates
     - the explicit no-change boundary for config-file family creation and for gateway ownership outside nested request routing
 
@@ -372,4 +374,5 @@ This manifest does not select these feature-local doc classes:
 
 - `agent-hub-session-protocol-spec.md` needs to name the exact machine-readable status objects used by `substrate agent status` and every JSON variant exposed by the feature.
 - `telemetry-spec.md` needs to name the exact restart and alert event family that carries world-reuse and world-generation transitions.
-- `impact_map.md` needs to confirm whether the implementation reuses an existing `crates/agent-hub` package path or creates the successor module in a new exact crate path.
+- `impact_map.md` needs to keep the selected existing-crate owner set (`crates/shell`, `crates/common`, `crates/trace`, and `crates/agent-api-*`) synchronized with ADR-0044 and ADR-0045; this feature boundary does not create `crates/agent-hub`.
+- `impact_map.md` needs to carry the post-ADR-0044 continuation path explicitly: the ADR-0045 toolbox follow-on plus `gateway-backend-selection-runtime-integration-fse` for integrated multi-backend gateway realization.

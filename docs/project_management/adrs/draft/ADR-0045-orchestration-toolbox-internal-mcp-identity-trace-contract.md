@@ -250,7 +250,7 @@ Operator rule:
 ## Architecture Shape
 - Components:
   - `crates/agent-toolbox`: internal MCP server for toolbox reads and explanations.
-  - `crates/agent-hub`: supplies orchestrator identity, session state, and backend allowlist context.
+  - the ADR-0044 successor surfaces in `crates/shell`, `crates/common`, and `crates/agent-api-*`: supply orchestrator identity, session state, and backend allowlist context without requiring ADR-0044 to introduce a dedicated `crates/agent-hub` crate.
   - `crates/broker`: source of policy views and explainability.
   - `crates/trace`: canonical sink for toolbox call start/complete records.
   - `crates/substrate-graph`: query surface for graph-backed introspection where available.

@@ -146,7 +146,11 @@
   - edit: `26`
   - deprecate: `1`
   - crates touched: `6`
-- Intake lift result: failed because ADR-0044 uses an invalid Lift Vector field type for `risk.unknowns_high`.
+- Intake lift result:
+  - `lift_score = 16`
+  - `estimated_slices = 2`
+  - `confidence = high`
+  - ADR-0044 now passes `pm-lift-intake`; the prior `risk.unknowns_high` field-type blocker is resolved.
 
 ## Proposed Planning Workstreams
 
@@ -273,9 +277,8 @@
 ## Risks And Unknowns
 - High-churn seam: `backend_id`, `client`, `router`, `protocol`, `provider`, and `auth_authority` cross `contract.md`, `policy-spec.md`, `telemetry-spec.md`, and CLI JSON output.
 - High-churn seam: `world_id` and `world_generation` publication crosses protocol, telemetry, parity, and manual validation.
-- Open gap: ADR-0044 still carries `crates/agent-hub` wording, while the impact map locks this feature to existing crates under `crates/shell`, `crates/common`, `crates/trace`, and `crates/agent-api-*`.
 - Open gap: machine-readable output for `substrate agent list` and `substrate agent status` needs an explicit owner line in `contract.md`.
-- Open gap: `pm-lift-intake` fails until ADR-0044 changes `risk.unknowns_high` to `integer` or `null`.
+- Remaining downstream seam after this pack: toolbox and integrated gateway runtime follow-ons must consume the locked successor namespace and backend-id boundary without reopening ADR-0025 semantics.
 
 ## Evidence Links
 - Canonical pre-planning artifacts:
@@ -293,7 +296,7 @@
   - `logs/workstream-triage/pm_lift_pack.json`
 
 ## Follow-ups
-- Repair the ADR-0044 Lift Vector field type for `risk.unknowns_high`, then rerun `pm-lift-intake`.
-- Mirror the existing-crate implementation placement in ADR-0044 before full planning promotes slice specs.
 - Pin the machine-readable list and status output contract inside `contract.md` during `AHCSITC-PWS-contract`.
 - Pin the exact publication path for `world_generation` inside `telemetry-spec.md` during `AHCSITC-PWS-runtime_fail_early`.
+- Create or land the ADR-0045 successor toolbox pack after ADR-0044 planning closes so toolbox status/env/tool-call surfaces consume the locked `substrate agent ...` namespace and existing-crate Agent Hub owner set.
+- Continue `gateway-backend-selection-runtime-integration-fse` after ADR-0044 planning closes so nested multi-backend runtime realization catches up to the successor contract.

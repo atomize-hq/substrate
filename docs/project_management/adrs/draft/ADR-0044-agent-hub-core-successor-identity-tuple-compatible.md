@@ -31,6 +31,8 @@ This ADR supersedes the older backend-id-centric Agent Hub framing in ADR-0025 a
   - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - Follow-on orchestration surface:
+  - `docs/project_management/adrs/draft/ADR-0045-orchestration-toolbox-internal-mcp-identity-trace-contract.md`
+- Historical toolbox predecessor:
   - `docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md`
 
 ## Executive Summary (Operator)
@@ -230,10 +232,12 @@ Concrete example:
 
 ## Architecture Shape
 - Components:
-  - `crates/agent-hub` (new or successor module): registry, session router, and world-placement coordinator.
-  - `crates/shell`: operator-facing list/status/doctor presentation.
+  - `crates/shell`: operator-facing list/status/doctor presentation, host-scoped orchestrator evaluation, and successor command wiring.
+  - `crates/common`: shared command-surface projection helpers plus shared agent-event and identity-field helpers reused by shell and telemetry code.
+  - `crates/agent-api-types`, `crates/agent-api-client`, and `crates/agent-api-core`: capability, session-handle, and lifecycle contract surfaces for successor Agent Hub semantics.
   - `crates/trace`: canonical event and trace attribution sink.
   - `substrate_gateway`: nested LLM fulfillment boundary for agent-triggered model calls.
+  - A dedicated `crates/agent-hub` package is optional future refactor territory only; this ADR does not require or introduce one.
 
 - End-to-end flow:
   - Inputs:
@@ -264,6 +268,7 @@ Concrete example:
   - ADR-0027 remains the source of truth for config file families and fail-closed posture.
   - ADR-0017 and ADR-0028 remain the event-plane and trace prerequisites.
   - ADR-0040 and ADR-0041 remain the gateway ownership and adapter prerequisites.
+  - After this successor closes, ADR-0045 is the next agent-control-plane follow-on and ADR-0046 remains the adjacent gateway-runtime follow-on for nested request realization.
 
 ## Work Lift (discovery estimate)
 
@@ -294,7 +299,7 @@ Concrete example:
     "security_sensitive": true,
     "concurrency_or_ordering": true,
     "migration_or_backfill": false,
-    "unknowns_high": false
+    "unknowns_high": 0
   },
   "notes": "Docs-only successor ADR; no implementation or pack-file work is created by this change."
 }
