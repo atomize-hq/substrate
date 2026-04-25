@@ -524,6 +524,7 @@
       "acceptance_criteria": [
         "The checkpoint audit trail is recorded in session_log.md.",
         "Compile parity is green for the checkpoint checkout SHA.",
+        "Windows remains a compile-parity checkpoint lane only; no Windows feature-smoke run is required.",
         "The task only validates the checkpoint boundary defined by pre-planning/ci_checkpoint_plan.md."
       ],
       "start_checklist": [
@@ -534,6 +535,7 @@
       "end_checklist": [
         "Dispatch compile parity for the checkpoint checkout SHA and record run ids/URLs.",
         "Record any checkpoint blockers or required platform follow-ups in session_log.md.",
+        "Do not dispatch or require Windows feature smoke for this checkpoint.",
         "Set status to completed; add END entry; commit docs."
       ],
       "worktree": null,
@@ -929,6 +931,7 @@
       "acceptance_criteria": [
         "The checkpoint audit trail is recorded in session_log.md.",
         "Compile parity is green for the checkpoint checkout SHA.",
+        "Windows remains a compile-parity checkpoint lane only; no Windows feature-smoke run is required.",
         "The task only validates the checkpoint boundary defined by pre-planning/ci_checkpoint_plan.md."
       ],
       "start_checklist": [
@@ -939,6 +942,7 @@
       "end_checklist": [
         "Dispatch compile parity for the checkpoint checkout SHA and record run ids/URLs.",
         "Record any checkpoint blockers or required platform follow-ups in session_log.md.",
+        "Do not dispatch or require Windows feature smoke for this checkpoint.",
         "Set status to completed; add END entry; commit docs."
       ],
       "worktree": null,

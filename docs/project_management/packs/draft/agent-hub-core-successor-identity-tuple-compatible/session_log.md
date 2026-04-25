@@ -77,3 +77,39 @@
   - `NONE`
 - Next steps:
   - The pack is execution-ready on the owned planning surfaces.
+
+## START — 2026-04-24T21:05:00Z — planning — checkpoint scope clarification
+- Goal: clarify that Windows remains compile parity only at `CP1` and `CP2` and is not a feature-smoke requirement for CI checkpoints.
+- Inputs read:
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/kickoff_prompts/CP1-ci-checkpoint.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/kickoff_prompts/CP2-ci-checkpoint.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/platform-parity-spec.md`
+- Commands planned:
+  - `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible"`
+  - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible"`
+  - `make planning-micro-lint FEATURE_DIR="docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible" OWNED_PATHS="plan.md tasks.json session_log.md kickoff_prompts/CP1-ci-checkpoint.md kickoff_prompts/CP2-ci-checkpoint.md pre-planning/ci_checkpoint_plan.md"`
+
+## END — 2026-04-24T21:05:00Z — planning — checkpoint scope clarification
+- Summary of changes:
+  - Updated `plan.md` to state explicitly that Windows stays in the CI compile-parity set only and is not a checkpoint feature-smoke requirement.
+  - Updated `pre-planning/ci_checkpoint_plan.md` so both `CP1` and `CP2` call out that Windows WSL warm or smoke flows are outside checkpoint scope.
+  - Updated checkpoint kickoff prompts and `tasks.json` acceptance criteria or checklists so operators do not dispatch Windows feature smoke during checkpoint execution.
+- Files created or modified:
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/kickoff_prompts/CP1-ci-checkpoint.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/kickoff_prompts/CP2-ci-checkpoint.md`
+  - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md`
+- Validation commands run (with results):
+  - `python3 docs/project_management/system/scripts/planning/validate_tasks_json.py --feature-dir "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible"` → `0` → `PASS`
+  - `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible"` → `0` → `PASS`
+  - `make planning-micro-lint FEATURE_DIR="docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible" OWNED_PATHS="plan.md tasks.json session_log.md kickoff_prompts/CP1-ci-checkpoint.md kickoff_prompts/CP2-ci-checkpoint.md pre-planning/ci_checkpoint_plan.md"` → `0` → `PASS`
+- Blockers:
+  - `NONE`
+- Next steps:
+  - Use the checkpoint tasks as compile-parity-only gates unless a later planning change explicitly introduces a feature-local smoke surface.

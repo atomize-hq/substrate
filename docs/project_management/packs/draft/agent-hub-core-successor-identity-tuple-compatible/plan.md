@@ -46,6 +46,7 @@
 - `tasks.json` `meta.checkpoint_boundaries` stays `["AHCSITC2", "AHCSITC3"]`.
 - `tasks.json` `meta.ci_parity_platforms_required` stays `["linux", "macos", "windows"]`.
 - `tasks.json` `meta.behavior_platforms_required` stays `[]` until a later execution lane adds feature smoke scripts and explicitly widens the behavior-platform requirement.
+- Windows stays inside the checkpoint compile-parity set only. Neither `CP1-ci-checkpoint` nor `CP2-ci-checkpoint` requires Windows feature smoke.
 - `AHCSITC0` and `AHCSITC1` stay normal schema-v4 slices with a single final `*-integ` task.
 - `AHCSITC2` and `AHCSITC3` use the full boundary model: `*-integ-core`, `*-integ-linux`, `*-integ-macos`, `*-integ-windows`, and final `*-integ`.
 - The platform-fix tasks for this pack are parity-only follow-up tasks. They do not imply required feature-smoke coverage.
