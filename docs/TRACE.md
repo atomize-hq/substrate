@@ -149,6 +149,24 @@ These are canonical cross-feature correlation identifiers. Details and required/
 - `backend_id`: backend identifier in `<kind>:<name>` form (e.g., `cli:codex`, `api:openai`) when a specific backend is involved.
 - `world_id`: world boundary identity; required on in-world telemetry families (e.g., `world_process_*`) and any record that describes an in-world boundary/session.
 
+### Agent Identity-Tuple Fields
+
+Agent-hub successor telemetry keeps adapter identity separate from semantic identity:
+
+- `backend_id`: derived adapter identifier in `<kind>:<agent_id>` form. This remains the allowlist and adapter-selection token.
+- `client`: pure-agent client identity for successor agent-hub records.
+- `router`: routing surface for the record. Pure-agent records use `agent_hub`; nested gateway-backed records use `substrate_gateway`.
+- `protocol`: protocol family for the record, such as `uaa.agent.session`.
+- `provider`: nested gateway-backed provider identity only; pure-agent records omit it.
+- `auth_authority`: nested gateway-backed auth authority only; pure-agent records omit it.
+- `world_id`: world boundary identifier for world-scoped pure-agent records and in-world telemetry families.
+- `world_generation`: generation counter for the active world-scoped pure-agent session or world-backed execution.
+
+Operator-facing omission rules:
+- Pure-agent records keep `client`, `router`, and `protocol`, and omit `provider` plus `auth_authority`.
+- Nested gateway-backed records may add `provider` and `auth_authority`, but they must omit `world_id` and `world_generation`.
+- Host-scoped pure-agent records omit `world_id` and `world_generation`.
+
 ### Router-Derived Event Families (workflow router daemon; Phase 8)
 
 The workflow-router daemon appends derived events to `trace.jsonl` (append-only). v1 uses explicit `event_type` values (see router DR-0016):
