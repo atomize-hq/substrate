@@ -185,3 +185,7 @@
 ## END — 2026-04-25T04:26:12Z — integration — AHCSITC2-integ-core
 - HEAD: `5d8644570b17903550c7992eb931aa9adbec048c`
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/logs/AHCSITC2/integ-core/last_message.md`
+
+## START — 2026-04-25T04:27:47Z — checkpoint — CP1-ci-checkpoint
+- Dispatch:
+  - `make triad-task-start FEATURE_DIR="/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible" TASK_ID="CP1-ci-checkpoint"`
