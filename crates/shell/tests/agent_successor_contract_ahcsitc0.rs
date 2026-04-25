@@ -160,6 +160,11 @@ fn repo_root() -> PathBuf {
         .expect("repo root should exist")
 }
 
+fn read_repo_file(path: &str) -> String {
+    fs::read_to_string(repo_root().join(path))
+        .unwrap_or_else(|err| panic!("failed to read {path}: {err}"))
+}
+
 fn parse_json_output(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON")
 }
@@ -440,8 +445,7 @@ fn agent_doctor_json_locks_field_names_omissions_and_check_order() {
 
 #[test]
 fn docs_usage_and_repo_boundary_match_the_successor_contract() {
-    let usage = fs::read_to_string(repo_root().join("docs/USAGE.md"))
-        .expect("docs/USAGE.md should be readable");
+    let usage = read_repo_file("docs/USAGE.md");
     assert!(
         usage.contains("substrate agent list"),
         "docs/USAGE.md must document the canonical singular list command"
@@ -469,6 +473,107 @@ fn docs_usage_and_repo_boundary_match_the_successor_contract() {
         !repo_root().join("crates/agent-hub").exists(),
         "AHCSITC0 must not introduce a new crates/agent-hub package"
     );
+}
+
+#[test]
+fn ahcsitc3_specs_lock_supersession_parity_and_validation_boundaries() {
+    let compatibility = read_repo_file(
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/compatibility-spec.md",
+    );
+    for required in [
+        "ADR-0025 is historical evidence only",
+        "ADR-0025 may be cited only as superseded historical evidence.",
+        "Existing `agents.allowed_backends` entries remain valid without rewriting because `backend_id` stays derived as `<kind>:<agent_id>`.",
+        "`substrate agents validate` remains supported as an additive compatibility leaf for inventory validation only.",
+        "`backend_id` remains the agent-side adapter identifier and allowlist token",
+    ] {
+        assert!(
+            compatibility.contains(required),
+            "compatibility-spec.md must lock AHCSITC3 closeout rule `{required}`"
+        );
+    }
+
+    let parity = read_repo_file(
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/platform-parity-spec.md",
+    );
+    for required in [
+        "| Linux |",
+        "| macOS |",
+        "| Windows |",
+        "`substrate agents validate` remains a compatibility leaf on every platform and never becomes an alias for list, status, or doctor.",
+        "Nested gateway-backed LLM records always omit `world_id` and `world_generation` on every platform.",
+        "If the effective command path requires a world-scoped member posture and the required world boundary is temporarily unavailable, `substrate agent doctor` returns exit `3`.",
+        "If the current build or platform cannot satisfy the required world posture at all, `substrate agent doctor` returns exit `4`.",
+        "`crates/shell/tests/agents_validate.rs`",
+        "`crates/shell/tests/agent_hub_trace_persistence.rs`",
+        "`crates/shell/tests/repl_world_first_routing_v1.rs`",
+        "`scripts/linux/world-provision.sh`",
+        "`scripts/mac/lima-warm.sh`",
+        "`scripts/mac/smoke.sh`",
+        "`scripts/windows/wsl-warm.ps1`",
+        "`scripts/windows/wsl-smoke.ps1`",
+    ] {
+        assert!(
+            parity.contains(required),
+            "platform-parity-spec.md must lock AHCSITC3 parity evidence `{required}`"
+        );
+    }
+
+    let playbook = read_repo_file(
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md",
+    );
+    for required in [
+        "### Case 1 — `substrate agent list --json` keeps adapter identity and omission rules",
+        "### Case 2 — `substrate agent status --json` proves a host-scoped orchestrator",
+        "### Case 3 — world-scoped members publish `world_id` and `world_generation`",
+        "### Case 4 — nested gateway-backed records publish `provider` and `auth_authority` on the nested record only",
+        "### Case 5 — canonical trace keeps the same pure-agent versus nested-record split",
+        "### Case 6 — `substrate agent doctor --json` proves healthy ordered checks",
+        "### Case 7 — `substrate agent doctor` fails closed for invalid orchestrator state",
+        "### Case 8 — `substrate agent doctor` fails closed for world-boundary loss",
+        "`crates/shell/tests/agents_validate.rs`",
+        "`crates/shell/tests/agent_hub_trace_persistence.rs`",
+        "`crates/shell/tests/repl_world_first_routing_v1.rs`",
+    ] {
+        assert!(
+            playbook.contains(required),
+            "manual_testing_playbook.md must keep AHCSITC3 validation coverage `{required}`"
+        );
+    }
+}
+
+#[test]
+fn ahcsitc3_configuration_doc_locks_successor_config_surface() {
+    let configuration = read_repo_file("docs/CONFIGURATION.md");
+    for required in [
+        "agents.hub.orchestrator_agent_id",
+        "agents.allowed_backends",
+    ] {
+        assert!(
+            configuration.contains(required),
+            "docs/CONFIGURATION.md must document successor config surface `{required}`"
+        );
+    }
+}
+
+#[test]
+fn ahcsitc3_trace_doc_locks_tuple_compatible_fields() {
+    let trace = read_repo_file("docs/TRACE.md");
+    for required in [
+        "`backend_id`",
+        "`client`",
+        "`router`",
+        "`protocol`",
+        "`provider`",
+        "`auth_authority`",
+        "`world_id`",
+        "`world_generation`",
+    ] {
+        assert!(
+            trace.contains(required),
+            "docs/TRACE.md must document tuple-compatible trace field `{required}`"
+        );
+    }
 }
 
 #[test]
