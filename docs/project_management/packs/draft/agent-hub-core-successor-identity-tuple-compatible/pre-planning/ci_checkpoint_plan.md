@@ -73,6 +73,7 @@ What risk is reduced by running cross-platform CI here:
 - Compile parity catches cross-platform build and type drift across `crates/shell`, `crates/agent-api-*`, `crates/common`, and `crates/trace` before the final validation slice starts.
 - `ci_testing = quick` exercises the high-risk contract and telemetry path without paying full-suite cost before the parity and compatibility closure slice lands.
 - `feature_smoke = false` in this first pass because the pack defines no feature-local `smoke/` surface and `spec_manifest.md` assigns deterministic validation ownership to `manual_testing_playbook.md`.
+- Windows remains part of the compile-parity checkpoint set only. The Windows WSL warm or smoke flow is not a CI checkpoint requirement for `CP1`.
 
 Checkpoint-size justification:
 - This group contains 3 slices, which stays within the machine-readable checkpoint range of 1 to 8 slices.
@@ -93,6 +94,7 @@ What risk is reduced by running cross-platform CI here:
 - Compile parity confirms the final compatibility and parity edits did not reopen cross-platform shell or trace regressions.
 - `ci_testing = full` provides the last cross-platform confidence gate before planning promotes this pack into execution.
 - `feature_smoke = false` remains correct in this first pass because the pack still has no feature-local smoke surface. Full planning updates this gate if a smoke workflow becomes part of the accepted validation contract.
+- Windows remains part of the compile-parity checkpoint set only. The Windows WSL warm or smoke flow is not a CI checkpoint requirement for `CP2`.
 
 Checkpoint-size justification:
 - This group contains 1 slice, which stays within the machine-readable checkpoint range of 1 to 8 slices.

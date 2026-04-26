@@ -202,15 +202,7 @@ fn build_macos_gateway_client() -> anyhow::Result<MacosGatewayClient> {
         });
     }
 
-    let default_sock = macos_default_world_socket_path();
-    if default_sock.exists() && probe_gateway_caps_uds(&default_sock) {
-        return Ok(MacosGatewayClient {
-            client: AgentClient::unix_socket(default_sock)?,
-            _forwarding: None,
-        });
-    }
-
-    if substrate_home_is_explicitly_set() {
+    if let Some(default_sock) = resolve_macos_host_gateway_socket() {
         return Ok(MacosGatewayClient {
             client: AgentClient::unix_socket(default_sock)?,
             _forwarding: None,
@@ -247,17 +239,22 @@ fn resolve_macos_gateway_client_endpoint() -> MacosGatewayClientEndpoint {
         return MacosGatewayClientEndpoint::Unix(std::path::PathBuf::from(socket_path));
     }
 
-    let default_sock = macos_default_world_socket_path();
-
-    if substrate_home_is_explicitly_set()
-        || (default_sock.exists() && probe_gateway_caps_uds(&default_sock))
-    {
-        MacosGatewayClientEndpoint::Unix(default_sock)
-    } else {
-        MacosGatewayClientEndpoint::Tcp {
+    match resolve_macos_host_gateway_socket() {
+        Some(default_sock) => MacosGatewayClientEndpoint::Unix(default_sock),
+        None => MacosGatewayClientEndpoint::Tcp {
             host: "127.0.0.1".to_string(),
             port: 17788,
-        }
+        },
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_macos_host_gateway_socket() -> Option<PathBuf> {
+    let default_sock = macos_default_world_socket_path();
+    if default_sock.exists() && probe_gateway_caps_uds(&default_sock) {
+        Some(default_sock)
+    } else {
+        None
     }
 }
 
@@ -280,11 +277,6 @@ fn probe_gateway_caps_uds(path: &std::path::Path) -> bool {
             .contains(" 200 "),
         _ => false,
     }
-}
-
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn substrate_home_is_explicitly_set() -> bool {
-    std::env::var_os("SUBSTRATE_HOME").is_some_and(|value| !value.is_empty())
 }
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -1025,8 +1017,10 @@ where
 #[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
+    use crate::execution::world_env_guard;
 
     fn with_env_var<T>(key: &str, value: Option<&std::ffi::OsStr>, f: impl FnOnce() -> T) -> T {
+        let _guard = world_env_guard();
         let prev = std::env::var_os(key);
         match value {
             Some(value) => std::env::set_var(key, value),
@@ -1057,13 +1051,15 @@ mod tests {
         });
 
         with_env_var("HOME", Some(home.as_os_str()), || {
-            with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
-                match resolve_macos_gateway_client_endpoint() {
-                    MacosGatewayClientEndpoint::Unix(path) => assert_eq!(path, sock),
-                    MacosGatewayClientEndpoint::Tcp { .. } => {
-                        panic!("expected unix endpoint when host socket exists")
+            with_env_var("SUBSTRATE_HOME", None, || {
+                with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
+                    match resolve_macos_gateway_client_endpoint() {
+                        MacosGatewayClientEndpoint::Unix(path) => assert_eq!(path, sock),
+                        MacosGatewayClientEndpoint::Tcp { .. } => {
+                            panic!("expected unix endpoint when host socket exists")
+                        }
                     }
-                }
+                })
             })
         });
 
@@ -1076,6 +1072,29 @@ mod tests {
         let home = temp.path();
 
         with_env_var("HOME", Some(home.as_os_str()), || {
+            with_env_var("SUBSTRATE_HOME", None, || {
+                with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
+                    match resolve_macos_gateway_client_endpoint() {
+                        MacosGatewayClientEndpoint::Tcp { host, port } => {
+                            assert_eq!(host, "127.0.0.1");
+                            assert_eq!(port, 17788);
+                        }
+                        MacosGatewayClientEndpoint::Unix(path) => {
+                            panic!("expected tcp fallback when socket is missing, got {path:?}")
+                        }
+                    }
+                })
+            })
+        });
+    }
+
+    #[test]
+    fn macos_gateway_client_endpoint_falls_back_to_tcp_when_explicit_substrate_home_socket_missing()
+    {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let substrate_home = temp.path().join("isolated-substrate-home");
+
+        with_env_var("SUBSTRATE_HOME", Some(substrate_home.as_os_str()), || {
             with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
                 match resolve_macos_gateway_client_endpoint() {
                     MacosGatewayClientEndpoint::Tcp { host, port } => {
@@ -1083,7 +1102,9 @@ mod tests {
                         assert_eq!(port, 17788);
                     }
                     MacosGatewayClientEndpoint::Unix(path) => {
-                        panic!("expected tcp fallback when socket is missing, got {path:?}")
+                        panic!(
+                            "expected tcp fallback when explicit substrate home socket is missing, got {path:?}"
+                        )
                     }
                 }
             })
@@ -1099,16 +1120,18 @@ mod tests {
         std::fs::write(&sock, "").expect("create placeholder socket path");
 
         with_env_var("HOME", Some(home.as_os_str()), || {
-            with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
-                match resolve_macos_gateway_client_endpoint() {
-                    MacosGatewayClientEndpoint::Tcp { host, port } => {
-                        assert_eq!(host, "127.0.0.1");
-                        assert_eq!(port, 17788);
+            with_env_var("SUBSTRATE_HOME", None, || {
+                with_env_var("SUBSTRATE_WORLD_SOCKET", None, || {
+                    match resolve_macos_gateway_client_endpoint() {
+                        MacosGatewayClientEndpoint::Tcp { host, port } => {
+                            assert_eq!(host, "127.0.0.1");
+                            assert_eq!(port, 17788);
+                        }
+                        MacosGatewayClientEndpoint::Unix(path) => {
+                            panic!("expected tcp fallback when socket is stale, got {path:?}")
+                        }
                     }
-                    MacosGatewayClientEndpoint::Unix(path) => {
-                        panic!("expected tcp fallback when socket is stale, got {path:?}")
-                    }
-                }
+                })
             })
         });
     }
@@ -1116,12 +1139,11 @@ mod tests {
 
 #[cfg(test)]
 mod classification_tests {
-    use super::{
-        error_is_component_unavailable, macos_default_world_socket_path,
-        substrate_home_is_explicitly_set,
-    };
+    use super::{error_is_component_unavailable, macos_default_world_socket_path};
+    use crate::execution::world_env_guard;
 
     fn with_env_var<T>(key: &str, value: Option<&std::ffi::OsStr>, f: impl FnOnce() -> T) -> T {
+        let _guard = world_env_guard();
         let prev = std::env::var_os(key);
         match value {
             Some(value) => std::env::set_var(key, value),
@@ -1156,7 +1178,6 @@ mod classification_tests {
         let substrate_home = temp.path().join("isolated-substrate-home");
 
         with_env_var("SUBSTRATE_HOME", Some(substrate_home.as_os_str()), || {
-            assert!(substrate_home_is_explicitly_set());
             assert_eq!(
                 macos_default_world_socket_path(),
                 substrate_home.join("sock/agent.sock")

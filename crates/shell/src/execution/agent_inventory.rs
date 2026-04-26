@@ -6,7 +6,8 @@ use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
-use substrate_broker::{validate_backend_id, Policy, WorldFsDenyEnforcement};
+use substrate_broker::{validate_backend_id, validate_dotted_id, Policy, WorldFsDenyEnforcement};
+use substrate_common::derive_agent_backend_id;
 use substrate_common::paths as substrate_paths;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -26,6 +27,8 @@ pub(crate) struct AgentConfigV1 {
     pub enabled: bool,
     pub kind: AgentConfigKind,
     #[serde(default)]
+    pub protocol: Option<String>,
+    #[serde(default)]
     pub execution: AgentExecutionConfigV1,
     #[serde(default)]
     pub cli: Option<AgentCliConfigV1>,
@@ -40,6 +43,15 @@ pub(crate) struct AgentConfigV1 {
 pub(crate) enum AgentConfigKind {
     Cli,
     Api,
+}
+
+impl AgentConfigKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Cli => "cli",
+            Self::Api => "api",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -74,6 +86,12 @@ pub(crate) struct AgentApiAuthConfigV1 {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentCapabilitiesV1 {
+    pub session_start: bool,
+    pub session_resume: bool,
+    pub session_fork: bool,
+    pub session_stop: bool,
+    pub status_snapshot: bool,
+    pub event_stream: bool,
     pub llm: bool,
     pub mcp_client: bool,
 }
@@ -82,6 +100,35 @@ pub(crate) struct AgentCapabilitiesV1 {
 pub(crate) struct AgentInventoryEntryV1 {
     pub path: PathBuf,
     pub file: AgentFileV1,
+}
+
+impl AgentFileV1 {
+    pub(crate) fn derived_backend_id(&self) -> String {
+        derive_agent_backend_id(self.config.kind.as_str(), &self.id)
+    }
+
+    pub(crate) fn effective_scope(
+        &self,
+        effective_config: &crate::execution::config_model::SubstrateConfig,
+    ) -> crate::execution::config_model::AgentExecutionScope {
+        self.config
+            .execution
+            .scope
+            .unwrap_or(effective_config.agents.defaults.execution.scope)
+    }
+}
+
+impl AgentInventoryEntryV1 {
+    pub(crate) fn derived_backend_id(&self) -> String {
+        self.file.derived_backend_id()
+    }
+
+    pub(crate) fn effective_scope(
+        &self,
+        effective_config: &crate::execution::config_model::SubstrateConfig,
+    ) -> crate::execution::config_model::AgentExecutionScope {
+        self.file.effective_scope(effective_config)
+    }
 }
 
 fn default_true() -> bool {
@@ -159,14 +206,8 @@ pub(crate) fn resolve_gateway_backend_inventory_entry(
         ))
     })?;
 
-    let derived_backend_id = format!(
-        "{}:{}",
-        agent_kind_as_backend_kind(entry.file.config.kind),
-        entry.file.id
-    );
-    if derived_backend_id != trimmed_backend_id
-        || backend_kind != agent_kind_as_backend_kind(entry.file.config.kind)
-    {
+    let derived_backend_id = entry.derived_backend_id();
+    if derived_backend_id != trimmed_backend_id || backend_kind != entry.file.config.kind.as_str() {
         return Err(config_model::user_error(format!(
             "gateway backend '{}' does not match effective inventory item '{}' in {}",
             trimmed_backend_id,
@@ -317,9 +358,39 @@ fn validate_agent_config(path: &Path, config: &AgentConfigV1) -> Result<()> {
         }
     }
 
+    if let Some(protocol) = &config.protocol {
+        let trimmed = protocol.trim();
+        if trimmed.is_empty() {
+            return Err(config_model::user_error(format!(
+                "invalid agent file in {}: config.protocol must not be empty",
+                path.display()
+            )));
+        }
+        if trimmed != protocol {
+            return Err(config_model::user_error(format!(
+                "invalid agent file in {}: config.protocol must not include leading or trailing whitespace",
+                path.display()
+            )));
+        }
+        validate_dotted_id(protocol).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid agent file in {}: config.protocol '{}' must be a lowercase dotted id",
+                path.display(),
+                protocol
+            ))
+        })?;
+    }
+
+    let _ = &config.protocol;
     let _ = config.execution.scope;
     let _ = config.cli.as_ref().and_then(|cli| cli.mode);
     let _ = config.enabled;
+    let _ = config.capabilities.session_start;
+    let _ = config.capabilities.session_resume;
+    let _ = config.capabilities.session_fork;
+    let _ = config.capabilities.session_stop;
+    let _ = config.capabilities.status_snapshot;
+    let _ = config.capabilities.event_stream;
     let _ = config.capabilities.llm;
     let _ = config.capabilities.mcp_client;
 
@@ -608,11 +679,4 @@ fn validate_overlay_subset(
         }
     }
     Ok(())
-}
-
-fn agent_kind_as_backend_kind(kind: AgentConfigKind) -> &'static str {
-    match kind {
-        AgentConfigKind::Cli => "cli",
-        AgentConfigKind::Api => "api",
-    }
 }

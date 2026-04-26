@@ -59,6 +59,30 @@ The shell includes cross-platform built-ins handled without spawning a child pro
 through the builtin handler when running non-interactively (`substrate -c`,
 scripts, etc.).
 
+### Agent Commands
+
+The successor agent control-plane surface lives under the singular
+`substrate agent` namespace:
+
+```bash
+substrate agent list
+substrate agent list --json
+substrate agent status --scope world
+substrate agent doctor --json
+```
+
+`substrate agents validate` remains available as the inventory-validation
+compatibility leaf. It does not alias `substrate agent list`, `status`, or
+`doctor`.
+
+Operator-visible identity rules on these surfaces:
+- `backend_id` always renders as `<kind>:<agent_id>`.
+- Pure-agent list rows omit `provider`, `auth_authority`, `world_id`, and `world_generation`.
+- Pure-agent status rows omit `provider` and `auth_authority`.
+- `world_id` and `world_generation` render only for world-scoped pure-agent session rows.
+- Nested gateway-backed status rows stay separate from pure-agent rows and are the only rows that publish `provider` and `auth_authority`.
+- Nested gateway-backed status rows depend on valid trace-side `parent_run_id` correlation; stale historical nested rows are ignored, and malformed selected-surface rows fail closed.
+
 ## PTY Support
 
 Substrate automatically uses PTY for interactive commands:

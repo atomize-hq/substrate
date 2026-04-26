@@ -32,6 +32,33 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_PTY_DEBUG` | Enable PTY debug logging | *none* | `1` |
 | `SUBSTRATE_PTY_PIPELINE_LAST` | PTY for last pipeline segment | *none* | `1` |
 
+## Agent Hub Configuration
+
+Agent Hub successor routing is configured through the normal Substrate config and policy files.
+
+Config keys:
+- `agents.hub.orchestrator_agent_id` selects the canonical host-scoped orchestrator agent for `substrate agent status` and `substrate agent doctor`.
+- Agent inventory entries continue to define each agent's adapter kind and execution posture; the derived `backend_id` remains `<kind>:<agent_id>`.
+
+Policy keys:
+- `agents.allowed_backends` remains the allowlist for derived agent adapter ids such as `cli:codex` or `api:openai`.
+- Existing `agents.allowed_backends` entries stay valid across the successor `substrate agent ...` command surface because the policy token is still the derived `backend_id`, not `client`, `router`, `protocol`, `provider`, or `auth_authority`.
+
+Minimal example:
+
+```yaml
+agents:
+  hub:
+    orchestrator_agent_id: claude_code
+```
+
+```yaml
+agents:
+  allowed_backends:
+    - cli:claude_code
+    - cli:codex
+```
+
 ## Manager Manifest & Init
 
 | Variable | Purpose | Default | Example |

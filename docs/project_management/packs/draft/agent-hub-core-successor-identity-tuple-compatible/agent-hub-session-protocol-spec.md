@@ -189,12 +189,13 @@ An inventory item is orchestrator-eligible only when all of these checks pass:
 8. `capabilities.session_stop=true`
 9. `capabilities.status_snapshot=true`
 10. `capabilities.event_stream=true`
-11. the derived `backend_id` is allowed by `agents.allowed_backends`
+
+After orchestrator eligibility succeeds, control-plane policy evaluation separately checks that the selected derived `backend_id` is allowed by `agents.allowed_backends`.
 
 Failure rules:
 - The hub never falls back to a different orchestrator.
 - A world-scoped candidate is invalid even when every other capability check passes.
-- `substrate agent doctor` and every control-plane entrypoint fail closed on any orchestrator-eligibility failure.
+- `substrate agent doctor` and every control-plane entrypoint fail closed on any orchestrator-eligibility or policy-allowlist failure.
 
 ## Member dispatch model
 
@@ -303,6 +304,7 @@ This is the exact object shape for each nested record in `substrate agent status
     "orchestration_session_id": "sess_001",
     "agent_id": "codex"
   },
+  "run_id": "run_nested_001",
   "backend_id": "cli:codex",
   "client": "codex",
   "router": "substrate_gateway",
@@ -314,10 +316,15 @@ This is the exact object shape for each nested record in `substrate agent status
 
 Field rules:
 - `parent.orchestration_session_id` and `parent.agent_id` identify the pure-agent session that triggered the nested request.
+- `run_id` is the nested request correlation id and is required on every nested row.
 - `backend_id` remains the parent agent backend id.
 - `client` remains the parent agent id.
 - `router` is exactly `substrate_gateway`.
 - `provider` and `auth_authority` are required.
+- The source nested trace/event record carries `parent_run_id`, but `NestedLlmStatusRecordV1` does not surface it publicly.
+- Status emits a nested row only when that source `parent_run_id` matches the winning selected pure-agent `run_id` for the same `(orchestration_session_id, agent_id)` pair.
+- Nested rows tied to older historical pure-agent runs for the same pair are ignored as stale history.
+- Missing, empty, or otherwise unknown `parent_run_id` on a nested row whose parent pure-agent row is selected causes `substrate agent status` to fail closed.
 - `world_id` and `world_generation` never appear on `NestedLlmStatusRecordV1`.
 
 ### `AgentStatusResponseV1`
@@ -341,7 +348,7 @@ Field rules:
 - `sessions[*]` uses `AgentSessionStatusV1` exactly.
 - `nested_llm_records[*]` uses `NestedLlmStatusRecordV1` exactly.
 - `sessions` sort by `orchestration_session_id`, then `agent_id`, ascending byte order.
-- `nested_llm_records` sort by `parent.orchestration_session_id`, then `parent.agent_id`, then nested request correlation id ascending byte order.
+- `nested_llm_records` sort by `parent.orchestration_session_id`, then `parent.agent_id`, then `run_id` ascending byte order.
 
 ## Structured event exchange
 

@@ -16,7 +16,8 @@ Do not edit planning docs inside the worktree.
 ## Requirements
 - Run the advisory CI audit if available, then dispatch compile parity for the checkpoint checkout SHA.
 - Record run ids, URLs, and any required Linux/macOS/Windows parity follow-ups in `session_log.md`.
-- Keep the task scoped to compile parity. `pre-planning/ci_checkpoint_plan.md` currently leaves feature smoke disabled for this checkpoint.
+- Keep the task scoped to compile parity. `pre-planning/ci_checkpoint_plan.md` leaves feature smoke disabled for this checkpoint, including Windows.
+- Do not dispatch or require `scripts/windows/wsl-smoke.ps1` as part of this checkpoint task.
 
 ## End Checklist
 1. Confirm compile parity is green or record the blocking failures precisely.

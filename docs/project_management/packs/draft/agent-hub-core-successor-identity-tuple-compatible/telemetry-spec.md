@@ -122,6 +122,7 @@ Omission rules:
 - `client` on the nested record stays equal to the parent agent runtime id.
 - `router`, `provider`, `auth_authority`, and `protocol` on the nested record describe only the nested gateway-backed request.
 - The nested record never mutates, widens, or retroactively annotates the parent pure-agent record.
+- Status consumers use `parent_run_id` for correlation validation only. A nested row is emitted only when its `parent_run_id` matches the winning selected pure-agent `run_id` for that `(orchestration_session_id, agent_id)` pair. Nested rows tied to older historical pure-agent runs are ignored as stale history, and malformed selected-surface rows fail closed.
 
 ## `world_generation` publication path
 

@@ -80,6 +80,19 @@ fn valid_cli_agent_file(agent_id: &str, policy_overlay: Option<&str>) -> String 
     let overlay = policy_overlay.unwrap_or("");
     if overlay.is_empty() {
         format!(
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: codex\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n"
+        )
+    } else {
+        format!(
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: codex\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\npolicy_overlay:\n{overlay}"
+        )
+    }
+}
+
+fn legacy_valid_cli_agent_file(agent_id: &str, policy_overlay: Option<&str>) -> String {
+    let overlay = policy_overlay.unwrap_or("");
+    if overlay.is_empty() {
+        format!(
             "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  execution:\n    scope: world\n  cli:\n    binary: codex\n    mode: persistent\n"
         )
     } else {
@@ -115,6 +128,19 @@ world_fs:
 }
 
 #[test]
+fn agents_validate_accepts_legacy_inventory_without_protocol_and_session_capabilities() {
+    let fixture = AgentsValidateFixture::new();
+    fixture.init_workspace();
+    fixture.write_agent_file("codex.yaml", &legacy_valid_cli_agent_file("codex", None));
+
+    let output = fixture.validate();
+    assert!(
+        output.status.success(),
+        "legacy inventory without protocol/session capabilities should still succeed: {output:?}"
+    );
+}
+
+#[test]
 fn agents_validate_rejects_unknown_keys_with_exit_2() {
     let fixture = AgentsValidateFixture::new();
     fixture.init_workspace();
@@ -144,6 +170,88 @@ config:
     assert!(
         stderr.contains("bad_unknown.yaml") && stderr.contains("unknown_key"),
         "stderr should mention the file path and unknown key\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn agents_validate_rejects_protocol_with_leading_or_trailing_whitespace() {
+    let fixture = AgentsValidateFixture::new();
+    fixture.init_workspace();
+    fixture.write_agent_file(
+        "bad_protocol.yaml",
+        r#"version: 1
+id: bad_protocol
+config:
+  kind: cli
+  enabled: true
+  protocol: " uaa.agent.session "
+  execution:
+    scope: world
+  cli:
+    binary: codex
+    mode: persistent
+  capabilities:
+    session_start: true
+    session_resume: true
+    session_fork: true
+    session_stop: true
+    status_snapshot: true
+    event_stream: true
+"#,
+    );
+
+    let output = fixture.validate();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "whitespace-padded protocol should exit 2: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("bad_protocol.yaml")
+            && stderr.contains("config.protocol must not include leading or trailing whitespace"),
+        "stderr should mention protocol whitespace rejection\nstderr: {stderr}"
+    );
+}
+
+#[test]
+fn agents_validate_rejects_invalid_dotted_protocol_with_exit_2() {
+    let fixture = AgentsValidateFixture::new();
+    fixture.init_workspace();
+    fixture.write_agent_file(
+        "bad_protocol.yaml",
+        r#"version: 1
+id: bad_protocol
+config:
+  kind: cli
+  enabled: true
+  protocol: "uaa agent session"
+  execution:
+    scope: world
+  cli:
+    binary: codex
+    mode: persistent
+  capabilities:
+    session_start: true
+    session_resume: true
+    session_fork: true
+    session_stop: true
+    status_snapshot: true
+    event_stream: true
+"#,
+    );
+
+    let output = fixture.validate();
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "invalid dotted protocol should exit 2: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("bad_protocol.yaml")
+            && stderr.contains("config.protocol 'uaa agent session' must be a lowercase dotted id"),
+        "stderr should mention dotted-id validation\nstderr: {stderr}"
     );
 }
 

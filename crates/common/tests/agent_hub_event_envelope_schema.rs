@@ -51,6 +51,40 @@ fn envelope_missing_required_fields_is_rejected() {
 }
 
 #[test]
+fn parent_run_id_roundtrips_when_present() {
+    let mut value = minimal_valid_envelope_json();
+    value.as_object_mut().expect("envelope object").insert(
+        "parent_run_id".to_string(),
+        json!("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f11"),
+    );
+
+    let event: AgentEvent = serde_json::from_value(value).expect("deserialize AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert_eq!(
+        roundtrip.get("parent_run_id").and_then(Value::as_str),
+        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f11"),
+        "expected parent_run_id to survive roundtrip; got: {roundtrip}"
+    );
+}
+
+#[test]
+fn parent_run_id_omits_by_field_absence_when_unset() {
+    let event: AgentEvent =
+        serde_json::from_value(minimal_valid_envelope_json()).expect("deserialize AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert!(
+        roundtrip.get("parent_run_id").is_none(),
+        "expected parent_run_id to omit when unset; got: {roundtrip}"
+    );
+    assert!(
+        !roundtrip.to_string().contains("\"parent_run_id\":null"),
+        "parent_run_id must not serialize as null when unset: {roundtrip}"
+    );
+}
+
+#[test]
 fn safe_channel_roundtrips() {
     let mut value = minimal_valid_envelope_json();
     value
@@ -360,6 +394,7 @@ fn trace_tuple_metadata_preserves_existing_join_keys() {
         "agent_id": "demo-agent",
         "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
         "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+        "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f10",
         "backend_id": "cli:codex",
         "world_id": "wld_test",
         "cmd_id": "cmd_test",
@@ -395,6 +430,10 @@ fn trace_tuple_metadata_preserves_existing_join_keys() {
     assert_eq!(
         roundtrip.get("span_id").and_then(Value::as_str),
         Some("spn_test")
+    );
+    assert_eq!(
+        roundtrip.get("parent_run_id").and_then(Value::as_str),
+        Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f10")
     );
     assert_eq!(
         roundtrip

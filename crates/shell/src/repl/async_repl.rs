@@ -1388,7 +1388,9 @@ fn emit_world_restarted_alert(
     );
     event.role = Some("orchestrator".to_string());
     event.backend_id = Some("shell:repl".to_string());
-    event.world_id = Some(previous_world_id.to_string());
+    event.world_id = Some(new_world_id.to_string());
+    event.world_generation = Some(new_world_generation);
+    event.set_pure_agent_telemetry_identity("shell");
 
     if let Some(data) = event.data.as_object_mut() {
         data.insert("reason".to_string(), serde_json::json!(reason.code()));
@@ -1426,6 +1428,8 @@ fn build_world_restart_required_alert(
     event.role = Some("orchestrator".to_string());
     event.backend_id = Some("shell:repl".to_string());
     event.world_id = Some(current_world_id.to_string());
+    event.world_generation = Some(current_world_generation);
+    event.set_pure_agent_telemetry_identity("shell");
 
     if let Some(data) = event.data.as_object_mut() {
         data.insert("reason".to_string(), serde_json::json!(reason.code()));
@@ -1434,11 +1438,6 @@ fn build_world_restart_required_alert(
             serde_json::json!("restart_world"),
         );
         data.insert("on_drift".to_string(), serde_json::json!("fail_closed"));
-        data.insert("world_id".to_string(), serde_json::json!(current_world_id));
-        data.insert(
-            "world_generation".to_string(),
-            serde_json::json!(current_world_generation),
-        );
     }
 
     event
