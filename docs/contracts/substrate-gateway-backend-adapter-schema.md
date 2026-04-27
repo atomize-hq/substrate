@@ -56,7 +56,7 @@ Rules:
 
 - Unsupported extension keys fail closed before spawn.
 - `agent_api.exec.non_interactive` is a boolean and defaults to the owner-doc default when absent.
-- `agent_api.exec.add_dirs.v1` is a closed object owned by the Universal Agent API extensions spec;
+- `agent_api.exec.add_dirs.v1` is a closed object owned by the Unified Agent API extensions spec;
   unknown keys are invalid.
 - `agent_api.session.resume.v1` and `agent_api.session.fork.v1` are closed objects with:
   - `selector: "last" | "id"`
@@ -183,6 +183,6 @@ Rules:
 The implementation and verification surfaces for this contract are expected to stay aligned across:
 
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md`
-- the Universal Agent API capability, extension, run-protocol, and event-envelope specs cited by
+- the Unified Agent API capability, extension, run-protocol, and event-envelope specs cited by
   ADR-0041
 - the built-in backend capability and session-handle tests cited by the seam-local schema spec

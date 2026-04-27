@@ -34,6 +34,7 @@ open_remediations:
   - REM-002
   - REM-003
 ---
+
 # SEAM-2 - Adapter protocol and schema
 
 ## Seam Brief (Restated)
@@ -70,7 +71,7 @@ open_remediations:
 - **Verification**:
   - This seam **consumes** `C-01` and `C-02` from `../../governance/seam-1-closeout.md`.
   - This seam **produces** `C-03` and `C-04`.
-  - The exact adopted Universal Agent API subset and the local-to-external ADR-0017 / ADR-0028 owner line are now concrete enough to execute without post-exec invention.
+  - The exact adopted Unified Agent API subset and the local-to-external ADR-0017 / ADR-0028 owner line are now concrete enough to execute without post-exec invention.
   - The durable contract baselines now live at:
     - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
     - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
@@ -142,7 +143,7 @@ open_remediations:
 
 - **Contracts produced (owned)**:
   - `C-03`: deterministic adapter dispatch lifecycle and local-to-external owner line
-  - `C-04`: bounded adopted Universal Agent API subset for capability advertisement, extension keys, request/response payloads, adapter errors, and session-handle facets
+  - `C-04`: bounded adopted Unified Agent API subset for capability advertisement, extension keys, request/response payloads, adapter errors, and session-handle facets
 - **Contracts consumed**:
   - `C-01`: stable backend-id selection contract
   - `C-02`: published adapter-visible status boundary

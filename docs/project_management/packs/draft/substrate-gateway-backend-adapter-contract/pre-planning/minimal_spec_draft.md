@@ -7,6 +7,7 @@
 This draft defines only the pack-level alignment backbone for ADR-0041 and the pre-planning inputs under `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/`.
 
 This draft defines:
+
 - cross-cutting defaults
 - precedence and authority boundaries
 - security and failure invariants
@@ -14,6 +15,7 @@ This draft defines:
 - unresolved choices that block deterministic downstream planning
 
 This draft does not define:
+
 - execution tasks
 - kickoff prompts
 - runtime worktree ownership
@@ -21,6 +23,7 @@ This draft does not define:
 - implementation checklists
 
 Authority boundaries for this feature:
+
 - `contract.md` is the downstream single owner for the user-facing adapter contract inside this pack.
 - `policy-spec.md` is the downstream single owner for adapter selection, allowlist gating, and trusted-input boundaries.
 - `gateway-backend-adapter-protocol-spec.md` and `gateway-backend-adapter-schema-spec.md` are the downstream single owners for adapter lifecycle, payload, capability, error, and session-handle boundary details.
@@ -36,6 +39,7 @@ Authority boundaries for this feature:
 ## Defaults and precedence
 
 Source-of-truth inputs for this feature:
+
 - ADR basis: `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - Pre-planning authorities: `pre-planning/spec_manifest.md` and `pre-planning/impact_map.md`
 - Config and policy authorities:
@@ -44,6 +48,7 @@ Source-of-truth inputs for this feature:
   - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 
 Precedence posture for this draft:
+
 1. Existing `substrate world gateway ...` CLI invocation selects the operator action only. ADR-0041 adds no new CLI flags for adapter selection.
 2. Backend selection reads the existing ADR-0027 config surfaces:
    - `$SUBSTRATE_HOME/config.yaml`
@@ -57,6 +62,7 @@ Precedence posture for this draft:
    - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`
 
 Precedence rules that downstream docs must preserve:
+
 - No new adapter-selection env var exists in this feature.
 - No gateway-local admin, config, persistence, or session state becomes a new precedence layer for authorization.
 - Stable backend selection stays expressed as one `<kind>:<name>` id.
@@ -66,6 +72,7 @@ Precedence rules that downstream docs must preserve:
 ## Failure posture and invariants
 
 Failure posture:
+
 - Adapter-backed execution is fail-closed.
 - Selection fails with a contract error when the selected backend id is invalid.
 - Selection fails with a dependency-unavailable posture when the required adapter component is unavailable.
@@ -74,6 +81,7 @@ Failure posture:
 - World-required execution remains fail-closed when policy demands in-world routing.
 
 Security and boundary invariants:
+
 - Stable backend ids remain the only Substrate-facing backend identity.
 - One backend id maps to one adapter contract identity.
 - Substrate-owned surfaces do not split backend identity into planner, executor, provider, router, wrapper, or auth-authority sub-identities.
@@ -99,6 +107,7 @@ Security and boundary invariants:
 ## Cross-cutting seams and constraints
 
 Shared constraints for every downstream doc:
+
 - Preserve the stable backend-id grammar: `<kind>:<name>`.
 - Preserve the deny-by-default posture of `llm.allowed_backends`.
 - Preserve the one-file-per-backend inventory rule and filename-to-id matching rule from ADR-0027 surfaces.
@@ -112,6 +121,7 @@ Shared constraints for every downstream doc:
 - Keep the implemented ADR-0027 pack path authoritative in this checkout.
 
 Downstream seam boundaries:
+
 - Selection boundary:
   - covers stable backend identity, config and policy input usage, allowlist gating, invalid-selection classification, unavailable-adapter classification, and the ban on gateway-local authorization inputs
 - Protocol and schema boundary:
@@ -122,7 +132,7 @@ Downstream seam boundaries:
 ## Follow-ups for downstream seam planning and decomposition
 
 - Assign the owning document for any additive adapter metadata on `substrate world gateway status --json` before local schema or runtime surfaces widen.
-- Pin the adopted Universal Agent API subset in `gateway-backend-adapter-schema-spec.md`: capability ids, extension keys, session-handle facet fields, and bounded error detail.
+- Pin the adopted Unified Agent API subset in `gateway-backend-adapter-schema-spec.md`: capability ids, extension keys, session-handle facet fields, and bounded error detail.
 - Pin the exact capability-validation order and dispatch ordering in `gateway-backend-adapter-protocol-spec.md`.
 - Record the exact boundary line between local adapter event translation and ADR-0017 event-envelope ownership.
 - Record the exact boundary line between local adapter telemetry references and ADR-0028 trace ownership.

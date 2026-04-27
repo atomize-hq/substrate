@@ -4,6 +4,7 @@ review_phase: pre_exec
 execution_horizon: active
 basis_ref: seam.md#basis
 ---
+
 # Review Bundle - SEAM-2 Adapter protocol and schema
 
 This artifact feeds `gates.pre_exec.review`.
@@ -13,7 +14,7 @@ This artifact feeds `gates.pre_exec.review`.
 
 - Can the protocol still redefine the published backend-id selection boundary instead of consuming `THR-01` as fixed upstream truth?
 - Can unsupported capabilities or required extension keys still fall through to permissive behavior instead of failing closed?
-- Can request/response payloads, adapter errors, or session-handle facets still widen without one concrete adopted Universal Agent API subset?
+- Can request/response payloads, adapter errors, or session-handle facets still widen without one concrete adopted Unified Agent API subset?
 - Can local adapter translation still silently redefine ADR-0017 event-envelope or ADR-0028 trace ownership instead of handing off to those external owners explicitly?
 - Can seam-local planning still treat `THR-02` as an inbound prerequisite instead of as outbound publication work owned by this seam?
 
@@ -36,7 +37,7 @@ flowchart TB
   Protocol["Local adapter protocol"] --> Owner["Explicit owner line"]
   Owner --> ADR17["ADR-0017 event-envelope owner"]
   Owner --> ADR28["ADR-0028 trace owner"]
-  Protocol --> Schema["Adopted Universal Agent API subset"]
+  Protocol --> Schema["Adopted Unified Agent API subset"]
   Schema --> Caps["Capabilities + extension keys"]
   Schema --> Payloads["Request/response payloads"]
   Schema --> Errors["Bounded adapter error detail"]
@@ -45,7 +46,7 @@ flowchart TB
 
 ## Likely mismatch hotspots
 
-- `REM-002` stays open only as post-baseline execution and closeout tracking for the adopted Universal Agent API subset.
+- `REM-002` stays open only as post-baseline execution and closeout tracking for the adopted Unified Agent API subset.
 - `REM-003` stays open only as post-baseline execution and closeout tracking for the local-to-external owner line.
 - Any seam-local draft that treats `THR-02` as required inbound state would falsely block activation and invert producer/consumer ownership.
 

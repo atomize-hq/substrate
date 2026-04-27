@@ -32,7 +32,7 @@ Concrete rules:
   7. surface one completion result and any bounded metadata attached to that completion
 - Unsupported extension keys and unsupported required capabilities fail closed before any adapter
   process is started.
-- Extension-value validation uses closed `.v1` schema rules where the adopted Universal Agent API
+- Extension-value validation uses closed `.v1` schema rules where the adopted Unified Agent API
   owner docs pin them.
 - Session resume and fork selectors are mutually exclusive.
 - Session-handle metadata is gateway-contract data only. It must not be treated as policy input,
@@ -86,5 +86,5 @@ The implementation and verification surfaces for this contract are expected to s
 
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-protocol-spec.md`
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
-- the Universal Agent API normative specs and backend harnesses cited by ADR-0041
+- the Unified Agent API normative specs and backend harnesses cited by ADR-0041
 - the standalone gateway structured-event normalization surfaces cited by ADR-0041

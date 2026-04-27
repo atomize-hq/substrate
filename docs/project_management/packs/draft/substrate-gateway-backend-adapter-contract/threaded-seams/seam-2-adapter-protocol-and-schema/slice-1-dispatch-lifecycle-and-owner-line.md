@@ -30,6 +30,7 @@ contracts_consumed:
 open_remediations:
   - REM-003
 ---
+
 ### S1 - Lock dispatch lifecycle and external owner line
 
 #### Goal
@@ -63,6 +64,7 @@ Turn the protocol boundary into one deterministic lifecycle that consumes the pu
   - cross-check with the published `SEAM-1` closeout and existing gateway review surfaces
 
 Checklist:
+
 - Implement:
   - document the ordered lifecycle and fail-closed checkpoints in `../../gateway-backend-adapter-protocol-spec.md`
   - keep `docs/contracts/substrate-gateway-backend-adapter-protocol.md` as the durable owner of the lifecycle boundary
@@ -90,13 +92,14 @@ Checklist:
   - compare wording against ADR-0017, ADR-0028, and `review.md`
 
 Checklist:
+
 - Implement:
   - write the exact local-to-external owner boundary
   - map each owned protocol surface to the correct upstream authority
   - record that repository packaging changes for the standalone gateway or UAA repos do not change this owner line by themselves
 - Test:
   - verify each lifecycle stage has one owner against:
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/backend_contract.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/backend_contract.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/tests/backend_contract.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/tests/backend_contract.rs`
 - Validate:
   - confirm `REM-003` can resolve without widening other seams
