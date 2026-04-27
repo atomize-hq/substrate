@@ -166,6 +166,35 @@ impl AgentSuccessorFixture {
 "#,
         );
     }
+
+    fn seed_inventory_for_toolbox_contracts(&self, transport: &str) {
+        self.write_global_config_patch(&format!(
+            r#"agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+  toolbox:
+    enabled: true
+    bind:
+      transport: {transport}
+"#
+        ));
+        self.write_global_policy_patch(
+            r#"agents:
+  allowed_backends:
+    - cli:claude_code
+    - cli:codex
+"#,
+        );
+        self.write_agent_file(
+            "claude_code.yaml",
+            &cli_agent_file("claude_code", "host", true, true, true),
+        );
+        self.write_agent_file(
+            "codex.yaml",
+            &cli_agent_file("codex", "world", true, false, true),
+        );
+    }
 }
 
 fn cli_agent_file(
@@ -618,6 +647,193 @@ fn agent_status_json_uses_locked_top_level_field_names() {
     assert!(
         json.get("nested_llm_records").is_some_and(Value::is_array),
         "status output must expose `nested_llm_records` as an array: {json}"
+    );
+}
+
+#[test]
+fn agent_toolbox_status_json_reports_template_when_no_active_orchestrator_session_exists() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    let expected_template = format!(
+        "unix://{}/run/agent-toolbox/<orchestration_session_id>.sock",
+        fixture.substrate_home.display()
+    );
+
+    let output = fixture.run(&["agent", "toolbox", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "toolbox status should succeed when the surface is enabled but no session is active: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    assert_eq!(
+        json.pointer("/toolbox_enabled").and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        json.pointer("/toolbox_version").and_then(Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        json.pointer("/transport").and_then(Value::as_str),
+        Some("uds")
+    );
+    assert_eq!(
+        json.pointer("/eligibility/state").and_then(Value::as_str),
+        Some("dependency_unavailable")
+    );
+    assert!(
+        json.pointer("/active_orchestration_session_id")
+            .is_some_and(Value::is_null),
+        "status must publish a null active session id when no orchestrator session is active: {json}"
+    );
+    assert!(
+        json.pointer("/endpoint").is_none() || json["endpoint"].is_null(),
+        "status must omit a concrete endpoint when no session exists: {json}"
+    );
+    assert_eq!(
+        json.pointer("/endpoint_template").and_then(Value::as_str),
+        Some(expected_template.as_str()),
+        "UDS status must expose the deterministic endpoint template: {json}"
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/agent_id")
+            .and_then(Value::as_str),
+        Some("claude_code")
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/backend_id")
+            .and_then(Value::as_str),
+        Some("cli:claude_code")
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/role").and_then(Value::as_str),
+        Some("orchestrator")
+    );
+    assert_eq!(
+        json.pointer("/orchestrator/execution/scope")
+            .and_then(Value::as_str),
+        Some("host")
+    );
+}
+
+#[test]
+fn agent_toolbox_env_requires_an_active_orchestrator_session() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+
+    let output = fixture.run(&["agent", "toolbox", "env", "--json"]);
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "toolbox env must fail with dependency-unavailable when no orchestrator session is active: {output:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).trim().is_empty(),
+        "failed toolbox env commands must not emit stdout: {output:?}"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no active pure-agent orchestrator session found in trace"),
+        "stderr must explain the missing active session: {stderr}"
+    );
+}
+
+#[test]
+fn agent_toolbox_env_json_emits_exact_endpoint_for_latest_orchestrator_session() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    let expected_endpoint = format!(
+        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f99.sock",
+        fixture.substrate_home.display()
+    );
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-06T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "data": { "message": "orchestrator session is live" }
+        }),
+        json!({
+            "ts": "2026-04-06T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f99",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "data": { "message": "newer orchestrator session is live" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "toolbox", "env", "--json"]);
+    assert!(
+        output.status.success(),
+        "toolbox env should succeed once an orchestrator session exists: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    assert_eq!(
+        json.pointer("/SUBSTRATE_AGENT_TOOLBOX_VERSION")
+            .and_then(Value::as_str),
+        Some("1")
+    );
+    assert_eq!(
+        json.pointer("/SUBSTRATE_AGENT_TOOLBOX_ENDPOINT")
+            .and_then(Value::as_str),
+        Some(expected_endpoint.as_str()),
+        "env output must project the latest orchestrator session into the deterministic UDS path: {json}"
+    );
+}
+
+#[test]
+fn agent_toolbox_status_json_reports_tcp_as_unsupported_pre_runtime() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("tcp");
+
+    let output = fixture.run(&["agent", "toolbox", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "toolbox status should stay readable when tcp transport is selected: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    assert_eq!(
+        json.pointer("/transport").and_then(Value::as_str),
+        Some("tcp")
+    );
+    assert_eq!(
+        json.pointer("/eligibility/state").and_then(Value::as_str),
+        Some("unsupported")
+    );
+    let reason = json
+        .pointer("/eligibility/reason")
+        .and_then(Value::as_str)
+        .expect("unsupported tcp posture must publish a reason");
+    assert!(
+        reason.contains("deterministic pre-runtime loopback port contract"),
+        "unsupported tcp status must explain the pre-runtime port-allocation gap: {json}"
     );
 }
 
@@ -1448,6 +1664,14 @@ fn docs_usage_and_repo_boundary_match_the_successor_contract() {
     assert!(
         usage.contains("substrate agent doctor"),
         "docs/USAGE.md must document the canonical singular doctor command"
+    );
+    assert!(
+        usage.contains("substrate agent toolbox status"),
+        "docs/USAGE.md must document the canonical singular toolbox status command"
+    );
+    assert!(
+        usage.contains("substrate agent toolbox env"),
+        "docs/USAGE.md must document the canonical singular toolbox env command"
     );
     for forbidden in [
         "substrate agents list",

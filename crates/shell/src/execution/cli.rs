@@ -446,6 +446,27 @@ pub struct AgentDoctorArgs {
     pub json: bool,
 }
 
+#[derive(Args, Debug)]
+pub struct AgentToolboxCmd {
+    #[command(subcommand)]
+    pub action: AgentToolboxAction,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentToolboxViewArgs {
+    /// Emit JSON instead of human-readable output
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AgentToolboxAction {
+    /// Show the current orchestration toolbox posture and projected endpoint
+    Status(AgentToolboxViewArgs),
+    /// Emit environment hints for connecting the orchestrator to the toolbox
+    Env(AgentToolboxViewArgs),
+}
+
 #[derive(Subcommand, Debug)]
 pub enum AgentAction {
     /// List the effective agent inventory
@@ -454,6 +475,8 @@ pub enum AgentAction {
     Status(AgentViewArgs),
     /// Validate deterministic startability of the agent control plane
     Doctor(AgentDoctorArgs),
+    /// Inspect the internal orchestration toolbox surface
+    Toolbox(AgentToolboxCmd),
 }
 
 #[derive(Args, Debug)]

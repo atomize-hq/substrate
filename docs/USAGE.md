@@ -69,11 +69,13 @@ substrate agent list
 substrate agent list --json
 substrate agent status --scope world
 substrate agent doctor --json
+substrate agent toolbox status --json
+substrate agent toolbox env
 ```
 
 `substrate agents validate` remains available as the inventory-validation
-compatibility leaf. It does not alias `substrate agent list`, `status`, or
-`doctor`.
+compatibility leaf. It does not alias `substrate agent list`, `status`,
+`doctor`, or `toolbox ...`.
 
 Operator-visible identity rules on these surfaces:
 - `backend_id` always renders as `<kind>:<agent_id>`.
@@ -82,6 +84,8 @@ Operator-visible identity rules on these surfaces:
 - `world_id` and `world_generation` render only for world-scoped pure-agent session rows.
 - Nested gateway-backed status rows stay separate from pure-agent rows and are the only rows that publish `provider` and `auth_authority`.
 - Nested gateway-backed status rows depend on valid trace-side `parent_run_id` correlation; stale historical nested rows are ignored, and malformed selected-surface rows fail closed.
+- `substrate agent toolbox status` is a pre-runtime introspection surface: it projects the effective toolbox posture, the selected orchestrator identity, and either the active per-session UDS endpoint or the deterministic endpoint template when no orchestrator session is active yet.
+- `substrate agent toolbox env` emits `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` and `SUBSTRATE_AGENT_TOOLBOX_VERSION` only when a current pure-agent orchestrator session is present; otherwise it fails closed with a specific exit code.
 
 ## PTY Support
 

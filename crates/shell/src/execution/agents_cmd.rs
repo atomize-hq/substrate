@@ -3,11 +3,11 @@ use crate::execution::agent_inventory::{
     AgentInventoryEntryV1,
 };
 use crate::execution::cli::{
-    AgentAction, AgentCmd, AgentDoctorArgs, AgentScopeArg, AgentViewArgs, AgentsAction, AgentsCmd,
-    Cli,
+    AgentAction, AgentCmd, AgentDoctorArgs, AgentScopeArg, AgentToolboxAction, AgentToolboxCmd,
+    AgentToolboxViewArgs, AgentViewArgs, AgentsAction, AgentsCmd, Cli,
 };
 use crate::execution::config_model::{
-    self, AgentExecutionScope, CliConfigOverrides, SubstrateConfig,
+    self, AgentExecutionScope, AgentToolboxBindTransport, CliConfigOverrides, SubstrateConfig,
 };
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -25,6 +25,7 @@ use substrate_common::{AgentEvent, PlacementExecution};
 const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
 const PURE_AGENT_ROUTER: &str = "agent_hub";
 const NESTED_ROUTER: &str = "substrate_gateway";
+const TOOLBOX_VERSION: u32 = 1;
 const MEMBER_ROLE: &str = "member";
 const ORCHESTRATOR_ROLE: &str = "orchestrator";
 
@@ -63,6 +64,26 @@ pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
                 1
             }
         },
+        AgentAction::Toolbox(cmd) => handle_agent_toolbox_command(cmd, cli),
+    }
+}
+
+fn handle_agent_toolbox_command(cmd: &AgentToolboxCmd, cli: &Cli) -> i32 {
+    let result = match &cmd.action {
+        AgentToolboxAction::Status(args) => run_toolbox_status(args, cli),
+        AgentToolboxAction::Env(args) => run_toolbox_env(args, cli),
+    };
+
+    match result {
+        Ok(code) => code,
+        Err(err) if config_model::is_user_error(&err) => {
+            eprintln!("{err}");
+            2
+        }
+        Err(err) => {
+            eprintln!("{err:#}");
+            1
+        }
     }
 }
 
@@ -668,6 +689,365 @@ fn render_status_report(report: &StatusReportJson<'_>, json_mode: bool) -> Resul
     }
 
     Ok(())
+}
+
+fn run_toolbox_status(args: &AgentToolboxViewArgs, cli: &Cli) -> Result<i32> {
+    let context = resolve_command_context(cli)?;
+    let report = build_toolbox_status_report(&context)?;
+    render_toolbox_status_report(&report, args.json)?;
+    Ok(0)
+}
+
+fn run_toolbox_env(args: &AgentToolboxViewArgs, cli: &Cli) -> Result<i32> {
+    let context = resolve_command_context(cli)?;
+    let status = build_toolbox_status_report(&context)?;
+    match status.eligibility.state.as_str() {
+        "allowed" => {
+            let report = build_toolbox_env_report(&status)?;
+            render_toolbox_env_report(&report, args.json)?;
+            Ok(0)
+        }
+        "disabled" => {
+            eprintln!(
+                "{}",
+                status
+                    .eligibility
+                    .reason
+                    .as_deref()
+                    .unwrap_or("toolbox is disabled by the effective config")
+            );
+            Ok(2)
+        }
+        "denied" => {
+            eprintln!(
+                "{}",
+                status
+                    .eligibility
+                    .reason
+                    .as_deref()
+                    .unwrap_or("toolbox access is denied by effective policy")
+            );
+            Ok(5)
+        }
+        "unsupported" => {
+            eprintln!(
+                "{}",
+                status
+                    .eligibility
+                    .reason
+                    .as_deref()
+                    .unwrap_or("toolbox transport is unsupported")
+            );
+            Ok(4)
+        }
+        "dependency_unavailable" => {
+            eprintln!(
+                "{}",
+                status
+                    .eligibility
+                    .reason
+                    .as_deref()
+                    .unwrap_or("toolbox environment hints require an active orchestrator session",)
+            );
+            Ok(3)
+        }
+        other => Err(anyhow::anyhow!(
+            "unexpected toolbox eligibility state '{other}'"
+        )),
+    }
+}
+
+#[derive(Clone, Serialize)]
+struct ToolboxOrchestratorJson<'a> {
+    agent_id: String,
+    backend_id: String,
+    role: &'a str,
+    execution: ExecutionScopeJson<'a>,
+}
+
+#[derive(Clone, Serialize)]
+struct ToolboxEligibilityJson {
+    state: String,
+    reason: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+struct ToolboxStatusReportJson<'a> {
+    toolbox_enabled: bool,
+    toolbox_version: u32,
+    transport: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    endpoint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    endpoint_template: Option<String>,
+    active_orchestration_session_id: Option<String>,
+    eligibility: ToolboxEligibilityJson,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    orchestrator: Option<ToolboxOrchestratorJson<'a>>,
+}
+
+#[derive(Serialize)]
+struct ToolboxEnvReportJson {
+    #[serde(rename = "SUBSTRATE_AGENT_TOOLBOX_ENDPOINT")]
+    substrate_agent_toolbox_endpoint: String,
+    #[serde(rename = "SUBSTRATE_AGENT_TOOLBOX_VERSION")]
+    substrate_agent_toolbox_version: String,
+}
+
+struct LatestOrchestratorSession {
+    orchestration_session_id: String,
+    ts: DateTime<Utc>,
+}
+
+fn build_toolbox_status_report<'a>(
+    context: &'a AgentCommandContext,
+) -> Result<ToolboxStatusReportJson<'a>> {
+    let transport = toolbox_transport_label(context.effective_config.agents.toolbox.bind.transport);
+
+    if !context.effective_config.agents.enabled {
+        return Ok(ToolboxStatusReportJson {
+            toolbox_enabled: false,
+            toolbox_version: TOOLBOX_VERSION,
+            transport,
+            endpoint: None,
+            endpoint_template: None,
+            active_orchestration_session_id: None,
+            eligibility: ToolboxEligibilityJson {
+                state: "disabled".to_string(),
+                reason: Some("agents are disabled by effective config".to_string()),
+            },
+            orchestrator: None,
+        });
+    }
+
+    let orchestrator =
+        validate_orchestrator_selection(&context.effective_config, &context.inventory)
+            .map_err(config_model::user_error)?;
+    let orchestrator_report = ToolboxOrchestratorJson {
+        agent_id: orchestrator.file.id.clone(),
+        backend_id: orchestrator.derived_backend_id(),
+        role: ORCHESTRATOR_ROLE,
+        execution: ExecutionScopeJson { scope: "host" },
+    };
+
+    if !context.effective_config.agents.toolbox.enabled {
+        return Ok(ToolboxStatusReportJson {
+            toolbox_enabled: false,
+            toolbox_version: TOOLBOX_VERSION,
+            transport,
+            endpoint: None,
+            endpoint_template: None,
+            active_orchestration_session_id: None,
+            eligibility: ToolboxEligibilityJson {
+                state: "disabled".to_string(),
+                reason: Some("agents.toolbox.enabled is false in the effective config".to_string()),
+            },
+            orchestrator: Some(orchestrator_report),
+        });
+    }
+
+    if !backend_allowed(&context.base_policy, &orchestrator_report.backend_id) {
+        return Ok(ToolboxStatusReportJson {
+            toolbox_enabled: true,
+            toolbox_version: TOOLBOX_VERSION,
+            transport,
+            endpoint: None,
+            endpoint_template: None,
+            active_orchestration_session_id: None,
+            eligibility: ToolboxEligibilityJson {
+                state: "denied".to_string(),
+                reason: Some(format!(
+                    "selected orchestrator backend '{}' is not allowlisted by effective policy agents.allowed_backends",
+                    orchestrator_report.backend_id
+                )),
+            },
+            orchestrator: Some(orchestrator_report),
+        });
+    }
+
+    match context.effective_config.agents.toolbox.bind.transport {
+        AgentToolboxBindTransport::Tcp => Ok(ToolboxStatusReportJson {
+            toolbox_enabled: true,
+            toolbox_version: TOOLBOX_VERSION,
+            transport,
+            endpoint: None,
+            endpoint_template: None,
+            active_orchestration_session_id: None,
+            eligibility: ToolboxEligibilityJson {
+                state: "unsupported".to_string(),
+                reason: Some(
+                    "toolbox TCP transport is not yet supported because no deterministic pre-runtime loopback port contract exists"
+                        .to_string(),
+                ),
+            },
+            orchestrator: Some(orchestrator_report),
+        }),
+        AgentToolboxBindTransport::Uds => {
+            let endpoint_template = Some(toolbox_uds_endpoint_template()?);
+            let latest_session =
+                latest_orchestrator_session_id(&orchestrator.file.id, &read_trace_agent_events()?);
+
+            match latest_session {
+                Some(session) => Ok(ToolboxStatusReportJson {
+                    toolbox_enabled: true,
+                    toolbox_version: TOOLBOX_VERSION,
+                    transport,
+                    endpoint: Some(toolbox_uds_endpoint(&session.orchestration_session_id)?),
+                    endpoint_template,
+                    active_orchestration_session_id: Some(session.orchestration_session_id),
+                    eligibility: ToolboxEligibilityJson {
+                        state: "allowed".to_string(),
+                        reason: None,
+                    },
+                    orchestrator: Some(orchestrator_report),
+                }),
+                None => Ok(ToolboxStatusReportJson {
+                    toolbox_enabled: true,
+                    toolbox_version: TOOLBOX_VERSION,
+                    transport,
+                    endpoint: None,
+                    endpoint_template,
+                    active_orchestration_session_id: None,
+                    eligibility: ToolboxEligibilityJson {
+                        state: "dependency_unavailable".to_string(),
+                        reason: Some(
+                            "no active pure-agent orchestrator session found in trace for the selected orchestrator"
+                                .to_string(),
+                        ),
+                    },
+                    orchestrator: Some(orchestrator_report),
+                }),
+            }
+        }
+    }
+}
+
+fn render_toolbox_status_report(
+    report: &ToolboxStatusReportJson<'_>,
+    json_mode: bool,
+) -> Result<()> {
+    if json_mode {
+        println!("{}", serde_json::to_string_pretty(report)?);
+        return Ok(());
+    }
+
+    println!("toolbox_enabled: {}", report.toolbox_enabled);
+    println!("toolbox_version: {}", report.toolbox_version);
+    println!("transport: {}", report.transport);
+    let eligibility = if let Some(reason) = &report.eligibility.reason {
+        format!("{}: {}", report.eligibility.state, reason)
+    } else {
+        report.eligibility.state.clone()
+    };
+    println!("eligibility: {eligibility}");
+
+    if let Some(session_id) = &report.active_orchestration_session_id {
+        println!("active_orchestration_session_id: {session_id}");
+    }
+    if let Some(endpoint) = &report.endpoint {
+        println!("endpoint: {endpoint}");
+    }
+    if let Some(endpoint_template) = &report.endpoint_template {
+        println!("endpoint_template: {endpoint_template}");
+    }
+    if let Some(orchestrator) = &report.orchestrator {
+        println!(
+            "orchestrator: agent_id={} | backend_id={} | role={} | execution.scope={}",
+            orchestrator.agent_id,
+            orchestrator.backend_id,
+            orchestrator.role,
+            orchestrator.execution.scope
+        );
+    }
+
+    Ok(())
+}
+
+fn build_toolbox_env_report(report: &ToolboxStatusReportJson<'_>) -> Result<ToolboxEnvReportJson> {
+    Ok(ToolboxEnvReportJson {
+        substrate_agent_toolbox_endpoint: report
+            .endpoint
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("missing toolbox endpoint for allowed session"))?,
+        substrate_agent_toolbox_version: TOOLBOX_VERSION.to_string(),
+    })
+}
+
+fn render_toolbox_env_report(report: &ToolboxEnvReportJson, json_mode: bool) -> Result<()> {
+    if json_mode {
+        println!("{}", serde_json::to_string_pretty(report)?);
+        return Ok(());
+    }
+
+    println!(
+        "export SUBSTRATE_AGENT_TOOLBOX_ENDPOINT={}",
+        shell_single_quote(&report.substrate_agent_toolbox_endpoint)
+    );
+    println!(
+        "export SUBSTRATE_AGENT_TOOLBOX_VERSION={}",
+        shell_single_quote(&report.substrate_agent_toolbox_version)
+    );
+    Ok(())
+}
+
+fn latest_orchestrator_session_id(
+    agent_id: &str,
+    events: &[AgentEvent],
+) -> Option<LatestOrchestratorSession> {
+    let mut latest: Option<LatestOrchestratorSession> = None;
+    for event in events {
+        if event.agent_id != agent_id {
+            continue;
+        }
+        if pure_session_key(event).is_none() {
+            continue;
+        }
+        let candidate = LatestOrchestratorSession {
+            orchestration_session_id: event.orchestration_session_id.clone(),
+            ts: event.ts,
+        };
+        let replace = match &latest {
+            Some(existing) => candidate.ts >= existing.ts,
+            None => true,
+        };
+        if replace {
+            latest = Some(candidate);
+        }
+    }
+    latest
+}
+
+fn toolbox_transport_label(transport: AgentToolboxBindTransport) -> &'static str {
+    match transport {
+        AgentToolboxBindTransport::Uds => "uds",
+        AgentToolboxBindTransport::Tcp => "tcp",
+    }
+}
+
+fn toolbox_uds_endpoint(orchestration_session_id: &str) -> Result<String> {
+    Ok(format!(
+        "unix://{}",
+        substrate_paths::substrate_home()?
+            .join("run")
+            .join("agent-toolbox")
+            .join(format!("{orchestration_session_id}.sock"))
+            .display()
+    ))
+}
+
+fn toolbox_uds_endpoint_template() -> Result<String> {
+    Ok(format!(
+        "unix://{}",
+        substrate_paths::substrate_home()?
+            .join("run")
+            .join("agent-toolbox")
+            .join("<orchestration_session_id>.sock")
+            .display()
+    ))
+}
+
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 fn read_trace_agent_events() -> Result<Vec<AgentEvent>> {
