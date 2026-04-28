@@ -116,6 +116,27 @@ impl AgentFileV1 {
             .scope
             .unwrap_or(effective_config.agents.defaults.execution.scope)
     }
+
+    pub(crate) fn effective_cli_mode(
+        &self,
+        effective_config: &crate::execution::config_model::SubstrateConfig,
+    ) -> crate::execution::config_model::AgentCliMode {
+        self.config
+            .cli
+            .as_ref()
+            .and_then(|cli| cli.mode)
+            .unwrap_or(effective_config.agents.defaults.cli.mode)
+    }
+
+    pub(crate) fn effective_cli_binary(&self) -> Option<&str> {
+        let cli = self.config.cli.as_ref()?;
+        let trimmed = cli.binary.trim();
+        if trimmed.is_empty() {
+            Some(self.id.as_str())
+        } else {
+            Some(trimmed)
+        }
+    }
 }
 
 impl AgentInventoryEntryV1 {
@@ -128,6 +149,17 @@ impl AgentInventoryEntryV1 {
         effective_config: &crate::execution::config_model::SubstrateConfig,
     ) -> crate::execution::config_model::AgentExecutionScope {
         self.file.effective_scope(effective_config)
+    }
+
+    pub(crate) fn effective_cli_mode(
+        &self,
+        effective_config: &crate::execution::config_model::SubstrateConfig,
+    ) -> crate::execution::config_model::AgentCliMode {
+        self.file.effective_cli_mode(effective_config)
+    }
+
+    pub(crate) fn effective_cli_binary(&self) -> Option<&str> {
+        self.file.effective_cli_binary()
     }
 }
 

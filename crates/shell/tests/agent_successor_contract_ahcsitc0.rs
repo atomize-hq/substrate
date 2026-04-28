@@ -21,6 +21,8 @@ enum CapabilityOverride<'a> {
 struct SessionContractOptions<'a> {
     protocol: Option<&'a str>,
     capability_override: Option<CapabilityOverride<'a>>,
+    cli_mode: &'a str,
+    binary: &'a str,
 }
 
 impl SessionContractOptions<'_> {
@@ -28,6 +30,8 @@ impl SessionContractOptions<'_> {
         Self {
             protocol: Some(PURE_AGENT_PROTOCOL),
             capability_override: None,
+            cli_mode: "persistent",
+            binary: "sh",
         }
     }
 }
@@ -228,7 +232,8 @@ fn cli_agent_file_with_session_contract<'a>(
         body.push_str(&format!("  protocol: {protocol}\n"));
     }
     body.push_str(&format!(
-        "  execution:\n    scope: {scope}\n  cli:\n    binary: {agent_id}\n    mode: persistent\n  capabilities:\n"
+        "  execution:\n    scope: {scope}\n  cli:\n    binary: {}\n    mode: {}\n  capabilities:\n",
+        options.binary, options.cli_mode
     ));
     for capability in [
         "session_start",
@@ -253,6 +258,96 @@ fn cli_agent_file_with_session_contract<'a>(
     }
     body.push_str(&format!("    llm: {llm}\n    mcp_client: {mcp_client}\n"));
     body
+}
+
+fn write_live_runtime_manifest(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    session_handle_id: &str,
+    ts: &str,
+) {
+    write_runtime_manifest(
+        fixture,
+        agent_id,
+        orchestration_session_id,
+        session_handle_id,
+        "running",
+        true,
+        ts,
+    );
+}
+
+fn write_invalidated_runtime_manifest(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    session_handle_id: &str,
+    ts: &str,
+) {
+    write_runtime_manifest(
+        fixture,
+        agent_id,
+        orchestration_session_id,
+        session_handle_id,
+        "invalidated",
+        false,
+        ts,
+    );
+}
+
+fn write_runtime_manifest(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    session_handle_id: &str,
+    state: &str,
+    ownership_valid: bool,
+    ts: &str,
+) {
+    let handles_dir = fixture
+        .substrate_home
+        .join("run")
+        .join("agent-hub")
+        .join("handles");
+    fs::create_dir_all(&handles_dir).expect("failed to create runtime handles dir");
+    let manifest = json!({
+        "session_handle_id": session_handle_id,
+        "orchestration_session_id": orchestration_session_id,
+        "agent_id": agent_id,
+        "backend_id": format!("cli:{agent_id}"),
+        "role": "orchestrator",
+        "protocol": PURE_AGENT_PROTOCOL,
+        "execution": { "scope": "host" },
+        "state": state,
+        "opened_at": ts,
+        "last_transition_at": ts,
+        "parent_session_handle_id": null,
+        "resumed_from_session_handle_id": null,
+        "internal": {
+            "resolved_agent_kind": agent_id,
+            "resolved_binary_path": "sh",
+            "shell_owner_pid": std::process::id(),
+            "lease_token": "lease-test",
+            "uaa_session_id": "external-session-1",
+            "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
+            "cancel_supported": true,
+            "ownership_mode": "attached_control",
+            "ownership_valid": ownership_valid,
+            "ownership_verified_at": ts,
+            "last_heartbeat_at": ts,
+            "last_event_at": ts,
+            "terminal_observed_at": if ownership_valid { Value::Null } else { json!(ts) },
+            "termination_reason": if ownership_valid { Value::Null } else { json!("attached control exited") },
+            "last_error_bucket": null,
+            "last_error_message": null
+        }
+    });
+    fs::write(
+        handles_dir.join(format!("{session_handle_id}.json")),
+        serde_json::to_vec_pretty(&manifest).expect("serialize runtime manifest"),
+    )
+    .expect("write runtime manifest");
 }
 
 fn repo_root() -> PathBuf {
@@ -737,20 +832,17 @@ fn agent_toolbox_env_requires_an_active_orchestrator_session() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("no active pure-agent orchestrator session found in trace"),
+        stderr
+            .contains("no active pure-agent orchestrator session found in authoritative live manifests"),
         "stderr must explain the missing active session: {stderr}"
     );
 }
 
 #[test]
-fn agent_toolbox_env_json_emits_exact_endpoint_for_latest_orchestrator_session() {
+fn agent_toolbox_env_trace_history_does_not_authorize_active_session() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_toolbox_contracts("uds");
-    let expected_endpoint = format!(
-        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f99.sock",
-        fixture.substrate_home.display()
-    );
     fixture.write_trace_events(&[
         json!({
             "ts": "2026-04-06T00:00:00Z",
@@ -787,22 +879,105 @@ fn agent_toolbox_env_json_emits_exact_endpoint_for_latest_orchestrator_session()
     ]);
 
     let output = fixture.run(&["agent", "toolbox", "env", "--json"]);
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "trace history must not authorize an active toolbox session: {output:?}"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("authoritative live manifests"),
+        "trace-only active history must fail closed at the authoritative live manifest boundary: {stderr}"
+    );
+}
+
+#[test]
+fn agent_toolbox_env_prefers_live_manifest_over_trace_fallback() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa",
+        "ash_live_toolbox",
+        "2026-04-06T00:00:02Z",
+    );
+    fixture.write_trace_events(&[json!({
+        "ts": "2026-04-06T00:00:03Z",
+        "event_type": "agent_event",
+        "session_id": "ses_agent_hub",
+        "component": "agent-hub",
+        "kind": "status",
+        "agent_id": "claude_code",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fab",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fac",
+        "backend_id": "cli:claude_code",
+        "client": "claude_code",
+        "router": "agent_hub",
+        "protocol": "uaa.agent.session",
+        "role": "orchestrator",
+        "data": { "message": "trace fallback should lose to live manifest" }
+    })]);
+
+    let output = fixture.run(&["agent", "toolbox", "env", "--json"]);
     assert!(
         output.status.success(),
-        "toolbox env should succeed once an orchestrator session exists: {output:?}"
+        "toolbox env should prefer the live manifest: {output:?}"
     );
 
     let json = parse_json_output(&output);
-    assert_eq!(
-        json.pointer("/SUBSTRATE_AGENT_TOOLBOX_VERSION")
-            .and_then(Value::as_str),
-        Some("1")
+    let expected = format!(
+        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa.sock",
+        fixture.substrate_home.display()
     );
     assert_eq!(
         json.pointer("/SUBSTRATE_AGENT_TOOLBOX_ENDPOINT")
             .and_then(Value::as_str),
-        Some(expected_endpoint.as_str()),
-        "env output must project the latest orchestrator session into the deterministic UDS path: {json}"
+        Some(expected.as_str()),
+        "toolbox env must use the authoritative live manifest and ignore trace history for active-session authorization: {json}"
+    );
+}
+
+#[test]
+fn agent_toolbox_env_invalidated_manifest_and_trace_still_fail_closed() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_invalidated_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa",
+        "ash_invalidated_toolbox",
+        "2026-04-06T00:00:02Z",
+    );
+    fixture.write_trace_events(&[json!({
+        "ts": "2026-04-06T00:00:03Z",
+        "event_type": "agent_event",
+        "session_id": "ses_agent_hub",
+        "component": "agent-hub",
+        "kind": "status",
+        "agent_id": "claude_code",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fab",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fac",
+        "backend_id": "cli:claude_code",
+        "client": "claude_code",
+        "router": "agent_hub",
+        "protocol": "uaa.agent.session",
+        "role": "orchestrator",
+        "data": { "message": "historical trace must not resurrect an invalidated session" }
+    })]);
+
+    let output = fixture.run(&["agent", "toolbox", "env", "--json"]);
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "invalidated manifests must not be resurrected by trace fallback: {output:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("authoritative live manifests"),
+        "invalidated manifests must keep toolbox env behind the authoritative live-manifest contract"
     );
 }
 
@@ -984,6 +1159,55 @@ fn agent_status_preserves_member_roles_and_filters_them_by_contract_label() {
     assert_eq!(
         orchestrator_only.pointer("/role").and_then(Value::as_str),
         Some("orchestrator")
+    );
+}
+
+#[test]
+fn agent_status_prefers_live_manifest_over_trace_fallback_for_selected_orchestrator() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa",
+        "ash_live_status",
+        "2026-04-05T00:00:02Z",
+    );
+    fixture.write_trace_events(&[json!({
+        "ts": "2026-04-05T00:00:03Z",
+        "event_type": "agent_event",
+        "session_id": "ses_agent_hub",
+        "component": "agent-hub",
+        "kind": "status",
+        "agent_id": "claude_code",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fab",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fac",
+        "backend_id": "cli:claude_code",
+        "client": "claude_code",
+        "router": "agent_hub",
+        "protocol": "uaa.agent.session",
+        "role": "orchestrator",
+        "data": { "message": "trace fallback should lose to live manifest" }
+    })]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "status should prefer the live manifest: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    assert_eq!(
+        orchestrator
+            .pointer("/orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa"),
+        "status must prefer live manifest state over trace fallback for the selected orchestrator: {json}"
     );
 }
 
@@ -1504,6 +1728,7 @@ fn agent_doctor_json_locks_field_names_omissions_and_check_order() {
         vec![
             "inventory_scan",
             "orchestrator_selection",
+            "runtime_realizability",
             "policy_allowlist",
             "world_boundary",
         ],
@@ -1521,8 +1746,8 @@ fn agent_doctor_json_locks_field_names_omissions_and_check_order() {
         .collect();
     assert_eq!(
         statuses,
-        vec!["pass", "pass", "pass", "not_applicable"],
-        "host-only doctor fixture should report a not_applicable world boundary after the three required passes: {json}"
+        vec!["pass", "pass", "pass", "pass", "not_applicable"],
+        "host-only doctor fixture should report a not_applicable world boundary after the four required passes: {json}"
     );
 }
 
@@ -1542,6 +1767,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_missing() {
             SessionContractOptions {
                 protocol: None,
                 capability_override: None,
+                ..SessionContractOptions::default()
             },
         ),
     );
@@ -1573,6 +1799,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_wrong() {
             SessionContractOptions {
                 protocol: Some("openai.responses"),
                 capability_override: None,
+                ..SessionContractOptions::default()
             },
         ),
     );
@@ -1604,6 +1831,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_fals
             SessionContractOptions {
                 protocol: Some(PURE_AGENT_PROTOCOL),
                 capability_override: Some(CapabilityOverride::ForceFalse("event_stream")),
+                ..SessionContractOptions::default()
             },
         ),
     );
@@ -1635,6 +1863,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_omit
             SessionContractOptions {
                 protocol: Some(PURE_AGENT_PROTOCOL),
                 capability_override: Some(CapabilityOverride::Omit("event_stream")),
+                ..SessionContractOptions::default()
             },
         ),
     );
@@ -1647,6 +1876,111 @@ fn agent_doctor_fails_at_orchestrator_selection_when_required_capability_is_omit
     assert_doctor_fails_at_orchestrator_selection(
         &output,
         "orchestrator agent 'claude_code' is missing required capability 'event_stream'",
+    );
+}
+
+#[test]
+fn agent_doctor_fails_at_runtime_realizability_when_selected_binary_is_missing() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_doctor_prereqs();
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file_with_session_contract(
+            "claude_code",
+            "host",
+            true,
+            true,
+            true,
+            SessionContractOptions {
+                binary: "definitely_missing_substrate_agent_binary",
+                ..SessionContractOptions::default()
+            },
+        ),
+    );
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert_eq!(
+        output.status.code(),
+        Some(4),
+        "doctor should classify missing orchestrator binaries as host-prereq failures: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let checks = json["checks"]
+        .as_array()
+        .expect("checks should be an array");
+    let observed: Vec<&str> = checks
+        .iter()
+        .map(|check| check.pointer("/check").and_then(Value::as_str).unwrap())
+        .collect();
+    assert_eq!(
+        observed,
+        vec![
+            "inventory_scan",
+            "orchestrator_selection",
+            "runtime_realizability",
+        ],
+        "doctor must stop at runtime_realizability before policy/world checks on binary resolution failures: {json}"
+    );
+    assert!(
+        checks[2]
+            .pointer("/reason")
+            .and_then(Value::as_str)
+            .is_some_and(|reason| reason.contains("did not resolve on the host")),
+        "runtime_realizability must explain the missing binary: {json}"
+    );
+}
+
+#[test]
+fn agent_doctor_fails_at_runtime_realizability_when_selected_cli_mode_is_per_request() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_doctor_prereqs();
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file_with_session_contract(
+            "claude_code",
+            "host",
+            true,
+            true,
+            true,
+            SessionContractOptions {
+                cli_mode: "per_request",
+                ..SessionContractOptions::default()
+            },
+        ),
+    );
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "doctor should classify unsupported cli.mode values as runtime contract failures: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let checks = json["checks"]
+        .as_array()
+        .expect("checks should be an array");
+    let observed: Vec<&str> = checks
+        .iter()
+        .map(|check| check.pointer("/check").and_then(Value::as_str).unwrap())
+        .collect();
+    assert_eq!(
+        observed,
+        vec![
+            "inventory_scan",
+            "orchestrator_selection",
+            "runtime_realizability",
+        ],
+        "doctor must stop at runtime_realizability before policy/world checks on unsupported cli.mode values: {json}"
+    );
+    assert_eq!(
+        checks[2].pointer("/reason").and_then(Value::as_str),
+        Some(
+            "selected orchestrator 'claude_code' is not runtime-realizable because cli.mode=per_request is unsupported; only cli.mode=persistent is supported for the first caller path"
+        )
     );
 }
 
@@ -1870,11 +2204,16 @@ metadata: {}
         .collect();
     assert_eq!(
         observed,
-        vec!["inventory_scan", "orchestrator_selection", "policy_allowlist"],
+        vec![
+            "inventory_scan",
+            "orchestrator_selection",
+            "runtime_realizability",
+            "policy_allowlist",
+        ],
         "fail-closed routing must stop at the member backend allowlist before world_boundary: {json}"
     );
     assert_eq!(
-        checks[2].pointer("/reason").and_then(Value::as_str),
+        checks[3].pointer("/reason").and_then(Value::as_str),
         Some(
             "required world-scoped member backend 'cli:codex' is not allowlisted by effective policy agents.allowed_backends"
         ),

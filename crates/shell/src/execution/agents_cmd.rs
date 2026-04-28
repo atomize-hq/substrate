@@ -1,6 +1,11 @@
 use crate::execution::agent_inventory::{
-    discover_agent_files, load_effective_agent_inventory, validate_agent_file, AgentCapabilitiesV1,
+    discover_agent_files, load_effective_agent_inventory, validate_agent_file,
     AgentInventoryEntryV1,
+};
+use crate::execution::agent_runtime::{
+    runtime_realizability_error_exit_code, validate_orchestrator_selection,
+    validate_runtime_realizability, AgentRuntimeSessionManifest, AgentRuntimeStateStore,
+    MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDoctorArgs, AgentScopeArg, AgentToolboxAction, AgentToolboxCmd,
@@ -21,15 +26,7 @@ use std::process::Command;
 use substrate_broker::Policy;
 use substrate_common::paths as substrate_paths;
 use substrate_common::{AgentEvent, PlacementExecution};
-
-// Substrate-local normalized protocol-family id for current pure-agent status
-// and selection logic; not, by itself, a claim of upstream UAA compatibility.
-const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
-const PURE_AGENT_ROUTER: &str = "agent_hub";
-const NESTED_ROUTER: &str = "substrate_gateway";
 const TOOLBOX_VERSION: u32 = 1;
-const MEMBER_ROLE: &str = "member";
-const ORCHESTRATOR_ROLE: &str = "orchestrator";
 
 pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
     match &cmd.action {
@@ -430,6 +427,7 @@ fn build_status_report<'a>(
     }
 
     let events = read_trace_agent_events()?;
+    let live_manifests = AgentRuntimeStateStore::new()?.list_live_manifests()?;
     let mut sessions = BTreeMap::<(String, String), SessionProjection>::new();
     let mut nested = BTreeMap::<(String, String, String), NestedProjection>::new();
     let mut historical_parent_runs = BTreeMap::<(String, String), BTreeSet<String>>::new();
@@ -613,10 +611,31 @@ fn build_status_report<'a>(
         )));
     }
 
-    let filtered_sessions: Vec<StatusSessionJson> = filtered_session_projections
-        .into_iter()
-        .map(|projection| projection.session)
-        .collect();
+    let mut merged_sessions = BTreeMap::<(String, String), StatusSessionJson>::new();
+    for manifest in live_manifests {
+        let session = live_manifest_status_session(&manifest);
+        if !matches_scope(scope_from_label(session.execution.scope), args.scope)
+            || !matches_role(session.role.as_deref(), role_filter)
+        {
+            continue;
+        }
+        merged_sessions.insert(
+            (
+                session.orchestration_session_id.clone(),
+                session.agent_id.clone(),
+            ),
+            session,
+        );
+    }
+    for projection in filtered_session_projections {
+        merged_sessions
+            .entry((
+                projection.session.orchestration_session_id.clone(),
+                projection.session.agent_id.clone(),
+            ))
+            .or_insert(projection.session);
+    }
+    let filtered_sessions: Vec<StatusSessionJson> = merged_sessions.into_values().collect();
 
     Ok(StatusReportJson {
         disabled: false,
@@ -796,11 +815,6 @@ struct ToolboxEnvReportJson {
     substrate_agent_toolbox_version: String,
 }
 
-struct LatestOrchestratorSession {
-    orchestration_session_id: String,
-    ts: DateTime<Utc>,
-}
-
 fn build_toolbox_status_report<'a>(
     context: &'a AgentCommandContext,
 ) -> Result<ToolboxStatusReportJson<'a>> {
@@ -887,16 +901,18 @@ fn build_toolbox_status_report<'a>(
         AgentToolboxBindTransport::Uds => {
             let endpoint_template = Some(toolbox_uds_endpoint_template()?);
             let latest_session =
-                latest_orchestrator_session_id(&orchestrator.file.id, &read_trace_agent_events()?);
+                AgentRuntimeStateStore::new()?.find_live_orchestrator(&orchestrator.file.id)?;
 
             match latest_session {
                 Some(session) => Ok(ToolboxStatusReportJson {
                     toolbox_enabled: true,
                     toolbox_version: TOOLBOX_VERSION,
                     transport,
-                    endpoint: Some(toolbox_uds_endpoint(&session.orchestration_session_id)?),
+                    endpoint: Some(toolbox_uds_endpoint(&session.handle.orchestration_session_id)?),
                     endpoint_template,
-                    active_orchestration_session_id: Some(session.orchestration_session_id),
+                    active_orchestration_session_id: Some(
+                        session.handle.orchestration_session_id,
+                    ),
                     eligibility: ToolboxEligibilityJson {
                         state: "allowed".to_string(),
                         reason: None,
@@ -913,7 +929,7 @@ fn build_toolbox_status_report<'a>(
                     eligibility: ToolboxEligibilityJson {
                         state: "dependency_unavailable".to_string(),
                         reason: Some(
-                            "no active pure-agent orchestrator session found in trace for the selected orchestrator"
+                            "no active pure-agent orchestrator session found in authoritative live manifests for the selected orchestrator"
                                 .to_string(),
                         ),
                     },
@@ -990,33 +1006,6 @@ fn render_toolbox_env_report(report: &ToolboxEnvReportJson, json_mode: bool) -> 
         shell_single_quote(&report.substrate_agent_toolbox_version)
     );
     Ok(())
-}
-
-fn latest_orchestrator_session_id(
-    agent_id: &str,
-    events: &[AgentEvent],
-) -> Option<LatestOrchestratorSession> {
-    let mut latest: Option<LatestOrchestratorSession> = None;
-    for event in events {
-        if event.agent_id != agent_id {
-            continue;
-        }
-        if pure_session_key(event).is_none() {
-            continue;
-        }
-        let candidate = LatestOrchestratorSession {
-            orchestration_session_id: event.orchestration_session_id.clone(),
-            ts: event.ts,
-        };
-        let replace = match &latest {
-            Some(existing) => candidate.ts >= existing.ts,
-            None => true,
-        };
-        if replace {
-            latest = Some(candidate);
-        }
-    }
-    latest
 }
 
 fn toolbox_transport_label(transport: AgentToolboxBindTransport) -> &'static str {
@@ -1263,6 +1252,8 @@ struct DoctorReportJson<'a> {
     checks: Vec<DoctorCheckJson>,
     #[serde(skip)]
     world_boundary_exit_code: Option<i32>,
+    #[serde(skip)]
+    runtime_realizability_exit_code: Option<i32>,
 }
 
 enum RequiredWorldBoundaryState {
@@ -1348,9 +1339,43 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 orchestrator: None,
                 checks,
                 world_boundary_exit_code: None,
+                runtime_realizability_exit_code: None,
             });
         }
     };
+
+    let runtime_descriptor = match validate_runtime_realizability(
+        inventory
+            .get(&orchestrator.agent_id)
+            .expect("selected orchestrator must exist in effective inventory"),
+        &effective_config,
+    ) {
+        Ok(descriptor) => {
+            checks.push(DoctorCheckJson {
+                check: "runtime_realizability".to_string(),
+                status: "pass".to_string(),
+                reason: None,
+            });
+            descriptor
+        }
+        Err(err) => {
+            let exit_code = runtime_realizability_error_exit_code(&err);
+            checks.push(DoctorCheckJson {
+                check: "runtime_realizability".to_string(),
+                status: "fail".to_string(),
+                reason: Some(err.reason),
+            });
+            return Ok(DoctorReportJson {
+                healthy: false,
+                fail_closed: true,
+                orchestrator: Some(orchestrator),
+                checks,
+                world_boundary_exit_code: None,
+                runtime_realizability_exit_code: Some(exit_code),
+            });
+        }
+    };
+    let _ = runtime_descriptor;
 
     if let Some(reason) = policy_allowlist_failure(&effective_config, &inventory, &base_policy) {
         checks.push(DoctorCheckJson {
@@ -1364,6 +1389,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
             orchestrator: Some(orchestrator),
             checks,
             world_boundary_exit_code: None,
+            runtime_realizability_exit_code: None,
         });
     }
     checks.push(DoctorCheckJson {
@@ -1388,6 +1414,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 orchestrator: Some(orchestrator),
                 checks,
                 world_boundary_exit_code: Some(3),
+                runtime_realizability_exit_code: None,
             });
         }
 
@@ -1411,6 +1438,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                     orchestrator: Some(orchestrator),
                     checks,
                     world_boundary_exit_code: Some(exit_code),
+                    runtime_realizability_exit_code: None,
                 });
             }
         }
@@ -1428,6 +1456,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
         orchestrator: Some(orchestrator),
         checks,
         world_boundary_exit_code: None,
+        runtime_realizability_exit_code: None,
     })
 }
 
@@ -1446,6 +1475,7 @@ fn failed_doctor_report(
             reason: Some(reason),
         }],
         world_boundary_exit_code: None,
+        runtime_realizability_exit_code: None,
     }
 }
 
@@ -1580,74 +1610,6 @@ fn format_world_boundary_failure_reason(
     }
 }
 
-fn validate_orchestrator_selection<'a>(
-    effective_config: &SubstrateConfig,
-    inventory: &'a BTreeMap<String, AgentInventoryEntryV1>,
-) -> std::result::Result<&'a AgentInventoryEntryV1, String> {
-    if !effective_config.agents.enabled {
-        return Err("agents are disabled by effective config".to_string());
-    }
-
-    let orchestrator_agent_id = effective_config.agents.hub.orchestrator_agent_id.trim();
-    if orchestrator_agent_id.is_empty() {
-        return Err("agents.hub.orchestrator_agent_id must select an orchestrator".to_string());
-    }
-
-    let entry = inventory.get(orchestrator_agent_id).ok_or_else(|| {
-        format!(
-            "agents.hub.orchestrator_agent_id '{}' is not present in the effective agent inventory",
-            orchestrator_agent_id
-        )
-    })?;
-
-    if !entry.file.config.enabled {
-        return Err(format!(
-            "selected orchestrator '{}' is disabled in the effective inventory",
-            orchestrator_agent_id
-        ));
-    }
-
-    if entry.effective_scope(effective_config) != AgentExecutionScope::Host {
-        return Err(format!(
-            "selected orchestrator '{}' must resolve to execution.scope=host",
-            orchestrator_agent_id
-        ));
-    }
-
-    if entry.file.config.protocol.as_deref() != Some(PURE_AGENT_PROTOCOL) {
-        return Err(format!(
-            "orchestrator agent '{}' does not advertise protocol '{}'",
-            orchestrator_agent_id, PURE_AGENT_PROTOCOL
-        ));
-    }
-
-    if let Some(capability) =
-        missing_required_orchestrator_capability(&entry.file.config.capabilities)
-    {
-        return Err(format!(
-            "orchestrator agent '{}' is missing required capability '{}'",
-            orchestrator_agent_id, capability
-        ));
-    }
-
-    Ok(entry)
-}
-
-fn missing_required_orchestrator_capability(
-    capabilities: &AgentCapabilitiesV1,
-) -> Option<&'static str> {
-    [
-        ("session_start", capabilities.session_start),
-        ("session_resume", capabilities.session_resume),
-        ("session_fork", capabilities.session_fork),
-        ("session_stop", capabilities.session_stop),
-        ("status_snapshot", capabilities.status_snapshot),
-        ("event_stream", capabilities.event_stream),
-    ]
-    .into_iter()
-    .find_map(|(name, enabled)| (!enabled).then_some(name))
-}
-
 fn policy_allowlist_failure(
     effective_config: &SubstrateConfig,
     inventory: &BTreeMap<String, AgentInventoryEntryV1>,
@@ -1697,8 +1659,30 @@ fn doctor_exit_code(report: &DoctorReportJson<'_>) -> i32 {
     match failed_check {
         "policy_allowlist" => 5,
         "world_boundary" => report.world_boundary_exit_code.unwrap_or(3),
+        "runtime_realizability" => report.runtime_realizability_exit_code.unwrap_or(2),
         "inventory_scan" | "orchestrator_selection" => 2,
         _ => 1,
+    }
+}
+
+fn live_manifest_status_session(manifest: &AgentRuntimeSessionManifest) -> StatusSessionJson {
+    StatusSessionJson {
+        orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
+        agent_id: manifest.handle.agent_id.clone(),
+        backend_id: manifest.handle.backend_id.clone(),
+        client: manifest.handle.agent_id.clone(),
+        router: PURE_AGENT_ROUTER.to_string(),
+        protocol: manifest.handle.protocol.clone(),
+        execution: ExecutionScopeJson {
+            scope: match manifest.handle.execution.scope {
+                AgentExecutionScope::Host => "host",
+                AgentExecutionScope::World => "world",
+            },
+        },
+        role: Some(manifest.handle.role.clone()),
+        last_event_at: manifest.last_status_at().to_rfc3339(),
+        world_id: manifest.handle.world_id.clone(),
+        world_generation: manifest.handle.world_generation,
     }
 }
 

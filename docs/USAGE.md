@@ -84,8 +84,11 @@ Operator-visible identity rules on these surfaces:
 - `world_id` and `world_generation` render only for world-scoped pure-agent session rows.
 - Nested gateway-backed status rows stay separate from pure-agent rows and are the only rows that publish `provider` and `auth_authority`.
 - Nested gateway-backed status rows depend on valid trace-side `parent_run_id` correlation; stale historical nested rows are ignored, and malformed selected-surface rows fail closed.
+- `substrate agent doctor` now includes a `runtime_realizability` check after `orchestrator_selection`. For the selected orchestrator, it fail-closes on unsupported `config.kind`, unsupported `cli.mode`, unsupported shell-owned backend mapping, or an unresolved `config.cli.binary`.
 - `substrate agent toolbox status` is a pre-runtime introspection surface: it projects the effective toolbox posture, the selected orchestrator identity, and either the active per-session UDS endpoint or the deterministic endpoint template when no orchestrator session is active yet.
 - `substrate agent toolbox env` emits `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` and `SUBSTRATE_AGENT_TOOLBOX_VERSION` only when a current pure-agent orchestrator session is present; otherwise it fails closed with a specific exit code.
+
+When the async REPL owns a shell-scoped orchestrator session, live session discovery is backed by persisted manifests under `~/.substrate/run/agent-hub/handles/`. `substrate agent status` and `substrate agent toolbox ...` prefer those live manifests before falling back to trace-derived session discovery.
 
 ## PTY Support
 

@@ -59,6 +59,7 @@ Phase 8 introduces/locks additional cross-feature correlation fields (e.g., `orc
 Operator note (non-negotiable):
 - Do not rely on heuristic joins. Prefer explicit join keys (`session_id`, `orchestration_session_id`, `run_id`, explicit cause refs) as defined in ADR-0028/Phase 8 contracts.
 - Trace is safe-by-default: do not mirror raw third-party JSONL/NDJSON agent logs into `trace.jsonl` by default. Treat raw wrapper logs and any payloads that may contain secrets as per-session artifacts, and apply redaction/caps rules per ADR-0028 and the Phase 8 secrets rubric.
+- Live shell-owned orchestrator session ownership is persisted separately from trace under `~/.substrate/run/agent-hub/handles/*.json`. Trace remains the canonical historical event log; the live manifests only provide cross-invocation session discovery and precedence for current-session status/toolbox surfaces.
 
 ### Command Span Schema (`command_start` / `command_complete`)
 
@@ -164,6 +165,14 @@ Agent-hub successor telemetry keeps adapter identity separate from semantic iden
 - `world_generation`: generation counter for the active world-scoped pure-agent session or world-backed execution.
 
 `uaa.agent.session` is currently a Substrate-local normalized protocol-family id, not an automatic claim of upstream Unified Agent API wire or API compatibility. In the current repo, pure-agent records are stamped with that label by [agent_events.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/common/src/agent_events.rs:17), and `substrate agent status` / orchestrator-selection logic consumes the same label in [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:25).
+
+The shell-owned UAA runtime translates external `agent_api` wrapper events into canonical `agent_event` trace rows with:
+- `router=agent_hub`
+- `protocol=uaa.agent.session`
+- `provider` omitted
+- `auth_authority` omitted
+
+Bootstrap and lifecycle rows for the first host orchestrator caller path are emitted through the same canonical `agent_event` family; raw wrapper output stays outside `trace.jsonl`.
 
 Operator-facing omission rules:
 - Pure-agent records keep `client`, `router`, and `protocol`, and omit `provider` plus `auth_authority`.

@@ -58,6 +58,7 @@ futures = "0.3"
 base64 = "0.22"
 url = "2"
 rand = "0.8"
+agent_api = { package = "unified-agent-api", version = "=0.2.3", default-features = false, features = ["codex", "claude_code"] }
 agent-api-client = { version = "0.2.7", path = "../agent-api-client" }
 agent-api-types = { version = "0.2.7", path = "../agent-api-types" }
 http-body-util = "0.1"

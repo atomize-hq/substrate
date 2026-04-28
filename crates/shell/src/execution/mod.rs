@@ -1,5 +1,6 @@
 pub mod agent_events;
 pub(crate) mod agent_inventory;
+pub(crate) mod agent_runtime;
 mod agents_cmd;
 mod auto_sync;
 mod cli;

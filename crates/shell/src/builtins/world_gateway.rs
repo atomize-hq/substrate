@@ -1018,6 +1018,7 @@ where
 mod tests {
     use super::*;
     use crate::execution::world_env_guard;
+    use serial_test::serial;
 
     fn with_env_var<T>(key: &str, value: Option<&std::ffi::OsStr>, f: impl FnOnce() -> T) -> T {
         let _guard = world_env_guard();
@@ -1035,6 +1036,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn macos_gateway_client_endpoint_prefers_existing_host_socket() {
         let temp = tempfile::tempdir().expect("tempdir");
         let home = temp.path();
@@ -1067,6 +1069,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn macos_gateway_client_endpoint_falls_back_to_tcp_when_host_socket_missing() {
         let temp = tempfile::tempdir().expect("tempdir");
         let home = temp.path();
@@ -1089,6 +1092,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn macos_gateway_client_endpoint_falls_back_to_tcp_when_explicit_substrate_home_socket_missing()
     {
         let temp = tempfile::tempdir().expect("tempdir");
@@ -1112,6 +1116,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn macos_gateway_client_endpoint_falls_back_to_tcp_when_host_socket_is_stale() {
         let temp = tempfile::tempdir().expect("tempdir");
         let home = temp.path();
@@ -1141,6 +1146,7 @@ mod tests {
 mod classification_tests {
     use super::{error_is_component_unavailable, macos_default_world_socket_path};
     use crate::execution::world_env_guard;
+    use serial_test::serial;
 
     fn with_env_var<T>(key: &str, value: Option<&std::ffi::OsStr>, f: impl FnOnce() -> T) -> T {
         let _guard = world_env_guard();
@@ -1158,6 +1164,7 @@ mod classification_tests {
     }
 
     #[test]
+    #[serial]
     fn component_unavailable_includes_macos_forwarding_bootstrap_failures() {
         for message in [
             "No forwarding transport available. Run scripts/mac/lima-doctor.sh",
@@ -1173,6 +1180,7 @@ mod classification_tests {
     }
 
     #[test]
+    #[serial]
     fn macos_default_world_socket_path_respects_explicit_substrate_home() {
         let temp = tempfile::tempdir().expect("tempdir");
         let substrate_home = temp.path().join("isolated-substrate-home");

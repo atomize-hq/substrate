@@ -39,6 +39,9 @@ Agent Hub successor routing is configured through the normal Substrate config an
 Config keys:
 - `agents.hub.orchestrator_agent_id` selects the canonical host-scoped orchestrator agent for `substrate agent status` and `substrate agent doctor`.
 - Agent inventory entries continue to define each agent's adapter kind and execution posture; the derived `backend_id` remains `<kind>:<agent_id>`.
+- The shell-owned v1 runtime only realizes selected orchestrators with `config.kind=cli`, `protocol=uaa.agent.session`, and `cli.mode=persistent`.
+- The first realized shell-owned UAA backends are `cli:codex` and `cli:claude_code`. Other inventory items may still validate and list successfully, but they are not runtime-realizable on the selected orchestrator path in v1.
+- `config.cli.binary` for the selected orchestrator must resolve on the host during `substrate agent doctor` and async REPL bootstrap.
 
 Policy keys:
 - `agents.allowed_backends` remains the allowlist for derived agent adapter ids such as `cli:codex` or `api:openai`.
@@ -50,6 +53,28 @@ Minimal example:
 agents:
   hub:
     orchestrator_agent_id: claude_code
+```
+
+```yaml
+version: 1
+id: claude_code
+config:
+  kind: cli
+  protocol: uaa.agent.session
+  execution:
+    scope: host
+  cli:
+    binary: claude
+    mode: persistent
+  capabilities:
+    session_start: true
+    session_resume: true
+    session_fork: true
+    session_stop: true
+    status_snapshot: true
+    event_stream: true
+    llm: true
+    mcp_client: true
 ```
 
 ```yaml

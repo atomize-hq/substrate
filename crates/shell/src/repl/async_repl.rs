@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -8,7 +8,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
-use futures::{pin_mut, FutureExt};
+use futures::{pin_mut, FutureExt, StreamExt};
 use reedline::{ExternalPrinter, Prompt, Reedline, Signal};
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -18,6 +18,13 @@ use uuid::Uuid;
 use crate::execution::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, orchestration_session_id,
     publish_agent_event, publish_command_completion, schedule_demo_burst, schedule_demo_events,
+};
+use crate::execution::agent_inventory::load_effective_agent_inventory;
+use crate::execution::agent_runtime::{
+    backend_allowed, build_gateway_for_descriptor, runtime_realizability_error_exit_code,
+    validate_orchestrator_selection, validate_runtime_realizability, AgentRuntimeSessionManifest,
+    AgentRuntimeSessionState, AgentRuntimeStateStore, PURE_AGENT_PROTOCOL,
+    SESSION_HANDLE_SCHEMA_V1,
 };
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
@@ -31,7 +38,7 @@ use crate::execution::{
 };
 use crate::repl::editor;
 use substrate_broker::{detect_profile, world_fs_policy};
-use substrate_common::agent_events::AgentEvent;
+use substrate_common::agent_events::{AgentEvent, MessageEventKind};
 
 #[derive(Clone)]
 enum ReplPrinter {
@@ -456,6 +463,21 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         } else {
             None
         };
+        let mut agent_runtime = match start_host_orchestrator_runtime(
+            &shared_config,
+            &agent_printer,
+            &mut telemetry,
+        )
+        .await
+        {
+            Ok(runtime) => runtime,
+            Err(failure) => {
+                agent_printer.print(failure.message.clone());
+                write_best_effort_stderr_line(&failure.message);
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                return Ok(failure.exit_code);
+            }
+        };
 
         let mut should_exit = false;
         let mut termination_cause = ReplTerminationCause::NormalExit;
@@ -876,6 +898,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         prompt_worker.shutdown_with_disposition(shutdown_disposition_for_termination_cause(
             termination_cause,
         ));
+        if let Some(runtime) = agent_runtime.take() {
+            shutdown_host_orchestrator_runtime(runtime, &agent_printer, &mut telemetry).await;
+        }
         clear_agent_event_sender();
 
         let auto_sync_exit_code: i32 = {
@@ -1200,6 +1225,766 @@ fn handle_agent_event(
     telemetry.persist_agent_event(&event);
     telemetry.record_agent_event();
     agent_printer.print(format_event_line(&event));
+}
+
+#[derive(Debug)]
+struct RuntimeBootstrapFailure {
+    exit_code: i32,
+    message: String,
+}
+
+enum RuntimeStartupSignal {
+    Running,
+    Failed(String),
+}
+
+struct AsyncReplAgentRuntime {
+    manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
+    store: AgentRuntimeStateStore,
+    cancel: agent_api::AgentWrapperCancelHandle,
+    shutdown_requested: Arc<AtomicBool>,
+    event_task: Option<tokio::task::JoinHandle<()>>,
+    completion_task: Option<tokio::task::JoinHandle<()>>,
+    heartbeat_stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    heartbeat_task: Option<tokio::task::JoinHandle<()>>,
+}
+
+async fn start_host_orchestrator_runtime(
+    config: &Arc<ShellConfig>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let effective_config = crate::execution::config_model::resolve_effective_config(
+        &cwd,
+        &crate::execution::config_model::CliConfigOverrides {
+            world_enabled: if config.cli_world {
+                Some(true)
+            } else if config.cli_no_world {
+                Some(false)
+            } else {
+                None
+            },
+            anchor_mode: config.cli_anchor_mode,
+            anchor_path: config
+                .cli_anchor_path
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string()),
+            caged: config.cli_caged,
+        },
+    )
+    .map_err(runtime_bootstrap_failure_from_anyhow)?;
+    if !effective_config.agents.enabled {
+        return Ok(None);
+    }
+
+    let (base_policy, _) = substrate_broker::resolve_effective_policy_with_explain(&cwd, false)
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 2,
+            message: err.to_string(),
+        })?;
+    let inventory = load_effective_agent_inventory(&cwd, &base_policy)
+        .map_err(runtime_bootstrap_failure_from_anyhow)?;
+    let orchestrator =
+        validate_orchestrator_selection(&effective_config, &inventory).map_err(|reason| {
+            RuntimeBootstrapFailure {
+                exit_code: 2,
+                message: reason,
+            }
+        })?;
+
+    if !backend_allowed(&base_policy, &orchestrator.derived_backend_id()) {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 5,
+            message: format!(
+                "selected orchestrator backend '{}' is not allowlisted by effective policy agents.allowed_backends",
+                orchestrator.derived_backend_id()
+            ),
+        });
+    }
+
+    let descriptor =
+        validate_runtime_realizability(orchestrator, &effective_config).map_err(|err| {
+            RuntimeBootstrapFailure {
+                exit_code: runtime_realizability_error_exit_code(&err),
+                message: err.reason,
+            }
+        })?;
+    let state_store = AgentRuntimeStateStore::new().map_err(|err| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!("failed to initialize shell runtime state store: {err:#}"),
+    })?;
+    let gateway =
+        build_gateway_for_descriptor(&descriptor).map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to build shell-owned UAA runtime registry: {err:#}"),
+        })?;
+    let agent_kind = agent_api::AgentWrapperKind::new(descriptor.backend_kind.as_agent_kind_str())
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 2,
+            message: format!("failed to resolve runtime backend kind: {err}"),
+        })?;
+
+    let session_handle_id = format!("ash_{}", Uuid::now_v7());
+    let lease_token = Uuid::now_v7().to_string();
+    let run_id = Uuid::now_v7().to_string();
+    let mut manifest = AgentRuntimeSessionManifest::new(
+        &descriptor,
+        orchestration_session_id(),
+        session_handle_id,
+        lease_token,
+    );
+    manifest.internal.latest_run_id = Some(run_id.clone());
+    state_store
+        .persist_manifest(&manifest)
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to persist agent runtime manifest: {err:#}"),
+        })?;
+
+    emit_runtime_event(
+        build_runtime_message_event(
+            &manifest,
+            run_id.clone(),
+            MessageEventKind::Registered,
+            "shell-owned orchestrator session handle allocated",
+        ),
+        telemetry,
+        agent_printer,
+    );
+    emit_runtime_event(
+        build_runtime_message_event(
+            &manifest,
+            run_id.clone(),
+            MessageEventKind::TaskStart,
+            "starting long-lived shell-owned orchestrator control turn",
+        ),
+        telemetry,
+        agent_printer,
+    );
+
+    let request = agent_api::AgentWrapperRunRequest {
+        prompt: "Enter persistent Substrate host orchestrator mode. Keep this control session attached for the lifetime of the host REPL and do not exit until the client cancels the run.".to_string(),
+        working_dir: Some(cwd),
+        timeout: None,
+        env: BTreeMap::new(),
+        extensions: BTreeMap::new(),
+    };
+    let control = gateway
+        .run_control(&agent_kind, request)
+        .await
+        .map_err(runtime_bootstrap_failure_from_wrapper_error)?;
+    let manifest = Arc::new(Mutex::new(manifest));
+    let shutdown_requested = Arc::new(AtomicBool::new(false));
+    let (startup_tx, startup_rx) = tokio::sync::oneshot::channel::<RuntimeStartupSignal>();
+    let startup_signal = Arc::new(Mutex::new(Some(startup_tx)));
+    let agent_id = {
+        manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned")
+            .handle
+            .agent_id
+            .clone()
+    };
+    let run_id_for_tasks = run_id.clone();
+    let event_store = state_store.clone();
+    let event_manifest = Arc::clone(&manifest);
+    let startup_signal_for_events = Arc::clone(&startup_signal);
+    let shutdown_for_events = Arc::clone(&shutdown_requested);
+    let mut events = control.handle.events;
+    let event_task = tokio::spawn(async move {
+        while let Some(wrapper_event) = events.next().await {
+            let mut ownership_became_live = false;
+            let (snapshot, event) = {
+                let mut guard = event_manifest
+                    .lock()
+                    .expect("runtime manifest mutex poisoned");
+                if let Some(session_id) = extract_session_handle_id(wrapper_event.data.as_ref()) {
+                    guard.internal.uaa_session_id = Some(session_id.to_string());
+                    if guard.handle.state == AgentRuntimeSessionState::Allocating {
+                        guard.transition_state(AgentRuntimeSessionState::Running);
+                        guard.mark_ownership_verified();
+                        guard.touch_heartbeat();
+                        ownership_became_live = true;
+                    }
+                }
+                let event = translate_wrapper_event(&guard, &run_id_for_tasks, wrapper_event);
+                guard.touch_event(event.ts);
+                (guard.clone(), event)
+            };
+            let _ = event_store.persist_manifest(&snapshot);
+            let _ = publish_agent_event(event);
+
+            if ownership_became_live {
+                let _ = publish_agent_event(build_runtime_message_event(
+                    &snapshot,
+                    run_id_for_tasks.clone(),
+                    MessageEventKind::Status,
+                    "shell-owned orchestrator session is running via attached control ownership",
+                ));
+                signal_runtime_startup(&startup_signal_for_events, RuntimeStartupSignal::Running);
+            }
+        }
+
+        if !shutdown_for_events.load(Ordering::SeqCst) {
+            let snapshot = {
+                let mut guard = event_manifest
+                    .lock()
+                    .expect("runtime manifest mutex poisoned");
+                if guard.is_authoritative_live() {
+                    let reason = "shell-owned orchestrator control stream closed".to_string();
+                    guard.transition_state(AgentRuntimeSessionState::Invalidated);
+                    guard.mark_ownership_invalid(reason.clone());
+                    guard.internal.last_error_bucket = Some("runtime_lifecycle".to_string());
+                    guard.internal.last_error_message = Some(reason.clone());
+                    signal_runtime_startup(
+                        &startup_signal_for_events,
+                        RuntimeStartupSignal::Failed(reason),
+                    );
+                } else if guard.handle.state == AgentRuntimeSessionState::Allocating {
+                    let reason =
+                        "attached control turn ended before ownership could be established"
+                            .to_string();
+                    guard.transition_state(AgentRuntimeSessionState::Failed);
+                    guard.mark_ownership_invalid(reason.clone());
+                    guard.internal.last_error_bucket = Some("bootstrap_run".to_string());
+                    guard.internal.last_error_message = Some(reason.clone());
+                    signal_runtime_startup(
+                        &startup_signal_for_events,
+                        RuntimeStartupSignal::Failed(reason),
+                    );
+                }
+                guard.clone()
+            };
+            let _ = event_store.persist_manifest(&snapshot);
+            if snapshot.handle.state == AgentRuntimeSessionState::Invalidated {
+                let _ = publish_agent_event(AgentEvent::alert(
+                    snapshot.handle.agent_id.clone(),
+                    snapshot.handle.orchestration_session_id.clone(),
+                    run_id_for_tasks.clone(),
+                    "orchestrator_runtime_stream_closed",
+                    "shell-owned orchestrator control stream closed".to_string(),
+                ));
+            }
+        }
+    });
+
+    let completion_store = state_store.clone();
+    let completion_manifest = Arc::clone(&manifest);
+    let startup_signal_for_completion = Arc::clone(&startup_signal);
+    let shutdown_for_completion = Arc::clone(&shutdown_requested);
+    let run_id_for_completion = run_id.clone();
+    let completion_task = tokio::spawn(async move {
+        let completion = control.handle.completion.await;
+        let shutdown_requested = shutdown_for_completion.load(Ordering::SeqCst);
+        let mut startup_failure: Option<String> = None;
+        let mut publish_events = Vec::new();
+
+        let snapshot = {
+            let mut guard = completion_manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned");
+
+            match completion {
+                Ok(completion) => {
+                    if guard.internal.uaa_session_id.is_none() {
+                        guard.internal.uaa_session_id = extract_session_handle_id(
+                            completion.data.as_ref(),
+                        )
+                        .map(ToOwned::to_owned);
+                    }
+
+                    if shutdown_requested {
+                        guard.touch_heartbeat();
+                    } else if guard.has_valid_ownership() {
+                        let reason = format!(
+                            "attached control turn exited with status {}",
+                            completion.status.code().unwrap_or(-1)
+                        );
+                        guard.transition_state(AgentRuntimeSessionState::Invalidated);
+                        guard.mark_ownership_invalid(reason.clone());
+                        guard.internal.last_error_bucket = Some("runtime_lifecycle".to_string());
+                        guard.internal.last_error_message = Some(reason.clone());
+                        publish_events.push(AgentEvent::alert(
+                            guard.handle.agent_id.clone(),
+                            guard.handle.orchestration_session_id.clone(),
+                            run_id_for_completion.clone(),
+                            "orchestrator_runtime_invalidated",
+                            reason,
+                        ));
+                    } else if guard.handle.state == AgentRuntimeSessionState::Invalidated {
+                        // The event task already observed stream shutdown and invalidated the session.
+                    } else {
+                        let reason = if completion.status.success() {
+                            "attached control turn ended before ownership could be established"
+                                .to_string()
+                        } else {
+                            format!(
+                                "attached control turn exited with status {} before ownership was established",
+                                completion.status.code().unwrap_or(-1)
+                            )
+                        };
+                        guard.transition_state(AgentRuntimeSessionState::Failed);
+                        guard.mark_ownership_invalid(reason.clone());
+                        guard.internal.last_error_bucket = Some("bootstrap_run".to_string());
+                        guard.internal.last_error_message = Some(reason.clone());
+                        startup_failure = Some(reason);
+                    }
+                }
+                Err(err) => {
+                    let reason = match &err {
+                        agent_api::AgentWrapperError::Backend { message } => {
+                            message.clone()
+                        }
+                        other => other.to_string(),
+                    };
+                    if shutdown_requested && reason == "cancelled" {
+                        guard.touch_heartbeat();
+                    } else if guard.has_valid_ownership() {
+                        let reason = format!(
+                            "attached control turn ended unexpectedly: {reason}"
+                        );
+                        guard.transition_state(AgentRuntimeSessionState::Invalidated);
+                        guard.mark_ownership_invalid(reason.clone());
+                        guard.internal.last_error_bucket = Some("runtime_lifecycle".to_string());
+                        guard.internal.last_error_message = Some(reason.clone());
+                        publish_events.push(AgentEvent::alert(
+                            guard.handle.agent_id.clone(),
+                            guard.handle.orchestration_session_id.clone(),
+                            run_id_for_completion.clone(),
+                            "orchestrator_runtime_invalidated",
+                            reason,
+                        ));
+                    } else if guard.handle.state == AgentRuntimeSessionState::Invalidated {
+                        // The event task already observed stream shutdown and invalidated the session.
+                    } else {
+                        let reason = format!(
+                            "failed to establish attached control ownership: {reason}"
+                        );
+                        guard.transition_state(AgentRuntimeSessionState::Failed);
+                        guard.mark_ownership_invalid(reason.clone());
+                        guard.internal.last_error_bucket = Some("bootstrap_run".to_string());
+                        guard.internal.last_error_message = Some(reason.clone());
+                        startup_failure = Some(reason);
+                    }
+                }
+            }
+
+            guard.clone()
+        };
+
+        let _ = completion_store.persist_manifest(&snapshot);
+        for event in publish_events {
+            let _ = publish_agent_event(event);
+        }
+        if let Some(message) = startup_failure {
+            signal_runtime_startup(
+                &startup_signal_for_completion,
+                RuntimeStartupSignal::Failed(message),
+            );
+        }
+    });
+
+    let (heartbeat_stop_tx, mut heartbeat_stop_rx) = tokio::sync::oneshot::channel();
+    let heartbeat_store = state_store.clone();
+    let heartbeat_manifest = Arc::clone(&manifest);
+    let heartbeat_task = tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(5));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    let next = {
+                        let mut guard = heartbeat_manifest
+                            .lock()
+                            .expect("runtime manifest mutex poisoned");
+                        if !guard.is_authoritative_live() {
+                            None
+                        } else {
+                            guard.touch_heartbeat();
+                            Some(guard.clone())
+                        }
+                    };
+                    let Some(next) = next else {
+                        break;
+                    };
+                    let _ = heartbeat_store.persist_manifest(&next);
+                }
+                _ = &mut heartbeat_stop_rx => break,
+            }
+        }
+    });
+
+    match tokio::time::timeout(Duration::from_secs(10), startup_rx).await {
+        Ok(Ok(RuntimeStartupSignal::Running)) => {}
+        Ok(Ok(RuntimeStartupSignal::Failed(message))) => {
+            shutdown_requested.store(true, Ordering::SeqCst);
+            let _ = heartbeat_stop_tx.send(());
+            control.cancel.cancel();
+            let _ = completion_task.await;
+            let _ = event_task.await;
+            let _ = heartbeat_task.await;
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 4,
+                message,
+            });
+        }
+        Ok(Err(_)) => {
+            shutdown_requested.store(true, Ordering::SeqCst);
+            let _ = heartbeat_stop_tx.send(());
+            control.cancel.cancel();
+            let _ = completion_task.await;
+            let _ = event_task.await;
+            let _ = heartbeat_task.await;
+            mark_runtime_startup_failed(
+                &state_store,
+                &manifest,
+                "failed to establish attached control ownership",
+            );
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: "failed to establish attached control ownership".to_string(),
+            });
+        }
+        Err(_) => {
+            shutdown_requested.store(true, Ordering::SeqCst);
+            let _ = heartbeat_stop_tx.send(());
+            control.cancel.cancel();
+            let _ = completion_task.await;
+            let _ = event_task.await;
+            let _ = heartbeat_task.await;
+            let message = format!(
+                "timed out waiting for shell-owned orchestrator control ownership: {agent_id}"
+            );
+            mark_runtime_startup_failed(&state_store, &manifest, &message);
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 4,
+                message,
+            });
+        }
+    }
+
+    Ok(Some(AsyncReplAgentRuntime {
+        manifest,
+        store: state_store,
+        cancel: control.cancel,
+        shutdown_requested,
+        event_task: Some(event_task),
+        completion_task: Some(completion_task),
+        heartbeat_stop_tx: Some(heartbeat_stop_tx),
+        heartbeat_task: Some(heartbeat_task),
+    }))
+}
+
+async fn shutdown_host_orchestrator_runtime(
+    mut runtime: AsyncReplAgentRuntime,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) {
+    let (run_id, should_attempt_stop) = {
+        let guard = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        (
+            guard.internal
+                .latest_run_id
+                .clone()
+                .unwrap_or_else(|| Uuid::now_v7().to_string()),
+            guard.is_authoritative_live(),
+        )
+    };
+    if should_attempt_stop {
+        let manifest = {
+            let mut guard = runtime
+                .manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned");
+            guard.transition_state(AgentRuntimeSessionState::Stopping);
+            guard.touch_heartbeat();
+            guard.clone()
+        };
+        let _ = runtime.store.persist_manifest(&manifest);
+        emit_runtime_event(
+            build_runtime_message_event(
+                &manifest,
+                run_id.clone(),
+                MessageEventKind::Status,
+                "shell-owned orchestrator session stopping",
+            ),
+            telemetry,
+            agent_printer,
+        );
+    }
+
+    runtime.shutdown_requested.store(true, Ordering::SeqCst);
+    if let Some(stop_tx) = runtime.heartbeat_stop_tx.take() {
+        let _ = stop_tx.send(());
+    }
+    runtime.cancel.cancel();
+
+    let mut stop_failed = false;
+    if let Some(task) = runtime.completion_task.take() {
+        if tokio::time::timeout(Duration::from_secs(5), task).await.is_err() {
+            stop_failed = true;
+        }
+    }
+    if let Some(task) = runtime.event_task.take() {
+        let _ = tokio::time::timeout(Duration::from_secs(5), task).await;
+    }
+    if let Some(task) = runtime.heartbeat_task.take() {
+        let _ = task.await;
+    }
+
+    let mut manifest = runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .clone();
+    if stop_failed {
+        let reason = "shell-owned orchestrator cancel timed out".to_string();
+        manifest = {
+            let mut guard = runtime
+                .manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned");
+            guard.transition_state(AgentRuntimeSessionState::Invalidated);
+            guard.mark_ownership_invalid(reason.clone());
+            guard.internal.last_error_bucket = Some("runtime_shutdown".to_string());
+            guard.internal.last_error_message = Some(reason.clone());
+            guard.clone()
+        };
+        let _ = runtime.store.persist_manifest(&manifest);
+        emit_runtime_event(
+            AgentEvent::alert(
+                manifest.handle.agent_id.clone(),
+                manifest.handle.orchestration_session_id.clone(),
+                run_id,
+                "orchestrator_runtime_invalidated",
+                reason,
+            ),
+            telemetry,
+            agent_printer,
+        );
+        return;
+    }
+
+    if should_attempt_stop
+        && manifest.handle.state == AgentRuntimeSessionState::Stopping
+    {
+        manifest = {
+            let mut guard = runtime
+                .manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned");
+            guard.transition_state(AgentRuntimeSessionState::Stopped);
+            guard.mark_ownership_invalid("stopped");
+            guard.touch_heartbeat();
+            guard.clone()
+        };
+        let _ = runtime.store.persist_manifest(&manifest);
+        emit_runtime_event(
+            build_runtime_message_event(
+                &manifest,
+                run_id,
+                MessageEventKind::Status,
+                "shell-owned orchestrator session stopped",
+            ),
+            telemetry,
+            agent_printer,
+        );
+    }
+}
+
+fn signal_runtime_startup(
+    signal: &Arc<Mutex<Option<tokio::sync::oneshot::Sender<RuntimeStartupSignal>>>>,
+    value: RuntimeStartupSignal,
+) {
+    if let Some(tx) = signal
+        .lock()
+        .expect("runtime startup signal mutex poisoned")
+        .take()
+    {
+        let _ = tx.send(value);
+    }
+}
+
+fn mark_runtime_startup_failed(
+    store: &AgentRuntimeStateStore,
+    manifest: &Arc<Mutex<AgentRuntimeSessionManifest>>,
+    message: &str,
+) {
+    let snapshot = {
+        let mut guard = manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        if guard.handle.state == AgentRuntimeSessionState::Allocating {
+            guard.transition_state(AgentRuntimeSessionState::Failed);
+        }
+        if !guard.has_valid_ownership() {
+            guard.mark_ownership_invalid(message.to_string());
+        }
+        guard.internal.last_error_bucket = Some("bootstrap_run".to_string());
+        guard.internal.last_error_message = Some(message.to_string());
+        guard.clone()
+    };
+    let _ = store.persist_manifest(&snapshot);
+}
+
+fn runtime_bootstrap_failure_from_anyhow(err: anyhow::Error) -> RuntimeBootstrapFailure {
+    if crate::execution::config_model::is_user_error(&err) {
+        RuntimeBootstrapFailure {
+            exit_code: 2,
+            message: err.to_string(),
+        }
+    } else {
+        RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("{err:#}"),
+        }
+    }
+}
+
+fn runtime_bootstrap_failure_from_wrapper_error(
+    err: agent_api::AgentWrapperError,
+) -> RuntimeBootstrapFailure {
+    match err {
+        agent_api::AgentWrapperError::UnknownBackend { agent_kind }
+        | agent_api::AgentWrapperError::UnsupportedCapability {
+            agent_kind,
+            capability: _,
+        } => RuntimeBootstrapFailure {
+            exit_code: 2,
+            message: format!("failed to bootstrap shell-owned orchestrator runtime: {agent_kind}"),
+        },
+        agent_api::AgentWrapperError::InvalidAgentKind { message }
+        | agent_api::AgentWrapperError::InvalidRequest { message } => RuntimeBootstrapFailure {
+            exit_code: 2,
+            message,
+        },
+        agent_api::AgentWrapperError::Backend { message } => RuntimeBootstrapFailure {
+            exit_code: if message.to_ascii_lowercase().contains("timeout") {
+                3
+            } else {
+                4
+            },
+            message,
+        },
+    }
+}
+
+fn translate_wrapper_event(
+    manifest: &AgentRuntimeSessionManifest,
+    run_id: &str,
+    wrapper_event: agent_api::AgentWrapperEvent,
+) -> AgentEvent {
+    let mut event = match wrapper_event.kind {
+        agent_api::AgentWrapperEventKind::Status => AgentEvent::message(
+            manifest.handle.agent_id.clone(),
+            manifest.handle.orchestration_session_id.clone(),
+            run_id.to_string(),
+            MessageEventKind::Status,
+            wrapper_event
+                .message
+                .clone()
+                .unwrap_or_else(|| "agent runtime status".to_string()),
+        ),
+        agent_api::AgentWrapperEventKind::TextOutput => AgentEvent::message(
+            manifest.handle.agent_id.clone(),
+            manifest.handle.orchestration_session_id.clone(),
+            run_id.to_string(),
+            MessageEventKind::TaskProgress,
+            wrapper_event
+                .text
+                .clone()
+                .unwrap_or_else(|| "agent runtime output".to_string()),
+        ),
+        agent_api::AgentWrapperEventKind::ToolCall
+        | agent_api::AgentWrapperEventKind::ToolResult => AgentEvent::message(
+            manifest.handle.agent_id.clone(),
+            manifest.handle.orchestration_session_id.clone(),
+            run_id.to_string(),
+            MessageEventKind::TaskProgress,
+            wrapper_event
+                .message
+                .clone()
+                .unwrap_or_else(|| "agent runtime tool activity".to_string()),
+        ),
+        agent_api::AgentWrapperEventKind::Error => AgentEvent::alert(
+            manifest.handle.agent_id.clone(),
+            manifest.handle.orchestration_session_id.clone(),
+            run_id.to_string(),
+            "agent_wrapper_error",
+            wrapper_event
+                .message
+                .clone()
+                .unwrap_or_else(|| "agent runtime error".to_string()),
+        ),
+        agent_api::AgentWrapperEventKind::Unknown => AgentEvent::message(
+            manifest.handle.agent_id.clone(),
+            manifest.handle.orchestration_session_id.clone(),
+            run_id.to_string(),
+            MessageEventKind::TaskProgress,
+            "agent runtime emitted an unknown event".to_string(),
+        ),
+    };
+
+    event.role = Some(manifest.handle.role.clone());
+    event.backend_id = Some(manifest.handle.backend_id.clone());
+    event.set_pure_agent_telemetry_identity(manifest.handle.agent_id.clone());
+    event.set_channel(wrapper_event.channel.clone());
+
+    if let Some(data) = wrapper_event.data {
+        if let Some(obj) = event.data.as_object_mut() {
+            obj.insert("uaa_event".to_string(), data);
+            obj.insert(
+                "protocol".to_string(),
+                serde_json::json!(PURE_AGENT_PROTOCOL),
+            );
+        }
+    }
+
+    event
+}
+
+fn build_runtime_message_event(
+    manifest: &AgentRuntimeSessionManifest,
+    run_id: String,
+    kind: MessageEventKind,
+    message: impl Into<String>,
+) -> AgentEvent {
+    let mut event = AgentEvent::message(
+        manifest.handle.agent_id.clone(),
+        manifest.handle.orchestration_session_id.clone(),
+        run_id,
+        kind,
+        message.into(),
+    );
+    event.role = Some(manifest.handle.role.clone());
+    event.backend_id = Some(manifest.handle.backend_id.clone());
+    event.set_pure_agent_telemetry_identity(manifest.handle.agent_id.clone());
+    event
+}
+
+fn emit_runtime_event(
+    event: AgentEvent,
+    telemetry: &mut ReplSessionTelemetry,
+    agent_printer: &ReplPrinter,
+) {
+    handle_agent_event(event, telemetry, agent_printer);
+}
+
+fn extract_session_handle_id(data: Option<&serde_json::Value>) -> Option<&str> {
+    let value = data?;
+    if value.get("schema").and_then(serde_json::Value::as_str) != Some(SESSION_HANDLE_SCHEMA_V1) {
+        return None;
+    }
+    value
+        .get("session")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|session| session.get("id"))
+        .and_then(serde_json::Value::as_str)
+        .filter(|id| !id.trim().is_empty())
 }
 
 fn report_nonzero_status(status: &ExitStatus) {
@@ -2464,9 +3249,14 @@ fn exit_status_from_code(code: i32) -> ExitStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::execution::ShellMode;
+    use crate::execution::WorldRootSettings;
     use std::cell::Cell;
     #[cfg(unix)]
     use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::fs;
+    use tempfile::TempDir;
 
     #[cfg(unix)]
     fn reedline_terminal_loss_error() -> anyhow::Error {
@@ -2659,6 +3449,241 @@ mod tests {
         assert!(err.is_none());
         assert_eq!(detect_calls.get(), REEDLINE_CTRLD_TERMINAL_LOSS_RECHECKS);
         assert_eq!(sleep_calls.get(), REEDLINE_CTRLD_TERMINAL_LOSS_RECHECKS - 1);
+    }
+
+    struct CurrentDirGuard {
+        original: PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn change_to(path: &Path) -> Self {
+            let original = std::env::current_dir().expect("current dir should resolve");
+            std::env::set_current_dir(path).expect("set current dir");
+            Self { original }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            let _ = std::env::set_current_dir(&self.original);
+        }
+    }
+
+    #[cfg(unix)]
+    fn write_fake_codex_script(temp: &TempDir, keep_alive: bool) -> PathBuf {
+        let path = temp.path().join("fake-codex.sh");
+        let body = if keep_alive {
+            "#!/bin/sh\ntrap 'exit 0' INT TERM\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}\\r\\n'\nwhile :; do sleep 1; done\n"
+        } else {
+            "#!/bin/sh\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}\\r\\n'\n"
+        };
+        fs::write(
+            &path,
+            body,
+        )
+        .expect("write fake codex script");
+        let mut perms = fs::metadata(&path)
+            .expect("fake codex metadata")
+            .permissions();
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).expect("set fake codex permissions");
+        path
+    }
+
+    #[cfg(unix)]
+    fn test_shell_config(workspace_root: &Path, substrate_home: &Path) -> ShellConfig {
+        ShellConfig {
+            mode: ShellMode::Interactive { use_pty: false },
+            session_id: Uuid::now_v7().to_string(),
+            trace_log_file: substrate_home.join("trace.jsonl"),
+            original_path: std::env::var("PATH").unwrap_or_default(),
+            shim_dir: substrate_home.join("shims"),
+            shell_path: "/bin/sh".to_string(),
+            ci_mode: false,
+            no_exit_on_error: false,
+            skip_shims: true,
+            no_world: true,
+            cli_world: false,
+            cli_no_world: true,
+            cli_anchor_mode: None,
+            cli_anchor_path: None,
+            cli_caged: None,
+            world_root: WorldRootSettings {
+                mode: substrate_common::WorldRootMode::Project,
+                path: workspace_root.to_path_buf(),
+                caged: true,
+            },
+            async_repl: true,
+            repl_host_escape: false,
+            env_vars: HashMap::new(),
+            manager_init_path: substrate_home.join("manager-init.sh"),
+            manager_env_path: substrate_home.join("manager-env.sh"),
+            shimmed_path: None,
+            host_bash_env: None,
+            bash_preexec_path: substrate_home.join("bash-preexec.sh"),
+            preexec_available: false,
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn start_host_orchestrator_runtime_bootstraps_and_persists_a_live_manifest() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_codex = write_fake_codex_script(&temp, true);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            format!(
+                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+                fake_codex.display()
+            ),
+        )
+        .expect("write codex agent file");
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            let runtime =
+                start_host_orchestrator_runtime(&config, &ReplPrinter::Stdout, &mut telemetry)
+                    .await
+                    .expect("bootstrap runtime should succeed")
+                    .expect("agents enabled should create a runtime");
+
+            let live = runtime
+                .store
+                .find_live_orchestrator("codex")
+                .expect("load live orchestrator")
+                .expect("live orchestrator manifest should exist");
+            assert_eq!(live.handle.state, AgentRuntimeSessionState::Running);
+            assert_eq!(live.internal.uaa_session_id.as_deref(), Some("thread-test"));
+            assert!(live.internal.ownership_valid);
+            assert_eq!(live.handle.protocol, PURE_AGENT_PROTOCOL);
+
+            shutdown_host_orchestrator_runtime(runtime, &ReplPrinter::Stdout, &mut telemetry).await;
+
+            let manifests = AgentRuntimeStateStore::new()
+                .expect("state store")
+                .list_manifests()
+                .expect("list manifests");
+            let stopped = manifests
+                .into_iter()
+                .find(|manifest| manifest.handle.agent_id == "codex")
+                .expect("stopped manifest should exist");
+            assert_eq!(stopped.handle.state, AgentRuntimeSessionState::Stopped);
+            assert!(!stopped.internal.ownership_valid);
+        });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn start_host_orchestrator_runtime_invalidates_when_attached_control_exits() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_codex = write_fake_codex_script(&temp, false);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            format!(
+                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+                fake_codex.display()
+            ),
+        )
+        .expect("write codex agent file");
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            let runtime =
+                start_host_orchestrator_runtime(&config, &ReplPrinter::Stdout, &mut telemetry)
+                    .await
+                    .expect("runtime start should still observe attached ownership briefly")
+                    .expect("agents enabled should create a runtime");
+
+            tokio::time::timeout(Duration::from_secs(2), async {
+                loop {
+                    let manifests = AgentRuntimeStateStore::new()
+                        .expect("state store")
+                        .list_manifests()
+                        .expect("list manifests");
+                    let manifest = manifests
+                        .into_iter()
+                        .find(|manifest| manifest.handle.agent_id == "codex")
+                        .expect("runtime manifest should exist");
+                    if manifest.handle.state == AgentRuntimeSessionState::Invalidated {
+                        assert!(!manifest.internal.ownership_valid);
+                        assert!(manifest.internal.terminal_observed_at.is_some());
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+            })
+            .await
+            .expect("runtime should invalidate promptly after attached control exits");
+
+            assert!(
+                AgentRuntimeStateStore::new()
+                    .expect("state store")
+                    .find_live_orchestrator("codex")
+                    .expect("load live orchestrator")
+                    .is_none(),
+                "invalidated attached control must disappear from authoritative live lookups"
+            );
+
+            shutdown_host_orchestrator_runtime(runtime, &ReplPrinter::Stdout, &mut telemetry).await;
+
+            let manifest = AgentRuntimeStateStore::new()
+                .expect("state store")
+                .list_manifests()
+                .expect("list manifests")
+                .into_iter()
+                .find(|manifest| manifest.handle.agent_id == "codex")
+                .expect("runtime manifest should still exist");
+            assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Invalidated);
+        });
+        std::env::remove_var("SUBSTRATE_HOME");
     }
 
     #[cfg(unix)]
