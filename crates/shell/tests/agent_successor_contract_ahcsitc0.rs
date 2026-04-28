@@ -332,6 +332,9 @@ fn write_runtime_manifest(
             "uaa_session_id": "external-session-1",
             "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
             "cancel_supported": true,
+            "control_owner_retained": ownership_valid,
+            "event_stream_active": ownership_valid,
+            "completion_observer_retained": ownership_valid,
             "ownership_mode": "attached_control",
             "ownership_valid": ownership_valid,
             "ownership_verified_at": ts,
@@ -832,8 +835,9 @@ fn agent_toolbox_env_requires_an_active_orchestrator_session() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr
-            .contains("no active pure-agent orchestrator session found in authoritative live manifests"),
+        stderr.contains(
+            "no active pure-agent orchestrator session found in authoritative live manifests"
+        ),
         "stderr must explain the missing active session: {stderr}"
     );
 }
@@ -1208,6 +1212,64 @@ fn agent_status_prefers_live_manifest_over_trace_fallback_for_selected_orchestra
             .and_then(Value::as_str),
         Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa"),
         "status must prefer live manifest state over trace fallback for the selected orchestrator: {json}"
+    );
+}
+
+#[test]
+fn agent_status_suppresses_trace_fallback_rows_for_live_pure_agent_identity() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa",
+        "ash_live_status_suppression",
+        "2026-04-05T00:00:02Z",
+    );
+    fixture.write_trace_events(&[json!({
+        "ts": "2026-04-05T00:00:01Z",
+        "event_type": "agent_event",
+        "session_id": "ses_agent_hub",
+        "component": "agent-hub",
+        "kind": "status",
+        "agent_id": "claude_code",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fab",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fac",
+        "backend_id": "cli:claude_code",
+        "client": "claude_code",
+        "router": "agent_hub",
+        "protocol": "uaa.agent.session",
+        "role": "orchestrator",
+        "data": { "message": "trace fallback should be suppressed for the same pure-agent identity" }
+    })]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "status should succeed when a live pure-agent manifest suppresses trace fallback rows: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let claude_rows: Vec<&Value> = sessions
+        .iter()
+        .filter(|session| {
+            session.pointer("/agent_id").and_then(Value::as_str) == Some("claude_code")
+        })
+        .collect();
+    assert_eq!(
+        claude_rows.len(),
+        1,
+        "live pure-agent status identity must suppress trace fallback duplicates for the same agent_id: {json}"
+    );
+    assert_eq!(
+        claude_rows[0]
+            .pointer("/orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa")
     );
 }
 

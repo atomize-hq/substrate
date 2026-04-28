@@ -103,6 +103,8 @@ impl AgentRuntimeStateStore {
         Ok(self
             .list_manifests()?
             .into_iter()
+            // A persisted live manifest is only authoritative while the REPL still owns the
+            // retained control boundary and the original shell owner process is still alive.
             .filter(|manifest| manifest.is_authoritative_live() && owner_process_is_alive(manifest))
             .collect())
     }

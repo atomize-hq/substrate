@@ -611,7 +611,7 @@ fn build_status_report<'a>(
         )));
     }
 
-    let mut merged_sessions = BTreeMap::<(String, String), StatusSessionJson>::new();
+    let mut live_sessions_by_agent = BTreeMap::<String, (DateTime<Utc>, StatusSessionJson)>::new();
     for manifest in live_manifests {
         let session = live_manifest_status_session(&manifest);
         if !matches_scope(scope_from_label(session.execution.scope), args.scope)
@@ -619,23 +619,32 @@ fn build_status_report<'a>(
         {
             continue;
         }
-        merged_sessions.insert(
-            (
-                session.orchestration_session_id.clone(),
-                session.agent_id.clone(),
-            ),
-            session,
-        );
+        let last_status_at = manifest.last_status_at();
+        let should_replace = match live_sessions_by_agent.get(&session.agent_id) {
+            Some((existing_ts, _)) => last_status_at >= *existing_ts,
+            None => true,
+        };
+        if should_replace {
+            live_sessions_by_agent.insert(session.agent_id.clone(), (last_status_at, session));
+        }
     }
+    let live_agent_ids: BTreeSet<String> = live_sessions_by_agent.keys().cloned().collect();
+    let mut filtered_sessions: Vec<StatusSessionJson> = live_sessions_by_agent
+        .into_values()
+        .map(|(_, session)| session)
+        .collect();
     for projection in filtered_session_projections {
-        merged_sessions
-            .entry((
-                projection.session.orchestration_session_id.clone(),
-                projection.session.agent_id.clone(),
-            ))
-            .or_insert(projection.session);
+        if live_agent_ids.contains(&projection.session.agent_id) {
+            continue;
+        }
+        filtered_sessions.push(projection.session);
     }
-    let filtered_sessions: Vec<StatusSessionJson> = merged_sessions.into_values().collect();
+    filtered_sessions.sort_by(|left, right| {
+        left.agent_id.cmp(&right.agent_id).then(
+            left.orchestration_session_id
+                .cmp(&right.orchestration_session_id),
+        )
+    });
 
     Ok(StatusReportJson {
         disabled: false,

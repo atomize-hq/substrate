@@ -59,7 +59,7 @@ Phase 8 introduces/locks additional cross-feature correlation fields (e.g., `orc
 Operator note (non-negotiable):
 - Do not rely on heuristic joins. Prefer explicit join keys (`session_id`, `orchestration_session_id`, `run_id`, explicit cause refs) as defined in ADR-0028/Phase 8 contracts.
 - Trace is safe-by-default: do not mirror raw third-party JSONL/NDJSON agent logs into `trace.jsonl` by default. Treat raw wrapper logs and any payloads that may contain secrets as per-session artifacts, and apply redaction/caps rules per ADR-0028 and the Phase 8 secrets rubric.
-- Live shell-owned orchestrator session ownership is persisted separately from trace under `~/.substrate/run/agent-hub/handles/*.json`. Trace remains the canonical historical event log; the live manifests only provide cross-invocation session discovery and precedence for current-session status/toolbox surfaces.
+- Live shell-owned orchestrator session ownership is persisted separately from trace under `~/.substrate/run/agent-hub/handles/*.json`. Those manifests reflect a REPL-owned session only while the shell still retains the attached UAA control boundary (cancel ownership plus active event/completion observation). Trace remains the canonical historical event log; the live manifests only provide cross-invocation session discovery and precedence for current-session status/toolbox surfaces.
 
 ### Command Span Schema (`command_start` / `command_complete`)
 

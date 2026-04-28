@@ -66,6 +66,15 @@ pub(crate) struct AgentRuntimeSessionInternal {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latest_run_id: Option<String>,
     pub cancel_supported: bool,
+    // A manifest is only authoritative-live while the REPL still retains the attached
+    // UAA control boundary: the cancel handle remains owned, the event stream task is
+    // still active, and the completion observer is still retained.
+    #[serde(default)]
+    pub control_owner_retained: bool,
+    #[serde(default)]
+    pub event_stream_active: bool,
+    #[serde(default)]
+    pub completion_observer_retained: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ownership_mode: Option<String>,
     #[serde(default)]
@@ -128,6 +137,9 @@ impl AgentRuntimeSessionManifest {
                 uaa_session_id: None,
                 latest_run_id: None,
                 cancel_supported: true,
+                control_owner_retained: false,
+                event_stream_active: false,
+                completion_observer_retained: false,
                 ownership_mode: Some("attached_control".to_string()),
                 ownership_valid: false,
                 ownership_verified_at: None,
@@ -154,22 +166,67 @@ impl AgentRuntimeSessionManifest {
         self.internal.last_event_at = Some(ts);
     }
 
-    pub(crate) fn mark_ownership_verified(&mut self) {
+    pub(crate) fn set_uaa_session_id(&mut self, session_id: impl Into<String>) {
+        self.internal.uaa_session_id = Some(session_id.into());
+        self.refresh_ownership_validity();
+    }
+
+    pub(crate) fn set_event_stream_active(&mut self, active: bool) {
+        self.internal.event_stream_active = active;
+        self.refresh_ownership_validity();
+    }
+
+    pub(crate) fn can_advertise_live(&self) -> bool {
+        self.internal.uaa_session_id.is_some()
+            && self.internal.control_owner_retained
+            && self.internal.event_stream_active
+            && self.internal.completion_observer_retained
+            && self.internal.terminal_observed_at.is_none()
+    }
+
+    fn refresh_ownership_validity(&mut self) {
+        let now_live = self.can_advertise_live();
+        let was_live = self.internal.ownership_valid;
+        self.internal.ownership_valid = now_live;
+        if now_live {
+            if !was_live {
+                self.internal.ownership_verified_at = Some(Utc::now());
+            }
+            self.internal.terminal_observed_at = None;
+            self.internal.termination_reason = None;
+        }
+    }
+
+    pub(crate) fn mark_runtime_ownership_retained(&mut self) {
+        self.internal.control_owner_retained = true;
+        self.internal.event_stream_active = true;
+        self.internal.completion_observer_retained = true;
+        self.refresh_ownership_validity();
+    }
+
+    pub(crate) fn release_runtime_ownership(&mut self) {
+        self.internal.control_owner_retained = false;
+        self.internal.event_stream_active = false;
+        self.internal.completion_observer_retained = false;
+        self.internal.ownership_valid = false;
+    }
+
+    pub(crate) fn mark_terminal_state(&mut self, reason: impl Into<String>) {
         let now = Utc::now();
-        self.internal.ownership_valid = true;
-        self.internal.ownership_verified_at = Some(now);
-        self.internal.terminal_observed_at = None;
-        self.internal.termination_reason = None;
+        self.release_runtime_ownership();
+        self.internal.terminal_observed_at = Some(Utc::now());
+        self.internal.termination_reason = Some(reason.into());
+        if self.internal.ownership_verified_at.is_none() {
+            self.internal.ownership_verified_at = Some(now);
+        }
     }
 
     pub(crate) fn mark_ownership_invalid(&mut self, reason: impl Into<String>) {
-        self.internal.ownership_valid = false;
-        self.internal.terminal_observed_at = Some(Utc::now());
-        self.internal.termination_reason = Some(reason.into());
+        self.mark_terminal_state(reason);
     }
 
     pub(crate) fn has_valid_ownership(&self) -> bool {
-        self.internal.ownership_valid && self.internal.terminal_observed_at.is_none()
+        self.internal.ownership_valid && self.can_advertise_live()
     }
 
     pub(crate) fn is_authoritative_live(&self) -> bool {
