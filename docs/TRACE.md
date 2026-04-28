@@ -163,6 +163,8 @@ Agent-hub successor telemetry keeps adapter identity separate from semantic iden
 - `world_id`: world boundary identifier for world-scoped pure-agent records and in-world telemetry families.
 - `world_generation`: generation counter for the active world-scoped pure-agent session or world-backed execution.
 
+`uaa.agent.session` is currently a Substrate-local normalized protocol-family id, not an automatic claim of upstream Unified Agent API wire or API compatibility. In the current repo, pure-agent records are stamped with that label by [agent_events.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/common/src/agent_events.rs:17), and `substrate agent status` / orchestrator-selection logic consumes the same label in [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:25).
+
 Operator-facing omission rules:
 - Pure-agent records keep `client`, `router`, and `protocol`, and omit `provider` plus `auth_authority`.
 - Nested gateway-backed records may add `provider` and `auth_authority`, but they must omit `world_id` and `world_generation`.

@@ -6,7 +6,7 @@ This section is the canonical description of the intended product shape for the 
 
 ### v1 intent
 
-Substrate v1 orchestration is intended to use real external CLI agents through the Unified Agent API (`unified-agent-api` on crates.io; Rust crate name `agent_api`), not a bespoke Substrate-native agent runtime.
+Substrate v1 orchestration is intended to use real external CLI agents through the Unified Agent API (`unified-agent-api` on crates.io; imported in Rust code as `agent_api`), not a bespoke Substrate-native agent runtime.
 
 In v1:
 
@@ -45,7 +45,7 @@ These items should be treated as decided unless explicitly revisited.
 
 1. `unified-agent-api` is the canonical source of truth for CLI-agent runtime semantics.
 2. Substrate intends to consume `unified-agent-api` as a normal crates.io dependency, not as a path dependency and not as an indefinitely separate local protocol.
-3. The crates.io package is `unified-agent-api`; the Rust crate name is `agent_api`.
+3. The crates.io package is `unified-agent-api`; the default Rust import name in code is `agent_api`.
 4. Substrate v1 should use external CLI agents through Unified Agent API rather than waiting for a custom Substrate-native harness.
 5. Substrate owns orchestration semantics, world placement, policy, and trace/audit semantics.
 6. Unified Agent API owns backend registration, capability discovery, run control, and session extension semantics for the CLI agents.
@@ -56,7 +56,7 @@ There are two different API layers in this repository and they should not be con
 
 - External CLI-agent abstraction:
   - `unified-agent-api` from crates.io
-  - Rust crate name: `agent_api`
+  - Default Rust import name in code: `agent_api`
   - Purpose: run and control Codex / Claude Code / other CLI agents through one capability-gated contract
 - Substrate-local host/world transport:
   - `crates/agent-api-types`
@@ -65,6 +65,11 @@ There are two different API layers in this repository and they should not be con
   - Purpose: Substrate host components talking to `world-agent`
 
 The local `agent-api-*` crates are not the same thing as Unified Agent API. They currently represent Substrate’s transport layer for host-to-world execution, not the canonical CLI-agent wrapper contract.
+
+Terminology rule for this repository:
+
+- Reserve `Unified Agent API`, `UAA`, and the external Rust import name `agent_api` for the CLI-agent runtime abstraction.
+- Refer to `crates/agent-api-types`, `crates/agent-api-core`, and `crates/agent-api-client` as the Substrate-local host/world transport layer or world-agent transport layer.
 
 ## Current State Summary
 

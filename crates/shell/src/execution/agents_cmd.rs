@@ -22,6 +22,8 @@ use substrate_broker::Policy;
 use substrate_common::paths as substrate_paths;
 use substrate_common::{AgentEvent, PlacementExecution};
 
+// Substrate-local normalized protocol-family id for current pure-agent status
+// and selection logic; not, by itself, a claim of upstream UAA compatibility.
 const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
 const PURE_AGENT_ROUTER: &str = "agent_hub";
 const NESTED_ROUTER: &str = "substrate_gateway";

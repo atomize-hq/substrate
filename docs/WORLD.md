@@ -176,6 +176,8 @@ Per session world (identified by `WORLD_ID`, e.g., `wld_01994…`):
 
 ## 5) Agent API (over UDS)
 
+This section describes Substrate's local host/world transport API over the `world-agent` socket. It is not the external Unified Agent API (`unified-agent-api` on crates.io; imported in Rust code as `agent_api`) used for CLI-agent runtime abstraction.
+
 Socket: `/run/substrate.sock`
 
 - `GET /v1/capabilities`
