@@ -1,4 +1,4 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-orchestration-session-identity-autoplan-restore-20260429-125504.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-orchestration-session-identity-autoplan-restore-20260429-130952.md -->
 # PLAN-02: Session Participant Record Cutover
 
 Source file: [02-session-participant-record.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/02-session-participant-record.md)  
@@ -191,6 +191,27 @@ Semantics:
 - `replaced`: prior participant retained only for lineage and audit
 
 Do not use free-form strings forever. Keep the first patch additive if needed, then move to a proper enum before this slice closes.
+
+### Participant lifecycle contract
+
+`PLAN-01` already owns the parent session lifecycle. This slice must make participant lifecycle line up with it instead of freelancing its own truth.
+
+| Moment | Parent state | Participant state | Notes |
+|---|---|---|---|
+| parent exists, no child yet | `Allocating` | no participant yet | child creation never becomes the thing that legitimizes the parent |
+| participant file first persisted | `Allocating` | `Allocating` | bootstrap may write the child record before durable control is proven |
+| durable control proven | `Active` | `Ready` | this is the first point where the participant may become authoritative-live |
+| command loop actively serving | `Active` | `Running` | status and event emission may surface the participant |
+| graceful shutdown requested | `Stopping` | `Stopping` | parent and participant transition in the same shutdown block |
+| graceful shutdown completed | `Stopped` | `Stopped` | historical row remains queryable, but never live |
+| ownership lost after prior success | `Invalidated` | `Invalidated` | toolbox and live status must fail closed immediately |
+| replacement lineage recorded later | `Active` on the replacement parent-child pair | `Replaced` on the old participant | replaced rows remain auditable but never authoritative-live |
+
+Hard rules:
+
+- a participant is authoritative-live only when both its own ownership checks pass and its parent session is `Active`
+- `Replaced`, `Stopped`, `Failed`, and `Invalidated` participants persist for audit, but they do not suppress a distinct live participant unless the `participant_id` matches exactly
+- this slice does not add a participant-specific restart state machine; it adds the identity and lineage fields that later restart work will consume
 
 ### On-disk layout and compatibility rules
 
@@ -422,6 +443,25 @@ substrate agent toolbox status|env
 6. Add additive participant lineage to `AgentEvent` and runtime producers.
 7. Extend tests and docs. Remove handle-only assumptions once coverage is green.
 
+### Execution sequencing and merge gates
+
+This slice only stays boring if the sequencing is strict:
+
+1. Land the type rename plus compatibility parser first.
+   Exit gate: legacy `handles/*.json` fixtures still parse into the participant model.
+2. Land participant-native store helpers second.
+   Exit gate: read-path tests prove `participants/` wins over `handles/` for the same child identity, and ambiguous live answers fail closed.
+3. Cut over the orchestrator writer third.
+   Exit gate: bootstrap writes `participants/*.json` only, and parent-child linkage still resolves through the existing parent record.
+4. Cut over operator surfaces fourth.
+   Exit gate: `status`, `toolbox`, and `doctor` all consume participant-native helpers and no remaining live projection deduplicates by `agent_id`.
+5. Land event schema and runtime publication after the participant surface is stable.
+   Exit gate: additive participant lineage fields roundtrip without breaking legacy consumers.
+6. Run the contract test and doc sweep last.
+   Exit gate: status JSON examples, trace docs, and integration fixtures all use participant terminology and sibling-safe semantics.
+
+Do not merge a later step while it still depends on an unstabilized helper signature from an earlier step. That is how a clean slice turns into a half-renamed swamp.
+
 ### Workstream 1: Participant model and compatibility parser
 
 Files:
@@ -558,6 +598,53 @@ Recommendation: make the store participant-native now. Do not stack more logic o
 Without `participant_id`, later restart/fork lineage becomes hard to correlate. The plan resolves this with additive fields only.
 
 Recommendation: add the fields now while the participant model is being introduced. Waiting until slice `05` would force a second schema churn.
+
+## Code Quality Review
+
+This slice has a real DRY risk because it is migrating a live type, a store boundary, and operator surfaces at the same time. The plan needs explicit guardrails so the implementation does not leave two truths behind.
+
+### Finding 1
+
+`[P2] (confidence: 9/10) The role/scope/world invariants can easily get duplicated across constructors, store validation, doctor checks, and status projection if the implementation is careless.`
+
+That is how these migrations rot. One path starts rejecting `role=member` without `orchestrator_participant_id`, another path forgets, and six weeks later the store contains impossible state that only one command notices.
+
+Recommendation: put participant invariants in one model-level validation path and have store, doctor, and tests call it. Do not hand-roll the same rules three times.
+
+### Finding 2
+
+`[P2] (confidence: 8/10) Legacy-handle compatibility can sprawl if the upgrade logic leaks beyond the read boundary in [state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:20).`
+
+If `agents_cmd.rs`, `async_repl.rs`, and tests all know how to translate `session_handle_id` into `participant_id`, the repo will carry two mental models for far too long. Not great.
+
+Recommendation: keep the legacy upgrade shim at the persistence boundary. Everyone above the store should speak participant terminology only.
+
+### Finding 3
+
+`[P2] (confidence: 8/10) Terminology drift will create fake complexity if public APIs keep saying "manifest" or "handle" after the canonical type becomes a participant record.`
+
+This matters because later slices will read the new helper names as the contract. If the code says `find_live_orchestrator_manifest()` but returns a participant, the type system compiles and the humans still lose.
+
+Recommendation: reserve `handles/` and `manifest` wording for the compatibility path and on-disk legacy explanation only. New helpers, docs, and test names should say `participant`.
+
+## Error & Rescue Registry
+
+These are the failure cases the implementation must rescue explicitly instead of letting them become quiet operator drift.
+
+| Failure | Detection point | Required rescue behavior | Fail-open forbidden? |
+|---|---|---|---|
+| malformed `participants/*.json` | participant load path, doctor | reject the file, surface explicit validation failure, keep toolbox unauthorized | yes |
+| legacy handle file cannot upgrade cleanly | compatibility parser | omit that record from live selection, return a clear error on validation surfaces, preserve other healthy rows | yes |
+| same child identity exists in both `handles/` and `participants/` | store enumeration | prefer `participants/`, ignore legacy duplicate, never merge fields across the two records | yes |
+| parent session points at a child id that is missing or non-live | parent-gated lookup | fail closed for toolbox and live status projection, require bootstrap or cleanup to repair | yes |
+| multiple live host orchestrator participants survive lookup | orchestrator resolver | return ambiguity, not newest-wins, and block toolbox publication | yes |
+| runtime event path lacks a live participant snapshot | runtime event builder | omit additive participant lineage fields instead of inventing or backfilling them from trace history | yes |
+
+Operator rescue rule:
+
+- `substrate agent doctor --json` is the place that explains bad participant-store state to the operator
+- `substrate agent status --json` may show historical trace rows, but it must never use trace history to re-authorize a broken live participant
+- `substrate agent toolbox status|env` stays stricter than status, because a wrong endpoint is worse than no endpoint
 
 ## Test Review
 
@@ -790,18 +877,38 @@ Why: depends on participant types but is otherwise independent except for one sh
 Lane D: tests + docs cleanup  
 Why: goes last so it can validate the final API, not a moving target.
 
+### Lane ownership rules
+
+To keep worktrees from stepping on each other:
+
+- Lane A owns `crates/shell/src/execution/agent_runtime/` and the participant type names. Nobody else edits those files until Lane A merges.
+- Lane B owns `crates/shell/src/execution/agents_cmd.rs`, `docs/USAGE.md`, and `docs/TRACE.md` after Lane A merges.
+- Lane C owns `crates/common/src/agent_events.rs`, `crates/common/tests/agent_hub_event_envelope_schema.rs`, and the event-emission touchpoints in `async_repl.rs` after Lane A merges.
+- Lane D owns integration tests and doc cleanup after B and C merge.
+
+If a lane needs to cross that boundary, stop and re-split the work. Parallelism is only worth it when ownership is obvious.
+
 ### Execution order
 
 1. Launch Lane A first.
-2. After Lane A lands the participant surface, launch Lane B and Lane C in parallel worktrees.
-3. Merge B and C.
-4. Run Lane D last.
+2. After Lane A lands the participant surface and helper signatures, launch Lane B and Lane C in parallel worktrees.
+3. Merge Lane C before Lane B only if `async_repl.rs` stayed isolated to event publication; otherwise rebase whichever lane touched the shared block second.
+4. Merge B and C only after both pass their lane-local tests.
+5. Run Lane D last.
+
+Lane-local merge gates:
+
+- Lane A: participant constructor, compat upgrade, and store tests green
+- Lane B: status/toolbox/doctor contract tests green
+- Lane C: event envelope schema tests green
+- Lane D: full targeted shell/common suite green and docs updated
 
 ### Conflict flags
 
 - Lane A and Lane C both touch `crates/shell/src/repl/async_repl.rs`
 - Lane A and Lane B both touch `crates/shell/src/execution/agent_runtime/state_store.rs`
 - Lane B and Lane D both touch `docs/USAGE.md` and `docs/TRACE.md`
+- Lane C and Lane D can both touch `crates/common/tests/agent_hub_event_envelope_schema.rs` if test cleanup starts too early
 
 Safe rule: do not start B or C before A defines the participant type names and store helper signatures.
 
@@ -844,9 +951,10 @@ The slice is done when all of these are true:
 
 - Step 0: Scope Challenge - scope accepted as-is, but explicitly bounded away from slices `03` through `06`
 - Architecture Review: 4 material findings
-- Code Quality Review: folded into the compatibility and fail-closed rules
+- Code Quality Review: 3 implementation guardrails around invariant ownership, compat-boundary DRY, and terminology cutover
 - Test Review: coverage diagrams produced, 33 concrete gaps/assertions identified
 - Performance Review: 0 major issues, 3 direct-lookup/no-cache rules
+- Error & Rescue Registry: written
 - NOT in scope: written
 - What already exists: written
 - TODOS.md updates: deferred scope captured in-plan because no `TODOS.md` exists
