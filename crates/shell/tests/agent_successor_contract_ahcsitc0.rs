@@ -353,6 +353,79 @@ fn write_runtime_manifest(
     .expect("write runtime manifest");
 }
 
+fn write_active_orchestration_session(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: Option<&str>,
+    ts: &str,
+) {
+    write_orchestration_session(
+        fixture,
+        agent_id,
+        orchestration_session_id,
+        active_session_handle_id,
+        "active",
+        ts,
+    );
+}
+
+fn write_inactive_orchestration_session(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: Option<&str>,
+    ts: &str,
+) {
+    write_orchestration_session(
+        fixture,
+        agent_id,
+        orchestration_session_id,
+        active_session_handle_id,
+        "stopped",
+        ts,
+    );
+}
+
+fn write_orchestration_session(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: Option<&str>,
+    state: &str,
+    ts: &str,
+) {
+    let sessions_dir = fixture
+        .substrate_home
+        .join("run")
+        .join("agent-hub")
+        .join("sessions");
+    fs::create_dir_all(&sessions_dir).expect("failed to create orchestration sessions dir");
+    let session = json!({
+        "orchestration_session_id": orchestration_session_id,
+        "shell_trace_session_id": "ses_agent_hub",
+        "workspace_root": fixture.workspace_root.display().to_string(),
+        "shell_owner_pid": std::process::id(),
+        "state": state,
+        "opened_at": ts,
+        "last_active_at": ts,
+        "orchestrator_agent_id": agent_id,
+        "orchestrator_backend_id": format!("cli:{agent_id}"),
+        "orchestrator_protocol": PURE_AGENT_PROTOCOL,
+        "active_session_handle_id": active_session_handle_id,
+        "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
+        "world_id": Value::Null,
+        "world_generation": Value::Null,
+        "invalidation_reason": if state == "active" { Value::Null } else { json!("fixture stopped parent") },
+        "closed_at": if state == "active" { Value::Null } else { json!(ts) }
+    });
+    fs::write(
+        sessions_dir.join(format!("{orchestration_session_id}.json")),
+        serde_json::to_vec_pretty(&session).expect("serialize orchestration session"),
+    )
+    .expect("write orchestration session");
+}
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -506,6 +579,44 @@ fn assert_doctor_fails_at_orchestrator_selection(output: &Output, expected_reaso
         json.get("orchestrator").is_none() || json["orchestrator"].is_null(),
         "failed orchestrator selection must not publish an orchestrator summary: {json}"
     );
+}
+
+fn assert_parent_resolution_fail_closed(
+    output: &Output,
+    command: &str,
+    expected_stderr_fragments: &[&str],
+) {
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "{command} must fail closed on broken orchestrator parent resolution: {output:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).trim().is_empty(),
+        "{command} failures must not emit stdout: {output:?}"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for needle in expected_stderr_fragments {
+        assert!(
+            stderr.contains(needle),
+            "{command} stderr must contain `{needle}`: {stderr}"
+        );
+    }
+}
+
+fn assert_parent_resolution_fail_closed_across_operator_surfaces(
+    fixture: &AgentSuccessorFixture,
+    expected_stderr_fragments: &[&str],
+) {
+    for args in [
+        vec!["agent", "status", "--json"],
+        vec!["agent", "toolbox", "status", "--json"],
+        vec!["agent", "toolbox", "env", "--json"],
+    ] {
+        let output = fixture.run(&args);
+        assert_parent_resolution_fail_closed(&output, &args.join(" "), expected_stderr_fragments);
+    }
 }
 
 fn find_session_by_agent<'a>(sessions: &'a [Value], agent_id: &str) -> &'a Value {
@@ -908,6 +1019,13 @@ fn agent_toolbox_env_prefers_live_manifest_over_trace_fallback() {
         "ash_live_toolbox",
         "2026-04-06T00:00:02Z",
     );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa",
+        Some("ash_live_toolbox"),
+        "2026-04-06T00:00:02Z",
+    );
     fixture.write_trace_events(&[json!({
         "ts": "2026-04-06T00:00:03Z",
         "event_type": "agent_event",
@@ -941,6 +1059,135 @@ fn agent_toolbox_env_prefers_live_manifest_over_trace_fallback() {
             .and_then(Value::as_str),
         Some(expected.as_str()),
         "toolbox env must use the authoritative live manifest and ignore trace history for active-session authorization: {json}"
+    );
+}
+
+#[test]
+fn operator_surfaces_fail_closed_when_live_orchestrator_child_has_no_parent_session() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fac",
+        "ash_missing_parent",
+        "2026-04-06T00:00:02Z",
+    );
+
+    assert_parent_resolution_fail_closed_across_operator_surfaces(
+        &fixture,
+        &["missing orchestration session record for live handle ash_missing_parent"],
+    );
+}
+
+#[test]
+fn operator_surfaces_fail_closed_when_live_orchestrator_parent_is_inactive() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fad",
+        "ash_inactive_parent",
+        "2026-04-06T00:00:02Z",
+    );
+    write_inactive_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fad",
+        Some("ash_inactive_parent"),
+        "2026-04-06T00:00:02Z",
+    );
+
+    assert_parent_resolution_fail_closed_across_operator_surfaces(
+        &fixture,
+        &[
+            "inactive orchestration session 0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fad for live handle ash_inactive_parent",
+        ],
+    );
+}
+
+#[test]
+fn operator_surfaces_fail_closed_when_active_parent_omits_active_session_handle_id() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fae",
+        "ash_missing_active_handle",
+        "2026-04-06T00:00:02Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fae",
+        None,
+        "2026-04-06T00:00:02Z",
+    );
+
+    assert_parent_resolution_fail_closed_across_operator_surfaces(
+        &fixture,
+        &[
+            "active orchestration session 0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fae is missing active_session_handle_id",
+        ],
+    );
+}
+
+#[test]
+fn operator_surfaces_fail_closed_when_active_parent_points_to_different_live_handle() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faf",
+        "ash_live_handle",
+        "2026-04-06T00:00:02Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faf",
+        Some("ash_other_handle"),
+        "2026-04-06T00:00:02Z",
+    );
+
+    assert_parent_resolution_fail_closed_across_operator_surfaces(
+        &fixture,
+        &[
+            "active orchestration session 0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faf points to ash_other_handle, not live handle ash_live_handle",
+        ],
+    );
+}
+
+#[test]
+fn operator_surfaces_fail_closed_when_multiple_active_parent_candidates_exist() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb0",
+        Some("ash_parent_one"),
+        "2026-04-06T00:00:02Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb1",
+        Some("ash_parent_two"),
+        "2026-04-06T00:00:03Z",
+    );
+
+    assert_parent_resolution_fail_closed_across_operator_surfaces(
+        &fixture,
+        &["multiple active orchestration session candidates found for agent claude_code"],
     );
 }
 
@@ -1178,6 +1425,13 @@ fn agent_status_prefers_live_manifest_over_trace_fallback_for_selected_orchestra
         "ash_live_status",
         "2026-04-05T00:00:02Z",
     );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa",
+        Some("ash_live_status"),
+        "2026-04-05T00:00:02Z",
+    );
     fixture.write_trace_events(&[json!({
         "ts": "2026-04-05T00:00:03Z",
         "event_type": "agent_event",
@@ -1225,6 +1479,13 @@ fn agent_status_suppresses_trace_fallback_rows_for_live_pure_agent_identity() {
         "claude_code",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa",
         "ash_live_status_suppression",
+        "2026-04-05T00:00:02Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa",
+        Some("ash_live_status_suppression"),
         "2026-04-05T00:00:02Z",
     );
     fixture.write_trace_events(&[json!({

@@ -56,6 +56,32 @@ metadata: {}
     fs::write(project_dir.join(".substrate-profile"), profile).expect("write .substrate-profile");
 }
 
+fn write_host_only_profile(project_dir: &Path) {
+    let profile = r#"id: test-policy
+name: Test Policy
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {}
+"#;
+    fs::write(project_dir.join(".substrate-profile"), profile).expect("write host-only profile");
+}
+
+#[allow(dead_code)]
 fn write_policy(home_substrate: &Path) {
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
     let policy = r#"id: test-global-policy
@@ -80,6 +106,105 @@ limits:
 metadata: {}
 "#;
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
+}
+
+fn write_host_only_policy(home_substrate: &Path) {
+    fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
+    let policy = r#"id: test-global-policy
+name: Test Global Policy
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {}
+"#;
+    fs::write(home_substrate.join("policy.yaml"), policy).expect("write host-only policy.yaml");
+}
+
+fn write_orchestrator_runtime_config(home_substrate: &Path, fake_codex: &Path) {
+    fs::create_dir_all(home_substrate.join("agents")).expect("create agents dir");
+    fs::write(
+        home_substrate.join("config.yaml"),
+        "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+    )
+    .expect("write config.yaml");
+    fs::write(
+        home_substrate.join("policy.yaml"),
+        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex\n",
+    )
+    .expect("write agent runtime policy");
+    fs::write(
+        home_substrate.join("agents/codex.yaml"),
+        format!(
+            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            fake_codex.display()
+        ),
+    )
+    .expect("write codex agent file");
+}
+
+#[cfg(unix)]
+fn write_fake_codex_script(temp: &Path) -> PathBuf {
+    let path = temp.join("fake-codex.sh");
+    let body = "#!/bin/sh\ntrap 'exit 0' INT TERM\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}\\r\\n'\nwhile :; do sleep 1; done\n";
+    fs::write(&path, body).expect("write fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("fake codex metadata")
+        .permissions();
+    use std::os::unix::fs::PermissionsExt;
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake codex permissions");
+    path
+}
+
+fn extract_session_id(output: &[u8]) -> String {
+    let text = String::from_utf8_lossy(output);
+    text.lines()
+        .find_map(|line| line.strip_prefix("Session ID: ").map(str::to_string))
+        .expect("session id line")
+}
+
+fn read_trace_events(trace_path: &Path) -> Vec<Value> {
+    fs::read_to_string(trace_path)
+        .expect("read trace")
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("parse trace line"))
+        .collect()
+}
+
+fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
+    let sessions_dir = substrate_home.join("run/agent-hub/sessions");
+    let mut entries = fs::read_dir(&sessions_dir)
+        .expect("read orchestration session dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .collect::<Vec<_>>();
+    entries.sort();
+    let session_path = entries
+        .into_iter()
+        .next()
+        .expect("orchestration session file");
+    serde_json::from_str::<Value>(&fs::read_to_string(session_path).expect("read session file"))
+        .expect("parse session file")
+        .get("orchestration_session_id")
+        .and_then(Value::as_str)
+        .expect("session orchestration_session_id")
+        .to_string()
 }
 
 struct PtyRepl {
@@ -117,6 +242,16 @@ impl PtyRepl {
         substrate_home: &Path,
         trace_path: &Path,
     ) -> Self {
+        Self::spawn_with_env(project_dir, home_dir, substrate_home, trace_path, &[])
+    }
+
+    fn spawn_with_env(
+        project_dir: &Path,
+        home_dir: &Path,
+        substrate_home: &Path,
+        trace_path: &Path,
+        extra_env: &[(&str, &str)],
+    ) -> Self {
         ensure_substrate_built();
 
         let pty_system = native_pty_system();
@@ -151,6 +286,9 @@ impl PtyRepl {
         cmd.env_remove("SUBSTRATE_WORLD_ENABLED");
         cmd.env_remove("SUBSTRATE_WORLD_ID");
         cmd.env("SHELL", "/bin/bash");
+        for (key, value) in extra_env {
+            cmd.env(key, value);
+        }
         cmd.arg("--async-repl");
         cmd.arg("--shim-skip");
 
@@ -376,6 +514,122 @@ fn agent_events_append_flattened_agent_event_records_with_join_keys() {
             "agent_event record must be flattened (no payload wrapper); got: {record:?}"
         );
     }
+}
+
+#[test]
+#[serial]
+fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_session() {
+    let temp = temp_dir("substrate-runtime-agent-hub-trace-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(substrate_home.join("shims")).expect("create shims dir");
+    fs::create_dir_all(&project).expect("create project dir");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_codex = write_fake_codex_script(temp.path());
+    write_orchestrator_runtime_config(&substrate_home, &fake_codex);
+
+    let trace_path = substrate_home.join("trace.jsonl");
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &trace_path);
+
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+
+    repl.send_line("exit");
+    let (code, out) = repl.shutdown_graceful(Duration::from_secs(5));
+    assert_eq!(
+        code,
+        0,
+        "expected clean exit; output:\n{}",
+        String::from_utf8_lossy(&out)
+    );
+
+    let shell_session_id = extract_session_id(&out);
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let events = read_trace_events(&trace_path);
+    let runtime_records = events
+        .iter()
+        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
+        .filter(|event| event.get("agent_id").and_then(Value::as_str) == Some("codex"))
+        .collect::<Vec<_>>();
+
+    assert!(
+        !runtime_records.is_empty(),
+        "expected runtime-owned codex agent_event rows in trace; got: {events:?}"
+    );
+
+    for record in runtime_records {
+        assert_eq!(
+            record.get("session_id").and_then(Value::as_str),
+            Some(shell_session_id.as_str()),
+            "runtime-owned agent_event row must retain the shell trace session_id: {record:?}"
+        );
+        assert_eq!(
+            record
+                .get("orchestration_session_id")
+                .and_then(Value::as_str),
+            Some(orchestration_session_id.as_str()),
+            "runtime-owned agent_event row must retain the authoritative orchestration_session_id: {record:?}"
+        );
+    }
+}
+
+#[test]
+#[serial]
+fn no_context_shell_command_completion_does_not_synthesize_agent_event_trace_row() {
+    let temp = temp_dir("substrate-no-context-command-trace-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(substrate_home.join("shims")).expect("create shims dir");
+    fs::create_dir_all(&project).expect("create project dir");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
+    write_host_only_profile(&project);
+    write_host_only_policy(&substrate_home);
+
+    let trace_path = substrate_home.join("trace.jsonl");
+    let mut repl = PtyRepl::spawn_with_env(
+        &project,
+        &home,
+        &substrate_home,
+        &trace_path,
+        &[("SUBSTRATE_REPL_HOST_ESCAPE", "1")],
+    );
+
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.send_line(":host false");
+    repl.wait_for_output("Command failed with status: 1", Duration::from_secs(3))
+        .expect("host failure output");
+    repl.send_line("exit");
+    let (code, out) = repl.shutdown_graceful(Duration::from_secs(5));
+    assert_eq!(
+        code,
+        0,
+        "expected clean exit; output:\n{}",
+        String::from_utf8_lossy(&out)
+    );
+
+    let events = read_trace_events(&trace_path);
+    let shell_completion_records = events
+        .iter()
+        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
+        .filter(|event| event.get("agent_id").and_then(Value::as_str) == Some("shell"))
+        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("task_end"))
+        .collect::<Vec<_>>();
+
+    assert!(
+        shell_completion_records.is_empty(),
+        "no-context shell completion must not synthesize an orchestration-scoped agent_event row: {shell_completion_records:?}"
+    );
 }
 
 #[test]

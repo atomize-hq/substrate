@@ -11,6 +11,7 @@ use super::world_ops::WorldFsStrategyUnavailableError;
 use super::world_ops::{
     collect_world_telemetry, emit_stream_chunk, stream_non_pty_via_agent, AgentStreamOutcome,
 };
+use crate::execution::agent_runtime::AgentRuntimeStateStore;
 use crate::execution::config_model;
 use crate::execution::config_model::CliConfigOverrides;
 use crate::execution::config_model::PolicyMode;
@@ -163,6 +164,18 @@ fn exit_status_from_code(code: i32) -> ExitStatus {
         use std::os::windows::process::ExitStatusExt;
         ExitStatus::from_raw(code as u32)
     }
+}
+
+fn resolve_active_orchestration_session_id() -> Option<String> {
+    AgentRuntimeStateStore::new()
+        .ok()
+        .and_then(|store| {
+            store
+                .find_active_orchestration_session_for_pid(std::process::id())
+                .ok()
+                .flatten()
+        })
+        .map(|session| session.orchestration_session_id)
 }
 
 pub(crate) fn execute_command(
@@ -1543,15 +1556,24 @@ fn execute_external(
     let mut child = cmd
         .spawn()
         .with_context(|| format!("Failed to execute: {command}"))?;
+    let orchestration_session_id = resolve_active_orchestration_session_id();
 
-    let stdout_thread = child
-        .stdout
-        .take()
-        .map(|pipe| spawn_host_stream_thread(pipe, false, SHELL_AGENT_ID.to_string()));
-    let stderr_thread = child
-        .stderr
-        .take()
-        .map(|pipe| spawn_host_stream_thread(pipe, true, SHELL_AGENT_ID.to_string()));
+    let stdout_thread = child.stdout.take().map(|pipe| {
+        spawn_host_stream_thread(
+            pipe,
+            false,
+            SHELL_AGENT_ID.to_string(),
+            orchestration_session_id.clone(),
+        )
+    });
+    let stderr_thread = child.stderr.take().map(|pipe| {
+        spawn_host_stream_thread(
+            pipe,
+            true,
+            SHELL_AGENT_ID.to_string(),
+            orchestration_session_id.clone(),
+        )
+    });
 
     let child_pid = child.id() as i32;
     running_child_pid.store(child_pid, Ordering::SeqCst);
@@ -1584,6 +1606,7 @@ fn spawn_host_stream_thread<R>(
     mut reader: R,
     is_stderr: bool,
     agent_label: String,
+    orchestration_session_id: Option<String>,
 ) -> std::thread::JoinHandle<anyhow::Result<()>>
 where
     R: std::io::Read + Send + 'static,
@@ -1594,7 +1617,14 @@ where
             match std::io::Read::read(&mut reader, &mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    emit_stream_chunk(&agent_label, "unknown", None, &buf[..n], is_stderr);
+                    emit_stream_chunk(
+                        &agent_label,
+                        orchestration_session_id.as_deref(),
+                        "unknown",
+                        None,
+                        &buf[..n],
+                        is_stderr,
+                    );
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
                 Err(e) => return Err(anyhow::anyhow!("pipe read failed: {}", e)),

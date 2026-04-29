@@ -2,6 +2,7 @@
 
 use super::shim_ops::build_world_env_map_for_cwd;
 use crate::execution::agent_events::publish_agent_event;
+use crate::execution::agent_runtime::AgentRuntimeStateStore;
 #[cfg(target_os = "windows")]
 use crate::execution::policy_snapshot::world_spec_for_network_policy;
 use crate::execution::policy_snapshot::{
@@ -184,6 +185,18 @@ pub(super) fn collect_world_telemetry(
         // World backend only available on Linux for now
         (vec![], None)
     }
+}
+
+fn resolve_active_orchestration_session_id() -> Option<String> {
+    AgentRuntimeStateStore::new()
+        .ok()
+        .and_then(|store| {
+            store
+                .find_active_orchestration_session_for_pid(std::process::id())
+                .ok()
+                .flatten()
+        })
+        .map(|session| session.orchestration_session_id)
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1422,6 +1435,7 @@ pub(crate) fn stream_non_pty_via_agent(
         build_agent_client_and_request_with_trace_metadata(command, parent_span_id, parent_cmd_id)?;
     let run_id = parent_cmd_id.unwrap_or("unknown").to_string();
     let parent_span_id = parent_span_id.map(|s| s.to_string());
+    let orchestration_session_id = resolve_active_orchestration_session_id();
 
     let host_visible = request.policy_snapshot.world_fs.host_visible;
     let empty_env: std::collections::HashMap<String, String> = std::collections::HashMap::new();
@@ -1437,6 +1451,7 @@ pub(crate) fn stream_non_pty_via_agent(
         let message = substrate_common::world_exec_guard::deny_message(&deny);
         emit_stream_chunk(
             &agent_id,
+            orchestration_session_id.as_deref(),
             &run_id,
             parent_span_id.as_deref(),
             message.as_bytes(),
@@ -1487,8 +1502,22 @@ pub(crate) fn stream_non_pty_via_agent(
             let stderr = BASE64
                 .decode(response.stderr_b64.as_bytes())
                 .unwrap_or_else(|_| response.stderr_b64.clone().into_bytes());
-            emit_stream_chunk(&agent_id, &run_id, parent_span_id.as_deref(), &stdout, false);
-            emit_stream_chunk(&agent_id, &run_id, parent_span_id.as_deref(), &stderr, true);
+            emit_stream_chunk(
+                &agent_id,
+                orchestration_session_id.as_deref(),
+                &run_id,
+                parent_span_id.as_deref(),
+                &stdout,
+                false,
+            );
+            emit_stream_chunk(
+                &agent_id,
+                orchestration_session_id.as_deref(),
+                &run_id,
+                parent_span_id.as_deref(),
+                &stderr,
+                true,
+            );
 
             Ok(AgentStreamOutcome {
                 exit_code: response.exit,
@@ -1535,6 +1564,7 @@ pub(crate) fn stream_non_pty_via_agent(
             let result = process_agent_stream(
                 response.into_body(),
                 agent_id,
+                orchestration_session_id.as_deref(),
                 &mut sigint_rx,
                 |span_id, sig| async {
                     client
@@ -1554,19 +1584,28 @@ pub(crate) fn stream_non_pty_via_agent(
 async fn process_agent_stream<Fut>(
     body: hyper::body::Incoming,
     agent_label: String,
+    orchestration_session_id: Option<&str>,
     sigint_rx: &mut tokio::sync::mpsc::UnboundedReceiver<()>,
     cancel: impl FnMut(String, String) -> Fut,
 ) -> anyhow::Result<AgentStreamOutcome>
 where
     Fut: std::future::Future<Output = anyhow::Result<()>>,
 {
-    process_agent_stream_body(body, agent_label, sigint_rx, cancel).await
+    process_agent_stream_body(
+        body,
+        agent_label,
+        orchestration_session_id,
+        sigint_rx,
+        cancel,
+    )
+    .await
 }
 
 #[cfg(not(target_os = "windows"))]
 async fn process_agent_stream_body<B, Fut>(
     body: B,
     agent_label: String,
+    orchestration_session_id: Option<&str>,
     sigint_rx: &mut tokio::sync::mpsc::UnboundedReceiver<()>,
     mut cancel: impl FnMut(String, String) -> Fut,
 ) -> anyhow::Result<AgentStreamOutcome>
@@ -1612,8 +1651,9 @@ where
         let frame = frame.map_err(|e| anyhow::anyhow!("stream frame error: {}", e))?;
         if let Some(data) = frame.data_ref() {
             buffer.extend_from_slice(data);
-            consume_agent_stream_buffer_with_meta(
+            consume_agent_stream_buffer_with_context(
                 &agent_label,
+                orchestration_session_id,
                 &mut buffer,
                 &mut active_span_id,
                 &mut exit_code,
@@ -1629,8 +1669,9 @@ where
     }
 
     if exit_code.is_none() && !buffer.is_empty() {
-        consume_agent_stream_buffer_with_meta(
+        consume_agent_stream_buffer_with_context(
             &agent_label,
+            orchestration_session_id,
             &mut buffer,
             &mut active_span_id,
             &mut exit_code,
@@ -1686,6 +1727,31 @@ pub(crate) fn consume_agent_stream_buffer_with_meta(
     fs_strategy: &mut Option<WorldFsStrategyTraceMeta>,
     process_telemetry: &mut ProcessTelemetry,
 ) -> anyhow::Result<()> {
+    consume_agent_stream_buffer_with_context(
+        agent_label,
+        None,
+        buffer,
+        active_span_id,
+        exit_code,
+        scopes_used,
+        fs_diff,
+        fs_strategy,
+        process_telemetry,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn consume_agent_stream_buffer_with_context(
+    agent_label: &str,
+    orchestration_session_id: Option<&str>,
+    buffer: &mut Vec<u8>,
+    active_span_id: &mut Option<String>,
+    exit_code: &mut Option<i32>,
+    scopes_used: &mut Vec<String>,
+    fs_diff: &mut Option<substrate_common::FsDiff>,
+    fs_strategy: &mut Option<WorldFsStrategyTraceMeta>,
+    process_telemetry: &mut ProcessTelemetry,
+) -> anyhow::Result<()> {
     use anyhow::Context as _;
 
     while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
@@ -1716,6 +1782,7 @@ pub(crate) fn consume_agent_stream_buffer_with_meta(
                 let run_id = active_span_id.as_deref().unwrap_or("unknown");
                 emit_stream_chunk(
                     agent_label,
+                    orchestration_session_id,
                     run_id,
                     active_span_id.as_deref(),
                     &bytes,
@@ -1727,7 +1794,14 @@ pub(crate) fn consume_agent_stream_buffer_with_meta(
                     .decode(chunk_b64.as_bytes())
                     .map_err(|e| anyhow::anyhow!("invalid stderr chunk: {}", e))?;
                 let run_id = active_span_id.as_deref().unwrap_or("unknown");
-                emit_stream_chunk(agent_label, run_id, active_span_id.as_deref(), &bytes, true);
+                emit_stream_chunk(
+                    agent_label,
+                    orchestration_session_id,
+                    run_id,
+                    active_span_id.as_deref(),
+                    &bytes,
+                    true,
+                );
             }
             ExecuteStreamFrame::Event { event } => {
                 if let (Some(primary), Some(final_strategy), Some(reason)) = (
@@ -1785,6 +1859,7 @@ pub(crate) fn consume_agent_stream_buffer_with_meta(
 
 pub(super) fn emit_stream_chunk(
     agent_label: &str,
+    orchestration_session_id: Option<&str>,
     run_id: &str,
     span_id: Option<&str>,
     data: &[u8],
@@ -1802,10 +1877,13 @@ pub(super) fn emit_stream_chunk(
         let _ = stdout.flush();
     }
 
+    let Some(orchestration_session_id) = orchestration_session_id else {
+        return;
+    };
     let text = String::from_utf8_lossy(data);
     let mut event = AgentEvent::stream_chunk(
         agent_label,
-        crate::execution::agent_events::orchestration_session_id(),
+        orchestration_session_id.to_string(),
         run_id.to_string(),
         is_stderr,
         text.to_string(),
@@ -1817,9 +1895,12 @@ pub(super) fn emit_stream_chunk(
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
     use super::{
-        current_world_request_profile, ensure_world_deps_bin_on_path,
+        current_world_request_profile, emit_stream_chunk, ensure_world_deps_bin_on_path,
         extract_process_telemetry_from_ws_exit, preserve_world_project_dir_override,
         process_agent_stream_body, WORLD_PROJECT_DIR_OVERRIDE_ENV,
+    };
+    use crate::execution::agent_events::{
+        acquire_event_test_guard, clear_agent_event_sender, init_event_channel,
     };
     use agent_api_types::ExecuteStreamFrame;
     use futures::stream;
@@ -1828,6 +1909,7 @@ mod tests {
     use std::convert::Infallible;
     use std::sync::{Arc, Mutex, OnceLock};
     use std::time::Duration;
+    use substrate_common::agent_events::AgentEventKind;
 
     fn with_env_var<T>(key: &str, value: &str, f: impl FnOnce() -> T) -> T {
         let _guard = test_env_lock().lock().expect("test env mutex poisoned");
@@ -2005,6 +2087,7 @@ mod tests {
             let outcome = process_agent_stream_body(
                 body,
                 "agent".to_string(),
+                Some("orch-live"),
                 &mut sigint_rx,
                 move |span_id, sig| {
                     let cancels = Arc::clone(&cancels_for_cancel);
@@ -2023,6 +2106,44 @@ mod tests {
                 &[("spn_interrupt".to_string(), "INT".to_string())]
             );
         });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn emit_stream_chunk_some_emits_orchestration_scoped_agent_event() {
+        let _guard = acquire_event_test_guard();
+        let mut rx = init_event_channel();
+
+        emit_stream_chunk(
+            "agent",
+            Some("orch-live"),
+            "run-1",
+            Some("spn-1"),
+            b"hello stdout",
+            false,
+        );
+
+        let event = rx.try_recv().expect("stream chunk event");
+        assert_eq!(event.kind, AgentEventKind::PtyData);
+        assert_eq!(event.orchestration_session_id, "orch-live");
+        assert_eq!(event.run_id, "run-1");
+        assert_eq!(event.span_id.as_deref(), Some("spn-1"));
+        clear_agent_event_sender();
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn emit_stream_chunk_none_emits_no_orchestration_scoped_agent_event() {
+        let _guard = acquire_event_test_guard();
+        let mut rx = init_event_channel();
+
+        emit_stream_chunk("agent", None, "run-1", Some("spn-1"), b"hello stderr", true);
+
+        assert!(
+            rx.try_recv().is_err(),
+            "stream chunk without orchestration context must not emit an agent event"
+        );
+        clear_agent_event_sender();
     }
 
     #[test]

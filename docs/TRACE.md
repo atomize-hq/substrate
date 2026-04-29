@@ -59,7 +59,7 @@ Phase 8 introduces/locks additional cross-feature correlation fields (e.g., `orc
 Operator note (non-negotiable):
 - Do not rely on heuristic joins. Prefer explicit join keys (`session_id`, `orchestration_session_id`, `run_id`, explicit cause refs) as defined in ADR-0028/Phase 8 contracts.
 - Trace is safe-by-default: do not mirror raw third-party JSONL/NDJSON agent logs into `trace.jsonl` by default. Treat raw wrapper logs and any payloads that may contain secrets as per-session artifacts, and apply redaction/caps rules per ADR-0028 and the Phase 8 secrets rubric.
-- Live shell-owned orchestrator session ownership is persisted separately from trace under `~/.substrate/run/agent-hub/handles/*.json`. Those manifests reflect a REPL-owned session only while the shell still retains the attached UAA control boundary (cancel ownership plus active event/completion observation). Trace remains the canonical historical event log; the live manifests only provide cross-invocation session discovery and precedence for current-session status/toolbox surfaces.
+- Live shell-owned orchestrator session ownership is persisted separately from trace under `~/.substrate/run/agent-hub/sessions/*.json` (parent orchestration session record) plus `~/.substrate/run/agent-hub/handles/*.json` (child runtime handle manifest). The child handle is authoritative-live only while the shell still retains the attached UAA control boundary, and production status/toolbox discovery must resolve through the parent record instead of treating handles alone as truth. Trace remains the canonical historical event log; the runtime store only provides current-session discovery and precedence for operator surfaces.
 
 ### Command Span Schema (`command_start` / `command_complete`)
 
@@ -150,6 +150,9 @@ These are canonical cross-feature correlation identifiers. Details and required/
 - `backend_id`: backend identifier in `<kind>:<name>` form (e.g., `cli:codex`, `api:openai`) when a specific backend is involved.
 - `world_id`: world boundary identity; required on in-world telemetry families (e.g., `world_process_*`) and any record that describes an in-world boundary/session.
 
+Emission rule:
+- `AgentEvent` schema is unchanged. Runtime-owned producers must emit a real `orchestration_session_id` or suppress the agent-event row entirely; they must not synthesize a process-global fallback id.
+
 ### Agent Identity-Tuple Fields
 
 Agent-hub successor telemetry keeps adapter identity separate from semantic identity:
@@ -173,6 +176,8 @@ The shell-owned UAA runtime translates external `agent_api` wrapper events into 
 - `auth_authority` omitted
 
 Bootstrap and lifecycle rows for the first host orchestrator caller path are emitted through the same canonical `agent_event` family; raw wrapper output stays outside `trace.jsonl`.
+
+Runtime-owned shell rows follow the same rule. Host stream chunks, shell command-completion events, and world-restart alerts emit `agent_event` rows only when a live parent orchestration session exists; otherwise stdout/stderr and operator-facing terminal messaging continue without appending an orchestration-scoped trace row.
 
 Operator-facing omission rules:
 - Pure-agent records keep `client`, `router`, and `protocol`, and omit `provider` plus `auth_authority`.

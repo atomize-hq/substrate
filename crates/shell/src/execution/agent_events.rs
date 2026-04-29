@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 /// Global sender storage so any component can publish agent events.
 static AGENT_EVENT_SENDER: OnceLock<Mutex<Option<UnboundedSender<AgentEvent>>>> = OnceLock::new();
-static ORCHESTRATION_SESSION_ID: OnceLock<String> = OnceLock::new();
 
 #[cfg(test)]
 static EVENT_TEST_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
@@ -63,13 +62,12 @@ pub(crate) fn clear_agent_event_sender() {
     }
 }
 
-pub(crate) fn orchestration_session_id() -> String {
-    ORCHESTRATION_SESSION_ID
-        .get_or_init(|| Uuid::now_v7().to_string())
-        .clone()
-}
-
-pub(crate) fn publish_command_completion(command: &str, cmd_id: &str, status: &ExitStatus) {
+pub(crate) fn publish_command_completion(
+    orchestration_session_id: Option<&str>,
+    command: &str,
+    cmd_id: &str,
+    status: &ExitStatus,
+) {
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
@@ -85,10 +83,13 @@ pub(crate) fn publish_command_completion(command: &str, cmd_id: &str, status: &E
         if !enabled {
             return;
         }
+        let Some(orchestration_session_id) = orchestration_session_id else {
+            return;
+        };
 
         let mut event = AgentEvent::message(
             "shell",
-            orchestration_session_id(),
+            orchestration_session_id.to_string(),
             cmd_id.to_string(),
             MessageEventKind::TaskEnd,
             format!("Command `{command}` completed successfully"),
@@ -98,10 +99,13 @@ pub(crate) fn publish_command_completion(command: &str, cmd_id: &str, status: &E
         return;
     }
 
+    let Some(orchestration_session_id) = orchestration_session_id else {
+        return;
+    };
     let code = status.code().unwrap_or(-1);
     let mut event = AgentEvent::message(
         "shell",
-        orchestration_session_id(),
+        orchestration_session_id.to_string(),
         cmd_id.to_string(),
         MessageEventKind::TaskEnd,
         format!("Command `{command}` exited with status {code}"),
@@ -151,7 +155,7 @@ pub(crate) fn schedule_demo_events() {
         return;
     }
 
-    let orchestration_session_id = orchestration_session_id();
+    let orchestration_session_id = Uuid::now_v7().to_string();
     let run_id = Uuid::now_v7().to_string();
 
     let mut first = AgentEvent::message(
@@ -198,7 +202,7 @@ pub(crate) fn schedule_demo_burst(agent_count: usize, events_per_agent: usize, d
 
     let agent_count = agent_count.clamp(1, 16);
     let events_per_agent = events_per_agent.clamp(1, 10_000);
-    let orchestration_session_id = orchestration_session_id();
+    let orchestration_session_id = Uuid::now_v7().to_string();
     let run_id = Uuid::now_v7().to_string();
 
     for agent_idx in 0..agent_count {
@@ -261,6 +265,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn schedule_demo_burst_emits_expected_events() {
         let _guard = super::acquire_event_test_guard();
         let rt = Runtime::new().expect("runtime");
@@ -293,6 +298,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn publish_command_completion_failure_emits_task_end_with_cmd_id() {
         let _guard = super::acquire_event_test_guard();
         let rt = Runtime::new().expect("runtime");
@@ -301,11 +307,12 @@ mod tests {
             let cmd_id = "cmd-failure";
             let status = exit_status_from_code(7);
 
-            publish_command_completion("false", cmd_id, &status);
+            publish_command_completion(Some("orch-live"), "false", cmd_id, &status);
 
             let event = rx.recv().await.expect("event");
             assert_eq!(event.kind, AgentEventKind::TaskEnd);
             assert_eq!(event.cmd_id.as_deref(), Some(cmd_id));
+            assert_eq!(event.orchestration_session_id, "orch-live");
             assert_eq!(
                 event
                     .data
@@ -323,6 +330,26 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
+    fn publish_command_completion_none_emits_no_agent_event() {
+        let _guard = super::acquire_event_test_guard();
+        let rt = Runtime::new().expect("runtime");
+        rt.block_on(async {
+            let mut rx = init_event_channel();
+            let status = exit_status_from_code(7);
+
+            publish_command_completion(None, "false", "cmd-no-context", &status);
+
+            assert!(
+                rx.try_recv().is_err(),
+                "no-context command completion must not emit an agent event"
+            );
+        });
+        clear_agent_event_sender();
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn publish_command_completion_success_emits_task_end_when_enabled() {
         let _guard = super::acquire_event_test_guard();
         let rt = Runtime::new().expect("runtime");
@@ -332,11 +359,12 @@ mod tests {
             let status = exit_status_from_code(0);
             std::env::set_var("SUBSTRATE_COMMAND_SUCCESS_EVENTS", "1");
 
-            publish_command_completion("true", cmd_id, &status);
+            publish_command_completion(Some("orch-live"), "true", cmd_id, &status);
 
             let event = rx.recv().await.expect("event");
             assert_eq!(event.kind, AgentEventKind::TaskEnd);
             assert_eq!(event.cmd_id.as_deref(), Some(cmd_id));
+            assert_eq!(event.orchestration_session_id, "orch-live");
             assert_eq!(
                 event
                     .data

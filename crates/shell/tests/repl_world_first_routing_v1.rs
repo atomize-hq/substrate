@@ -817,75 +817,8 @@ fn c3_drift_restart_restarts_session_and_emits_message() {
         .collect();
     assert_eq!(
         alerts.len(),
-        1,
-        "expected exactly one world_restarted alert record, got: {alerts:?}"
-    );
-
-    let alert = alerts[0];
-    assert_eq!(
-        alert.get("agent_id").and_then(Value::as_str),
-        Some("shell"),
-        "restart alert must attribute to shell: {alert:?}"
-    );
-    assert_eq!(
-        alert.get("backend_id").and_then(Value::as_str),
-        Some("shell:repl"),
-        "restart alert must preserve backend attribution: {alert:?}"
-    );
-    assert_eq!(
-        alert.get("role").and_then(Value::as_str),
-        Some("orchestrator"),
-        "restart alert must carry role=orchestrator: {alert:?}"
-    );
-    assert_eq!(
-        alert.get("world_id").and_then(Value::as_str),
-        Some("wld_stub_0002"),
-        "top-level world_id must point at the active replacement world: {alert:?}"
-    );
-    assert_eq!(
-        alert.get("world_generation").and_then(Value::as_u64),
-        Some(1),
-        "top-level world_generation must point at the active replacement generation: {alert:?}"
-    );
-    assert_eq!(
-        alert.pointer("/data/reason").and_then(Value::as_str),
-        Some("policy_snapshot_changed"),
-        "policy drift restart should classify as policy_snapshot_changed: {alert:?}"
-    );
-    assert_eq!(
-        alert.pointer("/data/on_drift").and_then(Value::as_str),
-        Some("auto_restart"),
-        "restart alert must record on_drift=auto_restart: {alert:?}"
-    );
-    assert_eq!(
-        alert
-            .pointer("/data/previous_world_id")
-            .and_then(Value::as_str),
-        Some("wld_stub_0001"),
-        "restart alert must capture previous world_id: {alert:?}"
-    );
-    assert_eq!(
-        alert.pointer("/data/new_world_id").and_then(Value::as_str),
-        Some("wld_stub_0002"),
-        "restart alert must capture new world_id: {alert:?}"
-    );
-    assert_eq!(
-        alert
-            .pointer("/data/previous_world_generation")
-            .and_then(Value::as_u64),
-        Some(0),
-        "restart alert must capture previous generation 0: {alert:?}"
-    );
-    assert_eq!(
-        alert
-            .pointer("/data/new_world_generation")
-            .and_then(Value::as_u64),
-        Some(1),
-        "restart alert must capture new generation 1: {alert:?}"
-    );
-    assert!(
-        alert.pointer("/data/world_id").is_none() && alert.pointer("/data/world_generation").is_none(),
-        "restart alerts must keep active world identity at the top level, not duplicate it under data: {alert:?}"
+        0,
+        "no active orchestration context must suppress world_restarted agent_event rows: {alerts:?}"
     );
 }
 
@@ -942,55 +875,8 @@ fn c3_startup_drift_restart_emits_world_restarted_alert() {
         .collect();
     assert_eq!(
         alerts.len(),
-        1,
-        "expected exactly one startup world_restarted alert record, got: {alerts:?}"
-    );
-
-    let alert = alerts[0];
-    assert_eq!(
-        alert.get("world_id").and_then(Value::as_str),
-        Some("wld_stub_0002"),
-        "startup restart alert must publish the active replacement world at the top level: {alert:?}"
-    );
-    assert_eq!(
-        alert.get("world_generation").and_then(Value::as_u64),
-        Some(1),
-        "startup restart alert must publish the replacement generation at the top level: {alert:?}"
-    );
-    assert_eq!(
-        alert.pointer("/data/reason").and_then(Value::as_str),
-        Some("workspace_root_changed"),
-        "startup drift restart should classify as workspace_root_changed: {alert:?}"
-    );
-    assert_eq!(
-        alert
-            .pointer("/data/previous_world_id")
-            .and_then(Value::as_str),
-        Some("wld_stub_0001"),
-        "startup drift alert must capture the first world id: {alert:?}"
-    );
-    assert_eq!(
-        alert.pointer("/data/new_world_id").and_then(Value::as_str),
-        Some("wld_stub_0002"),
-        "startup drift alert must capture the restarted world id: {alert:?}"
-    );
-    assert_eq!(
-        alert
-            .pointer("/data/previous_world_generation")
-            .and_then(Value::as_u64),
-        Some(0),
-        "startup drift alert must start from generation 0: {alert:?}"
-    );
-    assert_eq!(
-        alert
-            .pointer("/data/new_world_generation")
-            .and_then(Value::as_u64),
-        Some(1),
-        "startup drift alert must increment to generation 1: {alert:?}"
-    );
-    assert!(
-        alert.pointer("/data/world_id").is_none() && alert.pointer("/data/world_generation").is_none(),
-        "startup restart alerts must keep active world identity at the top level, not under data: {alert:?}"
+        0,
+        "startup drift without orchestration context must suppress world_restarted agent_event rows: {alerts:?}"
     );
 }
 
@@ -1077,56 +963,8 @@ fn c3_drift_fail_closed_emits_world_restart_required_alert() {
         .collect();
     assert_eq!(
         alerts.len(),
-        1,
-        "expected exactly one world_restart_required alert record, got: {alerts:?}"
-    );
-
-    let alert = alerts[0];
-    assert_eq!(
-        alert.get("agent_id").and_then(Value::as_str),
-        Some("shell"),
-        "restart-required alert must attribute to shell: {alert:?}"
-    );
-    assert_eq!(
-        alert.get("backend_id").and_then(Value::as_str),
-        Some("shell:repl"),
-        "restart-required alert must preserve backend attribution: {alert:?}"
-    );
-    assert_eq!(
-        alert.get("role").and_then(Value::as_str),
-        Some("orchestrator"),
-        "restart-required alert must carry role=orchestrator: {alert:?}"
-    );
-    assert_eq!(
-        alert.get("world_id").and_then(Value::as_str),
-        Some("wld_stub_0001"),
-        "top-level world_id must point at the current world: {alert:?}"
-    );
-    assert_eq!(
-        alert.get("world_generation").and_then(Value::as_u64),
-        Some(0),
-        "top-level world_generation must publish the current generation for fail-closed restart-required alerts: {alert:?}"
-    );
-    assert_eq!(
-        alert.pointer("/data/reason").and_then(Value::as_str),
-        Some("policy_snapshot_changed"),
-        "policy drift fail-closed alert should classify as policy_snapshot_changed: {alert:?}"
-    );
-    assert_eq!(
-        alert.pointer("/data/on_drift").and_then(Value::as_str),
-        Some("fail_closed"),
-        "restart-required alert must record on_drift=fail_closed: {alert:?}"
-    );
-    assert_eq!(
-        alert
-            .pointer("/data/required_action")
-            .and_then(Value::as_str),
-        Some("restart_world"),
-        "restart-required alert must record required_action=restart_world: {alert:?}"
-    );
-    assert!(
-        alert.pointer("/data/world_id").is_none() && alert.pointer("/data/world_generation").is_none(),
-        "restart-required alerts must keep current world identity at the top level when known: {alert:?}"
+        0,
+        "no active orchestration context must suppress world_restart_required agent_event rows: {alerts:?}"
     );
 }
 
@@ -1202,41 +1040,8 @@ fn c3_startup_drift_fail_closed_emits_world_restart_required_alert() {
         .collect();
     assert_eq!(
         alerts.len(),
-        1,
-        "expected exactly one startup world_restart_required alert record, got: {alerts:?}"
-    );
-
-    let alert = alerts[0];
-    assert_eq!(
-        alert.get("world_id").and_then(Value::as_str),
-        Some("wld_stub_0001"),
-        "startup fail-closed alert must publish the current world id at the top level: {alert:?}"
-    );
-    assert_eq!(
-        alert.get("world_generation").and_then(Value::as_u64),
-        Some(0),
-        "startup fail-closed alert must publish the current generation at the top level: {alert:?}"
-    );
-    assert_eq!(
-        alert.pointer("/data/reason").and_then(Value::as_str),
-        Some("workspace_root_changed"),
-        "startup fail-closed drift should classify as workspace_root_changed: {alert:?}"
-    );
-    assert_eq!(
-        alert.pointer("/data/on_drift").and_then(Value::as_str),
-        Some("fail_closed"),
-        "startup fail-closed alert must record on_drift=fail_closed: {alert:?}"
-    );
-    assert_eq!(
-        alert
-            .pointer("/data/required_action")
-            .and_then(Value::as_str),
-        Some("restart_world"),
-        "startup fail-closed alert must record required_action=restart_world: {alert:?}"
-    );
-    assert!(
-        alert.pointer("/data/world_id").is_none() && alert.pointer("/data/world_generation").is_none(),
-        "startup fail-closed alerts must keep current world identity at the top level when known: {alert:?}"
+        0,
+        "startup drift without orchestration context must suppress world_restart_required agent_event rows: {alerts:?}"
     );
 }
 

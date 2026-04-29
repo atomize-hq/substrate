@@ -221,10 +221,6 @@ impl AgentRuntimeSessionManifest {
         }
     }
 
-    pub(crate) fn mark_ownership_invalid(&mut self, reason: impl Into<String>) {
-        self.mark_terminal_state(reason);
-    }
-
     pub(crate) fn has_valid_ownership(&self) -> bool {
         self.internal.ownership_valid && self.can_advertise_live()
     }

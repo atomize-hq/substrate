@@ -427,7 +427,10 @@ fn build_status_report<'a>(
     }
 
     let events = read_trace_agent_events()?;
-    let live_manifests = AgentRuntimeStateStore::new()?.list_live_manifests()?;
+    let state_store = AgentRuntimeStateStore::new()?;
+    let live_orchestrator_manifest =
+        resolve_authoritative_live_orchestrator_manifest(&state_store, &orchestrator_agent_id)?;
+    let live_manifests = state_store.list_live_manifests()?;
     let mut sessions = BTreeMap::<(String, String), SessionProjection>::new();
     let mut nested = BTreeMap::<(String, String, String), NestedProjection>::new();
     let mut historical_parent_runs = BTreeMap::<(String, String), BTreeSet<String>>::new();
@@ -612,7 +615,21 @@ fn build_status_report<'a>(
     }
 
     let mut live_sessions_by_agent = BTreeMap::<String, (DateTime<Utc>, StatusSessionJson)>::new();
+    if let Some(manifest) = live_orchestrator_manifest {
+        let session = live_manifest_status_session(&manifest);
+        if matches_scope(scope_from_label(session.execution.scope), args.scope)
+            && matches_role(session.role.as_deref(), role_filter)
+        {
+            live_sessions_by_agent.insert(
+                session.agent_id.clone(),
+                (manifest.last_status_at(), session),
+            );
+        }
+    }
     for manifest in live_manifests {
+        if manifest.handle.agent_id == orchestrator_agent_id {
+            continue;
+        }
         let session = live_manifest_status_session(&manifest);
         if !matches_scope(scope_from_label(session.execution.scope), args.scope)
             || !matches_role(session.role.as_deref(), role_filter)
@@ -909,8 +926,10 @@ fn build_toolbox_status_report<'a>(
         }),
         AgentToolboxBindTransport::Uds => {
             let endpoint_template = Some(toolbox_uds_endpoint_template()?);
-            let latest_session =
-                AgentRuntimeStateStore::new()?.find_live_orchestrator(&orchestrator.file.id)?;
+            let latest_session = resolve_authoritative_live_orchestrator_manifest(
+                &AgentRuntimeStateStore::new()?,
+                &orchestrator.file.id,
+            )?;
 
             match latest_session {
                 Some(session) => Ok(ToolboxStatusReportJson {
@@ -1048,6 +1067,16 @@ fn toolbox_uds_endpoint_template() -> Result<String> {
 
 fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn resolve_authoritative_live_orchestrator_manifest(
+    state_store: &AgentRuntimeStateStore,
+    agent_id: &str,
+) -> Result<Option<AgentRuntimeSessionManifest>> {
+    state_store
+        .resolve_live_orchestrator_session(agent_id)
+        .map(|resolved| resolved.map(|(_, manifest)| manifest))
+        .map_err(|err| config_model::user_error(err.to_string()))
 }
 
 fn read_trace_agent_events() -> Result<Vec<AgentEvent>> {
