@@ -167,16 +167,16 @@ Parent and child do not use the exact same enum, so the mapping must be explicit
 |---|---|---|---|
 | parent record created | `Allocating` | no child yet | parent must exist first |
 | child manifest persisted | `Allocating` | `Allocating` | child references existing parent id |
-| durable UAA session handle observed and ownership valid | `Active` | `Ready` or `Running` | parent becomes active once durable ownership is proven |
+| durable UAA session handle observed and ownership valid | `Active` | `Ready` | parent becomes active in the same transition block that first makes the child authoritative-live |
 | graceful shutdown requested | `Stopping` | `Stopping` | both transition before teardown completes |
 | graceful shutdown completed | `Stopped` | `Stopped` | record `closed_at` on parent |
 | attached control exits after being active | `Invalidated` | `Invalidated` | record reason |
-| bootstrap fails before durable ownership | `Failed` | `Failed` if child exists, otherwise no child | no live discovery allowed |
+| bootstrap fails before durable ownership | `Failed` | `Failed` if child exists, otherwise no child | `Invalidated` is not used before a session has ever become active |
 
 Two specific decisions remove ambiguity:
 
 - Parent `Active` means "there is an attached, durable, authoritative child right now". It does not mean "we allocated a UUID".
-- There is no parent `Restarting` state in this slice. Future restart/resume work can extend the model if needed. Do not speculate now.
+- There is no parent `Restarting` state in this slice. Do not add one.
 
 ### Required store APIs
 
@@ -211,6 +211,7 @@ Rules:
 - `resolve_live_orchestrator_session()` fails closed on:
   - missing parent
   - inactive parent
+  - missing `active_session_handle_id`
   - mismatched `active_session_handle_id`
   - multiple active parent candidates
 
@@ -245,8 +246,8 @@ Behavior:
 
 Demo helper decision:
 
-- do not keep the global helper around just for `schedule_demo_events()` and `schedule_demo_burst()`
-- those helpers can mint a local UUID inside the helper if they remain, because demo/test data is not runtime authority
+- remove the production global helper completely
+- if `schedule_demo_events()` and `schedule_demo_burst()` remain, each helper mints its own local UUID inline and does not share it through any reusable global or runtime lookup path
 
 #### `world_ops.rs` and `exec.rs`
 
@@ -287,6 +288,10 @@ Required change:
 - if no active parent session exists, do not emit an `AgentEvent` alert for these world events
 - keep terminal/operator messaging; skip fake orchestration correlation
 
+Exact rule:
+
+- `emit_world_restarted_alert(...)` and `build_world_restart_required_alert(...)` must take `Option<&str>` and follow the same contract as `publish_command_completion(...)`: `Some(id)` emits an `AgentEvent`, `None` does not
+
 ### Operator discovery contract
 
 `substrate agent status`, `substrate agent toolbox status`, and `substrate agent toolbox env` must all resolve through the same parent-aware rule set.
@@ -300,7 +305,8 @@ Required rule:
    - child is authoritative-live
    - parent exists
    - parent state is `Active`
-   - parent `active_session_handle_id`, when present, matches the child handle id
+   - parent `active_session_handle_id` is set
+   - parent `active_session_handle_id` matches the child handle id
 5. If multiple active parents exist for the same orchestrator agent or shell pid, fail closed with an ambiguity error.
 
 Concrete surface decisions:
@@ -342,12 +348,12 @@ start_host_orchestrator_runtime()
                |                                                     |
                +-- handle observed + ownership valid?                |
                |      |                                              |
-               |      +-- yes -> child Ready/Running                 |
+               |      +-- yes -> child Ready                         |
                |                 parent Active                       |
                |                 parent.active_session_handle_id=child|
                |                                                     |
-               +-- no  -> parent Failed or Invalidated               |
-                          child Failed or Invalidated                |
+               +-- no  -> parent Failed                              |
+                          child Failed                               |
 ```
 
 ### Status and toolbox lookup
@@ -371,10 +377,28 @@ selected orchestrator agent_id
         |
         +-- success -> publish session + endpoint
         |
-        +-- failure -> dependency_unavailable or ambiguity error
+        +-- failure -> dependency_unavailable, or explicit ambiguity error if more than one active parent exists
 ```
 
 ## Implementation Plan
+
+### Ordered execution checklist
+
+Implement this plan in this order. Do not reshuffle it.
+
+1. Add `orchestration_session.rs` and export the new types from `agent_runtime/mod.rs`.
+2. Extend `state_store.rs` with parent-session persistence, load, list, and resolve APIs.
+3. Update `async_repl.rs` bootstrap so parent persistence happens before child manifest creation.
+4. Update `async_repl.rs` shutdown and invalidation paths so parent and child transition together.
+5. Remove production `ORCHESTRATION_SESSION_ID` usage from `agent_events.rs`.
+6. Update `publish_command_completion(...)` callsites in `async_repl.rs` to pass `None`.
+7. Update `emit_stream_chunk(...)` signature in `world_ops.rs`, then fix all `world_ops.rs` and `exec.rs` callers.
+8. Update world restart alert helpers in `async_repl.rs` to use `Option<&str>` and stop emitting fake orchestration events.
+9. Update `agents_cmd.rs` production paths to resolve parent + child together.
+10. Update tests.
+11. Update `docs/TRACE.md`.
+
+If an implementation step requires touching code outside that order, stop and justify it in the PR description. The default assumption is that out-of-order work is scope creep.
 
 ### Workstream 1: Parent session model and store
 
@@ -419,12 +443,14 @@ Required work:
 5. When durable UAA ownership is established:
    - set child `uaa_session_id`
    - refresh child ownership validity
+   - transition child to `Ready`
    - set parent `active_session_handle_id`
    - set parent `latest_run_id`
    - transition parent to `Active`
 6. On startup failure before durable ownership:
    - parent `Failed`
    - child `Failed` if child exists
+   - do not use `Invalidated` in this codepath
 7. On attached-control exit after activation:
    - child `Invalidated`
    - parent `Invalidated`
@@ -451,11 +477,11 @@ Required work:
 
 1. Delete production use of `ORCHESTRATION_SESSION_ID`.
 2. Update `publish_command_completion(...)` to accept `Option<&str>`.
-3. Update async REPL shell command callsites to pass `None` unless the completion is genuinely runtime-owned orchestration work.
+3. Update every current async REPL shell command completion callsite to pass `None`.
 4. Update `emit_stream_chunk(...)` to accept `Option<&str>`.
 5. Update world-backed callers to pass `Some(parent_id)`.
 6. Update [exec.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/exec.rs:1597) host stream path to pass `None`.
-7. Update world-restart alert helpers in `async_repl.rs` to use explicit orchestration context or skip `AgentEvent` emission when no active parent session exists.
+7. Update world-restart alert helpers in `async_repl.rs` to take `Option<&str>` and emit no `AgentEvent` when the value is `None`.
 8. Keep the sender singleton. Remove the identity singleton.
 
 Exit gate:
@@ -471,7 +497,7 @@ Files:
 
 Required work:
 
-1. Keep `find_live_orchestrator()` only as a low-level child helper if tests still need it.
+1. Keep `find_live_orchestrator()` as a low-level child helper for tests and migration glue only. Production `status` and `toolbox` code must not call it after this slice lands.
 2. Move `agent status` active-session projection to `resolve_live_orchestrator_session()`.
 3. Move `agent toolbox status|env` to the same parent-aware resolver.
 4. Preserve existing allowlist and protocol checks.
@@ -700,7 +726,7 @@ Add:
 
 Add:
 
-- compile-shape or unit coverage that world-backed stream paths require explicit context
+- unit coverage that `emit_stream_chunk(Some(id), ...)` emits an orchestration-scoped `AgentEvent`
 - host exec stream path with `None` does not emit orchestration-scoped `AgentEvent`
 
 ### Test commands
