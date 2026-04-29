@@ -157,7 +157,7 @@ These are hard rules:
 
 Add one explicit owner-bound mode to `world-api`. Do not overload "plain `reuse_session=true` plus maybe some optional fields."
 
-Recommended shape:
+Use this shape:
 
 ```rust
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -310,7 +310,7 @@ That means:
 - PTY `Ready` must stop being only `{ world_id, cwd, protocol_version }`
 - non-PTY `ExecuteResponse` must stop returning only a brand-new span id with no owner proof
 
-Recommended PTY `Ready` shape:
+Use this PTY `Ready` shape:
 
 ```rust
 Ready {
@@ -322,7 +322,7 @@ Ready {
 }
 ```
 
-Recommended non-PTY `ExecuteResponse` addition:
+Add this to non-PTY `ExecuteResponse`:
 
 ```rust
 pub shared_world: Option<SharedWorldBindingSnapshot>
@@ -539,112 +539,85 @@ Tasks:
 - document shared-owner mode and non-Linux rejection
 - document that runtime-state projection is still `PLAN-04`
 
-## Architecture Review Findings
+## Architecture Review
 
-### Finding 1
+This section is the final engineering lock-in for slice `03`. The prior review findings are now resolved into hard implementation requirements, not open recommendations.
 
-`[P1] (confidence: 10/10) llm-last-mile/03-shared-world-ownership-linux-first.md — the source SOW was trying to own three slices at once: owner authority, runtime-state projection, and restart invalidation.`
+### Locked architecture decisions
 
-That would create 6-month regret fast. The repo already has separate docs for runtime-state projection and restart invalidation, and the code already contains local generation/restart logic in [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:2378). If slice `03` keeps all three seams, the packet becomes internally contradictory.
+1. **Slice boundary is fixed.**
+   - `PLAN-03` owns only the shared-world owner contract, Linux reuse semantics, transport proof, and non-Linux fail-closed rejection.
+   - `PLAN-04` owns runtime-manifest projection of `world_id` and `world_generation`.
+   - `PLAN-05` owns invalidation and replacement semantics after generation changes.
 
-Recommendation:
+2. **Linux backend metadata is the only authority in this slice.**
+   - The authoritative seam is persisted Linux world metadata plus `crates/world` allocation behavior.
+   - This plan does not introduce a shell-owned binding file or second authority store under `~/.substrate/run/agent-hub/`.
 
-- keep slice `03` focused on owner contract plus Linux reuse semantics
-- defer runtime-manifest authority to `PLAN-04`
-- defer invalidation semantics to `PLAN-05`
+3. **Shared-owner reuse is structurally distinct from generic reuse.**
+   - Generic compatible reuse remains the current path.
+   - Explicit shared-world reuse must go through `WorldReuseMode::SharedOrchestration(...)`.
+   - Missing owner context is a hard error, never an implicit downgrade to generic reuse.
 
-### Finding 2
+4. **Backend-returned generation is the committed truth.**
+   - The REPL may stage local restart intent, but it does not commit `world_generation`.
+   - PTY and non-PTY responses must echo the authoritative `SharedWorldBindingSnapshot`, and that echoed generation is the only value later slices may persist.
 
-`[P1] (confidence: 9/10) crates/world/src/lib.rs:39 and crates/world/src/session.rs:90 — the actual reuse authority lives in the Linux backend, so a shell-side authoritative binding file would create dual truth and ugly crash recovery.`
+5. **Linux-first is enforced behaviorally, not cosmetically.**
+   - macOS and Windows may deserialize additive fields.
+   - They must reject explicit shared-owner requests before any generic `ensure_session()`-style fallback can occur.
 
-The source SOW wanted `~/.substrate/run/agent-hub/world-bindings/*.json` as the primary authority. That sounds convenient until the shell dies after binding write `A` and before Linux metadata write `B`, or vice versa. Then nobody knows which truth wins.
+### Architecture acceptance gates
 
-Recommendation:
+The plan is only correctly implemented if all five gates pass:
 
-- Linux `session.json` plus backend allocation logic are the authoritative seam in this slice
-- shell persistence can index or project later, but not become the source of truth now
+1. **Contract gate**
+   - `world-api`, `agent-api-types`, PTY ready frames, and non-PTY execute responses all use the same owner-binding vocabulary.
 
-### Finding 3
+2. **Linux authority gate**
+   - `crates/world` can decide attach/create/replace using persisted owner-bearing metadata alone, without consulting shell-local authority.
 
-`[P1] (confidence: 9/10) crates/world-agent/src/pty.rs:1581 and crates/world-agent/src/service.rs:506 — if owner fields are just optional extras on a generic request path, a missing field silently downgrades to generic compatible reuse.`
+3. **Transport proof gate**
+   - Both PTY and non-PTY callers receive authoritative owner proof back from the backend, not just `world_id`.
 
-That would be the worst bug here. Same spec, wrong owner, no visible error, world reused anyway.
+4. **Fail-closed gate**
+   - Any malformed, missing, contradictory, or cross-owned metadata path rejects or allocates fresh. It never silently reuses.
 
-Recommendation:
-
-- add an explicit `WorldReuseMode`
-- make shared-owner mode structurally different from generic reuse
-- fail closed when shared-world flows do not carry owner context
-
-### Finding 4
-
-`[P2] (confidence: 8/10) crates/world-agent/src/pty.rs:993 and crates/shell/src/repl/async_repl.rs:2723 — generation truth is currently local to the REPL, but this slice needs generation proof to come back from Linux allocation.`
-
-Right now the REPL can increment generation before the backend proves a replacement world exists. That is a sequencing smell. It makes later runtime-state projection ambiguous.
-
-Recommendation:
-
-- world-agent responses must echo authoritative `world_generation`
-- the shell may stage a restart request locally, but the committed generation comes from Linux
-
-### Finding 5
-
-`[P2] (confidence: 8/10) crates/shell/src/execution/platform_world/mod.rs:60 and crates/shell/src/execution/platform_world/windows.rs:52 — Linux-first behavior is not actually Linux-first unless explicit shared-owner requests are blocked on non-Linux before generic ensure-session paths run.`
-
-Compile compatibility is not behavior compatibility.
-
-Recommendation:
-
-- deserialize new fields on all platforms
-- reject explicit shared-owner mode on non-Linux before generic reuse can happen
+5. **Platform boundary gate**
+   - Non-Linux explicit shared-owner requests reject uniformly and early.
 
 ## Code Quality Review
 
-This slice is easy to over-engineer. Don’t.
+This slice stays boring on purpose. The minimum diff that closes the ownership hole is the right diff.
 
-### Finding 1
+### Implementation guardrails
 
-`[P2] (confidence: 8/10) crates/world/src/session.rs and crates/world/src/lib.rs — compatibility hashing and owner-match rules must live in one place, not be reimplemented in shell and backend code.`
+1. **One place owns reuse compatibility logic.**
+   - Compatibility hashing, policy fingerprint comparison, and owner-match rules stay in `crates/world`.
+   - Shell and world-agent code only build requests, pass them through, and validate returned snapshots.
 
-If allowed-domain hashing, policy fingerprinting, or compatibility checks get duplicated across shell routing and Linux backend code, drift is guaranteed.
+2. **One snapshot type travels through every layer.**
+   - `SharedWorldBindingSnapshot` is the reusable proof object.
+   - `WorldHandle`, PTY `Ready`, and non-PTY `ExecuteResponse` all reuse it instead of inventing adjacent mini-schemas.
 
-Recommendation:
+3. **No synthetic ownership attribution.**
+   - `span_id` remains span correlation only.
+   - Shared-world ownership fields are populated from explicit owner context or omitted. They are never inferred.
 
-- keep compatibility/fingerprint helpers in `crates/world`
-- shell and world-agent only build request structs and validate returned snapshots
+4. **No second persistence system.**
+   - No new shell-owned registry, no side cache, no background daemon, no duplicate JSON authority file.
+   - The implementation extends existing persistence seams instead of adding new ones.
 
-### Finding 2
+5. **Provisional REPL state stays clearly provisional.**
+   - Any local generation arithmetic in [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:2723) must be treated as pre-commit state only.
+   - Backend echo is the boundary between "requested" and "committed."
 
-`[P2] (confidence: 10/10) crates/world-agent/src/service.rs:1321 — `span_id` is not ownership.`
+### Minimal-diff rules
 
-This path still emits `orchestration_session_id: span_id` for streamed events. That is acceptable only for generic span correlation, never for shared-world ownership semantics.
-
-Recommendation:
-
-- remove synthetic owner inference from shared-world paths
-- if explicit owner context is unavailable, omit ownership fields instead of inventing them
-
-### Finding 3
-
-`[P2] (confidence: 7/10) world-api + agent-api-types + PTY ready frame — the same owner snapshot should not be hand-reassembled differently in three layers.`
-
-If `WorldHandle`, PTY `Ready`, and `ExecuteResponse` each invent their own owner/generation mini-schema, later slices will waste time translating the same concept.
-
-Recommendation:
-
-- define one reusable `SharedWorldBindingSnapshot`
-- reuse it in all transports and backend-returned handles
-
-### Finding 4
-
-`[P3] (confidence: 7/10) crates/shell/src/repl/async_repl.rs — local generation arithmetic may remain temporarily, but it must be clearly labeled as provisional until backend echo is wired in.`
-
-This is a medium-confidence review smell, not a proven bug yet. But without discipline, provisional local state becomes accidental authority.
-
-Recommendation:
-
-- keep the temporary local field
-- gate all future persistence on backend-returned snapshots
+- Reuse existing serde surfaces instead of creating wrapper payloads for one slice.
+- Reuse existing Linux metadata recovery paths instead of adding a new world lookup registry.
+- Reuse existing platform-world routing seams for fail-closed rejection instead of creating a special shared-world launcher.
+- Add comments only where the generic/shared-owner boundary would otherwise be easy to misread.
 
 ## Error & Rescue Registry
 
@@ -967,8 +940,8 @@ The slice is done when all of these are true:
 ## Completion Summary
 
 - Step 0: Scope Challenge - scope reduced from the source SOW; slice `03` now owns owner contract only
-- Architecture Review: 5 material findings
-- Code Quality Review: 4 implementation guardrails
+- Architecture Review: 5 locked decisions, 5 acceptance gates
+- Code Quality Review: 5 implementation guardrails, 4 minimal-diff rules
 - Test Review: coverage diagrams produced, 23 concrete gaps/assertions identified
 - Performance Review: 0 major issues, 3 no-cache/no-dual-truth rules
 - Error & Rescue Registry: written
