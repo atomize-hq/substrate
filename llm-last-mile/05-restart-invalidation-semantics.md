@@ -2,11 +2,16 @@
 
 ## Objective
 
-Define and land the live-state and registry semantics that make shared-world restarts authoritative for world-scoped member sessions. When `world_generation` changes for an `orchestration_session_id`, every prior-generation world-scoped member session must stop being live in the registry immediately, and no status or toolbox surface may resurrect those stale sessions from trace history.
+Define and land the live-state and registry semantics that consume already-authoritative
+shared-world restarts for world-scoped member sessions. Once `world_generation` changes for an
+`orchestration_session_id`, every prior-generation world-scoped member session must stop being
+live in the registry immediately, and no status or toolbox surface may resurrect those stale
+sessions from trace history.
 
 This prerequisite exists to close the gap between:
 
 - the current authoritative-live manifest model in [`crates/shell/src/execution/agent_runtime/session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs) and [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs),
+- the owner/generation authority established by [`PLAN-03.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-03.md) and the runtime-state projection established by [`04-thread-world-binding-into-runtime-state.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/04-thread-world-binding-into-runtime-state.md),
 - the current restart signaling in [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs),
 - and the successor contract already written in [`docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/agent-hub-session-protocol-spec.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/agent-hub-session-protocol-spec.md).
 
@@ -14,11 +19,18 @@ This prerequisite exists to close the gap between:
 
 The repo already has most of the pieces, but they are not yet locked together for restart invalidation:
 
+- `PLAN-03` now owns the authoritative shared-world owner tuple and generation transition
+  contract.
+- `PLAN-04` now owns persisting that authoritative binding into shell runtime state.
+- This slice starts only after those two contracts hold. It does not define owner authority,
+  generic Linux world reuse, or generation assignment.
+
 - `AgentRuntimeSessionState` already includes `Restarting` and `Invalidated`, and `is_authoritative_live()` already excludes invalidated manifests.
   - Source: [`crates/shell/src/execution/agent_runtime/session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs)
 - `AgentRuntimeStateStore::list_live_manifests()` already treats persisted manifests as the authoritative live source and explicitly separates them from historical trace.
   - Source: [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-- REPL world drift already increments `world_generation` and emits `world_restarted` or `world_restart_required`.
+- REPL world drift already emits `world_restarted` or `world_restart_required`, and the shell now
+  receives the active generation through the upstream binding contract before invalidation runs.
   - Source: [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
 - `substrate agent status` already merges authoritative live manifests with historical trace, preferring live manifests when present.
   - Source: [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
@@ -28,7 +40,9 @@ The repo already has most of the pieces, but they are not yet locked together fo
     - [`docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/telemetry-spec.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/telemetry-spec.md)
     - [`docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/policy-spec.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/policy-spec.md)
 
-The missing prerequisite is the live-state rule that ties generation transitions to registry invalidation. Without that rule, a prior-generation member can remain selectable or be re-surfaced from trace fallback after the shared world has moved on.
+The missing prerequisite is the live-state rule that ties an already-authoritative generation
+transition to registry invalidation. Without that rule, a prior-generation member can remain
+selectable or be re-surfaced from trace fallback after the shared world has moved on.
 
 ## Current Repo Seams
 
@@ -39,6 +53,8 @@ The missing prerequisite is the live-state rule that ties generation transitions
 - [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
   - Owns persistence under `~/.substrate/run/agent-hub/handles/*.json`.
   - Currently lists live manifests but does not expose generation-aware invalidation helpers or an active-generation index.
+  - In this slice, the store consumes `world_generation` as an already-authoritative value; it
+    does not assign or prove that value.
 
 ### Status and operator surfaces
 
@@ -52,7 +68,8 @@ The missing prerequisite is the live-state rule that ties generation transitions
 
 - [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
   - Owns `classify_world_restart_reason()`, `emit_world_restarted_alert()`, `build_world_restart_required_alert()`, and restart sequencing.
-  - Already increments `world_generation` on auto-restart.
+  - Receives or projects the active shared-world generation into shell-visible runtime state before
+    this slice runs its invalidation rules.
   - Already uses `Invalidated` for shell-owned runtime ownership loss, which is the closest existing state precedent.
 
 ### Existing contract and tests that this prerequisite must satisfy
@@ -72,12 +89,15 @@ The missing prerequisite is the live-state rule that ties generation transitions
 - Define the required registry semantics for marking old-generation members non-live.
 - Define how `substrate agent status` must select, suppress, or omit stale member sessions.
 - Define how trace/history must remain auditable without being allowed to re-authorize stale sessions.
-- Define sequencing expectations for restart commit ordering.
+- Define sequencing expectations after owner binding and generation have already advanced.
 - Define concrete acceptance criteria and tests.
 
 ## Out of Scope
 
 - Shipping the full multi-member runtime if it does not already exist.
+- Defining shared-world owner authority, generic Linux world reuse, or backend generation
+  assignment behavior already owned by `PLAN-03`.
+- Re-defining runtime-state projection/persistence of the active binding already owned by `PLAN-04`.
 - Redesigning trace schema wholesale.
 - Changing orchestrator selection rules.
 - Replacing the current manifest storage layout under `~/.substrate/run/agent-hub/handles`.
@@ -108,7 +128,8 @@ The missing prerequisite is the live-state rule that ties generation transitions
 
 ### 1. Authoritative identity and generation boundary
 
-For world-scoped member sessions, authoritative live identity is not just `agent_id`. It is:
+For world-scoped member sessions, authoritative live identity is not just `agent_id`. Given the
+already-authoritative owner tuple and active world binding from `PLAN-03`/`PLAN-04`, it is:
 
 - `orchestration_session_id`
 - `agent_id`
@@ -124,7 +145,8 @@ Rule:
 
 ### 2. Generation change is a hard invalidation barrier
 
-When the shared world for an `orchestration_session_id` advances from generation `G` to `G+1`:
+When the shared world for an `orchestration_session_id` advances from generation `G` to `G+1` and
+that advancement is already authoritative:
 
 - every live world-scoped member manifest bound to generation `G` must be transitioned out of the live set,
 - every such manifest must end in `state=invalidated` unless a stricter terminal failure state is required,
@@ -144,13 +166,14 @@ Non-negotiable invariant:
 
 ### 3. Commit ordering
 
-Restart handling must use commit ordering that never leaves the registry in an ambiguous live state.
+Restart handling must use commit ordering that never leaves the registry in an ambiguous live
+state once the binding has advanced.
 
 Required sequence:
 
 1. Detect drift or explicit restart need.
-2. Allocate or prepare the replacement shared world.
-3. Persist the new active world binding for the orchestration session.
+2. `PLAN-03` commits or returns the replacement shared-world binding for generation `G+1`.
+3. `PLAN-04` persists that authoritative active world binding for the orchestration session.
 4. Persist replacement member manifests for the new generation.
 5. Mark prior-generation member manifests `invalidated`.
 6. Only after steps 3-5 succeed, emit operator-facing success reporting such as `world_restarted`.
@@ -158,7 +181,8 @@ Required sequence:
 Implementation rule:
 
 - The alert is historical reporting.
-- The manifest/registry update is the live-state authority.
+- The manifest/registry update is the live-state authority after the upstream binding change is
+  already committed.
 - If those disagree, the manifests win for current-state reads.
 
 ### 4. Fail-closed posture when replacement is not ready
@@ -167,7 +191,7 @@ If restart is required but replacement member handles are not ready yet:
 
 - prior-generation world-scoped member handles must still leave the authoritative live set,
 - status must not continue to show them as active,
-- trace history must not resurrect them,
+- invalidation tombstones must beat trace fallback and status selection,
 - policy evaluation for new world-scoped work must fail closed with a reason equivalent to the current successor draft:
   - “prior handle is invalidated and no replacement handle is ready”.
 
@@ -235,7 +259,8 @@ Practical consequence:
   - Make status projection generation-aware.
   - Ensure invalidated/superseded registry state suppresses trace fallback for stale members.
 - [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
-  - Ensure restart alert emission happens after live-state commit.
+  - Ensure restart alert emission happens after the authoritative binding change has been projected
+    into live state and the invalidation commit has completed.
   - Provide the future restart handoff contract member runtimes will follow.
 
 ### Test and contract surfaces
@@ -272,7 +297,9 @@ Practical consequence:
 
 ### Phase 3: Wire restart commit order
 
-- Update restart handling so generation advancement, replacement-handle registration, and old-handle invalidation are committed before success alert publication.
+- Update restart handling so the authoritative generation advancement from `PLAN-03`, the
+  runtime-state projection from `PLAN-04`, replacement-handle registration, and old-handle
+  invalidation are committed before success alert publication.
 - Ensure fail-closed posture does not leave stale prior-generation handles visible as live.
 
 ### Phase 4: Update status/reporting selection
@@ -367,4 +394,6 @@ Practical consequence:
 
 ## Deliverable
 
-A generation-aware live-state contract and implementation path that makes shared-world restart semantics deterministic for the registry, keeps status/toolbox surfaces fail-closed, and preserves trace as historical audit rather than live authorization.
+A generation-aware live-state contract and implementation path that reacts to already-authoritative
+shared-world restart semantics, keeps status/toolbox surfaces fail-closed, and preserves trace as
+historical audit rather than live authorization.
