@@ -59,7 +59,7 @@ Phase 8 introduces/locks additional cross-feature correlation fields (e.g., `orc
 Operator note (non-negotiable):
 - Do not rely on heuristic joins. Prefer explicit join keys (`session_id`, `orchestration_session_id`, `run_id`, explicit cause refs) as defined in ADR-0028/Phase 8 contracts.
 - Trace is safe-by-default: do not mirror raw third-party JSONL/NDJSON agent logs into `trace.jsonl` by default. Treat raw wrapper logs and any payloads that may contain secrets as per-session artifacts, and apply redaction/caps rules per ADR-0028 and the Phase 8 secrets rubric.
-- Live shell-owned orchestrator session ownership is persisted separately from trace under `~/.substrate/run/agent-hub/sessions/*.json` (parent orchestration session record) plus `~/.substrate/run/agent-hub/handles/*.json` (child runtime handle manifest). The child handle is authoritative-live only while the shell still retains the attached UAA control boundary, and production status/toolbox discovery must resolve through the parent record instead of treating handles alone as truth. Trace remains the canonical historical event log; the runtime store only provides current-session discovery and precedence for operator surfaces.
+- Live shell-owned orchestrator session ownership is persisted separately from trace under `~/.substrate/run/agent-hub/sessions/*.json` (parent orchestration session record) plus `~/.substrate/run/agent-hub/participants/*.json` (child runtime participant record; `handles/*.json` remains legacy compatibility input only). The child participant record is authoritative-live only while the shell still retains the attached UAA control boundary, and production status/toolbox discovery must resolve through the parent record plus the live runtime participant snapshot instead of treating legacy handle files as truth. Trace remains the canonical historical event log; the runtime store only provides current-session discovery and precedence for operator surfaces.
 
 ### Command Span Schema (`command_start` / `command_complete`)
 
@@ -151,7 +151,9 @@ These are canonical cross-feature correlation identifiers. Details and required/
 - `world_id`: world boundary identity; required on in-world telemetry families (e.g., `world_process_*`) and any record that describes an in-world boundary/session.
 
 Emission rule:
-- `AgentEvent` schema is unchanged. Runtime-owned producers must emit a real `orchestration_session_id` or suppress the agent-event row entirely; they must not synthesize a process-global fallback id.
+- `AgentEvent` keeps backward-compatible additive lineage fields: `participant_id`, `parent_participant_id`, and `resumed_from_participant_id`.
+- Runtime-owned producers must emit a real `orchestration_session_id` or suppress the agent-event row entirely; they must not synthesize a process-global fallback id.
+- Legacy trace rows may omit `participant_id`, `parent_participant_id`, and `resumed_from_participant_id`; consumers that ignore these additive fields continue to work unchanged.
 
 ### Agent Identity-Tuple Fields
 

@@ -946,9 +946,7 @@ fn agent_toolbox_env_requires_an_active_orchestrator_session() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains(
-            "no active pure-agent orchestrator session found in authoritative live manifests"
-        ),
+        stderr.contains("no live host-scoped orchestrator participant found"),
         "stderr must explain the missing active session: {stderr}"
     );
 }
@@ -1002,7 +1000,7 @@ fn agent_toolbox_env_trace_history_does_not_authorize_active_session() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("authoritative live manifests"),
+        stderr.contains("no live host-scoped orchestrator participant found"),
         "trace-only active history must fail closed at the authoritative live manifest boundary: {stderr}"
     );
 }
@@ -1077,7 +1075,7 @@ fn operator_surfaces_fail_closed_when_live_orchestrator_child_has_no_parent_sess
 
     assert_parent_resolution_fail_closed_across_operator_surfaces(
         &fixture,
-        &["missing orchestration session record for live handle ash_missing_parent"],
+        &["live host-scoped orchestrator participant exists for agent claude_code without an active parent session"],
     );
 }
 
@@ -1103,9 +1101,7 @@ fn operator_surfaces_fail_closed_when_live_orchestrator_parent_is_inactive() {
 
     assert_parent_resolution_fail_closed_across_operator_surfaces(
         &fixture,
-        &[
-            "inactive orchestration session 0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fad for live handle ash_inactive_parent",
-        ],
+        &["live host-scoped orchestrator participant exists for agent claude_code without an active parent session"],
     );
 }
 
@@ -1160,7 +1156,7 @@ fn operator_surfaces_fail_closed_when_active_parent_points_to_different_live_han
     assert_parent_resolution_fail_closed_across_operator_surfaces(
         &fixture,
         &[
-            "active orchestration session 0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faf points to ash_other_handle, not live handle ash_live_handle",
+            "active orchestration session 0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faf references missing participant ash_other_handle",
         ],
     );
 }
@@ -1227,7 +1223,8 @@ fn agent_toolbox_env_invalidated_manifest_and_trace_still_fail_closed() {
         "invalidated manifests must not be resurrected by trace fallback: {output:?}"
     );
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("authoritative live manifests"),
+        String::from_utf8_lossy(&output.stderr)
+            .contains("no live host-scoped orchestrator participant found"),
         "invalidated manifests must keep toolbox env behind the authoritative live-manifest contract"
     );
 }
@@ -2052,6 +2049,7 @@ fn agent_doctor_json_locks_field_names_omissions_and_check_order() {
             "inventory_scan",
             "orchestrator_selection",
             "runtime_realizability",
+            "participant_store",
             "policy_allowlist",
             "world_boundary",
         ],
@@ -2069,7 +2067,7 @@ fn agent_doctor_json_locks_field_names_omissions_and_check_order() {
         .collect();
     assert_eq!(
         statuses,
-        vec!["pass", "pass", "pass", "pass", "not_applicable"],
+        vec!["pass", "pass", "pass", "pass", "pass", "not_applicable"],
         "host-only doctor fixture should report a not_applicable world boundary after the four required passes: {json}"
     );
 }
@@ -2531,12 +2529,13 @@ metadata: {}
             "inventory_scan",
             "orchestrator_selection",
             "runtime_realizability",
+            "participant_store",
             "policy_allowlist",
         ],
         "fail-closed routing must stop at the member backend allowlist before world_boundary: {json}"
     );
     assert_eq!(
-        checks[3].pointer("/reason").and_then(Value::as_str),
+        checks[4].pointer("/reason").and_then(Value::as_str),
         Some(
             "required world-scoped member backend 'cli:codex' is not allowlisted by effective policy agents.allowed_backends"
         ),

@@ -207,6 +207,27 @@ fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
         .to_string()
 }
 
+fn load_single_active_participant_id(substrate_home: &Path) -> String {
+    let sessions_dir = substrate_home.join("run/agent-hub/sessions");
+    let mut entries = fs::read_dir(&sessions_dir)
+        .expect("read orchestration session dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .collect::<Vec<_>>();
+    entries.sort();
+    let session_path = entries
+        .into_iter()
+        .next()
+        .expect("orchestration session file");
+    serde_json::from_str::<Value>(&fs::read_to_string(session_path).expect("read session file"))
+        .expect("parse session file")
+        .get("active_session_handle_id")
+        .and_then(Value::as_str)
+        .expect("session active_session_handle_id")
+        .to_string()
+}
+
 struct PtyRepl {
     child: Box<dyn portable_pty::Child + Send>,
     master: Option<Box<dyn portable_pty::MasterPty + Send>>,
@@ -553,6 +574,7 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
 
     let shell_session_id = extract_session_id(&out);
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let participant_id = load_single_active_participant_id(&substrate_home);
     let events = read_trace_events(&trace_path);
     let runtime_records = events
         .iter()
@@ -577,6 +599,19 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
                 .and_then(Value::as_str),
             Some(orchestration_session_id.as_str()),
             "runtime-owned agent_event row must retain the authoritative orchestration_session_id: {record:?}"
+        );
+        assert_eq!(
+            record.get("participant_id").and_then(Value::as_str),
+            Some(participant_id.as_str()),
+            "runtime-owned agent_event row must retain participant_id from the live runtime manifest: {record:?}"
+        );
+        assert!(
+            record.get("parent_participant_id").is_none(),
+            "runtime-owned orchestrator rows with no parent lineage must omit parent_participant_id: {record:?}"
+        );
+        assert!(
+            record.get("resumed_from_participant_id").is_none(),
+            "runtime-owned orchestrator rows with no resume lineage must omit resumed_from_participant_id: {record:?}"
         );
     }
 }
@@ -664,5 +699,95 @@ fn flattened_agent_event_records_retain_parent_run_id_when_present() {
         record.get("parent_run_id").and_then(Value::as_str),
         Some("0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f13"),
         "flattened agent_event records must retain parent_run_id when present: {record:?}"
+    );
+}
+
+#[test]
+fn flattened_agent_event_records_retain_participant_lineage_when_present() {
+    let mut event = AgentEvent::message(
+        "runtime-agent",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+        MessageEventKind::Status,
+        "runtime participant event",
+    );
+    event.participant_id = Some("ash_live".to_string());
+    event.parent_participant_id = Some("ash_parent".to_string());
+    event.resumed_from_participant_id = Some("ash_previous".to_string());
+
+    let mut record = event.to_trace_record().expect("flatten agent event");
+    let obj = record
+        .as_object_mut()
+        .expect("agent event trace record should be an object");
+    obj.insert(
+        "event_type".to_string(),
+        Value::String("agent_event".to_string()),
+    );
+    obj.insert(
+        "session_id".to_string(),
+        Value::String("ses_agent_hub".to_string()),
+    );
+    obj.insert(
+        "component".to_string(),
+        Value::String("agent-hub".to_string()),
+    );
+
+    assert_eq!(
+        record.get("participant_id").and_then(Value::as_str),
+        Some("ash_live"),
+        "flattened agent_event records must retain participant_id when present: {record:?}"
+    );
+    assert_eq!(
+        record.get("parent_participant_id").and_then(Value::as_str),
+        Some("ash_parent"),
+        "flattened agent_event records must retain parent_participant_id when present: {record:?}"
+    );
+    assert_eq!(
+        record
+            .get("resumed_from_participant_id")
+            .and_then(Value::as_str),
+        Some("ash_previous"),
+        "flattened agent_event records must retain resumed_from_participant_id when present: {record:?}"
+    );
+}
+
+#[test]
+fn world_alert_rows_omit_synthesized_participant_lineage_without_runtime_context() {
+    let event = AgentEvent::alert(
+        "shell",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f14",
+        "world_restart_required",
+        "world restart required before continuing",
+    );
+
+    let mut record = event.to_trace_record().expect("flatten agent event");
+    let obj = record
+        .as_object_mut()
+        .expect("agent event trace record should be an object");
+    obj.insert(
+        "event_type".to_string(),
+        Value::String("agent_event".to_string()),
+    );
+    obj.insert(
+        "session_id".to_string(),
+        Value::String("ses_agent_hub".to_string()),
+    );
+    obj.insert(
+        "component".to_string(),
+        Value::String("agent-hub".to_string()),
+    );
+
+    assert!(
+        record.get("participant_id").is_none(),
+        "world alert rows without runtime context must not synthesize participant_id: {record:?}"
+    );
+    assert!(
+        record.get("parent_participant_id").is_none(),
+        "world alert rows without runtime context must not synthesize parent_participant_id: {record:?}"
+    );
+    assert!(
+        record.get("resumed_from_participant_id").is_none(),
+        "world alert rows without runtime context must not synthesize resumed_from_participant_id: {record:?}"
     );
 }

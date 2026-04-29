@@ -11,7 +11,11 @@ pub(crate) use mapping::{
 };
 pub(crate) use orchestration_session::{OrchestrationSessionRecord, OrchestrationSessionState};
 pub(crate) use registry::build_gateway_for_descriptor;
-pub(crate) use session::{AgentRuntimeSessionManifest, AgentRuntimeSessionState};
+#[allow(unused_imports)]
+pub(crate) use session::{
+    AgentRuntimeOwnershipMode, AgentRuntimeParticipantRecord, AgentRuntimeParticipantWorldBinding,
+    AgentRuntimeSessionManifest, AgentRuntimeSessionState,
+};
 pub(crate) use state_store::AgentRuntimeStateStore;
 pub(crate) use validator::{
     backend_allowed, runtime_realizability_error_exit_code, validate_orchestrator_selection,

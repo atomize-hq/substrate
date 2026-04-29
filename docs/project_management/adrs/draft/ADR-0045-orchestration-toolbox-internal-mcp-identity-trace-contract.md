@@ -195,6 +195,7 @@ Operator rule:
   - `component: "agent-toolbox"`
   - `session_id`
   - `orchestration_session_id`
+  - `participant_id`
   - `run_id`
   - `agent_id`
   - `client`
@@ -229,6 +230,7 @@ Operator rule:
   - `component=agent-toolbox`
   - `session_id=<session>`
   - `orchestration_session_id=<orchestration session>`
+  - `participant_id=<orchestrator participant>`
   - `run_id=<run>`
   - `agent_id=<orchestrator agent>`
   - `client=claude_code`

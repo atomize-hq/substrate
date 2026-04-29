@@ -324,6 +324,8 @@ fn render_list_report(report: &ListReportJson<'_>, json_mode: bool) -> Result<()
 #[derive(Clone, Serialize)]
 struct StatusSessionJson {
     orchestration_session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    participant_id: Option<String>,
     agent_id: String,
     backend_id: String,
     client: String,
@@ -341,6 +343,8 @@ struct StatusSessionJson {
 #[derive(Clone, Serialize)]
 struct NestedParentJson {
     orchestration_session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    participant_id: Option<String>,
     agent_id: String,
 }
 
@@ -376,12 +380,19 @@ struct SessionProjection {
 #[derive(Clone)]
 struct SessionProjectionSource {
     orchestration_session_id: String,
+    participant_id: Option<String>,
     agent_id: String,
-    run_id: String,
+    run_id: Option<String>,
     ts: DateTime<Utc>,
     is_world_scoped: bool,
     has_top_level_world_id: bool,
     has_top_level_world_generation: bool,
+}
+
+#[derive(Clone)]
+struct SelectedParentRun {
+    participant_id: Option<String>,
+    run_id: String,
 }
 
 #[derive(Clone)]
@@ -467,6 +478,7 @@ fn build_status_report<'a>(
                 last_event_ts: event.ts,
                 session: StatusSessionJson {
                     orchestration_session_id: orchestration_session_id.clone(),
+                    participant_id: None,
                     agent_id: entry.file.id.clone(),
                     backend_id: entry.derived_backend_id(),
                     client: entry.file.id.clone(),
@@ -490,8 +502,9 @@ fn build_status_report<'a>(
                 },
                 source: SessionProjectionSource {
                     orchestration_session_id,
+                    participant_id: None,
                     agent_id: entry.file.id.clone(),
-                    run_id: event.run_id.clone(),
+                    run_id: Some(event.run_id.clone()),
                     ts: event.ts,
                     is_world_scoped: scope == AgentExecutionScope::World,
                     has_top_level_world_id: world_id.is_some(),
@@ -531,7 +544,7 @@ fn build_status_report<'a>(
                 "malformed world identity on newest selected world-scoped pure-agent status event: agent_id={} orchestration_session_id={} run_id={} ts={} requires top-level world_id and world_generation",
                 projection.source.agent_id,
                 projection.source.orchestration_session_id,
-                projection.source.run_id,
+                projection.source.run_id.as_deref().unwrap_or("<missing>"),
                 projection.source.ts.to_rfc3339(),
             )));
         }
@@ -539,18 +552,58 @@ fn build_status_report<'a>(
         filtered_session_projections.push(projection);
     }
 
-    let selected_parent_runs: BTreeMap<(String, String), String> = filtered_session_projections
+    let mut selected_session_projections = Vec::new();
+    if let Some(manifest) = live_orchestrator_manifest {
+        let projection = live_manifest_status_projection(&manifest);
+        if matches_scope(
+            scope_from_label(projection.session.execution.scope),
+            args.scope,
+        ) && matches_role(projection.session.role.as_deref(), role_filter)
+        {
+            selected_session_projections.push(projection);
+        }
+    }
+    for manifest in live_manifests {
+        if manifest.handle.agent_id == orchestrator_agent_id {
+            continue;
+        }
+        let projection = live_manifest_status_projection(&manifest);
+        if !matches_scope(
+            scope_from_label(projection.session.execution.scope),
+            args.scope,
+        ) || !matches_role(projection.session.role.as_deref(), role_filter)
+        {
+            continue;
+        }
+        selected_session_projections.push(projection);
+    }
+
+    let live_fallback_suppression_keys = selected_session_projections
         .iter()
-        .map(|projection| {
-            (
-                (
-                    projection.source.orchestration_session_id.clone(),
-                    projection.source.agent_id.clone(),
-                ),
-                projection.source.run_id.clone(),
-            )
-        })
-        .collect();
+        .map(session_fallback_suppression_key)
+        .collect::<BTreeSet<_>>();
+    selected_session_projections.extend(filtered_session_projections.into_iter().filter(
+        |projection| {
+            !live_fallback_suppression_keys.contains(&session_fallback_suppression_key(projection))
+        },
+    ));
+
+    let mut selected_parent_runs = BTreeMap::<(String, String), Vec<SelectedParentRun>>::new();
+    for projection in &selected_session_projections {
+        let Some(run_id) = projection.source.run_id.as_ref() else {
+            continue;
+        };
+        selected_parent_runs
+            .entry((
+                projection.source.orchestration_session_id.clone(),
+                projection.source.agent_id.clone(),
+            ))
+            .or_default()
+            .push(SelectedParentRun {
+                participant_id: projection.source.participant_id.clone(),
+                run_id: run_id.clone(),
+            });
+    }
 
     let mut filtered_nested = Vec::new();
     for projection in nested.into_values() {
@@ -558,12 +611,14 @@ fn build_status_report<'a>(
             projection.source.orchestration_session_id.clone(),
             projection.source.agent_id.clone(),
         );
-        let Some(selected_parent_run_id) = selected_parent_runs.get(&parent_key) else {
+        let Some(selected_parent_runs) = selected_parent_runs.get(&parent_key) else {
             continue;
         };
         let parent_run_id = projection.source.parent_run_id.as_deref();
-        let parent_run_matches_selected = parent_run_id == Some(selected_parent_run_id.as_str());
-        if parent_run_matches_selected {
+        if let Some(selected_parent_run) = selected_parent_runs
+            .iter()
+            .find(|candidate| parent_run_id == Some(candidate.run_id.as_str()))
+        {
             let missing_fields = missing_required_nested_fields(&projection);
             if !missing_fields.is_empty() {
                 return Err(config_model::user_error(format!(
@@ -578,6 +633,7 @@ fn build_status_report<'a>(
             filtered_nested.push(NestedLlmRecordJson {
                 parent: NestedParentJson {
                     orchestration_session_id: projection.source.orchestration_session_id.clone(),
+                    participant_id: selected_parent_run.participant_id.clone(),
                     agent_id: projection.source.agent_id.clone(),
                 },
                 run_id: projection.source.run_id.clone(),
@@ -614,53 +670,20 @@ fn build_status_report<'a>(
         )));
     }
 
-    let mut live_sessions_by_agent = BTreeMap::<String, (DateTime<Utc>, StatusSessionJson)>::new();
-    if let Some(manifest) = live_orchestrator_manifest {
-        let session = live_manifest_status_session(&manifest);
-        if matches_scope(scope_from_label(session.execution.scope), args.scope)
-            && matches_role(session.role.as_deref(), role_filter)
-        {
-            live_sessions_by_agent.insert(
-                session.agent_id.clone(),
-                (manifest.last_status_at(), session),
-            );
-        }
-    }
-    for manifest in live_manifests {
-        if manifest.handle.agent_id == orchestrator_agent_id {
-            continue;
-        }
-        let session = live_manifest_status_session(&manifest);
-        if !matches_scope(scope_from_label(session.execution.scope), args.scope)
-            || !matches_role(session.role.as_deref(), role_filter)
-        {
-            continue;
-        }
-        let last_status_at = manifest.last_status_at();
-        let should_replace = match live_sessions_by_agent.get(&session.agent_id) {
-            Some((existing_ts, _)) => last_status_at >= *existing_ts,
-            None => true,
-        };
-        if should_replace {
-            live_sessions_by_agent.insert(session.agent_id.clone(), (last_status_at, session));
-        }
-    }
-    let live_agent_ids: BTreeSet<String> = live_sessions_by_agent.keys().cloned().collect();
-    let mut filtered_sessions: Vec<StatusSessionJson> = live_sessions_by_agent
-        .into_values()
-        .map(|(_, session)| session)
+    let mut filtered_sessions: Vec<StatusSessionJson> = selected_session_projections
+        .into_iter()
+        .map(|projection| projection.session)
         .collect();
-    for projection in filtered_session_projections {
-        if live_agent_ids.contains(&projection.session.agent_id) {
-            continue;
-        }
-        filtered_sessions.push(projection.session);
-    }
     filtered_sessions.sort_by(|left, right| {
-        left.agent_id.cmp(&right.agent_id).then(
-            left.orchestration_session_id
-                .cmp(&right.orchestration_session_id),
-        )
+        left.orchestration_session_id
+            .cmp(&right.orchestration_session_id)
+            .then(
+                left.participant_id
+                    .as_deref()
+                    .unwrap_or("")
+                    .cmp(right.participant_id.as_deref().unwrap_or("")),
+            )
+            .then(left.agent_id.cmp(&right.agent_id))
     });
 
     Ok(StatusReportJson {
@@ -698,6 +721,10 @@ fn render_status_report(report: &StatusReportJson<'_>, json_mode: bool) -> Resul
                 "orchestration_session_id={}",
                 session.orchestration_session_id
             ),
+            format!(
+                "participant_id={}",
+                session.participant_id.as_deref().unwrap_or("")
+            ),
             format!("agent_id={}", session.agent_id),
             format!("backend_id={}", session.backend_id),
             format!("client={}", session.client),
@@ -721,8 +748,9 @@ fn render_status_report(report: &StatusReportJson<'_>, json_mode: bool) -> Resul
         println!("nested_llm_records");
         for record in &report.nested_llm_records {
             println!(
-                "  parent.orchestration_session_id={} | parent.agent_id={} | run_id={} | backend_id={} | client={} | router={} | provider={} | auth_authority={} | protocol={}",
+                "  parent.orchestration_session_id={} | parent.participant_id={} | parent.agent_id={} | run_id={} | backend_id={} | client={} | router={} | provider={} | auth_authority={} | protocol={}",
                 record.parent.orchestration_session_id,
+                record.parent.participant_id.as_deref().unwrap_or(""),
                 record.parent.agent_id,
                 record.run_id,
                 record.backend_id,
@@ -957,7 +985,7 @@ fn build_toolbox_status_report<'a>(
                     eligibility: ToolboxEligibilityJson {
                         state: "dependency_unavailable".to_string(),
                         reason: Some(
-                            "no active pure-agent orchestrator session found in authoritative live manifests for the selected orchestrator"
+                            "no live host-scoped orchestrator participant found for the selected orchestrator"
                                 .to_string(),
                         ),
                     },
@@ -1077,6 +1105,48 @@ fn resolve_authoritative_live_orchestrator_manifest(
         .resolve_live_orchestrator_session(agent_id)
         .map(|resolved| resolved.map(|(_, manifest)| manifest))
         .map_err(|err| config_model::user_error(err.to_string()))
+}
+
+fn live_manifest_status_projection(manifest: &AgentRuntimeSessionManifest) -> SessionProjection {
+    SessionProjection {
+        last_event_ts: manifest.last_status_at(),
+        session: StatusSessionJson {
+            orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
+            participant_id: Some(manifest.handle.participant_id.clone()),
+            agent_id: manifest.handle.agent_id.clone(),
+            backend_id: manifest.handle.backend_id.clone(),
+            client: manifest.handle.agent_id.clone(),
+            router: PURE_AGENT_ROUTER.to_string(),
+            protocol: manifest.handle.protocol.clone(),
+            execution: ExecutionScopeJson {
+                scope: match manifest.handle.execution.scope {
+                    AgentExecutionScope::Host => "host",
+                    AgentExecutionScope::World => "world",
+                },
+            },
+            role: Some(manifest.handle.role.clone()),
+            last_event_at: manifest.last_status_at().to_rfc3339(),
+            world_id: manifest.handle.world_id.clone(),
+            world_generation: manifest.handle.world_generation,
+        },
+        source: SessionProjectionSource {
+            orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
+            participant_id: Some(manifest.handle.participant_id.clone()),
+            agent_id: manifest.handle.agent_id.clone(),
+            run_id: manifest.internal.latest_run_id.clone(),
+            ts: manifest.last_status_at(),
+            is_world_scoped: manifest.handle.execution.scope == AgentExecutionScope::World,
+            has_top_level_world_id: manifest.handle.world_id.is_some(),
+            has_top_level_world_generation: manifest.handle.world_generation.is_some(),
+        },
+    }
+}
+
+fn session_fallback_suppression_key(projection: &SessionProjection) -> (String, String) {
+    (
+        projection.session.agent_id.clone(),
+        projection.session.role.clone().unwrap_or_default(),
+    )
 }
 
 fn read_trace_agent_events() -> Result<Vec<AgentEvent>> {
@@ -1415,6 +1485,31 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
     };
     let _ = runtime_descriptor;
 
+    match validate_passive_participant_store() {
+        Ok(()) => {
+            checks.push(DoctorCheckJson {
+                check: "participant_store".to_string(),
+                status: "pass".to_string(),
+                reason: None,
+            });
+        }
+        Err(err) => {
+            checks.push(DoctorCheckJson {
+                check: "participant_store".to_string(),
+                status: "fail".to_string(),
+                reason: Some(err.to_string()),
+            });
+            return Ok(DoctorReportJson {
+                healthy: false,
+                fail_closed: true,
+                orchestrator: Some(orchestrator),
+                checks,
+                world_boundary_exit_code: None,
+                runtime_realizability_exit_code: None,
+            });
+        }
+    }
+
     if let Some(reason) = policy_allowlist_failure(&effective_config, &inventory, &base_policy) {
         checks.push(DoctorCheckJson {
             check: "policy_allowlist".to_string(),
@@ -1698,30 +1793,15 @@ fn doctor_exit_code(report: &DoctorReportJson<'_>) -> i32 {
         "policy_allowlist" => 5,
         "world_boundary" => report.world_boundary_exit_code.unwrap_or(3),
         "runtime_realizability" => report.runtime_realizability_exit_code.unwrap_or(2),
-        "inventory_scan" | "orchestrator_selection" => 2,
+        "inventory_scan" | "orchestrator_selection" | "participant_store" => 2,
         _ => 1,
     }
 }
 
-fn live_manifest_status_session(manifest: &AgentRuntimeSessionManifest) -> StatusSessionJson {
-    StatusSessionJson {
-        orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
-        agent_id: manifest.handle.agent_id.clone(),
-        backend_id: manifest.handle.backend_id.clone(),
-        client: manifest.handle.agent_id.clone(),
-        router: PURE_AGENT_ROUTER.to_string(),
-        protocol: manifest.handle.protocol.clone(),
-        execution: ExecutionScopeJson {
-            scope: match manifest.handle.execution.scope {
-                AgentExecutionScope::Host => "host",
-                AgentExecutionScope::World => "world",
-            },
-        },
-        role: Some(manifest.handle.role.clone()),
-        last_event_at: manifest.last_status_at().to_rfc3339(),
-        world_id: manifest.handle.world_id.clone(),
-        world_generation: manifest.handle.world_generation,
-    }
+fn validate_passive_participant_store() -> Result<()> {
+    let state_store = AgentRuntimeStateStore::new()?;
+    state_store.list_participants()?;
+    Ok(())
 }
 
 fn render_doctor_report(report: &DoctorReportJson<'_>, json_mode: bool) -> Result<()> {

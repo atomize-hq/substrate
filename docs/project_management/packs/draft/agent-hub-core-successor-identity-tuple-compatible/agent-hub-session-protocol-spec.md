@@ -1,6 +1,6 @@
 # agent-hub-session-protocol-spec
 
-This file is the single authoritative schema inventory for ADR-0044 session semantics inside this feature pack. It defines the backend capability descriptor, the hub-owned session-handle object, the lifecycle state machine, the host-orchestrator and world-member routing rules, the shared-world reuse boundary, and the exact machine-readable object shapes projected into `substrate agent list --json` and `substrate agent status --json`.
+This file is the single authoritative schema inventory for ADR-0044 session semantics inside this feature pack. It defines the backend capability descriptor, the hub-owned session participant record, the lifecycle state machine, the host-orchestrator and world-member routing rules, the shared-world reuse boundary, and the exact machine-readable object shapes projected into `substrate agent list --json` and `substrate agent status --json`.
 
 Authoritative inputs:
 - `docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md`
@@ -17,7 +17,7 @@ Authoritative inputs:
 
 - This file is authoritative for:
   - the canonical backend capability descriptor consumed by the hub
-  - the canonical hub-owned session-handle schema
+  - the canonical hub-owned session participant schema
   - the lifecycle state names and legal transitions for agent sessions
   - the exact host-orchestrator eligibility rule
   - the exact world-scoped member routing, world reuse, and world restart invalidation rules
@@ -85,15 +85,15 @@ Projection rule:
 - `substrate agent list --json` projects each effective descriptor into the `agents[*]` shape defined in `contract.md`.
 - The list surface is a projection. It does not widen, rename, or reinterpret the underlying descriptor fields defined here.
 
-## Session-handle schema
+## Session participant schema
 
-The hub owns the session handle. Backends do not invent or persist an alternate handle format.
+The hub owns the session participant record. Backends do not invent or persist an alternate child-record format.
 
-### `AgentSessionHandleV1`
+### `AgentSessionParticipantV1`
 
 ```json
 {
-  "session_handle_id": "ash_001",
+  "participant_id": "ash_001",
   "orchestration_session_id": "sess_001",
   "agent_id": "codex",
   "backend_id": "cli:codex",
@@ -107,24 +107,27 @@ The hub owns the session handle. Backends do not invent or persist an alternate 
   "last_transition_at": "2026-04-24T18:30:00Z",
   "world_id": "world-17",
   "world_generation": 3,
-  "parent_session_handle_id": null,
-  "resumed_from_session_handle_id": null
+  "parent_participant_id": null,
+  "resumed_from_participant_id": null,
+  "orchestrator_participant_id": "ash_orch_001"
 }
 ```
 
 Field rules:
-- `session_handle_id` is hub-assigned and unique within the repository trace domain.
+- `participant_id` is hub-assigned and unique within the repository trace domain.
 - `orchestration_session_id` groups the orchestrator session plus every member session opened under the same control-plane session.
-- `agent_id`, `backend_id`, `protocol`, and `execution.scope` are copied from the canonical capability descriptor and never drift during the life of one handle.
+- `agent_id`, `backend_id`, `protocol`, and `execution.scope` are copied from the canonical capability descriptor and never drift during the life of one participant record.
 - `role` is exactly `orchestrator` or `member`.
 - `state` is one of the lifecycle state names defined below.
-- `opened_at` is the first successful allocation time for this handle.
+- `opened_at` is the first successful allocation time for this participant record.
 - `last_transition_at` is updated on every state transition.
 - `world_id` and `world_generation` are both present or both absent.
 - `world_id` and `world_generation` are required when `execution.scope=world`.
 - `world_id` and `world_generation` are omitted when `execution.scope=host`.
-- `parent_session_handle_id` is non-null only for a forked child handle.
-- `resumed_from_session_handle_id` is non-null only when a new handle replaced an invalidated world-scoped handle after a hub-driven restart.
+- `parent_participant_id` is non-null only for a forked or explicitly derived child participant.
+- `resumed_from_participant_id` is non-null only when a new participant replaced an invalidated participant after a hub-driven restart.
+- `orchestrator_participant_id` is omitted on the orchestrator participant and required on member participants.
+- The parent orchestration-session record keeps its serialized field name `active_session_handle_id` during `PLAN-02`, but its value now points at the active `participant_id`.
 
 ## Lifecycle state machine
 
@@ -133,19 +136,19 @@ Field rules:
 - `allocating`
   - The hub accepted the request and is waiting for backend or world allocation to complete.
 - `ready`
-  - The handle is live and ready to accept work. No task is currently executing.
+  - The participant is live and ready to accept work. No task is currently executing.
 - `running`
-  - The handle is actively executing or streaming work.
+  - The participant is actively executing or streaming work.
 - `restarting`
-  - The hub is replacing a world-scoped handle because the shared world restarted.
+  - The hub is replacing a world-scoped participant because the shared world restarted.
 - `stopping`
   - The hub issued a stop and is waiting for terminal confirmation.
 - `stopped`
   - Terminal state after a successful stop.
 - `failed`
-  - Terminal state after an execution or lifecycle failure that leaves the handle unusable.
+  - Terminal state after an execution or lifecycle failure that leaves the participant unusable.
 - `invalidated`
-  - Terminal state after world restart or orchestrator teardown made the handle unusable without an explicit stop.
+  - Terminal state after world restart or orchestrator teardown made the participant unusable without an explicit stop.
 
 ### Legal transitions
 
@@ -158,7 +161,7 @@ Field rules:
 | `running` | `ready` | work dispatch completes successfully |
 | `ready` | `restarting` | shared world drift requires restart |
 | `running` | `restarting` | shared world drift requires restart after the in-flight unit ends or is cancelled |
-| `restarting` | `invalidated` | old world-scoped handle is retired |
+| `restarting` | `invalidated` | old world-scoped participant is retired |
 | `restarting` | `failed` | restart attempt fails closed |
 | `ready` | `stopping` | `stop_session` begins |
 | `running` | `stopping` | `stop_session` begins while work is active |
@@ -167,12 +170,12 @@ Field rules:
 | `running` | `failed` | backend execution fails irrecoverably |
 
 Non-negotiable transition rules:
-- A world restart invalidates every live world-scoped member handle tied to the previous `world_id`.
-- A replacement handle created after restart MUST use a new `session_handle_id`.
-- The replacement handle MUST copy `orchestration_session_id`, `agent_id`, `backend_id`, `role`, and `protocol`.
-- The replacement handle MUST publish `resumed_from_session_handle_id=<old session_handle_id>`.
-- The replacement handle MUST publish the new `world_id` plus `world_generation = previous_world_generation + 1`.
-- Host-scoped handles never transition through `restarting`.
+- A world restart invalidates every live world-scoped member participant tied to the previous `world_id`.
+- A replacement participant created after restart MUST use a new `participant_id`.
+- The replacement participant MUST copy `orchestration_session_id`, `agent_id`, `backend_id`, `role`, and `protocol`.
+- The replacement participant MUST publish `resumed_from_participant_id=<old participant_id>`.
+- The replacement participant MUST publish the new `world_id` plus `world_generation = previous_world_generation + 1`.
+- Host-scoped participants never transition through `restarting`.
 
 ## Host-orchestrator eligibility
 
@@ -208,8 +211,8 @@ Failure rules:
 
 ## Shared-world reuse and restart contract
 
-- The v1 default is exactly one shared `world_id` per `orchestration_session_id` for all world-scoped member handles.
-- Host-scoped orchestrator handles do not join that shared world and never publish `world_id` or `world_generation`.
+- The v1 default is exactly one shared `world_id` per `orchestration_session_id` for all world-scoped member participants.
+- Host-scoped orchestrator participants do not join that shared world and never publish `world_id` or `world_generation`.
 - `world_generation` starts at `0` when the first shared world is allocated for an orchestration session.
 - The shared world is reused while these inputs remain unchanged:
   - workspace root
@@ -221,11 +224,11 @@ Failure rules:
 - When `agents.hub.world_restart.on_drift=auto_restart`:
   - the hub MUST allocate a new shared world
   - the hub MUST increment `world_generation` by exactly `1`
-  - the hub MUST invalidate every live world-scoped handle bound to the previous world
-  - the hub MUST create replacement handles before more work is dispatched
+  - the hub MUST invalidate every live world-scoped participant bound to the previous world
+  - the hub MUST create replacement participants before more work is dispatched
 - When `agents.hub.world_restart.on_drift=fail_closed`:
   - the hub MUST NOT restart implicitly
-  - the hub MUST leave the prior world-scoped handles in `invalidated` or `failed`
+  - the hub MUST leave the prior world-scoped participants in `invalidated` or `failed`
   - the hub MUST require an explicit restart path before more world-scoped work begins
 
 ## Status exchange objects
@@ -268,6 +271,7 @@ This is the exact object shape for each pure-agent entry in `substrate agent sta
 
 ```json
 {
+  "participant_id": "ash_001",
   "orchestration_session_id": "sess_001",
   "agent_id": "codex",
   "backend_id": "cli:codex",
@@ -285,11 +289,12 @@ This is the exact object shape for each pure-agent entry in `substrate agent sta
 ```
 
 Field rules:
+- `participant_id` is the canonical child identity for status, toolbox, and participant-aware trace correlation.
 - `client` is exactly the emitting session `agent_id`.
 - `router` is exactly `agent_hub`.
 - `protocol` is exactly `uaa.agent.session`.
 - `role` is `orchestrator` or `member`.
-- `last_event_at` is the latest accepted structured event timestamp for that handle.
+- `last_event_at` is the latest accepted structured event timestamp for that participant.
 - `world_id` and `world_generation` are both required when `execution.scope=world`.
 - `world_id` and `world_generation` are both omitted when `execution.scope=host`.
 - `provider` and `auth_authority` never appear on `AgentSessionStatusV1`.
@@ -302,6 +307,7 @@ This is the exact object shape for each nested record in `substrate agent status
 {
   "parent": {
     "orchestration_session_id": "sess_001",
+    "participant_id": "ash_001",
     "agent_id": "codex"
   },
   "run_id": "run_nested_001",
@@ -315,7 +321,7 @@ This is the exact object shape for each nested record in `substrate agent status
 ```
 
 Field rules:
-- `parent.orchestration_session_id` and `parent.agent_id` identify the pure-agent session that triggered the nested request.
+- `parent.orchestration_session_id`, `parent.participant_id`, and `parent.agent_id` identify the pure-agent participant that triggered the nested request.
 - `run_id` is the nested request correlation id and is required on every nested row.
 - `backend_id` remains the parent agent backend id.
 - `client` remains the parent agent id.
@@ -347,7 +353,7 @@ Field rules:
 - `role_filter` is `null`, `orchestrator`, or `member`.
 - `sessions[*]` uses `AgentSessionStatusV1` exactly.
 - `nested_llm_records[*]` uses `NestedLlmStatusRecordV1` exactly.
-- `sessions` sort by `orchestration_session_id`, then `agent_id`, ascending byte order.
+- `sessions` sort by `orchestration_session_id`, then `participant_id`, then `agent_id`, ascending byte order.
 - `nested_llm_records` sort by `parent.orchestration_session_id`, then `parent.agent_id`, then `run_id` ascending byte order.
 
 ## Structured event exchange
@@ -360,12 +366,13 @@ Required envelope fields for pure-agent session events:
 - `data`
 - `agent_id`
 - `orchestration_session_id`
+- `participant_id`
 - `run_id`
 
 Required or conditional fields:
 - `backend_id` is required for v1 agent-hub session events because the emitting backend is always known.
 - `role` is required on orchestrator-emitted control-plane alerts and optional on member progress events.
-- `world_id` is required when the emitting handle uses `execution.scope=world`.
+- `world_id` is required when the emitting participant uses `execution.scope=world`.
 - `identity_tuple` is required on pure-agent session events and MUST be:
   - `client=<agent_id>`
   - `router=agent_hub`
@@ -383,22 +390,22 @@ Event-kind rules:
 
 Ordering rules:
 - The hub does not promise one global total order across all agents.
-- For a single `session_handle_id`, events are processed in emission order.
-- A `registered` event, if emitted, precedes every later event for the same handle.
+- For a single `participant_id`, events are processed in emission order.
+- A `registered` event, if emitted, precedes every later event for the same participant.
 - A terminal `task_end` or `alert` that closes an in-flight unit precedes any transition back to `ready`.
 
 Retry rules:
 - Capability discovery is retryable and side-effect free.
-- `start_session` is retryable only while no terminal handle exists for the same `(orchestration_session_id, agent_id, role)` tuple.
-- `stop_session` is retryable and returns the same terminal state when the handle is already `stopped`, `failed`, or `invalidated`.
-- `fork_session` is intentionally non-idempotent. Each successful fork creates a new `session_handle_id`.
+- `start_session` is retryable only while no terminal participant exists for the same requested participant lineage tuple.
+- `stop_session` is retryable and returns the same terminal state when the participant is already `stopped`, `failed`, or `invalidated`.
+- `fork_session` is intentionally non-idempotent. Each successful fork creates a new `participant_id`.
 
 Idempotency rules:
-- Repeating `start_session` for a live `(orchestration_session_id, agent_id, role)` tuple returns the existing live handle instead of creating a second live handle.
-- Repeating `resume_session` for the same live `session_handle_id` returns that same handle.
-- Repeating `stop_session` for a terminal handle returns the same terminal handle and does not create new events other than an at-most-once confirmation.
+- Repeating `start_session` for the same live requested participant lineage tuple returns the existing live participant instead of creating a second live participant.
+- Repeating `resume_session` for the same live `participant_id` returns that same participant.
+- Repeating `stop_session` for a terminal participant returns the same terminal participant and does not create new events other than an at-most-once confirmation.
 
 Timeout rules:
 - Session allocation timeout is evaluated in `allocating`.
 - Dispatch timeout is evaluated in `running`.
-- A timeout transitions the handle to `failed` unless the world restart path first moved it to `restarting`.
+- A timeout transitions the participant to `failed` unless the world restart path first moved it to `restarting`.

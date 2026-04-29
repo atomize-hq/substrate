@@ -1371,14 +1371,14 @@ async fn start_host_orchestrator_runtime(
             message: format!("failed to resolve runtime backend kind: {err}"),
         })?;
 
-    let session_handle_id = format!("ash_{}", Uuid::now_v7());
+    let participant_id = format!("ash_{}", Uuid::now_v7());
     let lease_token = Uuid::now_v7().to_string();
     let run_id = Uuid::now_v7().to_string();
     let orchestration_session_id = Uuid::now_v7().to_string();
     let mut manifest = AgentRuntimeSessionManifest::new(
         &descriptor,
         orchestration_session_id.clone(),
-        session_handle_id,
+        participant_id,
         lease_token,
     );
     manifest.internal.latest_run_id = Some(run_id.clone());
@@ -1398,15 +1398,15 @@ async fn start_host_orchestrator_runtime(
             exit_code: 1,
             message: format!("failed to persist orchestration session record: {err:#}"),
         })?;
-    if let Err(err) = state_store.persist_manifest(&manifest) {
+    if let Err(err) = state_store.persist_participant(&manifest) {
         mark_orchestration_session_failed(
             &state_store,
             &orchestration_session,
-            format!("failed to persist agent runtime manifest: {err:#}"),
+            format!("failed to persist agent runtime participant record: {err:#}"),
         );
         return Err(RuntimeBootstrapFailure {
             exit_code: 1,
-            message: format!("failed to persist agent runtime manifest: {err:#}"),
+            message: format!("failed to persist agent runtime participant record: {err:#}"),
         });
     }
 
@@ -1492,7 +1492,7 @@ async fn start_host_orchestrator_runtime(
                         manifest_guard.transition_state(AgentRuntimeSessionState::Ready);
                         manifest_guard.touch_heartbeat();
                         orchestration_guard.bind_active_session_handle(
-                            manifest_guard.handle.session_handle_id.clone(),
+                            manifest_guard.handle.participant_id.clone(),
                         );
                         orchestration_guard.transition_state(OrchestrationSessionState::Active);
                         startup_became_live = true;
@@ -1569,13 +1569,15 @@ async fn start_host_orchestrator_runtime(
                 manifest_guard.internal.last_error_message = Some(reason.clone());
                 orchestration_guard.transition_state(OrchestrationSessionState::Invalidated);
                 orchestration_guard.mark_terminal(reason.clone());
-                publish_events.push(AgentEvent::alert(
+                let mut event = AgentEvent::alert(
                     manifest_guard.handle.agent_id.clone(),
                     manifest_guard.handle.orchestration_session_id.clone(),
                     run_id_for_tasks.clone(),
                     "orchestrator_runtime_stream_closed",
                     reason,
-                ));
+                );
+                apply_runtime_participant_lineage(&mut event, &manifest_guard);
+                publish_events.push(event);
             }
             (orchestration_guard.clone(), manifest_guard.clone())
         };
@@ -1676,13 +1678,15 @@ async fn start_host_orchestrator_runtime(
                         orchestration_guard
                             .transition_state(OrchestrationSessionState::Invalidated);
                         orchestration_guard.mark_terminal(reason.clone());
-                        publish_events.push(AgentEvent::alert(
+                        let mut event = AgentEvent::alert(
                             manifest_guard.handle.agent_id.clone(),
                             manifest_guard.handle.orchestration_session_id.clone(),
                             run_id_for_completion.clone(),
                             "orchestrator_runtime_invalidated",
                             reason,
-                        ));
+                        );
+                        apply_runtime_participant_lineage(&mut event, &manifest_guard);
+                        publish_events.push(event);
                     }
                 }
                 Err(err) => {
@@ -1738,13 +1742,15 @@ async fn start_host_orchestrator_runtime(
                         orchestration_guard
                             .transition_state(OrchestrationSessionState::Invalidated);
                         orchestration_guard.mark_terminal(reason.clone());
-                        publish_events.push(AgentEvent::alert(
+                        let mut event = AgentEvent::alert(
                             manifest_guard.handle.agent_id.clone(),
                             manifest_guard.handle.orchestration_session_id.clone(),
                             run_id_for_completion.clone(),
                             "orchestrator_runtime_invalidated",
                             reason,
-                        ));
+                        );
+                        apply_runtime_participant_lineage(&mut event, &manifest_guard);
+                        publish_events.push(event);
                     }
                 }
             }
@@ -2022,17 +2028,15 @@ async fn shutdown_host_orchestrator_runtime(
             (orchestration_guard.clone(), manifest_guard.clone())
         };
         let _ = persist_runtime_snapshots(&runtime.store, &orchestration_session, &manifest);
-        emit_runtime_event(
-            AgentEvent::alert(
-                manifest.handle.agent_id.clone(),
-                manifest.handle.orchestration_session_id.clone(),
-                run_id,
-                "orchestrator_runtime_invalidated",
-                reason,
-            ),
-            telemetry,
-            agent_printer,
+        let mut event = AgentEvent::alert(
+            manifest.handle.agent_id.clone(),
+            manifest.handle.orchestration_session_id.clone(),
+            run_id,
+            "orchestrator_runtime_invalidated",
+            reason,
         );
+        apply_runtime_participant_lineage(&mut event, &manifest);
+        emit_runtime_event(event, telemetry, agent_printer);
         return;
     }
 
@@ -2139,7 +2143,7 @@ fn persist_runtime_snapshots(
     manifest: &AgentRuntimeSessionManifest,
 ) -> Result<()> {
     store.persist_orchestration_session(orchestration_session)?;
-    store.persist_manifest(manifest)
+    store.persist_participant(manifest)
 }
 
 fn runtime_bootstrap_failure_from_anyhow(err: anyhow::Error) -> RuntimeBootstrapFailure {
@@ -2244,6 +2248,7 @@ fn translate_wrapper_event(
     event.backend_id = Some(manifest.handle.backend_id.clone());
     event.set_pure_agent_telemetry_identity(manifest.handle.agent_id.clone());
     event.set_channel(wrapper_event.channel.clone());
+    apply_runtime_participant_lineage(&mut event, manifest);
 
     if let Some(data) = wrapper_event.data {
         if let Some(obj) = event.data.as_object_mut() {
@@ -2256,6 +2261,15 @@ fn translate_wrapper_event(
     }
 
     event
+}
+
+fn apply_runtime_participant_lineage(
+    event: &mut AgentEvent,
+    manifest: &AgentRuntimeSessionManifest,
+) {
+    event.participant_id = Some(manifest.handle.participant_id.clone());
+    event.parent_participant_id = manifest.handle.parent_participant_id.clone();
+    event.resumed_from_participant_id = manifest.handle.resumed_from_participant_id.clone();
 }
 
 fn build_runtime_message_event(
@@ -2274,6 +2288,7 @@ fn build_runtime_message_event(
     event.role = Some(manifest.handle.role.clone());
     event.backend_id = Some(manifest.handle.backend_id.clone());
     event.set_pure_agent_telemetry_identity(manifest.handle.agent_id.clone());
+    apply_runtime_participant_lineage(&mut event, manifest);
     event
 }
 
@@ -3906,6 +3921,127 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn write_fake_codex_script_with_running_and_shutdown_delay(
+        temp: &TempDir,
+        running_delay_seconds: u64,
+        shutdown_delay_seconds: u64,
+    ) -> PathBuf {
+        let path = temp.path().join("fake-codex-running-and-shutdown-delay.sh");
+        let body = format!(
+            "#!/bin/sh\ntrap 'sleep {}; exit 0' INT TERM\nprintf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\nsleep {}\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\nwhile :; do sleep 1; done\n",
+            shutdown_delay_seconds, running_delay_seconds
+        );
+        fs::write(&path, body).expect("write fake codex delayed script");
+        let mut perms = fs::metadata(&path)
+            .expect("fake codex metadata")
+            .permissions();
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).expect("set fake codex permissions");
+        path
+    }
+
+    #[cfg(unix)]
+    fn participant_snapshot_path(store: &AgentRuntimeStateStore, participant_id: &str) -> PathBuf {
+        store
+            .participants_dir()
+            .join(format!("{participant_id}.json"))
+    }
+
+    #[cfg(unix)]
+    fn legacy_handle_snapshot_path(
+        store: &AgentRuntimeStateStore,
+        participant_id: &str,
+    ) -> PathBuf {
+        store.handles_dir().join(format!("{participant_id}.json"))
+    }
+
+    #[cfg(unix)]
+    fn session_state_name(state: &AgentRuntimeSessionState) -> &'static str {
+        match state {
+            AgentRuntimeSessionState::Allocating => "allocating",
+            AgentRuntimeSessionState::Ready => "ready",
+            AgentRuntimeSessionState::Running => "running",
+            AgentRuntimeSessionState::Restarting => "restarting",
+            AgentRuntimeSessionState::Stopping => "stopping",
+            AgentRuntimeSessionState::Stopped => "stopped",
+            AgentRuntimeSessionState::Failed => "failed",
+            AgentRuntimeSessionState::Invalidated => "invalidated",
+        }
+    }
+
+    #[cfg(unix)]
+    fn read_persisted_participant_snapshot(
+        store: &AgentRuntimeStateStore,
+        participant_id: &str,
+    ) -> serde_json::Value {
+        let participant_path = participant_snapshot_path(store, participant_id);
+        assert!(
+            participant_path.exists(),
+            "participant snapshot should exist at {}",
+            participant_path.display()
+        );
+
+        let legacy_handle_path = legacy_handle_snapshot_path(store, participant_id);
+        assert!(
+            !legacy_handle_path.exists(),
+            "writer cutover must not create legacy handle snapshots at {}",
+            legacy_handle_path.display()
+        );
+
+        let payload: serde_json::Value = serde_json::from_slice(
+            &fs::read(&participant_path).expect("read persisted participant snapshot"),
+        )
+        .expect("parse persisted participant snapshot");
+        assert_eq!(
+            payload
+                .get("participant_id")
+                .and_then(serde_json::Value::as_str),
+            Some(participant_id)
+        );
+        assert!(
+            payload.get("session_handle_id").is_none(),
+            "participant snapshot should not serialize legacy session_handle_id"
+        );
+        payload
+    }
+
+    #[cfg(unix)]
+    fn assert_persisted_participant_snapshot(
+        store: &AgentRuntimeStateStore,
+        participant_id: &str,
+        expected_state: &AgentRuntimeSessionState,
+    ) -> serde_json::Value {
+        let payload = read_persisted_participant_snapshot(store, participant_id);
+        assert_eq!(
+            payload.get("state").and_then(serde_json::Value::as_str),
+            Some(session_state_name(expected_state))
+        );
+        payload
+    }
+
+    #[cfg(unix)]
+    async fn wait_for_persisted_participant_snapshot(
+        store: &AgentRuntimeStateStore,
+        participant_id: &str,
+        expected_state: AgentRuntimeSessionState,
+    ) -> serde_json::Value {
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                let payload = read_persisted_participant_snapshot(store, participant_id);
+                if payload.get("state").and_then(serde_json::Value::as_str)
+                    == Some(session_state_name(&expected_state))
+                {
+                    break payload;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .expect("timed out waiting for participant snapshot state")
+    }
+
+    #[cfg(unix)]
     fn test_shell_config(workspace_root: &Path, substrate_home: &Path) -> ShellConfig {
         ShellConfig {
             mode: ShellMode::Interactive { use_pty: false },
@@ -3943,7 +4079,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
-    fn start_host_orchestrator_runtime_bootstraps_and_persists_a_live_manifest() {
+    fn start_host_orchestrator_runtime_persists_participant_snapshots_across_lifecycle_states() {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
@@ -3951,7 +4087,7 @@ mod tests {
         fs::create_dir_all(&workspace_root).expect("workspace root");
         fs::create_dir_all(&substrate_home).expect("substrate home");
         let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
-        let fake_codex = write_fake_codex_script(&temp, true);
+        let fake_codex = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
 
         std::env::set_var("SUBSTRATE_HOME", &substrate_home);
         fs::write(
@@ -3984,16 +4120,18 @@ mod tests {
                     .await
                     .expect("bootstrap runtime should succeed")
                     .expect("agents enabled should create a runtime");
+            let store = runtime.store.clone();
 
             let (parent, live) = runtime
                 .store
                 .resolve_live_orchestrator_session("codex")
                 .expect("resolve live orchestrator session")
                 .expect("live orchestration session should exist");
+            let participant_id = live.handle.participant_id.clone();
             assert_eq!(parent.state, OrchestrationSessionState::Active);
             assert_eq!(
                 parent.active_session_handle_id.as_deref(),
-                Some(live.handle.session_handle_id.as_str())
+                Some(participant_id.as_str())
             );
             assert_eq!(parent.shell_trace_session_id, config.session_id);
             assert_eq!(
@@ -4009,23 +4147,59 @@ mod tests {
                     .orchestration_session_id,
                 parent.orchestration_session_id
             );
-            assert!(matches!(
-                live.handle.state,
-                AgentRuntimeSessionState::Ready | AgentRuntimeSessionState::Running
-            ));
+            assert_eq!(live.handle.state, AgentRuntimeSessionState::Ready);
             assert_eq!(live.internal.uaa_session_id.as_deref(), Some("thread-test"));
             assert!(live.internal.ownership_valid);
             assert!(live.internal.control_owner_retained);
             assert!(live.internal.event_stream_active);
             assert!(live.internal.completion_observer_retained);
             assert_eq!(live.handle.protocol, PURE_AGENT_PROTOCOL);
+            assert_persisted_participant_snapshot(
+                &store,
+                &participant_id,
+                &AgentRuntimeSessionState::Ready,
+            );
 
-            shutdown_host_orchestrator_runtime(runtime, &ReplPrinter::Stdout, &mut telemetry).await;
+            wait_for_persisted_participant_snapshot(
+                &store,
+                &participant_id,
+                AgentRuntimeSessionState::Running,
+            )
+            .await;
 
-            let manifests = AgentRuntimeStateStore::new()
-                .expect("state store")
-                .list_manifests()
-                .expect("list manifests");
+            let shutdown_config = config.clone();
+            let shutdown_task = tokio::spawn(async move {
+                let mut shutdown_telemetry =
+                    ReplSessionTelemetry::new(shutdown_config, "async-test-shutdown");
+                shutdown_host_orchestrator_runtime(
+                    runtime,
+                    &ReplPrinter::Stdout,
+                    &mut shutdown_telemetry,
+                )
+                .await;
+            });
+
+            wait_for_persisted_participant_snapshot(
+                &store,
+                &participant_id,
+                AgentRuntimeSessionState::Stopping,
+            )
+            .await;
+            let stopping_parent = store
+                .load_orchestration_session(&parent.orchestration_session_id)
+                .expect("load stopping orchestration session")
+                .expect("stopping orchestration session should exist");
+            assert_eq!(stopping_parent.state, OrchestrationSessionState::Stopping);
+            assert_eq!(
+                stopping_parent.active_session_handle_id.as_deref(),
+                Some(participant_id.as_str())
+            );
+
+            shutdown_task
+                .await
+                .expect("shutdown task should complete cleanly");
+
+            let manifests = store.list_manifests().expect("list manifests");
             let stopped = manifests
                 .into_iter()
                 .find(|manifest| manifest.handle.agent_id == "codex")
@@ -4035,15 +4209,19 @@ mod tests {
             assert!(!stopped.internal.control_owner_retained);
             assert!(!stopped.internal.event_stream_active);
             assert!(!stopped.internal.completion_observer_retained);
-            let stopped_parent = AgentRuntimeStateStore::new()
-                .expect("state store")
+            assert_persisted_participant_snapshot(
+                &store,
+                &participant_id,
+                &AgentRuntimeSessionState::Stopped,
+            );
+            let stopped_parent = store
                 .load_orchestration_session(&stopped.handle.orchestration_session_id)
                 .expect("load stopped orchestration session")
                 .expect("stopped orchestration session should exist");
             assert_eq!(stopped_parent.state, OrchestrationSessionState::Stopped);
             assert_eq!(
                 stopped_parent.active_session_handle_id.as_deref(),
-                Some(stopped.handle.session_handle_id.as_str())
+                Some(participant_id.as_str())
             );
         });
         std::env::remove_var("SUBSTRATE_HOME");
@@ -4102,6 +4280,11 @@ mod tests {
                         .into_iter()
                         .find(|manifest| manifest.handle.agent_id == "codex")
                         .expect("runtime manifest should exist");
+                    assert_persisted_participant_snapshot(
+                        &store,
+                        &manifest.handle.participant_id,
+                        &manifest.handle.state,
+                    );
                     let parent = store
                         .load_orchestration_session(&manifest.handle.orchestration_session_id)
                         .expect("load orchestration session")
@@ -4110,7 +4293,7 @@ mod tests {
                         assert_eq!(parent.state, OrchestrationSessionState::Invalidated);
                         assert_eq!(
                             parent.active_session_handle_id.as_deref(),
-                            Some(manifest.handle.session_handle_id.as_str())
+                            Some(manifest.handle.participant_id.as_str())
                         );
                         assert!(parent.closed_at.is_some());
                         assert!(!manifest.internal.ownership_valid);
@@ -4160,6 +4343,11 @@ mod tests {
                 .find(|manifest| manifest.handle.agent_id == "codex")
                 .expect("runtime manifest should still exist");
             assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Invalidated);
+            assert_persisted_participant_snapshot(
+                &AgentRuntimeStateStore::new().expect("state store"),
+                &manifest.handle.participant_id,
+                &AgentRuntimeSessionState::Invalidated,
+            );
             let parent = AgentRuntimeStateStore::new()
                 .expect("state store")
                 .load_orchestration_session(&manifest.handle.orchestration_session_id)
@@ -4255,6 +4443,11 @@ mod tests {
                 .expect("failed manifest should exist");
             assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Failed);
             assert!(!manifest.internal.ownership_valid);
+            assert_persisted_participant_snapshot(
+                &AgentRuntimeStateStore::new().expect("state store"),
+                &manifest.handle.participant_id,
+                &AgentRuntimeSessionState::Failed,
+            );
             let parent = AgentRuntimeStateStore::new()
                 .expect("state store")
                 .load_orchestration_session(&manifest.handle.orchestration_session_id)
