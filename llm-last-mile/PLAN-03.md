@@ -1,7 +1,7 @@
 # PLAN-03: Shared-World Ownership Contract, Linux-First
 
 Source file: [03-shared-world-ownership-linux-first.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/03-shared-world-ownership-linux-first.md)  
-Branch: `feat/session-participant-record-cutover`  
+Branch: `feat/shared-world-ownership-contract`  
 Plan type: backend-only, no UI scope  
 Review posture: `/autoplan`-style scope tightening with `/plan-eng-review` structure and rigor  
 Status: execution-ready after slice-boundary correction
