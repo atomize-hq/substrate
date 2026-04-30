@@ -1,4 +1,4 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-shared-world-ownership-contract-autoplan-restore-20260429-213754.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-thread-world-binding-autoplan-restore-20260429-232824.md -->
 
 # PLAN-04: Thread World Binding Into Runtime State
 
@@ -24,7 +24,7 @@ Instead, `PLAN-04` does four precise jobs:
 That is the smallest correct bridge between:
 
 - backend-authoritative shared-world proof from `PLAN-03`,
-- member invalidation semantics coming in `PLAN-05`,
+- member invalidation semantics coming in [05-restart-invalidation-semantics.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/05-restart-invalidation-semantics.md),
 - and the future grouped `agent-sessions/<orchestration_session_id>.json` layout planned in [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md:3).
 
 ## Scope Challenge
@@ -279,6 +279,17 @@ Rules:
 - field omission is non-fatal
 - toolbox status retains its normal eligibility and transport semantics
 
+### Runtime-mode matrix
+
+This is the exact behavior matrix. No hidden branches.
+
+| Runtime condition | Shared-world request shape | Parent-session write requirement | Event / alert rule |
+| ----------------- | -------------------------- | -------------------------------- | ------------------ |
+| First startup with world enabled | `AttachOrCreate` with persisted `orchestration_session_id` | pending parent record must exist before request; active binding must persist after ready frame | startup `registered` / `task_start` host-runtime events wait until the binding barrier succeeds |
+| Restart after drift with auto-restart | `ReplaceExpectedGeneration { expected_generation, reason }` | new authoritative binding must persist before publish | `world_restarted` emits only after persistence succeeds |
+| Drift with fail-closed posture | no new request in the failing path | current authoritative binding is re-persisted before fail-closed publish | `world_restart_required` emits only after persistence succeeds, then further world work stops |
+| `--no-world` startup | no shared-world request | no world-binding write required | runtime bootstrap keeps the current host-only event ordering |
+
 ## Architecture Diagrams
 
 ### Startup flow
@@ -332,20 +343,58 @@ OrchestrationSessionRecord
         └── selected status row stays host-scoped
 ```
 
+## Concrete File Touch Plan
+
+| File / module | Required change | Must not change |
+| ------------- | --------------- | --------------- |
+| [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | Introduce a persisted startup context, thread it through `start_world_session(...)`, `handle_detected_world_drift(...)`, `restart_world_session(...)`, and gate world-bound host-runtime events/alerts behind parent-session persistence | Do not invent a second live-state store or reconstruct binding from trace |
+| [crates/shell/src/execution/agent_runtime/orchestration_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs) | Add explicit `set_world_binding(...)` and `clear_world_binding()` mutators on `OrchestrationSessionRecord` | Do not move world binding onto host participants |
+| [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse `persist_orchestration_session(...)` as the binding authority write barrier and keep `resolve_live_orchestrator_session(...)` as the live proof reader | Do not expand the lease sidecar in this slice |
+| [crates/shell/src/execution/agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Add optional `active_world_binding` to toolbox status JSON using the already-authoritative parent + child live resolution | Do not change selected `agent status --json` rows |
+| [crates/shell/src/execution/repl_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/repl_persistent_session.rs) | Keep echo validation, but make the first-start request actually carry owner proof | Do not loosen request validation to permit proof-less attach/create |
+| [crates/shell/tests/](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/) and [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md) | Add regression coverage and document slice `04` as the runtime-state bridge to slices `05` and `06` | Do not redefine packet order |
+
 ## Implementation Plan
 
-### Ordered execution checklist
+### Ordered implementation sequence
 
-1. Add persisted pending startup session context.
-2. Thread startup owner proof into the first `start_world_session(...)` call.
-3. Thread the same startup context through pre-live drift/restart paths.
-4. Add parent-session binding mutators and clear rules.
-5. Add parent-only binding persistence helper.
-6. Move startup/restart/fail-closed alerts behind successful parent binding persistence.
-7. Explicitly close the world and mark the parent record terminal on bootstrap failure after attach.
-8. Stamp host/orchestrator runtime events from persisted parent binding.
-9. Add `toolbox status --json` `active_world_binding`.
-10. Add regression coverage for startup proof, pre-live drift, bootstrap cleanup, and contract preservation.
+Implement in this order. Each step produces a concrete invariant the next step can trust.
+
+1. **Persist startup authority before world creation**
+   - allocate `orchestration_session_id`
+   - create a pending `OrchestrationSessionRecord`
+   - persist it before the first `AttachOrCreate` request
+
+2. **Thread that startup authority through every pre-live path**
+   - `start_world_session(...)`
+   - `handle_detected_world_drift(...)`
+   - `restart_world_session(...)`
+   - any bootstrap-failure path that runs before active-session lookup can succeed
+
+3. **Add the parent-only binding barrier**
+   - copy `world_id/world_generation` from `WorldSession`
+   - persist the parent session record
+   - treat that persisted snapshot as the source for subsequent publish work
+
+4. **Reorder publish points**
+   - startup host-runtime events publish after the binding barrier when a world session exists
+   - `world_restarted` publishes after the replacement binding persists
+   - `world_restart_required` publishes after the current binding re-persists
+
+5. **Add live proof and regression coverage**
+   - extend toolbox status JSON with optional `active_world_binding`
+   - preserve selected status contract
+   - land tests before calling the slice done
+
+### Step-by-step acceptance gates
+
+| Step | Acceptance gate |
+| ---- | --------------- |
+| 1 | a persisted parent record exists on disk before any first-start shared-world request leaves the shell |
+| 2 | startup drift and restart logic can operate without `resolve_active_orchestration_session_id()` |
+| 3 | one helper owns the authoritative write order for live binding |
+| 4 | no alert or host-runtime event can claim a world binding that is not yet persisted in the parent record |
+| 5 | toolbox status proves the live binding when possible and selected status rows remain unchanged |
 
 ### Workstream 1: Persisted startup context
 
@@ -362,6 +411,7 @@ Tasks:
   - `start_world_session(...)`
   - `handle_detected_world_drift(...)`
   - `restart_world_session(...)`
+- make `--no-world` the explicit bypass case rather than an implicit "no binding barrier exists" assumption
 
 ### Workstream 2: Parent-only binding authority
 
@@ -377,6 +427,7 @@ Tasks:
 - add `persist_active_world_binding(...)`
 - keep host participant manifests world-empty
 - keep lease-sidecar world binding out of slice `04` unless a same-slice reader appears
+- keep `persist_runtime_snapshots(...)` for lifecycle persistence, but do not make participant persistence a prerequisite for binding truth
 
 ### Workstream 3: Bootstrap failure and drift ordering
 
@@ -392,6 +443,7 @@ Tasks:
   - close the world session
   - mark the parent record terminal
   - clear binding only after close
+- treat any `start_host_orchestrator_runtime(...)` failure after world attach as a cleanup path, including startup timeout, missing UAA handle, and wrapper bootstrap failure
 
 ### Workstream 4: Live proof surface and event stamping
 
@@ -406,6 +458,7 @@ Tasks:
 - add `active_world_binding` to `toolbox status --json`
 - preserve selected status rows exactly as-is
 - make proof-field omission non-fatal when live resolution is ambiguous or unavailable
+- keep `active_orchestration_session_id` as the control-plane endpoint input, but omit it from the new proof object
 
 ### Workstream 5: Tests and docs
 
@@ -422,6 +475,7 @@ Tasks:
 - add bootstrap-failure cleanup coverage
 - add toolbox proof-surface coverage
 - document that slice `04` is the session-scoped binding bridge before slice `06`
+- update any packet references that still imply a nonexistent `PLAN-05.md` file
 
 ## Architecture Review
 
@@ -628,7 +682,7 @@ cargo test --workspace -- --nocapture
 
 Primary QA artifact for follow-up verification:
 
-[spensermcconnell-feat-shared-world-ownership-contract-eng-review-test-plan-20260429-220341.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/spensermcconnell-feat-shared-world-ownership-contract-eng-review-test-plan-20260429-220341.md)
+[spensermcconnell-feat-thread-world-binding-eng-review-test-plan-20260429-232824.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/spensermcconnell-feat-thread-world-binding-eng-review-test-plan-20260429-232824.md)
 
 ## Failure Modes Registry
 
@@ -662,33 +716,52 @@ Footguns to avoid:
 2. Rewriting participant + lease files as part of binding-only persistence.
 3. Using `doctor` as a live runtime truth surface.
 
+## Cross-Phase Themes
+
+These are the concerns that kept repeating across the review passes and are now locked into the plan:
+
+1. **Persist before publish**
+   - The main failure mode is not "wrong JSON shape." It is claiming a live binding in alerts or runtime events before the parent session record says the same thing on disk.
+
+2. **Startup is the sharp edge**
+   - The dangerous gap is the first attach/create and the pre-live drift window. Once the host runtime is active, existing lookup paths are mostly good enough. Before that, they are not.
+
+3. **Parent record is the bridge, not the destination**
+   - This slice should improve truth today without pretending it is the final `agent-sessions/` layout. That keeps the diff boring and keeps slice `06` possible.
+
+4. **Operator visibility must be safe by default**
+   - A missing proof field in toolbox status is acceptable. A wrong proof field is not.
+
 ## Worktree Parallelization Strategy
 
 ### Dependency table
 
-| Step                               | Modules touched                                                       | Depends on              |
-| ---------------------------------- | --------------------------------------------------------------------- | ----------------------- |
-| Pending startup context            | `crates/shell/src/repl/`                                              | —                       |
-| Parent binding mutators + ordering | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/repl/` | pending startup context |
-| Toolbox proof surface              | `crates/shell/src/execution/`                                         | parent binding mutators |
-| Integration tests + docs           | `crates/shell/tests/`, `llm-last-mile/`                               | all above               |
+| Step | Modules touched | Depends on |
+| ---- | --------------- | ---------- |
+| Startup context plumbing | `crates/shell/src/repl/` | — |
+| Parent-session mutators and store helpers | `crates/shell/src/execution/agent_runtime/` | — |
+| Restart ordering and bootstrap cleanup | `crates/shell/src/repl/` | startup context plumbing, parent-session mutators and store helpers |
+| Toolbox proof surface | `crates/shell/src/execution/` | parent-session mutators and store helpers |
+| Regression tests and packet docs | `crates/shell/tests/`, `llm-last-mile/` | restart ordering and bootstrap cleanup, toolbox proof surface |
 
 ### Parallel lanes
 
-Lane A: pending startup context -> parent binding ordering  
-Lane B: toolbox proof surface after parent binding API settles  
-Lane C: integration tests + docs last
+Lane A: startup context plumbing -> restart ordering and bootstrap cleanup  
+Lane B: parent-session mutators and store helpers -> toolbox proof surface  
+Lane C: regression tests and packet docs
 
 ### Execution order
 
-1. Land Lane A first.
-2. Launch Lane B after the parent binding API exists.
-3. Run Lane C last.
+1. Launch Lane A step 1 and Lane B step 1 in parallel worktrees.
+2. Merge those foundations.
+3. Run Lane A step 2 and Lane B step 2 in parallel.
+4. Run Lane C last, after the runtime and surface contracts settle.
 
 ### Conflict flags
 
-- Lane A and Lane C both touch `repl_world_first_routing_v1.rs`
-- Lane B and Lane C both touch status/toolbox contract tests
+- Lane A is fully sequential inside `crates/shell/src/repl/`. Do not split startup plumbing and restart ordering across separate worktrees.
+- Lane B is sequential inside `crates/shell/src/execution/agent_runtime/` -> `crates/shell/src/execution/`. The toolbox work depends on the parent-session API shape.
+- Lane C will touch test files exercised by both prior lanes. Keep it last to avoid churn and merge noise.
 
 ## Deferred Work
 
@@ -741,6 +814,7 @@ This slice is done when all of these are true:
 - Code Quality Review: 6 implementation guardrails, 4 minimal-diff rules
 - Test Review: coverage diagrams produced, 19 concrete gaps/assertions identified
 - Performance Review: 0 major issues, 3 no-cache/no-guessing rules
+- Cross-Phase Themes: 4 recurring concerns locked into the implementation contract
 - Error & Rescue Registry: written
 - NOT in scope: written
 - What already exists: written
@@ -748,7 +822,7 @@ This slice is done when all of these are true:
 - TODOS.md updates: deferred scope captured in-plan because no `TODOS.md` exists
 - Failure modes: 4 critical gaps flagged until startup proof, bootstrap cleanup, and parent-only binding persistence land
 - Outside voice: completed and incorporated
-- Parallelization: 3 lanes, 1 foundational lane, 1 surface lane, 1 validation lane
+- Parallelization: 3 lanes, 2 foundational lanes in parallel, 1 validation lane last
 - Lake Score: complete version chosen for every in-slice decision
 
 ## Decision Audit Trail
