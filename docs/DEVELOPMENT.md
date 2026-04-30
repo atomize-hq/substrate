@@ -114,13 +114,13 @@ cargo test --workspace -- --nocapture
 
 ```bash
 # Dynamically link to a system Kuzu (fast if installed)
-cargo build -p substrate-graph --features kuzu-dylib
+cargo build --manifest-path crates/substrate-graph/Cargo.toml --features kuzu-dylib
 
 # Statically build Kuzu (slow; requires cmake and a long native build)
-cargo build -p substrate-graph --features kuzu-static
+cargo build --manifest-path crates/substrate-graph/Cargo.toml --features kuzu-static
 ```
 
-Use `cargo tree -p substrate-graph -e features` to inspect which features are active.
+Use `cargo tree --manifest-path crates/substrate-graph/Cargo.toml -e features` to inspect which features are active.
 
 ### Documentation
 

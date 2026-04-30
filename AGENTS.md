@@ -37,7 +37,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace -- --nocapture       # run full suite with output
 cargo bench                                 # exercise hotspots when touching performance-sensitive crates
 ```
-- Avoid `--all-features` at the workspace level; enable graph features explicitly (e.g., `cargo build -p substrate-graph --features kuzu-dylib`).
+- Avoid `--all-features` at the workspace level; enable graph features explicitly via the graph crate manifest (e.g., `cargo build --manifest-path crates/substrate-graph/Cargo.toml --features kuzu-dylib`).
 - Regenerate shims for manual testing with `substrate --shim-deploy`; inspect with `substrate --shim-status`.
 
 ## Coding Standards & Patterns
