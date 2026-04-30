@@ -1,8 +1,9 @@
 <!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-shared-world-ownership-contract-autoplan-restore-20260429-213754.md -->
+
 # PLAN-04: Thread World Binding Into Runtime State
 
 Source file: [04-thread-world-binding-into-runtime-state.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/04-thread-world-binding-into-runtime-state.md)  
-Branch: `feat/shared-world-ownership-contract`  
+Branch: `feat/thread-world-binding`  
 Plan type: backend-only, no UI scope  
 Review posture: `/autoplan` consolidation pass with `/plan-eng-review` structure and rigor  
 Status: execution-ready
@@ -54,17 +55,17 @@ These are the premises this plan accepts after CEO and engineering review.
 
 ### 0B. Existing Code Leverage
 
-| Sub-problem | Existing code | Reuse or replace |
-|---|---|---|
-| Session-scoped runtime record already stores world fields | [crates/shell/src/execution/agent_runtime/orchestration_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs:20) | Reuse, extend with explicit mutators |
-| Parent-session persistence already exists | [AgentRuntimeStateStore::persist_orchestration_session(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:271) | Reuse as the binding authority write path |
-| Shared-world echo validation already exists | [validate_shared_world_echo(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/repl_persistent_session.rs:314) | Reuse, but make first-start requests actually send owner proof |
-| Startup currently opens the world before host runtime bootstrap | [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:433) | Keep the overall shape, change the startup context and persistence ordering |
-| Pre-live drift/restart logic already exists | [handle_detected_world_drift(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:2586) and [restart_world_session(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:2707) | Reuse, thread explicit startup context through them |
-| Post-start active session lookup already exists | [resolve_active_orchestration_session_id()](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:1255) | Reuse after runtime activation, do not rely on it for first start or pre-live drift |
-| Live orchestrator resolution already returns parent + child | [resolve_live_orchestrator_session(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:410) | Reuse for toolbox live authority |
-| Status contract already suppresses host world fields | [crates/shell/tests/agent_successor_contract_ahcsitc0.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs:1850) | Reuse exactly |
-| Runtime event schema already supports top-level world fields | [crates/common/src/agent_events.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/common/src/agent_events.rs:66) | Reuse unchanged |
+| Sub-problem                                                     | Existing code                                                                                                                                                                                                                                                                 | Reuse or replace                                                                    |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Session-scoped runtime record already stores world fields       | [crates/shell/src/execution/agent_runtime/orchestration_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs:20)                                                                          | Reuse, extend with explicit mutators                                                |
+| Parent-session persistence already exists                       | [AgentRuntimeStateStore::persist_orchestration_session(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:271)                                                                                          | Reuse as the binding authority write path                                           |
+| Shared-world echo validation already exists                     | [validate_shared_world_echo(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/repl_persistent_session.rs:314)                                                                                                                       | Reuse, but make first-start requests actually send owner proof                      |
+| Startup currently opens the world before host runtime bootstrap | [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:433)                                                                                                                                     | Keep the overall shape, change the startup context and persistence ordering         |
+| Pre-live drift/restart logic already exists                     | [handle_detected_world_drift(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:2586) and [restart_world_session(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:2707) | Reuse, thread explicit startup context through them                                 |
+| Post-start active session lookup already exists                 | [resolve_active_orchestration_session_id()](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:1255)                                                                                                                              | Reuse after runtime activation, do not rely on it for first start or pre-live drift |
+| Live orchestrator resolution already returns parent + child     | [resolve_live_orchestrator_session(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:410)                                                                                                              | Reuse for toolbox live authority                                                    |
+| Status contract already suppresses host world fields            | [crates/shell/tests/agent_successor_contract_ahcsitc0.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs:1850)                                                                                            | Reuse exactly                                                                       |
+| Runtime event schema already supports top-level world fields    | [crates/common/src/agent_events.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/common/src/agent_events.rs:66)                                                                                                                                          | Reuse unchanged                                                                     |
 
 ### 0C. Dream State Mapping
 
@@ -104,12 +105,12 @@ grouped agent-sessions registry
 
 ### 0C-bis. Implementation Alternatives
 
-| Approach | What it does | Effort | Risk | Recommendation |
-|---|---|---:|---:|---|
-| A. Keep reconstructing from trace or REPL memory | No durable authority fix | S | High | Reject |
-| B. Force world binding onto the host participant manifest | Uses the fields the source SOW pointed at | M | Critical | Reject, violates current host invariant |
-| C. Persist binding on the parent session record, create that record before first attach, preserve host participant invariants | Smallest correct bridge | M | Low | Recommended |
-| D. Collapse `PLAN-04`, `PLAN-05`, and slice `06` into a thin session-registry vertical slice | Better end-state alignment | L | Medium | Strategic alternative, defer for this packet |
+| Approach                                                                                                                      | What it does                              | Effort |     Risk | Recommendation                               |
+| ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | -----: | -------: | -------------------------------------------- |
+| A. Keep reconstructing from trace or REPL memory                                                                              | No durable authority fix                  |      S |     High | Reject                                       |
+| B. Force world binding onto the host participant manifest                                                                     | Uses the fields the source SOW pointed at |      M | Critical | Reject, violates current host invariant      |
+| C. Persist binding on the parent session record, create that record before first attach, preserve host participant invariants | Smallest correct bridge                   |      M |      Low | Recommended                                  |
+| D. Collapse `PLAN-04`, `PLAN-05`, and slice `06` into a thin session-registry vertical slice                                  | Better end-state alignment                |      L |   Medium | Strategic alternative, defer for this packet |
 
 Recommendation: **C**.
 
@@ -478,14 +479,14 @@ Tasks:
 
 ## Error & Rescue Registry
 
-| Failure point | What goes wrong | Expected rescue / fail-closed behavior |
-|---|---|---|
-| no pending parent record before first attach | startup shared world has no durable authority anchor | hard failure, slice not done |
-| bootstrap fails after world attach | orphaned shared world remains bound to a session that never became live | close world, mark parent terminal, clear binding after close |
-| startup drift before runtime activation | restart/fail-closed path loses owner proof because no active session exists yet | thread explicit startup context through drift paths |
-| host manifest accidentally gets world fields | runtime violates its own invariant | compile/test failure, revert to parent-only storage |
-| alert published before parent persist | event and live runtime state disagree | fail test, fix ordering |
-| toolbox proof field flakes on ambiguous live resolution | operators lose trust in the proof surface | omit field, keep command non-fatal |
+| Failure point                                           | What goes wrong                                                                 | Expected rescue / fail-closed behavior                       |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| no pending parent record before first attach            | startup shared world has no durable authority anchor                            | hard failure, slice not done                                 |
+| bootstrap fails after world attach                      | orphaned shared world remains bound to a session that never became live         | close world, mark parent terminal, clear binding after close |
+| startup drift before runtime activation                 | restart/fail-closed path loses owner proof because no active session exists yet | thread explicit startup context through drift paths          |
+| host manifest accidentally gets world fields            | runtime violates its own invariant                                              | compile/test failure, revert to parent-only storage          |
+| alert published before parent persist                   | event and live runtime state disagree                                           | fail test, fix ordering                                      |
+| toolbox proof field flakes on ambiguous live resolution | operators lose trust in the proof surface                                       | omit field, keep command non-fatal                           |
 
 ## Test Review
 
@@ -631,14 +632,14 @@ Primary QA artifact for follow-up verification:
 
 ## Failure Modes Registry
 
-| New codepath | Real production failure | Test covers it? | Error handling exists? | User sees clear error? | Critical gap? |
-|---|---|---|---|---|---|
-| first-start owner proof | world attaches without durable orchestration ownership proof | planned | planned | partial today | yes until fixed |
-| bootstrap failure after attach | world stays bound after host runtime never becomes live | planned | planned | yes | yes until fixed |
-| pre-live drift | startup restart/fail-closed loses owner proof or alert attribution | planned | planned | yes | yes until fixed |
-| alert ordering | restart alert outruns persisted parent truth | planned | planned | yes | yes until fixed |
-| toolbox proof surface | proof field flakes on ambiguous live resolution | planned | planned | partial | no, but trust regression |
-| selected status contract | host-scoped row leaks world fields | planned | planned | yes | no, contract regression |
+| New codepath                   | Real production failure                                            | Test covers it? | Error handling exists? | User sees clear error? | Critical gap?            |
+| ------------------------------ | ------------------------------------------------------------------ | --------------- | ---------------------- | ---------------------- | ------------------------ |
+| first-start owner proof        | world attaches without durable orchestration ownership proof       | planned         | planned                | partial today          | yes until fixed          |
+| bootstrap failure after attach | world stays bound after host runtime never becomes live            | planned         | planned                | yes                    | yes until fixed          |
+| pre-live drift                 | startup restart/fail-closed loses owner proof or alert attribution | planned         | planned                | yes                    | yes until fixed          |
+| alert ordering                 | restart alert outruns persisted parent truth                       | planned         | planned                | yes                    | yes until fixed          |
+| toolbox proof surface          | proof field flakes on ambiguous live resolution                    | planned         | planned                | partial                | no, but trust regression |
+| selected status contract       | host-scoped row leaks world fields                                 | planned         | planned                | yes                    | no, contract regression  |
 
 Critical gap rule:
 
@@ -665,12 +666,12 @@ Footguns to avoid:
 
 ### Dependency table
 
-| Step | Modules touched | Depends on |
-|---|---|---|
-| Pending startup context | `crates/shell/src/repl/` | — |
+| Step                               | Modules touched                                                       | Depends on              |
+| ---------------------------------- | --------------------------------------------------------------------- | ----------------------- |
+| Pending startup context            | `crates/shell/src/repl/`                                              | —                       |
 | Parent binding mutators + ordering | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/repl/` | pending startup context |
-| Toolbox proof surface | `crates/shell/src/execution/` | parent binding mutators |
-| Integration tests + docs | `crates/shell/tests/`, `llm-last-mile/` | all above |
+| Toolbox proof surface              | `crates/shell/src/execution/`                                         | parent binding mutators |
+| Integration tests + docs           | `crates/shell/tests/`, `llm-last-mile/`                               | all above               |
 
 ### Parallel lanes
 
@@ -694,19 +695,19 @@ Lane C: integration tests + docs last
 There is no `TODOS.md` in this repo root, so deferrals stay here explicitly.
 
 1. Member invalidation and replacement lineage on generation changes  
-Why: explicit job of [PLAN-05](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/05-restart-invalidation-semantics.md)
+   Why: explicit job of [PLAN-05](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/05-restart-invalidation-semantics.md)
 
 2. Full grouped session-centric registry layout under `agent-sessions/`  
-Why: explicit job of slice `06`
+   Why: explicit job of slice `06`
 
 3. Any change to selected-orchestrator status JSON  
-Why: deliberately preserved contract in this slice
+   Why: deliberately preserved contract in this slice
 
 4. Lease-sidecar world-binding expansion  
-Why: defer until a concrete reader requires it before slice `06`
+   Why: defer until a concrete reader requires it before slice `06`
 
 5. Broader packet reframe into a single thin session-registry vertical slice  
-Why: valid strategic alternative, but outside this packet’s current user direction
+   Why: valid strategic alternative, but outside this packet’s current user direction
 
 ## NOT in Scope
 
@@ -752,46 +753,46 @@ This slice is done when all of these are true:
 
 ## Decision Audit Trail
 
-| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
-|---|---|---|---|---|---|---|
-| 1 | Premise | Reject host-manifest world binding as the slice-04 authority surface | Mechanical | Explicit over clever | Current host participant invariant forbids it | Forcing world fields into host manifests |
-| 2 | Startup | Persist a pending parent session before first attach/create | Mechanical | Completeness | Pre-live drift and bootstrap failure need a durable anchor | In-memory preallocation only |
-| 3 | Authority | Use `OrchestrationSessionRecord` as the bridge store | Mechanical | Pragmatic | Smallest correct bridge before slice `06` | New registry layout in this slice |
-| 4 | Ordering | Make parent-only persistence the binding authority barrier | Mechanical | Systems over heroes | Avoids non-atomic participant/lease rewrites for binding-only truth | Tying binding truth to participant + lease writes |
-| 5 | Visibility | Add `toolbox status --json` proof surface | Taste | Bias toward action | Gives operators one live, queryable win without breaking selected status | Keeping the slice entirely invisible |
-| 6 | Scope | Defer member invalidation to `PLAN-05` | Mechanical | Scope discipline | Packet already gives it a dedicated slice | Pulling invalidation into `PLAN-04` |
-| 7 | Storage | Defer lease-sidecar world-binding expansion until a reader exists | Taste | Minimal diff | Avoids bridge debt with no consumer | Expanding lease sidecars preemptively |
+| #   | Phase      | Decision                                                             | Classification | Principle            | Rationale                                                                | Rejected                                          |
+| --- | ---------- | -------------------------------------------------------------------- | -------------- | -------------------- | ------------------------------------------------------------------------ | ------------------------------------------------- |
+| 1   | Premise    | Reject host-manifest world binding as the slice-04 authority surface | Mechanical     | Explicit over clever | Current host participant invariant forbids it                            | Forcing world fields into host manifests          |
+| 2   | Startup    | Persist a pending parent session before first attach/create          | Mechanical     | Completeness         | Pre-live drift and bootstrap failure need a durable anchor               | In-memory preallocation only                      |
+| 3   | Authority  | Use `OrchestrationSessionRecord` as the bridge store                 | Mechanical     | Pragmatic            | Smallest correct bridge before slice `06`                                | New registry layout in this slice                 |
+| 4   | Ordering   | Make parent-only persistence the binding authority barrier           | Mechanical     | Systems over heroes  | Avoids non-atomic participant/lease rewrites for binding-only truth      | Tying binding truth to participant + lease writes |
+| 5   | Visibility | Add `toolbox status --json` proof surface                            | Taste          | Bias toward action   | Gives operators one live, queryable win without breaking selected status | Keeping the slice entirely invisible              |
+| 6   | Scope      | Defer member invalidation to `PLAN-05`                               | Mechanical     | Scope discipline     | Packet already gives it a dedicated slice                                | Pulling invalidation into `PLAN-04`               |
+| 7   | Storage    | Defer lease-sidecar world-binding expansion until a reader exists    | Taste          | Minimal diff         | Avoids bridge debt with no consumer                                      | Expanding lease sidecars preemptively             |
 
 ## CEO DUAL VOICES — CONSENSUS TABLE
 
-| Dimension | Claude Subagent | Codex | Consensus |
-|---|---|---|---|
-| Premises valid? | flagged host-manifest contradiction and startup-proof gap | flagged same plus packet-end-state tension | CONFIRMED on host-manifest contradiction and startup proof |
-| Right problem to solve? | yes, but only with corrected authority layer | yes, but packet-wide vertical-slice alternative exists | CONFIRMED for current packet, strategic alternative deferred |
-| Scope calibration correct? | bridge-store approach okay after correction | warned against over-investing in transitional stores | CONFIRMED after narrowing to parent-only bridge and deferring registry reshape |
-| Alternatives sufficiently explored? | requested parent-only and no-lease variants | requested thin session-registry vertical slice as strategic alternative | CONFIRMED that alternatives had to be expanded |
-| Competitive / operator risk covered? | wanted one visible proof point | wanted a visible proof point but not on status | CONFIRMED via toolbox-status proof surface |
-| 6-month trajectory sound? | okay if startup and lifecycle edges are fixed | okay if clearly framed as bridge, not end-state | CONFIRMED after bridge framing |
+| Dimension                            | Claude Subagent                                           | Codex                                                                   | Consensus                                                                      |
+| ------------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Premises valid?                      | flagged host-manifest contradiction and startup-proof gap | flagged same plus packet-end-state tension                              | CONFIRMED on host-manifest contradiction and startup proof                     |
+| Right problem to solve?              | yes, but only with corrected authority layer              | yes, but packet-wide vertical-slice alternative exists                  | CONFIRMED for current packet, strategic alternative deferred                   |
+| Scope calibration correct?           | bridge-store approach okay after correction               | warned against over-investing in transitional stores                    | CONFIRMED after narrowing to parent-only bridge and deferring registry reshape |
+| Alternatives sufficiently explored?  | requested parent-only and no-lease variants               | requested thin session-registry vertical slice as strategic alternative | CONFIRMED that alternatives had to be expanded                                 |
+| Competitive / operator risk covered? | wanted one visible proof point                            | wanted a visible proof point but not on status                          | CONFIRMED via toolbox-status proof surface                                     |
+| 6-month trajectory sound?            | okay if startup and lifecycle edges are fixed             | okay if clearly framed as bridge, not end-state                         | CONFIRMED after bridge framing                                                 |
 
 ## ENG DUAL VOICES — CONSENSUS TABLE
 
-| Dimension | Claude Subagent | Codex | Consensus |
-|---|---|---|---|
-| Architecture sound? | yes after shifting to parent-session authority | yes after parent-only authority and persisted startup context | CONFIRMED |
-| Test coverage sufficient? | no, bootstrap failure + startup drift gaps missing | no, same gaps missing | CONFIRMED gaps added |
-| Performance risks addressed? | mostly yes, but parent+child atomicity was overstated | same | CONFIRMED by parent-only binding writes |
-| Security threats covered? | wanted explicit trust-boundary note and less public id exposure | same concern indirectly | CONFIRMED via proof-surface omission of orchestration_session_id |
-| Error paths handled? | bootstrap failure, pre-live drift, and clear points missing | same | CONFIRMED gaps added |
-| Deployment / operational risk manageable? | yes after cleanup + ordering rules | yes after doctor/toolbox surface correction | CONFIRMED |
+| Dimension                                 | Claude Subagent                                                 | Codex                                                         | Consensus                                                        |
+| ----------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Architecture sound?                       | yes after shifting to parent-session authority                  | yes after parent-only authority and persisted startup context | CONFIRMED                                                        |
+| Test coverage sufficient?                 | no, bootstrap failure + startup drift gaps missing              | no, same gaps missing                                         | CONFIRMED gaps added                                             |
+| Performance risks addressed?              | mostly yes, but parent+child atomicity was overstated           | same                                                          | CONFIRMED by parent-only binding writes                          |
+| Security threats covered?                 | wanted explicit trust-boundary note and less public id exposure | same concern indirectly                                       | CONFIRMED via proof-surface omission of orchestration_session_id |
+| Error paths handled?                      | bootstrap failure, pre-live drift, and clear points missing     | same                                                          | CONFIRMED gaps added                                             |
+| Deployment / operational risk manageable? | yes after cleanup + ordering rules                              | yes after doctor/toolbox surface correction                   | CONFIRMED                                                        |
 
 ## GSTACK REVIEW REPORT
 
-| Review | Trigger | Why | Runs | Status | Findings |
-|--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 2 | CLEAR | Corrected host-manifest premise, added startup-proof requirement, expanded alternatives, and reframed slice `04` as a bridge to the session-centric registry |
-| Codex Review | `/codex review` | Independent 2nd opinion | 2 | CLEAR | Outside voices forced the parent-session authority model, pushed live proof onto toolbox status instead of doctor, and tightened bridge vs end-state framing |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 2 | CLEAR | Added persisted pending startup context, pre-live drift threading, bootstrap-failure cleanup, parent-only binding writes, and full regression matrix |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | SKIPPED | No UI scope |
+| Review        | Trigger               | Why                             | Runs | Status  | Findings                                                                                                                                                     |
+| ------------- | --------------------- | ------------------------------- | ---- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| CEO Review    | `/plan-ceo-review`    | Scope & strategy                | 2    | CLEAR   | Corrected host-manifest premise, added startup-proof requirement, expanded alternatives, and reframed slice `04` as a bridge to the session-centric registry |
+| Codex Review  | `/codex review`       | Independent 2nd opinion         | 2    | CLEAR   | Outside voices forced the parent-session authority model, pushed live proof onto toolbox status instead of doctor, and tightened bridge vs end-state framing |
+| Eng Review    | `/plan-eng-review`    | Architecture & tests (required) | 2    | CLEAR   | Added persisted pending startup context, pre-live drift threading, bootstrap-failure cleanup, parent-only binding writes, and full regression matrix         |
+| Design Review | `/plan-design-review` | UI/UX gaps                      | 0    | SKIPPED | No UI scope                                                                                                                                                  |
 
 **CODEX:** Two Codex passes materially improved this plan. The first rejected host-manifest storage and pushed the bridge-store framing. The second forced the more important lifecycle corrections: persist the pending parent record before first attach, keep binding writes parent-only, and move the proof surface from doctor to toolbox status.
 
