@@ -370,6 +370,26 @@ fn write_active_orchestration_session(
     );
 }
 
+fn write_active_orchestration_session_with_world_binding(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: Option<&str>,
+    ts: &str,
+    world_id: &str,
+    world_generation: u64,
+) {
+    write_orchestration_session_with_world_binding(
+        fixture,
+        agent_id,
+        orchestration_session_id,
+        active_session_handle_id,
+        "active",
+        ts,
+        (world_id, world_generation),
+    );
+}
+
 fn write_inactive_orchestration_session(
     fixture: &AgentSuccessorFixture,
     agent_id: &str,
@@ -387,6 +407,26 @@ fn write_inactive_orchestration_session(
     );
 }
 
+fn write_orchestration_session_with_world_binding(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: Option<&str>,
+    state: &str,
+    ts: &str,
+    world_binding: (&str, u64),
+) {
+    write_orchestration_session_impl(
+        fixture,
+        agent_id,
+        orchestration_session_id,
+        active_session_handle_id,
+        state,
+        ts,
+        Some(world_binding),
+    );
+}
+
 fn write_orchestration_session(
     fixture: &AgentSuccessorFixture,
     agent_id: &str,
@@ -395,12 +435,36 @@ fn write_orchestration_session(
     state: &str,
     ts: &str,
 ) {
+    write_orchestration_session_impl(
+        fixture,
+        agent_id,
+        orchestration_session_id,
+        active_session_handle_id,
+        state,
+        ts,
+        None,
+    );
+}
+
+fn write_orchestration_session_impl(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: Option<&str>,
+    state: &str,
+    ts: &str,
+    world_binding: Option<(&str, u64)>,
+) {
     let sessions_dir = fixture
         .substrate_home
         .join("run")
         .join("agent-hub")
         .join("sessions");
     fs::create_dir_all(&sessions_dir).expect("failed to create orchestration sessions dir");
+    let (world_id, world_generation) = match world_binding {
+        Some((world_id, world_generation)) => (json!(world_id), json!(world_generation)),
+        None => (Value::Null, Value::Null),
+    };
     let session = json!({
         "orchestration_session_id": orchestration_session_id,
         "shell_trace_session_id": "ses_agent_hub",
@@ -414,8 +478,8 @@ fn write_orchestration_session(
         "orchestrator_protocol": PURE_AGENT_PROTOCOL,
         "active_session_handle_id": active_session_handle_id,
         "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
-        "world_id": Value::Null,
-        "world_generation": Value::Null,
+        "world_id": world_id,
+        "world_generation": world_generation,
         "invalidation_reason": if state == "active" { Value::Null } else { json!("fixture stopped parent") },
         "closed_at": if state == "active" { Value::Null } else { json!(ts) }
     });
@@ -925,6 +989,10 @@ fn agent_toolbox_status_json_reports_template_when_no_active_orchestrator_sessio
             .and_then(Value::as_str),
         Some("host")
     );
+    assert!(
+        json.get("active_world_binding").is_none(),
+        "toolbox status must omit active_world_binding when no active session is live: {json}"
+    );
 }
 
 #[test]
@@ -1226,6 +1294,149 @@ fn agent_toolbox_env_invalidated_manifest_and_trace_still_fail_closed() {
         String::from_utf8_lossy(&output.stderr)
             .contains("no live host-scoped orchestrator participant found"),
         "invalidated manifests must keep toolbox env behind the authoritative live-manifest contract"
+    );
+}
+
+#[test]
+fn agent_toolbox_status_json_omits_active_world_binding_non_fatally_for_live_host_session() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb2",
+        "ash_live_no_binding",
+        "2026-04-06T00:00:02Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb2",
+        Some("ash_live_no_binding"),
+        "2026-04-06T00:00:02Z",
+    );
+
+    let output = fixture.run(&["agent", "toolbox", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "toolbox status should remain readable when the live host session has no binding proof: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let expected = format!(
+        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb2.sock",
+        fixture.substrate_home.display()
+    );
+    assert_eq!(
+        json.pointer("/eligibility/state").and_then(Value::as_str),
+        Some("allowed")
+    );
+    assert_eq!(
+        json.pointer("/active_orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb2")
+    );
+    assert_eq!(
+        json.pointer("/endpoint").and_then(Value::as_str),
+        Some(expected.as_str())
+    );
+    assert!(
+        json.get("active_world_binding").is_none(),
+        "toolbox status must keep active_world_binding optional for live host sessions without projected binding state: {json}"
+    );
+}
+
+#[test]
+fn agent_toolbox_status_json_reports_active_world_binding_from_live_parent_session() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb3",
+        "ash_live_with_binding",
+        "2026-04-06T00:00:02Z",
+    );
+    write_active_orchestration_session_with_world_binding(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb3",
+        Some("ash_live_with_binding"),
+        "2026-04-06T00:00:02Z",
+        "wld_active_0002",
+        7,
+    );
+
+    let toolbox_output = fixture.run(&["agent", "toolbox", "status", "--json"]);
+    assert!(
+        toolbox_output.status.success(),
+        "toolbox status should surface the optional active binding proof without changing transport semantics: {toolbox_output:?}"
+    );
+
+    let toolbox_json = parse_json_output(&toolbox_output);
+    assert_eq!(
+        toolbox_json
+            .pointer("/active_world_binding/world_id")
+            .and_then(Value::as_str),
+        Some("wld_active_0002"),
+        "toolbox status must publish the active world_id proof from the authoritative parent session: {toolbox_json}"
+    );
+    assert_eq!(
+        toolbox_json
+            .pointer("/active_world_binding/world_generation")
+            .and_then(Value::as_u64),
+        Some(7),
+        "toolbox status must publish the active world_generation proof from the authoritative parent session: {toolbox_json}"
+    );
+}
+
+#[test]
+fn agent_status_selected_host_row_stays_unchanged_when_parent_session_has_world_binding() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb3",
+        "ash_live_with_binding",
+        "2026-04-06T00:00:02Z",
+    );
+    write_active_orchestration_session_with_world_binding(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb3",
+        Some("ash_live_with_binding"),
+        "2026-04-06T00:00:02Z",
+        "wld_active_0002",
+        7,
+    );
+
+    let status_output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        status_output.status.success(),
+        "selected host status rows must remain readable when the parent session has world binding state: {status_output:?}"
+    );
+
+    let status_json = parse_json_output(&status_output);
+    let sessions = status_json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    assert_eq!(
+        orchestrator.pointer("/execution/scope").and_then(Value::as_str),
+        Some("host"),
+        "selected orchestrator rows must stay host-scoped even when the parent session carries world binding state: {status_json}"
+    );
+    assert!(
+        orchestrator.get("world_id").is_none(),
+        "selected host status rows must keep omitting world_id: {status_json}"
+    );
+    assert!(
+        orchestrator.get("world_generation").is_none(),
+        "selected host status rows must keep omitting world_generation: {status_json}"
     );
 }
 

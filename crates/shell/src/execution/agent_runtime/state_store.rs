@@ -274,11 +274,25 @@ impl AgentRuntimeStateStore {
         &self,
         session: &OrchestrationSessionRecord,
     ) -> Result<()> {
-        self.ensure_sessions_dir()?;
-        write_atomic_json(
-            &self.orchestration_session_path(&session.orchestration_session_id),
-            session,
-        )
+        self.persist_parent_session_snapshot(session)
+    }
+
+    pub(crate) fn set_orchestration_session_world_binding(
+        &self,
+        session: &mut OrchestrationSessionRecord,
+        world_id: impl Into<String>,
+        world_generation: u64,
+    ) -> Result<()> {
+        session.set_world_binding(world_id, world_generation);
+        self.persist_parent_session_snapshot(session)
+    }
+
+    pub(crate) fn clear_orchestration_session_world_binding(
+        &self,
+        session: &mut OrchestrationSessionRecord,
+    ) -> Result<()> {
+        session.clear_world_binding();
+        self.persist_parent_session_snapshot(session)
     }
 
     fn persist_lease(&self, participant: &AgentRuntimeParticipantRecord) -> Result<()> {
@@ -295,6 +309,14 @@ impl AgentRuntimeStateStore {
         write_atomic_json(
             &self.lease_path(&participant.handle.participant_id),
             &payload,
+        )
+    }
+
+    fn persist_parent_session_snapshot(&self, session: &OrchestrationSessionRecord) -> Result<()> {
+        self.ensure_sessions_dir()?;
+        write_atomic_json(
+            &self.orchestration_session_path(&session.orchestration_session_id),
+            session,
         )
     }
 

@@ -847,6 +847,12 @@ struct ToolboxEligibilityJson {
 }
 
 #[derive(Clone, Serialize)]
+struct ToolboxActiveWorldBindingJson {
+    world_id: String,
+    world_generation: u64,
+}
+
+#[derive(Clone, Serialize)]
 struct ToolboxStatusReportJson<'a> {
     toolbox_enabled: bool,
     toolbox_version: u32,
@@ -856,6 +862,8 @@ struct ToolboxStatusReportJson<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     endpoint_template: Option<String>,
     active_orchestration_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    active_world_binding: Option<ToolboxActiveWorldBindingJson>,
     eligibility: ToolboxEligibilityJson,
     #[serde(skip_serializing_if = "Option::is_none")]
     orchestrator: Option<ToolboxOrchestratorJson<'a>>,
@@ -882,6 +890,7 @@ fn build_toolbox_status_report<'a>(
             endpoint: None,
             endpoint_template: None,
             active_orchestration_session_id: None,
+            active_world_binding: None,
             eligibility: ToolboxEligibilityJson {
                 state: "disabled".to_string(),
                 reason: Some("agents are disabled by effective config".to_string()),
@@ -908,6 +917,7 @@ fn build_toolbox_status_report<'a>(
             endpoint: None,
             endpoint_template: None,
             active_orchestration_session_id: None,
+            active_world_binding: None,
             eligibility: ToolboxEligibilityJson {
                 state: "disabled".to_string(),
                 reason: Some("agents.toolbox.enabled is false in the effective config".to_string()),
@@ -924,6 +934,7 @@ fn build_toolbox_status_report<'a>(
             endpoint: None,
             endpoint_template: None,
             active_orchestration_session_id: None,
+            active_world_binding: None,
             eligibility: ToolboxEligibilityJson {
                 state: "denied".to_string(),
                 reason: Some(format!(
@@ -943,6 +954,7 @@ fn build_toolbox_status_report<'a>(
             endpoint: None,
             endpoint_template: None,
             active_orchestration_session_id: None,
+            active_world_binding: None,
             eligibility: ToolboxEligibilityJson {
                 state: "unsupported".to_string(),
                 reason: Some(
@@ -954,21 +966,23 @@ fn build_toolbox_status_report<'a>(
         }),
         AgentToolboxBindTransport::Uds => {
             let endpoint_template = Some(toolbox_uds_endpoint_template()?);
-            let latest_session = resolve_authoritative_live_orchestrator_manifest(
-                &AgentRuntimeStateStore::new()?,
-                &orchestrator.file.id,
-            )?;
+            let latest_session = AgentRuntimeStateStore::new()?
+                .resolve_live_orchestrator_session(&orchestrator.file.id)
+                .map_err(|err| config_model::user_error(err.to_string()))?;
 
             match latest_session {
-                Some(session) => Ok(ToolboxStatusReportJson {
+                Some((session, manifest)) => Ok(ToolboxStatusReportJson {
                     toolbox_enabled: true,
                     toolbox_version: TOOLBOX_VERSION,
                     transport,
-                    endpoint: Some(toolbox_uds_endpoint(&session.handle.orchestration_session_id)?),
+                    endpoint: Some(toolbox_uds_endpoint(
+                        &manifest.handle.orchestration_session_id,
+                    )?),
                     endpoint_template,
                     active_orchestration_session_id: Some(
-                        session.handle.orchestration_session_id,
+                        manifest.handle.orchestration_session_id,
                     ),
+                    active_world_binding: toolbox_active_world_binding(&session),
                     eligibility: ToolboxEligibilityJson {
                         state: "allowed".to_string(),
                         reason: None,
@@ -982,6 +996,7 @@ fn build_toolbox_status_report<'a>(
                     endpoint: None,
                     endpoint_template,
                     active_orchestration_session_id: None,
+                    active_world_binding: None,
                     eligibility: ToolboxEligibilityJson {
                         state: "dependency_unavailable".to_string(),
                         reason: Some(
@@ -1024,6 +1039,12 @@ fn render_toolbox_status_report(
     if let Some(endpoint_template) = &report.endpoint_template {
         println!("endpoint_template: {endpoint_template}");
     }
+    if let Some(binding) = &report.active_world_binding {
+        println!(
+            "active_world_binding: world_id={} | world_generation={}",
+            binding.world_id, binding.world_generation
+        );
+    }
     if let Some(orchestrator) = &report.orchestrator {
         println!(
             "orchestrator: agent_id={} | backend_id={} | role={} | execution.scope={}",
@@ -1035,6 +1056,21 @@ fn render_toolbox_status_report(
     }
 
     Ok(())
+}
+
+fn toolbox_active_world_binding(
+    session: &crate::execution::agent_runtime::OrchestrationSessionRecord,
+) -> Option<ToolboxActiveWorldBindingJson> {
+    let world_id = session.world_id.as_ref()?;
+    let world_generation = session.world_generation?;
+    if world_id.trim().is_empty() {
+        return None;
+    }
+
+    Some(ToolboxActiveWorldBindingJson {
+        world_id: world_id.clone(),
+        world_generation,
+    })
 }
 
 fn build_toolbox_env_report(report: &ToolboxStatusReportJson<'_>) -> Result<ToolboxEnvReportJson> {

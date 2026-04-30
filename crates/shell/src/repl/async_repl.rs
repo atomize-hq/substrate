@@ -20,6 +20,7 @@ use crate::execution::agent_events::{
     publish_command_completion, schedule_demo_burst, schedule_demo_events,
 };
 use crate::execution::agent_inventory::load_effective_agent_inventory;
+use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::{
     backend_allowed, build_gateway_for_descriptor, runtime_realizability_error_exit_code,
     validate_orchestrator_selection, validate_runtime_realizability, AgentRuntimeSessionManifest,
@@ -432,16 +433,42 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
         let prompt_active = Arc::new(AtomicBool::new(false));
         let stdout_cb = make_world_stdout_callback(prompt_active.clone(), stdout_printer);
+        let prepared_runtime = match prepare_host_orchestrator_runtime_startup(&shared_config) {
+            Ok(prepared) => prepared,
+            Err(failure) => {
+                agent_printer.print(failure.message.clone());
+                write_best_effort_stderr_line(&failure.message);
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                return Ok(failure.exit_code);
+            }
+        };
+        let startup_context = prepared_runtime
+            .as_ref()
+            .map(|prepared| prepared.startup_context.clone());
+
         let mut world_session = if !shared_config.no_world {
             let requested = std::env::current_dir()
                 .unwrap_or_else(|_| PathBuf::from("."))
                 .display()
                 .to_string();
-            match start_world_session(requested, stdout_cb.clone(), &agent_printer, &mut telemetry)
-                .await
+            match start_world_session(
+                requested,
+                startup_context.as_ref(),
+                stdout_cb.clone(),
+                &agent_printer,
+                &mut telemetry,
+            )
+            .await
             {
                 Ok(session) => Some(session),
                 Err(err) => {
+                    if let Some(startup_context) = startup_context.as_ref() {
+                        mark_orchestration_session_failed(
+                            &startup_context.store,
+                            &startup_context.orchestration_session,
+                            format!("failed to start persistent world session: {err:#}"),
+                        );
+                    }
                     let exit_code = if is_world_restart_required_error(&err) {
                         3
                     } else {
@@ -463,8 +490,13 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         } else {
             None
         };
-        let mut agent_runtime = match start_host_orchestrator_runtime(
-            &shared_config,
+        let initial_world_binding = world_session.as_ref().map(|session| PersistedWorldBinding {
+            world_id: session.world_id.clone(),
+            world_generation: session.world_generation,
+        });
+        let mut agent_runtime = match start_host_orchestrator_runtime_with_prepared(
+            prepared_runtime,
+            initial_world_binding.as_ref(),
             &agent_printer,
             &mut telemetry,
         )
@@ -472,6 +504,13 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         {
             Ok(runtime) => runtime,
             Err(failure) => {
+                if let Some(session) = world_session.take() {
+                    if session.client.close().await.is_ok() {
+                        if let Some(startup_context) = startup_context.as_ref() {
+                            let _ = persist_world_binding_authority(startup_context, None);
+                        }
+                    }
+                }
                 agent_printer.print(failure.message.clone());
                 write_best_effort_stderr_line(&failure.message);
                 tokio::time::sleep(Duration::from_millis(100)).await;
@@ -666,6 +705,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             if world_session.is_some() {
                                 ensure_no_policy_drift(
                                     &mut world_session,
+                                    startup_context.as_ref(),
                                     &agent_printer,
                                     &mut telemetry,
                                 )
@@ -686,6 +726,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 };
                                 ensure_no_policy_drift(
                                     &mut world_session,
+                                    startup_context.as_ref(),
                                     &agent_printer,
                                     &mut telemetry,
                                 )
@@ -709,6 +750,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     if world_session.is_some() {
                         ensure_no_policy_drift(
                             &mut world_session,
+                            startup_context.as_ref(),
                             &agent_printer,
                             &mut telemetry,
                         )
@@ -734,6 +776,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         };
                         ensure_no_policy_drift(
                             &mut world_session,
+                            startup_context.as_ref(),
                             &agent_printer,
                             &mut telemetry,
                         )
@@ -973,7 +1016,11 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         }
 
         if let Some(session) = world_session.take() {
-            let _ = session.client.close().await;
+            if session.client.close().await.is_ok() {
+                if let Some(startup_context) = startup_context.as_ref() {
+                    let _ = persist_world_binding_authority(startup_context, None);
+                }
+            }
         }
 
         let exit_code = match termination_cause {
@@ -1270,6 +1317,37 @@ struct RuntimeBootstrapFailure {
     message: String,
 }
 
+#[derive(Clone)]
+struct RuntimeOrchestrationContext {
+    store: AgentRuntimeStateStore,
+    orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
+}
+
+impl RuntimeOrchestrationContext {
+    fn orchestration_session_id(&self) -> String {
+        self.orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned")
+            .orchestration_session_id
+            .clone()
+    }
+}
+
+struct PreparedHostOrchestratorRuntime {
+    descriptor: RuntimeSelectionDescriptor,
+    gateway: agent_api::AgentWrapperGateway,
+    agent_kind: agent_api::AgentWrapperKind,
+    startup_context: RuntimeOrchestrationContext,
+    manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
+    run_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PersistedWorldBinding {
+    world_id: String,
+    world_generation: u64,
+}
+
 enum RuntimeStartupSignal {
     Running,
     Failed(String),
@@ -1295,11 +1373,19 @@ struct AsyncReplAgentRuntime {
     heartbeat_task: Option<tokio::task::JoinHandle<()>>,
 }
 
+#[allow(dead_code)]
 async fn start_host_orchestrator_runtime(
     config: &Arc<ShellConfig>,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    let prepared = prepare_host_orchestrator_runtime_startup(config)?;
+    start_host_orchestrator_runtime_with_prepared(prepared, None, agent_printer, telemetry).await
+}
+
+fn prepare_host_orchestrator_runtime_startup(
+    config: &Arc<ShellConfig>,
+) -> std::result::Result<Option<PreparedHostOrchestratorRuntime>, RuntimeBootstrapFailure> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let effective_config = crate::execution::config_model::resolve_effective_config(
         &cwd,
@@ -1398,10 +1484,56 @@ async fn start_host_orchestrator_runtime(
             exit_code: 1,
             message: format!("failed to persist orchestration session record: {err:#}"),
         })?;
-    if let Err(err) = state_store.persist_participant(&manifest) {
+
+    Ok(Some(PreparedHostOrchestratorRuntime {
+        descriptor,
+        gateway,
+        agent_kind,
+        startup_context: RuntimeOrchestrationContext {
+            store: state_store,
+            orchestration_session,
+        },
+        manifest: Arc::new(Mutex::new(manifest)),
+        run_id,
+    }))
+}
+
+async fn start_host_orchestrator_runtime_with_prepared(
+    prepared: Option<PreparedHostOrchestratorRuntime>,
+    initial_world_binding: Option<&PersistedWorldBinding>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    let Some(prepared) = prepared else {
+        return Ok(None);
+    };
+    let PreparedHostOrchestratorRuntime {
+        descriptor: _descriptor,
+        gateway,
+        agent_kind,
+        startup_context,
+        manifest,
+        run_id,
+    } = prepared;
+    if let Err(err) = persist_world_binding_authority(&startup_context, initial_world_binding) {
         mark_orchestration_session_failed(
-            &state_store,
-            &orchestration_session,
+            &startup_context.store,
+            &startup_context.orchestration_session,
+            format!("failed to persist startup world binding: {err:#}"),
+        );
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to persist startup world binding: {err:#}"),
+        });
+    }
+    let persist_participant_result = {
+        let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+        startup_context.store.persist_participant(&manifest_guard)
+    };
+    if let Err(err) = persist_participant_result {
+        mark_orchestration_session_failed(
+            &startup_context.store,
+            &startup_context.orchestration_session,
             format!("failed to persist agent runtime participant record: {err:#}"),
         );
         return Err(RuntimeBootstrapFailure {
@@ -1409,10 +1541,19 @@ async fn start_host_orchestrator_runtime(
             message: format!("failed to persist agent runtime participant record: {err:#}"),
         });
     }
-
+    let orchestration_snapshot = startup_context
+        .orchestration_session
+        .lock()
+        .expect("orchestration session mutex poisoned")
+        .clone();
+    let manifest_snapshot = manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .clone();
     emit_runtime_event(
         build_runtime_message_event(
-            &manifest,
+            &manifest_snapshot,
+            &orchestration_snapshot,
             run_id.clone(),
             MessageEventKind::Registered,
             "shell-owned orchestrator session handle allocated",
@@ -1422,7 +1563,8 @@ async fn start_host_orchestrator_runtime(
     );
     emit_runtime_event(
         build_runtime_message_event(
-            &manifest,
+            &manifest_snapshot,
+            &orchestration_snapshot,
             run_id.clone(),
             MessageEventKind::TaskStart,
             "starting long-lived shell-owned orchestrator control turn",
@@ -1433,19 +1575,18 @@ async fn start_host_orchestrator_runtime(
 
     let request = agent_api::AgentWrapperRunRequest {
         prompt: "Enter persistent Substrate host orchestrator mode. Keep this control session attached for the lifetime of the host REPL and do not exit until the client cancels the run.".to_string(),
-        working_dir: Some(cwd),
+        working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
         timeout: None,
         env: BTreeMap::new(),
         extensions: BTreeMap::new(),
     };
-    let manifest = Arc::new(Mutex::new(manifest));
     let control = match gateway.run_control(&agent_kind, request).await {
         Ok(control) => control,
         Err(err) => {
             let failure = runtime_bootstrap_failure_from_wrapper_error(err);
             mark_runtime_startup_failed(
-                &state_store,
-                &orchestration_session,
+                &startup_context.store,
+                &startup_context.orchestration_session,
                 &manifest,
                 &failure.message,
             );
@@ -1466,8 +1607,8 @@ async fn start_host_orchestrator_runtime(
             .clone()
     };
     let run_id_for_tasks = run_id.clone();
-    let event_store = state_store.clone();
-    let event_orchestration_session = Arc::clone(&orchestration_session);
+    let event_store = startup_context.store.clone();
+    let event_orchestration_session = Arc::clone(&startup_context.orchestration_session);
     let event_manifest = Arc::clone(&manifest);
     let startup_signal_for_events = Arc::clone(&startup_signal);
     let shutdown_for_events = Arc::clone(&shutdown_requested);
@@ -1503,8 +1644,12 @@ async fn start_host_orchestrator_runtime(
                     manifest_guard.transition_state(AgentRuntimeSessionState::Running);
                     orchestration_guard.touch_active();
                 }
-                let event =
-                    translate_wrapper_event(&manifest_guard, &run_id_for_tasks, wrapper_event);
+                let event = translate_wrapper_event(
+                    &manifest_guard,
+                    &orchestration_guard,
+                    &run_id_for_tasks,
+                    wrapper_event,
+                );
                 manifest_guard.touch_event(event.ts);
                 if orchestration_guard.state == OrchestrationSessionState::Active {
                     orchestration_guard.touch_active();
@@ -1528,6 +1673,7 @@ async fn start_host_orchestrator_runtime(
             if startup_became_live {
                 let _ = publish_agent_event(build_runtime_message_event(
                     &manifest_snapshot,
+                    &orchestration_snapshot,
                     run_id_for_tasks.clone(),
                     MessageEventKind::Status,
                     "shell-owned orchestrator session is ready via retained attached control ownership",
@@ -1594,8 +1740,8 @@ async fn start_host_orchestrator_runtime(
         }
     });
 
-    let completion_store = state_store.clone();
-    let completion_orchestration_session = Arc::clone(&orchestration_session);
+    let completion_store = startup_context.store.clone();
+    let completion_orchestration_session = Arc::clone(&startup_context.orchestration_session);
     let completion_manifest = Arc::clone(&manifest);
     let startup_signal_for_completion = Arc::clone(&startup_signal);
     let shutdown_for_completion = Arc::clone(&shutdown_requested);
@@ -1775,8 +1921,8 @@ async fn start_host_orchestrator_runtime(
     });
 
     let (heartbeat_stop_tx, mut heartbeat_stop_rx) = tokio::sync::oneshot::channel();
-    let heartbeat_store = state_store.clone();
-    let heartbeat_orchestration_session = Arc::clone(&orchestration_session);
+    let heartbeat_store = startup_context.store.clone();
+    let heartbeat_orchestration_session = Arc::clone(&startup_context.orchestration_session);
     let heartbeat_manifest = Arc::clone(&manifest);
     let heartbeat_task = tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(5));
@@ -1815,7 +1961,8 @@ async fn start_host_orchestrator_runtime(
         }
     });
     let (retained_orchestration_snapshot, retained_manifest_snapshot) = {
-        let mut orchestration_guard = orchestration_session
+        let mut orchestration_guard = startup_context
+            .orchestration_session
             .lock()
             .expect("orchestration session mutex poisoned");
         let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
@@ -1824,7 +1971,7 @@ async fn start_host_orchestrator_runtime(
         (orchestration_guard.clone(), manifest_guard.clone())
     };
     persist_runtime_snapshots(
-        &state_store,
+        &startup_context.store,
         &retained_orchestration_snapshot,
         &retained_manifest_snapshot,
     )
@@ -1864,8 +2011,8 @@ async fn start_host_orchestrator_runtime(
             )
             .await;
             mark_runtime_startup_failed(
-                &state_store,
-                &orchestration_session,
+                &startup_context.store,
+                &startup_context.orchestration_session,
                 &manifest,
                 "failed to establish attached control ownership",
             );
@@ -1885,7 +2032,12 @@ async fn start_host_orchestrator_runtime(
             let message = format!(
                 "timed out waiting for shell-owned orchestrator control ownership: {agent_id}"
             );
-            mark_runtime_startup_failed(&state_store, &orchestration_session, &manifest, &message);
+            mark_runtime_startup_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                &manifest,
+                &message,
+            );
             return Err(RuntimeBootstrapFailure {
                 exit_code: 4,
                 message,
@@ -1912,7 +2064,12 @@ async fn start_host_orchestrator_runtime(
             .await;
             let message =
                 "runtime startup signalled ready without a surfaced UAA session handle".to_string();
-            mark_runtime_startup_failed(&state_store, &orchestration_session, &manifest, &message);
+            mark_runtime_startup_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                &manifest,
+                &message,
+            );
             return Err(RuntimeBootstrapFailure {
                 exit_code: 1,
                 message,
@@ -1921,9 +2078,9 @@ async fn start_host_orchestrator_runtime(
     };
 
     Ok(Some(AsyncReplAgentRuntime {
-        orchestration_session,
+        orchestration_session: startup_context.orchestration_session,
         manifest,
-        store: state_store,
+        store: startup_context.store,
         uaa_session_handle_id,
         retained_control,
         shutdown_requested,
@@ -1974,6 +2131,7 @@ async fn shutdown_host_orchestrator_runtime(
         emit_runtime_event(
             build_runtime_message_event(
                 &manifest,
+                &orchestration_session,
                 run_id.clone(),
                 MessageEventKind::Status,
                 format!(
@@ -2046,9 +2204,15 @@ async fn shutdown_host_orchestrator_runtime(
         .expect("runtime manifest mutex poisoned")
         .clone();
     if should_attempt_stop && manifest.handle.state == AgentRuntimeSessionState::Stopped {
+        let orchestration_session = runtime
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned")
+            .clone();
         emit_runtime_event(
             build_runtime_message_event(
                 &manifest,
+                &orchestration_session,
                 run_id,
                 MessageEventKind::Status,
                 "shell-owned orchestrator session stopped",
@@ -2137,6 +2301,34 @@ fn mark_orchestration_session_failed(
     let _ = store.persist_orchestration_session(&snapshot);
 }
 
+fn persist_world_binding_authority(
+    context: &RuntimeOrchestrationContext,
+    world_binding: Option<&PersistedWorldBinding>,
+) -> Result<OrchestrationSessionRecord> {
+    let snapshot = {
+        let mut guard = context
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned");
+        match world_binding {
+            Some(binding) => {
+                context.store.set_orchestration_session_world_binding(
+                    &mut guard,
+                    binding.world_id.clone(),
+                    binding.world_generation,
+                )?;
+            }
+            None => {
+                context
+                    .store
+                    .clear_orchestration_session_world_binding(&mut guard)?;
+            }
+        };
+        guard.clone()
+    };
+    Ok(snapshot)
+}
+
 fn persist_runtime_snapshots(
     store: &AgentRuntimeStateStore,
     orchestration_session: &OrchestrationSessionRecord,
@@ -2190,6 +2382,7 @@ fn runtime_bootstrap_failure_from_wrapper_error(
 
 fn translate_wrapper_event(
     manifest: &AgentRuntimeSessionManifest,
+    orchestration_session: &OrchestrationSessionRecord,
     run_id: &str,
     wrapper_event: agent_api::AgentWrapperEvent,
 ) -> AgentEvent {
@@ -2248,6 +2441,8 @@ fn translate_wrapper_event(
     event.backend_id = Some(manifest.handle.backend_id.clone());
     event.set_pure_agent_telemetry_identity(manifest.handle.agent_id.clone());
     event.set_channel(wrapper_event.channel.clone());
+    event.world_id = orchestration_session.world_id.clone();
+    event.world_generation = orchestration_session.world_generation;
     apply_runtime_participant_lineage(&mut event, manifest);
 
     if let Some(data) = wrapper_event.data {
@@ -2274,6 +2469,7 @@ fn apply_runtime_participant_lineage(
 
 fn build_runtime_message_event(
     manifest: &AgentRuntimeSessionManifest,
+    orchestration_session: &OrchestrationSessionRecord,
     run_id: String,
     kind: MessageEventKind,
     message: impl Into<String>,
@@ -2288,6 +2484,8 @@ fn build_runtime_message_event(
     event.role = Some(manifest.handle.role.clone());
     event.backend_id = Some(manifest.handle.backend_id.clone());
     event.set_pure_agent_telemetry_identity(manifest.handle.agent_id.clone());
+    event.world_id = orchestration_session.world_id.clone();
+    event.world_generation = orchestration_session.world_generation;
     apply_runtime_participant_lineage(&mut event, manifest);
     event
 }
@@ -2575,6 +2773,7 @@ fn resolve_world_restart_on_drift(
 
 struct WorldDriftRequest<'a> {
     requested_cwd: String,
+    startup_context: Option<&'a RuntimeOrchestrationContext>,
     policy_snapshot: agent_api_types::PolicySnapshotV3,
     snapshot_hash: String,
     workspace_root: Option<PathBuf>,
@@ -2589,6 +2788,7 @@ async fn handle_detected_world_drift(
 ) -> Result<WorldSession> {
     let WorldDriftRequest {
         requested_cwd,
+        startup_context,
         policy_snapshot,
         snapshot_hash,
         workspace_root,
@@ -2601,18 +2801,31 @@ async fn handle_detected_world_drift(
         crate::execution::config_model::WorldRestartOnDriftMode::AutoRestart => {
             restart_world_session(
                 old_session,
-                requested_cwd,
-                policy_snapshot,
-                snapshot_hash,
-                workspace_root,
-                agent_printer,
-                reason,
+                WorldDriftRequest {
+                    requested_cwd,
+                    startup_context,
+                    policy_snapshot,
+                    snapshot_hash,
+                    workspace_root,
+                    agent_printer,
+                    telemetry,
+                    reason,
+                },
             )
             .await
         }
         crate::execution::config_model::WorldRestartOnDriftMode::FailClosed => {
+            let orchestration_session_id =
+                startup_context.map(RuntimeOrchestrationContext::orchestration_session_id);
+            if let Some(startup_context) = startup_context {
+                let current_binding = PersistedWorldBinding {
+                    world_id: old_session.world_id.clone(),
+                    world_generation: old_session.world_generation,
+                };
+                persist_world_binding_authority(startup_context, Some(&current_binding))?;
+            }
             if let Some(alert) = build_world_restart_required_alert(
-                resolve_active_orchestration_session_id().as_deref(),
+                orchestration_session_id.as_deref(),
                 &old_session.world_id,
                 old_session.world_generation,
                 reason,
@@ -2706,25 +2919,34 @@ async fn open_world_session(request: OpenWorldSessionRequest<'_>) -> Result<Worl
 
 async fn restart_world_session(
     old_session: WorldSession,
-    requested_cwd: String,
-    policy_snapshot: agent_api_types::PolicySnapshotV3,
-    snapshot_hash: String,
-    workspace_root: Option<PathBuf>,
-    agent_printer: &ReplPrinter,
-    reason: WorldRestartReason,
+    request: WorldDriftRequest<'_>,
 ) -> Result<WorldSession> {
+    let WorldDriftRequest {
+        requested_cwd,
+        startup_context,
+        policy_snapshot,
+        snapshot_hash,
+        workspace_root,
+        agent_printer,
+        telemetry: _telemetry,
+        reason,
+    } = request;
     let requested_path = PathBuf::from(&requested_cwd);
     let on_stdout = old_session.on_stdout.clone();
     let previous_world_id = old_session.world_id.clone();
     let previous_world_generation = old_session.world_generation;
+    let orchestration_session_id =
+        startup_context.map(RuntimeOrchestrationContext::orchestration_session_id);
     let shared_world_request =
-        resolve_active_orchestration_session_id().map(|id| agent_api_types::SharedWorldOwnerSpec {
-            orchestration_session_id: id,
-            action: agent_api_types::SharedWorldOwnerAction::ReplaceExpectedGeneration {
-                expected_generation: previous_world_generation,
-                reason: reason.message().to_string(),
-            },
-        });
+        orchestration_session_id
+            .clone()
+            .map(|id| agent_api_types::SharedWorldOwnerSpec {
+                orchestration_session_id: id,
+                action: agent_api_types::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                    expected_generation: previous_world_generation,
+                    reason: reason.message().to_string(),
+                },
+            });
 
     old_session.client.close().await?;
 
@@ -2742,8 +2964,15 @@ async fn restart_world_session(
     })
     .await?;
 
+    if let Some(startup_context) = startup_context {
+        let next_binding = PersistedWorldBinding {
+            world_id: new_session.world_id.clone(),
+            world_generation: new_session.world_generation,
+        };
+        persist_world_binding_authority(startup_context, Some(&next_binding))?;
+    }
     emit_world_restarted_alert(
-        resolve_active_orchestration_session_id().as_deref(),
+        orchestration_session_id.as_deref(),
         &previous_world_id,
         previous_world_generation,
         &new_session.world_id,
@@ -2895,6 +3124,7 @@ fn spawn_resize_task(resize_tx: UnboundedSender<(u16, u16)>) {
 
 async fn start_world_session(
     requested_cwd: String,
+    startup_context: Option<&RuntimeOrchestrationContext>,
     on_stdout: StdoutCallback,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
@@ -2905,8 +3135,8 @@ async fn start_world_session(
     let start_hash = resolved_start.snapshot_hash.clone();
     let start_workspace_root = find_workspace_root(requested_path);
     let shared_world_request =
-        resolve_active_orchestration_session_id().map(|id| agent_api_types::SharedWorldOwnerSpec {
-            orchestration_session_id: id,
+        startup_context.map(|context| agent_api_types::SharedWorldOwnerSpec {
+            orchestration_session_id: context.orchestration_session_id(),
             action: agent_api_types::SharedWorldOwnerAction::AttachOrCreate,
         });
     let session = open_world_session(OpenWorldSessionRequest {
@@ -2950,6 +3180,7 @@ async fn start_world_session(
             session,
             WorldDriftRequest {
                 requested_cwd: ready_cwd,
+                startup_context,
                 policy_snapshot: resolved_ready.snapshot,
                 snapshot_hash: ready_hash,
                 workspace_root: ready_workspace_root,
@@ -2966,6 +3197,7 @@ async fn start_world_session(
 
 async fn ensure_no_policy_drift(
     world_session: &mut Option<WorldSession>,
+    startup_context: Option<&RuntimeOrchestrationContext>,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
@@ -3008,6 +3240,7 @@ async fn ensure_no_policy_drift(
             old,
             WorldDriftRequest {
                 requested_cwd: requested,
+                startup_context,
                 policy_snapshot: resolved.snapshot,
                 snapshot_hash: resolved.snapshot_hash,
                 workspace_root,

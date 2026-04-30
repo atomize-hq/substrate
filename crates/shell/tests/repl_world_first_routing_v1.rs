@@ -168,6 +168,30 @@ fn wait_for_min_start_sessions(
     );
 }
 
+fn wait_for_min_start_sessions_with_output(
+    repl: &PtyRepl,
+    records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
+    min_starts: usize,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let guard = records.lock().expect("lock records");
+        if guard.persistent_start_sessions.len() >= min_starts {
+            return;
+        }
+        drop(guard);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    let guard = records.lock().expect("lock records");
+    panic!(
+        "timed out waiting for persistent start sessions >= {min_starts}; got {}; output:\n{}\nrecords: {guard:#?}",
+        guard.persistent_start_sessions.len(),
+        repl.output_string(),
+    );
+}
+
 fn wait_for_min_records(
     records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
     min_execs: usize,
@@ -201,6 +225,185 @@ fn read_trace(trace_path: &Path) -> Vec<Value> {
         .filter(|line| !line.trim().is_empty())
         .map(|line| serde_json::from_str(line).expect("parse trace line"))
         .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn write_orchestrator_runtime_world_config(
+    home_substrate: &Path,
+    fake_codex: &Path,
+    on_drift: &str,
+) {
+    fs::create_dir_all(home_substrate.join("agents")).expect("create agents dir");
+    let config = format!(
+        r#"world:
+  enabled: true
+  anchor_mode: workspace
+  anchor_path: ''
+  caged: false
+  net:
+    filter: false
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
+agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: codex
+    world_restart:
+      on_drift: {on_drift}
+"#
+    );
+    fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
+    fs::write(
+        home_substrate.join("policy.yaml"),
+        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex\n",
+    )
+    .expect("write agent runtime policy");
+    fs::write(
+        home_substrate.join("agents/codex.yaml"),
+        format!(
+            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            fake_codex.display()
+        ),
+    )
+    .expect("write codex agent file");
+}
+
+#[cfg(target_os = "linux")]
+fn write_fake_codex_script(temp: &Path) -> PathBuf {
+    let path = temp.join("fake-codex.sh");
+    let body = "#!/bin/sh\ntrap 'exit 0' INT TERM\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}\\r\\n'\nwhile :; do sleep 1; done\n";
+    fs::write(&path, body).expect("write fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("fake codex metadata")
+        .permissions();
+    use std::os::unix::fs::PermissionsExt;
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake codex permissions");
+    path
+}
+
+#[cfg(target_os = "linux")]
+fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
+    let sessions_dir = substrate_home.join("run/agent-hub/sessions");
+    let mut entries = fs::read_dir(&sessions_dir)
+        .expect("read orchestration session dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .collect::<Vec<_>>();
+    entries.sort();
+    let session_path = entries
+        .into_iter()
+        .next()
+        .expect("orchestration session file");
+    serde_json::from_str::<Value>(&fs::read_to_string(session_path).expect("read session file"))
+        .expect("parse session file")
+        .get("orchestration_session_id")
+        .and_then(Value::as_str)
+        .expect("session orchestration_session_id")
+        .to_string()
+}
+
+#[cfg(target_os = "linux")]
+fn orchestration_session_path(substrate_home: &Path, orchestration_session_id: &str) -> PathBuf {
+    substrate_home
+        .join("run/agent-hub/sessions")
+        .join(format!("{orchestration_session_id}.json"))
+}
+
+#[cfg(target_os = "linux")]
+fn read_orchestration_session(session_path: &Path) -> Value {
+    serde_json::from_str(&fs::read_to_string(session_path).expect("read orchestration session"))
+        .expect("parse orchestration session")
+}
+
+#[cfg(target_os = "linux")]
+fn assert_session_world_binding(
+    session: &Value,
+    expected_world_id: Option<&str>,
+    expected_world_generation: Option<u64>,
+) {
+    assert_eq!(
+        session.pointer("/world_id").and_then(Value::as_str),
+        expected_world_id,
+        "unexpected persisted parent world_id: {session:?}"
+    );
+    assert_eq!(
+        session.pointer("/world_generation").and_then(Value::as_u64),
+        expected_world_generation,
+        "unexpected persisted parent world_generation: {session:?}"
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn alert_rows_by_code<'a>(events: &'a [Value], code: &str) -> Vec<&'a Value> {
+    events
+        .iter()
+        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
+        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("alert"))
+        .filter(|event| event.pointer("/data/code").and_then(Value::as_str) == Some(code))
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn assert_shared_world_attach_or_create(
+    start: &support::PersistentStartSessionRecord,
+    orchestration_session_id: &str,
+) {
+    let shared_world = start
+        .shared_world
+        .as_ref()
+        .expect("expected shared_world request on start_session");
+    assert_eq!(
+        shared_world.orchestration_session_id, orchestration_session_id,
+        "unexpected shared_world orchestration_session_id"
+    );
+    assert!(
+        matches!(
+            shared_world.action,
+            agent_api_types::SharedWorldOwnerAction::AttachOrCreate
+        ),
+        "expected AttachOrCreate shared_world action, got {:?}",
+        shared_world.action
+    );
+}
+
+#[cfg(target_os = "linux")]
+fn assert_shared_world_replace_expected_generation(
+    start: &support::PersistentStartSessionRecord,
+    orchestration_session_id: &str,
+    expected_generation: u64,
+    expected_reason_fragment: &str,
+) {
+    let shared_world = start
+        .shared_world
+        .as_ref()
+        .expect("expected shared_world request on start_session");
+    assert_eq!(
+        shared_world.orchestration_session_id, orchestration_session_id,
+        "unexpected shared_world orchestration_session_id"
+    );
+    match &shared_world.action {
+        agent_api_types::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+            expected_generation: actual_generation,
+            reason,
+        } => {
+            assert_eq!(
+                *actual_generation, expected_generation,
+                "unexpected ReplaceExpectedGeneration expected_generation"
+            );
+            assert!(
+                reason.contains(expected_reason_fragment),
+                "expected restart reason to contain `{expected_reason_fragment}`, got `{reason}`"
+            );
+        }
+        other => panic!("expected ReplaceExpectedGeneration shared_world action, got {other:?}"),
+    }
 }
 
 fn assert_world_network_payload(
@@ -254,7 +457,7 @@ fn run_repl_routing_case(case: &ReplRoutingCase<'_>) {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    wait_for_min_start_sessions(&records, 1, Duration::from_secs(3));
+    wait_for_min_start_sessions_with_output(&repl, &records, 1, Duration::from_secs(3));
     repl.send_line("exit");
 
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(2));
@@ -323,6 +526,26 @@ impl PtyRepl {
         extra_env: &[(&str, &str)],
         args: &[&str],
     ) -> Self {
+        Self::spawn_inner(
+            project_dir,
+            home_dir,
+            substrate_home,
+            socket_path,
+            extra_env,
+            args,
+            None,
+        )
+    }
+
+    fn spawn_inner(
+        project_dir: &Path,
+        home_dir: &Path,
+        substrate_home: &Path,
+        socket_path: &Path,
+        extra_env: &[(&str, &str)],
+        args: &[&str],
+        startup_delay: Option<Duration>,
+    ) -> Self {
         ensure_substrate_built();
 
         let pty_system = native_pty_system();
@@ -345,7 +568,19 @@ impl PtyRepl {
             set_fd_nonblocking(fd);
         }
 
-        let mut cmd = CommandBuilder::new(binary_path());
+        let substrate_binary = binary_path();
+        let mut cmd = if let Some(startup_delay) = startup_delay {
+            let mut cmd = CommandBuilder::new("bash");
+            cmd.arg("-lc");
+            cmd.arg(format!(
+                "sleep {:.3}; exec \"$0\" \"$@\"",
+                startup_delay.as_secs_f64()
+            ));
+            cmd.arg(substrate_binary.clone());
+            cmd
+        } else {
+            CommandBuilder::new(substrate_binary)
+        };
         cmd.args(args);
         cmd.cwd(project_dir);
         cmd.env("HOME", home_dir);
@@ -750,6 +985,349 @@ fn c3_persistent_session_start_obeys_net_allowed_routing_matrix() {
     for case in &cases {
         run_repl_routing_case(case);
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_first_start_shared_world_attach_create_is_owner_bound() {
+    let temp = temp_dir("substrate-c3-world-owner-bound-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_codex = write_fake_codex_script(temp.path());
+    write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "auto_restart");
+
+    let sock_temp = short_socket_dir("sub-c3ws-owner-bound-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+    wait_for_min_start_sessions_with_output(&repl, &records, 1, Duration::from_secs(3));
+    repl.send_line("exit");
+
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(2));
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+
+    let guard = records.lock().expect("lock records");
+    let start = guard
+        .persistent_start_sessions
+        .first()
+        .expect("persistent start session");
+    assert_shared_world_attach_or_create(start, &orchestration_session_id);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_startup_drift_before_first_command_retains_persisted_startup_context() {
+    let temp = temp_dir("substrate-c3-startup-drift-context-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let child = project.join("child");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&child).expect("create project child");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_workspace_marker(&project);
+    write_profile(&project);
+    let fake_codex = write_fake_codex_script(temp.path());
+    write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "auto_restart");
+
+    let parent_cwd = temp.path().to_string_lossy().into_owned();
+
+    let sock_temp = short_socket_dir("sub-c3ws-startup-context-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_first_ready_cwd_override(
+        &sock,
+        StreamBehavior::Normal,
+        parent_cwd,
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&child, &home, &substrate_home, &sock, &[], &["--world"]);
+
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+    wait_for_min_start_sessions_with_output(&repl, &records, 2, Duration::from_secs(3));
+    repl.send_line("exit");
+
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+
+    let guard = records.lock().expect("lock records");
+    let first = &guard.persistent_start_sessions[0];
+    let second = &guard.persistent_start_sessions[1];
+    assert_shared_world_attach_or_create(first, &orchestration_session_id);
+    assert_shared_world_replace_expected_generation(
+        second,
+        &orchestration_session_id,
+        0,
+        "workspace root drift",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_parent_binding_persists_before_world_restarted_publishes() {
+    let temp = temp_dir("substrate-c3-world-restarted-binding-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_profile(&project);
+    let fake_codex = write_fake_codex_script(temp.path());
+    write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "auto_restart");
+
+    let sock_temp = short_socket_dir("sub-c3ws-world-restarted-binding-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
+
+    write_policy(&substrate_home, false);
+    std::thread::sleep(Duration::from_millis(25));
+
+    repl.send_line("echo second");
+    repl.wait_for_output(
+        "[shell] world restarted due to policy snapshot drift",
+        Duration::from_secs(5),
+    )
+    .expect("world_restarted alert output");
+
+    let persisted = read_orchestration_session(&session_path);
+    assert_session_world_binding(&persisted, Some("wld_stub_0002"), Some(1));
+
+    repl.wait_for_output("second", Duration::from_secs(3))
+        .expect("second command output");
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+
+    let events = read_trace(&trace_path);
+    let alerts = alert_rows_by_code(&events, "world_restarted");
+    assert_eq!(
+        alerts.len(),
+        1,
+        "expected one world_restarted alert: {alerts:?}"
+    );
+    let alert = alerts[0];
+    assert_eq!(
+        alert
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id.as_str()),
+        "world_restarted alert must retain the authoritative orchestration_session_id: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("world_id").and_then(Value::as_str),
+        Some("wld_stub_0002"),
+        "world_restarted alert must publish the replacement world binding: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("world_generation").and_then(Value::as_u64),
+        Some(1),
+        "world_restarted alert must publish the replacement world generation: {alert:?}"
+    );
+    assert_eq!(
+        alert
+            .pointer("/data/previous_world_id")
+            .and_then(Value::as_str),
+        Some("wld_stub_0001"),
+        "world_restarted alert must retain the previous world_id: {alert:?}"
+    );
+    assert_eq!(
+        alert.pointer("/data/new_world_id").and_then(Value::as_str),
+        Some("wld_stub_0002"),
+        "world_restarted alert must retain the replacement world_id: {alert:?}"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_fail_closed_drift_repersists_binding_before_world_restart_required_publishes() {
+    let temp = temp_dir("substrate-c3-world-restart-required-binding-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_profile(&project);
+    let fake_codex = write_fake_codex_script(temp.path());
+    write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "fail_closed");
+
+    let sock_temp = short_socket_dir("sub-c3ws-world-restart-required-binding-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
+
+    write_policy(&substrate_home, false);
+    std::thread::sleep(Duration::from_millis(25));
+
+    repl.send_line("echo second");
+    repl.wait_for_output(
+        "[shell] world restart required due to policy snapshot drift",
+        Duration::from_secs(5),
+    )
+    .expect("world_restart_required alert output");
+
+    let persisted = read_orchestration_session(&session_path);
+    assert_session_world_binding(&persisted, Some("wld_stub_0001"), Some(0));
+
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(3) {
+        if repl.try_wait().expect("try_wait") {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let (code, _out) = repl.shutdown();
+    assert_eq!(code, 3, "expected fail-closed drift exit code 3");
+
+    let events = read_trace(&trace_path);
+    let alerts = alert_rows_by_code(&events, "world_restart_required");
+    assert_eq!(
+        alerts.len(),
+        1,
+        "expected one world_restart_required alert: {alerts:?}"
+    );
+    let alert = alerts[0];
+    assert_eq!(
+        alert.get("orchestration_session_id").and_then(Value::as_str),
+        Some(orchestration_session_id.as_str()),
+        "world_restart_required alert must retain the authoritative orchestration_session_id: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("world_id").and_then(Value::as_str),
+        Some("wld_stub_0001"),
+        "world_restart_required alert must publish the current authoritative world binding: {alert:?}"
+    );
+    assert_eq!(
+        alert.get("world_generation").and_then(Value::as_u64),
+        Some(0),
+        "world_restart_required alert must publish the current authoritative world generation: {alert:?}"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_bootstrap_failure_after_attach_cleans_up_world_and_parent_session_state() {
+    let temp = temp_dir("substrate-c3-startup-drift-cleanup-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let child = project.join("child");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&child).expect("create project child");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_workspace_marker(&project);
+    write_profile(&project);
+    let fake_codex = write_fake_codex_script(temp.path());
+    write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "fail_closed");
+
+    let parent_cwd = temp.path().to_string_lossy().into_owned();
+
+    let sock_temp = short_socket_dir("sub-c3ws-startup-drift-cleanup-");
+    let sock = sock_temp.path().join("world.sock");
+    let _server = ReplWorldAgentStub::start_with_first_ready_cwd_override(
+        &sock,
+        StreamBehavior::Normal,
+        parent_cwd,
+    );
+
+    let mut repl = PtyRepl::spawn(&child, &home, &substrate_home, &sock, &[], &["--world"]);
+
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
+
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(3) {
+        if repl.try_wait().expect("try_wait") {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    let (code, out) = repl.shutdown();
+    assert_eq!(
+        code, 3,
+        "expected startup fail-closed drift exit code 3, got output:\n{out}"
+    );
+    assert!(
+        out.contains("[shell] world restart required due to workspace root drift"),
+        "expected startup cleanup path to publish the world_restart_required alert before exiting; output:\n{out}"
+    );
+
+    let persisted = read_orchestration_session(&session_path);
+    assert_session_world_binding(&persisted, None, None);
 }
 
 #[test]

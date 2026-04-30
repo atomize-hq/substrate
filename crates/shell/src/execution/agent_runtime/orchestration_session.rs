@@ -61,8 +61,8 @@ impl OrchestrationSessionRecord {
             orchestrator_protocol: child_manifest.handle.protocol.clone(),
             active_session_handle_id: None,
             latest_run_id: child_manifest.internal.latest_run_id.clone(),
-            world_id: child_manifest.handle.world_id.clone(),
-            world_generation: child_manifest.handle.world_generation,
+            world_id: None,
+            world_generation: None,
             invalidation_reason: None,
             closed_at: None,
         }
@@ -83,6 +83,18 @@ impl OrchestrationSessionRecord {
 
     pub(crate) fn bind_active_session_handle(&mut self, session_handle_id: impl Into<String>) {
         self.active_session_handle_id = Some(session_handle_id.into());
+        self.touch_active();
+    }
+
+    pub(crate) fn set_world_binding(&mut self, world_id: impl Into<String>, world_generation: u64) {
+        self.world_id = Some(world_id.into());
+        self.world_generation = Some(world_generation);
+        self.touch_active();
+    }
+
+    pub(crate) fn clear_world_binding(&mut self) {
+        self.world_id = None;
+        self.world_generation = None;
         self.touch_active();
     }
 
