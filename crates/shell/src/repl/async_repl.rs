@@ -504,13 +504,12 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         {
             Ok(runtime) => runtime,
             Err(failure) => {
-                if let Some(session) = world_session.take() {
-                    if session.client.close().await.is_ok() {
-                        if let Some(startup_context) = startup_context.as_ref() {
-                            let _ = persist_world_binding_authority(startup_context, None);
-                        }
-                    }
-                }
+                finalize_runtime_startup_failure(
+                    startup_context.as_ref(),
+                    &mut world_session,
+                    &failure.message,
+                )
+                .await;
                 agent_printer.print(failure.message.clone());
                 write_best_effort_stderr_line(&failure.message);
                 tokio::time::sleep(Duration::from_millis(100)).await;
@@ -520,7 +519,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
         let mut should_exit = false;
         let mut termination_cause = ReplTerminationCause::NormalExit;
-        while !should_exit {
+        let mut fatal_runtime_error: Option<anyhow::Error> = None;
+        'repl_loop: while !should_exit {
             prompt_active.store(true, Ordering::SeqCst);
             if let Err(err) = prompt_worker.request_prompt() {
                 termination_cause = ReplTerminationCause::AbnormalTerminalLoss;
@@ -681,7 +681,15 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 world_session.as_ref().map(|s| &s.client),
                                 &mut io_ctx,
                             )
-                            .await?;
+                            .await;
+                            let exit_code = match exit_code {
+                                Ok(exit_code) => exit_code,
+                                Err(err) => {
+                                    fatal_runtime_error = Some(err);
+                                    should_exit = true;
+                                    continue 'repl_loop;
+                                }
+                            };
                             let status = exit_status_from_code(exit_code);
                             report_nonzero_status(&status);
                             let orchestration_session_id = resolve_active_orchestration_session_id();
@@ -703,13 +711,18 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             }
 
                             if world_session.is_some() {
-                                ensure_no_policy_drift(
+                                let drift_check = ensure_no_policy_drift(
                                     &mut world_session,
                                     startup_context.as_ref(),
                                     &agent_printer,
                                     &mut telemetry,
                                 )
-                                .await?;
+                                .await;
+                                if let Err(err) = drift_check {
+                                    fatal_runtime_error = Some(err);
+                                    should_exit = true;
+                                    continue 'repl_loop;
+                                }
                                 let exit_code = {
                                     let session = world_session
                                         .as_mut()
@@ -722,15 +735,29 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                         agent_printer: &agent_printer,
                                         max_pty_buffered_lines,
                                     };
-                                    exec_world_pty(session, pty_cmd, &cmd_id, &mut io_ctx).await?
+                                    match exec_world_pty(session, pty_cmd, &cmd_id, &mut io_ctx)
+                                        .await
+                                    {
+                                        Ok(exit_code) => exit_code,
+                                        Err(err) => {
+                                            fatal_runtime_error = Some(err);
+                                            should_exit = true;
+                                            continue 'repl_loop;
+                                        }
+                                    }
                                 };
-                                ensure_no_policy_drift(
+                                let drift_check = ensure_no_policy_drift(
                                     &mut world_session,
                                     startup_context.as_ref(),
                                     &agent_printer,
                                     &mut telemetry,
                                 )
-                                .await?;
+                                .await;
+                                if let Err(err) = drift_check {
+                                    fatal_runtime_error = Some(err);
+                                    should_exit = true;
+                                    continue 'repl_loop;
+                                }
                                 let status = exit_status_from_code(exit_code);
                                 report_nonzero_status(&status);
                                 let orchestration_session_id =
@@ -748,13 +775,18 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     }
 
                     if world_session.is_some() {
-                        ensure_no_policy_drift(
+                        let drift_check = ensure_no_policy_drift(
                             &mut world_session,
                             startup_context.as_ref(),
                             &agent_printer,
                             &mut telemetry,
                         )
-                        .await?;
+                        .await;
+                        if let Err(err) = drift_check {
+                            fatal_runtime_error = Some(err);
+                            should_exit = true;
+                            continue 'repl_loop;
+                        }
                         let pty = needs_pty(trimmed);
                         let exit_code = {
                             let session = world_session
@@ -769,18 +801,41 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 max_pty_buffered_lines,
                             };
                             if pty {
-                                exec_world_pty(session, &command, &cmd_id, &mut io_ctx).await?
+                                match exec_world_pty(session, &command, &cmd_id, &mut io_ctx)
+                                    .await
+                                {
+                                    Ok(exit_code) => exit_code,
+                                    Err(err) => {
+                                        fatal_runtime_error = Some(err);
+                                        should_exit = true;
+                                        continue 'repl_loop;
+                                    }
+                                }
                             } else {
-                                exec_world_line(session, &command, &cmd_id, &mut io_ctx).await?
+                                match exec_world_line(session, &command, &cmd_id, &mut io_ctx)
+                                    .await
+                                {
+                                    Ok(exit_code) => exit_code,
+                                    Err(err) => {
+                                        fatal_runtime_error = Some(err);
+                                        should_exit = true;
+                                        continue 'repl_loop;
+                                    }
+                                }
                             }
                         };
-                        ensure_no_policy_drift(
+                        let drift_check = ensure_no_policy_drift(
                             &mut world_session,
                             startup_context.as_ref(),
                             &agent_printer,
                             &mut telemetry,
                         )
-                        .await?;
+                        .await;
+                        if let Err(err) = drift_check {
+                            fatal_runtime_error = Some(err);
+                            should_exit = true;
+                            continue 'repl_loop;
+                        }
                         let status = exit_status_from_code(exit_code);
                         report_nonzero_status(&status);
                         let orchestration_session_id = resolve_active_orchestration_session_id();
@@ -821,7 +876,15 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
                     let status = loop {
                         tokio::select! {
-                            res = &mut command_fut => break res?,
+                            res = &mut command_fut => {
+                                match res {
+                                    Ok(status) => break Some(status),
+                                    Err(err) => {
+                                        fatal_runtime_error = Some(err);
+                                        break None;
+                                    }
+                                }
+                            }
                             maybe_event = agent_rx.recv() => {
                                 if let Some(event) = maybe_event {
                                     if is_shell_stream_event(&event) {
@@ -846,6 +909,10 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             _maybe_resize = resize_rx.recv() => {}
                             _maybe_sigint = sigint_rx.recv() => {}
                         }
+                    };
+                    let Some(status) = status else {
+                        should_exit = true;
+                        continue 'repl_loop;
                     };
 
                     for line in buffered_structured_lines {
@@ -890,8 +957,16 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             write_best_effort_stderr_line(
                                 "substrate: warning: prompt backend degraded (cursor query timeout); falling back to plain stdin reader"
                             );
-                            prompt_worker = PromptWorker::spawn_stdio(shared_config.clone())
-                                .context("failed to start plain prompt worker")?;
+                            prompt_worker = match PromptWorker::spawn_stdio(shared_config.clone())
+                                .context("failed to start plain prompt worker")
+                            {
+                                Ok(worker) => worker,
+                                Err(err) => {
+                                    fatal_runtime_error = Some(err);
+                                    should_exit = true;
+                                    continue 'repl_loop;
+                                }
+                            };
                             agent_printer = prompt_worker.printer_handle();
                             prompt_responses = prompt_worker.take_response_receiver();
                             continue;
@@ -1021,6 +1096,14 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     let _ = persist_world_binding_authority(startup_context, None);
                 }
             }
+        }
+
+        if let Some(err) = fatal_runtime_error.as_ref() {
+            let (exit_code, message) = runtime_loop_exit(err);
+            agent_printer.print(message.clone());
+            write_best_effort_stderr_line(&message);
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            return Ok(exit_code);
         }
 
         let exit_code = match termination_cause {
@@ -2265,9 +2348,6 @@ fn mark_runtime_startup_failed(
     message: &str,
 ) {
     let (orchestration_snapshot, manifest_snapshot) = {
-        let mut orchestration_guard = orchestration_session
-            .lock()
-            .expect("orchestration session mutex poisoned");
         let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
         if manifest_guard.handle.state == AgentRuntimeSessionState::Allocating {
             manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
@@ -2277,9 +2357,11 @@ fn mark_runtime_startup_failed(
         }
         manifest_guard.internal.last_error_bucket = Some("bootstrap_run".to_string());
         manifest_guard.internal.last_error_message = Some(message.to_string());
-        orchestration_guard.transition_state(OrchestrationSessionState::Failed);
-        orchestration_guard.mark_terminal(message.to_string());
-        (orchestration_guard.clone(), manifest_guard.clone())
+        let orchestration_snapshot = orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned")
+            .clone();
+        (orchestration_snapshot, manifest_guard.clone())
     };
     let _ = persist_runtime_snapshots(store, &orchestration_snapshot, &manifest_snapshot);
 }
@@ -2327,6 +2409,43 @@ fn persist_world_binding_authority(
         guard.clone()
     };
     Ok(snapshot)
+}
+
+async fn finalize_runtime_startup_failure(
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    world_session: &mut Option<WorldSession>,
+    failure_message: &str,
+) {
+    let mut close_succeeded = false;
+    if let Some(session) = world_session.take() {
+        close_succeeded = session.client.close().await.is_ok();
+    }
+
+    let Some(startup_context) = startup_context else {
+        return;
+    };
+
+    mark_orchestration_session_failed(
+        &startup_context.store,
+        &startup_context.orchestration_session,
+        failure_message.to_string(),
+    );
+    if close_succeeded {
+        let _ = persist_world_binding_authority(startup_context, None);
+    }
+}
+
+fn runtime_loop_exit(err: &anyhow::Error) -> (i32, String) {
+    if is_world_restart_required_error(err) {
+        return (3, err.to_string());
+    }
+
+    let message = format!("{err:#}");
+    if message.starts_with("substrate: error:") {
+        (1, message)
+    } else {
+        (1, format!("substrate: error: {message}"))
+    }
 }
 
 fn persist_runtime_snapshots(
@@ -2774,6 +2893,7 @@ fn resolve_world_restart_on_drift(
 struct WorldDriftRequest<'a> {
     requested_cwd: String,
     startup_context: Option<&'a RuntimeOrchestrationContext>,
+    live_runtime_established: bool,
     policy_snapshot: agent_api_types::PolicySnapshotV3,
     snapshot_hash: String,
     workspace_root: Option<PathBuf>,
@@ -2789,6 +2909,7 @@ async fn handle_detected_world_drift(
     let WorldDriftRequest {
         requested_cwd,
         startup_context,
+        live_runtime_established,
         policy_snapshot,
         snapshot_hash,
         workspace_root,
@@ -2804,6 +2925,7 @@ async fn handle_detected_world_drift(
                 WorldDriftRequest {
                     requested_cwd,
                     startup_context,
+                    live_runtime_established,
                     policy_snapshot,
                     snapshot_hash,
                     workspace_root,
@@ -2815,19 +2937,36 @@ async fn handle_detected_world_drift(
             .await
         }
         crate::execution::config_model::WorldRestartOnDriftMode::FailClosed => {
-            let orchestration_session_id =
-                startup_context.map(RuntimeOrchestrationContext::orchestration_session_id);
-            if let Some(startup_context) = startup_context {
+            let persisted_snapshot = if let Some(startup_context) = startup_context {
                 let current_binding = PersistedWorldBinding {
                     world_id: old_session.world_id.clone(),
                     world_generation: old_session.world_generation,
                 };
-                persist_world_binding_authority(startup_context, Some(&current_binding))?;
-            }
+                Some(persist_world_binding_authority(
+                    startup_context,
+                    Some(&current_binding),
+                )?)
+            } else {
+                None
+            };
+            let startup_orchestration_session_id =
+                startup_context.map(RuntimeOrchestrationContext::orchestration_session_id);
+            let orchestration_session_id = persisted_snapshot
+                .as_ref()
+                .map(|snapshot| snapshot.orchestration_session_id.as_str())
+                .or(startup_orchestration_session_id.as_deref());
+            let current_world_id = persisted_snapshot
+                .as_ref()
+                .and_then(|snapshot| snapshot.world_id.as_deref())
+                .unwrap_or(old_session.world_id.as_str());
+            let current_world_generation = persisted_snapshot
+                .as_ref()
+                .and_then(|snapshot| snapshot.world_generation)
+                .unwrap_or(old_session.world_generation);
             if let Some(alert) = build_world_restart_required_alert(
-                orchestration_session_id.as_deref(),
-                &old_session.world_id,
-                old_session.world_generation,
+                orchestration_session_id,
+                current_world_id,
+                current_world_generation,
                 reason,
             ) {
                 telemetry.persist_agent_event(&alert);
@@ -2836,12 +2975,17 @@ async fn handle_detected_world_drift(
             } else {
                 agent_printer.print(format!("[shell] {}", reason.restart_required_message()));
             }
-            let _ = old_session.client.close().await;
+            let close_succeeded = old_session.client.close().await.is_ok();
+            if !live_runtime_established && close_succeeded {
+                if let Some(startup_context) = startup_context {
+                    let _ = persist_world_binding_authority(startup_context, None);
+                }
+            }
             Err(anyhow!(WorldRestartRequiredError::new(format!(
                 "substrate: error: world restart required before continuing ({}, world_id={}, generation={})",
                 reason.code(),
-                old_session.world_id,
-                old_session.world_generation,
+                current_world_id,
+                current_world_generation,
             ))))
         }
     }
@@ -2924,6 +3068,7 @@ async fn restart_world_session(
     let WorldDriftRequest {
         requested_cwd,
         startup_context,
+        live_runtime_established: _live_runtime_established,
         policy_snapshot,
         snapshot_hash,
         workspace_root,
@@ -2964,19 +3109,28 @@ async fn restart_world_session(
     })
     .await?;
 
+    let mut authoritative_world_id = new_session.world_id.clone();
+    let mut authoritative_world_generation = new_session.world_generation;
     if let Some(startup_context) = startup_context {
         let next_binding = PersistedWorldBinding {
             world_id: new_session.world_id.clone(),
             world_generation: new_session.world_generation,
         };
-        persist_world_binding_authority(startup_context, Some(&next_binding))?;
+        let persisted_snapshot =
+            persist_world_binding_authority(startup_context, Some(&next_binding))?;
+        if let Some(world_id) = persisted_snapshot.world_id {
+            authoritative_world_id = world_id;
+        }
+        if let Some(world_generation) = persisted_snapshot.world_generation {
+            authoritative_world_generation = world_generation;
+        }
     }
     emit_world_restarted_alert(
         orchestration_session_id.as_deref(),
         &previous_world_id,
         previous_world_generation,
-        &new_session.world_id,
-        new_session.world_generation,
+        &authoritative_world_id,
+        authoritative_world_generation,
         reason,
     );
 
@@ -3181,6 +3335,7 @@ async fn start_world_session(
             WorldDriftRequest {
                 requested_cwd: ready_cwd,
                 startup_context,
+                live_runtime_established: false,
                 policy_snapshot: resolved_ready.snapshot,
                 snapshot_hash: ready_hash,
                 workspace_root: ready_workspace_root,
@@ -3241,6 +3396,7 @@ async fn ensure_no_policy_drift(
             WorldDriftRequest {
                 requested_cwd: requested,
                 startup_context,
+                live_runtime_established: true,
                 policy_snapshot: resolved.snapshot,
                 snapshot_hash: resolved.snapshot_hash,
                 workspace_root,

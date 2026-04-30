@@ -288,6 +288,20 @@ fn write_fake_codex_script(temp: &Path) -> PathBuf {
 }
 
 #[cfg(target_os = "linux")]
+fn write_fake_codex_script_without_session_handle(temp: &Path) -> PathBuf {
+    let path = temp.join("fake-codex-no-session-handle.sh");
+    let body = "#!/bin/sh\nprintf 'bootstrap-without-session-handle\\n'\n";
+    fs::write(&path, body).expect("write fake codex script without session handle");
+    let mut perms = fs::metadata(&path)
+        .expect("fake codex metadata")
+        .permissions();
+    use std::os::unix::fs::PermissionsExt;
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake codex permissions");
+    path
+}
+
+#[cfg(target_os = "linux")]
 fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
     let sessions_dir = substrate_home.join("run/agent-hub/sessions");
     let mut entries = fs::read_dir(&sessions_dir)
@@ -1272,39 +1286,28 @@ fn c3_fail_closed_drift_repersists_binding_before_world_restart_required_publish
 #[test]
 #[serial]
 fn c3_bootstrap_failure_after_attach_cleans_up_world_and_parent_session_state() {
-    let temp = temp_dir("substrate-c3-startup-drift-cleanup-");
+    let temp = temp_dir("substrate-c3-startup-bootstrap-cleanup-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
-    let child = project.join("child");
     let substrate_home = home.join(".substrate");
     fs::create_dir_all(&home).expect("create home");
-    fs::create_dir_all(&child).expect("create project child");
+    fs::create_dir_all(&project).expect("create project");
     fs::create_dir_all(&substrate_home).expect("create substrate home");
     fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
-    write_workspace_marker(&project);
     write_profile(&project);
-    let fake_codex = write_fake_codex_script(temp.path());
+    let fake_codex = write_fake_codex_script_without_session_handle(temp.path());
     write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "fail_closed");
 
-    let parent_cwd = temp.path().to_string_lossy().into_owned();
-
-    let sock_temp = short_socket_dir("sub-c3ws-startup-drift-cleanup-");
+    let sock_temp = short_socket_dir("sub-c3ws-startup-bootstrap-cleanup-");
     let sock = sock_temp.path().join("world.sock");
-    let _server = ReplWorldAgentStub::start_with_first_ready_cwd_override(
-        &sock,
-        StreamBehavior::Normal,
-        parent_cwd,
-    );
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
 
-    let mut repl = PtyRepl::spawn(&child, &home, &substrate_home, &sock, &[], &["--world"]);
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    wait_for_min_start_sessions_with_output(&repl, &records, 1, Duration::from_secs(3));
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
@@ -1318,12 +1321,13 @@ fn c3_bootstrap_failure_after_attach_cleans_up_world_and_parent_session_state() 
 
     let (code, out) = repl.shutdown();
     assert_eq!(
-        code, 3,
-        "expected startup fail-closed drift exit code 3, got output:\n{out}"
+        code, 4,
+        "expected post-attach orchestrator bootstrap failure exit code 4, got output:\n{out}"
     );
     assert!(
-        out.contains("[shell] world restart required due to workspace root drift"),
-        "expected startup cleanup path to publish the world_restart_required alert before exiting; output:\n{out}"
+        out.contains("attached control turn ended before ownership could be established")
+            || out.contains("failed to establish attached control ownership"),
+        "expected bootstrap failure output after world attach; output:\n{out}"
     );
 
     let persisted = read_orchestration_session(&session_path);
