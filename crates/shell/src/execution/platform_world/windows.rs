@@ -8,7 +8,7 @@ use anyhow::Result;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use substrate_broker::world_fs_mode;
-use world_api::{WorldBackend, WorldSpec};
+use world_api::{SharedWorldOwnerSpec, WorldBackend, WorldSpec};
 use world_windows_wsl::WindowsWslBackend;
 
 struct WindowsContext {
@@ -54,10 +54,14 @@ fn socket_path_from_transport(transport: &Transport) -> PathBuf {
 }
 
 pub fn ensure_world_ready_with_state(no_world: bool) -> Result<Option<String>> {
-    ensure_world_ready_impl(no_world, get_backend)
+    ensure_world_ready_impl(no_world, None, get_backend)
 }
 
-fn ensure_world_ready_impl<F>(no_world: bool, backend_provider: F) -> Result<Option<String>>
+fn ensure_world_ready_impl<F>(
+    no_world: bool,
+    shared_world: Option<&SharedWorldOwnerSpec>,
+    backend_provider: F,
+) -> Result<Option<String>>
 where
     F: FnOnce() -> Result<Arc<dyn WorldBackend>>,
 {
@@ -68,16 +72,18 @@ where
     #[cfg(test)]
     let _env_guard = world_env_guard();
 
-    let backend = backend_provider()?;
-    let spec = bootstrap_world_spec();
-    match backend.ensure_session(&spec) {
-        Ok(handle) => {
-            std::env::set_var("SUBSTRATE_WORLD", "enabled");
-            std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
-            Ok(Some(handle.id))
+    super::with_supported_shared_world_request(shared_world, "windows world bootstrap", || {
+        let backend = backend_provider()?;
+        let spec = bootstrap_world_spec();
+        match backend.ensure_session(&spec) {
+            Ok(handle) => {
+                std::env::set_var("SUBSTRATE_WORLD", "enabled");
+                std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+                Ok(Some(handle.id))
+            }
+            Err(_err) => Ok(None),
         }
-        Err(_err) => Ok(None),
-    }
+    })
 }
 
 pub fn get_backend() -> Result<Arc<dyn WorldBackend>> {
@@ -165,7 +171,10 @@ mod tests {
     impl StubBackend {
         fn new(id: &str, ensure_calls: Arc<AtomicUsize>) -> Self {
             Self {
-                handle: WorldHandle { id: id.to_string() },
+                handle: WorldHandle {
+                    id: id.to_string(),
+                    shared_binding: None,
+                },
                 ensure_calls,
             }
         }

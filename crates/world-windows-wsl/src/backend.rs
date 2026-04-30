@@ -336,6 +336,7 @@ impl WindowsWslBackend {
             agent_id: self.agent_id.clone(),
             budget: None,
             policy_snapshot,
+            shared_world: None,
             world_network: None,
             world_fs_mode: Some(fs_mode),
         })
@@ -369,6 +370,7 @@ impl WindowsWslBackend {
     fn generate_world_handle(&self) -> WorldHandle {
         WorldHandle {
             id: format!("wsl:{}:{}", self.distro, Uuid::now_v7()),
+            shared_binding: None,
         }
     }
 

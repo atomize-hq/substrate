@@ -62,6 +62,7 @@ mod imp {
     enum SessionState {
         Starting {
             ready_tx: tokio::sync::oneshot::Sender<ReadyFrame>,
+            requested_shared_world: Option<agent_api_types::SharedWorldOwnerSpec>,
         },
         Ready {
             next_seq: u64,
@@ -81,6 +82,7 @@ mod imp {
         pub(crate) world_id: String,
         pub(crate) cwd: String,
         pub(crate) protocol_version: u32,
+        pub(crate) shared_world: Option<agent_api_types::SharedWorldBindingSnapshot>,
     }
 
     #[derive(Debug, Clone)]
@@ -88,6 +90,7 @@ mod imp {
         pub(crate) cwd: String,
         pub(crate) env: HashMap<String, String>,
         pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV3,
+        pub(crate) shared_world: Option<agent_api_types::SharedWorldOwnerSpec>,
         pub(crate) world_network: agent_api_types::WorldNetworkRoutingV1,
         pub(crate) cols: u16,
         pub(crate) rows: u16,
@@ -107,6 +110,7 @@ mod imp {
                     cwd,
                     env,
                     policy_snapshot,
+                    shared_world: None,
                     world_network,
                     cols,
                     rows,
@@ -123,12 +127,16 @@ mod imp {
             start: ReplSessionStartParams,
             on_stdout: StdoutCallback,
         ) -> Result<Self> {
+            let requested_shared_world = start.shared_world.clone();
             let (ws, start_frame) = build_ws_and_start_session_frame(start).await?;
             let (sink, stream) = ws.split();
             let sink = Arc::new(Mutex::new(sink));
 
             let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
-            let state = Arc::new(Mutex::new(SessionState::Starting { ready_tx }));
+            let state = Arc::new(Mutex::new(SessionState::Starting {
+                ready_tx,
+                requested_shared_world,
+            }));
             let ready_cell = OnceCell::new();
             let (fatal_tx, fatal_rx) = tokio::sync::watch::channel::<Option<String>>(None);
 
@@ -217,6 +225,7 @@ mod imp {
                     cwd,
                     env: env_map,
                     policy_snapshot: network_policy.snapshot,
+                    shared_world: None,
                     world_network,
                     cols,
                     rows,
@@ -368,6 +377,8 @@ mod imp {
             cwd: String,
             env: HashMap<String, String>,
             policy_snapshot: Box<agent_api_types::PolicySnapshotV3>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            shared_world: Option<agent_api_types::SharedWorldOwnerSpec>,
             world_network: agent_api_types::WorldNetworkRoutingV1,
             cols: u16,
             rows: u16,
@@ -400,6 +411,8 @@ mod imp {
             world_id: String,
             cwd: String,
             protocol_version: u32,
+            #[serde(default)]
+            shared_world: Option<agent_api_types::SharedWorldBindingSnapshot>,
         },
         Stdout {
             data_b64: String,
@@ -533,21 +546,42 @@ mod imp {
                 world_id,
                 cwd,
                 protocol_version,
+                shared_world,
             } => {
                 if world_id.trim().is_empty() {
                     return Err(anyhow!(
                         "protocol error: ready.world_id must be a non-empty string"
                     ));
                 }
+                let mut guard = state.lock().await;
+                let requested_shared_world = match &*guard {
+                    SessionState::Starting {
+                        requested_shared_world,
+                        ..
+                    } => requested_shared_world.clone(),
+                    _ => {
+                        return Err(anyhow!(
+                            "protocol error: unexpected ready frame after session start"
+                        ))
+                    }
+                };
+                let validated_shared_world =
+                    crate::execution::repl_persistent_session::validate_shared_world_echo(
+                        requested_shared_world.as_ref(),
+                        shared_world.as_ref(),
+                        "ready.shared_world",
+                        Some(world_id.as_str()),
+                    )
+                    .map_err(|message| anyhow!("protocol error: {message}"))?;
                 let ready = ReadyFrame {
                     session_nonce,
                     world_id,
                     cwd,
                     protocol_version,
+                    shared_world: validated_shared_world,
                 };
-                let mut guard = state.lock().await;
                 match std::mem::replace(&mut *guard, SessionState::Closed) {
-                    SessionState::Starting { ready_tx } => {
+                    SessionState::Starting { ready_tx, .. } => {
                         *guard = SessionState::Ready { next_seq: 1 };
                         let _ = ready_tx.send(ready);
                         Ok(())
@@ -668,6 +702,7 @@ mod imp {
             cwd,
             env,
             policy_snapshot,
+            shared_world,
             world_network,
             cols,
             rows,
@@ -676,6 +711,7 @@ mod imp {
             cwd,
             env,
             policy_snapshot: Box::new(policy_snapshot),
+            shared_world,
             world_network,
             cols,
             rows,
@@ -692,10 +728,15 @@ mod imp {
             cwd,
             mut env,
             policy_snapshot,
+            shared_world,
             world_network,
             cols,
             rows,
         } = start;
+        pw::reject_non_linux_shared_owner_request(
+            shared_world.as_ref(),
+            "persistent world session bootstrap",
+        )?;
         super::super::world_ops::normalize_env_for_linux_guest(&mut env);
 
         // Allow explicit socket overrides (used by tests/fixtures and advanced setups).
@@ -713,6 +754,7 @@ mod imp {
                 cwd,
                 env,
                 policy_snapshot: Box::new(policy_snapshot),
+                shared_world: shared_world.clone(),
                 world_network: world_network.clone(),
                 cols,
                 rows,
@@ -768,6 +810,7 @@ mod imp {
             cwd,
             env,
             policy_snapshot: Box::new(policy_snapshot),
+            shared_world,
             world_network,
             cols,
             rows,
@@ -813,7 +856,7 @@ mod imp {
         let mut guard = state.lock().await;
         let old = std::mem::replace(&mut *guard, SessionState::Closed);
         match old {
-            SessionState::Starting { ready_tx } => {
+            SessionState::Starting { ready_tx, .. } => {
                 drop(ready_tx);
             }
             SessionState::InFlight { complete_tx, .. } => {
@@ -869,6 +912,10 @@ mod imp {
                         },
                     },
                 }),
+                shared_world: Some(agent_api_types::SharedWorldOwnerSpec {
+                    orchestration_session_id: "orch-test".to_string(),
+                    action: agent_api_types::SharedWorldOwnerAction::AttachOrCreate,
+                }),
                 world_network: agent_api_types::WorldNetworkRoutingV1 {
                     isolate_network: true,
                     allowed_domains: vec!["example.com".to_string()],
@@ -882,6 +929,13 @@ mod imp {
             assert_eq!(
                 value["world_network"]["allowed_domains"],
                 serde_json::json!(["example.com"])
+            );
+            assert_eq!(
+                value["shared_world"],
+                serde_json::json!({
+                    "orchestration_session_id": "orch-test",
+                    "action": "attach_or_create",
+                })
             );
         }
     }
@@ -915,6 +969,7 @@ mod imp {
         pub(crate) world_id: String,
         pub(crate) cwd: String,
         pub(crate) protocol_version: u32,
+        pub(crate) shared_world: Option<agent_api_types::SharedWorldBindingSnapshot>,
     }
 
     #[derive(Debug, Clone)]
@@ -922,6 +977,7 @@ mod imp {
         pub(crate) cwd: String,
         pub(crate) env: HashMap<String, String>,
         pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV3,
+        pub(crate) shared_world: Option<agent_api_types::SharedWorldOwnerSpec>,
         pub(crate) world_network: agent_api_types::WorldNetworkRoutingV1,
         pub(crate) cols: u16,
         pub(crate) rows: u16,
@@ -939,6 +995,7 @@ mod imp {
                     cwd,
                     env: HashMap::new(),
                     policy_snapshot,
+                    shared_world: None,
                     world_network,
                     cols: 80,
                     rows: 24,

@@ -34,6 +34,7 @@ use std::process as stdprocess;
 use std::sync::OnceLock;
 #[cfg(target_os = "linux")]
 use world::{copydiff, overlayfs};
+use world_api::WorldReuseMode;
 
 const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
 const ANCHOR_PATH_ENV: &str = "SUBSTRATE_ANCHOR_PATH";
@@ -141,6 +142,7 @@ fn build_agent_execute_request(
         agent_id: std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "replay".to_string()),
         budget: None,
         policy_snapshot,
+        shared_world: None,
         world_network: Some(world_network),
         world_fs_mode: Some(substrate_broker::world_fs_mode()),
     })
@@ -328,6 +330,7 @@ async fn try_world_backend(
         let start = Instant::now();
         let spec = WorldSpec {
             reuse_session: true,
+            reuse_mode: WorldReuseMode::GenericCompatible,
             isolate_network: true,
             limits: ResourceLimits::default(),
             enable_preload: false,

@@ -8,6 +8,10 @@
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde::Deserialize;
+use world_api::{
+    SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerAction,
+    SharedWorldOwnerSpec,
+};
 
 #[derive(Debug, Clone)]
 pub struct PersistentSessionProtocolError {
@@ -41,6 +45,7 @@ pub struct PersistentSessionClientCore {
     phase: Phase,
     shutdown_initiated: bool,
     latched_fatal: Option<PersistentSessionProtocolError>,
+    requested_shared_world: Option<SharedWorldOwnerSpec>,
 }
 
 #[derive(Debug, Default)]
@@ -64,6 +69,8 @@ enum ServerFrame {
         world_id: String,
         cwd: String,
         protocol_version: u32,
+        #[serde(default)]
+        shared_world: Option<SharedWorldBindingSnapshot>,
     },
     Stdout {
         data_b64: String,
@@ -94,9 +101,17 @@ impl PersistentSessionClientCore {
     }
 
     pub fn note_start_session_sent(&mut self) {
+        self.note_start_session_sent_with_shared_world(None);
+    }
+
+    pub fn note_start_session_sent_with_shared_world(
+        &mut self,
+        requested_shared_world: Option<SharedWorldOwnerSpec>,
+    ) {
         if self.latched_fatal.is_some() {
             return;
         }
+        self.requested_shared_world = requested_shared_world;
         self.phase = Phase::WaitingReady;
     }
 
@@ -156,6 +171,7 @@ impl PersistentSessionClientCore {
                 world_id,
                 cwd,
                 protocol_version,
+                shared_world,
             } => {
                 if !matches!(self.phase, Phase::WaitingReady) {
                     return Err(self.latch_fatal(
@@ -182,6 +198,13 @@ impl PersistentSessionClientCore {
                         "protocol error: ready.cwd must be an absolute world path: {cwd}"
                     )));
                 }
+                validate_shared_world_echo(
+                    self.requested_shared_world.as_ref(),
+                    shared_world.as_ref(),
+                    "ready.shared_world",
+                    Some(world_id.as_str()),
+                )
+                .map_err(|message| self.latch_fatal(format!("protocol error: {message}")))?;
                 self.phase = Phase::Ready;
                 Ok(())
             }
@@ -280,6 +303,75 @@ fn redact_token(token: &str) -> String {
         return "***".to_string();
     }
     format!("{}…{}", &token[..4], &token[token.len() - 4..])
+}
+
+pub fn validate_shared_world_echo(
+    requested: Option<&SharedWorldOwnerSpec>,
+    echoed: Option<&SharedWorldBindingSnapshot>,
+    context: &str,
+    expected_world_id: Option<&str>,
+) -> Result<Option<SharedWorldBindingSnapshot>, String> {
+    let Some(binding) = echoed else {
+        if let Some(requested) = requested {
+            return Err(format!(
+                "{context} missing authoritative proof for orchestration session {}",
+                requested.orchestration_session_id
+            ));
+        }
+        return Ok(None);
+    };
+
+    let Some(requested) = requested else {
+        return Err(format!(
+            "{context} must be absent when no explicit shared-owner request was sent"
+        ));
+    };
+
+    if binding.orchestration_session_id.trim().is_empty() {
+        return Err(format!(
+            "{context}.orchestration_session_id must be a non-empty string"
+        ));
+    }
+    if binding.orchestration_session_id != requested.orchestration_session_id {
+        return Err(format!(
+            "{context}.orchestration_session_id mismatch (expected {}, got {})",
+            requested.orchestration_session_id, binding.orchestration_session_id
+        ));
+    }
+    if binding.world_id.trim().is_empty() {
+        return Err(format!("{context}.world_id must be a non-empty string"));
+    }
+    if let Some(expected_world_id) = expected_world_id {
+        if binding.world_id != expected_world_id {
+            return Err(format!(
+                "{context}.world_id mismatch (expected {}, got {})",
+                expected_world_id, binding.world_id
+            ));
+        }
+    }
+    if binding.binding_state != SharedWorldBindingState::Active {
+        return Err(format!(
+            "{context}.binding_state must be active, got {:?}",
+            binding.binding_state
+        ));
+    }
+
+    match requested.action {
+        SharedWorldOwnerAction::AttachOrCreate => {}
+        SharedWorldOwnerAction::ReplaceExpectedGeneration {
+            expected_generation,
+            ..
+        } => {
+            if binding.world_generation <= expected_generation {
+                return Err(format!(
+                    "{context}.world_generation must advance past expected_generation={} (got {})",
+                    expected_generation, binding.world_generation
+                ));
+            }
+        }
+    }
+
+    Ok(Some(binding.clone()))
 }
 
 #[cfg(test)]

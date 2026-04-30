@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 use substrate_common::WorldFsMode;
-use world_api::{ResourceLimits, WorldSpec};
+use world_api::{ResourceLimits, WorldReuseMode, WorldSpec};
 
 const WORLD_FS_ENFORCEMENT_PLAN_B64_ENV: &str = "SUBSTRATE_WORLD_FS_ENFORCEMENT_PLAN_B64";
 
@@ -171,6 +171,7 @@ pub(crate) fn resolve_world_network_policy_for_snapshot(
 pub(crate) fn bootstrap_world_spec(project_dir: PathBuf, fs_mode: WorldFsMode) -> WorldSpec {
     WorldSpec {
         reuse_session: true,
+        reuse_mode: WorldReuseMode::GenericCompatible,
         isolate_network: false,
         limits: ResourceLimits::default(),
         enable_preload: false,

@@ -307,6 +307,7 @@ impl MacLimaBackend {
             agent_id: "world-mac-lima".to_string(),
             budget: None,
             policy_snapshot,
+            shared_world: None,
             world_network: None,
             world_fs_mode: Some(fs_mode),
         }
@@ -413,7 +414,10 @@ impl WorldBackend for MacLimaBackend {
         // Generate world ID
         let world_id = format!("vm:{}", self.vm_name);
 
-        let handle = WorldHandle { id: world_id };
+        let handle = WorldHandle {
+            id: world_id,
+            shared_binding: None,
+        };
 
         if spec.reuse_session {
             let mut cache = self

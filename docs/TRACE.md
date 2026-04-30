@@ -167,7 +167,12 @@ Agent-hub successor telemetry keeps adapter identity separate from semantic iden
 - `auth_authority`: nested gateway-backed auth authority only; pure-agent records omit it.
 - `parent_run_id`: nested gateway-backed trace correlation only; points at the parent pure-agent `run_id`.
 - `world_id`: world boundary identifier for world-scoped pure-agent records and in-world telemetry families.
-- `world_generation`: generation counter for the active world-scoped pure-agent session or world-backed execution.
+- `world_generation`: generation counter for the active world-scoped pure-agent session or world-backed execution when an authoritative shared-world binding proof exists.
+
+Boundary note:
+- The trace can carry `orchestration_session_id`, `world_id`, and `world_generation` for explicit shared-owner world executions, but trace remains historical audit output only.
+- Projection of the active shared-world binding into shell-owned runtime state remains PLAN-04.
+- Replacement/invalidation semantics for prior generations remain PLAN-05; consumers must not infer global invalidation from trace fields alone.
 
 `uaa.agent.session` is currently a Substrate-local normalized protocol-family id, not an automatic claim of upstream Unified Agent API wire or API compatibility. In the current repo, pure-agent records are stamped with that label by [agent_events.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/common/src/agent_events.rs:17), and `substrate agent status` / orchestrator-selection logic consumes the same label in [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:25).
 
@@ -254,6 +259,10 @@ These fields may appear on non-span records even when command spans remain uncha
 ### World Lifecycle Alerts (Agent Hub; Phase 8)
 
 Agent Hub emits structured alert events to make world session reuse and restart behavior operator-verifiable. These alerts are appended to `trace.jsonl` as structured agent events (not command spans).
+
+Current scope boundary:
+- These alerts are observational trace records, not the authoritative live-state registry for shared-world bindings.
+- A `world_generation` value in trace or on an alert does not by itself define replacement/invalidation semantics for prior-generation participants; that contract remains PLAN-05.
 
 Key machine-detectable alert codes:
 - `data.code="world_restarted"`: emitted when the hub auto-restarts the world (e.g., due to world-relevant drift).

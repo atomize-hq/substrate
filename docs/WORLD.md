@@ -58,6 +58,36 @@ Always-on by default (unless disabled via `SUBSTRATE_WORLD=disabled`):
 
 Windows (WSL backend) follows the same operator-facing lifecycle/status meaning; only the transport/bootstrap implementation differs. When the world backend is unavailable, the same `world_fs.require_world` rules apply (fallback only when `false`).
 
+### Shared-owner world reuse (Linux-first)
+
+Substrate now has two reuse modes in the shared `world-api` contract:
+
+- `reuse_mode=generic_compatible` is the legacy/default reusable-world lookup.
+- `reuse_mode=shared_orchestration` activates explicit shared-owner reuse with:
+  - `orchestration_session_id`
+  - `action=attach_or_create`
+  - `action=replace_expected_generation { expected_generation, reason }`
+
+When explicit shared-owner reuse is active, the authoritative proof surface is `WorldHandle.shared_binding`:
+
+- `orchestration_session_id`
+- `world_id`
+- `world_generation`
+- `binding_state`
+
+Current enforcement boundary:
+
+- Linux is the only platform that implements owner-bound shared-world reuse semantics, and those semantics live in `crates/world`.
+- Reuse requires both exact owner match and compatible world inputs; generic compatibility alone is not enough.
+- When a caller explicitly requests shared-owner reuse, the proof echoed back to request/PTY callers must describe the same `orchestration_session_id` and `world_id`, and the proof must be in `binding_state=active`.
+- macOS and Windows do not implement independent shared-owner behavior in this slice. The shell rejects explicit shared-owner requests before non-Linux world bootstrap or fallback logic runs.
+
+Deliberate boundary for later lanes:
+
+- Runtime-state projection of the active binding into shell-owned live state remains PLAN-04.
+- Invalidation/replacement registry semantics for generation changes and non-`active` binding states remain PLAN-05.
+- This document does not claim restart persistence or cross-generation invalidation behavior beyond the current Linux backend reuse proof.
+
 ---
 
 ### Native Linux provisioning helper
@@ -185,24 +215,36 @@ Socket: `/run/substrate.sock`
 - `GET /v1/doctor/world`
   - World enforcement readiness report (guest-kernel + agent view; used by `substrate world doctor`)
 - `POST /v1/execute` (non‑PTY)
-  - Body: `{ cmd, cwd, env, pty: false, agent_id, budget?, profile? }`
-  - Returns: `{ exit, span_id, stdout_b64, stderr_b64, scopes_used }`
+  - Body: `{ cmd, cwd, env, pty: false, agent_id, budget?, profile?, policy_snapshot, shared_world?, world_network?, world_fs_mode? }`
+  - `shared_world` request shape: `{ orchestration_session_id, action }`
+  - Returns: `{ exit, span_id, stdout_b64, stderr_b64, scopes_used, fs_diff?, shared_world?, ...process_telemetry }`
+  - `shared_world` response shape is the authoritative echoed proof:
+    `{ orchestration_session_id, world_id, world_generation, binding_state }`
 - `GET /v1/stream` (WebSocket, PTY)
   - Client → Server frames (text JSON):
     - `{"type":"start","cmd":"bash -lc '<raw>'","cwd":"/path","env":{...},"span_id":"spn_...","cols":<u16>,"rows":<u16>}`
+    - Legacy `start` does not support `shared_world`.
+    - Persistent session start:
+      `{"type":"start_session","protocol_version":1,"cwd":"/path","env":{...},"policy_snapshot":{...},"shared_world?":{...},"world_network?":{...},"cols":<u16>,"rows":<u16>}`
     - `{"type":"stdin","data_b64":"..."}`
     - `{"type":"resize","cols":<u16>,"rows":<u16>}`
     - `{"type":"signal","sig":"INT|TERM|HUP|QUIT"}`
   - Server → Client frames:
+    - Persistent-session ready:
+      `{"type":"ready","session_nonce":"<hex32>","world_id":"wld_...","cwd":"/path","protocol_version":1,"shared_world?":{...}}`
     - `{"type":"stdout","data_b64":"..."}`
+    - Persistent-session command completion:
+      `{"type":"command_complete","seq":<u64>,"token_hex":"<hex32>","exit":0,"cwd":"/path"}`
     - `{"type":"exit","code":0}`
-    - `{"type":"error","message":"..."}`
+    - `{"type":"error","code":"...","message":"...","fatal":true,"seq?":<u64>}`
 - `GET /v1/trace/:span_id` (placeholder)
 - `POST /v1/request_scopes` (placeholder)
 - `POST /v1/gc` (netns GC; see §10)
 
 Notes
 - Protocol is stable; no TLS by design (UDS only).
+- The shared-world proof is additive. Generic callers omit `shared_world` entirely and do not receive owner-bound proof fields.
+- PTY shared-world requests must use `start_session`; the agent rejects `shared_world` on legacy `start`.
 - `profile` is an advanced request field used for backend-specific execution posture. For example,
   `substrate world enable --provision-deps` sets `profile=world-deps-provision` so provisioning can
   run with the expected world-agent behavior. On guest Linux agents, that profile is executed via a
@@ -228,6 +270,7 @@ Notes
 - Routing
   - Non‑PTY: POST to `/v1/execute` over UDS (Linux) or the forwarded socket/port (macOS/Windows).
   - PTY: use WS to `/v1/stream` over the active transport; host fallback only occurs when `world_fs.require_world=false`.
+  - Explicit shared-owner requests are Linux-first. On macOS and Windows, the shell rejects them before platform bootstrap/fallback rather than silently degrading to generic reuse.
 - Prompt safety
   - The REPL wraps PTY runs in `reedline::suspend_guard()` to avoid prompt corruption during external output.
 - Readiness & auto‑spawn

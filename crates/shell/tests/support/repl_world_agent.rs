@@ -20,6 +20,7 @@ pub struct PersistentStartSessionRecord {
     pub cwd: String,
     pub env: HashMap<String, String>,
     pub policy_snapshot: JsonValue,
+    pub shared_world: Option<agent_api_types::SharedWorldOwnerSpec>,
     pub world_network: JsonValue,
     pub cols: u16,
     pub rows: u16,
@@ -158,13 +159,6 @@ impl ReplWorldAgentStub {
                 use tokio::net::UnixListener;
                 use tokio_tungstenite as tungs;
                 use tungs::tungstenite::protocol::Message;
-
-                #[derive(serde::Deserialize)]
-                struct ExecuteRequestStub {
-                    cmd: String,
-                    cwd: Option<String>,
-                    env: Option<HashMap<String, String>>,
-                }
 
                 async fn read_http_request(
                     stream: &mut tokio::net::UnixStream,
@@ -310,7 +304,8 @@ impl ReplWorldAgentStub {
                     }
 
                     if first_line.starts_with("POST /v1/execute/stream ") {
-                        let parsed: ExecuteRequestStub = match serde_json::from_slice(&body) {
+                        let parsed: agent_api_types::ExecuteRequest =
+                            match serde_json::from_slice(&body) {
                             Ok(p) => p,
                             Err(_) => {
                                 write_http_json(&mut stream, "400 Bad Request", r#"{"error":"bad_request","message":"invalid json"}"#).await;
@@ -377,7 +372,8 @@ impl ReplWorldAgentStub {
                     }
 
                     if first_line.starts_with("POST /v1/execute ") {
-                        let parsed: ExecuteRequestStub = match serde_json::from_slice(&body) {
+                        let parsed: agent_api_types::ExecuteRequest =
+                            match serde_json::from_slice(&body) {
                             Ok(p) => p,
                             Err(_) => {
                                 write_http_json(&mut stream, "400 Bad Request", r#"{"error":"bad_request","message":"invalid json"}"#).await;
@@ -394,6 +390,21 @@ impl ReplWorldAgentStub {
                             cmd.envs(env);
                         }
                         let output = cmd.output().expect("run host command");
+                        let shared_world = parsed.shared_world.as_ref().map(|request| {
+                            let generation = match request.action {
+                                agent_api_types::SharedWorldOwnerAction::AttachOrCreate => 0,
+                                agent_api_types::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                                    expected_generation,
+                                    ..
+                                } => expected_generation.saturating_add(1),
+                            };
+                            serde_json::json!({
+                                "orchestration_session_id": request.orchestration_session_id,
+                                "world_id": "wld_execute_stub",
+                                "world_generation": generation,
+                                "binding_state": "active",
+                            })
+                        });
                         let resp = serde_json::json!({
                             "exit": output.status.code().unwrap_or(-1),
                             "span_id": "agent-span",
@@ -401,6 +412,7 @@ impl ReplWorldAgentStub {
                             "stderr_b64": BASE64.encode(&output.stderr),
                             "scopes_used": [],
                             "fs_diff": serde_json::Value::Null,
+                            "shared_world": shared_world,
                             "process_events": [],
                             "process_events_status": "unavailable",
                             "process_events_reason": "backend_disabled",
@@ -593,6 +605,10 @@ impl ReplWorldAgentStub {
                         .get("policy_snapshot")
                         .cloned()
                         .unwrap_or(JsonValue::Null);
+                    let shared_world = first_json
+                        .get("shared_world")
+                        .cloned()
+                        .and_then(|value| serde_json::from_value(value).ok());
                     let world_network = first_json
                         .get("world_network")
                         .cloned()
@@ -605,6 +621,7 @@ impl ReplWorldAgentStub {
                             cwd: cwd.clone(),
                             env,
                             policy_snapshot,
+                            shared_world: shared_world.clone(),
                             world_network,
                             cols,
                             rows,
@@ -623,12 +640,28 @@ impl ReplWorldAgentStub {
                     // Respond with a deterministic ready.
                     let world_id = format!("wld_stub_{next_world_id:04}");
                     next_world_id = next_world_id.saturating_add(1);
+                    let ready_world_id = world_id.clone();
                     let ready = serde_json::json!({
                         "type": "ready",
                         "session_nonce": "0123456789abcdef0123456789abcdef",
                         "world_id": world_id,
                         "cwd": session_cwd,
                         "protocol_version": 1,
+                        "shared_world": shared_world.as_ref().map(|request| {
+                            let world_generation = match request.action {
+                                agent_api_types::SharedWorldOwnerAction::AttachOrCreate => 0,
+                                agent_api_types::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                                    expected_generation,
+                                    ..
+                                } => expected_generation.saturating_add(1),
+                            };
+                            serde_json::json!({
+                                "orchestration_session_id": request.orchestration_session_id,
+                                "world_id": ready_world_id,
+                                "world_generation": world_generation,
+                                "binding_state": "active",
+                            })
+                        }),
                     })
                     .to_string();
                     let _ = sink.send(Message::Text(ready)).await;

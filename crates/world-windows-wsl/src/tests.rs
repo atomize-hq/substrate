@@ -75,6 +75,7 @@ impl AgentApiMock for MockAgent {
                 stderr_b64: BASE64_STANDARD.encode(b""),
                 scopes_used: vec![],
                 fs_diff: None,
+                shared_world: None,
                 process_telemetry: ProcessTelemetry::not_supported_platform(),
             })
         })
@@ -149,6 +150,7 @@ fn exec_routes_to_agent() {
             writes: vec![PathBuf::from("/mnt/c/repo/new.txt")],
             ..Default::default()
         }),
+        shared_world: None,
         process_telemetry: ProcessTelemetry::not_supported_platform(),
     }));
 

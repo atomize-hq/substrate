@@ -1034,6 +1034,21 @@ fn current_world_request_profile() -> Option<String> {
         .filter(|value| !RESERVED_WORLD_REQUEST_PROFILES.contains(&value.as_str()))
 }
 
+#[cfg(target_os = "windows")]
+fn validate_execute_response_shared_world(
+    requested: Option<&agent_api_types::SharedWorldOwnerSpec>,
+    response: &agent_api_types::ExecuteResponse,
+) -> anyhow::Result<()> {
+    crate::execution::repl_persistent_session::validate_shared_world_echo(
+        requested,
+        response.shared_world.as_ref(),
+        "execute_response.shared_world",
+        None,
+    )
+    .map(|_| ())
+    .map_err(|message| anyhow::anyhow!("protocol error: {message}"))
+}
+
 #[cfg(target_os = "linux")]
 fn build_agent_client_and_request_impl(
     cmd: &str,
@@ -1078,6 +1093,7 @@ fn build_agent_client_and_request_impl(
         agent_id: agent_id.clone(),
         budget: None,
         policy_snapshot,
+        shared_world: None,
         world_network: Some(world_network),
         world_fs_mode: Some(current_world_fs_mode()),
     };
@@ -1174,6 +1190,7 @@ fn build_agent_client_and_request_impl(
             agent_id: agent_id.clone(),
             budget: None,
             policy_snapshot,
+            shared_world: None,
             world_network: Some(world_network),
             world_fs_mode: Some(current_world_fs_mode()),
         };
@@ -1227,6 +1244,7 @@ fn build_agent_client_and_request_impl(
         agent_id: agent_id.clone(),
         budget: None,
         policy_snapshot,
+        shared_world: None,
         world_network: Some(world_network),
         world_fs_mode: Some(current_world_fs_mode()),
     };
@@ -1376,6 +1394,7 @@ fn build_agent_client_and_request_impl(
         agent_id: agent_id.clone(),
         budget: None,
         policy_snapshot,
+        shared_world: None,
         world_network: Some(world_network),
         world_fs_mode: Some(current_world_fs_mode()),
     };
@@ -1481,6 +1500,7 @@ pub(crate) fn stream_non_pty_via_agent(
 
             let timeout = parse_timeout_ms("SUBSTRATE_WSL_AGENT_EXEC_TIMEOUT_MS")
                 .unwrap_or_else(|| std::time::Duration::from_secs(120));
+            let requested_shared_world = request.shared_world.clone();
 
             let response = tokio::time::timeout(timeout, async {
                 client
@@ -1496,6 +1516,7 @@ pub(crate) fn stream_non_pty_via_agent(
                     client.transport().description()
                 )
             })??;
+            validate_execute_response_shared_world(requested_shared_world.as_ref(), &response)?;
             let stdout = BASE64
                 .decode(response.stdout_b64.as_bytes())
                 .unwrap_or_else(|_| response.stdout_b64.clone().into_bytes());

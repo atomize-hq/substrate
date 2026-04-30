@@ -11,6 +11,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
 use crate::execution::policy_snapshot::bootstrap_world_spec;
 #[cfg(not(target_os = "windows"))]
 use crate::execution::settings;
+use agent_api_types::SharedWorldOwnerSpec;
 use anyhow::Result;
 use std::fmt;
 use std::path::PathBuf;
@@ -56,6 +57,33 @@ pub struct PlatformWorldContext {
 }
 
 static GLOBAL_CTX: OnceLock<Arc<PlatformWorldContext>> = OnceLock::new();
+
+pub(crate) fn reject_non_linux_shared_owner_request(
+    request: Option<&SharedWorldOwnerSpec>,
+    operation: &str,
+) -> Result<()> {
+    if let Some(request) = request {
+        anyhow::bail!(
+            "{} rejects explicit shared-owner world reuse on this platform (orchestration_session_id={})",
+            operation,
+            request.orchestration_session_id
+        );
+    }
+
+    Ok(())
+}
+
+pub(crate) fn with_supported_shared_world_request<T, F>(
+    request: Option<&SharedWorldOwnerSpec>,
+    operation: &str,
+    on_supported: F,
+) -> Result<T>
+where
+    F: FnOnce() -> Result<T>,
+{
+    reject_non_linux_shared_owner_request(request, operation)?;
+    on_supported()
+}
 
 pub fn store_context_globally(ctx: PlatformWorldContext) {
     let _ = GLOBAL_CTX.set(Arc::new(ctx));

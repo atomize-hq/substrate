@@ -51,7 +51,10 @@ use tokio::task;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 #[cfg(target_os = "linux")]
 use world::stream::{install_stream_sink, StreamKind, StreamSink};
-use world_api::{WorldBackend, WorldHandle, WorldSpec};
+use world_api::{
+    SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerSpec, WorldBackend,
+    WorldHandle, WorldReuseMode, WorldSpec,
+};
 
 use crate::enforcement_plan;
 #[cfg(target_os = "linux")]
@@ -484,21 +487,8 @@ impl WorldAgentService {
         let host_visible = !isolation_full;
         let empty_env: HashMap<String, String> = HashMap::new();
         let guard_env = req.env.as_ref().unwrap_or(&empty_env);
-        if let Some(deny) =
-            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible)
-        {
-            let span_id = format!("spn_{}", uuid::Uuid::now_v7());
-            let message = crate::world_exec_guard::deny_message(&deny);
-            return Ok(ExecuteResponse {
-                exit: 5,
-                span_id,
-                stdout_b64: BASE64.encode(b""),
-                stderr_b64: BASE64.encode(message.as_bytes()),
-                scopes_used: Vec::new(),
-                fs_diff: None,
-                process_telemetry: ProcessTelemetry::default(),
-            });
-        }
+        let guard_deny =
+            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible);
 
         // Create world spec from request
         let spec = build_world_spec(
@@ -507,6 +497,7 @@ impl WorldAgentService {
             fs_mode,
             isolate_network,
             allowed_domains,
+            req.shared_world.as_ref(),
         );
 
         // Ensure world exists
@@ -518,6 +509,22 @@ impl WorldAgentService {
                 return Err(anyhow::anyhow!("Failed to ensure session world"));
             }
         };
+        let shared_world = resolve_shared_world_binding(req.shared_world.as_ref(), &world)?;
+
+        if let Some(deny) = guard_deny {
+            let span_id = format!("spn_{}", uuid::Uuid::now_v7());
+            let message = crate::world_exec_guard::deny_message(&deny);
+            return Ok(ExecuteResponse {
+                exit: 5,
+                span_id,
+                stdout_b64: BASE64.encode(b""),
+                stderr_b64: BASE64.encode(message.as_bytes()),
+                scopes_used: Vec::new(),
+                fs_diff: None,
+                shared_world,
+                process_telemetry: ProcessTelemetry::default(),
+            });
+        }
 
         // Prepare execution request
         let mut env_map = req.env.unwrap_or_default();
@@ -588,6 +595,7 @@ impl WorldAgentService {
             stderr_b64: BASE64.encode(result.stderr),
             scopes_used: result.scopes_used,
             fs_diff: result.fs_diff,
+            shared_world,
             process_telemetry: result.process_telemetry,
         })
     }
@@ -623,6 +631,7 @@ impl WorldAgentService {
                 fs_mode,
                 isolate_network,
                 allowed_domains,
+                None,
             );
 
             let world = match self.backend.ensure_session(&spec) {
@@ -730,6 +739,7 @@ impl WorldAgentService {
                 fs_mode,
                 isolate_network,
                 allowed_domains,
+                None,
             );
 
             let world = match self.backend.ensure_session(&spec) {
@@ -808,6 +818,7 @@ impl WorldAgentService {
                 fs_mode,
                 isolate_network,
                 allowed_domains,
+                None,
             );
 
             let world = match self.backend.ensure_session(&spec) {
@@ -948,6 +959,7 @@ impl WorldAgentService {
                 fs_mode,
                 isolate_network,
                 allowed_domains,
+                None,
             );
 
             let world = match self.backend.ensure_session(&spec) {
@@ -1187,9 +1199,29 @@ impl WorldAgentService {
         let host_visible = !isolation_full;
         let empty_env: HashMap<String, String> = HashMap::new();
         let guard_env = req.env.as_ref().unwrap_or(&empty_env);
-        if let Some(deny) =
-            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible)
-        {
+        let guard_deny =
+            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible);
+
+        let spec = build_world_spec(
+            project_dir,
+            always_isolate,
+            fs_mode,
+            isolate_network,
+            allowed_domains,
+            req.shared_world.as_ref(),
+        );
+
+        let world = match self.backend.ensure_session(&spec) {
+            Ok(w) => w,
+            Err(e) => {
+                self.record_last_netfilter_failure_for_error(isolate_network, &e);
+                tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
+                anyhow::bail!("Failed to ensure session world");
+            }
+        };
+        let shared_world = resolve_shared_world_binding(req.shared_world.as_ref(), &world)?;
+
+        if let Some(deny) = guard_deny {
             let span_id = format!("spn_{}", uuid::Uuid::now_v7());
             let message = crate::world_exec_guard::deny_message(&deny);
             let frames = vec![
@@ -1222,23 +1254,6 @@ impl WorldAgentService {
                 .map_err(|e| anyhow!("failed to build stream response: {e}"))?;
             return Ok(response);
         }
-
-        let spec = build_world_spec(
-            project_dir,
-            always_isolate,
-            fs_mode,
-            isolate_network,
-            allowed_domains,
-        );
-
-        let world = match self.backend.ensure_session(&spec) {
-            Ok(w) => w,
-            Err(e) => {
-                self.record_last_netfilter_failure_for_error(isolate_network, &e);
-                tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
-                anyhow::bail!("Failed to ensure session world");
-            }
-        };
 
         let mut exec_req = world_api::ExecRequest {
             cmd: req.cmd.clone(),
@@ -1288,6 +1303,7 @@ impl WorldAgentService {
         #[cfg(target_os = "linux")]
         let service = self.clone();
         let agent_id = req.agent_id.clone();
+        let shared_world_for_events = shared_world.clone();
         let span_id_for_cleanup = span_id.clone();
         task::spawn_blocking(move || {
             let sink = Arc::new(StreamingSink::new(tx.clone()));
@@ -1318,7 +1334,10 @@ impl WorldAgentService {
                                 ts: chrono::Utc::now(),
                                 agent_id: agent_id.clone(),
                                 kind: AgentEventKind::Status,
-                                orchestration_session_id: span_id.clone(),
+                                orchestration_session_id: shared_world_for_events
+                                    .as_ref()
+                                    .map(|binding| binding.orchestration_session_id.clone())
+                                    .unwrap_or_else(|| span_id.clone()),
                                 run_id: span_id.clone(),
                                 parent_run_id: None,
                                 participant_id: None,
@@ -1327,8 +1346,15 @@ impl WorldAgentService {
                                 backend_id: None,
                                 thread_id: None,
                                 role: None,
-                                world_id: Some(world.id.clone()),
-                                world_generation: None,
+                                world_id: Some(
+                                    shared_world_for_events
+                                        .as_ref()
+                                        .map(|binding| binding.world_id.clone())
+                                        .unwrap_or_else(|| world.id.clone()),
+                                ),
+                                world_generation: shared_world_for_events
+                                    .as_ref()
+                                    .map(|binding| binding.world_generation),
                                 cmd_id: None,
                                 span_id: Some(span_id.clone()),
                                 channel: None,
@@ -1464,6 +1490,7 @@ impl WorldAgentService {
             policy_inputs.fs_mode,
             policy_inputs.isolate_network,
             policy_inputs.allowed_domains,
+            None,
         );
         let control =
             GatewayControlSettings::from_request_env(env_ref).map_err(gateway_runtime_error)?;
@@ -1893,6 +1920,7 @@ mod gateway_runtime_binding_tests {
             WorldFsMode::Writable,
             false,
             vec!["b.example.com".to_string(), "a.example.com".to_string()],
+            None,
         );
         let first = non_isolated_gateway_runtime_id(&project_dir, &world_spec, "cli:codex");
         world_spec.allowed_domains.reverse();
@@ -1909,6 +1937,7 @@ mod gateway_runtime_binding_tests {
             WorldFsMode::Writable,
             false,
             vec!["example.com".to_string()],
+            None,
         );
         let changed_project =
             non_isolated_gateway_runtime_id(Path::new("/tmp/other"), &base, "cli:codex");
@@ -1920,6 +1949,7 @@ mod gateway_runtime_binding_tests {
                 WorldFsMode::Writable,
                 false,
                 vec!["example.com".to_string()],
+                None,
             ),
             "cli:codex",
         );
@@ -1931,6 +1961,7 @@ mod gateway_runtime_binding_tests {
                 WorldFsMode::Writable,
                 false,
                 vec!["other.example.com".to_string()],
+                None,
             ),
             "cli:codex",
         );
@@ -2269,15 +2300,20 @@ fn resolve_policy_inputs(
     ))
 }
 
-fn build_world_spec(
+pub(crate) fn build_world_spec(
     project_dir: PathBuf,
     always_isolate: bool,
     fs_mode: WorldFsMode,
     isolate_network: bool,
     allowed_domains: Vec<String>,
+    shared_world: Option<&SharedWorldOwnerSpec>,
 ) -> WorldSpec {
     WorldSpec {
         reuse_session: true,
+        reuse_mode: shared_world
+            .cloned()
+            .map(WorldReuseMode::SharedOrchestration)
+            .unwrap_or(WorldReuseMode::GenericCompatible),
         isolate_network,
         limits: world_api::ResourceLimits::default(),
         enable_preload: false,
@@ -2286,6 +2322,51 @@ fn build_world_spec(
         always_isolate,
         fs_mode,
     }
+}
+
+pub(crate) fn resolve_shared_world_binding(
+    requested: Option<&SharedWorldOwnerSpec>,
+    world: &WorldHandle,
+) -> Result<Option<SharedWorldBindingSnapshot>> {
+    let Some(owner_spec) = requested else {
+        return Ok(world.shared_binding.clone());
+    };
+
+    let binding = world.shared_binding.clone().ok_or_else(|| {
+        anyhow!(
+            "missing authoritative shared world proof for orchestration session {}",
+            owner_spec.orchestration_session_id
+        )
+    })?;
+
+    if binding.orchestration_session_id.trim().is_empty() {
+        anyhow::bail!("malformed shared world proof: orchestration_session_id is empty");
+    }
+    if binding.orchestration_session_id != owner_spec.orchestration_session_id {
+        anyhow::bail!(
+            "malformed shared world proof: orchestration_session_id mismatch (expected {}, got {})",
+            owner_spec.orchestration_session_id,
+            binding.orchestration_session_id
+        );
+    }
+    if binding.world_id.trim().is_empty() {
+        anyhow::bail!("malformed shared world proof: world_id is empty");
+    }
+    if binding.world_id != world.id {
+        anyhow::bail!(
+            "malformed shared world proof: world_id mismatch (expected {}, got {})",
+            world.id,
+            binding.world_id
+        );
+    }
+    if binding.binding_state != SharedWorldBindingState::Active {
+        anyhow::bail!(
+            "malformed shared world proof: binding_state must be active, got {:?}",
+            binding.binding_state
+        );
+    }
+
+    Ok(Some(binding))
 }
 
 pub(crate) fn apply_full_isolation_helper_env(
@@ -2605,6 +2686,7 @@ pub(crate) fn resolve_landlock_allowlist_paths(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use world_api::{SharedWorldOwnerAction, WorldHandle};
 
     #[test]
     fn landlock_helper_src_accepts_substrate_world_agent_name() {
@@ -2653,6 +2735,7 @@ mod tests {
                 display_path: None,
                 summary: None,
             }),
+            shared_world: None,
             process_telemetry: ProcessTelemetry {
                 process_events: vec![substrate_common::ProcessEvent {
                     event_type: substrate_common::ProcessEventType::WorldProcessStart,
@@ -2704,6 +2787,49 @@ mod tests {
         assert_eq!(fd.writes[0], std::path::PathBuf::from("/tmp/a.txt"));
         assert!(fd.mods.is_empty());
         assert!(fd.deletes.is_empty());
+    }
+
+    #[test]
+    fn build_world_spec_uses_shared_orchestration_reuse_mode() {
+        let owner = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_test".to_string(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+
+        let spec = build_world_spec(
+            PathBuf::from("/tmp/project"),
+            true,
+            WorldFsMode::Writable,
+            false,
+            vec!["example.com".to_string()],
+            Some(&owner),
+        );
+
+        assert_eq!(spec.reuse_mode, WorldReuseMode::SharedOrchestration(owner));
+    }
+
+    #[test]
+    fn resolve_shared_world_binding_rejects_mismatched_owner_proof() {
+        let requested = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_expected".to_string(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let world = WorldHandle {
+            id: "wld_test".to_string(),
+            shared_binding: Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: "orch_other".to_string(),
+                world_id: "wld_test".to_string(),
+                world_generation: 0,
+                binding_state: SharedWorldBindingState::Active,
+            }),
+        };
+
+        let err = resolve_shared_world_binding(Some(&requested), &world).expect_err("mismatch");
+        assert!(
+            err.to_string()
+                .contains("orchestration_session_id mismatch"),
+            "unexpected error: {err:#}"
+        );
     }
 
     #[test]

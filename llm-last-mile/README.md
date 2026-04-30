@@ -7,6 +7,15 @@ This directory contains the reviewed statement-of-work packet for the prerequisi
   - registry wraps UAA handles with Substrate-owned metadata
   - `trace.jsonl` remains audit history, not live state authority
 
+## Current Status
+
+- `03-shared-world-ownership-linux-first` is the landed Linux-first interface/backend slice:
+  shared-world requests now use explicit request/response proof shapes, and Linux owner-bound reuse lives in `crates/world`.
+- `04-thread-world-binding-into-runtime-state` is still pending:
+  authoritative runtime-state projection of the active shared-world binding remains a follow-on slice.
+- `05-restart-invalidation-semantics` is still pending:
+  invalidation/replacement registry semantics for generation changes and restart handling remain a follow-on slice.
+
 ## Reviewed Execution Order
 
 1. [01-orchestration-session-identity.md](./01-orchestration-session-identity.md)
@@ -17,8 +26,10 @@ This directory contains the reviewed statement-of-work packet for the prerequisi
    - Make shared-world ownership explicit on Linux and bind one active `world_id` to one `orchestration_session_id`.
 4. [04-thread-world-binding-into-runtime-state.md](./04-thread-world-binding-into-runtime-state.md)
    - Persist authoritative `world_id` and `world_generation` in runtime state instead of relying on trace/event history.
+   - Status: still pending after the Linux-first interface slice.
 5. [05-restart-invalidation-semantics.md](./05-restart-invalidation-semantics.md)
    - Define the live-state rule that a generation change invalidates all prior-generation world-scoped member sessions.
+   - Status: still pending after the Linux-first interface slice.
 6. [06-session-centric-state-store.md](./06-session-centric-state-store.md)
    - Rework the runtime handle store APIs and layout so consumers resolve by orchestration session instead of by orchestrator agent heuristics.
 

@@ -8,9 +8,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use world_api::{ExecResult, FsDiff, WorldFsMode, WorldSpec};
+use world_api::{
+    ExecResult, FsDiff, SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerSpec,
+    WorldFsMode, WorldSpec,
+};
 
 const SESSION_METADATA_FILE_NAME: &str = "session.json";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum SessionWorldOwnerMode {
+    #[default]
+    Generic,
+    SharedOrchestration,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct SessionWorldMetadata {
@@ -21,6 +32,26 @@ struct SessionWorldMetadata {
     allowed_domains: Vec<String>,
     cgroup_path: PathBuf,
     started_at_unix_millis: u64,
+    #[serde(default)]
+    owner_mode: SessionWorldOwnerMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    orchestration_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    world_generation: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    binding_state: Option<SharedWorldBindingState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    policy_snapshot_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    world_fs_mode: Option<WorldFsMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_restart_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SessionWorldOwnership {
+    Generic,
+    Shared(SharedWorldBindingSnapshot),
 }
 
 /// A reusable Linux world with proper isolation.
@@ -34,6 +65,9 @@ pub struct SessionWorld {
     pub started_at: SystemTime,
     pub network_filter: Option<crate::netfilter::NetFilter>,
     pub fs_by_span: HashMap<String, FsDiff>,
+    shared_binding: Option<SharedWorldBindingSnapshot>,
+    policy_snapshot_hash: Option<String>,
+    last_restart_reason: Option<String>,
     /// Persistent overlay mount for this session (writable or read-only).
     overlay: Option<OverlayFs>,
     overlay_mode: Option<WorldFsMode>,
@@ -56,8 +90,37 @@ impl SessionWorld {
 
     /// Ensure a session world is started and return it.
     pub fn ensure_started(spec: WorldSpec) -> Result<Self> {
-        // Create new session world
+        Self::ensure_started_with_binding(spec, None, None)
+    }
+
+    pub(crate) fn ensure_started_for_shared_owner(
+        spec: WorldSpec,
+        orchestration_session_id: String,
+        world_generation: u64,
+        last_restart_reason: Option<String>,
+    ) -> Result<Self> {
+        let shared_binding = SharedWorldBindingSnapshot {
+            orchestration_session_id,
+            world_id: String::new(),
+            world_generation,
+            binding_state: SharedWorldBindingState::Active,
+        };
+        Self::ensure_started_with_binding(spec, Some(shared_binding), last_restart_reason)
+    }
+
+    fn ensure_started_with_binding(
+        spec: WorldSpec,
+        world_binding: Option<SharedWorldBindingSnapshot>,
+        last_restart_reason: Option<String>,
+    ) -> Result<Self> {
         let world_id = format!("wld_{}", uuid::Uuid::now_v7());
+        let shared_binding = match world_binding {
+            Some(mut binding) => {
+                binding.world_id = world_id.clone();
+                Some(binding)
+            }
+            None => None,
+        };
         let mut world = Self {
             id: world_id.clone(),
             root_dir: Self::shared_root_dir(),
@@ -68,12 +131,15 @@ impl SessionWorld {
             started_at: SystemTime::now(),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            shared_binding,
+            policy_snapshot_hash: None,
+            last_restart_reason,
             overlay: None,
             overlay_mode: None,
         };
 
         world.setup()?;
-        if world.spec.reuse_session {
+        if world.should_persist_metadata() {
             world.persist_metadata()?;
         }
         Ok(world)
@@ -87,7 +153,37 @@ impl SessionWorld {
             && self.spec.allowed_domains == spec.allowed_domains
     }
 
-    pub(crate) fn recover_compatible_from_root(
+    pub(crate) fn is_generic_reusable_with(&self, spec: &WorldSpec) -> bool {
+        self.shared_binding.is_none() && self.compatible_with(spec)
+    }
+
+    pub(crate) fn is_shared_owner_reusable_with(
+        &self,
+        spec: &WorldSpec,
+        owner_spec: &SharedWorldOwnerSpec,
+    ) -> bool {
+        self.compatible_with(spec)
+            && self.shared_binding.as_ref().is_some_and(|binding| {
+                binding.binding_state == SharedWorldBindingState::Active
+                    && binding.orchestration_session_id == owner_spec.orchestration_session_id
+            })
+    }
+
+    pub(crate) fn shared_binding(&self) -> Option<SharedWorldBindingSnapshot> {
+        self.shared_binding.clone()
+    }
+
+    pub(crate) fn mark_shared_binding_replaced(&mut self, reason: String) -> Result<()> {
+        let binding = self
+            .shared_binding
+            .as_mut()
+            .ok_or_else(|| anyhow!("shared binding missing for world {}", self.id))?;
+        binding.binding_state = SharedWorldBindingState::Replaced;
+        self.last_restart_reason = Some(reason);
+        self.persist_metadata()
+    }
+
+    pub(crate) fn recover_generic_compatible_from_root(
         root_dir: &Path,
         spec: &WorldSpec,
     ) -> Result<Option<Self>> {
@@ -95,6 +191,29 @@ impl SessionWorld {
             return Ok(None);
         }
 
+        Self::recover_first_from_root(root_dir, |metadata_path| {
+            Self::recover_generic_from_metadata_path(metadata_path, root_dir, spec)
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn recover_compatible_from_root(
+        root_dir: &Path,
+        spec: &WorldSpec,
+    ) -> Result<Option<Self>> {
+        Self::recover_generic_compatible_from_root(root_dir, spec)
+    }
+
+    pub(crate) fn recover_shared_active_from_root(
+        root_dir: &Path,
+        spec: &WorldSpec,
+        owner_spec: &SharedWorldOwnerSpec,
+    ) -> Result<Option<Self>> {
+        if !root_dir.is_dir() {
+            return Ok(None);
+        }
+
+        let mut recovered = None;
         for entry in fs::read_dir(root_dir)
             .with_context(|| format!("failed to read session root {}", root_dir.display()))?
         {
@@ -110,7 +229,56 @@ impl SessionWorld {
                 continue;
             }
 
-            match Self::recover_from_metadata_path(&metadata_path, root_dir, spec) {
+            match Self::recover_shared_from_metadata_path(
+                &metadata_path,
+                root_dir,
+                spec,
+                owner_spec,
+            ) {
+                Ok(Some(world)) => {
+                    if recovered.is_some() {
+                        anyhow::bail!(
+                            "multiple active shared worlds found for orchestration session {}",
+                            owner_spec.orchestration_session_id
+                        );
+                    }
+                    recovered = Some(world);
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        metadata = %metadata_path.display(),
+                        "ignoring invalid persisted session metadata"
+                    );
+                    let _ = fs::remove_file(&metadata_path);
+                }
+            }
+        }
+
+        Ok(recovered)
+    }
+
+    fn recover_first_from_root<F>(root_dir: &Path, mut recover: F) -> Result<Option<Self>>
+    where
+        F: FnMut(&Path) -> Result<Option<Self>>,
+    {
+        for entry in fs::read_dir(root_dir)
+            .with_context(|| format!("failed to read session root {}", root_dir.display()))?
+        {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    tracing::warn!(error = %err, root = %root_dir.display(), "failed to inspect session metadata entry");
+                    continue;
+                }
+            };
+            let metadata_path = entry.path().join(SESSION_METADATA_FILE_NAME);
+            if !metadata_path.is_file() {
+                continue;
+            }
+
+            match recover(&metadata_path) {
                 Ok(Some(world)) => return Ok(Some(world)),
                 Ok(None) => {}
                 Err(err) => {
@@ -127,7 +295,7 @@ impl SessionWorld {
         Ok(None)
     }
 
-    fn recover_from_metadata_path(
+    fn recover_generic_from_metadata_path(
         metadata_path: &Path,
         root_dir: &Path,
         spec: &WorldSpec,
@@ -139,7 +307,42 @@ impl SessionWorld {
         if !Self::metadata_is_usable(&metadata, metadata_path) {
             return Ok(None);
         }
-        Ok(Some(Self::from_metadata(root_dir, spec, metadata)))
+        match Self::ownership_from_metadata(&metadata)? {
+            SessionWorldOwnership::Generic => {
+                Ok(Some(Self::from_metadata(root_dir, spec, metadata, None)))
+            }
+            SessionWorldOwnership::Shared(_) => Ok(None),
+        }
+    }
+
+    fn recover_shared_from_metadata_path(
+        metadata_path: &Path,
+        root_dir: &Path,
+        spec: &WorldSpec,
+        owner_spec: &SharedWorldOwnerSpec,
+    ) -> Result<Option<Self>> {
+        let metadata = Self::read_metadata(metadata_path)?;
+        if !Self::metadata_matches_spec(&metadata, spec) {
+            return Ok(None);
+        }
+        if !Self::metadata_is_usable(&metadata, metadata_path) {
+            return Ok(None);
+        }
+        match Self::ownership_from_metadata(&metadata)? {
+            SessionWorldOwnership::Generic => Ok(None),
+            SessionWorldOwnership::Shared(binding)
+                if binding.binding_state == SharedWorldBindingState::Active
+                    && binding.orchestration_session_id == owner_spec.orchestration_session_id =>
+            {
+                Ok(Some(Self::from_metadata(
+                    root_dir,
+                    spec,
+                    metadata,
+                    Some(binding),
+                )))
+            }
+            SessionWorldOwnership::Shared(_) => Ok(None),
+        }
     }
 
     fn metadata_matches_spec(metadata: &SessionWorldMetadata, spec: &WorldSpec) -> bool {
@@ -155,7 +358,60 @@ impl SessionWorld {
             && metadata.cgroup_path.is_dir()
     }
 
-    fn from_metadata(root_dir: &Path, spec: &WorldSpec, metadata: SessionWorldMetadata) -> Self {
+    fn ownership_from_metadata(metadata: &SessionWorldMetadata) -> Result<SessionWorldOwnership> {
+        let owner_fields_present = metadata.orchestration_session_id.is_some()
+            || metadata.world_generation.is_some()
+            || metadata.binding_state.is_some();
+        match metadata.owner_mode {
+            SessionWorldOwnerMode::Generic => {
+                if owner_fields_present {
+                    Err(anyhow!(
+                        "generic session metadata {} includes shared owner fields",
+                        metadata.world_id
+                    ))
+                } else {
+                    Ok(SessionWorldOwnership::Generic)
+                }
+            }
+            SessionWorldOwnerMode::SharedOrchestration => {
+                let orchestration_session_id = metadata
+                    .orchestration_session_id
+                    .clone()
+                    .filter(|id| !id.is_empty())
+                    .ok_or_else(|| {
+                        anyhow!(
+                            "shared session metadata {} missing orchestration_session_id",
+                            metadata.world_id
+                        )
+                    })?;
+                let world_generation = metadata.world_generation.ok_or_else(|| {
+                    anyhow!(
+                        "shared session metadata {} missing world_generation",
+                        metadata.world_id
+                    )
+                })?;
+                let binding_state = metadata.binding_state.clone().ok_or_else(|| {
+                    anyhow!(
+                        "shared session metadata {} missing binding_state",
+                        metadata.world_id
+                    )
+                })?;
+                Ok(SessionWorldOwnership::Shared(SharedWorldBindingSnapshot {
+                    orchestration_session_id,
+                    world_id: metadata.world_id.clone(),
+                    world_generation,
+                    binding_state,
+                }))
+            }
+        }
+    }
+
+    fn from_metadata(
+        root_dir: &Path,
+        spec: &WorldSpec,
+        metadata: SessionWorldMetadata,
+        shared_binding: Option<SharedWorldBindingSnapshot>,
+    ) -> Self {
         Self {
             id: metadata.world_id,
             root_dir: root_dir.to_path_buf(),
@@ -166,6 +422,9 @@ impl SessionWorld {
             started_at: UNIX_EPOCH + Duration::from_millis(metadata.started_at_unix_millis),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            shared_binding,
+            policy_snapshot_hash: metadata.policy_snapshot_hash,
+            last_restart_reason: metadata.last_restart_reason,
             overlay: None,
             overlay_mode: None,
         }
@@ -187,6 +446,16 @@ impl SessionWorld {
             .as_millis()
             .try_into()
             .context("session start time exceeds u64 millis")?;
+        let (owner_mode, orchestration_session_id, world_generation, binding_state) =
+            match self.shared_binding.as_ref() {
+                Some(binding) => (
+                    SessionWorldOwnerMode::SharedOrchestration,
+                    Some(binding.orchestration_session_id.clone()),
+                    Some(binding.world_generation),
+                    Some(binding.binding_state.clone()),
+                ),
+                None => (SessionWorldOwnerMode::Generic, None, None, None),
+            };
         Ok(SessionWorldMetadata {
             world_id: self.id.clone(),
             project_dir: self.project_dir.clone(),
@@ -195,6 +464,13 @@ impl SessionWorld {
             allowed_domains: self.spec.allowed_domains.clone(),
             cgroup_path: self.cgroup_path.clone(),
             started_at_unix_millis,
+            owner_mode,
+            orchestration_session_id,
+            world_generation,
+            binding_state,
+            policy_snapshot_hash: self.policy_snapshot_hash.clone(),
+            world_fs_mode: Some(self.spec.fs_mode),
+            last_restart_reason: self.last_restart_reason.clone(),
         })
     }
 
@@ -207,6 +483,10 @@ impl SessionWorld {
         let metadata_path = Self::metadata_path(&self.root_dir, &self.id);
         fs::write(&metadata_path, encoded)
             .with_context(|| format!("failed to write {}", metadata_path.display()))
+    }
+
+    fn should_persist_metadata(&self) -> bool {
+        self.spec.reuse_session || self.shared_binding.is_some()
     }
 
     fn read_metadata(path: &Path) -> Result<SessionWorldMetadata> {
@@ -752,6 +1032,7 @@ mod tests {
     use tempfile::tempdir;
     #[cfg(target_os = "linux")]
     use tempfile::TempDir;
+    use world_api::SharedWorldOwnerAction;
 
     #[cfg(target_os = "linux")]
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -809,6 +1090,9 @@ mod tests {
             started_at: std::time::SystemTime::UNIX_EPOCH,
             network_filter: None,
             fs_by_span: HashMap::new(),
+            shared_binding: None,
+            policy_snapshot_hash: None,
+            last_restart_reason: None,
             overlay: None,
             overlay_mode: None,
         }
@@ -836,6 +1120,7 @@ mod tests {
     fn session_compatibility_respects_core_spec_fields() {
         let base_spec = WorldSpec {
             reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::GenericCompatible,
             isolate_network: true,
             limits: world_api::ResourceLimits::default(),
             enable_preload: false,
@@ -854,6 +1139,9 @@ mod tests {
             started_at: std::time::SystemTime::UNIX_EPOCH,
             network_filter: None,
             fs_by_span: HashMap::new(),
+            shared_binding: None,
+            policy_snapshot_hash: None,
+            last_restart_reason: None,
             overlay: None,
             overlay_mode: None,
         };
@@ -913,6 +1201,9 @@ mod tests {
             started_at: UNIX_EPOCH + Duration::from_millis(1_234),
             network_filter: None,
             fs_by_span: HashMap::new(),
+            shared_binding: None,
+            policy_snapshot_hash: None,
+            last_restart_reason: None,
             overlay: None,
             overlay_mode: None,
         };
@@ -927,6 +1218,71 @@ mod tests {
         assert_eq!(recovered.cgroup_path, world.cgroup_path);
         assert_eq!(recovered.started_at, world.started_at);
         assert!(recovered.compatible_with(&spec));
+        assert_eq!(recovered.shared_binding(), None);
+    }
+
+    #[test]
+    fn shared_metadata_round_trips_for_recovery() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        let cgroup_path = temp.path().join("cgroup").join("wld_shared");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&cgroup_path).unwrap();
+
+        let owner_spec = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_123".into(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(owner_spec.clone()),
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir: project_dir.clone(),
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+        let world = SessionWorld {
+            id: "wld_shared".into(),
+            root_dir: root_dir.clone(),
+            project_dir: project_dir.clone(),
+            cgroup_path: cgroup_path.clone(),
+            net_namespace: None,
+            spec: spec.clone(),
+            started_at: UNIX_EPOCH + Duration::from_millis(1_234),
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            shared_binding: Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: owner_spec.orchestration_session_id.clone(),
+                world_id: "wld_shared".into(),
+                world_generation: 0,
+                binding_state: SharedWorldBindingState::Active,
+            }),
+            policy_snapshot_hash: None,
+            last_restart_reason: None,
+            overlay: None,
+            overlay_mode: None,
+        };
+
+        world.persist_metadata().unwrap();
+
+        let recovered =
+            SessionWorld::recover_shared_active_from_root(&root_dir, &spec, &owner_spec)
+                .unwrap()
+                .expect("shared metadata should recover");
+        assert_eq!(
+            recovered.shared_binding(),
+            Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: "orch_123".into(),
+                world_id: "wld_shared".into(),
+                world_generation: 0,
+                binding_state: SharedWorldBindingState::Active,
+            })
+        );
+        assert_eq!(recovered.last_restart_reason, None);
     }
 
     #[test]
@@ -951,6 +1307,13 @@ mod tests {
             allowed_domains: vec!["example.com".into()],
             cgroup_path: temp.path().join("missing-cgroup"),
             started_at_unix_millis: 42,
+            owner_mode: SessionWorldOwnerMode::Generic,
+            orchestration_session_id: None,
+            world_generation: None,
+            binding_state: None,
+            policy_snapshot_hash: None,
+            world_fs_mode: None,
+            last_restart_reason: None,
         };
         std::fs::write(
             stale_dir.join(SESSION_METADATA_FILE_NAME),
@@ -970,6 +1333,173 @@ mod tests {
 
         let recovered = SessionWorld::recover_compatible_from_root(&root_dir, &spec).unwrap();
         assert!(recovered.is_none(), "stale metadata should be ignored");
+    }
+
+    #[test]
+    fn shared_recovery_rejects_ownerless_legacy_metadata() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        let cgroup_path = temp.path().join("cgroup").join("wld_legacy");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&cgroup_path).unwrap();
+        let metadata_dir = root_dir.join("wld_legacy");
+        std::fs::create_dir_all(&metadata_dir).unwrap();
+
+        std::fs::write(
+            metadata_dir.join(SESSION_METADATA_FILE_NAME),
+            format!(
+                r#"{{
+  "world_id": "wld_legacy",
+  "project_dir": "{}",
+  "isolate_network": false,
+  "always_isolate": false,
+  "allowed_domains": ["example.com"],
+  "cgroup_path": "{}",
+  "started_at_unix_millis": 5000
+}}"#,
+                project_dir.display(),
+                cgroup_path.display()
+            ),
+        )
+        .unwrap();
+
+        let owner_spec = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_123".into(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(owner_spec.clone()),
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir,
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+
+        let recovered =
+            SessionWorld::recover_shared_active_from_root(&root_dir, &spec, &owner_spec).unwrap();
+        assert!(
+            recovered.is_none(),
+            "legacy ownerless metadata must not be reused for shared-owner mode"
+        );
+    }
+
+    #[test]
+    fn shared_recovery_rejects_cross_owned_or_inactive_metadata() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        let cgroup_path = temp.path().join("cgroup").join("wld_shared");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&cgroup_path).unwrap();
+
+        let metadata_dir = root_dir.join("wld_shared");
+        std::fs::create_dir_all(&metadata_dir).unwrap();
+        let metadata = SessionWorldMetadata {
+            world_id: "wld_shared".into(),
+            project_dir: project_dir.clone(),
+            isolate_network: false,
+            always_isolate: false,
+            allowed_domains: vec!["example.com".into()],
+            cgroup_path: cgroup_path.clone(),
+            started_at_unix_millis: 42,
+            owner_mode: SessionWorldOwnerMode::SharedOrchestration,
+            orchestration_session_id: Some("orch_other".into()),
+            world_generation: Some(0),
+            binding_state: Some(SharedWorldBindingState::Replaced),
+            policy_snapshot_hash: None,
+            world_fs_mode: Some(WorldFsMode::Writable),
+            last_restart_reason: Some("restart".into()),
+        };
+        std::fs::write(
+            metadata_dir.join(SESSION_METADATA_FILE_NAME),
+            serde_json::to_vec(&metadata).unwrap(),
+        )
+        .unwrap();
+
+        let owner_spec = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_123".into(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(owner_spec.clone()),
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir,
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+
+        let recovered =
+            SessionWorld::recover_shared_active_from_root(&root_dir, &spec, &owner_spec).unwrap();
+        assert!(
+            recovered.is_none(),
+            "cross-owned or inactive metadata must not be reused"
+        );
+    }
+
+    #[test]
+    fn shared_recovery_ignores_partial_owner_metadata() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        let cgroup_path = temp.path().join("cgroup").join("wld_partial");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&cgroup_path).unwrap();
+
+        let metadata_dir = root_dir.join("wld_partial");
+        std::fs::create_dir_all(&metadata_dir).unwrap();
+        let partial = SessionWorldMetadata {
+            world_id: "wld_partial".into(),
+            project_dir: project_dir.clone(),
+            isolate_network: false,
+            always_isolate: false,
+            allowed_domains: vec!["example.com".into()],
+            cgroup_path,
+            started_at_unix_millis: 42,
+            owner_mode: SessionWorldOwnerMode::SharedOrchestration,
+            orchestration_session_id: Some("orch_123".into()),
+            world_generation: Some(0),
+            binding_state: None,
+            policy_snapshot_hash: None,
+            world_fs_mode: Some(WorldFsMode::Writable),
+            last_restart_reason: None,
+        };
+        std::fs::write(
+            metadata_dir.join(SESSION_METADATA_FILE_NAME),
+            serde_json::to_vec(&partial).unwrap(),
+        )
+        .unwrap();
+
+        let owner_spec = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_123".into(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(owner_spec.clone()),
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir,
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+
+        let recovered =
+            SessionWorld::recover_shared_active_from_root(&root_dir, &spec, &owner_spec).unwrap();
+        assert!(
+            recovered.is_none(),
+            "partial owner metadata must be treated as non-reusable"
+        );
     }
 
     #[test]
@@ -995,6 +1525,9 @@ mod tests {
             started_at: std::time::SystemTime::UNIX_EPOCH,
             network_filter: None,
             fs_by_span: HashMap::new(),
+            shared_binding: None,
+            policy_snapshot_hash: None,
+            last_restart_reason: None,
             overlay: None,
             overlay_mode: None,
         };

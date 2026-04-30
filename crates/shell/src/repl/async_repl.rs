@@ -2638,6 +2638,7 @@ struct OpenWorldSessionRequest<'a> {
     requested_cwd: String,
     requested_path: &'a Path,
     resolved_policy_snapshot: agent_api_types::PolicySnapshotV3,
+    shared_world_request: Option<agent_api_types::SharedWorldOwnerSpec>,
     snapshot_hash: String,
     workspace_root: Option<PathBuf>,
     on_stdout: StdoutCallback,
@@ -2651,6 +2652,7 @@ async fn open_world_session(request: OpenWorldSessionRequest<'_>) -> Result<Worl
         requested_cwd,
         requested_path,
         resolved_policy_snapshot,
+        shared_world_request,
         snapshot_hash,
         workspace_root,
         on_stdout,
@@ -2674,8 +2676,14 @@ async fn open_world_session(request: OpenWorldSessionRequest<'_>) -> Result<Worl
         agent_printer.print("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
     }
     apply_anchor_env_for_cwd(&mut start_params.env, requested_path)?;
+    start_params.shared_world = shared_world_request;
     let client = ReplPersistentSessionClient::start_with(start_params, on_stdout.clone()).await?;
     let ready = client.ready().clone();
+    let world_generation = ready
+        .shared_world
+        .as_ref()
+        .map(|binding| binding.world_generation)
+        .unwrap_or(world_generation);
 
     if ready.cwd != requested_cwd {
         let action = if restarted { "restarted" } else { "started" };
@@ -2709,6 +2717,14 @@ async fn restart_world_session(
     let on_stdout = old_session.on_stdout.clone();
     let previous_world_id = old_session.world_id.clone();
     let previous_world_generation = old_session.world_generation;
+    let shared_world_request =
+        resolve_active_orchestration_session_id().map(|id| agent_api_types::SharedWorldOwnerSpec {
+            orchestration_session_id: id,
+            action: agent_api_types::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                expected_generation: previous_world_generation,
+                reason: reason.message().to_string(),
+            },
+        });
 
     old_session.client.close().await?;
 
@@ -2716,6 +2732,7 @@ async fn restart_world_session(
         requested_cwd,
         requested_path: requested_path.as_path(),
         resolved_policy_snapshot: policy_snapshot,
+        shared_world_request,
         snapshot_hash,
         workspace_root,
         on_stdout,
@@ -2887,10 +2904,16 @@ async fn start_world_session(
         .context("policy snapshot (start)")?;
     let start_hash = resolved_start.snapshot_hash.clone();
     let start_workspace_root = find_workspace_root(requested_path);
+    let shared_world_request =
+        resolve_active_orchestration_session_id().map(|id| agent_api_types::SharedWorldOwnerSpec {
+            orchestration_session_id: id,
+            action: agent_api_types::SharedWorldOwnerAction::AttachOrCreate,
+        });
     let session = open_world_session(OpenWorldSessionRequest {
         requested_cwd: requested_cwd.clone(),
         requested_path,
         resolved_policy_snapshot: resolved_start.snapshot,
+        shared_world_request,
         snapshot_hash: start_hash.clone(),
         workspace_root: start_workspace_root.clone(),
         on_stdout,

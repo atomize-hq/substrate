@@ -9,6 +9,10 @@ pub use substrate_common::{
     PlacementPosture, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry,
     WorldFsMode,
 };
+pub use world_api::{
+    SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerAction,
+    SharedWorldOwnerSpec, WorldReuseMode,
+};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -664,6 +668,8 @@ pub struct ExecuteRequest {
     pub budget: Option<Budget>,
     pub policy_snapshot: PolicySnapshotV3,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_world: Option<SharedWorldOwnerSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_network: Option<WorldNetworkRoutingV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_fs_mode: Option<WorldFsMode>,
@@ -678,6 +684,8 @@ pub struct ExecuteResponse {
     pub scopes_used: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fs_diff: Option<FsDiff>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_world: Option<SharedWorldBindingSnapshot>,
     #[serde(flatten, default)]
     pub process_telemetry: ProcessTelemetry,
 }
@@ -1961,6 +1969,10 @@ mod tests {
             agent_id: "tester".into(),
             budget: None,
             policy_snapshot: snapshot,
+            shared_world: Some(SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_123".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }),
             world_network: Some(WorldNetworkRoutingV1 {
                 isolate_network: true,
                 allowed_domains: vec!["github.com".to_string()],
@@ -1979,6 +1991,13 @@ mod tests {
         );
         let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
         assert_eq!(back.world_fs_mode, Some(WorldFsMode::ReadOnly));
+        assert_eq!(
+            back.shared_world,
+            Some(SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_123".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            })
+        );
         assert_eq!(back.policy_snapshot.schema_version, 3);
         assert_eq!(
             back.policy_snapshot.net_allowed,
@@ -2028,6 +2047,7 @@ mod tests {
             agent_id: "tester".into(),
             budget: None,
             policy_snapshot: snapshot,
+            shared_world: None,
             world_network: None,
             world_fs_mode: None,
         };
@@ -2052,6 +2072,42 @@ mod tests {
         assert_eq!(
             snapshot.net_allowed,
             vec!["github.com".to_string(), "crates.io".to_string()]
+        );
+    }
+
+    #[test]
+    fn execute_response_shared_world_round_trip() {
+        let response = ExecuteResponse {
+            exit: 0,
+            span_id: "spn_123".into(),
+            stdout_b64: "aGVsbG8=".into(),
+            stderr_b64: String::new(),
+            scopes_used: vec!["github.com".into()],
+            fs_diff: None,
+            shared_world: Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: "orch_123".into(),
+                world_id: "wld_123".into(),
+                world_generation: 3,
+                binding_state: SharedWorldBindingState::Active,
+            }),
+            process_telemetry: ProcessTelemetry::default(),
+        };
+
+        let json = serde_json::to_string(&response).expect("serialize response");
+        assert!(
+            json.contains("\"shared_world\""),
+            "expected shared_world to serialize"
+        );
+        let back: ExecuteResponse =
+            serde_json::from_str(&json).expect("deserialize execute response");
+        assert_eq!(
+            back.shared_world,
+            Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: "orch_123".into(),
+                world_id: "wld_123".into(),
+                world_generation: 3,
+                binding_state: SharedWorldBindingState::Active,
+            })
         );
     }
 
