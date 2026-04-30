@@ -11,7 +11,7 @@ use substrate_common::paths as substrate_paths;
 use crate::execution::config_model::AgentExecutionScope;
 
 use super::{
-    mapping::ORCHESTRATOR_ROLE,
+    mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     orchestration_session::{OrchestrationSessionRecord, OrchestrationSessionState},
     session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest},
 };
@@ -145,6 +145,18 @@ impl AgentRuntimeStateStore {
             .collect())
     }
 
+    pub(crate) fn list_invalidated_participants(
+        &self,
+    ) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        Ok(self
+            .read_participant_dir(&self.participants_dir())?
+            .into_iter()
+            .filter(|participant| {
+                participant.handle.state == super::session::AgentRuntimeSessionState::Invalidated
+            })
+            .collect())
+    }
+
     #[allow(dead_code)]
     pub(crate) fn list_live_participants_for_session(
         &self,
@@ -157,6 +169,39 @@ impl AgentRuntimeStateStore {
                 participant.handle.orchestration_session_id == orchestration_session_id
             })
             .collect())
+    }
+
+    pub(crate) fn invalidate_stale_world_members_for_session(
+        &self,
+        orchestration_session_id: &str,
+        active_generation: u64,
+    ) -> Result<Vec<String>> {
+        let mut invalidated_participant_ids = Vec::new();
+
+        for mut participant in self.read_participant_dir(&self.participants_dir())? {
+            if participant.handle.orchestration_session_id != orchestration_session_id
+                || participant.handle.role != MEMBER_ROLE
+                || participant.handle.execution.scope != AgentExecutionScope::World
+                || !participant.is_authoritative_live()
+                || !owner_process_is_alive(&participant)
+            {
+                continue;
+            }
+
+            let Some(world_generation) = participant.handle.world_generation else {
+                continue;
+            };
+            if world_generation >= active_generation {
+                continue;
+            }
+
+            if participant.invalidate_for_world_generation_rollover() {
+                invalidated_participant_ids.push(participant.handle.participant_id.clone());
+                self.persist_participant(&participant)?;
+            }
+        }
+
+        Ok(invalidated_participant_ids)
     }
 
     pub(crate) fn resolve_live_orchestrator_participant(
@@ -768,6 +813,147 @@ mod tests {
                 .expect("list live participants");
             assert_eq!(participants.len(), 1);
             assert_eq!(participants[0].handle.participant_id, "ash_live");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn invalidate_stale_world_members_for_session_is_session_local_and_world_only() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("claude_code", "sess_live", "ash_orchestrator");
+            let stale_member =
+                live_member("codex", "sess_live", "ash_member_old", "ash_orchestrator");
+            let mut current_member =
+                live_member("codex", "sess_live", "ash_member_new", "ash_orchestrator");
+            current_member.handle.world_generation = Some(3);
+            let mut host_member = AgentRuntimeParticipantRecord::new_member_participant(
+                &descriptor("codex", AgentExecutionScope::Host),
+                "sess_live".to_string(),
+                "ash_host_member".to_string(),
+                "ash_orchestrator".to_string(),
+                None,
+                None,
+                "lease_host".to_string(),
+            )
+            .expect("host member");
+            set_live(&mut host_member);
+            let stale_other_session = live_member(
+                "codex",
+                "sess_other",
+                "ash_member_other",
+                "ash_orchestrator",
+            );
+
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store
+                .persist_participant(&stale_member)
+                .expect("persist stale member");
+            store
+                .persist_participant(&current_member)
+                .expect("persist current member");
+            store
+                .persist_participant(&host_member)
+                .expect("persist host member");
+            store
+                .persist_participant(&stale_other_session)
+                .expect("persist other session member");
+
+            let invalidated = store
+                .invalidate_stale_world_members_for_session("sess_live", 3)
+                .expect("invalidate stale members");
+
+            assert_eq!(invalidated, vec!["ash_member_old"]);
+            assert_eq!(
+                store
+                    .load_participant("ash_member_old")
+                    .expect("load stale member")
+                    .expect("stale member exists")
+                    .handle
+                    .state,
+                AgentRuntimeSessionState::Invalidated
+            );
+            assert!(store
+                .load_participant("ash_member_new")
+                .expect("load current member")
+                .expect("current member exists")
+                .is_authoritative_live());
+            assert!(store
+                .load_participant("ash_host_member")
+                .expect("load host member")
+                .expect("host member exists")
+                .is_authoritative_live());
+            assert!(store
+                .load_participant("ash_member_other")
+                .expect("load other session member")
+                .expect("other session member exists")
+                .is_authoritative_live());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn invalidate_stale_world_members_for_session_is_idempotent() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("claude_code", "sess_live", "ash_orchestrator");
+            let stale_member =
+                live_member("codex", "sess_live", "ash_member_old", "ash_orchestrator");
+
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store
+                .persist_participant(&stale_member)
+                .expect("persist stale member");
+
+            let first = store
+                .invalidate_stale_world_members_for_session("sess_live", 3)
+                .expect("first invalidation");
+            let second = store
+                .invalidate_stale_world_members_for_session("sess_live", 3)
+                .expect("second invalidation");
+
+            assert_eq!(first, vec!["ash_member_old"]);
+            assert!(second.is_empty(), "second sweep must be a no-op");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn list_invalidated_participants_reads_authoritative_tombstones_only() {
+        with_store(|store| {
+            let mut participant =
+                live_member("codex", "sess_live", "ash_member_old", "ash_orchestrator");
+            participant.invalidate_for_world_generation_rollover();
+            store
+                .persist_participant(&participant)
+                .expect("persist invalidated participant");
+            write_legacy_handle_file(
+                store,
+                "ash_legacy_only",
+                "codex",
+                "sess_live",
+                false,
+                Some(json!({
+                    "role": "member",
+                    "execution": { "scope": "world" },
+                    "state": "invalidated",
+                    "world_id": "world-17",
+                    "world_generation": 1,
+                    "orchestrator_participant_id": "ash_orchestrator",
+                    "internal": {
+                        "ownership_mode": "member_runtime"
+                    }
+                })),
+            );
+
+            let invalidated = store
+                .list_invalidated_participants()
+                .expect("list invalidated participants");
+
+            assert_eq!(invalidated.len(), 1);
+            assert_eq!(invalidated[0].handle.participant_id, "ash_member_old");
         });
     }
 

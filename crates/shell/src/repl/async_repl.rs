@@ -2411,6 +2411,16 @@ fn persist_world_binding_authority(
     Ok(snapshot)
 }
 
+fn invalidate_stale_world_members_after_binding(
+    context: &RuntimeOrchestrationContext,
+    active_generation: u64,
+) -> Result<Vec<String>> {
+    context.store.invalidate_stale_world_members_for_session(
+        &context.orchestration_session_id(),
+        active_generation,
+    )
+}
+
 async fn finalize_runtime_startup_failure(
     startup_context: Option<&RuntimeOrchestrationContext>,
     world_session: &mut Option<WorldSession>,
@@ -3128,6 +3138,16 @@ async fn restart_world_session(
         }
         if let Some(world_generation) = persisted_snapshot.world_generation {
             authoritative_world_generation = world_generation;
+        }
+
+        if let Err(err) = invalidate_stale_world_members_after_binding(
+            startup_context,
+            authoritative_world_generation,
+        ) {
+            let _ = new_session.client.close().await;
+            return Err(err).context(
+                "failed to invalidate stale world-scoped participants after replacement binding persistence",
+            );
         }
     }
     emit_world_restarted_alert(

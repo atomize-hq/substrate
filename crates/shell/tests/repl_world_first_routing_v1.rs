@@ -355,6 +355,221 @@ fn assert_session_world_binding(
 }
 
 #[cfg(target_os = "linux")]
+fn participants_dir(substrate_home: &Path) -> PathBuf {
+    substrate_home.join("run/agent-hub/participants")
+}
+
+#[cfg(target_os = "linux")]
+fn participant_manifest_path(substrate_home: &Path, participant_id: &str) -> PathBuf {
+    participants_dir(substrate_home).join(format!("{participant_id}.json"))
+}
+
+#[cfg(target_os = "linux")]
+fn read_trace_lenient(trace_path: &Path) -> Vec<Value> {
+    fs::read_to_string(trace_path)
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn read_participant_manifest(substrate_home: &Path, participant_id: &str) -> Value {
+    serde_json::from_str(
+        &fs::read_to_string(participant_manifest_path(substrate_home, participant_id))
+            .expect("read participant manifest"),
+    )
+    .expect("parse participant manifest")
+}
+
+#[cfg(target_os = "linux")]
+fn write_live_world_member_manifest(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    participant_id: &str,
+    orchestrator_participant_id: &str,
+    world_id: &str,
+    world_generation: u64,
+) {
+    fs::create_dir_all(participants_dir(substrate_home)).expect("create participants dir");
+    let ts = "2026-04-30T12:00:00Z";
+    let payload = serde_json::json!({
+        "participant_id": participant_id,
+        "orchestration_session_id": orchestration_session_id,
+        "agent_id": "codex",
+        "backend_id": "cli:codex",
+        "role": "member",
+        "protocol": "uaa.agent.session",
+        "execution": { "scope": "world" },
+        "state": "ready",
+        "opened_at": ts,
+        "last_transition_at": ts,
+        "world_id": world_id,
+        "world_generation": world_generation,
+        "parent_session_handle_id": Value::Null,
+        "resumed_from_session_handle_id": Value::Null,
+        "orchestrator_participant_id": orchestrator_participant_id,
+        "internal": {
+            "resolved_agent_kind": "codex",
+            "resolved_binary_path": "/usr/bin/codex",
+            "shell_owner_pid": std::process::id(),
+            "lease_token": format!("lease_{participant_id}"),
+            "uaa_session_id": "uaa_session",
+            "latest_run_id": Value::Null,
+            "cancel_supported": true,
+            "control_owner_retained": true,
+            "event_stream_active": true,
+            "completion_observer_retained": true,
+            "ownership_mode": "member_runtime",
+            "ownership_valid": true,
+            "ownership_verified_at": ts,
+            "last_heartbeat_at": ts,
+            "last_event_at": ts,
+            "terminal_observed_at": Value::Null,
+            "termination_reason": Value::Null,
+            "last_error_bucket": Value::Null,
+            "last_error_message": Value::Null
+        }
+    });
+    fs::write(
+        participant_manifest_path(substrate_home, participant_id),
+        serde_json::to_vec_pretty(&payload).expect("serialize participant manifest"),
+    )
+    .expect("write participant manifest");
+}
+
+#[cfg(target_os = "linux")]
+fn session_participant_manifests(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> Vec<Value> {
+    let mut manifests = fs::read_dir(participants_dir(substrate_home))
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .map(|path| {
+            serde_json::from_str::<Value>(&fs::read_to_string(path).expect("read participant file"))
+                .expect("parse participant file")
+        })
+        .filter(|manifest| {
+            manifest
+                .get("orchestration_session_id")
+                .and_then(Value::as_str)
+                == Some(orchestration_session_id)
+        })
+        .collect::<Vec<_>>();
+    manifests.sort_by(|left, right| {
+        left.get("participant_id")
+            .and_then(Value::as_str)
+            .cmp(&right.get("participant_id").and_then(Value::as_str))
+    });
+    manifests
+}
+
+#[cfg(target_os = "linux")]
+fn participant_is_authoritative_live(manifest: &Value) -> bool {
+    let Some(state) = manifest.get("state").and_then(Value::as_str) else {
+        return false;
+    };
+    let live_state = matches!(
+        state,
+        "allocating" | "ready" | "running" | "restarting" | "stopping"
+    );
+    live_state
+        && manifest
+            .pointer("/internal/uaa_session_id")
+            .and_then(Value::as_str)
+            .is_some()
+        && manifest
+            .pointer("/internal/control_owner_retained")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && manifest
+            .pointer("/internal/event_stream_active")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && manifest
+            .pointer("/internal/completion_observer_retained")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && manifest
+            .pointer("/internal/ownership_valid")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && manifest
+            .pointer("/internal/terminal_observed_at")
+            .is_none_or(Value::is_null)
+}
+
+#[cfg(target_os = "linux")]
+fn live_world_member_generations_for_session(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> Vec<(String, u64)> {
+    let mut live = session_participant_manifests(substrate_home, orchestration_session_id)
+        .into_iter()
+        .filter(|manifest| manifest.get("role").and_then(Value::as_str) == Some("member"))
+        .filter(|manifest| {
+            manifest.pointer("/execution/scope").and_then(Value::as_str) == Some("world")
+        })
+        .filter(|manifest| participant_is_authoritative_live(manifest))
+        .filter_map(|manifest| {
+            Some((
+                manifest.get("participant_id")?.as_str()?.to_string(),
+                manifest.get("world_generation")?.as_u64()?,
+            ))
+        })
+        .collect::<Vec<_>>();
+    live.sort();
+    live
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_world_restarted_alert_without_stale_liveness(
+    trace_path: &Path,
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    stale_generation: u64,
+    timeout: Duration,
+) -> Value {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let events = read_trace_lenient(trace_path);
+        let alert = events.into_iter().find(|event| {
+            event.get("event_type").and_then(Value::as_str) == Some("agent_event")
+                && event.get("kind").and_then(Value::as_str) == Some("alert")
+                && event.pointer("/data/code").and_then(Value::as_str) == Some("world_restarted")
+                && event
+                    .get("orchestration_session_id")
+                    .and_then(Value::as_str)
+                    == Some(orchestration_session_id)
+        });
+        let stale_live =
+            live_world_member_generations_for_session(substrate_home, orchestration_session_id)
+                .into_iter()
+                .filter(|(_, generation)| *generation == stale_generation)
+                .collect::<Vec<_>>();
+        if let Some(alert) = alert {
+            assert!(
+                stale_live.is_empty(),
+                "world_restarted published before stale generation {stale_generation} invalidated: alert={alert:?} stale_live={stale_live:?}"
+            );
+            return alert;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+
+    panic!(
+        "timed out waiting for world_restarted without stale live generation {stale_generation}; live={:?}; trace={:?}",
+        live_world_member_generations_for_session(substrate_home, orchestration_session_id),
+        read_trace_lenient(trace_path),
+    );
+}
+
+#[cfg(target_os = "linux")]
 fn alert_rows_by_code<'a>(events: &'a [Value], code: &str) -> Vec<&'a Value> {
     events
         .iter()
@@ -1279,6 +1494,308 @@ fn c3_fail_closed_drift_repersists_binding_before_world_restart_required_publish
         alert.get("world_generation").and_then(Value::as_u64),
         Some(0),
         "world_restart_required alert must publish the current authoritative world generation: {alert:?}"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_world_restart_invalidates_stale_member_generation_before_publish() {
+    let temp = temp_dir("substrate-c3-world-restart-invalidates-stale-members-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_profile(&project);
+    let fake_codex = write_fake_codex_script(temp.path());
+    write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "auto_restart");
+
+    let sock_temp = short_socket_dir("sub-c3ws-world-restart-invalidates-stale-members-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
+    let initial_session = read_orchestration_session(&session_path);
+    let world_id = initial_session
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("initial world_id")
+        .to_string();
+    let orchestrator_participant_id = initial_session
+        .get("active_session_handle_id")
+        .and_then(Value::as_str)
+        .expect("active_session_handle_id")
+        .to_string();
+
+    let stale_member_ids = (0..256)
+        .map(|idx| format!("ash_member_stale_{idx:03}"))
+        .collect::<Vec<_>>();
+    for participant_id in &stale_member_ids {
+        write_live_world_member_manifest(
+            &substrate_home,
+            &orchestration_session_id,
+            participant_id,
+            &orchestrator_participant_id,
+            &world_id,
+            0,
+        );
+    }
+
+    write_policy(&substrate_home, false);
+    std::thread::sleep(Duration::from_millis(25));
+
+    repl.send_line("echo second");
+    let alert = wait_for_world_restarted_alert_without_stale_liveness(
+        &trace_path,
+        &substrate_home,
+        &orchestration_session_id,
+        0,
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        alert.get("world_generation").and_then(Value::as_u64),
+        Some(1),
+        "world_restarted alert must publish replacement generation: {alert:?}"
+    );
+
+    repl.wait_for_output("second", Duration::from_secs(3))
+        .expect("second command output");
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+
+    let persisted = read_orchestration_session(&session_path);
+    assert_session_world_binding(&persisted, Some("wld_stub_0002"), Some(1));
+    assert!(
+        live_world_member_generations_for_session(&substrate_home, &orchestration_session_id)
+            .is_empty(),
+        "stale generation members must not remain authoritative-live after restart"
+    );
+    for participant_id in &stale_member_ids {
+        let manifest = read_participant_manifest(&substrate_home, participant_id);
+        assert_eq!(
+            manifest.get("state").and_then(Value::as_str),
+            Some("invalidated"),
+            "stale member must be invalidated: {manifest:?}"
+        );
+        assert_eq!(
+            manifest
+                .pointer("/internal/termination_reason")
+                .and_then(Value::as_str),
+            Some("world generation invalidated by replacement binding"),
+            "stale member invalidation reason must explain generation rollover: {manifest:?}"
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_world_restart_missing_member_replacement_leaves_absence() {
+    let temp = temp_dir("substrate-c3-world-restart-member-absence-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_profile(&project);
+    let fake_codex = write_fake_codex_script(temp.path());
+    write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "auto_restart");
+
+    let sock_temp = short_socket_dir("sub-c3ws-world-restart-member-absence-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
+    let initial_session = read_orchestration_session(&session_path);
+    write_live_world_member_manifest(
+        &substrate_home,
+        &orchestration_session_id,
+        "ash_member_stale_only",
+        initial_session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str)
+            .expect("active_session_handle_id"),
+        initial_session
+            .get("world_id")
+            .and_then(Value::as_str)
+            .expect("initial world_id"),
+        0,
+    );
+
+    write_policy(&substrate_home, false);
+    std::thread::sleep(Duration::from_millis(25));
+
+    repl.send_line("echo second");
+    let _alert = wait_for_world_restarted_alert_without_stale_liveness(
+        &trace_path,
+        &substrate_home,
+        &orchestration_session_id,
+        0,
+        Duration::from_secs(5),
+    );
+    assert!(
+        live_world_member_generations_for_session(&substrate_home, &orchestration_session_id)
+            .is_empty(),
+        "missing member replacement must leave absence rather than stale liveness"
+    );
+
+    repl.wait_for_output("second", Duration::from_secs(3))
+        .expect("second command output");
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+
+    let stale = read_participant_manifest(&substrate_home, "ash_member_stale_only");
+    assert_eq!(
+        stale.get("state").and_then(Value::as_str),
+        Some("invalidated"),
+        "stale member must remain invalidated when no replacement is created: {stale:?}"
+    );
+    let persisted = read_orchestration_session(&session_path);
+    assert_session_world_binding(&persisted, Some("wld_stub_0002"), Some(1));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_world_restart_replacement_generation_becomes_only_live_generation() {
+    let temp = temp_dir("substrate-c3-world-restart-member-replacement-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_profile(&project);
+    let fake_codex = write_fake_codex_script(temp.path());
+    write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "auto_restart");
+
+    let sock_temp = short_socket_dir("sub-c3ws-world-restart-member-replacement-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
+    let initial_session = read_orchestration_session(&session_path);
+    let orchestrator_participant_id = initial_session
+        .get("active_session_handle_id")
+        .and_then(Value::as_str)
+        .expect("active_session_handle_id")
+        .to_string();
+    write_live_world_member_manifest(
+        &substrate_home,
+        &orchestration_session_id,
+        "ash_member_old_generation",
+        &orchestrator_participant_id,
+        initial_session
+            .get("world_id")
+            .and_then(Value::as_str)
+            .expect("initial world_id"),
+        0,
+    );
+
+    write_policy(&substrate_home, false);
+    std::thread::sleep(Duration::from_millis(25));
+
+    repl.send_line("echo second");
+    let alert = wait_for_world_restarted_alert_without_stale_liveness(
+        &trace_path,
+        &substrate_home,
+        &orchestration_session_id,
+        0,
+        Duration::from_secs(5),
+    );
+    let replacement_world_id = alert
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("replacement world_id")
+        .to_string();
+    let replacement_generation = alert
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("replacement world_generation");
+    write_live_world_member_manifest(
+        &substrate_home,
+        &orchestration_session_id,
+        "ash_member_new_generation",
+        &orchestrator_participant_id,
+        &replacement_world_id,
+        replacement_generation,
+    );
+    assert_eq!(
+        live_world_member_generations_for_session(&substrate_home, &orchestration_session_id),
+        vec![("ash_member_new_generation".to_string(), 1)],
+        "replacement generation must become the only authoritative-live world member generation"
+    );
+
+    repl.wait_for_output("second", Duration::from_secs(3))
+        .expect("second command output");
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+
+    let stale = read_participant_manifest(&substrate_home, "ash_member_old_generation");
+    assert_eq!(
+        stale.get("state").and_then(Value::as_str),
+        Some("invalidated"),
+        "stale generation must not remain live after replacement is present: {stale:?}"
+    );
+    let persisted = read_orchestration_session(&session_path);
+    assert_session_world_binding(
+        &persisted,
+        Some(replacement_world_id.as_str()),
+        Some(replacement_generation),
     );
 }
 

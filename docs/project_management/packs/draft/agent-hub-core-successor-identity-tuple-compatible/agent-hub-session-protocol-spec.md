@@ -23,6 +23,10 @@ Authoritative inputs:
   - the exact world-scoped member routing, world reuse, and world restart invalidation rules
   - the exact machine-readable status objects reused by `substrate agent list --json` and `substrate agent status --json`
   - the exact structured event envelope reused between agent backends and the hub
+- Live runtime authority is exactly `~/.substrate/run/agent-hub/sessions/*.json` plus `~/.substrate/run/agent-hub/participants/*.json`.
+- `~/.substrate/run/agent-hub/handles/*.json` is compatibility-only input and never outranks the canonical participant path when both exist.
+- Invalidated participant tombstones in `participants/*.json` beat stale trace fallback for live-state selection on the same `(orchestration_session_id, agent_id, execution.scope)` tuple.
+- If a replacement participant for that tuple has not been persisted yet, the live status surface omits the tuple instead of projecting stale liveness from trace.
 - `contract.md` remains authoritative for operator-facing command behavior, exit codes, and human-readable render rules.
 - `policy-spec.md` remains authoritative for ordered deny evaluation and fail-closed control-plane outcomes.
 - `telemetry-spec.md` remains authoritative for trace placement, nested-record publication, and redaction rules after the hub projects protocol objects into canonical trace.
@@ -125,7 +129,7 @@ Field rules:
 - `world_id` and `world_generation` are required when `execution.scope=world`.
 - `world_id` and `world_generation` are omitted when `execution.scope=host`.
 - `parent_participant_id` is non-null only for a forked or explicitly derived child participant.
-- `resumed_from_participant_id` is non-null only when a new participant replaced an invalidated participant after a hub-driven restart.
+- `resumed_from_participant_id` is the persisted lineage field name and is non-null only when a new participant replaced an invalidated participant after a hub-driven restart.
 - `orchestrator_participant_id` is omitted on the orchestrator participant and required on member participants.
 - The parent orchestration-session record keeps its serialized field name `active_session_handle_id` during `PLAN-02`, but its value now points at the active `participant_id`.
 

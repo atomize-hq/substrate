@@ -582,9 +582,20 @@ fn build_status_report<'a>(
         .iter()
         .map(session_fallback_suppression_key)
         .collect::<BTreeSet<_>>();
+    let invalidated_fallback_suppression_keys = state_store
+        .list_invalidated_participants()?
+        .into_iter()
+        .filter(|participant| {
+            participant.handle.role == MEMBER_ROLE
+                && participant.handle.execution.scope == AgentExecutionScope::World
+        })
+        .map(participant_fallback_suppression_key)
+        .collect::<BTreeSet<_>>();
     selected_session_projections.extend(filtered_session_projections.into_iter().filter(
         |projection| {
-            !live_fallback_suppression_keys.contains(&session_fallback_suppression_key(projection))
+            let suppression_key = session_fallback_suppression_key(projection);
+            !live_fallback_suppression_keys.contains(&suppression_key)
+                && !invalidated_fallback_suppression_keys.contains(&suppression_key)
         },
     ));
 
@@ -1178,10 +1189,24 @@ fn live_manifest_status_projection(manifest: &AgentRuntimeSessionManifest) -> Se
     }
 }
 
-fn session_fallback_suppression_key(projection: &SessionProjection) -> (String, String) {
+fn session_fallback_suppression_key(projection: &SessionProjection) -> (String, String, String) {
     (
+        projection.session.orchestration_session_id.clone(),
         projection.session.agent_id.clone(),
-        projection.session.role.clone().unwrap_or_default(),
+        projection.session.execution.scope.to_string(),
+    )
+}
+
+fn participant_fallback_suppression_key(
+    participant: AgentRuntimeSessionManifest,
+) -> (String, String, String) {
+    (
+        participant.handle.orchestration_session_id,
+        participant.handle.agent_id,
+        match participant.handle.execution.scope {
+            AgentExecutionScope::Host => "host".to_string(),
+            AgentExecutionScope::World => "world".to_string(),
+        },
     )
 }
 

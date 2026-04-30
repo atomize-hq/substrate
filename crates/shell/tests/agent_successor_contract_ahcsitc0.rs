@@ -264,17 +264,15 @@ fn write_live_runtime_manifest(
     fixture: &AgentSuccessorFixture,
     agent_id: &str,
     orchestration_session_id: &str,
-    session_handle_id: &str,
+    participant_id: &str,
     ts: &str,
 ) {
-    write_runtime_manifest(
+    write_runtime_participant(
         fixture,
+        participant_id,
         agent_id,
         orchestration_session_id,
-        session_handle_id,
-        "running",
-        true,
-        ts,
+        RuntimeParticipantOptions::host_orchestrator("running", true, ts),
     );
 }
 
@@ -282,75 +280,225 @@ fn write_invalidated_runtime_manifest(
     fixture: &AgentSuccessorFixture,
     agent_id: &str,
     orchestration_session_id: &str,
-    session_handle_id: &str,
+    participant_id: &str,
     ts: &str,
 ) {
-    write_runtime_manifest(
+    write_runtime_participant(
         fixture,
+        participant_id,
         agent_id,
         orchestration_session_id,
-        session_handle_id,
-        "invalidated",
-        false,
-        ts,
+        RuntimeParticipantOptions::host_orchestrator("invalidated", false, ts),
     );
 }
 
-fn write_runtime_manifest(
+#[allow(clippy::too_many_arguments)]
+fn write_invalidated_world_member_manifest(
     fixture: &AgentSuccessorFixture,
     agent_id: &str,
     orchestration_session_id: &str,
-    session_handle_id: &str,
-    state: &str,
-    ownership_valid: bool,
+    participant_id: &str,
+    orchestrator_participant_id: &str,
+    world_id: &str,
+    world_generation: u64,
+    resumed_from_participant_id: Option<&str>,
     ts: &str,
 ) {
-    let handles_dir = fixture
+    write_runtime_participant(
+        fixture,
+        participant_id,
+        agent_id,
+        orchestration_session_id,
+        RuntimeParticipantOptions::world_member(
+            "invalidated",
+            false,
+            ts,
+            world_id,
+            world_generation,
+            orchestrator_participant_id,
+        )
+        .with_resumed_from_participant_id(resumed_from_participant_id),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_replacement_world_member_manifest(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    participant_id: &str,
+    orchestrator_participant_id: &str,
+    world_id: &str,
+    world_generation: u64,
+    resumed_from_participant_id: &str,
+    ts: &str,
+) {
+    write_runtime_participant(
+        fixture,
+        participant_id,
+        agent_id,
+        orchestration_session_id,
+        RuntimeParticipantOptions::world_member(
+            "ready",
+            true,
+            ts,
+            world_id,
+            world_generation,
+            orchestrator_participant_id,
+        )
+        .with_resumed_from_participant_id(Some(resumed_from_participant_id)),
+    );
+}
+
+#[derive(Clone, Copy)]
+struct RuntimeParticipantOptions<'a> {
+    role: &'a str,
+    scope: &'a str,
+    state: &'a str,
+    ownership_mode: &'a str,
+    ownership_valid: bool,
+    ts: &'a str,
+    world_binding: Option<(&'a str, u64)>,
+    parent_participant_id: Option<&'a str>,
+    resumed_from_participant_id: Option<&'a str>,
+    orchestrator_participant_id: Option<&'a str>,
+}
+
+impl<'a> RuntimeParticipantOptions<'a> {
+    fn host_orchestrator(state: &'a str, ownership_valid: bool, ts: &'a str) -> Self {
+        Self {
+            role: "orchestrator",
+            scope: "host",
+            state,
+            ownership_mode: "attached_control",
+            ownership_valid,
+            ts,
+            world_binding: None,
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            orchestrator_participant_id: None,
+        }
+    }
+
+    fn world_member(
+        state: &'a str,
+        ownership_valid: bool,
+        ts: &'a str,
+        world_id: &'a str,
+        world_generation: u64,
+        orchestrator_participant_id: &'a str,
+    ) -> Self {
+        Self {
+            role: "member",
+            scope: "world",
+            state,
+            ownership_mode: "member_runtime",
+            ownership_valid,
+            ts,
+            world_binding: Some((world_id, world_generation)),
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
+            orchestrator_participant_id: Some(orchestrator_participant_id),
+        }
+    }
+
+    fn with_resumed_from_participant_id(
+        mut self,
+        resumed_from_participant_id: Option<&'a str>,
+    ) -> Self {
+        self.resumed_from_participant_id = resumed_from_participant_id;
+        self
+    }
+}
+
+fn write_runtime_participant(
+    fixture: &AgentSuccessorFixture,
+    participant_id: &str,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    options: RuntimeParticipantOptions<'_>,
+) {
+    let participants_dir = fixture
         .substrate_home
         .join("run")
         .join("agent-hub")
-        .join("handles");
-    fs::create_dir_all(&handles_dir).expect("failed to create runtime handles dir");
-    let manifest = json!({
-        "session_handle_id": session_handle_id,
-        "orchestration_session_id": orchestration_session_id,
-        "agent_id": agent_id,
-        "backend_id": format!("cli:{agent_id}"),
-        "role": "orchestrator",
-        "protocol": PURE_AGENT_PROTOCOL,
-        "execution": { "scope": "host" },
-        "state": state,
-        "opened_at": ts,
-        "last_transition_at": ts,
-        "parent_session_handle_id": null,
-        "resumed_from_session_handle_id": null,
-        "internal": {
+        .join("participants");
+    fs::create_dir_all(&participants_dir).expect("failed to create runtime participants dir");
+    let mut manifest = serde_json::Map::new();
+    manifest.insert("participant_id".to_string(), json!(participant_id));
+    manifest.insert(
+        "orchestration_session_id".to_string(),
+        json!(orchestration_session_id),
+    );
+    manifest.insert("agent_id".to_string(), json!(agent_id));
+    manifest.insert("backend_id".to_string(), json!(format!("cli:{agent_id}")));
+    manifest.insert("role".to_string(), json!(options.role));
+    manifest.insert("protocol".to_string(), json!(PURE_AGENT_PROTOCOL));
+    manifest.insert("execution".to_string(), json!({ "scope": options.scope }));
+    manifest.insert("state".to_string(), json!(options.state));
+    manifest.insert("opened_at".to_string(), json!(options.ts));
+    manifest.insert("last_transition_at".to_string(), json!(options.ts));
+    if let Some((world_id, world_generation)) = options.world_binding {
+        manifest.insert("world_id".to_string(), json!(world_id));
+        manifest.insert("world_generation".to_string(), json!(world_generation));
+    }
+    if let Some(parent_participant_id) = options.parent_participant_id {
+        manifest.insert(
+            "parent_participant_id".to_string(),
+            json!(parent_participant_id),
+        );
+    }
+    if let Some(resumed_from_participant_id) = options.resumed_from_participant_id {
+        manifest.insert(
+            "resumed_from_participant_id".to_string(),
+            json!(resumed_from_participant_id),
+        );
+    }
+    if let Some(orchestrator_participant_id) = options.orchestrator_participant_id {
+        manifest.insert(
+            "orchestrator_participant_id".to_string(),
+            json!(orchestrator_participant_id),
+        );
+    }
+    manifest.insert(
+        "internal".to_string(),
+        json!({
             "resolved_agent_kind": agent_id,
             "resolved_binary_path": "sh",
             "shell_owner_pid": std::process::id(),
-            "lease_token": "lease-test",
-            "uaa_session_id": "external-session-1",
+            "lease_token": format!("lease-{participant_id}"),
+            "uaa_session_id": if options.ownership_valid { Value::String("external-session-1".to_string()) } else { Value::Null },
             "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
             "cancel_supported": true,
-            "control_owner_retained": ownership_valid,
-            "event_stream_active": ownership_valid,
-            "completion_observer_retained": ownership_valid,
-            "ownership_mode": "attached_control",
-            "ownership_valid": ownership_valid,
-            "ownership_verified_at": ts,
-            "last_heartbeat_at": ts,
-            "last_event_at": ts,
-            "terminal_observed_at": if ownership_valid { Value::Null } else { json!(ts) },
-            "termination_reason": if ownership_valid { Value::Null } else { json!("attached control exited") },
+            "control_owner_retained": options.ownership_valid,
+            "event_stream_active": options.ownership_valid,
+            "completion_observer_retained": options.ownership_valid,
+            "ownership_mode": options.ownership_mode,
+            "ownership_valid": options.ownership_valid,
+            "ownership_verified_at": options.ts,
+            "last_heartbeat_at": options.ts,
+            "last_event_at": options.ts,
+            "terminal_observed_at": if options.ownership_valid { Value::Null } else { json!(options.ts) },
+            "termination_reason": if options.ownership_valid { Value::Null } else { json!("attached control exited") },
             "last_error_bucket": null,
             "last_error_message": null
-        }
-    });
+        }),
+    );
     fs::write(
-        handles_dir.join(format!("{session_handle_id}.json")),
-        serde_json::to_vec_pretty(&manifest).expect("serialize runtime manifest"),
+        participants_dir.join(format!("{participant_id}.json")),
+        serde_json::to_vec_pretty(&Value::Object(manifest))
+            .expect("serialize runtime participant manifest"),
     )
-    .expect("write runtime manifest");
+    .expect("write runtime participant manifest");
+}
+
+fn participant_manifest_path(fixture: &AgentSuccessorFixture, participant_id: &str) -> PathBuf {
+    fixture
+        .substrate_home
+        .join("run")
+        .join("agent-hub")
+        .join("participants")
+        .join(format!("{participant_id}.json"))
 }
 
 fn write_active_orchestration_session(
@@ -688,6 +836,27 @@ fn find_session_by_agent<'a>(sessions: &'a [Value], agent_id: &str) -> &'a Value
         .iter()
         .find(|session| session.pointer("/agent_id").and_then(Value::as_str) == Some(agent_id))
         .unwrap_or_else(|| panic!("expected session row for agent `{agent_id}`"))
+}
+
+fn find_session_by_agent_and_orchestration_session<'a>(
+    sessions: &'a [Value],
+    agent_id: &str,
+    orchestration_session_id: &str,
+) -> &'a Value {
+    sessions
+        .iter()
+        .find(|session| {
+            session.pointer("/agent_id").and_then(Value::as_str) == Some(agent_id)
+                && session
+                    .pointer("/orchestration_session_id")
+                    .and_then(Value::as_str)
+                    == Some(orchestration_session_id)
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "expected session row for agent `{agent_id}` in orchestration session `{orchestration_session_id}`"
+            )
+        })
 }
 
 fn seed_nested_gateway_status_fixture(fixture: &AgentSuccessorFixture) {
@@ -1678,7 +1847,119 @@ fn agent_status_prefers_live_manifest_over_trace_fallback_for_selected_orchestra
 }
 
 #[test]
-fn agent_status_suppresses_trace_fallback_rows_for_live_pure_agent_identity() {
+fn agent_status_tombstone_suppression_beats_stale_trace_fallback_for_world_member() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_invalidated_world_member_manifest(
+        &fixture,
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb0",
+        "ash_codex_old",
+        "ash_orchestrator",
+        "wld_old_0001",
+        6,
+        None,
+        "2026-04-05T00:00:02Z",
+    );
+    fixture.write_trace_events(&[json!({
+        "ts": "2026-04-05T00:00:03Z",
+        "event_type": "agent_event",
+        "session_id": "ses_agent_hub",
+        "component": "agent-hub",
+        "kind": "status",
+        "agent_id": "codex",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb0",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fb1",
+        "backend_id": "cli:codex",
+        "client": "codex",
+        "router": "agent_hub",
+        "protocol": "uaa.agent.session",
+        "role": "member",
+        "world_id": "wld_old_0001",
+        "world_generation": 6,
+        "data": { "message": "stale trace row must not beat the authoritative participant tombstone" }
+    })]);
+
+    let output = fixture.run(&["agent", "status", "--scope", "world", "--json"]);
+    assert!(
+        output.status.success(),
+        "world status should succeed when tombstones suppress stale trace fallback: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert!(
+        sessions.is_empty(),
+        "authoritative participant tombstones must suppress stale trace fallback for the same (orchestration_session_id, agent_id, execution.scope) tuple: {json}"
+    );
+}
+
+#[test]
+fn agent_status_omits_invalidated_world_member_until_replacement_persists() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb2",
+        "ash_orchestrator_live",
+        "2026-04-05T00:00:01Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb2",
+        Some("ash_orchestrator_live"),
+        "2026-04-05T00:00:01Z",
+    );
+    write_invalidated_world_member_manifest(
+        &fixture,
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb2",
+        "ash_codex_missing_replacement",
+        "ash_orchestrator_live",
+        "wld_old_0002",
+        6,
+        None,
+        "2026-04-05T00:00:02Z",
+    );
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "status should succeed when a replacement participant has not been persisted yet: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        sessions.len(),
+        1,
+        "missing replacements must leave omission rather than stale liveness on the selected status surface: {json}"
+    );
+    let orchestrator = find_session_by_agent(sessions, "claude_code");
+    assert_eq!(
+        orchestrator
+            .pointer("/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_orchestrator_live")
+    );
+    assert!(
+        sessions
+            .iter()
+            .all(|session| session.pointer("/agent_id").and_then(Value::as_str) != Some("codex")),
+        "invalidated members must stay absent until a replacement participant is persisted: {json}"
+    );
+}
+
+#[test]
+fn agent_status_keeps_same_agent_concurrent_sessions_visible_across_orchestration_sessions() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_list_and_status_contracts();
@@ -1710,13 +1991,13 @@ fn agent_status_suppresses_trace_fallback_rows_for_live_pure_agent_identity() {
         "router": "agent_hub",
         "protocol": "uaa.agent.session",
         "role": "orchestrator",
-        "data": { "message": "trace fallback should be suppressed for the same pure-agent identity" }
+        "data": { "message": "distinct orchestration_session_id values must remain independently visible" }
     })]);
 
     let output = fixture.run(&["agent", "status", "--json"]);
     assert!(
         output.status.success(),
-        "status should succeed when a live pure-agent manifest suppresses trace fallback rows: {output:?}"
+        "status should succeed when the same agent is visible in concurrent sessions: {output:?}"
     );
 
     let json = parse_json_output(&output);
@@ -1731,14 +2012,117 @@ fn agent_status_suppresses_trace_fallback_rows_for_live_pure_agent_identity() {
         .collect();
     assert_eq!(
         claude_rows.len(),
-        1,
-        "live pure-agent status identity must suppress trace fallback duplicates for the same agent_id: {json}"
+        2,
+        "suppression identity must stay scoped to (orchestration_session_id, agent_id, execution.scope) so same-agent concurrent sessions remain independently visible: {json}"
     );
     assert_eq!(
-        claude_rows[0]
-            .pointer("/orchestration_session_id")
-            .and_then(Value::as_str),
+        find_session_by_agent_and_orchestration_session(
+            sessions,
+            "claude_code",
+            "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa",
+        )
+        .pointer("/orchestration_session_id")
+        .and_then(Value::as_str),
         Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faa")
+    );
+    assert_eq!(
+        find_session_by_agent_and_orchestration_session(
+            sessions,
+            "claude_code",
+            "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fab",
+        )
+        .pointer("/orchestration_session_id")
+        .and_then(Value::as_str),
+        Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fab")
+    );
+}
+
+#[test]
+fn agent_status_persists_resumed_from_participant_id_for_replacement_members() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb3",
+        "ash_orchestrator_lineage",
+        "2026-04-05T00:00:01Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb3",
+        Some("ash_orchestrator_lineage"),
+        "2026-04-05T00:00:01Z",
+    );
+    write_invalidated_world_member_manifest(
+        &fixture,
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb3",
+        "ash_codex_old_lineage",
+        "ash_orchestrator_lineage",
+        "wld_old_0003",
+        6,
+        None,
+        "2026-04-05T00:00:02Z",
+    );
+    write_replacement_world_member_manifest(
+        &fixture,
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb3",
+        "ash_codex_new_lineage",
+        "ash_orchestrator_lineage",
+        "wld_new_0003",
+        7,
+        "ash_codex_old_lineage",
+        "2026-04-05T00:00:03Z",
+    );
+
+    let output = fixture.run(&["agent", "status", "--scope", "world", "--json"]);
+    assert!(
+        output.status.success(),
+        "world status should succeed for replacement lineage fixtures: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        sessions.len(),
+        1,
+        "replacement member should win world status selection: {json}"
+    );
+    let replacement = find_session_by_agent(sessions, "codex");
+    assert_eq!(
+        replacement
+            .pointer("/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_codex_new_lineage")
+    );
+    assert_eq!(
+        replacement
+            .pointer("/world_generation")
+            .and_then(Value::as_u64),
+        Some(7)
+    );
+
+    let persisted = serde_json::from_str::<Value>(
+        &fs::read_to_string(participant_manifest_path(&fixture, "ash_codex_new_lineage"))
+            .expect("replacement participant manifest should be readable"),
+    )
+    .expect("replacement participant manifest should be valid JSON");
+    assert_eq!(
+        persisted
+            .pointer("/resumed_from_participant_id")
+            .and_then(Value::as_str),
+        Some("ash_codex_old_lineage"),
+        "replacement participant persistence must keep resumed_from_participant_id as the lineage field name"
+    );
+    assert!(
+        persisted.get("resumed_from_session_handle_id").is_none(),
+        "replacement participant persistence must not revert to the legacy resumed_from_session_handle_id field name"
     );
 }
 

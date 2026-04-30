@@ -423,6 +423,16 @@ impl AgentRuntimeParticipantRecord {
         self.handle.last_transition_at = Utc::now();
     }
 
+    pub(crate) fn invalidate_for_world_generation_rollover(&mut self) -> bool {
+        if self.handle.state == AgentRuntimeSessionState::Invalidated {
+            return false;
+        }
+
+        self.mark_terminal_state("world generation invalidated by replacement binding");
+        self.transition_state(AgentRuntimeSessionState::Invalidated);
+        true
+    }
+
     pub(crate) fn touch_heartbeat(&mut self) {
         self.internal.last_heartbeat_at = Some(Utc::now());
     }
@@ -662,6 +672,75 @@ mod tests {
         assert_eq!(
             participant.internal.ownership_mode,
             Some(AgentRuntimeOwnershipMode::MemberRuntime)
+        );
+    }
+
+    #[test]
+    fn invalidation_helper_marks_world_generation_rollover_tombstone() {
+        let mut participant = AgentRuntimeParticipantRecord::new_member_participant(
+            &descriptor(AgentExecutionScope::World),
+            "sess_001".to_string(),
+            "ash_002".to_string(),
+            "ash_orchestrator".to_string(),
+            None,
+            Some(AgentRuntimeParticipantWorldBinding {
+                world_id: "world-17".to_string(),
+                world_generation: 3,
+            }),
+            "lease_002".to_string(),
+        )
+        .expect("member constructor should succeed");
+        participant.mark_runtime_ownership_retained();
+        participant.set_uaa_session_id("uaa_session");
+        participant.transition_state(AgentRuntimeSessionState::Running);
+
+        let changed = participant.invalidate_for_world_generation_rollover();
+
+        assert!(changed, "invalidation helper must report first transition");
+        assert_eq!(
+            participant.handle.state,
+            AgentRuntimeSessionState::Invalidated
+        );
+        assert!(!participant.internal.ownership_valid);
+        assert!(!participant.can_advertise_live());
+        assert_eq!(
+            participant.internal.termination_reason.as_deref(),
+            Some("world generation invalidated by replacement binding")
+        );
+        assert!(
+            participant.internal.terminal_observed_at.is_some(),
+            "invalidation should stamp terminal metadata"
+        );
+    }
+
+    #[test]
+    fn invalidation_helper_is_idempotent() {
+        let mut participant = AgentRuntimeParticipantRecord::new_member_participant(
+            &descriptor(AgentExecutionScope::World),
+            "sess_001".to_string(),
+            "ash_002".to_string(),
+            "ash_orchestrator".to_string(),
+            None,
+            Some(AgentRuntimeParticipantWorldBinding {
+                world_id: "world-17".to_string(),
+                world_generation: 3,
+            }),
+            "lease_002".to_string(),
+        )
+        .expect("member constructor should succeed");
+
+        assert!(participant.invalidate_for_world_generation_rollover());
+        let first_transition_at = participant.handle.last_transition_at;
+        let first_terminal_observed_at = participant.internal.terminal_observed_at;
+
+        assert!(
+            !participant.invalidate_for_world_generation_rollover(),
+            "already invalidated participants must remain untouched"
+        );
+        assert_eq!(participant.handle.last_transition_at, first_transition_at);
+        assert_eq!(
+            participant.internal.terminal_observed_at,
+            first_terminal_observed_at
         );
     }
 
