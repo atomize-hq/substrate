@@ -90,6 +90,7 @@ fn non_pty_read_only_mode_blocks_writes() {
         agent_id: "fs-mode-test".to_string(),
         budget: None,
         policy_snapshot: policy_snapshot_for_mode(WorldFsMode::ReadOnly),
+        shared_world: None,
         world_network: None,
         world_fs_mode: Some(WorldFsMode::ReadOnly),
     };
@@ -154,6 +155,7 @@ fn non_pty_read_only_mode_blocks_absolute_project_writes() {
         agent_id: "fs-mode-test".to_string(),
         budget: None,
         policy_snapshot: policy_snapshot_for_mode(WorldFsMode::ReadOnly),
+        shared_world: None,
         world_network: None,
         world_fs_mode: Some(WorldFsMode::ReadOnly),
     };
@@ -208,6 +210,7 @@ fn non_pty_writable_mode_records_diffs_for_writes() {
         agent_id: "fs-mode-test".to_string(),
         budget: None,
         policy_snapshot: policy_snapshot_for_mode(WorldFsMode::Writable),
+        shared_world: None,
         world_network: None,
         world_fs_mode: Some(WorldFsMode::Writable),
     };
@@ -456,6 +459,7 @@ async fn pty_writable_mode_keeps_writes_in_overlay() {
             agent_id: "fs-mode-test".to_string(),
             budget: None,
             policy_snapshot: policy_snapshot_for_mode(WorldFsMode::Writable),
+            shared_world: None,
             world_network: None,
             world_fs_mode: Some(WorldFsMode::Writable),
         };
@@ -514,6 +518,7 @@ async fn pty_and_non_pty_share_overlay_state_across_mode_switch() {
         agent_id: "fs-mode-test".to_string(),
         budget: None,
         policy_snapshot: policy_snapshot_for_mode(WorldFsMode::Writable),
+        shared_world: None,
         world_network: None,
         world_fs_mode: Some(WorldFsMode::Writable),
     };
@@ -615,6 +620,7 @@ async fn pty_and_non_pty_share_overlay_state_across_mode_switch() {
         agent_id: "fs-mode-test".to_string(),
         budget: None,
         policy_snapshot: policy_snapshot_for_mode(WorldFsMode::ReadOnly),
+        shared_world: None,
         world_network: None,
         world_fs_mode: Some(WorldFsMode::ReadOnly),
     };

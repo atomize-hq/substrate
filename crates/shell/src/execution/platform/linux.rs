@@ -820,6 +820,7 @@ async fn legacy_world_doctor_report_v1_via_execute(
         agent_id: "doctor-world-probe".to_string(),
         budget: None,
         policy_snapshot,
+        shared_world: None,
         world_network: Some(world_network),
         world_fs_mode: Some(WorldFsMode::Writable),
     };

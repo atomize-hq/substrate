@@ -47,6 +47,7 @@ fn make_request(cwd: &Path, cmd: &str) -> ExecuteRequest {
         agent_id: "streamed-execute-cancel-test".to_string(),
         budget: None,
         policy_snapshot: minimal_policy_snapshot(),
+        shared_world: None,
         world_network: None,
         world_fs_mode: None,
     }

@@ -168,6 +168,7 @@ pub(super) fn collect_world_telemetry(
         let backend = LinuxLocalBackend::new();
         let handle = world_api::WorldHandle {
             id: world_id.clone(),
+            shared_binding: None,
         };
 
         // Try to get filesystem diff

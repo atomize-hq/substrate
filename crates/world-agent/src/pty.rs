@@ -1202,6 +1202,7 @@ async fn handle_persistent_session(
 
                                 let world_handle = world_api::WorldHandle {
                                     id: world.world_id.clone(),
+                                    shared_binding: None,
                                 };
                                 if let Err(e) =
                                     service.refresh_session_network_filter(&world_handle)
@@ -2332,8 +2333,6 @@ async fn handle_legacy_start(
     let mut inner_cmd = cmd.clone();
     #[cfg(target_os = "linux")]
     let world_network = _world_network;
-    #[cfg(target_os = "linux")]
-    let shared_world = shared_world;
     #[cfg(target_os = "linux")]
     let command_to_run: String;
     #[cfg(not(target_os = "linux"))]

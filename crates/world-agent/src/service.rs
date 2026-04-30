@@ -413,6 +413,7 @@ impl WorldAgentService {
     pub(crate) fn note_pty_pending_diff(&self, world_id: &str) {
         let world = WorldHandle {
             id: world_id.to_string(),
+            shared_binding: None,
         };
         let (_started_at, diff) = match self.linux_backend.pending_diff(&world) {
             Ok(v) => v,

@@ -2971,9 +2971,14 @@ async fn handle_detected_world_drift(
             ) {
                 telemetry.persist_agent_event(&alert);
                 telemetry.record_agent_event();
-                agent_printer.print(format_event_line(&alert));
+                // This path exits immediately after surfacing the alert. Reedline's external
+                // printer can drop queued lines during that shutdown, so write directly to stdout.
+                write_best_effort_stdout_line(&format_event_line(&alert));
             } else {
-                agent_printer.print(format!("[shell] {}", reason.restart_required_message()));
+                write_best_effort_stdout_line(&format!(
+                    "[shell] {}",
+                    reason.restart_required_message()
+                ));
             }
             let close_succeeded = old_session.client.close().await.is_ok();
             if !live_runtime_established && close_succeeded {

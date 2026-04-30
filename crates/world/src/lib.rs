@@ -506,6 +506,7 @@ mod tests {
         poison_cache(&backend.session_cache);
         let handle = WorldHandle {
             id: "missing".to_string(),
+            shared_binding: None,
         };
 
         let result = std::panic::catch_unwind(|| backend.fs_diff(&handle, "span"));
