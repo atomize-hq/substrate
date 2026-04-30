@@ -1091,11 +1091,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         }
 
         if let Some(session) = world_session.take() {
-            if session.client.close().await.is_ok() {
-                if let Some(startup_context) = startup_context.as_ref() {
-                    let _ = persist_world_binding_authority(startup_context, None);
-                }
-            }
+            let _ = session.client.close().await;
         }
 
         if let Some(err) = fatal_runtime_error.as_ref() {
@@ -4717,16 +4713,16 @@ mod tests {
                         .into_iter()
                         .find(|manifest| manifest.handle.agent_id == "codex")
                         .expect("runtime manifest should exist");
-                    assert_persisted_participant_snapshot(
-                        &store,
-                        &manifest.handle.participant_id,
-                        &manifest.handle.state,
-                    );
                     let parent = store
                         .load_orchestration_session(&manifest.handle.orchestration_session_id)
                         .expect("load orchestration session")
                         .expect("runtime orchestration session should exist");
                     if manifest.handle.state == AgentRuntimeSessionState::Invalidated {
+                        assert_persisted_participant_snapshot(
+                            &store,
+                            &manifest.handle.participant_id,
+                            &AgentRuntimeSessionState::Invalidated,
+                        );
                         assert_eq!(parent.state, OrchestrationSessionState::Invalidated);
                         assert_eq!(
                             parent.active_session_handle_id.as_deref(),

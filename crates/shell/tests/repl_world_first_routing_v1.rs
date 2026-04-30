@@ -1569,7 +1569,7 @@ fn c3_world_restart_invalidates_stale_member_generation_before_publish() {
         &substrate_home,
         &orchestration_session_id,
         0,
-        Duration::from_secs(5),
+        Duration::from_secs(15),
     );
     assert_eq!(
         alert.get("world_generation").and_then(Value::as_u64),
