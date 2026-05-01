@@ -789,6 +789,35 @@ fn read_repo_file(path: &str) -> String {
         .unwrap_or_else(|err| panic!("failed to read {path}: {err}"))
 }
 
+fn read_production_shell_source_without_inline_tests(path: &Path) -> String {
+    let source = fs::read_to_string(path)
+        .unwrap_or_else(|err| panic!("failed to read production source {}: {err}", path.display()));
+    let cutoff = source.find("#[cfg(test)]").unwrap_or(source.len());
+    source[..cutoff].to_string()
+}
+
+fn collect_rust_files(root: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(path) = stack.pop() {
+        let entries = fs::read_dir(&path)
+            .unwrap_or_else(|err| panic!("failed to read directory {}: {err}", path.display()));
+        for entry in entries {
+            let entry = entry.unwrap_or_else(|err| {
+                panic!("failed to enumerate directory {}: {err}", path.display())
+            });
+            let entry_path = entry.path();
+            if entry_path.is_dir() {
+                stack.push(entry_path);
+            } else if entry_path.extension().and_then(|ext| ext.to_str()) == Some("rs") {
+                files.push(entry_path);
+            }
+        }
+    }
+    files.sort();
+    files
+}
+
 fn parse_json_output(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON")
 }
@@ -1534,6 +1563,32 @@ fn operator_surfaces_fail_closed_when_active_parent_points_to_different_live_han
         &[
             "active orchestration session 0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faf references missing participant ash_other_handle",
         ],
+    );
+}
+
+#[test]
+fn operator_surfaces_fail_closed_when_active_parent_selects_inactive_participant() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_invalidated_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb0",
+        "ash_inactive_selected",
+        "2026-04-06T00:00:02Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb0",
+        Some("ash_inactive_selected"),
+        "2026-04-06T00:00:02Z",
+    );
+
+    assert_parent_resolution_fail_closed_across_operator_surfaces(
+        &fixture,
+        &[ "active orchestration session 0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb0 references inactive participant ash_inactive_selected" ],
     );
 }
 
@@ -3430,6 +3485,40 @@ fn ahcsitc3_trace_doc_locks_tuple_compatible_fields() {
             "docs/TRACE.md must document tuple-compatible trace field `{required}`"
         );
     }
+}
+
+#[test]
+fn production_runtime_snapshot_writes_remain_centralized_in_state_store() {
+    let src_root = repo_root().join("crates/shell/src");
+    let forbidden_markers = [
+        "join(\"agent-hub\")",
+        "join(\"handles\")",
+        "join(\"participants\")",
+        "join(\"leases\")",
+        "handles_dir()",
+        "participants_dir()",
+        "sessions_dir()",
+    ];
+
+    let offenders = collect_rust_files(&src_root)
+        .into_iter()
+        .filter(|path| path.file_name().and_then(|name| name.to_str()) != Some("state_store.rs"))
+        .filter_map(|path| {
+            let source = read_production_shell_source_without_inline_tests(&path);
+            let hits = forbidden_markers
+                .iter()
+                .copied()
+                .filter(|marker| source.contains(marker))
+                .collect::<Vec<_>>();
+            (!hits.is_empty()).then_some(format!("{} => {}", path.display(), hits.join(", ")))
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        offenders.is_empty(),
+        "production callers outside state_store.rs must not reach flat compatibility parent/participant/lease or legacy handle paths directly: {}",
+        offenders.join(" | ")
+    );
 }
 
 #[test]

@@ -1361,6 +1361,18 @@ mod tests {
         .expect("write flat session");
     }
 
+    fn write_flat_participant_file(
+        store: &AgentRuntimeStateStore,
+        participant: &AgentRuntimeParticipantRecord,
+    ) {
+        fs::create_dir_all(store.participants_dir()).expect("create participants dir");
+        fs::write(
+            store.participant_path(&participant.handle.participant_id),
+            serde_json::to_vec_pretty(participant).expect("serialize flat participant"),
+        )
+        .expect("write flat participant");
+    }
+
     fn write_canonical_session_file(
         store: &AgentRuntimeStateStore,
         session: &OrchestrationSessionRecord,
@@ -1941,6 +1953,122 @@ mod tests {
                 .expect_err("stale active handle references must fail closed");
             assert!(err.to_string().contains(
                 "active orchestration session sess_live references missing participant ash_missing"
+            ));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn load_session_prefers_canonical_participant_over_conflicting_legacy_handle_fallback() {
+        with_store(|store| {
+            let canonical_orchestrator =
+                live_orchestrator("codex", "sess_canonical_legacy", "ash_primary");
+            let canonical_parent = active_parent(&canonical_orchestrator);
+
+            write_legacy_handle_file(
+                store,
+                "ash_primary",
+                "legacy",
+                "sess_legacy_conflict",
+                true,
+                Some(json!({
+                    "last_transition_at": "2026-04-24T18:31:00Z",
+                    "internal": {
+                        "latest_run_id": "run-legacy"
+                    }
+                })),
+            );
+            write_canonical_participant_file(store, &canonical_orchestrator);
+            write_canonical_session_file(store, &canonical_parent);
+
+            let session = store
+                .load_session("sess_canonical_legacy")
+                .expect("load session")
+                .expect("session exists");
+            let selected = session
+                .participants
+                .iter()
+                .find(|participant| participant.handle.participant_id == "ash_primary")
+                .expect("selected participant");
+
+            assert_eq!(
+                selected.handle.agent_id, "codex",
+                "canonical participant must outrank conflicting legacy-handle fallback"
+            );
+            assert_eq!(
+                selected.handle.orchestration_session_id, "sess_canonical_legacy",
+                "canonical participant must keep the canonical parent linkage instead of drifting to the legacy handle"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn load_session_prefers_flat_participant_over_conflicting_legacy_handle_fallback() {
+        with_store(|store| {
+            let flat_orchestrator = live_orchestrator("codex", "sess_flat_legacy", "ash_primary");
+            let flat_parent = active_parent(&flat_orchestrator);
+
+            write_legacy_handle_file(
+                store,
+                "ash_primary",
+                "legacy",
+                "sess_legacy_conflict",
+                true,
+                Some(json!({
+                    "last_transition_at": "2026-04-24T18:31:00Z",
+                    "internal": {
+                        "latest_run_id": "run-legacy"
+                    }
+                })),
+            );
+            write_flat_participant_file(store, &flat_orchestrator);
+            write_flat_session_file(store, &flat_parent);
+
+            let session = store
+                .load_session("sess_flat_legacy")
+                .expect("load session")
+                .expect("session exists");
+            let selected = session
+                .participants
+                .iter()
+                .find(|participant| participant.handle.participant_id == "ash_primary")
+                .expect("selected participant");
+
+            assert_eq!(
+                selected.handle.agent_id, "codex",
+                "flat compatibility participant must outrank conflicting legacy-handle fallback when the canonical child is absent"
+            );
+            assert_eq!(
+                selected.handle.orchestration_session_id, "sess_flat_legacy",
+                "flat compatibility participant must keep the flat parent linkage instead of drifting to the legacy handle"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_single_live_session_fails_closed_on_inactive_selected_participant() {
+        with_store(|store| {
+            let mut selected = live_orchestrator("codex", "sess_live", "ash_selected");
+            selected.internal.ownership_valid = false;
+            selected.internal.control_owner_retained = false;
+            selected.internal.event_stream_active = false;
+            selected.internal.completion_observer_retained = false;
+            let parent = active_parent(&selected);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&selected)
+                .expect("persist inactive selected participant");
+
+            let err = store
+                .resolve_single_live_session_for_agent("codex")
+                .expect_err("inactive selected participant must fail closed");
+            assert!(err.to_string().contains(
+                "active orchestration session sess_live references inactive participant ash_selected"
             ));
         });
     }

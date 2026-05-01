@@ -86,13 +86,17 @@ Operator-visible identity rules on these surfaces:
 - Nested gateway-backed status rows depend on valid trace-side `parent_run_id` correlation; stale historical nested rows are ignored, and malformed selected-surface rows fail closed.
 - `substrate agent doctor` now includes a `runtime_realizability` check after `orchestrator_selection`. For the selected orchestrator, it fail-closes on unsupported `config.kind`, unsupported `cli.mode`, unsupported shell-owned backend mapping, or an unresolved `config.cli.binary`.
 - `substrate agent toolbox status` is a pre-runtime introspection surface: it projects the effective toolbox posture, the selected orchestrator identity, and either the active per-session UDS endpoint or the deterministic endpoint template when no orchestrator session is active yet.
-- `substrate agent toolbox env` emits `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` and `SUBSTRATE_AGENT_TOOLBOX_VERSION` only when a current pure-agent orchestrator session is present; otherwise it fails closed with a specific exit code.
+- `substrate agent toolbox env` emits `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` and `SUBSTRATE_AGENT_TOOLBOX_VERSION` only when a current live host-scoped orchestrator session is present; otherwise it fails closed with exit `3`.
 
 When the async REPL owns a shell-scoped orchestrator session, live session discovery is backed by the store-owned session root:
 - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/session.json`
 - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/<participant_id>.json`
 
-`substrate agent status` and `substrate agent toolbox ...` resolve live state from those session records first. `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>.json`, `~/.substrate/run/agent-hub/participants/*.json`, and `~/.substrate/run/agent-hub/handles/*.json` remains compatibility input only during the cutover and must not be treated as live-state authority.
+`substrate agent status` and `substrate agent toolbox ...` resolve live state from those session records first. Those canonical session-root parent plus participant records are the live-state authority boundary.
+
+`~/.substrate/run/agent-hub/sessions/<orchestration_session_id>.json` and `~/.substrate/run/agent-hub/participants/*.json` remain flat compatibility bridge input/output only during the cutover. Legacy `~/.substrate/run/agent-hub/handles/*.json` remains compatibility input only and is last-resort compatibility input only. None of those files outrank the canonical session-root records.
+
+Trace is historical fallback only for `substrate agent status` gaps after live-state filtering. Trace never authorizes current-session toolbox state or `substrate agent toolbox env`.
 
 ## PTY Support
 
