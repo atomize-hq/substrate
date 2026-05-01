@@ -15,6 +15,10 @@ This directory contains the reviewed statement-of-work packet for the prerequisi
   authoritative projection of the active shared-world binding is the handoff that slice `05` invalidation semantics and slice `06` session-centric store work both consume.
 - `05-restart-invalidation-semantics` is still pending:
   invalidation/replacement registry semantics for generation changes and restart handling remain a follow-on slice.
+- `07-world-replacement-ordering-rollback-atomic-metadata` is the landed backend-hardening reference:
+  shared-world replacement now has explicit ordering, rollback, cleanup, and atomic metadata expectations that later shell/runtime slices can rely on.
+- `08` through `10` are the remaining follow-on SOWs after the replacement-ordering and replacement-member work:
+  they cover event-emission authority cleanup, live-state authority/cutover cleanup, and the missing production member-launch seam.
 
 ## Reviewed Execution Order
 
@@ -32,6 +36,14 @@ This directory contains the reviewed statement-of-work packet for the prerequisi
    - Status: still pending after the slice `04` runtime-state bridge.
 6. [06-session-centric-state-store.md](./06-session-centric-state-store.md)
    - Rework the runtime handle store APIs and layout so consumers resolve by orchestration session instead of by orchestrator agent heuristics.
+7. [07-world-replacement-ordering-rollback-atomic-metadata.md](./07-world-replacement-ordering-rollback-atomic-metadata.md)
+   - Harden shared-world replacement ordering, rollback, cleanup, and atomic Linux world metadata writes so exactly one recoverable active world remains authoritative.
+8. [08-explicit-orchestration-authority-event-emission.md](./08-explicit-orchestration-authority-event-emission.md)
+   - Remove ambient PID-based orchestration identity lookup from shell-owned event emission and require explicit runtime-owned context instead.
+9. [09-live-state-authority-and-compatibility-cutover.md](./09-live-state-authority-and-compatibility-cutover.md)
+   - Freeze canonical session-root records as live-state authority, bound compatibility writes/reads during cutover, and keep ambiguity/torn-root behavior fail-closed.
+10. [10-member-runtime-launch-seam.md](./10-member-runtime-launch-seam.md)
+   - Add the missing production world-scoped member runtime launch/lifecycle seam that consumes the existing authority and status machinery.
 
 ## Review Notes
 
