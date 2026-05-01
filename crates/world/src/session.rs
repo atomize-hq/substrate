@@ -90,10 +90,15 @@ impl SessionWorld {
 
     /// Ensure a session world is started and return it.
     pub fn ensure_started(spec: WorldSpec) -> Result<Self> {
-        Self::ensure_started_with_binding(spec, None, None)
+        Self::ensure_started_in_root(spec, Self::shared_root_dir())
     }
 
-    pub(crate) fn ensure_started_for_shared_owner(
+    pub(crate) fn ensure_started_in_root(spec: WorldSpec, root_dir: PathBuf) -> Result<Self> {
+        Self::ensure_started_with_binding_at_root(spec, None, None, root_dir, None)
+    }
+
+    pub(crate) fn ensure_started_for_shared_owner_at_root(
+        root_dir: PathBuf,
         spec: WorldSpec,
         orchestration_session_id: String,
         world_generation: u64,
@@ -105,15 +110,46 @@ impl SessionWorld {
             world_generation,
             binding_state: SharedWorldBindingState::Active,
         };
-        Self::ensure_started_with_binding(spec, Some(shared_binding), last_restart_reason)
+        Self::ensure_started_with_binding_at_root(
+            spec,
+            Some(shared_binding),
+            last_restart_reason,
+            root_dir,
+            None,
+        )
     }
 
-    fn ensure_started_with_binding(
+    pub(crate) fn ensure_started_for_shared_owner_at_root_with_world_id(
+        root_dir: PathBuf,
+        spec: WorldSpec,
+        orchestration_session_id: String,
+        world_generation: u64,
+        last_restart_reason: Option<String>,
+        world_id: String,
+    ) -> Result<Self> {
+        let shared_binding = SharedWorldBindingSnapshot {
+            orchestration_session_id,
+            world_id: String::new(),
+            world_generation,
+            binding_state: SharedWorldBindingState::Active,
+        };
+        Self::ensure_started_with_binding_at_root(
+            spec,
+            Some(shared_binding),
+            last_restart_reason,
+            root_dir,
+            Some(world_id),
+        )
+    }
+
+    fn ensure_started_with_binding_at_root(
         spec: WorldSpec,
         world_binding: Option<SharedWorldBindingSnapshot>,
         last_restart_reason: Option<String>,
+        root_dir: PathBuf,
+        world_id: Option<String>,
     ) -> Result<Self> {
-        let world_id = format!("wld_{}", uuid::Uuid::now_v7());
+        let world_id = world_id.unwrap_or_else(|| format!("wld_{}", uuid::Uuid::now_v7()));
         let shared_binding = match world_binding {
             Some(mut binding) => {
                 binding.world_id = world_id.clone();
@@ -123,7 +159,7 @@ impl SessionWorld {
         };
         let mut world = Self {
             id: world_id.clone(),
-            root_dir: Self::shared_root_dir(),
+            root_dir,
             project_dir: spec.project_dir.clone(),
             cgroup_path: PathBuf::from("/sys/fs/cgroup/substrate").join(&world_id),
             net_namespace: None,
@@ -173,13 +209,41 @@ impl SessionWorld {
         self.shared_binding.clone()
     }
 
-    pub(crate) fn mark_shared_binding_replaced(&mut self, reason: String) -> Result<()> {
+    pub(crate) fn set_shared_binding_state(
+        &mut self,
+        binding_state: SharedWorldBindingState,
+        last_restart_reason: Option<String>,
+    ) -> Result<()> {
         let binding = self
             .shared_binding
             .as_mut()
             .ok_or_else(|| anyhow!("shared binding missing for world {}", self.id))?;
-        binding.binding_state = SharedWorldBindingState::Replaced;
-        self.last_restart_reason = Some(reason);
+
+        let current = binding.binding_state.clone();
+        let transition_allowed = matches!(
+            (&current, &binding_state),
+            (
+                SharedWorldBindingState::Active,
+                SharedWorldBindingState::Replacing
+            ) | (
+                SharedWorldBindingState::Replacing,
+                SharedWorldBindingState::Active
+            ) | (
+                SharedWorldBindingState::Replacing,
+                SharedWorldBindingState::Replaced
+            )
+        );
+        if !transition_allowed {
+            anyhow::bail!(
+                "invalid shared binding state transition for world {}: {:?} -> {:?}",
+                self.id,
+                current,
+                binding_state
+            );
+        }
+
+        binding.binding_state = binding_state;
+        self.last_restart_reason = last_restart_reason;
         self.persist_metadata()
     }
 
@@ -213,7 +277,8 @@ impl SessionWorld {
             return Ok(None);
         }
 
-        let mut recovered = None;
+        let mut active_worlds = Vec::new();
+        let mut replacing_worlds = Vec::new();
         for entry in fs::read_dir(root_dir)
             .with_context(|| format!("failed to read session root {}", root_dir.display()))?
         {
@@ -235,28 +300,73 @@ impl SessionWorld {
                 spec,
                 owner_spec,
             ) {
-                Ok(Some(world)) => {
-                    if recovered.is_some() {
-                        anyhow::bail!(
-                            "multiple active shared worlds found for orchestration session {}",
-                            owner_spec.orchestration_session_id
-                        );
-                    }
-                    recovered = Some(world);
-                }
+                Ok(Some(world)) => match world
+                    .shared_binding
+                    .as_ref()
+                    .map(|binding| binding.binding_state.clone())
+                {
+                    Some(SharedWorldBindingState::Active) => active_worlds.push(world),
+                    Some(SharedWorldBindingState::Replacing) => replacing_worlds.push(world),
+                    Some(
+                        SharedWorldBindingState::Replaced | SharedWorldBindingState::Abandoned,
+                    ) => {}
+                    None => tracing::warn!(
+                        metadata = %metadata_path.display(),
+                        "shared recovery candidate missing binding proof after parsing"
+                    ),
+                },
                 Ok(None) => {}
                 Err(err) => {
                     tracing::warn!(
                         error = %err,
                         metadata = %metadata_path.display(),
-                        "ignoring invalid persisted session metadata"
+                        "ignoring invalid shared session metadata without deleting it"
                     );
-                    let _ = fs::remove_file(&metadata_path);
                 }
             }
         }
 
-        Ok(recovered)
+        if active_worlds.len() > 1 {
+            anyhow::bail!(
+                "multiple active shared worlds found for orchestration session {}",
+                owner_spec.orchestration_session_id
+            );
+        }
+
+        if let Some(active_world) = active_worlds.pop() {
+            let active_generation = active_world
+                .shared_binding
+                .as_ref()
+                .map(|binding| binding.world_generation)
+                .ok_or_else(|| anyhow!("active shared world missing binding proof"))?;
+            if replacing_worlds.iter().any(|world| {
+                world
+                    .shared_binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.world_generation >= active_generation)
+            }) {
+                anyhow::bail!(
+                    "ambiguous shared world recovery state for orchestration session {}",
+                    owner_spec.orchestration_session_id
+                );
+            }
+            return Ok(Some(active_world));
+        }
+
+        match replacing_worlds.len() {
+            0 => Ok(None),
+            1 => {
+                let mut world = replacing_worlds
+                    .pop()
+                    .ok_or_else(|| anyhow!("replacing shared world missing from recovery set"))?;
+                world.set_shared_binding_state(SharedWorldBindingState::Active, None)?;
+                Ok(Some(world))
+            }
+            _ => anyhow::bail!(
+                "ambiguous replacing shared worlds found for orchestration session {}",
+                owner_spec.orchestration_session_id
+            ),
+        }
     }
 
     fn recover_first_from_root<F>(root_dir: &Path, mut recover: F) -> Result<Option<Self>>
@@ -331,8 +441,7 @@ impl SessionWorld {
         match Self::ownership_from_metadata(&metadata)? {
             SessionWorldOwnership::Generic => Ok(None),
             SessionWorldOwnership::Shared(binding)
-                if binding.binding_state == SharedWorldBindingState::Active
-                    && binding.orchestration_session_id == owner_spec.orchestration_session_id =>
+                if binding.orchestration_session_id == owner_spec.orchestration_session_id =>
             {
                 Ok(Some(Self::from_metadata(
                     root_dir,
@@ -478,11 +587,60 @@ impl SessionWorld {
         let metadata_dir = Self::metadata_dir(&self.root_dir, &self.id);
         fs::create_dir_all(&metadata_dir)
             .with_context(|| format!("failed to create {}", metadata_dir.display()))?;
-        let encoded =
-            serde_json::to_vec_pretty(&self.to_metadata()?).context("encode session metadata")?;
         let metadata_path = Self::metadata_path(&self.root_dir, &self.id);
-        fs::write(&metadata_path, encoded)
-            .with_context(|| format!("failed to write {}", metadata_path.display()))
+        let temp_path = metadata_dir.join(format!(
+            ".{}.{}.tmp",
+            SESSION_METADATA_FILE_NAME,
+            uuid::Uuid::now_v7()
+        ));
+        let metadata = self.to_metadata()?;
+        let mut temp_file = match fs::File::options()
+            .create_new(true)
+            .write(true)
+            .open(&temp_path)
+        {
+            Ok(file) => file,
+            Err(err) => {
+                return Err(err)
+                    .with_context(|| format!("failed to create {}", temp_path.display()));
+            }
+        };
+
+        if let Err(err) = serde_json::to_writer_pretty(&mut temp_file, &metadata)
+            .with_context(|| format!("failed to serialize {}", metadata_path.display()))
+        {
+            let _ = fs::remove_file(&temp_path);
+            return Err(err);
+        }
+
+        if let Err(err) = temp_file
+            .sync_all()
+            .with_context(|| format!("failed to flush {}", temp_path.display()))
+        {
+            let _ = fs::remove_file(&temp_path);
+            return Err(err);
+        }
+
+        if let Err(err) = fs::rename(&temp_path, &metadata_path)
+            .with_context(|| format!("failed to persist {}", metadata_path.display()))
+        {
+            let _ = fs::remove_file(&temp_path);
+            return Err(err);
+        }
+
+        #[cfg(unix)]
+        if let Some(parent) = metadata_path.parent() {
+            match fs::File::open(parent).and_then(|dir| dir.sync_all()) {
+                Ok(()) => {}
+                Err(err) => tracing::warn!(
+                    error = %err,
+                    path = %parent.display(),
+                    "failed to sync metadata directory after atomic persist"
+                ),
+            }
+        }
+
+        Ok(())
     }
 
     fn should_persist_metadata(&self) -> bool {
@@ -1027,6 +1185,8 @@ impl Drop for SessionWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     #[cfg(target_os = "linux")]
     use std::sync::Mutex;
     use tempfile::tempdir;
@@ -1286,6 +1446,234 @@ mod tests {
     }
 
     #[test]
+    fn shared_binding_state_transitions_persist_and_reject_invalid_edges() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        let cgroup_path = temp.path().join("cgroup").join("wld_shared");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&cgroup_path).unwrap();
+
+        let owner_spec = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_123".into(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(owner_spec.clone()),
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir: project_dir.clone(),
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+        let mut world = SessionWorld {
+            id: "wld_shared".into(),
+            root_dir: root_dir.clone(),
+            project_dir,
+            cgroup_path,
+            net_namespace: None,
+            spec,
+            started_at: UNIX_EPOCH + Duration::from_millis(1_234),
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            shared_binding: Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: owner_spec.orchestration_session_id,
+                world_id: "wld_shared".into(),
+                world_generation: 7,
+                binding_state: SharedWorldBindingState::Active,
+            }),
+            policy_snapshot_hash: None,
+            last_restart_reason: None,
+            overlay: None,
+            overlay_mode: None,
+        };
+
+        world.persist_metadata().unwrap();
+        world
+            .set_shared_binding_state(SharedWorldBindingState::Replacing, Some("restart".into()))
+            .unwrap();
+        assert_eq!(
+            world.shared_binding().unwrap().binding_state,
+            SharedWorldBindingState::Replacing
+        );
+        assert_eq!(world.last_restart_reason.as_deref(), Some("restart"));
+
+        world
+            .set_shared_binding_state(SharedWorldBindingState::Active, None)
+            .unwrap();
+        assert_eq!(
+            world.shared_binding().unwrap().binding_state,
+            SharedWorldBindingState::Active
+        );
+        assert_eq!(world.last_restart_reason, None);
+
+        world
+            .set_shared_binding_state(SharedWorldBindingState::Replacing, Some("restart".into()))
+            .unwrap();
+        world
+            .set_shared_binding_state(SharedWorldBindingState::Replaced, Some("restart".into()))
+            .unwrap();
+        assert_eq!(
+            world.shared_binding().unwrap().binding_state,
+            SharedWorldBindingState::Replaced
+        );
+        assert_eq!(world.last_restart_reason.as_deref(), Some("restart"));
+
+        let err = world
+            .set_shared_binding_state(SharedWorldBindingState::Active, None)
+            .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("invalid shared binding state transition"),
+            "unexpected error: {err:#}"
+        );
+    }
+
+    #[test]
+    fn lone_replacing_world_recovers_back_to_active() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        let cgroup_path = temp.path().join("cgroup").join("wld_shared");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&cgroup_path).unwrap();
+
+        let owner_spec = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_123".into(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(owner_spec.clone()),
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir: project_dir.clone(),
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+        let world = SessionWorld {
+            id: "wld_shared".into(),
+            root_dir: root_dir.clone(),
+            project_dir,
+            cgroup_path,
+            net_namespace: None,
+            spec: spec.clone(),
+            started_at: UNIX_EPOCH + Duration::from_millis(1_234),
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            shared_binding: Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: owner_spec.orchestration_session_id.clone(),
+                world_id: "wld_shared".into(),
+                world_generation: 3,
+                binding_state: SharedWorldBindingState::Replacing,
+            }),
+            policy_snapshot_hash: None,
+            last_restart_reason: Some("restart".into()),
+            overlay: None,
+            overlay_mode: None,
+        };
+
+        world.persist_metadata().unwrap();
+
+        let recovered =
+            SessionWorld::recover_shared_active_from_root(&root_dir, &spec, &owner_spec)
+                .unwrap()
+                .expect("replacing metadata should recover");
+        let binding = recovered.shared_binding().expect("shared binding");
+        assert_eq!(binding.binding_state, SharedWorldBindingState::Active);
+        assert_eq!(binding.world_generation, 3);
+        assert_eq!(recovered.last_restart_reason, None);
+    }
+
+    #[test]
+    fn shared_recovery_prefers_newer_active_over_older_replacing() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        let old_cgroup_path = temp.path().join("cgroup").join("wld_old");
+        let new_cgroup_path = temp.path().join("cgroup").join("wld_new");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&old_cgroup_path).unwrap();
+        std::fs::create_dir_all(&new_cgroup_path).unwrap();
+
+        let owner_spec = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_123".into(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(owner_spec.clone()),
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir: project_dir.clone(),
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+
+        let old_world = SessionWorld {
+            id: "wld_old".into(),
+            root_dir: root_dir.clone(),
+            project_dir: project_dir.clone(),
+            cgroup_path: old_cgroup_path,
+            net_namespace: None,
+            spec: spec.clone(),
+            started_at: UNIX_EPOCH + Duration::from_millis(1_000),
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            shared_binding: Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: owner_spec.orchestration_session_id.clone(),
+                world_id: "wld_old".into(),
+                world_generation: 4,
+                binding_state: SharedWorldBindingState::Replacing,
+            }),
+            policy_snapshot_hash: None,
+            last_restart_reason: Some("restart".into()),
+            overlay: None,
+            overlay_mode: None,
+        };
+        old_world.persist_metadata().unwrap();
+
+        let new_world = SessionWorld {
+            id: "wld_new".into(),
+            root_dir: root_dir.clone(),
+            project_dir,
+            cgroup_path: new_cgroup_path,
+            net_namespace: None,
+            spec: spec.clone(),
+            started_at: UNIX_EPOCH + Duration::from_millis(2_000),
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            shared_binding: Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: owner_spec.orchestration_session_id.clone(),
+                world_id: "wld_new".into(),
+                world_generation: 5,
+                binding_state: SharedWorldBindingState::Active,
+            }),
+            policy_snapshot_hash: None,
+            last_restart_reason: Some("restart".into()),
+            overlay: None,
+            overlay_mode: None,
+        };
+        new_world.persist_metadata().unwrap();
+
+        let recovered =
+            SessionWorld::recover_shared_active_from_root(&root_dir, &spec, &owner_spec)
+                .unwrap()
+                .expect("newer active metadata should recover");
+        let binding = recovered.shared_binding().expect("shared binding");
+        assert_eq!(binding.world_id, "wld_new");
+        assert_eq!(binding.world_generation, 5);
+        assert_eq!(binding.binding_state, SharedWorldBindingState::Active);
+    }
+
+    #[test]
     fn stale_or_invalid_metadata_is_ignored() {
         let temp = tempdir().unwrap();
         let root_dir = temp.path().join("world-root");
@@ -1500,6 +1888,84 @@ mod tests {
             recovered.is_none(),
             "partial owner metadata must be treated as non-reusable"
         );
+        assert!(
+            metadata_dir.join(SESSION_METADATA_FILE_NAME).is_file(),
+            "shared recovery must retain malformed owner metadata on disk"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn atomic_persist_failure_preserves_prior_metadata_bytes() {
+        if current_uid() == 0 {
+            return;
+        }
+
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        let cgroup_path = temp.path().join("cgroup").join("wld_shared");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&cgroup_path).unwrap();
+
+        let owner_spec = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_123".into(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let spec = WorldSpec {
+            reuse_session: true,
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(owner_spec.clone()),
+            isolate_network: false,
+            allowed_domains: vec!["example.com".into()],
+            project_dir,
+            always_isolate: false,
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+        let mut world = SessionWorld {
+            id: "wld_shared".into(),
+            root_dir: root_dir.clone(),
+            project_dir: temp.path().join("project"),
+            cgroup_path,
+            net_namespace: None,
+            spec,
+            started_at: UNIX_EPOCH + Duration::from_millis(1_234),
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            shared_binding: Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: owner_spec.orchestration_session_id,
+                world_id: "wld_shared".into(),
+                world_generation: 0,
+                binding_state: SharedWorldBindingState::Active,
+            }),
+            policy_snapshot_hash: None,
+            last_restart_reason: None,
+            overlay: None,
+            overlay_mode: None,
+        };
+
+        world.persist_metadata().unwrap();
+        let metadata_path = root_dir.join("wld_shared").join(SESSION_METADATA_FILE_NAME);
+        let original = std::fs::read(&metadata_path).unwrap();
+
+        let metadata_dir = root_dir.join("wld_shared");
+        let original_permissions = std::fs::metadata(&metadata_dir).unwrap().permissions();
+        let mut read_only_permissions = original_permissions.clone();
+        read_only_permissions.set_mode(0o555);
+        std::fs::set_permissions(&metadata_dir, read_only_permissions).unwrap();
+
+        let err = world
+            .set_shared_binding_state(SharedWorldBindingState::Replacing, Some("restart".into()))
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("failed to create")
+                || err.to_string().contains("Permission denied"),
+            "unexpected error: {err:#}"
+        );
+
+        std::fs::set_permissions(&metadata_dir, original_permissions).unwrap();
+        assert_eq!(std::fs::read(&metadata_path).unwrap(), original);
     }
 
     #[test]
