@@ -6,32 +6,28 @@ Plan type: Linux backend hardening and proof-preservation slice, no UI scope
 Review posture: `/autoplan`-style scope tightening with `/plan-eng-review` structure and rigor  
 Status: execution-ready as a repo-truth and regression-proof contract
 
-## What This Plan Does
+## Objective
 
-This is not a greenfield design doc. The Linux backend already carries most of the replacement
-mechanics this slice needs.
+This is not a greenfield design doc. The Linux backend already contains the core replacement
+mechanics this slice needs. The job here is to turn that existing behavior into one explicit,
+regression-proof contract that later slices can consume without reinterpreting it.
 
-The real job of `PLAN-07` is to freeze the contract so later work in `PLAN-04`, `PLAN-05`, and
-`PLAN-06` cannot quietly regress shared-world restart safety while they consume the shared-world
-binding upstream.
+`PLAN-07` freezes the backend contract that `PLAN-04`, `PLAN-05`, and `PLAN-06` depend on:
 
-The required outcome is narrow and important:
+- replacement ordering must never leave an orchestration session without one recoverable active
+  world,
+- `session.json` writes must remain atomic for every shared-world transition,
+- recovery must stay deterministic and fail closed on ambiguity,
+- downstream proof consumers must continue to accept only `binding_state=Active`.
 
-1. shared-owner replacement never strands an orchestration session without a recoverable active
-   world when replacement creation fails,
-2. `session.json` writes stay atomic for every shared-world state transition,
-3. recovery logic remains fail closed on ambiguity and owner drift,
-4. downstream proof consumers continue to accept only `binding_state=Active`,
-5. later runtime-state and registry slices consume one authoritative backend contract instead of a
-   pile of shell-side guesses.
+This is a narrow slice. It is also a hard one. Everything after slice `03` assumes the backend can
+answer one question honestly: "what is the one reusable active world for this orchestration session
+right now?" If restart can lie about that, the rest of the stack becomes a more sophisticated way
+to persist corruption.
 
-This matters because everything after slice `03` assumes the backend can answer one question
-honestly: "what is the one reusable active world for this orchestration session right now?" If
-that answer is flaky during restart, the rest of the stack becomes a fancy way to persist lies.
+## Step 0: Scope Challenge
 
-## Scope Challenge
-
-### Why this is the right seventh slice
+### 0A. Repo truth and why this slice exists
 
 `PLAN-03` established explicit shared-world ownership. `PLAN-04`, `PLAN-05`, and `PLAN-06` all
 consume that ownership.
@@ -44,7 +40,7 @@ What still needs to be locked down is the restart seam inside [crates/world/src/
 
 That is the whole game.
 
-### What already exists
+### 0B. Existing code to reuse
 
 | Sub-problem | Existing code | Plan |
 | --- | --- | --- |
@@ -56,7 +52,7 @@ That is the whole game.
 | PTY and non-PTY shared-world transport | [crates/world-agent/src/service.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs) and [crates/world-agent/src/pty.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/pty.rs) | Reuse |
 | Existing regression tests for success, rollback, and recovery | [crates/world/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/lib.rs) and [crates/world/src/session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs) | Extend |
 
-### Minimum change that achieves the goal
+### 0C. Minimum viable slice
 
 Do this, and only this:
 
@@ -75,7 +71,7 @@ Do not:
 - change selected-orchestrator UX,
 - expand cross-platform shared-world parity in this slice.
 
-### Complexity check
+### 0D. Complexity check
 
 This slice is intentionally smaller than `PLAN-04` through `PLAN-06`.
 
@@ -88,7 +84,7 @@ The honest production seam is four files:
 
 That is small enough to keep boring. Good. Boring is what you want in restart correctness.
 
-### Search-before-building posture
+### 0E. Search and built-in check
 
 `[Layer 1]` wins here.
 
@@ -103,7 +99,20 @@ The repo already has the right primitives:
 The correct move is to preserve and tighten that contract, not invent a second authority or a more
 abstract restart engine.
 
-### Hard non-goals
+### 0F. What already exists
+
+- the backend-local shared-owner mutex already serializes replacement entry,
+- replacement already has a pre-commit `Replacing` state instead of pretending create/finalize is
+  one atomic in-memory action,
+- recovery already distinguishes `Active`, `Replacing`, `Replaced`, and malformed metadata,
+- proof validation already rejects mismatched ownership and non-Active state in
+  `resolve_shared_world_binding(...)`,
+- repo tests already cover the happy-path replacement and rollback shape.
+
+That means the plan is not "invent the mechanism." It is "freeze the mechanism, tighten the
+failure rules, and close the remaining proof gaps."
+
+### 0G. NOT in scope
 
 - runtime-state projection work already owned by [04-thread-world-binding-into-runtime-state.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/04-thread-world-binding-into-runtime-state.md)
 - generation invalidation and member replacement semantics already owned by [05-restart-invalidation-semantics.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/05-restart-invalidation-semantics.md)
@@ -308,6 +317,90 @@ Primary test anchors:
 
 This slice does not need a doc rewrite campaign. It does need the tests to prove the contract the
 docs already claim.
+
+## Execution Plan
+
+### Ordered implementation sequence
+
+Implement in this order. Each phase creates one invariant the next phase can safely consume.
+
+1. **Freeze replacement ordering in `crates/world/src/lib.rs`**
+   - keep `expected_generation` enforcement hard,
+   - keep pre-commit `Active -> Replacing`,
+   - keep rollback-to-`Active` on create failure,
+   - preserve aggregated create/rollback/cleanup error reporting,
+   - preserve finalize-old-world failure as warning-only after replacement commit.
+
+2. **Freeze metadata authority in `crates/world/src/session.rs`**
+   - allow only `Active -> Replacing -> Active|Replaced`,
+   - keep `persist_metadata()` rename-based and temp-file-clean,
+   - keep recovery deterministic across `Active`, `Replacing`, `Replaced`, and malformed inputs,
+   - prove fail-closed ambiguity handling with targeted tests.
+
+3. **Freeze the proof boundary in `crates/world-agent`**
+   - keep `resolve_shared_world_binding(...)` as the single validation helper,
+   - ensure PTY and non-PTY paths both route through it,
+   - reject empty, mismatched, or non-Active proof snapshots before shell-visible success.
+
+4. **Widen regression coverage before calling the slice done**
+   - land the missing world/backend tests first,
+   - then land proof-boundary tests,
+   - then refresh the QA handoff artifact and plan closeout text.
+
+### Phase-by-phase acceptance gates
+
+| Phase | Acceptance gate |
+| --- | --- |
+| 1. Replacement ordering | no create-failure path can leave the owner without one recoverable `Active` world |
+| 2. Metadata authority | every shared-world state write is atomic and recovery never silently chooses between ambiguous candidates |
+| 3. Proof boundary | PTY and non-PTY consumers reject malformed or non-Active proof before reporting success |
+| 4. Regression closeout | targeted tests cover success, rollback, ambiguity, malformed proof, and temp-file hygiene |
+
+## Architecture Review
+
+### Locked architecture decisions
+
+1. **Keep metadata authority in the backend.**
+   - `session.json` remains the recovery authority. Shell/runtime consumers read proof, they do not invent it.
+
+2. **Keep `Replacing` as the only publicized pre-commit checkpoint.**
+   - It is the durable rollback seam. Removing it would make failure recovery more magical, not simpler.
+
+3. **Keep replacement commit asymmetric.**
+   - Create failure rolls back. Old-world finalize failure after replacement commit does not. Once the new `Active` world exists durably, that becomes the truth.
+
+4. **Keep fail-closed recovery on ambiguity.**
+   - Two `Active` candidates or two unreconciled `Replacing` candidates are contract failures, not "pick the newer one" opportunities.
+
+5. **Keep proof validation local and explicit.**
+   - `resolve_shared_world_binding(...)` stays the one boundary. PTY and non-PTY codepaths must not fork their own interpretation logic.
+
+### Architecture acceptance gates
+
+1. **Restart gate**
+   - `ReplaceExpectedGeneration` either returns one new `Active` world or returns failure with the old world still recoverable.
+
+2. **Recovery gate**
+   - recovery returns one authoritative world, repairs one lone `Replacing` world, or fails closed. Nothing in between.
+
+3. **Boundary gate**
+   - world-agent success paths never expose `Replacing`, `Replaced`, empty ids, or mismatched owner proof as reusable.
+
+## Code Quality Review
+
+### Implementation guardrails
+
+1. one replacement transaction shape in `crates/world/src/lib.rs`, not separate success and failure semantics hidden across callsites,
+2. one binding-state transition helper in `SessionWorld`, not ad hoc metadata mutation,
+3. one proof-validation helper in `crates/world-agent`, not PTY-specific and service-specific drift,
+4. no new binding states, cache files, registry files, or shell-side authority mirrors,
+5. explicit aggregated errors on the bad restart path, because debugging restart corruption from partial logs is miserable.
+
+### Minimal-diff rules
+
+- keep the diff inside the four production files already identified unless a test helper extraction makes the test seams materially clearer,
+- prefer extending existing tests in `crates/world` and `crates/world-agent` over creating a new harness,
+- keep docs and plan updates bounded to contract wording, not a broader narrative rewrite.
 
 ## Error & Rescue Registry
 
