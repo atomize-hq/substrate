@@ -239,6 +239,7 @@ Rules:
   - `replaced`
   - `abandoned`
 - shared-owner reuse is allowed only from `binding_state=active`
+- `binding_state=replacing` exists only as an internal pre-commit marker during replacement and recovery; downstream request/PTY/status surfaces may expose or accept only `binding_state=active`
 - incomplete or contradictory owner metadata is never reusable for shared-owner flows
 
 ### Linux reuse path splits cleanly
@@ -267,8 +268,10 @@ Required behavior:
 3. `WorldReuseMode::SharedOrchestration(ReplaceExpectedGeneration { expected_generation, reason })`
    - resolve the currently active world for that owner
    - require exact generation match
-   - create a fresh world with generation `expected_generation + 1`
-   - mark prior world `binding_state=replaced`
+   - pre-commit the current world to `binding_state=replacing`
+   - create a fresh world with generation `expected_generation + 1` and committed `binding_state=active`
+   - if replacement creation fails, roll the prior world back to `binding_state=active` and clean up the partial replacement root
+   - after the new world is committed, finalize the prior world to `binding_state=replaced`
    - return the new authoritative binding snapshot
 
 4. Any shared-owner request with ownerless legacy metadata
@@ -281,14 +284,15 @@ This split is the whole game.
 
 The source SOW left crash/abandonment too vague. This plan tightens it without stealing slice `05`.
 
-Required minimal rule in this slice:
+Required recovery rule in this slice:
 
-- if a shared-owner world root exists but its metadata is incomplete, unreadable, or references missing critical directories, it is not reusable
-- such a world may be marked `abandoned` by Linux recovery logic
-- `abandoned` worlds are never reused for shared-owner requests
-- cleanup automation can remain manual or follow-on work, but reuse semantics must be deterministic now
+- if a shared-owner world root exists but its metadata is incomplete, unreadable, or references missing critical directories, it is not reusable and recovery leaves it on disk without adopting it
+- if recovery finds exactly one `binding_state=replacing` world and no `active` world for the owner, it reconciles that lone `replacing` world back to `active`
+- if recovery finds one `active` world and an older `replacing` world for the same owner, it prefers the newer `active` world
+- if recovery finds ambiguous same-owner state, such as multiple `active` worlds or a `replacing` world with generation newer than or equal to the `active` world, it fails closed
+- `replaced` and `abandoned` worlds are never reused for shared-owner requests
 
-This prevents the worst case: shell crash leaves half-written owner metadata, and the next attach accidentally reuses it because the spec happened to match.
+This prevents the worst case: an interrupted replace leaves metadata on disk, and the next attach accidentally reuses the wrong state because the spec happened to match.
 
 ### Transport contract becomes proof-bearing
 
@@ -628,7 +632,7 @@ This slice stays boring on purpose. The minimum diff that closes the ownership h
 | replace request generation mismatch | stale restart request increments the wrong chain | reject with explicit generation-conflict error |
 | owner-bearing PTY request hits non-Linux | backend falls through to generic ensure-session | return uniform unsupported-shared-world-owner error |
 | legacy ownerless `session.json` encountered for shared-owner flow | backend silently adopts a pre-owner world | treat candidate as non-reusable for shared-owner mode |
-| partial metadata write after crash | future request reuses a half-bound world | mark candidate abandoned or ignore it; never reuse |
+| partial metadata write after crash | future request reuses a half-bound world | ignore the malformed candidate without adopting it; never reuse |
 | PTY ready frame omits generation echo | shell invents generation anyway | close session fail closed and surface protocol error |
 | world-agent event path uses `span_id` as owner id | trace shows false world lineage | omit owner attribution or use explicit owner context only |
 
