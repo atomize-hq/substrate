@@ -5,7 +5,7 @@ mod common;
 use common::{substrate_shell_driver, temp_dir};
 use serde_json::{json, Value};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Output;
 use tempfile::TempDir;
 
@@ -418,12 +418,44 @@ fn write_runtime_participant(
     orchestration_session_id: &str,
     options: RuntimeParticipantOptions<'_>,
 ) {
-    let participants_dir = fixture
-        .substrate_home
-        .join("run")
-        .join("agent-hub")
-        .join("participants");
-    fs::create_dir_all(&participants_dir).expect("failed to create runtime participants dir");
+    write_json_file(
+        &canonical_participant_manifest_path(fixture, orchestration_session_id, participant_id),
+        &runtime_participant_manifest(
+            fixture,
+            participant_id,
+            agent_id,
+            orchestration_session_id,
+            options,
+        ),
+    );
+}
+
+fn write_flat_runtime_participant_compatibility(
+    fixture: &AgentSuccessorFixture,
+    participant_id: &str,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    options: RuntimeParticipantOptions<'_>,
+) {
+    write_json_file(
+        &flat_participant_manifest_path(fixture, participant_id),
+        &runtime_participant_manifest(
+            fixture,
+            participant_id,
+            agent_id,
+            orchestration_session_id,
+            options,
+        ),
+    );
+}
+
+fn runtime_participant_manifest(
+    _fixture: &AgentSuccessorFixture,
+    participant_id: &str,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    options: RuntimeParticipantOptions<'_>,
+) -> Value {
     let mut manifest = serde_json::Map::new();
     manifest.insert("participant_id".to_string(), json!(participant_id));
     manifest.insert(
@@ -484,21 +516,80 @@ fn write_runtime_participant(
             "last_error_message": null
         }),
     );
-    fs::write(
-        participants_dir.join(format!("{participant_id}.json")),
-        serde_json::to_vec_pretty(&Value::Object(manifest))
-            .expect("serialize runtime participant manifest"),
-    )
-    .expect("write runtime participant manifest");
+    Value::Object(manifest)
 }
 
 fn participant_manifest_path(fixture: &AgentSuccessorFixture, participant_id: &str) -> PathBuf {
+    let participant_dirs = fixture
+        .substrate_home
+        .join("run")
+        .join("agent-hub")
+        .join("sessions");
+    fs::read_dir(&participant_dirs)
+        .expect("canonical sessions dir should exist")
+        .filter_map(|entry| entry.ok())
+        .map(|entry| entry.path())
+        .find_map(|path| {
+            let candidate = path
+                .join("participants")
+                .join(format!("{participant_id}.json"));
+            candidate.is_file().then_some(candidate)
+        })
+        .unwrap_or_else(|| {
+            panic!("expected canonical participant manifest for `{participant_id}` to exist")
+        })
+}
+
+fn canonical_participant_manifest_path(
+    fixture: &AgentSuccessorFixture,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    fixture
+        .substrate_home
+        .join("run")
+        .join("agent-hub")
+        .join("sessions")
+        .join(orchestration_session_id)
+        .join("participants")
+        .join(format!("{participant_id}.json"))
+}
+
+fn flat_participant_manifest_path(
+    fixture: &AgentSuccessorFixture,
+    participant_id: &str,
+) -> PathBuf {
     fixture
         .substrate_home
         .join("run")
         .join("agent-hub")
         .join("participants")
         .join(format!("{participant_id}.json"))
+}
+
+fn canonical_orchestration_session_path(
+    fixture: &AgentSuccessorFixture,
+    orchestration_session_id: &str,
+) -> PathBuf {
+    fixture
+        .substrate_home
+        .join("run")
+        .join("agent-hub")
+        .join("sessions")
+        .join(orchestration_session_id)
+        .join("session.json")
+}
+
+fn flat_orchestration_session_path(
+    fixture: &AgentSuccessorFixture,
+    orchestration_session_id: &str,
+) -> PathBuf {
+    fixture
+        .substrate_home
+        .join("run")
+        .join("agent-hub")
+        .join("sessions")
+        .join(format!("{orchestration_session_id}.json"))
 }
 
 fn write_active_orchestration_session(
@@ -603,17 +694,57 @@ fn write_orchestration_session_impl(
     ts: &str,
     world_binding: Option<(&str, u64)>,
 ) {
-    let sessions_dir = fixture
-        .substrate_home
-        .join("run")
-        .join("agent-hub")
-        .join("sessions");
-    fs::create_dir_all(&sessions_dir).expect("failed to create orchestration sessions dir");
+    write_json_file(
+        &canonical_orchestration_session_path(fixture, orchestration_session_id),
+        &orchestration_session_manifest(
+            fixture,
+            agent_id,
+            orchestration_session_id,
+            active_session_handle_id,
+            state,
+            ts,
+            world_binding,
+        ),
+    );
+}
+
+fn write_flat_orchestration_session_compatibility(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: Option<&str>,
+    state: &str,
+    ts: &str,
+    world_binding: Option<(&str, u64)>,
+) {
+    write_json_file(
+        &flat_orchestration_session_path(fixture, orchestration_session_id),
+        &orchestration_session_manifest(
+            fixture,
+            agent_id,
+            orchestration_session_id,
+            active_session_handle_id,
+            state,
+            ts,
+            world_binding,
+        ),
+    );
+}
+
+fn orchestration_session_manifest(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: Option<&str>,
+    state: &str,
+    ts: &str,
+    world_binding: Option<(&str, u64)>,
+) -> Value {
     let (world_id, world_generation) = match world_binding {
         Some((world_id, world_generation)) => (json!(world_id), json!(world_generation)),
         None => (Value::Null, Value::Null),
     };
-    let session = json!({
+    json!({
         "orchestration_session_id": orchestration_session_id,
         "shell_trace_session_id": "ses_agent_hub",
         "workspace_root": fixture.workspace_root.display().to_string(),
@@ -630,12 +761,20 @@ fn write_orchestration_session_impl(
         "world_generation": world_generation,
         "invalidation_reason": if state == "active" { Value::Null } else { json!("fixture stopped parent") },
         "closed_at": if state == "active" { Value::Null } else { json!(ts) }
-    });
+    })
+}
+
+fn write_json_file(path: &Path, value: &Value) {
+    let parent = path
+        .parent()
+        .expect("json fixture path should have a parent");
+    fs::create_dir_all(parent)
+        .unwrap_or_else(|err| panic!("failed to create fixture dir {}: {err}", parent.display()));
     fs::write(
-        sessions_dir.join(format!("{orchestration_session_id}.json")),
-        serde_json::to_vec_pretty(&session).expect("serialize orchestration session"),
+        path,
+        serde_json::to_vec_pretty(value).expect("serialize fixture json"),
     )
-    .expect("write orchestration session");
+    .unwrap_or_else(|err| panic!("failed to write fixture json {}: {err}", path.display()));
 }
 
 fn repo_root() -> PathBuf {
@@ -1562,6 +1701,126 @@ fn agent_toolbox_status_json_reports_active_world_binding_from_live_parent_sessi
 }
 
 #[test]
+fn agent_toolbox_surfaces_prefer_canonical_session_roots_over_flat_compatibility_files() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb4",
+        "ash_canonical_toolbox",
+        "2026-04-06T00:00:02Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb4",
+        Some("ash_canonical_toolbox"),
+        "2026-04-06T00:00:02Z",
+    );
+    write_flat_runtime_participant_compatibility(
+        &fixture,
+        "ash_canonical_toolbox",
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f99",
+        RuntimeParticipantOptions::host_orchestrator("invalidated", false, "2026-04-06T00:00:01Z"),
+    );
+    write_flat_orchestration_session_compatibility(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb4",
+        Some("ash_flat_conflict"),
+        "stopped",
+        "2026-04-06T00:00:01Z",
+        None,
+    );
+
+    let status_output = fixture.run(&["agent", "toolbox", "status", "--json"]);
+    assert!(
+        status_output.status.success(),
+        "toolbox status must prefer the canonical session-root record over conflicting flat compatibility files: {status_output:?}"
+    );
+    let status_json = parse_json_output(&status_output);
+    assert_eq!(
+        status_json
+            .pointer("/active_orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb4")
+    );
+
+    let env_output = fixture.run(&["agent", "toolbox", "env", "--json"]);
+    assert!(
+        env_output.status.success(),
+        "toolbox env must resolve from the same canonical session-root record chosen by toolbox status: {env_output:?}"
+    );
+    let env_json = parse_json_output(&env_output);
+    let expected_endpoint = format!(
+        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb4.sock",
+        fixture.substrate_home.display()
+    );
+    assert_eq!(
+        env_json
+            .pointer("/SUBSTRATE_AGENT_TOOLBOX_ENDPOINT")
+            .and_then(Value::as_str),
+        Some(expected_endpoint.as_str()),
+        "canonical participant and parent records must outrank conflicting flat compatibility files on both toolbox surfaces: {env_json}"
+    );
+}
+
+#[test]
+fn agent_toolbox_surfaces_fall_back_to_flat_participant_when_canonical_root_is_incomplete() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5",
+        Some("ash_flat_fallback"),
+        "2026-04-06T00:00:02Z",
+    );
+    write_flat_runtime_participant_compatibility(
+        &fixture,
+        "ash_flat_fallback",
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5",
+        RuntimeParticipantOptions::host_orchestrator("running", true, "2026-04-06T00:00:02Z"),
+    );
+
+    let status_output = fixture.run(&["agent", "toolbox", "status", "--json"]);
+    assert!(
+        status_output.status.success(),
+        "toolbox status must keep the flat compatibility participant fallback when the canonical session root is parent-only: {status_output:?}"
+    );
+    let status_json = parse_json_output(&status_output);
+    assert_eq!(
+        status_json
+            .pointer("/active_orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5")
+    );
+
+    let env_output = fixture.run(&["agent", "toolbox", "env", "--json"]);
+    assert!(
+        env_output.status.success(),
+        "toolbox env must share the same flat compatibility fallback when the canonical participant is missing: {env_output:?}"
+    );
+    let env_json = parse_json_output(&env_output);
+    let expected_endpoint = format!(
+        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5.sock",
+        fixture.substrate_home.display()
+    );
+    assert_eq!(
+        env_json
+            .pointer("/SUBSTRATE_AGENT_TOOLBOX_ENDPOINT")
+            .and_then(Value::as_str),
+        Some(expected_endpoint.as_str()),
+        "flat compatibility participant fallback must stay readable when the canonical root is incomplete: {env_json}"
+    );
+}
+
+#[test]
 fn agent_status_selected_host_row_stays_unchanged_when_parent_session_has_world_binding() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
@@ -2034,6 +2293,121 @@ fn agent_status_keeps_same_agent_concurrent_sessions_visible_across_orchestratio
         .pointer("/orchestration_session_id")
         .and_then(Value::as_str),
         Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fab")
+    );
+}
+
+#[test]
+fn agent_status_keeps_same_agent_concurrent_live_sessions_visible_from_session_records() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    fixture.write_global_policy_patch(
+        r#"agents:
+  allowed_backends:
+    - cli:claude_code
+    - cli:codex
+    - cli:helper
+"#,
+    );
+    fixture.write_agent_file(
+        "helper.yaml",
+        &cli_agent_file("helper", "host", true, false, true),
+    );
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc1",
+        "ash_orchestrator_session_one",
+        "2026-04-05T00:00:02Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc1",
+        Some("ash_orchestrator_session_one"),
+        "2026-04-05T00:00:02Z",
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_codex_session_one",
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc1",
+        RuntimeParticipantOptions::world_member(
+            "running",
+            true,
+            "2026-04-05T00:00:02Z",
+            "wld_live_member_0001",
+            7,
+            "ash_orchestrator_session_one",
+        ),
+    );
+    write_live_runtime_manifest(
+        &fixture,
+        "helper",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc2",
+        "ash_orchestrator_session_two",
+        "2026-04-05T00:00:03Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "helper",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc2",
+        Some("ash_orchestrator_session_two"),
+        "2026-04-05T00:00:03Z",
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_codex_session_two",
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc2",
+        RuntimeParticipantOptions::world_member(
+            "running",
+            true,
+            "2026-04-05T00:00:03Z",
+            "wld_live_member_0002",
+            8,
+            "ash_orchestrator_session_two",
+        ),
+    );
+
+    let output = fixture.run(&["agent", "status", "--scope", "world", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status must keep same-agent concurrent live sessions visible when both rows come from store-owned session records: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let codex_rows: Vec<&Value> = sessions
+        .iter()
+        .filter(|session| session.pointer("/agent_id").and_then(Value::as_str) == Some("codex"))
+        .collect();
+    assert_eq!(
+        codex_rows.len(),
+        2,
+        "same-agent concurrent visibility must survive the session-record regrouping cutover: {json}"
+    );
+    assert_eq!(
+        find_session_by_agent_and_orchestration_session(
+            sessions,
+            "codex",
+            "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc1",
+        )
+        .pointer("/participant_id")
+        .and_then(Value::as_str),
+        Some("ash_codex_session_one")
+    );
+    assert_eq!(
+        find_session_by_agent_and_orchestration_session(
+            sessions,
+            "codex",
+            "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc2",
+        )
+        .pointer("/participant_id")
+        .and_then(Value::as_str),
+        Some("ash_codex_session_two")
     );
 }
 
@@ -2927,10 +3301,21 @@ fn docs_usage_and_repo_boundary_match_the_successor_contract() {
         "substrate agents list",
         "substrate agents status",
         "substrate agents doctor",
+        "live session discovery is backed by persisted manifests under `~/.substrate/run/agent-hub/handles/`",
     ] {
         assert!(
             !usage.contains(forbidden),
             "docs/USAGE.md must not advertise plural successor aliases: {forbidden}"
+        );
+    }
+    for required in [
+        "`~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/session.json`",
+        "`~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/<participant_id>.json`",
+        "`~/.substrate/run/agent-hub/handles/*.json` remains compatibility input only",
+    ] {
+        assert!(
+            usage.contains(required),
+            "docs/USAGE.md must describe the session-root live-state authority boundary `{required}`"
         );
     }
 
@@ -3033,6 +3418,12 @@ fn ahcsitc3_trace_doc_locks_tuple_compatible_fields() {
         "`auth_authority`",
         "`world_id`",
         "`world_generation`",
+        "`~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/session.json`",
+        "`~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/<participant_id>.json`",
+        "`~/.substrate/run/agent-hub/sessions/<orchestration_session_id>.json`",
+        "`~/.substrate/run/agent-hub/participants/*.json`",
+        "`~/.substrate/run/agent-hub/handles/*.json` remains legacy compatibility input only",
+        "Invalidated participant tombstones in canonical or flat compatibility participant records beat stale trace fallback rows",
     ] {
         assert!(
             trace.contains(required),

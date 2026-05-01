@@ -1,9 +1,10 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use tempfile::NamedTempFile;
 
 use substrate_common::paths as substrate_paths;
@@ -15,6 +16,97 @@ use super::{
     orchestration_session::{OrchestrationSessionRecord, OrchestrationSessionState},
     session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest},
 };
+
+#[derive(Clone, Debug)]
+pub(crate) struct AgentRuntimeSessionRecord {
+    pub session: OrchestrationSessionRecord,
+    pub participants: Vec<AgentRuntimeParticipantRecord>,
+    #[allow(dead_code)]
+    pub warnings: Vec<String>,
+    has_authoritative_parent: bool,
+    complete: bool,
+}
+
+impl AgentRuntimeSessionRecord {
+    pub(crate) fn orchestration_session_id(&self) -> &str {
+        &self.session.orchestration_session_id
+    }
+
+    pub(crate) fn is_complete(&self) -> bool {
+        self.complete
+    }
+
+    pub(crate) fn live_participants(&self) -> Vec<AgentRuntimeParticipantRecord> {
+        self.participants
+            .iter()
+            .filter(|participant| {
+                participant.is_authoritative_live() && owner_process_is_alive(participant)
+            })
+            .cloned()
+            .collect()
+    }
+
+    pub(crate) fn live_orchestrator(&self) -> Option<AgentRuntimeParticipantRecord> {
+        let active_participant_id = self.session.active_session_handle_id.as_deref()?;
+        self.live_participants().into_iter().find(|participant| {
+            participant.handle.participant_id == active_participant_id
+                && participant.handle.agent_id == self.session.orchestrator_agent_id
+                && participant.handle.orchestration_session_id
+                    == self.session.orchestration_session_id
+                && participant.handle.role == ORCHESTRATOR_ROLE
+                && participant.handle.execution.scope == AgentExecutionScope::Host
+        })
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn live_participant_for_agent(
+        &self,
+        agent_id: &str,
+        scope: AgentExecutionScope,
+        role: &str,
+    ) -> Option<AgentRuntimeParticipantRecord> {
+        self.live_participants().into_iter().find(|participant| {
+            participant.handle.agent_id == agent_id
+                && participant.handle.execution.scope == scope
+                && participant.handle.role == role
+        })
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn invalidated_world_members(&self) -> Vec<AgentRuntimeParticipantRecord> {
+        self.participants
+            .iter()
+            .filter(|participant| {
+                participant.handle.role == MEMBER_ROLE
+                    && participant.handle.execution.scope == AgentExecutionScope::World
+                    && participant.handle.state
+                        == super::session::AgentRuntimeSessionState::Invalidated
+            })
+            .cloned()
+            .collect()
+    }
+
+    pub(crate) fn last_updated_at(&self) -> DateTime<Utc> {
+        self.participants
+            .iter()
+            .map(AgentRuntimeParticipantRecord::last_status_at)
+            .max()
+            .map_or(self.session.last_active_at, |participant_ts| {
+                participant_ts.max(self.session.last_active_at)
+            })
+    }
+
+    fn has_authoritative_parent(&self) -> bool {
+        self.has_authoritative_parent
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum ParticipantRecordSource {
+    Canonical,
+    Flat,
+    Legacy,
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct AgentRuntimeStateStore {
@@ -49,6 +141,43 @@ impl AgentRuntimeStateStore {
             .join("sessions")
     }
 
+    fn canonical_session_dir(&self, orchestration_session_id: &str) -> PathBuf {
+        self.sessions_dir().join(orchestration_session_id)
+    }
+
+    fn canonical_session_path(&self, orchestration_session_id: &str) -> PathBuf {
+        self.canonical_session_dir(orchestration_session_id)
+            .join("session.json")
+    }
+
+    fn canonical_participants_dir(&self, orchestration_session_id: &str) -> PathBuf {
+        self.canonical_session_dir(orchestration_session_id)
+            .join("participants")
+    }
+
+    fn canonical_participant_path(
+        &self,
+        orchestration_session_id: &str,
+        participant_id: &str,
+    ) -> PathBuf {
+        self.canonical_participants_dir(orchestration_session_id)
+            .join(format!("{participant_id}.json"))
+    }
+
+    fn canonical_leases_dir(&self, orchestration_session_id: &str) -> PathBuf {
+        self.canonical_session_dir(orchestration_session_id)
+            .join("leases")
+    }
+
+    fn canonical_lease_path(
+        &self,
+        orchestration_session_id: &str,
+        participant_id: &str,
+    ) -> PathBuf {
+        self.canonical_leases_dir(orchestration_session_id)
+            .join(format!("{participant_id}.lease"))
+    }
+
     fn ensure_participants_dir(&self) -> Result<()> {
         fs::create_dir_all(self.participants_dir())
             .with_context(|| format!("failed to create {}", self.participants_dir().display()))
@@ -62,10 +191,6 @@ impl AgentRuntimeStateStore {
     fn participant_path(&self, participant_id: &str) -> PathBuf {
         self.participants_dir()
             .join(format!("{participant_id}.json"))
-    }
-
-    fn legacy_handle_path(&self, participant_id: &str) -> PathBuf {
-        self.handles_dir().join(format!("{participant_id}.json"))
     }
 
     fn orchestration_session_path(&self, orchestration_session_id: &str) -> PathBuf {
@@ -85,6 +210,13 @@ impl AgentRuntimeStateStore {
         self.validate_participant_record(participant)?;
         self.ensure_participants_dir()?;
         write_atomic_json(
+            &self.canonical_participant_path(
+                &participant.handle.orchestration_session_id,
+                &participant.handle.participant_id,
+            ),
+            participant,
+        )?;
+        write_atomic_json(
             &self.participant_path(&participant.handle.participant_id),
             participant,
         )?;
@@ -95,49 +227,19 @@ impl AgentRuntimeStateStore {
         &self,
         participant_id: &str,
     ) -> Result<Option<AgentRuntimeParticipantRecord>> {
-        let participant_path = self.participant_path(participant_id);
-        if let Some(participant) =
-            read_json_if_exists::<AgentRuntimeParticipantRecord>(&participant_path)?
-        {
-            self.validate_participant_record(&participant)?;
-            return Ok(Some(participant));
-        }
-
-        let legacy_handle_path = self.legacy_handle_path(participant_id);
-        let Some(participant) =
-            read_json_if_exists::<AgentRuntimeParticipantRecord>(&legacy_handle_path)?
-        else {
-            return Ok(None);
-        };
-        self.validate_participant_record(&participant)?;
-        Ok(Some(participant))
+        Ok(self
+            .list_participants_across_sources()?
+            .into_iter()
+            .find(|participant| participant.handle.participant_id == participant_id))
     }
 
     pub(crate) fn list_participants(&self) -> Result<Vec<AgentRuntimeParticipantRecord>> {
-        let mut participants = BTreeMap::new();
-
-        for participant in self.read_participant_dir(&self.participants_dir())? {
-            participants.insert(participant.handle.participant_id.clone(), participant);
-        }
-
-        for participant in self.read_participant_dir(&self.handles_dir())? {
-            participants
-                .entry(participant.handle.participant_id.clone())
-                .or_insert(participant);
-        }
-
-        let mut participants = participants.into_values().collect::<Vec<_>>();
-        participants.sort_by(|left, right| {
-            left.handle
-                .last_transition_at
-                .cmp(&right.handle.last_transition_at)
-        });
-        Ok(participants)
+        self.list_participants_across_sources()
     }
 
     pub(crate) fn list_live_participants(&self) -> Result<Vec<AgentRuntimeParticipantRecord>> {
         Ok(self
-            .list_participants()?
+            .list_participants_across_sources()?
             .into_iter()
             .filter(|participant| {
                 participant.is_authoritative_live() && owner_process_is_alive(participant)
@@ -145,11 +247,61 @@ impl AgentRuntimeStateStore {
             .collect())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn list_invalidated_participants(
         &self,
     ) -> Result<Vec<AgentRuntimeParticipantRecord>> {
         Ok(self
             .read_participant_dir(&self.participants_dir())?
+            .into_iter()
+            .filter(|participant| {
+                participant.handle.state == super::session::AgentRuntimeSessionState::Invalidated
+            })
+            .collect())
+    }
+
+    pub(crate) fn list_participants_across_sources(
+        &self,
+    ) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        let mut participants = BTreeMap::new();
+
+        for (participant, source) in self.read_canonical_participants()? {
+            participants.insert(
+                participant.handle.participant_id.clone(),
+                (participant, source),
+            );
+        }
+
+        for participant in self.read_participant_dir(&self.participants_dir())? {
+            participants
+                .entry(participant.handle.participant_id.clone())
+                .or_insert((participant, ParticipantRecordSource::Flat));
+        }
+
+        for participant in self.read_participant_dir(&self.handles_dir())? {
+            participants
+                .entry(participant.handle.participant_id.clone())
+                .or_insert((participant, ParticipantRecordSource::Legacy));
+        }
+
+        let mut participants = participants
+            .into_values()
+            .map(|(participant, _)| participant)
+            .collect::<Vec<_>>();
+        participants.sort_by(|left, right| {
+            left.handle
+                .last_transition_at
+                .cmp(&right.handle.last_transition_at)
+                .then(left.handle.participant_id.cmp(&right.handle.participant_id))
+        });
+        Ok(participants)
+    }
+
+    pub(crate) fn list_invalidated_participants_across_sources(
+        &self,
+    ) -> Result<Vec<AgentRuntimeParticipantRecord>> {
+        Ok(self
+            .list_participants_across_sources()?
             .into_iter()
             .filter(|participant| {
                 participant.handle.state == super::session::AgentRuntimeSessionState::Invalidated
@@ -178,7 +330,7 @@ impl AgentRuntimeStateStore {
     ) -> Result<Vec<String>> {
         let mut invalidated_participant_ids = Vec::new();
 
-        for mut participant in self.read_participant_dir(&self.participants_dir())? {
+        for mut participant in self.list_participants_across_sources()? {
             if participant.handle.orchestration_session_id != orchestration_session_id
                 || participant.handle.role != MEMBER_ROLE
                 || participant.handle.execution.scope != AgentExecutionScope::World
@@ -204,20 +356,85 @@ impl AgentRuntimeStateStore {
         Ok(invalidated_participant_ids)
     }
 
-    pub(crate) fn resolve_live_orchestrator_participant(
+    pub(crate) fn load_session(
         &self,
-        orchestrator_agent_id: &str,
-    ) -> Result<Option<(OrchestrationSessionRecord, AgentRuntimeParticipantRecord)>> {
-        let active_parents = self
-            .list_orchestration_sessions()?
+        orchestration_session_id: &str,
+    ) -> Result<Option<AgentRuntimeSessionRecord>> {
+        let session = self.load_authoritative_session(orchestration_session_id)?;
+        let participants = self
+            .list_participants_across_sources()?
             .into_iter()
-            .filter(|session| {
-                session.orchestrator_agent_id == orchestrator_agent_id
-                    && session.state == OrchestrationSessionState::Active
-                    && owner_pid_is_alive(session.shell_owner_pid)
+            .filter(|participant| {
+                participant.handle.orchestration_session_id == orchestration_session_id
             })
             .collect::<Vec<_>>();
-        if active_parents.len() > 1 {
+        if session.is_none() && participants.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(self.build_session_record(
+            orchestration_session_id,
+            session,
+            participants,
+        )))
+    }
+
+    pub(crate) fn list_sessions(&self) -> Result<Vec<AgentRuntimeSessionRecord>> {
+        let mut session_ids = BTreeSet::new();
+
+        for session_id in self.canonical_session_root_ids()? {
+            session_ids.insert(session_id);
+        }
+        for session_id in self.flat_session_ids()? {
+            session_ids.insert(session_id);
+        }
+        for participant in self.list_participants_across_sources()? {
+            session_ids.insert(participant.handle.orchestration_session_id.clone());
+        }
+
+        let mut sessions = Vec::new();
+        for session_id in session_ids {
+            if let Some(record) = self.load_session(&session_id)? {
+                sessions.push(record);
+            }
+        }
+
+        sessions.sort_by(|left, right| {
+            left.last_updated_at().cmp(&right.last_updated_at()).then(
+                left.orchestration_session_id()
+                    .cmp(right.orchestration_session_id()),
+            )
+        });
+        Ok(sessions)
+    }
+
+    pub(crate) fn list_live_sessions(&self) -> Result<Vec<AgentRuntimeSessionRecord>> {
+        Ok(self
+            .list_sessions()?
+            .into_iter()
+            .filter(|record| {
+                record.is_complete()
+                    && record.session.state == OrchestrationSessionState::Active
+                    && owner_pid_is_alive(record.session.shell_owner_pid)
+            })
+            .collect())
+    }
+
+    pub(crate) fn resolve_single_live_session_for_agent(
+        &self,
+        orchestrator_agent_id: &str,
+    ) -> Result<Option<AgentRuntimeSessionRecord>> {
+        let active_candidates = self
+            .list_sessions()?
+            .into_iter()
+            .filter(|record| {
+                record.has_authoritative_parent()
+                    && record.session.orchestrator_agent_id == orchestrator_agent_id
+                    && record.session.state == OrchestrationSessionState::Active
+                    && owner_pid_is_alive(record.session.shell_owner_pid)
+            })
+            .collect::<Vec<_>>();
+        if active_candidates.len() > 1 {
             anyhow::bail!(
                 "multiple active orchestration session candidates found for agent {orchestrator_agent_id}"
             );
@@ -238,7 +455,7 @@ impl AgentRuntimeStateStore {
             );
         }
 
-        let Some(parent) = active_parents.into_iter().next() else {
+        let Some(record) = active_candidates.into_iter().next() else {
             return if live_host_orchestrators.is_empty() {
                 Ok(None)
             } else {
@@ -248,41 +465,50 @@ impl AgentRuntimeStateStore {
             };
         };
 
-        let active_participant_id = parent.active_session_handle_id.clone().ok_or_else(|| {
-            anyhow::anyhow!(
-                "active orchestration session {} is missing active_session_handle_id",
-                parent.orchestration_session_id
-            )
-        })?;
-        let participant = self
-            .load_participant(&active_participant_id)?
+        let active_participant_id =
+            record
+                .session
+                .active_session_handle_id
+                .clone()
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "active orchestration session {} is missing active_session_handle_id",
+                        record.session.orchestration_session_id
+                    )
+                })?;
+
+        let participant = record
+            .participants
+            .iter()
+            .find(|participant| participant.handle.participant_id == active_participant_id)
+            .cloned()
             .ok_or_else(|| {
                 anyhow::anyhow!(
                     "active orchestration session {} references missing participant {}",
-                    parent.orchestration_session_id,
+                    record.session.orchestration_session_id,
                     active_participant_id
                 )
             })?;
-        self.validate_participant_record(&participant)?;
+
         if !participant.is_authoritative_live() || !owner_process_is_alive(&participant) {
             anyhow::bail!(
                 "active orchestration session {} references inactive participant {}",
-                parent.orchestration_session_id,
+                record.session.orchestration_session_id,
                 active_participant_id
             );
         }
         if participant.handle.agent_id != orchestrator_agent_id {
             anyhow::bail!(
                 "active orchestration session {} belongs to agent {} not {}",
-                parent.orchestration_session_id,
+                record.session.orchestration_session_id,
                 participant.handle.agent_id,
                 orchestrator_agent_id
             );
         }
-        if participant.handle.orchestration_session_id != parent.orchestration_session_id {
+        if participant.handle.orchestration_session_id != record.session.orchestration_session_id {
             anyhow::bail!(
                 "active orchestration session {} does not match participant {} parent {}",
-                parent.orchestration_session_id,
+                record.session.orchestration_session_id,
                 active_participant_id,
                 participant.handle.orchestration_session_id
             );
@@ -292,7 +518,7 @@ impl AgentRuntimeStateStore {
         {
             anyhow::bail!(
                 "active orchestration session {} references non-host orchestrator participant {}",
-                parent.orchestration_session_id,
+                record.session.orchestration_session_id,
                 active_participant_id
             );
         }
@@ -305,7 +531,20 @@ impl AgentRuntimeStateStore {
             );
         }
 
-        Ok(Some((parent, participant)))
+        Ok(Some(record))
+    }
+
+    pub(crate) fn resolve_live_orchestrator_participant(
+        &self,
+        orchestrator_agent_id: &str,
+    ) -> Result<Option<(OrchestrationSessionRecord, AgentRuntimeParticipantRecord)>> {
+        Ok(self
+            .resolve_single_live_session_for_agent(orchestrator_agent_id)?
+            .and_then(|record| {
+                record
+                    .live_orchestrator()
+                    .map(|participant| (record.session, participant))
+            }))
     }
 
     pub(crate) fn validate_participant_record(
@@ -352,6 +591,13 @@ impl AgentRuntimeStateStore {
             "terminal_observed_at": participant.internal.terminal_observed_at,
         });
         write_atomic_json(
+            &self.canonical_lease_path(
+                &participant.handle.orchestration_session_id,
+                &participant.handle.participant_id,
+            ),
+            &payload,
+        )?;
+        write_atomic_json(
             &self.lease_path(&participant.handle.participant_id),
             &payload,
         )
@@ -360,20 +606,19 @@ impl AgentRuntimeStateStore {
     fn persist_parent_session_snapshot(&self, session: &OrchestrationSessionRecord) -> Result<()> {
         self.ensure_sessions_dir()?;
         write_atomic_json(
+            &self.canonical_session_path(&session.orchestration_session_id),
+            session,
+        )?;
+        write_atomic_json(
             &self.orchestration_session_path(&session.orchestration_session_id),
             session,
         )
     }
 
     fn read_participant_dir(&self, dir: &Path) -> Result<Vec<AgentRuntimeParticipantRecord>> {
-        let entries = match fs::read_dir(dir) {
-            Ok(entries) => entries,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(err) => {
-                return Err(err).with_context(|| format!("failed to read {}", dir.display()));
-            }
+        let Some(entries) = safe_read_dir(dir)? else {
+            return Ok(Vec::new());
         };
-
         let mut participants = Vec::new();
         for entry in entries {
             let entry = entry.with_context(|| format!("failed to read {}", dir.display()))?;
@@ -381,11 +626,45 @@ impl AgentRuntimeStateStore {
             if path.extension().and_then(|value| value.to_str()) != Some("json") {
                 continue;
             }
-            let participant: AgentRuntimeParticipantRecord = read_json_file(&path)
-                .with_context(|| format!("failed to load {}", path.display()))?;
+            let Some(participant) =
+                read_regular_json_if_exists::<AgentRuntimeParticipantRecord>(&path)?
+            else {
+                continue;
+            };
             self.validate_participant_record(&participant)
                 .with_context(|| format!("invalid participant record in {}", path.display()))?;
             participants.push(participant);
+        }
+
+        Ok(participants)
+    }
+
+    fn read_canonical_participants(
+        &self,
+    ) -> Result<Vec<(AgentRuntimeParticipantRecord, ParticipantRecordSource)>> {
+        let mut participants = Vec::new();
+
+        for orchestration_session_id in self.canonical_session_root_ids()? {
+            let participants_dir = self.canonical_participants_dir(&orchestration_session_id);
+            let Some(entries) = safe_read_dir(&participants_dir)? else {
+                continue;
+            };
+            for entry in entries {
+                let entry = entry
+                    .with_context(|| format!("failed to read {}", participants_dir.display()))?;
+                let path = entry.path();
+                if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                let Some(participant) =
+                    read_regular_json_if_exists::<AgentRuntimeParticipantRecord>(&path)?
+                else {
+                    continue;
+                };
+                self.validate_participant_record(&participant)
+                    .with_context(|| format!("invalid participant record in {}", path.display()))?;
+                participants.push((participant, ParticipantRecordSource::Canonical));
+            }
         }
 
         Ok(participants)
@@ -396,30 +675,24 @@ impl AgentRuntimeStateStore {
         &self,
         orchestration_session_id: &str,
     ) -> Result<Option<OrchestrationSessionRecord>> {
-        let path = self.orchestration_session_path(orchestration_session_id);
-        read_json_if_exists(&path)
+        self.load_authoritative_session(orchestration_session_id)
     }
 
     #[allow(dead_code)]
     pub(crate) fn list_orchestration_sessions(&self) -> Result<Vec<OrchestrationSessionRecord>> {
-        let dir = self.sessions_dir();
-        let entries = match fs::read_dir(&dir) {
-            Ok(entries) => entries,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(err) => {
-                return Err(err).with_context(|| format!("failed to read {}", dir.display()));
-            }
-        };
-
         let mut sessions = Vec::new();
-        for entry in entries {
-            let entry = entry.with_context(|| format!("failed to read {}", dir.display()))?;
-            let path = entry.path();
-            if path.extension().and_then(|value| value.to_str()) != Some("json") {
-                continue;
+        let mut session_ids = BTreeSet::new();
+        for session_id in self.canonical_session_root_ids()? {
+            session_ids.insert(session_id);
+        }
+        for session_id in self.flat_session_ids()? {
+            session_ids.insert(session_id);
+        }
+
+        for session_id in session_ids {
+            if let Some(session) = self.load_authoritative_session(&session_id)? {
+                sessions.push(session);
             }
-            let session: OrchestrationSessionRecord = read_json_file(&path)?;
-            sessions.push(session);
         }
 
         sessions.sort_by(|left, right| left.last_active_at.cmp(&right.last_active_at));
@@ -485,6 +758,154 @@ impl AgentRuntimeStateStore {
     #[allow(dead_code)]
     fn load_manifest(&self, participant_id: &str) -> Result<Option<AgentRuntimeSessionManifest>> {
         self.load_participant(participant_id)
+    }
+
+    fn load_authoritative_session(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Option<OrchestrationSessionRecord>> {
+        let canonical_dir = self.canonical_session_dir(orchestration_session_id);
+        if safe_metadata(&canonical_dir)?.is_some_and(|metadata| metadata.is_dir()) {
+            let canonical_path = self.canonical_session_path(orchestration_session_id);
+            if let Some(session) =
+                read_regular_json_if_exists::<OrchestrationSessionRecord>(&canonical_path)?
+            {
+                return Ok(Some(session));
+            }
+        }
+
+        read_regular_json_if_exists(&self.orchestration_session_path(orchestration_session_id))
+    }
+
+    fn canonical_session_root_ids(&self) -> Result<Vec<String>> {
+        let Some(entries) = safe_read_dir(&self.sessions_dir())? else {
+            return Ok(Vec::new());
+        };
+
+        let mut session_ids = Vec::new();
+        for entry in entries {
+            let entry = entry
+                .with_context(|| format!("failed to read {}", self.sessions_dir().display()))?;
+            let path = entry.path();
+            let Some(metadata) = safe_metadata(&path)? else {
+                continue;
+            };
+            if metadata.file_type().is_dir() {
+                let file_name = entry.file_name();
+                let Some(session_id) = file_name.to_str() else {
+                    continue;
+                };
+                session_ids.push(session_id.to_string());
+            }
+        }
+        session_ids.sort();
+        Ok(session_ids)
+    }
+
+    fn flat_session_ids(&self) -> Result<Vec<String>> {
+        let Some(entries) = safe_read_dir(&self.sessions_dir())? else {
+            return Ok(Vec::new());
+        };
+
+        let mut session_ids = Vec::new();
+        for entry in entries {
+            let entry = entry
+                .with_context(|| format!("failed to read {}", self.sessions_dir().display()))?;
+            let path = entry.path();
+            let Some(metadata) = safe_metadata(&path)? else {
+                continue;
+            };
+            if !metadata.is_file()
+                || path.extension().and_then(|value| value.to_str()) != Some("json")
+            {
+                continue;
+            }
+            let Some(stem) = path.file_stem().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            session_ids.push(stem.to_string());
+        }
+        session_ids.sort();
+        Ok(session_ids)
+    }
+
+    fn build_session_record(
+        &self,
+        orchestration_session_id: &str,
+        session: Option<OrchestrationSessionRecord>,
+        mut participants: Vec<AgentRuntimeParticipantRecord>,
+    ) -> AgentRuntimeSessionRecord {
+        participants.sort_by(|left, right| {
+            left.handle
+                .last_transition_at
+                .cmp(&right.handle.last_transition_at)
+                .then(left.handle.participant_id.cmp(&right.handle.participant_id))
+        });
+
+        let has_authoritative_parent = session.is_some();
+        let mut warnings = Vec::new();
+        if !has_authoritative_parent {
+            warnings.push(format!(
+                "orchestration session {orchestration_session_id} is missing authoritative parent session metadata"
+            ));
+        }
+
+        let session = session
+            .unwrap_or_else(|| synthesize_session_record(orchestration_session_id, &participants));
+
+        let complete = if !has_authoritative_parent {
+            false
+        } else if session.state != OrchestrationSessionState::Active {
+            true
+        } else {
+            match session.active_session_handle_id.as_deref() {
+                Some(active_participant_id) => match participants
+                    .iter()
+                    .find(|participant| participant.handle.participant_id == active_participant_id)
+                {
+                    Some(participant)
+                        if participant.is_authoritative_live()
+                            && owner_process_is_alive(participant)
+                            && participant.handle.agent_id == session.orchestrator_agent_id
+                            && participant.handle.orchestration_session_id
+                                == session.orchestration_session_id
+                            && participant.handle.role == ORCHESTRATOR_ROLE
+                            && participant.handle.execution.scope == AgentExecutionScope::Host =>
+                    {
+                        true
+                    }
+                    Some(participant) => {
+                        warnings.push(format!(
+                            "active orchestration session {} references incomplete live orchestrator participant {}",
+                            session.orchestration_session_id, participant.handle.participant_id
+                        ));
+                        false
+                    }
+                    None => {
+                        warnings.push(format!(
+                            "active orchestration session {} references missing participant {}",
+                            session.orchestration_session_id, active_participant_id
+                        ));
+                        false
+                    }
+                },
+                None => {
+                    warnings.push(format!(
+                        "active orchestration session {} is missing active_session_handle_id",
+                        session.orchestration_session_id
+                    ));
+                    false
+                }
+            }
+        };
+
+        AgentRuntimeSessionRecord {
+            session,
+            participants,
+            warnings,
+            has_authoritative_parent,
+            complete,
+        }
     }
 }
 
@@ -552,11 +973,106 @@ where
     }
 }
 
-fn read_json_file<T>(path: &Path) -> Result<T>
+fn safe_metadata(path: &Path) -> Result<Option<fs::Metadata>> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Ok(None),
+        Ok(metadata) => Ok(Some(metadata)),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err).with_context(|| format!("failed to stat {}", path.display())),
+    }
+}
+
+fn safe_read_dir(path: &Path) -> Result<Option<fs::ReadDir>> {
+    let Some(metadata) = safe_metadata(path)? else {
+        return Ok(None);
+    };
+    if !metadata.is_dir() {
+        return Ok(None);
+    }
+
+    let entries =
+        fs::read_dir(path).with_context(|| format!("failed to read {}", path.display()))?;
+    Ok(Some(entries))
+}
+
+fn read_regular_json_if_exists<T>(path: &Path) -> Result<Option<T>>
 where
     T: serde::de::DeserializeOwned,
 {
-    read_json_if_exists(path)?.ok_or_else(|| anyhow::anyhow!("missing {}", path.display()))
+    let Some(metadata) = safe_metadata(path)? else {
+        return Ok(None);
+    };
+    if !metadata.is_file() {
+        return Ok(None);
+    }
+
+    read_json_if_exists(path)
+}
+
+fn synthesize_session_record(
+    orchestration_session_id: &str,
+    participants: &[AgentRuntimeParticipantRecord],
+) -> OrchestrationSessionRecord {
+    let template = participants
+        .iter()
+        .find(|participant| {
+            participant.handle.role == ORCHESTRATOR_ROLE
+                && participant.handle.execution.scope == AgentExecutionScope::Host
+        })
+        .or_else(|| participants.first())
+        .expect("synthetic session record requires at least one participant");
+
+    let mut session = OrchestrationSessionRecord::new(
+        orchestration_session_id.to_string(),
+        "<unknown-trace-session>".to_string(),
+        "<unknown-workspace-root>".to_string(),
+        template,
+    );
+    session.opened_at = participants
+        .iter()
+        .map(|participant| participant.handle.opened_at)
+        .min()
+        .unwrap_or(session.opened_at);
+    session.last_active_at = participants
+        .iter()
+        .map(AgentRuntimeParticipantRecord::last_status_at)
+        .max()
+        .unwrap_or(session.last_active_at);
+
+    if let Some(orchestrator) = participants.iter().find(|participant| {
+        participant.handle.role == ORCHESTRATOR_ROLE
+            && participant.handle.execution.scope == AgentExecutionScope::Host
+    }) {
+        session.orchestrator_agent_id = orchestrator.handle.agent_id.clone();
+        session.orchestrator_backend_id = orchestrator.handle.backend_id.clone();
+        session.orchestrator_protocol = orchestrator.handle.protocol.clone();
+    }
+    session.active_session_handle_id = participants
+        .iter()
+        .find(|participant| {
+            participant.handle.role == ORCHESTRATOR_ROLE
+                && participant.handle.execution.scope == AgentExecutionScope::Host
+                && participant.is_authoritative_live()
+                && owner_process_is_alive(participant)
+        })
+        .map(|participant| participant.handle.participant_id.clone());
+    session.latest_run_id = participants
+        .iter()
+        .filter_map(|participant| {
+            participant
+                .internal
+                .latest_run_id
+                .as_ref()
+                .map(|run_id| (participant.last_status_at(), run_id.clone()))
+        })
+        .max_by(|left, right| left.0.cmp(&right.0))
+        .map(|(_, run_id)| run_id);
+    session.state = if session.active_session_handle_id.is_some() {
+        OrchestrationSessionState::Active
+    } else {
+        OrchestrationSessionState::Allocating
+    };
+    session
 }
 
 #[cfg(test)]
@@ -687,6 +1203,49 @@ mod tests {
         .expect("write legacy handle");
     }
 
+    fn write_flat_session_file(
+        store: &AgentRuntimeStateStore,
+        session: &OrchestrationSessionRecord,
+    ) {
+        fs::create_dir_all(store.sessions_dir()).expect("create sessions dir");
+        fs::write(
+            store.orchestration_session_path(&session.orchestration_session_id),
+            serde_json::to_vec_pretty(session).expect("serialize session"),
+        )
+        .expect("write flat session");
+    }
+
+    fn write_canonical_session_file(
+        store: &AgentRuntimeStateStore,
+        session: &OrchestrationSessionRecord,
+    ) {
+        fs::create_dir_all(store.canonical_session_dir(&session.orchestration_session_id))
+            .expect("create canonical session dir");
+        fs::write(
+            store.canonical_session_path(&session.orchestration_session_id),
+            serde_json::to_vec_pretty(session).expect("serialize canonical session"),
+        )
+        .expect("write canonical session");
+    }
+
+    fn write_canonical_participant_file(
+        store: &AgentRuntimeStateStore,
+        participant: &AgentRuntimeParticipantRecord,
+    ) {
+        fs::create_dir_all(
+            store.canonical_participants_dir(&participant.handle.orchestration_session_id),
+        )
+        .expect("create canonical participants dir");
+        fs::write(
+            store.canonical_participant_path(
+                &participant.handle.orchestration_session_id,
+                &participant.handle.participant_id,
+            ),
+            serde_json::to_vec_pretty(participant).expect("serialize canonical participant"),
+        )
+        .expect("write canonical participant");
+    }
+
     fn merge_json(target: &mut Value, extra: Value) {
         match (target, extra) {
             (Value::Object(target), Value::Object(extra)) => {
@@ -743,6 +1302,115 @@ mod tests {
             let participants = store.list_participants().expect("list participants");
             assert_eq!(participants.len(), 1);
             assert_eq!(participants[0].handle.agent_id, "codex");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn load_session_prefers_canonical_objects_and_keeps_flat_participant_fallbacks() {
+        with_store(|store| {
+            let canonical_orchestrator =
+                live_orchestrator("codex", "sess_precedence", "ash_primary");
+            let mut flat_orchestrator =
+                live_orchestrator("legacy", "sess_precedence", "ash_primary");
+            flat_orchestrator.internal.latest_run_id = Some("run-flat".to_string());
+            let flat_member = live_member(
+                "claude_code",
+                "sess_precedence",
+                "ash_member",
+                "ash_primary",
+            );
+
+            let canonical_parent = active_parent(&canonical_orchestrator);
+            let flat_parent = active_parent(&flat_orchestrator);
+
+            store
+                .persist_participant(&flat_orchestrator)
+                .expect("persist flat orchestrator");
+            store
+                .persist_participant(&flat_member)
+                .expect("persist flat member");
+            write_flat_session_file(store, &flat_parent);
+            write_canonical_participant_file(store, &canonical_orchestrator);
+            write_canonical_session_file(store, &canonical_parent);
+
+            let session = store
+                .load_session("sess_precedence")
+                .expect("load session")
+                .expect("session exists");
+            assert!(
+                session.warnings.is_empty(),
+                "complete record should not warn"
+            );
+            assert!(
+                session.is_complete(),
+                "canonical parent plus live participant should be complete"
+            );
+            assert_eq!(session.session.orchestrator_agent_id, "codex");
+            assert_eq!(
+                session
+                    .participants
+                    .iter()
+                    .find(|participant| participant.handle.participant_id == "ash_primary")
+                    .expect("orchestrator participant")
+                    .handle
+                    .agent_id,
+                "codex"
+            );
+            assert!(
+                session
+                    .participants
+                    .iter()
+                    .any(|participant| participant.handle.participant_id == "ash_member"),
+                "canonical parent must not erase flat participant compatibility fallback"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn persist_writes_canonical_and_flat_compatibility_layouts() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex", "sess_dual_write", "ash_dual_write");
+            let parent = active_parent(&participant);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            assert!(
+                store.canonical_session_path("sess_dual_write").is_file(),
+                "canonical session.json must be written"
+            );
+            assert!(
+                store
+                    .orchestration_session_path("sess_dual_write")
+                    .is_file(),
+                "flat compatibility parent session must remain readable during cutover"
+            );
+            assert!(
+                store
+                    .canonical_participant_path("sess_dual_write", "ash_dual_write")
+                    .is_file(),
+                "canonical participant record must be written"
+            );
+            assert!(
+                store.participant_path("ash_dual_write").is_file(),
+                "flat compatibility participant record must remain readable during cutover"
+            );
+            assert!(
+                store
+                    .canonical_lease_path("sess_dual_write", "ash_dual_write")
+                    .is_file(),
+                "canonical lease must be written"
+            );
+            assert!(
+                store.lease_path("ash_dual_write").is_file(),
+                "flat compatibility lease must remain readable during cutover"
+            );
         });
     }
 
@@ -813,6 +1481,83 @@ mod tests {
                 .expect("list live participants");
             assert_eq!(participants.len(), 1);
             assert_eq!(participants[0].handle.participant_id, "ash_live");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn list_sessions_discovers_participant_only_roots_and_excludes_them_from_live_results() {
+        with_store(|store| {
+            let live_session_orchestrator = live_orchestrator("codex", "sess_live", "ash_live");
+            let live_parent = active_parent(&live_session_orchestrator);
+            let torn_orchestrator = live_orchestrator("codex", "sess_torn", "ash_torn");
+
+            store
+                .persist_participant(&live_session_orchestrator)
+                .expect("persist live orchestrator");
+            store
+                .persist_orchestration_session(&live_parent)
+                .expect("persist live parent");
+            store
+                .persist_participant(&torn_orchestrator)
+                .expect("persist torn participant");
+
+            let sessions = store.list_sessions().expect("list sessions");
+            assert_eq!(sessions.len(), 2);
+            let torn = sessions
+                .iter()
+                .find(|record| record.orchestration_session_id() == "sess_torn")
+                .expect("participant-only torn root discovered");
+            assert!(
+                !torn.is_complete(),
+                "participant-only torn roots must remain incomplete"
+            );
+            assert!(
+                !torn.warnings.is_empty(),
+                "participant-only torn roots must surface warnings"
+            );
+
+            let live_sessions = store.list_live_sessions().expect("list live sessions");
+            assert_eq!(
+                live_sessions
+                    .iter()
+                    .map(|record| record.orchestration_session_id())
+                    .collect::<Vec<_>>(),
+                vec!["sess_live"]
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn parent_only_torn_roots_degrade_with_warnings_instead_of_failing_discovery() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex", "sess_parent_only", "ash_missing");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+
+            let session = store
+                .load_session("sess_parent_only")
+                .expect("load parent-only torn root")
+                .expect("parent-only torn root exists");
+            assert!(
+                !session.is_complete(),
+                "parent-only torn roots must stay incomplete"
+            );
+            assert!(
+                !session.warnings.is_empty(),
+                "parent-only torn roots must surface warnings"
+            );
+            assert!(
+                store
+                    .list_live_sessions()
+                    .expect("list live sessions")
+                    .into_iter()
+                    .all(|record| record.orchestration_session_id() != "sess_parent_only"),
+                "parent-only torn roots must not be promoted into live discovery"
+            );
         });
     }
 
@@ -959,6 +1704,49 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn list_invalidated_participants_across_sources_includes_legacy_fallback_tombstones() {
+        with_store(|store| {
+            let mut participant =
+                live_member("codex", "sess_live", "ash_member_old", "ash_orchestrator");
+            participant.invalidate_for_world_generation_rollover();
+            store
+                .persist_participant(&participant)
+                .expect("persist invalidated participant");
+            write_legacy_handle_file(
+                store,
+                "ash_legacy_only",
+                "codex",
+                "sess_live",
+                false,
+                Some(json!({
+                    "role": "member",
+                    "execution": { "scope": "world" },
+                    "state": "invalidated",
+                    "world_id": "world-17",
+                    "world_generation": 1,
+                    "orchestrator_participant_id": "ash_orchestrator",
+                    "internal": {
+                        "ownership_mode": "member_runtime"
+                    }
+                })),
+            );
+
+            let invalidated = store
+                .list_invalidated_participants_across_sources()
+                .expect("list invalidated participants across sources");
+
+            assert_eq!(invalidated.len(), 2);
+            let mut participant_ids = invalidated
+                .iter()
+                .map(|participant| participant.handle.participant_id.as_str())
+                .collect::<Vec<_>>();
+            participant_ids.sort();
+            assert_eq!(participant_ids, vec!["ash_legacy_only", "ash_member_old"]);
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn resolve_live_orchestrator_participant_fails_closed_on_ambiguity() {
         with_store(|store| {
             let participant_a = live_orchestrator("codex", "sess_a", "ash_a");
@@ -984,6 +1772,101 @@ mod tests {
             assert!(err.to_string().contains(
                 "multiple active orchestration session candidates found for agent codex"
             ));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_single_live_session_fails_closed_on_stale_active_handle_reference() {
+        with_store(|store| {
+            let selected = live_orchestrator("codex", "sess_live", "ash_selected");
+            let mut parent = active_parent(&selected);
+            parent.bind_active_session_handle("ash_missing");
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&selected)
+                .expect("persist selected participant");
+
+            let err = store
+                .resolve_single_live_session_for_agent("codex")
+                .expect_err("stale active handle references must fail closed");
+            assert!(err.to_string().contains(
+                "active orchestration session sess_live references missing participant ash_missing"
+            ));
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn path_hardening_ignores_symlinked_and_non_regular_entries() {
+        use std::os::unix::fs::symlink;
+
+        with_store(|store| {
+            fs::create_dir_all(store.sessions_dir()).expect("create sessions dir");
+            fs::create_dir_all(store.participants_dir()).expect("create participants dir");
+
+            let symlink_participant = live_orchestrator("codex", "sess_symlink", "ash_symlink");
+            let real_root = store.substrate_home.join("real-session-root");
+            fs::create_dir_all(real_root.join("participants")).expect("create real session root");
+            fs::write(
+                real_root.join("session.json"),
+                serde_json::to_vec_pretty(&active_parent(&symlink_participant))
+                    .expect("serialize symlinked session"),
+            )
+            .expect("write real session json");
+            fs::write(
+                real_root.join("participants/ash_symlink.json"),
+                serde_json::to_vec_pretty(&symlink_participant)
+                    .expect("serialize symlinked participant"),
+            )
+            .expect("write real participant json");
+            symlink(&real_root, store.sessions_dir().join("sess_symlink"))
+                .expect("symlink canonical root");
+
+            let external_participant_path = store.substrate_home.join("real-participant.json");
+            fs::write(
+                &external_participant_path,
+                serde_json::to_vec_pretty(&symlink_participant)
+                    .expect("serialize external participant"),
+            )
+            .expect("write external participant");
+            symlink(
+                &external_participant_path,
+                store.participants_dir().join("ash_symlink.json"),
+            )
+            .expect("symlink participant");
+
+            fs::create_dir_all(store.sessions_dir().join("ignored.json"))
+                .expect("create non-regular session entry");
+            fs::create_dir_all(store.participants_dir().join("ignored.json"))
+                .expect("create non-regular participant entry");
+
+            assert!(
+                store
+                    .load_orchestration_session("sess_symlink")
+                    .expect("load symlinked session")
+                    .is_none(),
+                "symlinked canonical session roots must be ignored"
+            );
+            assert!(
+                store
+                    .load_participant("ash_symlink")
+                    .expect("load symlinked participant")
+                    .is_none(),
+                "symlinked participant entries must be ignored"
+            );
+            assert!(
+                store
+                    .list_sessions()
+                    .expect("list sessions")
+                    .into_iter()
+                    .all(|record| record.orchestration_session_id() != "sess_symlink"),
+                "symlinked canonical roots must not be promoted into discovery"
+            );
         });
     }
 

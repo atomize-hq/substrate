@@ -88,7 +88,11 @@ Operator-visible identity rules on these surfaces:
 - `substrate agent toolbox status` is a pre-runtime introspection surface: it projects the effective toolbox posture, the selected orchestrator identity, and either the active per-session UDS endpoint or the deterministic endpoint template when no orchestrator session is active yet.
 - `substrate agent toolbox env` emits `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` and `SUBSTRATE_AGENT_TOOLBOX_VERSION` only when a current pure-agent orchestrator session is present; otherwise it fails closed with a specific exit code.
 
-When the async REPL owns a shell-scoped orchestrator session, live session discovery is backed by persisted manifests under `~/.substrate/run/agent-hub/handles/`. `substrate agent status` and `substrate agent toolbox ...` prefer those live manifests before falling back to trace-derived session discovery.
+When the async REPL owns a shell-scoped orchestrator session, live session discovery is backed by the store-owned session root:
+- `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/session.json`
+- `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/<participant_id>.json`
+
+`substrate agent status` and `substrate agent toolbox ...` resolve live state from those session records first. `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>.json`, `~/.substrate/run/agent-hub/participants/*.json`, and `~/.substrate/run/agent-hub/handles/*.json` remains compatibility input only during the cutover and must not be treated as live-state authority.
 
 ## PTY Support
 

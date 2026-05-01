@@ -186,7 +186,56 @@ fn read_trace_events(trace_path: &Path) -> Vec<Value> {
         .collect()
 }
 
-fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
+fn sessions_dir(substrate_home: &Path) -> PathBuf {
+    substrate_home.join("run/agent-hub/sessions")
+}
+
+fn canonical_session_path(substrate_home: &Path, orchestration_session_id: &str) -> PathBuf {
+    sessions_dir(substrate_home)
+        .join(orchestration_session_id)
+        .join("session.json")
+}
+
+fn canonical_participant_path(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    sessions_dir(substrate_home)
+        .join(orchestration_session_id)
+        .join("participants")
+        .join(format!("{participant_id}.json"))
+}
+
+fn canonical_lease_path(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    sessions_dir(substrate_home)
+        .join(orchestration_session_id)
+        .join("leases")
+        .join(format!("{participant_id}.lease"))
+}
+
+fn load_single_session_record(substrate_home: &Path) -> Value {
+    let sessions_dir = sessions_dir(substrate_home);
+    let mut canonical_entries = fs::read_dir(&sessions_dir)
+        .expect("read orchestration session dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .map(|path| path.join("session.json"))
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    canonical_entries.sort();
+    if let Some(session_path) = canonical_entries.into_iter().next() {
+        return serde_json::from_str::<Value>(
+            &fs::read_to_string(session_path).expect("read canonical session file"),
+        )
+        .expect("parse canonical session file");
+    }
+
     let sessions_dir = substrate_home.join("run/agent-hub/sessions");
     let mut entries = fs::read_dir(&sessions_dir)
         .expect("read orchestration session dir")
@@ -199,8 +248,14 @@ fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
         .into_iter()
         .next()
         .expect("orchestration session file");
-    serde_json::from_str::<Value>(&fs::read_to_string(session_path).expect("read session file"))
-        .expect("parse session file")
+    serde_json::from_str::<Value>(
+        &fs::read_to_string(session_path).expect("read flat session file"),
+    )
+    .expect("parse flat session file")
+}
+
+fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
+    load_single_session_record(substrate_home)
         .get("orchestration_session_id")
         .and_then(Value::as_str)
         .expect("session orchestration_session_id")
@@ -208,20 +263,7 @@ fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
 }
 
 fn load_single_active_participant_id(substrate_home: &Path) -> String {
-    let sessions_dir = substrate_home.join("run/agent-hub/sessions");
-    let mut entries = fs::read_dir(&sessions_dir)
-        .expect("read orchestration session dir")
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
-        .collect::<Vec<_>>();
-    entries.sort();
-    let session_path = entries
-        .into_iter()
-        .next()
-        .expect("orchestration session file");
-    serde_json::from_str::<Value>(&fs::read_to_string(session_path).expect("read session file"))
-        .expect("parse session file")
+    load_single_session_record(substrate_home)
         .get("active_session_handle_id")
         .and_then(Value::as_str)
         .expect("session active_session_handle_id")
@@ -575,6 +617,14 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
     let shell_session_id = extract_session_id(&out);
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let participant_id = load_single_active_participant_id(&substrate_home);
+    let canonical_session = canonical_session_path(&substrate_home, &orchestration_session_id);
+    let canonical_participant =
+        canonical_participant_path(&substrate_home, &orchestration_session_id, &participant_id);
+    let canonical_lease =
+        canonical_lease_path(&substrate_home, &orchestration_session_id, &participant_id);
+    let legacy_handle = substrate_home
+        .join("run/agent-hub/handles")
+        .join(format!("{participant_id}.json"));
     let events = read_trace_events(&trace_path);
     let runtime_records = events
         .iter()
@@ -585,6 +635,26 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
     assert!(
         !runtime_records.is_empty(),
         "expected runtime-owned codex agent_event rows in trace; got: {events:?}"
+    );
+    assert!(
+        canonical_session.is_file(),
+        "runtime session persistence must write canonical session roots: {}",
+        canonical_session.display()
+    );
+    assert!(
+        canonical_participant.is_file(),
+        "runtime session persistence must write canonical participant roots: {}",
+        canonical_participant.display()
+    );
+    assert!(
+        canonical_lease.is_file(),
+        "runtime session persistence must write canonical lease roots: {}",
+        canonical_lease.display()
+    );
+    assert!(
+        !legacy_handle.exists(),
+        "runtime session persistence must not resurrect handles/*.json authority: {}",
+        legacy_handle.display()
     );
 
     for record in runtime_records {

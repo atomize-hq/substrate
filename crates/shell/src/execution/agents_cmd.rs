@@ -4,8 +4,9 @@ use crate::execution::agent_inventory::{
 };
 use crate::execution::agent_runtime::{
     runtime_realizability_error_exit_code, validate_orchestrator_selection,
-    validate_runtime_realizability, AgentRuntimeSessionManifest, AgentRuntimeStateStore,
-    MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
+    validate_runtime_realizability, AgentRuntimeParticipantRecord, AgentRuntimeSessionRecord,
+    AgentRuntimeStateStore, MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL,
+    PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDoctorArgs, AgentScopeArg, AgentToolboxAction, AgentToolboxCmd,
@@ -439,9 +440,10 @@ fn build_status_report<'a>(
 
     let events = read_trace_agent_events()?;
     let state_store = AgentRuntimeStateStore::new()?;
-    let live_orchestrator_manifest =
-        resolve_authoritative_live_orchestrator_manifest(&state_store, &orchestrator_agent_id)?;
-    let live_manifests = state_store.list_live_manifests()?;
+    state_store
+        .resolve_single_live_session_for_agent(&orchestrator_agent_id)
+        .map_err(|err| config_model::user_error(err.to_string()))?;
+    let live_sessions = state_store.list_live_sessions()?;
     let mut sessions = BTreeMap::<(String, String), SessionProjection>::new();
     let mut nested = BTreeMap::<(String, String, String), NestedProjection>::new();
     let mut historical_parent_runs = BTreeMap::<(String, String), BTreeSet<String>>::new();
@@ -553,29 +555,17 @@ fn build_status_report<'a>(
     }
 
     let mut selected_session_projections = Vec::new();
-    if let Some(manifest) = live_orchestrator_manifest {
-        let projection = live_manifest_status_projection(&manifest);
-        if matches_scope(
-            scope_from_label(projection.session.execution.scope),
-            args.scope,
-        ) && matches_role(projection.session.role.as_deref(), role_filter)
-        {
+    for live_session in live_sessions {
+        for projection in live_session_status_projections(&live_session) {
+            if !matches_scope(
+                scope_from_label(projection.session.execution.scope),
+                args.scope,
+            ) || !matches_role(projection.session.role.as_deref(), role_filter)
+            {
+                continue;
+            }
             selected_session_projections.push(projection);
         }
-    }
-    for manifest in live_manifests {
-        if manifest.handle.agent_id == orchestrator_agent_id {
-            continue;
-        }
-        let projection = live_manifest_status_projection(&manifest);
-        if !matches_scope(
-            scope_from_label(projection.session.execution.scope),
-            args.scope,
-        ) || !matches_role(projection.session.role.as_deref(), role_filter)
-        {
-            continue;
-        }
-        selected_session_projections.push(projection);
     }
 
     let live_fallback_suppression_keys = selected_session_projections
@@ -583,7 +573,7 @@ fn build_status_report<'a>(
         .map(session_fallback_suppression_key)
         .collect::<BTreeSet<_>>();
     let invalidated_fallback_suppression_keys = state_store
-        .list_invalidated_participants()?
+        .list_invalidated_participants_across_sources()?
         .into_iter()
         .filter(|participant| {
             participant.handle.role == MEMBER_ROLE
@@ -978,22 +968,22 @@ fn build_toolbox_status_report<'a>(
         AgentToolboxBindTransport::Uds => {
             let endpoint_template = Some(toolbox_uds_endpoint_template()?);
             let latest_session = AgentRuntimeStateStore::new()?
-                .resolve_live_orchestrator_session(&orchestrator.file.id)
+                .resolve_single_live_session_for_agent(&orchestrator.file.id)
                 .map_err(|err| config_model::user_error(err.to_string()))?;
 
             match latest_session {
-                Some((session, manifest)) => Ok(ToolboxStatusReportJson {
+                Some(session_record) => Ok(ToolboxStatusReportJson {
                     toolbox_enabled: true,
                     toolbox_version: TOOLBOX_VERSION,
                     transport,
                     endpoint: Some(toolbox_uds_endpoint(
-                        &manifest.handle.orchestration_session_id,
+                        session_record.orchestration_session_id(),
                     )?),
                     endpoint_template,
                     active_orchestration_session_id: Some(
-                        manifest.handle.orchestration_session_id,
+                        session_record.orchestration_session_id().to_string(),
                     ),
-                    active_world_binding: toolbox_active_world_binding(&session),
+                    active_world_binding: toolbox_active_world_binding(&session_record.session),
                     eligibility: ToolboxEligibilityJson {
                         state: "allowed".to_string(),
                         reason: None,
@@ -1144,49 +1134,49 @@ fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
-fn resolve_authoritative_live_orchestrator_manifest(
-    state_store: &AgentRuntimeStateStore,
-    agent_id: &str,
-) -> Result<Option<AgentRuntimeSessionManifest>> {
-    state_store
-        .resolve_live_orchestrator_session(agent_id)
-        .map(|resolved| resolved.map(|(_, manifest)| manifest))
-        .map_err(|err| config_model::user_error(err.to_string()))
-}
-
-fn live_manifest_status_projection(manifest: &AgentRuntimeSessionManifest) -> SessionProjection {
+fn live_participant_status_projection(
+    participant: &AgentRuntimeParticipantRecord,
+) -> SessionProjection {
     SessionProjection {
-        last_event_ts: manifest.last_status_at(),
+        last_event_ts: participant.last_status_at(),
         session: StatusSessionJson {
-            orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
-            participant_id: Some(manifest.handle.participant_id.clone()),
-            agent_id: manifest.handle.agent_id.clone(),
-            backend_id: manifest.handle.backend_id.clone(),
-            client: manifest.handle.agent_id.clone(),
+            orchestration_session_id: participant.handle.orchestration_session_id.clone(),
+            participant_id: Some(participant.handle.participant_id.clone()),
+            agent_id: participant.handle.agent_id.clone(),
+            backend_id: participant.handle.backend_id.clone(),
+            client: participant.handle.agent_id.clone(),
             router: PURE_AGENT_ROUTER.to_string(),
-            protocol: manifest.handle.protocol.clone(),
+            protocol: participant.handle.protocol.clone(),
             execution: ExecutionScopeJson {
-                scope: match manifest.handle.execution.scope {
+                scope: match participant.handle.execution.scope {
                     AgentExecutionScope::Host => "host",
                     AgentExecutionScope::World => "world",
                 },
             },
-            role: Some(manifest.handle.role.clone()),
-            last_event_at: manifest.last_status_at().to_rfc3339(),
-            world_id: manifest.handle.world_id.clone(),
-            world_generation: manifest.handle.world_generation,
+            role: Some(participant.handle.role.clone()),
+            last_event_at: participant.last_status_at().to_rfc3339(),
+            world_id: participant.handle.world_id.clone(),
+            world_generation: participant.handle.world_generation,
         },
         source: SessionProjectionSource {
-            orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
-            participant_id: Some(manifest.handle.participant_id.clone()),
-            agent_id: manifest.handle.agent_id.clone(),
-            run_id: manifest.internal.latest_run_id.clone(),
-            ts: manifest.last_status_at(),
-            is_world_scoped: manifest.handle.execution.scope == AgentExecutionScope::World,
-            has_top_level_world_id: manifest.handle.world_id.is_some(),
-            has_top_level_world_generation: manifest.handle.world_generation.is_some(),
+            orchestration_session_id: participant.handle.orchestration_session_id.clone(),
+            participant_id: Some(participant.handle.participant_id.clone()),
+            agent_id: participant.handle.agent_id.clone(),
+            run_id: participant.internal.latest_run_id.clone(),
+            ts: participant.last_status_at(),
+            is_world_scoped: participant.handle.execution.scope == AgentExecutionScope::World,
+            has_top_level_world_id: participant.handle.world_id.is_some(),
+            has_top_level_world_generation: participant.handle.world_generation.is_some(),
         },
     }
+}
+
+fn live_session_status_projections(session: &AgentRuntimeSessionRecord) -> Vec<SessionProjection> {
+    session
+        .live_participants()
+        .into_iter()
+        .map(|participant| live_participant_status_projection(&participant))
+        .collect()
 }
 
 fn session_fallback_suppression_key(projection: &SessionProjection) -> (String, String, String) {
@@ -1198,7 +1188,7 @@ fn session_fallback_suppression_key(projection: &SessionProjection) -> (String, 
 }
 
 fn participant_fallback_suppression_key(
-    participant: AgentRuntimeSessionManifest,
+    participant: AgentRuntimeParticipantRecord,
 ) -> (String, String, String) {
     (
         participant.handle.orchestration_session_id,

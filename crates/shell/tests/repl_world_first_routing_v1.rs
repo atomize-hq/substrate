@@ -303,7 +303,27 @@ fn write_fake_codex_script_without_session_handle(temp: &Path) -> PathBuf {
 
 #[cfg(target_os = "linux")]
 fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
-    let sessions_dir = substrate_home.join("run/agent-hub/sessions");
+    let sessions_dir = sessions_dir(substrate_home);
+    let mut canonical_entries = fs::read_dir(&sessions_dir)
+        .expect("read orchestration session dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .map(|path| path.join("session.json"))
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    canonical_entries.sort();
+    if let Some(session_path) = canonical_entries.into_iter().next() {
+        return serde_json::from_str::<Value>(
+            &fs::read_to_string(session_path).expect("read canonical session file"),
+        )
+        .expect("parse canonical session file")
+        .get("orchestration_session_id")
+        .and_then(Value::as_str)
+        .expect("session orchestration_session_id")
+        .to_string();
+    }
+
     let mut entries = fs::read_dir(&sessions_dir)
         .expect("read orchestration session dir")
         .filter_map(Result::ok)
@@ -324,10 +344,40 @@ fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
 }
 
 #[cfg(target_os = "linux")]
+fn sessions_dir(substrate_home: &Path) -> PathBuf {
+    substrate_home.join("run/agent-hub/sessions")
+}
+
+#[cfg(target_os = "linux")]
 fn orchestration_session_path(substrate_home: &Path, orchestration_session_id: &str) -> PathBuf {
-    substrate_home
-        .join("run/agent-hub/sessions")
-        .join(format!("{orchestration_session_id}.json"))
+    sessions_dir(substrate_home)
+        .join(orchestration_session_id)
+        .join("session.json")
+}
+
+#[cfg(target_os = "linux")]
+fn canonical_participants_dir(substrate_home: &Path, orchestration_session_id: &str) -> PathBuf {
+    sessions_dir(substrate_home)
+        .join(orchestration_session_id)
+        .join("participants")
+}
+
+#[cfg(target_os = "linux")]
+fn canonical_participant_path(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    canonical_participants_dir(substrate_home, orchestration_session_id)
+        .join(format!("{participant_id}.json"))
+}
+
+#[cfg(target_os = "linux")]
+fn flat_orchestration_session_path(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> PathBuf {
+    sessions_dir(substrate_home).join(format!("{orchestration_session_id}.json"))
 }
 
 #[cfg(target_os = "linux")]
@@ -355,13 +405,13 @@ fn assert_session_world_binding(
 }
 
 #[cfg(target_os = "linux")]
-fn participants_dir(substrate_home: &Path) -> PathBuf {
+fn flat_participants_dir(substrate_home: &Path) -> PathBuf {
     substrate_home.join("run/agent-hub/participants")
 }
 
 #[cfg(target_os = "linux")]
-fn participant_manifest_path(substrate_home: &Path, participant_id: &str) -> PathBuf {
-    participants_dir(substrate_home).join(format!("{participant_id}.json"))
+fn flat_participant_manifest_path(substrate_home: &Path, participant_id: &str) -> PathBuf {
+    flat_participants_dir(substrate_home).join(format!("{participant_id}.json"))
 }
 
 #[cfg(target_os = "linux")]
@@ -376,11 +426,21 @@ fn read_trace_lenient(trace_path: &Path) -> Vec<Value> {
 
 #[cfg(target_os = "linux")]
 fn read_participant_manifest(substrate_home: &Path, participant_id: &str) -> Value {
-    serde_json::from_str(
-        &fs::read_to_string(participant_manifest_path(substrate_home, participant_id))
-            .expect("read participant manifest"),
-    )
-    .expect("parse participant manifest")
+    let canonical_path = fs::read_dir(sessions_dir(substrate_home))
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .map(|path| {
+            path.join("participants")
+                .join(format!("{participant_id}.json"))
+        })
+        .find(|path| path.is_file());
+    let path = canonical_path
+        .unwrap_or_else(|| flat_participant_manifest_path(substrate_home, participant_id));
+    serde_json::from_str(&fs::read_to_string(path).expect("read participant manifest"))
+        .expect("parse participant manifest")
 }
 
 #[cfg(target_os = "linux")]
@@ -392,7 +452,11 @@ fn write_live_world_member_manifest(
     world_id: &str,
     world_generation: u64,
 ) {
-    fs::create_dir_all(participants_dir(substrate_home)).expect("create participants dir");
+    fs::create_dir_all(canonical_participants_dir(
+        substrate_home,
+        orchestration_session_id,
+    ))
+    .expect("create canonical participants dir");
     let ts = "2026-04-30T12:00:00Z";
     let payload = serde_json::json!({
         "participant_id": participant_id,
@@ -433,7 +497,7 @@ fn write_live_world_member_manifest(
         }
     });
     fs::write(
-        participant_manifest_path(substrate_home, participant_id),
+        canonical_participant_path(substrate_home, orchestration_session_id, participant_id),
         serde_json::to_vec_pretty(&payload).expect("serialize participant manifest"),
     )
     .expect("write participant manifest");
@@ -444,15 +508,43 @@ fn session_participant_manifests(
     substrate_home: &Path,
     orchestration_session_id: &str,
 ) -> Vec<Value> {
-    let mut manifests = fs::read_dir(participants_dir(substrate_home))
+    use std::collections::BTreeMap;
+
+    let mut manifests = BTreeMap::new();
+
+    let canonical_dir = canonical_participants_dir(substrate_home, orchestration_session_id);
+    for path in fs::read_dir(canonical_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+    {
+        let manifest = serde_json::from_str::<Value>(
+            &fs::read_to_string(path).expect("read canonical participant file"),
+        )
+        .expect("parse canonical participant file");
+        let Some(participant_id) = manifest
+            .get("participant_id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        manifests.insert(participant_id, manifest);
+    }
+
+    for manifest in fs::read_dir(flat_participants_dir(substrate_home))
         .ok()
         .into_iter()
         .flat_map(|entries| entries.filter_map(Result::ok))
         .map(|entry| entry.path())
         .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
         .map(|path| {
-            serde_json::from_str::<Value>(&fs::read_to_string(path).expect("read participant file"))
-                .expect("parse participant file")
+            serde_json::from_str::<Value>(
+                &fs::read_to_string(path).expect("read flat participant file"),
+            )
+            .expect("parse flat participant file")
         })
         .filter(|manifest| {
             manifest
@@ -460,13 +552,18 @@ fn session_participant_manifests(
                 .and_then(Value::as_str)
                 == Some(orchestration_session_id)
         })
-        .collect::<Vec<_>>();
-    manifests.sort_by(|left, right| {
-        left.get("participant_id")
+    {
+        let Some(participant_id) = manifest
+            .get("participant_id")
             .and_then(Value::as_str)
-            .cmp(&right.get("participant_id").and_then(Value::as_str))
-    });
-    manifests
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        manifests.entry(participant_id).or_insert(manifest);
+    }
+
+    manifests.into_values().collect()
 }
 
 #[cfg(target_os = "linux")]
@@ -1796,6 +1893,127 @@ fn c3_world_restart_replacement_generation_becomes_only_live_generation() {
         &persisted,
         Some(replacement_world_id.as_str()),
         Some(replacement_generation),
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_world_restart_keeps_same_agent_members_in_other_sessions_isolated() {
+    let temp = temp_dir("substrate-c3-world-restart-cross-session-isolation-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_profile(&project);
+    let fake_codex = write_fake_codex_script(temp.path());
+    write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "auto_restart");
+
+    let sock_temp = short_socket_dir("sub-c3ws-cross-session-isolation-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
+    let initial_session = read_orchestration_session(&session_path);
+    let orchestrator_participant_id = initial_session
+        .get("active_session_handle_id")
+        .and_then(Value::as_str)
+        .expect("active_session_handle_id")
+        .to_string();
+    let initial_world_id = initial_session
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("initial world_id")
+        .to_string();
+
+    write_live_world_member_manifest(
+        &substrate_home,
+        &orchestration_session_id,
+        "ash_member_current_session",
+        &orchestrator_participant_id,
+        &initial_world_id,
+        0,
+    );
+
+    let other_orchestration_session_id = "orch_other_same_agent";
+    write_live_world_member_manifest(
+        &substrate_home,
+        other_orchestration_session_id,
+        "ash_member_other_session",
+        "ash_other_orchestrator",
+        "wld_other_0001",
+        0,
+    );
+    assert_eq!(
+        live_world_member_generations_for_session(&substrate_home, other_orchestration_session_id),
+        vec![("ash_member_other_session".to_string(), 0)],
+        "fixture must start with an independently live same-agent member in the other session"
+    );
+
+    write_policy(&substrate_home, false);
+    std::thread::sleep(Duration::from_millis(25));
+
+    repl.send_line("echo second");
+    let alert = wait_for_world_restarted_alert_without_stale_liveness(
+        &trace_path,
+        &substrate_home,
+        &orchestration_session_id,
+        0,
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        alert.get("world_generation").and_then(Value::as_u64),
+        Some(1),
+        "restart must still advance the active session generation: {alert:?}"
+    );
+
+    assert_eq!(
+        live_world_member_generations_for_session(&substrate_home, &orchestration_session_id),
+        Vec::<(String, u64)>::new(),
+        "current-session stale members must be suppressed after restart"
+    );
+    assert_eq!(
+        live_world_member_generations_for_session(&substrate_home, other_orchestration_session_id),
+        vec![("ash_member_other_session".to_string(), 0)],
+        "same-agent members in other orchestration sessions must stay isolated from current-session invalidation"
+    );
+
+    repl.wait_for_output("second", Duration::from_secs(3))
+        .expect("second command output");
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+
+    let current = read_participant_manifest(&substrate_home, "ash_member_current_session");
+    assert_eq!(
+        current.get("state").and_then(Value::as_str),
+        Some("invalidated"),
+        "current-session stale member must be invalidated by the restart: {current:?}"
+    );
+
+    let other = read_participant_manifest(&substrate_home, "ash_member_other_session");
+    assert_eq!(
+        other.get("state").and_then(Value::as_str),
+        Some("ready"),
+        "same-agent member from another orchestration session must stay live: {other:?}"
     );
 }
 
