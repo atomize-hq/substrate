@@ -4936,16 +4936,29 @@ mod tests {
                     .await
                     .expect("bootstrap runtime should succeed")
                     .expect("agents enabled should create a runtime");
+            let store = runtime.store.clone();
+            let shutdown_config = config.clone();
+            let shutdown_task = tokio::spawn(async move {
+                let mut shutdown_telemetry =
+                    ReplSessionTelemetry::new(shutdown_config, "async-test-shutdown");
+                shutdown_host_orchestrator_runtime(
+                    runtime,
+                    &ReplPrinter::Stdout,
+                    &mut shutdown_telemetry,
+                )
+                .await;
+            });
 
-            let started_at = std::time::Instant::now();
-            shutdown_host_orchestrator_runtime(runtime, &ReplPrinter::Stdout, &mut telemetry).await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
             assert!(
-                started_at.elapsed() >= Duration::from_secs(1),
-                "shutdown must wait for the retained completion path before returning"
+                !shutdown_task.is_finished(),
+                "shutdown must stay blocked until the retained completion path resolves"
             );
+            shutdown_task
+                .await
+                .expect("shutdown task should complete cleanly");
 
-            let manifest = AgentRuntimeStateStore::new()
-                .expect("state store")
+            let manifest = store
                 .list_manifests()
                 .expect("list manifests")
                 .into_iter()

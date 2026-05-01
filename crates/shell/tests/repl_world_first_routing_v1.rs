@@ -373,14 +373,6 @@ fn canonical_participant_path(
 }
 
 #[cfg(target_os = "linux")]
-fn flat_orchestration_session_path(
-    substrate_home: &Path,
-    orchestration_session_id: &str,
-) -> PathBuf {
-    sessions_dir(substrate_home).join(format!("{orchestration_session_id}.json"))
-}
-
-#[cfg(target_os = "linux")]
 fn read_orchestration_session(session_path: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(session_path).expect("read orchestration session"))
         .expect("parse orchestration session")
@@ -612,7 +604,7 @@ fn live_world_member_generations_for_session(
         .filter(|manifest| {
             manifest.pointer("/execution/scope").and_then(Value::as_str) == Some("world")
         })
-        .filter(|manifest| participant_is_authoritative_live(manifest))
+        .filter(participant_is_authoritative_live)
         .filter_map(|manifest| {
             Some((
                 manifest.get("participant_id")?.as_str()?.to_string(),
