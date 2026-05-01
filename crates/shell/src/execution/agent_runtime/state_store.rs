@@ -1,7 +1,9 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -207,7 +209,15 @@ impl AgentRuntimeStateStore {
         &self,
         participant: &AgentRuntimeParticipantRecord,
     ) -> Result<()> {
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
         self.validate_participant_record(participant)?;
+        if let Some(existing) = self.load_participant(&participant.handle.participant_id)? {
+            if !should_persist_participant_snapshot(&existing, participant) {
+                return Ok(());
+            }
+        }
         self.ensure_participants_dir()?;
         write_atomic_json(
             &self.canonical_participant_path(
@@ -558,6 +568,16 @@ impl AgentRuntimeStateStore {
         &self,
         session: &OrchestrationSessionRecord,
     ) -> Result<()> {
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+        if let Some(existing) =
+            self.load_authoritative_session(&session.orchestration_session_id)?
+        {
+            if !should_persist_orchestration_session_snapshot(&existing, session) {
+                return Ok(());
+            }
+        }
         self.persist_parent_session_snapshot(session)
     }
 
@@ -567,6 +587,9 @@ impl AgentRuntimeStateStore {
         world_id: impl Into<String>,
         world_generation: u64,
     ) -> Result<()> {
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
         session.set_world_binding(world_id, world_generation);
         self.persist_parent_session_snapshot(session)
     }
@@ -575,6 +598,9 @@ impl AgentRuntimeStateStore {
         &self,
         session: &mut OrchestrationSessionRecord,
     ) -> Result<()> {
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
         session.clear_world_binding();
         self.persist_parent_session_snapshot(session)
     }
@@ -926,6 +952,109 @@ fn write_atomic_json(path: &Path, value: &impl serde::Serialize) -> Result<()> {
         .map_err(|err| err.error)
         .with_context(|| format!("failed to persist {}", path.display()))?;
     Ok(())
+}
+
+fn snapshot_write_lock() -> &'static Mutex<()> {
+    static SNAPSHOT_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    SNAPSHOT_WRITE_LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn participant_snapshot_freshness(participant: &AgentRuntimeParticipantRecord) -> DateTime<Utc> {
+    [
+        Some(participant.handle.last_transition_at),
+        participant.internal.last_event_at,
+        participant.internal.last_heartbeat_at,
+        participant.internal.ownership_verified_at,
+        participant.internal.terminal_observed_at,
+    ]
+    .into_iter()
+    .flatten()
+    .max()
+    .unwrap_or(participant.handle.last_transition_at)
+}
+
+fn participant_state_rank(state: &super::session::AgentRuntimeSessionState) -> u8 {
+    match state {
+        super::session::AgentRuntimeSessionState::Allocating => 0,
+        super::session::AgentRuntimeSessionState::Ready => 1,
+        super::session::AgentRuntimeSessionState::Running => 2,
+        super::session::AgentRuntimeSessionState::Restarting => 3,
+        super::session::AgentRuntimeSessionState::Stopping => 4,
+        super::session::AgentRuntimeSessionState::Stopped => 5,
+        super::session::AgentRuntimeSessionState::Failed => 6,
+        super::session::AgentRuntimeSessionState::Invalidated => 7,
+    }
+}
+
+fn should_persist_participant_snapshot(
+    existing: &AgentRuntimeParticipantRecord,
+    incoming: &AgentRuntimeParticipantRecord,
+) -> bool {
+    if !existing.handle.state.is_live() && incoming.handle.state.is_live() {
+        return false;
+    }
+
+    match participant_snapshot_freshness(incoming).cmp(&participant_snapshot_freshness(existing)) {
+        Ordering::Greater => true,
+        Ordering::Less => false,
+        Ordering::Equal => {
+            let incoming_terminal = incoming.internal.terminal_observed_at.is_some();
+            let existing_terminal = existing.internal.terminal_observed_at.is_some();
+            (
+                incoming.handle.last_transition_at,
+                incoming_terminal,
+                participant_state_rank(&incoming.handle.state),
+            ) >= (
+                existing.handle.last_transition_at,
+                existing_terminal,
+                participant_state_rank(&existing.handle.state),
+            )
+        }
+    }
+}
+
+fn orchestration_session_freshness(session: &OrchestrationSessionRecord) -> DateTime<Utc> {
+    session
+        .closed_at
+        .unwrap_or(session.last_active_at)
+        .max(session.last_active_at)
+}
+
+fn orchestration_session_state_rank(state: &OrchestrationSessionState) -> u8 {
+    match state {
+        OrchestrationSessionState::Allocating => 0,
+        OrchestrationSessionState::Active => 1,
+        OrchestrationSessionState::Stopping => 2,
+        OrchestrationSessionState::Stopped => 3,
+        OrchestrationSessionState::Failed => 4,
+        OrchestrationSessionState::Invalidated => 5,
+    }
+}
+
+fn should_persist_orchestration_session_snapshot(
+    existing: &OrchestrationSessionRecord,
+    incoming: &OrchestrationSessionRecord,
+) -> bool {
+    if !existing.state.is_active() && incoming.state.is_active() {
+        return false;
+    }
+
+    match orchestration_session_freshness(incoming).cmp(&orchestration_session_freshness(existing))
+    {
+        Ordering::Greater => true,
+        Ordering::Less => false,
+        Ordering::Equal => {
+            (
+                incoming.last_active_at,
+                incoming.closed_at.is_some(),
+                orchestration_session_state_rank(&incoming.state),
+            ) >= (
+                existing.last_active_at,
+                existing.closed_at.is_some(),
+                orchestration_session_state_rank(&existing.state),
+            )
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -1796,6 +1925,58 @@ mod tests {
             assert!(err.to_string().contains(
                 "active orchestration session sess_live references missing participant ash_missing"
             ));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn persist_participant_rejects_stale_live_snapshot_after_terminal_snapshot() {
+        with_store(|store| {
+            let live =
+                live_orchestrator("codex", "sess_stale_participant", "ash_stale_participant");
+            let mut invalidated = live.clone();
+            invalidated.transition_state(AgentRuntimeSessionState::Invalidated);
+            invalidated.mark_terminal_state("attached control exited");
+
+            store
+                .persist_participant(&invalidated)
+                .expect("persist invalidated participant");
+            store
+                .persist_participant(&live)
+                .expect("reject stale live participant snapshot");
+
+            let loaded = store
+                .load_participant("ash_stale_participant")
+                .expect("load participant")
+                .expect("participant exists");
+            assert_eq!(loaded.handle.state, AgentRuntimeSessionState::Invalidated);
+            assert!(loaded.internal.terminal_observed_at.is_some());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn persist_orchestration_session_rejects_stale_active_snapshot_after_terminal_snapshot() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex", "sess_stale_parent", "ash_stale_parent");
+            let active = active_parent(&participant);
+            let mut invalidated = active.clone();
+            invalidated.transition_state(OrchestrationSessionState::Invalidated);
+            invalidated.mark_terminal("attached control exited");
+
+            store
+                .persist_orchestration_session(&invalidated)
+                .expect("persist invalidated parent");
+            store
+                .persist_orchestration_session(&active)
+                .expect("reject stale active parent snapshot");
+
+            let loaded = store
+                .load_orchestration_session("sess_stale_parent")
+                .expect("load orchestration session")
+                .expect("orchestration session exists");
+            assert_eq!(loaded.state, OrchestrationSessionState::Invalidated);
+            assert!(loaded.closed_at.is_some());
         });
     }
 

@@ -1,6 +1,6 @@
 # SOW: Live-State Authority Boundary and Compatibility Cutover
 
-Status: implementation-oriented scope. This document freezes the production contract for live-state authority across canonical session-root records, flat compatibility files, and trace fallback so the remaining cleanup work does not reintroduce silent heuristics or split authority.
+Status: implementation-oriented scope. This document freezes the production contract for live-state authority across canonical session-root records, flat compatibility files, and trace fallback so the remaining cleanup work does not reintroduce split authority now that shell-owned trace emission already follows the explicit real-id-or-suppress contract landed in `PLAN-08`.
 
 ## Objective
 
@@ -29,6 +29,8 @@ The repo now contains the right pieces, but the final authority contract is stil
   [crates/shell/src/execution/agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
 - `toolbox status|env` already resolves one live session through the store and fails closed on ambiguity or broken parent/child linkage:
   [crates/shell/src/execution/agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+- shell-owned command-completion, stream, and restart-alert `agent_event` rows now already obey the explicit real-id-or-suppress trace contract instead of doing ambient PID-based recovery:
+  [docs/TRACE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/TRACE.md)
 - docs now state that canonical session-root records outrank flat compatibility files and trace, but the write-side retirement decision is not yet captured in one execution-ready SOW:
   [docs/TRACE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/TRACE.md)
   [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md)
@@ -133,6 +135,7 @@ This suite already locks most of the intended behavior for:
 - changing the public JSON fields on `substrate agent status` or `substrate agent toolbox status`
 - changing trace schema or adding new trace families
 - introducing a new transactional runtime registry
+- re-opening shell-owned event-emission authority cleanup already landed by [PLAN-08.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-08.md)
 - reworking world replacement semantics from [05-restart-invalidation-semantics.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/05-restart-invalidation-semantics.md)
 - removing compatibility reads or writes in the same step that merely documents the contract
 
@@ -276,6 +279,7 @@ Trace remains the historical event log, not the live registry.
 
 Required rules:
 
+- shell-owned trace rows are assumed to have already satisfied the explicit real-id-or-suppress contract from [PLAN-08.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-08.md); this slice does not reintroduce heuristic event identity recovery
 - trace may fill status gaps only after live runtime state and tombstones have had first priority
 - trace must not authorize `toolbox env`
 - trace must not authorize orchestrator control-plane health or selection
@@ -405,11 +409,13 @@ This sequence keeps the repo safe under concurrent development because it remove
 
 This scope is downstream of:
 
+- [08-explicit-orchestration-authority-event-emission.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/08-explicit-orchestration-authority-event-emission.md)
 - [05-restart-invalidation-semantics.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/05-restart-invalidation-semantics.md)
 - [06-session-centric-state-store.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/06-session-centric-state-store.md)
 
 It should be read as the cutover and cleanup contract on top of those earlier slices:
 
+- `08` removes ambient event-identity recovery and leaves trace rows on the explicit real-id-or-suppress footing this slice now assumes
 - `05` defines invalidation and tombstone meaning
 - `06` defines session-centric store structure
 - this file defines which sources remain authoritative during the migration bridge and how operator surfaces must behave when those sources disagree or are incomplete
