@@ -616,6 +616,10 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
 
     let shell_session_id = extract_session_id(&out);
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    assert_ne!(
+        shell_session_id, orchestration_session_id,
+        "shell trace session_id and orchestration_session_id must remain distinct identities"
+    );
     let participant_id = load_single_active_participant_id(&substrate_home);
     let canonical_session = canonical_session_path(&substrate_home, &orchestration_session_id);
     let canonical_participant =
@@ -670,6 +674,11 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
             Some(orchestration_session_id.as_str()),
             "runtime-owned agent_event row must retain the authoritative orchestration_session_id: {record:?}"
         );
+        assert_ne!(
+            record.get("orchestration_session_id").and_then(Value::as_str),
+            record.get("session_id").and_then(Value::as_str),
+            "runtime-owned agent_event row must not synthesize orchestration_session_id from session_id: {record:?}"
+        );
         assert_eq!(
             record.get("participant_id").and_then(Value::as_str),
             Some(participant_id.as_str()),
@@ -723,7 +732,17 @@ fn no_context_shell_command_completion_does_not_synthesize_agent_event_trace_row
         String::from_utf8_lossy(&out)
     );
 
+    let shell_session_id = extract_session_id(&out);
     let events = read_trace_events(&trace_path);
+    let repl_status_stop_records = events
+        .iter()
+        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("repl_status"))
+        .filter(|event| event.get("component").and_then(Value::as_str) == Some("shell"))
+        .filter(|event| {
+            event.get("session_id").and_then(Value::as_str) == Some(shell_session_id.as_str())
+        })
+        .filter(|event| event.get("stage").and_then(Value::as_str) == Some("stop"))
+        .collect::<Vec<_>>();
     let shell_completion_records = events
         .iter()
         .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
@@ -731,6 +750,24 @@ fn no_context_shell_command_completion_does_not_synthesize_agent_event_trace_row
         .filter(|event| event.get("kind").and_then(Value::as_str) == Some("task_end"))
         .collect::<Vec<_>>();
 
+    assert!(
+        !repl_status_stop_records.is_empty(),
+        "suppressing a shell-owned orchestration agent_event row must remain additive; expected non-agent shell trace records to continue: {events:?}"
+    );
+    for record in repl_status_stop_records {
+        assert_eq!(
+            record
+                .get("metrics")
+                .and_then(|metrics| metrics.get("commands_executed"))
+                .and_then(Value::as_u64),
+            Some(1),
+            "no-context shell completion should still contribute to persisted shell metrics even when the orchestration-scoped agent_event row is suppressed: {record:?}"
+        );
+        assert!(
+            record.get("orchestration_session_id").is_none(),
+            "shell-owned non-agent trace records without orchestration context must not grow heuristic orchestration_session_id fields: {record:?}"
+        );
+    }
     assert!(
         shell_completion_records.is_empty(),
         "no-context shell completion must not synthesize an orchestration-scoped agent_event row: {shell_completion_records:?}"

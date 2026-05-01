@@ -80,7 +80,7 @@ pub(crate) fn run_wrap_mode(config: &ShellConfig, command: &str) -> Result<i32> 
     // Set up signal handlers for wrap mode to properly handle signals like SIGTERM
     setup_signal_handlers(running_child_pid.clone())?;
 
-    let status = execute_command(config, command, &cmd_id, running_child_pid)?;
+    let status = execute_command(config, command, &cmd_id, running_child_pid, None)?;
     Ok(exit_code(status))
 }
 
@@ -274,7 +274,7 @@ pub(crate) fn run_pipe_mode(config: &ShellConfig) -> Result<i32> {
         }
 
         let cmd_id = Uuid::now_v7().to_string();
-        match execute_command(config, &line, &cmd_id, no_signal_handler.clone()) {
+        match execute_command(config, &line, &cmd_id, no_signal_handler.clone(), None) {
             Ok(status) => {
                 last_status = exit_code(status);
                 if !status.success() && config.ci_mode && !config.no_exit_on_error {

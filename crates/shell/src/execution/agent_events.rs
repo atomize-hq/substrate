@@ -62,10 +62,71 @@ pub(crate) fn clear_agent_event_sender() {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ShellEventEmissionContext {
+    pub(crate) orchestration_session_id: String,
+    pub(crate) agent_id: String,
+    pub(crate) role: Option<String>,
+    pub(crate) backend_id: Option<String>,
+    pub(crate) participant_id: Option<String>,
+    pub(crate) parent_participant_id: Option<String>,
+    pub(crate) resumed_from_participant_id: Option<String>,
+    pub(crate) world_id: Option<String>,
+    pub(crate) world_generation: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ShellCommandEventContext {
+    pub(crate) emission: ShellEventEmissionContext,
+    pub(crate) cmd_id: String,
+    pub(crate) run_id: Option<String>,
+    pub(crate) span_id: Option<String>,
+}
+
+impl ShellCommandEventContext {
+    pub(crate) fn new(
+        emission: ShellEventEmissionContext,
+        cmd_id: impl Into<String>,
+        run_id: Option<String>,
+        span_id: Option<String>,
+    ) -> Self {
+        Self {
+            emission,
+            cmd_id: cmd_id.into(),
+            run_id,
+            span_id,
+        }
+    }
+}
+
+fn build_shell_message_event(
+    context: &ShellCommandEventContext,
+    kind: MessageEventKind,
+    message: String,
+) -> Option<AgentEvent> {
+    let run_id = context.run_id.as_ref()?;
+    let mut event = AgentEvent::message(
+        context.emission.agent_id.clone(),
+        context.emission.orchestration_session_id.clone(),
+        run_id.clone(),
+        kind,
+        message,
+    );
+    event.cmd_id = Some(context.cmd_id.clone());
+    event.span_id = context.span_id.clone();
+    event.role = context.emission.role.clone();
+    event.backend_id = context.emission.backend_id.clone();
+    event.participant_id = context.emission.participant_id.clone();
+    event.parent_participant_id = context.emission.parent_participant_id.clone();
+    event.resumed_from_participant_id = context.emission.resumed_from_participant_id.clone();
+    event.world_id = context.emission.world_id.clone();
+    event.world_generation = context.emission.world_generation;
+    Some(event)
+}
+
 pub(crate) fn publish_command_completion(
-    orchestration_session_id: Option<&str>,
+    context: Option<&ShellCommandEventContext>,
     command: &str,
-    cmd_id: &str,
     status: &ExitStatus,
 ) {
     #[cfg(unix)]
@@ -83,34 +144,31 @@ pub(crate) fn publish_command_completion(
         if !enabled {
             return;
         }
-        let Some(orchestration_session_id) = orchestration_session_id else {
+        let Some(event) = context.and_then(|context| {
+            build_shell_message_event(
+                context,
+                MessageEventKind::TaskEnd,
+                format!("Command `{command}` completed successfully"),
+            )
+        }) else {
             return;
         };
-
-        let mut event = AgentEvent::message(
-            "shell",
-            orchestration_session_id.to_string(),
-            cmd_id.to_string(),
-            MessageEventKind::TaskEnd,
-            format!("Command `{command}` completed successfully"),
-        );
-        event.cmd_id = Some(cmd_id.to_string());
         let _ = publish_agent_event(event);
         return;
     }
 
-    let Some(orchestration_session_id) = orchestration_session_id else {
+    let Some(event) = context.and_then(|context| {
+        build_shell_message_event(
+            context,
+            MessageEventKind::TaskEnd,
+            format!(
+                "Command `{command}` exited with status {}",
+                status.code().unwrap_or(-1)
+            ),
+        )
+    }) else {
         return;
     };
-    let code = status.code().unwrap_or(-1);
-    let mut event = AgentEvent::message(
-        "shell",
-        orchestration_session_id.to_string(),
-        cmd_id.to_string(),
-        MessageEventKind::TaskEnd,
-        format!("Command `{command}` exited with status {code}"),
-    );
-    event.cmd_id = Some(cmd_id.to_string());
 
     let _ = publish_agent_event(event);
 }
@@ -306,13 +364,36 @@ mod tests {
             let mut rx = init_event_channel();
             let cmd_id = "cmd-failure";
             let status = exit_status_from_code(7);
+            let context = ShellCommandEventContext::new(
+                ShellEventEmissionContext {
+                    orchestration_session_id: "orch-live".to_string(),
+                    agent_id: "shell".to_string(),
+                    role: Some("orchestrator".to_string()),
+                    backend_id: Some("shell:repl".to_string()),
+                    participant_id: Some("participant-1".to_string()),
+                    parent_participant_id: None,
+                    resumed_from_participant_id: None,
+                    world_id: Some("world-1".to_string()),
+                    world_generation: Some(4),
+                },
+                cmd_id,
+                Some(cmd_id.to_string()),
+                Some("spn-1".to_string()),
+            );
 
-            publish_command_completion(Some("orch-live"), "false", cmd_id, &status);
+            publish_command_completion(Some(&context), "false", &status);
 
             let event = rx.recv().await.expect("event");
             assert_eq!(event.kind, AgentEventKind::TaskEnd);
             assert_eq!(event.cmd_id.as_deref(), Some(cmd_id));
             assert_eq!(event.orchestration_session_id, "orch-live");
+            assert_eq!(event.run_id, cmd_id);
+            assert_eq!(event.span_id.as_deref(), Some("spn-1"));
+            assert_eq!(event.role.as_deref(), Some("orchestrator"));
+            assert_eq!(event.backend_id.as_deref(), Some("shell:repl"));
+            assert_eq!(event.participant_id.as_deref(), Some("participant-1"));
+            assert_eq!(event.world_id.as_deref(), Some("world-1"));
+            assert_eq!(event.world_generation, Some(4));
             assert_eq!(
                 event
                     .data
@@ -338,7 +419,7 @@ mod tests {
             let mut rx = init_event_channel();
             let status = exit_status_from_code(7);
 
-            publish_command_completion(None, "false", "cmd-no-context", &status);
+            publish_command_completion(None, "false", &status);
 
             assert!(
                 rx.try_recv().is_err(),
@@ -358,8 +439,24 @@ mod tests {
             let cmd_id = "cmd-success";
             let status = exit_status_from_code(0);
             std::env::set_var("SUBSTRATE_COMMAND_SUCCESS_EVENTS", "1");
+            let context = ShellCommandEventContext::new(
+                ShellEventEmissionContext {
+                    orchestration_session_id: "orch-live".to_string(),
+                    agent_id: "shell".to_string(),
+                    role: Some("orchestrator".to_string()),
+                    backend_id: Some("shell:repl".to_string()),
+                    participant_id: Some("participant-1".to_string()),
+                    parent_participant_id: None,
+                    resumed_from_participant_id: None,
+                    world_id: None,
+                    world_generation: None,
+                },
+                cmd_id,
+                Some(cmd_id.to_string()),
+                None,
+            );
 
-            publish_command_completion(Some("orch-live"), "true", cmd_id, &status);
+            publish_command_completion(Some(&context), "true", &status);
 
             let event = rx.recv().await.expect("event");
             assert_eq!(event.kind, AgentEventKind::TaskEnd);

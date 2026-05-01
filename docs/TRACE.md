@@ -158,6 +158,7 @@ These are canonical cross-feature correlation identifiers. Details and required/
 Emission rule:
 - `AgentEvent` keeps backward-compatible additive lineage fields: `participant_id`, `parent_participant_id`, and `resumed_from_participant_id`.
 - Runtime-owned producers must emit a real `orchestration_session_id` or suppress the agent-event row entirely; they must not synthesize a process-global fallback id.
+- Shell-owned command-completion and stream emitters follow the same real-id-or-suppress rule for orchestration-scoped `agent_event` rows. They may append the row only when live orchestration context already carries the authoritative `orchestration_session_id`; they must not backfill from `session_id`, PID lookup, synthetic run correlation, or any other heuristic.
 - Legacy trace rows may omit `participant_id`, `parent_participant_id`, and `resumed_from_participant_id`; consumers that ignore these additive fields continue to work unchanged.
 
 ### Agent Identity-Tuple Fields
@@ -189,7 +190,7 @@ The shell-owned UAA runtime translates external `agent_api` wrapper events into 
 
 Bootstrap and lifecycle rows for the first host orchestrator caller path are emitted through the same canonical `agent_event` family; raw wrapper output stays outside `trace.jsonl`.
 
-Runtime-owned shell rows follow the same rule. Host stream chunks, shell command-completion events, and world-restart alerts emit `agent_event` rows only when a live parent orchestration session exists; otherwise stdout/stderr and operator-facing terminal messaging continue without appending an orchestration-scoped trace row.
+Runtime-owned shell rows follow the same rule. Host stream chunks, shell command-completion events, and world-restart alerts emit orchestration-scoped `agent_event` rows only when a live parent orchestration session exists and supplies the real `orchestration_session_id`; otherwise stdout/stderr, `command_*` trace spans, and operator-facing terminal messaging continue without appending an orchestration-scoped `agent_event` row. Suppression here is additive only: missing orchestration context suppresses the shell-owned `agent_event` row, but it does not authorize heuristic recovery or synthetic correlation.
 
 Operator-facing omission rules:
 - Pure-agent records keep `client`, `router`, and `protocol`, and omit `provider` plus `auth_authority`.

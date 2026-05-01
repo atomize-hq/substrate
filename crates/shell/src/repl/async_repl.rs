@@ -18,6 +18,7 @@ use uuid::Uuid;
 use crate::execution::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_agent_event,
     publish_command_completion, schedule_demo_burst, schedule_demo_events,
+    ShellCommandEventContext, ShellEventEmissionContext,
 };
 use crate::execution::agent_inventory::load_effective_agent_inventory;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
@@ -672,6 +673,12 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 agent_printer: &agent_printer,
                                 max_pty_buffered_lines,
                             };
+                            let command_event_context = build_repl_shell_command_event_context(
+                                startup_context.as_ref(),
+                                agent_runtime.as_ref(),
+                                world_session.as_ref(),
+                                &cmd_id,
+                            );
                             let exit_code = exec_host_line(
                                 shared_config.as_ref(),
                                 &mut host_state,
@@ -692,11 +699,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             };
                             let status = exit_status_from_code(exit_code);
                             report_nonzero_status(&status);
-                            let orchestration_session_id = resolve_active_orchestration_session_id();
                             publish_command_completion(
-                                orchestration_session_id.as_deref(),
+                                command_event_context.as_ref(),
                                 &trimmed_owned,
-                                &cmd_id,
                                 &status,
                             );
                             telemetry.record_command();
@@ -723,6 +728,13 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     should_exit = true;
                                     continue 'repl_loop;
                                 }
+                                let command_event_context =
+                                    build_repl_shell_command_event_context(
+                                        startup_context.as_ref(),
+                                        agent_runtime.as_ref(),
+                                        world_session.as_ref(),
+                                        &cmd_id,
+                                    );
                                 let exit_code = {
                                     let session = world_session
                                         .as_mut()
@@ -760,12 +772,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 }
                                 let status = exit_status_from_code(exit_code);
                                 report_nonzero_status(&status);
-                                let orchestration_session_id =
-                                    resolve_active_orchestration_session_id();
                                 publish_command_completion(
-                                    orchestration_session_id.as_deref(),
+                                    command_event_context.as_ref(),
                                     &trimmed_owned,
-                                    &cmd_id,
                                     &status,
                                 );
                                 telemetry.record_command();
@@ -787,6 +796,12 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             should_exit = true;
                             continue 'repl_loop;
                         }
+                        let command_event_context = build_repl_shell_command_event_context(
+                            startup_context.as_ref(),
+                            agent_runtime.as_ref(),
+                            world_session.as_ref(),
+                            &cmd_id,
+                        );
                         let pty = needs_pty(trimmed);
                         let exit_code = {
                             let session = world_session
@@ -838,11 +853,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         }
                         let status = exit_status_from_code(exit_code);
                         report_nonzero_status(&status);
-                        let orchestration_session_id = resolve_active_orchestration_session_id();
                         publish_command_completion(
-                            orchestration_session_id.as_deref(),
+                            command_event_context.as_ref(),
                             &trimmed_owned,
-                            &cmd_id,
                             &status,
                         );
                         telemetry.record_command();
@@ -855,12 +868,20 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     let running_clone = running_child_pid.clone();
                     let command_for_exec = command.clone();
                     let cmd_id_for_exec = cmd_id.clone();
+                    let command_event_context = build_repl_shell_command_event_context(
+                        startup_context.as_ref(),
+                        agent_runtime.as_ref(),
+                        world_session.as_ref(),
+                        &cmd_id,
+                    );
+                    let command_event_context_for_exec = command_event_context.clone();
                     let command_fut = task::spawn_blocking(move || {
                         execute_command(
                             &config_clone,
                             &command_for_exec,
                             &cmd_id_for_exec,
                             running_clone,
+                            command_event_context_for_exec,
                         )
                     })
                     .map(|res: Result<Result<ExitStatus, anyhow::Error>, tokio::task::JoinError>| {
@@ -930,11 +951,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     }
 
                     report_nonzero_status(&status);
-                    let orchestration_session_id = resolve_active_orchestration_session_id();
                     publish_command_completion(
-                        orchestration_session_id.as_deref(),
+                        command_event_context.as_ref(),
                         &trimmed_owned,
-                        &cmd_id,
                         &status,
                     );
                     telemetry.record_command();
@@ -1378,18 +1397,6 @@ fn handle_agent_event(
     agent_printer.print(format_event_line(&event));
 }
 
-fn resolve_active_orchestration_session_id() -> Option<String> {
-    AgentRuntimeStateStore::new()
-        .ok()
-        .and_then(|store| {
-            store
-                .find_active_orchestration_session_for_pid(std::process::id())
-                .ok()
-                .flatten()
-        })
-        .map(|session| session.orchestration_session_id)
-}
-
 #[derive(Debug)]
 struct RuntimeBootstrapFailure {
     exit_code: i32,
@@ -1408,6 +1415,13 @@ impl RuntimeOrchestrationContext {
             .lock()
             .expect("orchestration session mutex poisoned")
             .orchestration_session_id
+            .clone()
+    }
+
+    fn snapshot(&self) -> OrchestrationSessionRecord {
+        self.orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned")
             .clone()
     }
 }
@@ -1450,6 +1464,53 @@ struct AsyncReplAgentRuntime {
     shutdown_requested: Arc<AtomicBool>,
     heartbeat_stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
     heartbeat_task: Option<tokio::task::JoinHandle<()>>,
+}
+
+fn build_repl_shell_event_emission_context(
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    agent_runtime: Option<&AsyncReplAgentRuntime>,
+    world_session: Option<&WorldSession>,
+) -> Option<ShellEventEmissionContext> {
+    let startup_context = startup_context?;
+    let agent_runtime = agent_runtime?;
+    let orchestration_snapshot = startup_context.snapshot();
+    let manifest_snapshot = agent_runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .clone();
+
+    Some(ShellEventEmissionContext {
+        orchestration_session_id: orchestration_snapshot.orchestration_session_id,
+        agent_id: "shell".to_string(),
+        role: Some("orchestrator".to_string()),
+        backend_id: Some("shell:repl".to_string()),
+        participant_id: Some(manifest_snapshot.handle.participant_id),
+        parent_participant_id: manifest_snapshot.handle.parent_participant_id,
+        resumed_from_participant_id: manifest_snapshot.handle.resumed_from_participant_id,
+        world_id: world_session
+            .map(|session| session.world_id.clone())
+            .or(orchestration_snapshot.world_id),
+        world_generation: world_session
+            .map(|session| session.world_generation)
+            .or(orchestration_snapshot.world_generation),
+    })
+}
+
+fn build_repl_shell_command_event_context(
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    agent_runtime: Option<&AsyncReplAgentRuntime>,
+    world_session: Option<&WorldSession>,
+    cmd_id: &str,
+) -> Option<ShellCommandEventContext> {
+    let emission =
+        build_repl_shell_event_emission_context(startup_context, agent_runtime, world_session)?;
+    Some(ShellCommandEventContext::new(
+        emission,
+        cmd_id,
+        Some(cmd_id.to_string()),
+        None,
+    ))
 }
 
 #[allow(dead_code)]

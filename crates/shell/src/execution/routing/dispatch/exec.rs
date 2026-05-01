@@ -11,7 +11,7 @@ use super::world_ops::WorldFsStrategyUnavailableError;
 use super::world_ops::{
     collect_world_telemetry, emit_stream_chunk, stream_non_pty_via_agent, AgentStreamOutcome,
 };
-use crate::execution::agent_runtime::AgentRuntimeStateStore;
+use crate::execution::agent_events::ShellCommandEventContext;
 use crate::execution::config_model;
 use crate::execution::config_model::CliConfigOverrides;
 use crate::execution::config_model::PolicyMode;
@@ -166,23 +166,12 @@ fn exit_status_from_code(code: i32) -> ExitStatus {
     }
 }
 
-fn resolve_active_orchestration_session_id() -> Option<String> {
-    AgentRuntimeStateStore::new()
-        .ok()
-        .and_then(|store| {
-            store
-                .find_active_orchestration_session_for_pid(std::process::id())
-                .ok()
-                .flatten()
-        })
-        .map(|session| session.orchestration_session_id)
-}
-
 pub(crate) fn execute_command(
     config: &ShellConfig,
     command: &str,
     cmd_id: &str,
     running_child_pid: Arc<AtomicI32>,
+    command_event_context: Option<ShellCommandEventContext>,
 ) -> Result<ExitStatus> {
     let trimmed = command.trim();
 
@@ -997,6 +986,7 @@ pub(crate) fn execute_command(
                 &agent_command,
                 span_id_for_cmd_events.as_deref(),
                 Some(cmd_id),
+                command_event_context.clone(),
             ) {
                 Ok(outcome) => {
                     if let Some(active_span) = span.as_mut() {
@@ -1078,6 +1068,7 @@ pub(crate) fn execute_command(
                 &agent_command,
                 span_id_for_cmd_events.as_deref(),
                 Some(cmd_id),
+                command_event_context.clone(),
             ) {
                 Ok(outcome) => {
                     if let Some(active_span) = span.as_mut() {
@@ -1190,8 +1181,12 @@ pub(crate) fn execute_command(
                     socket_activation::socket_activation_report().is_socket_activated(),
                 ),
             };
-            match stream_non_pty_via_agent(trimmed, span_id_for_cmd_events.as_deref(), Some(cmd_id))
-            {
+            match stream_non_pty_via_agent(
+                trimmed,
+                span_id_for_cmd_events.as_deref(),
+                Some(cmd_id),
+                command_event_context.clone(),
+            ) {
                 Ok(outcome) => {
                     if let Some(active_span) = span.as_mut() {
                         active_span.set_execution_origin(ExecutionOrigin::World);
@@ -1394,7 +1389,18 @@ pub(crate) fn execute_command(
     }
 
     // Execute external command through shell for complex commands or when no builtin matched.
-    let status = execute_external(config, trimmed, running_child_pid, cmd_id)?;
+    let mut host_stream_context = command_event_context;
+    if let Some(context) = host_stream_context.as_mut() {
+        context.span_id = context.span_id.clone().or(span_id_for_cmd_events.clone());
+    }
+
+    let status = execute_external(
+        config,
+        trimmed,
+        running_child_pid,
+        cmd_id,
+        host_stream_context,
+    )?;
 
     // Log command completion with redacted command
     let duration = start_time.elapsed();
@@ -1460,6 +1466,7 @@ fn execute_external(
     command: &str,
     running_child_pid: Arc<AtomicI32>,
     cmd_id: &str,
+    command_event_context: Option<ShellCommandEventContext>,
 ) -> Result<ExitStatus> {
     let shell = &config.shell_path;
     let mut command = command.to_string();
@@ -1556,14 +1563,13 @@ fn execute_external(
     let mut child = cmd
         .spawn()
         .with_context(|| format!("Failed to execute: {command}"))?;
-    let orchestration_session_id = resolve_active_orchestration_session_id();
 
     let stdout_thread = child.stdout.take().map(|pipe| {
         spawn_host_stream_thread(
             pipe,
             false,
             SHELL_AGENT_ID.to_string(),
-            orchestration_session_id.clone(),
+            command_event_context.clone(),
         )
     });
     let stderr_thread = child.stderr.take().map(|pipe| {
@@ -1571,7 +1577,7 @@ fn execute_external(
             pipe,
             true,
             SHELL_AGENT_ID.to_string(),
-            orchestration_session_id.clone(),
+            command_event_context.clone(),
         )
     });
 
@@ -1606,7 +1612,7 @@ fn spawn_host_stream_thread<R>(
     mut reader: R,
     is_stderr: bool,
     agent_label: String,
-    orchestration_session_id: Option<String>,
+    command_event_context: Option<ShellCommandEventContext>,
 ) -> std::thread::JoinHandle<anyhow::Result<()>>
 where
     R: std::io::Read + Send + 'static,
@@ -1617,11 +1623,23 @@ where
             match std::io::Read::read(&mut reader, &mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
+                    let (orchestration_session_id, run_id, span_id) =
+                        match command_event_context.as_ref() {
+                            Some(context) => match context.run_id.as_deref() {
+                                Some(run_id) => (
+                                    Some(context.emission.orchestration_session_id.as_str()),
+                                    run_id,
+                                    context.span_id.as_deref(),
+                                ),
+                                None => (None, "", None),
+                            },
+                            None => (None, "", None),
+                        };
                     emit_stream_chunk(
                         &agent_label,
-                        orchestration_session_id.as_deref(),
-                        "unknown",
-                        None,
+                        orchestration_session_id,
+                        run_id,
+                        span_id,
                         &buf[..n],
                         is_stderr,
                     );

@@ -658,7 +658,6 @@ fn wait_for_world_restarted_alert_without_stale_liveness(
     );
 }
 
-#[cfg(target_os = "linux")]
 fn alert_rows_by_code<'a>(events: &'a [Value], code: &str) -> Vec<&'a Value> {
     events
         .iter()
@@ -666,6 +665,28 @@ fn alert_rows_by_code<'a>(events: &'a [Value], code: &str) -> Vec<&'a Value> {
         .filter(|event| event.get("kind").and_then(Value::as_str) == Some("alert"))
         .filter(|event| event.pointer("/data/code").and_then(Value::as_str) == Some(code))
         .collect()
+}
+
+fn assert_no_alert_rows_by_code(events: &[Value], code: &str, scenario: &str) {
+    let alerts = alert_rows_by_code(events, code);
+    assert!(
+        alerts.is_empty(),
+        "{scenario}: explicit-context-only suppression must prevent `{code}` agent_event rows when no shared-world context exists: {alerts:?}"
+    );
+}
+
+fn assert_start_sessions_have_no_shared_world_context(
+    records: &support::ReplWorldAgentRecords,
+    scenario: &str,
+) {
+    assert!(
+        records
+            .persistent_start_sessions
+            .iter()
+            .all(|start| start.shared_world.is_none()),
+        "{scenario}: harness only exposes explicit orchestration context through start_session.shared_world; unexpected shared-world requests: {:#?}",
+        records.persistent_start_sessions
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -781,6 +802,7 @@ fn run_repl_routing_case(case: &ReplRoutingCase<'_>) {
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(2));
 
     let guard = records.lock().expect("lock records");
+    assert_start_sessions_have_no_shared_world_context(&guard, case.name);
     let start = guard
         .persistent_start_sessions
         .first()
@@ -2063,7 +2085,8 @@ fn c3_bootstrap_failure_after_attach_cleans_up_world_and_parent_session_state() 
 
 #[test]
 #[serial]
-fn c3_drift_restart_restarts_session_and_emits_message() {
+fn c3_drift_restart_restarts_session_and_suppresses_world_restarted_agent_event_without_explicit_context(
+) {
     let temp = temp_dir("substrate-c3-drift-restart-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
@@ -2113,27 +2136,23 @@ fn c3_drift_restart_restarts_session_and_emits_message() {
         "expected an operator-visible drift-restart message, got output:\n{out}"
     );
 
+    assert_start_sessions_have_no_shared_world_context(
+        &guard,
+        "drift restart without explicit orchestration context",
+    );
     drop(guard);
 
     let events = read_trace(&trace_path);
-    let alerts: Vec<&Value> = events
-        .iter()
-        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
-        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("alert"))
-        .filter(|event| {
-            event.pointer("/data/code").and_then(Value::as_str) == Some("world_restarted")
-        })
-        .collect();
-    assert_eq!(
-        alerts.len(),
-        0,
-        "no active orchestration context must suppress world_restarted agent_event rows: {alerts:?}"
+    assert_no_alert_rows_by_code(
+        &events,
+        "world_restarted",
+        "drift restart without explicit orchestration context",
     );
 }
 
 #[test]
 #[serial]
-fn c3_startup_drift_restart_emits_world_restarted_alert() {
+fn c3_startup_drift_restart_suppresses_world_restarted_agent_event_without_explicit_context() {
     let temp = temp_dir("substrate-c3-startup-drift-restart-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
@@ -2173,25 +2192,28 @@ fn c3_startup_drift_restart_emits_world_restarted_alert() {
         "expected startup drift restart note, got output:\n{out}"
     );
 
+    let guard = records.lock().expect("lock records");
+    assert!(
+        guard.persistent_start_sessions.len() >= 2,
+        "expected startup drift to restart the session before prompt; records: {guard:#?}"
+    );
+    assert_start_sessions_have_no_shared_world_context(
+        &guard,
+        "startup drift restart without explicit orchestration context",
+    );
+    drop(guard);
+
     let events = read_trace(&trace_path);
-    let alerts: Vec<&Value> = events
-        .iter()
-        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
-        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("alert"))
-        .filter(|event| {
-            event.pointer("/data/code").and_then(Value::as_str) == Some("world_restarted")
-        })
-        .collect();
-    assert_eq!(
-        alerts.len(),
-        0,
-        "startup drift without orchestration context must suppress world_restarted agent_event rows: {alerts:?}"
+    assert_no_alert_rows_by_code(
+        &events,
+        "world_restarted",
+        "startup drift restart without explicit orchestration context",
     );
 }
 
 #[test]
 #[serial]
-fn c3_drift_fail_closed_emits_world_restart_required_alert() {
+fn c3_drift_fail_closed_suppresses_world_restart_required_agent_event_without_explicit_context() {
     let temp = temp_dir("substrate-c3-drift-fail-closed-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
@@ -2259,27 +2281,24 @@ fn c3_drift_fail_closed_emits_world_restart_required_alert() {
         1,
         "fail-closed drift must stop before the second exec reaches world-agent; records: {guard:#?}"
     );
+    assert_start_sessions_have_no_shared_world_context(
+        &guard,
+        "fail-closed drift without explicit orchestration context",
+    );
     drop(guard);
 
     let events = read_trace(&trace_path);
-    let alerts: Vec<&Value> = events
-        .iter()
-        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
-        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("alert"))
-        .filter(|event| {
-            event.pointer("/data/code").and_then(Value::as_str) == Some("world_restart_required")
-        })
-        .collect();
-    assert_eq!(
-        alerts.len(),
-        0,
-        "no active orchestration context must suppress world_restart_required agent_event rows: {alerts:?}"
+    assert_no_alert_rows_by_code(
+        &events,
+        "world_restart_required",
+        "fail-closed drift without explicit orchestration context",
     );
 }
 
 #[test]
 #[serial]
-fn c3_startup_drift_fail_closed_emits_world_restart_required_alert() {
+fn c3_startup_drift_fail_closed_suppresses_world_restart_required_agent_event_without_explicit_context(
+) {
     let temp = temp_dir("substrate-c3-startup-drift-fail-closed-");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
@@ -2336,21 +2355,17 @@ fn c3_startup_drift_fail_closed_emits_world_restart_required_alert() {
         1,
         "startup fail-closed drift must not auto-restart the world session; records: {guard:#?}"
     );
+    assert_start_sessions_have_no_shared_world_context(
+        &guard,
+        "startup fail-closed drift without explicit orchestration context",
+    );
     drop(guard);
 
     let events = read_trace(&trace_path);
-    let alerts: Vec<&Value> = events
-        .iter()
-        .filter(|event| event.get("event_type").and_then(Value::as_str) == Some("agent_event"))
-        .filter(|event| event.get("kind").and_then(Value::as_str) == Some("alert"))
-        .filter(|event| {
-            event.pointer("/data/code").and_then(Value::as_str) == Some("world_restart_required")
-        })
-        .collect();
-    assert_eq!(
-        alerts.len(),
-        0,
-        "startup drift without orchestration context must suppress world_restart_required agent_event rows: {alerts:?}"
+    assert_no_alert_rows_by_code(
+        &events,
+        "world_restart_required",
+        "startup fail-closed drift without explicit orchestration context",
     );
 }
 
@@ -2521,11 +2536,12 @@ fn c3_drift_restart_refreshes_world_network_routing() {
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
 
     fs::create_dir_all(&home).expect("create home");
     fs::create_dir_all(&project).expect("create project");
     fs::create_dir_all(&substrate_home).expect("create substrate home");
-    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    fs::write(&trace_path, "").expect("seed trace");
 
     write_profile(&project);
     write_policy_with_net_allowed(&substrate_home, true, "[\"*\"]");
@@ -2570,6 +2586,10 @@ fn c3_drift_restart_refreshes_world_network_routing() {
 
     assert_world_network_payload(first, false, &[]);
     assert_world_network_payload(second, true, &["example.com", "api.example.com"]);
+    assert_start_sessions_have_no_shared_world_context(
+        &guard,
+        "network-routing drift restart without explicit orchestration context",
+    );
 
     let second_net_allowed = second
         .policy_snapshot
@@ -2581,4 +2601,13 @@ fn c3_drift_restart_refreshes_world_network_routing() {
         .map(|value| value.as_str().expect("net_allowed string"))
         .collect();
     assert_eq!(second_net_allowed, vec!["example.com", "api.example.com"]);
+
+    drop(guard);
+
+    let events = read_trace(&trace_path);
+    assert_no_alert_rows_by_code(
+        &events,
+        "world_restarted",
+        "network-routing drift restart without explicit orchestration context",
+    );
 }
