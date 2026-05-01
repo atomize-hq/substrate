@@ -562,9 +562,9 @@ mod tests {
     use super::*;
     #[cfg(target_os = "linux")]
     use std::collections::HashMap;
-    use std::sync::{mpsc, Arc};
     #[cfg(target_os = "linux")]
     use std::sync::RwLock;
+    use std::sync::{mpsc, Arc};
     use std::time::Duration;
     use tempfile::tempdir;
 
