@@ -220,14 +220,14 @@ impl AgentRuntimeStateStore {
         }
         self.ensure_participants_dir()?;
         write_atomic_json(
+            &self.participant_path(&participant.handle.participant_id),
+            participant,
+        )?;
+        write_atomic_json(
             &self.canonical_participant_path(
                 &participant.handle.orchestration_session_id,
                 &participant.handle.participant_id,
             ),
-            participant,
-        )?;
-        write_atomic_json(
-            &self.participant_path(&participant.handle.participant_id),
             participant,
         )?;
         self.persist_lease(participant)
@@ -617,14 +617,14 @@ impl AgentRuntimeStateStore {
             "terminal_observed_at": participant.internal.terminal_observed_at,
         });
         write_atomic_json(
+            &self.lease_path(&participant.handle.participant_id),
+            &payload,
+        )?;
+        write_atomic_json(
             &self.canonical_lease_path(
                 &participant.handle.orchestration_session_id,
                 &participant.handle.participant_id,
             ),
-            &payload,
-        )?;
-        write_atomic_json(
-            &self.lease_path(&participant.handle.participant_id),
             &payload,
         )
     }
@@ -632,11 +632,11 @@ impl AgentRuntimeStateStore {
     fn persist_parent_session_snapshot(&self, session: &OrchestrationSessionRecord) -> Result<()> {
         self.ensure_sessions_dir()?;
         write_atomic_json(
-            &self.canonical_session_path(&session.orchestration_session_id),
+            &self.orchestration_session_path(&session.orchestration_session_id),
             session,
         )?;
         write_atomic_json(
-            &self.orchestration_session_path(&session.orchestration_session_id),
+            &self.canonical_session_path(&session.orchestration_session_id),
             session,
         )
     }
@@ -993,6 +993,12 @@ fn should_persist_participant_snapshot(
     if !existing.handle.state.is_live() && incoming.handle.state.is_live() {
         return false;
     }
+    if participant_state_rank(&incoming.handle.state)
+        < participant_state_rank(&existing.handle.state)
+        && incoming.handle.last_transition_at <= existing.handle.last_transition_at
+    {
+        return false;
+    }
 
     match participant_snapshot_freshness(incoming).cmp(&participant_snapshot_freshness(existing)) {
         Ordering::Greater => true,
@@ -1035,7 +1041,18 @@ fn should_persist_orchestration_session_snapshot(
     existing: &OrchestrationSessionRecord,
     incoming: &OrchestrationSessionRecord,
 ) -> bool {
-    if !existing.state.is_active() && incoming.state.is_active() {
+    if matches!(
+        existing.state,
+        OrchestrationSessionState::Stopped
+            | OrchestrationSessionState::Failed
+            | OrchestrationSessionState::Invalidated
+    ) && incoming.state.is_active()
+    {
+        return false;
+    }
+    if orchestration_session_state_rank(&incoming.state)
+        < orchestration_session_state_rank(&existing.state)
+    {
         return false;
     }
 
@@ -1977,6 +1994,40 @@ mod tests {
                 .expect("orchestration session exists");
             assert_eq!(loaded.state, OrchestrationSessionState::Invalidated);
             assert!(loaded.closed_at.is_some());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn persist_orchestration_session_rejects_touched_allocating_regression_after_active() {
+        with_store(|store| {
+            let participant =
+                live_orchestrator("codex", "sess_regressed_parent", "ash_regressed_parent");
+            let active = active_parent(&participant);
+            let mut allocating = OrchestrationSessionRecord::new(
+                "sess_regressed_parent".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &participant,
+            );
+
+            store
+                .persist_orchestration_session(&active)
+                .expect("persist active parent");
+            allocating.touch_active();
+            store
+                .persist_orchestration_session(&allocating)
+                .expect("reject touched allocating regression");
+
+            let loaded = store
+                .load_orchestration_session("sess_regressed_parent")
+                .expect("load orchestration session")
+                .expect("orchestration session exists");
+            assert_eq!(loaded.state, OrchestrationSessionState::Active);
+            assert_eq!(
+                loaded.active_session_handle_id.as_deref(),
+                Some("ash_regressed_parent")
+            );
         });
     }
 
