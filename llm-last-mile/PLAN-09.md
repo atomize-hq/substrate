@@ -335,12 +335,19 @@ Keep this file as the live-state owner. Do not split authority anywhere else.
 
 Required work:
 
-- keep canonical-over-flat parent precedence explicit in `load_authoritative_session(...)`,
-- preserve participant merge order so canonical beats flat and flat beats legacy handle fallback,
+- preserve this read order in `load_authoritative_session(...)` and keep it obvious in code:
+  canonical parent -> flat parent only if canonical parent is absent -> canonical participant
+  -> flat participant only if canonical participant is absent -> legacy handle alias last,
 - keep `list_live_sessions()` and `resolve_single_live_session_for_agent(...)` strict about
-  completeness, active parent state, owner PID liveness, and parent/child linkage,
-- keep dual-write ownership local to store persistence helpers,
-- add any missing regression proving legacy handles never outrank canonical or flat runtime state.
+  parent state, owner PID liveness, selected-participant presence, selected-participant activity,
+  and parent/child linkage,
+- keep dual-write ownership local to `persist_orchestration_session(...)`,
+  `persist_participant(...)`, and `persist_parent_session_snapshot(...)`,
+- add or retain direct store-level regressions for:
+  - canonical participant beating conflicting legacy-handle fallback,
+  - flat participant beating conflicting legacy-handle fallback when the canonical child is absent,
+  - selected participant present but inactive failing closed before any operator surface can project it,
+- do not introduce a new cache, registry, or helper layer to "clarify" this logic.
 
 ### 2. `crates/shell/src/execution/agents_cmd.rs`
 
@@ -348,13 +355,18 @@ Keep operator surfaces strict and boring.
 
 Required work:
 
-- `build_status_report(...)` must keep live session projections first,
-- trace fallback must remain additive only for tuples not already covered by live state or
-  tombstone suppression,
-- `build_toolbox_status_report(...)` must keep `dependency_unavailable` versus fail-closed
-  behavior stable,
-- `build_toolbox_env_report(...)` must continue to require an actually resolved live endpoint,
-- no heuristic "latest session" recovery gets added anywhere in this file.
+- `build_status_report(...)` must keep live-session projections first and must only consult trace
+  after live-state projection plus tombstone suppression have already decided which tuples are still
+  unresolved,
+- `build_toolbox_status_report(...)` must continue resolving through
+  `resolve_single_live_session_for_agent(...)` rather than adding local precedence or recovery
+  logic,
+- `build_toolbox_env_report(...)` must continue to require a real resolved live endpoint and keep
+  exit `3` for `dependency_unavailable`,
+- parent-only canonical roots may degrade through flat participant fallback during cutover, but
+  no path in this file may promote a torn root to live on its own,
+- no heuristic "latest session", newest timestamp, or trace-only live-session recovery gets added
+  anywhere in this file.
 
 ### 3. `crates/shell/src/repl/async_repl.rs`
 
@@ -362,10 +374,13 @@ Keep `persist_runtime_snapshots(...)` as the caller choke point.
 
 Required work:
 
-- runtime code continues writing through `store.persist_orchestration_session(...)` and
+- runtime code continues writing through `persist_runtime_snapshots(...)`, and that helper
+  continues delegating only to `store.persist_orchestration_session(...)` plus
   `store.persist_participant(...)`,
-- no direct caller-owned flat compatibility writes appear outside the store,
-- if a helper extraction happens, it stays mechanical and local.
+- no direct writes to `sessions/<orchestration_session_id>.json`, `participants/*.json`, flat
+  lease files, or `handles/*.json` appear outside the store,
+- if a helper extraction happens, it stays mechanical and local, with no new persistence owner and
+  no new call graph branch around the store.
 
 ### 4. Active operator docs
 
@@ -376,10 +391,15 @@ Primary targets:
 
 Required work:
 
-- keep one clear authority statement,
-- keep one clear toolbox fail-closed statement,
-- keep one clear bridge-removal gate statement,
-- make sure docs do not accidentally imply that `handles/*.json` or trace history are current truth.
+- keep one clear authority statement: canonical session-root parent + participant records are the
+  live-state authority boundary,
+- keep one clear toolbox fail-closed statement: `substrate agent toolbox env --json` emits
+  variables only for a current live host-scoped orchestrator session and otherwise exits `3`,
+- keep one clear trace statement: trace is historical fallback for `status` gaps only, never
+  current-session toolbox authorization,
+- keep one clear bridge-removal gate statement so a future cleanup diff cannot claim "the docs
+  looked ready" while runtime/tests still depend on the bridge,
+- make sure docs do not imply that `handles/*.json` or trace history are current truth.
 
 ### 5. Secondary docs audit
 
@@ -388,7 +408,8 @@ Audit only if active wording still contradicts runtime truth:
 - [compatibility-spec.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/compatibility-spec.md)
 - [manual_testing_playbook.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md)
 
-If they already agree, leave them alone. Minimal diff matters.
+If they already agree, leave them alone. Minimal diff matters. If they disagree, update only the
+contradictory sentence or bullet, not the whole pack.
 
 ### 6. Regression suites
 
@@ -402,14 +423,14 @@ Primary anchors:
 Required work:
 
 - keep existing coverage green,
-- add only the missing contract edges,
+- add only the missing contract edges listed in this plan,
 - prefer test names that describe the actual authority rule, not implementation trivia.
 
 ## Execution Plan
 
 ### 1. Freeze store-owned authority first
 
-Lock the authority ladder in the store and its unit tests:
+Make `state_store.rs` the irreversible source of truth before touching docs or operator wording.
 
 - canonical parent first,
 - canonical participant first,
@@ -417,23 +438,43 @@ Lock the authority ladder in the store and its unit tests:
 - legacy handle last,
 - torn roots discoverable but non-live.
 
-This is the control point. If this stays soft, every later surface can drift.
+Required output:
+
+- store-level regressions proving both canonical-over-legacy and flat-over-legacy participant
+  precedence,
+- a store-level regression proving a selected inactive participant fails closed,
+- no production behavior change outside `state_store.rs` yet.
+
+Do not start the next step until these targeted tests pass.
 
 ### 2. Keep operator surfaces strict
 
-Audit `status` and `toolbox` against the frozen store contract:
+Update `agents_cmd.rs` only after the store contract is frozen. This step is about projection and
+error posture, not new authority logic.
 
 - no trace-based current liveness,
 - no heuristic newest-session selection,
 - no hidden live-state promotion for incomplete roots,
 - no ambiguity collapse.
 
+Required output:
+
+- CLI-surface regression for an active parent whose selected participant exists but is inactive,
+- `toolbox status|env` continuing to resolve through the store and fail closed rather than
+  inventing local recovery,
+- `status` continuing to treat trace as additive historical fill only.
+
 ### 3. Lock the write choke point
 
-Verify runtime persistence still routes through `persist_runtime_snapshots(...)` and store
-helpers only.
+Verify runtime persistence still routes through `persist_runtime_snapshots(...)` and store helpers
+only. This is a drift guard, not a new behavior branch.
 
-No caller-owned dual-write logic. No direct flat-file side channel.
+Required output:
+
+- a bounded ownership proof, ideally a contract/grep-style regression in the shell contract suite,
+  that no production caller outside `state_store.rs` writes flat compatibility session,
+  participant, lease, or handle artifacts directly,
+- if `async_repl.rs` needs edits, they stay mechanical.
 
 ### 4. Finish docs while behavior is fresh
 
@@ -442,15 +483,40 @@ Update active docs only where wording can still mislead an operator or future ma
 This is not fluff. Docs are part of the contract because this slice is mostly about making truth
 hard to misread.
 
+Required output:
+
+- `TRACE.md` and `USAGE.md` describing the same authority ladder as the runtime,
+- bridge-removal gates written once in active docs or this plan, not contradicted elsewhere,
+- secondary docs touched only if they disagree.
+
 ### 5. Retire the bridge later, not now
 
-Write the bridge-removal gates into this plan, but do not execute them here:
+Write the bridge-removal gates into this plan, but do not execute them here. Bridge retirement is a
+separate slice with its own green-light criteria.
 
 1. explicit migration-only tests are the only remaining flat readers,
 2. active docs no longer describe flat files as anything but compatibility input,
 3. no required off-repo consumer still depends on flat parent/participant files,
 4. no caller-owned write path exists outside the store,
 5. legacy handle reads have dedicated replacement coverage.
+
+### 6. Validate the slice end-to-end
+
+Do the boring proof before calling this done.
+
+Run:
+
+```bash
+cargo test -p shell agent_runtime::state_store -- --nocapture
+cargo test -p shell agent_successor_contract_ahcsitc0 -- --nocapture
+cargo test -p shell -- --nocapture
+```
+
+Acceptance for this step:
+
+- all new authority-order and fail-closed regressions are green,
+- no doc wording contradicts runtime behavior,
+- no new files or abstractions were added without a direct contract reason.
 
 ## Architecture Review
 
@@ -620,22 +686,31 @@ GAPS: 2 user-visible flows and 2 code-owner regressions need direct tests
 
 #### `crates/shell/src/execution/agent_runtime/state_store.rs`
 
-Add direct coverage for:
+Add direct coverage for exactly these authority rules:
 
-- canonical or flat participant data beating legacy-handle fallback when both exist,
-- a bounded regression that dual-write still originates only from store persistence helpers.
+- canonical participant beats conflicting legacy-handle fallback for the same
+  `(orchestration_session_id, agent_id)` tuple,
+- flat participant beats conflicting legacy-handle fallback when the canonical child is absent but
+  the canonical parent exists,
+- selected participant present but inactive causes `resolve_single_live_session_for_agent(...)` to
+  fail closed with an operator-meaningful error instead of silently degrading to another candidate.
 
 #### `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
 
-Add direct coverage for:
+Add direct coverage for exactly these operator-facing rules:
 
-- operator surfaces failing closed when the selected participant exists but is inactive,
-- docs or contract assertions if active wording still under-specifies bridge-removal gates.
+- `substrate agent toolbox status --json` fails closed when an active parent points at an existing
+  but inactive selected participant,
+- `substrate agent toolbox env --json` fails closed with exit `3` for the same scenario,
+- contract/doc assertions only if the final wording still leaves room to misread bridge-removal
+  posture or live-state authority order.
 
-#### `crates/shell/src/repl/async_repl.rs`
+#### Write-ownership drift guard
 
-Add a narrow proof, test or grep-backed contract, that runtime persistence keeps flowing through
-`persist_runtime_snapshots(...)` plus store helpers rather than reintroducing direct flat writes.
+Add a narrow proof, preferably in the shell contract suite rather than a new REPL abstraction,
+that production code outside `state_store.rs` does not write flat compatibility session,
+participant, lease, or handle artifacts directly. The guard may be grep-backed if it is precise and
+stable.
 
 ### Test commands
 
@@ -774,36 +849,43 @@ That means:
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| A. Freeze store-owned authority and missing regressions | `crates/shell/src/execution/agent_runtime/`, `crates/shell/tests/` | — |
-| B. Audit operator surfaces against the frozen contract | `crates/shell/src/execution/`, `crates/shell/tests/` | A |
+| A. Freeze store-owned authority and add store-level regressions | `crates/shell/src/execution/agent_runtime/` | — |
+| B. Tighten operator surfaces and CLI-surface regressions | `crates/shell/src/execution/`, `crates/shell/tests/` | A |
 | C. Tighten active docs and secondary doc drift only if needed | `docs/`, `docs/project_management/` | A |
+| D. Final validation and cleanup | `crates/shell/`, `docs/` | B, C |
 
 ### Parallel lanes
 
-- Lane A: step A
-- Lane B: step B, after Lane A
-- Lane C: step C, can run in parallel with late B once wording and test names stabilize
+- Lane A: Step A
+- Lane B: Step B, after Lane A
+- Lane C: Step C, after Lane A, in parallel with Lane B once the authority wording from Lane A is
+  stable
+- Lane D: Step D, after Lane B and Lane C merge
 
 ### Execution order
 
-1. land Lane A first, because it freezes what is actually true,
-2. land Lane B second, because operator surfaces depend on that truth,
-3. launch Lane C once the exact wording is settled.
+1. Launch Lane A first and let it own `state_store.rs`.
+2. Once Lane A lands or is merged into the worktree base, launch Lane B and Lane C in parallel.
+3. Lane B owns runtime/operator code plus `agent_successor_contract_ahcsitc0.rs`.
+4. Lane C owns docs only.
+5. Launch Lane D after B and C merge to run the full shell test pass and make any mechanical fixups.
 
 ### Conflict flags
 
-- `state_store.rs` and `agents_cmd.rs` are one coupled seam. Do not split them before the
-  authority wording is frozen.
-- test files can be parallelized only after the target behavior is final.
-- doc work is the only realistic parallel lane here.
+- `state_store.rs` is Lane A only. Do not let Lane B touch it unless Lane A is already merged.
+- `agent_successor_contract_ahcsitc0.rs` is Lane B only. Keep store-level tests in Lane A and
+  CLI-surface tests in Lane B to avoid test-file merge fights.
+- `TRACE.md` and `USAGE.md` are Lane C only.
+- If a secondary doc requires assertion changes in a contract suite, that work moves back to Lane D.
 
 ### Parallelization verdict
 
-This slice is mostly sequential.
+This slice is sequential at the authority seam, then safely parallel for docs versus operator
+surface tightening.
 
-- **3 lanes total**
-- **1 safe parallel lane pair after authority freeze**
-- **2 sequential core runtime lanes**
+- **4 lanes total**
+- **2 lanes can run in parallel after the authority freeze**
+- **2 sequential checkpoints remain non-negotiable: store freeze first, full validation last**
 
 ## Deferred Work
 
@@ -828,6 +910,7 @@ This slice is done only when all of the following are true:
 6. torn roots remain discoverable with warnings but never become live,
 7. store-owned persistence remains the only bridge write owner,
 8. bridge-removal gates are written down before anyone starts deleting compatibility code.
+9. targeted authority tests and the full `cargo test -p shell -- --nocapture` pass are green.
 
 ## Completion Summary
 
@@ -842,7 +925,7 @@ This slice is done only when all of the following are true:
 - TODOS.md updates: 0, repo has no root `TODOS.md`, deferrals captured here
 - Failure modes: 3 critical gaps flagged
 - Outside voice: skipped, `claude` CLI is installed but unauthenticated on 2026-05-01
-- Parallelization: 3 lanes, 1 safely parallel after authority freeze / 2 sequential
+- Parallelization: 4 lanes, with docs and operator-surface tightening parallel only after the authority freeze, plus a final validation lane
 - Lake Score: complete option chosen for every in-slice decision
 
 <!-- AUTONOMOUS DECISION LOG -->
