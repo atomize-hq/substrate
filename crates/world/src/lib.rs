@@ -562,14 +562,12 @@ mod tests {
     use super::*;
     #[cfg(target_os = "linux")]
     use std::collections::HashMap;
+    use std::sync::{mpsc, Arc};
     #[cfg(target_os = "linux")]
-    use std::sync::{mpsc, Arc, RwLock};
-    #[cfg(target_os = "linux")]
+    use std::sync::RwLock;
     use std::time::Duration;
-    #[cfg(target_os = "linux")]
     use tempfile::tempdir;
 
-    #[cfg(target_os = "linux")]
     fn shared_owner_spec(action: SharedWorldOwnerAction) -> SharedWorldOwnerSpec {
         SharedWorldOwnerSpec {
             orchestration_session_id: "orch_123".into(),
@@ -577,7 +575,6 @@ mod tests {
         }
     }
 
-    #[cfg(target_os = "linux")]
     fn shared_world_spec(
         project_dir: &std::path::Path,
         action: SharedWorldOwnerAction,
@@ -614,7 +611,6 @@ mod tests {
         assert!(backend.check_platform().is_ok());
     }
 
-    #[cfg(target_os = "linux")]
     #[test]
     fn cache_miss_with_valid_metadata_repopulates_backend_cache() {
         let temp = tempdir().unwrap();
@@ -667,7 +663,6 @@ mod tests {
             .contains_key(&handle.id));
     }
 
-    #[cfg(target_os = "linux")]
     #[test]
     fn replace_success_commits_new_active_and_finalizes_old_world() {
         let temp = tempdir().unwrap();
@@ -726,7 +721,6 @@ mod tests {
         assert_eq!(previous_metadata["world_generation"], 0);
     }
 
-    #[cfg(target_os = "linux")]
     #[test]
     fn replace_failure_rolls_back_old_world_and_cleans_partial_root() {
         let temp = tempdir().unwrap();
@@ -799,7 +793,6 @@ mod tests {
         );
     }
 
-    #[cfg(target_os = "linux")]
     #[test]
     fn shared_owner_branch_waits_on_backend_mutex() {
         let temp = tempdir().unwrap();
@@ -858,8 +851,8 @@ mod tests {
         });
     }
 
-    #[cfg(target_os = "linux")]
     #[test]
+    #[cfg(target_os = "linux")]
     fn poisoned_cache_returns_error_in_fs_diff() {
         let backend = LinuxLocalBackend::new();
         poison_cache(&backend.session_cache);
