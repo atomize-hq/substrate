@@ -1,3 +1,4 @@
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/substrate/feat-session-centric-state-store-autoplan-restore-20260501-100941.md -->
 # PLAN: Linux Shared-World Replacement Ordering, Rollback, and Atomic Metadata Writes
 
 Source brief: user SOW dated `2026-05-01`  
@@ -20,6 +21,17 @@ Right now:
 
 That combination can strand an orchestration session without a reusable world, silently reset generation, or destroy the only durable owner proof. The fix is a Linux-only two-phase replace transaction plus atomic metadata writes. Nothing more. Nothing fancier.
 
+## Execution Summary
+
+This slice ships in one narrow vertical path:
+
+1. harden the shared-binding state machine and `session.json` durability in [`crates/world/src/session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:16),
+2. rewrite Linux replacement ordering and same-owner serialization in [`crates/world/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/lib.rs:148),
+3. prove the unchanged `Active`-only contract through targeted world-agent and shell regressions,
+4. correct the stale authority docs so the code and docs describe the same seam.
+
+If any step tries to widen scope beyond those four items, it is out of plan.
+
 ## Scope Lock
 
 ### Repo truth this plan must follow
@@ -31,7 +43,7 @@ This plan is locked to current repository behavior, not stale intent docs:
 3. The persistence bug is write durability, not serialization shape. The current bug is at [`crates/world/src/session.rs:477`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:477).
 4. `binding_state=Active` is already the only acceptable proof state on both world-agent and shell validation paths. The plan must preserve that contract exactly.
 5. [`llm-last-mile/03-shared-world-ownership-linux-first.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/03-shared-world-ownership-linux-first.md:112) is stale where it still proposes a shell-authoritative binding store. Current repo truth is Linux metadata authority in `crates/world`.
-6. This slice is Linux only. macOS and Windows should keep compiling with additive compatibility only. No behavior redesign there.
+6. This slice is Linux only. macOS and Windows must keep compiling with additive compatibility only. No behavior redesign there.
 
 ### What already exists
 
@@ -88,6 +100,16 @@ This slice is a little wider than the ideal 5-file bug fix, but still boring:
 
 No new service. No new storage authority. No new public model. That is the whole game.
 
+### File touch budget
+
+Expected production edits are intentionally constrained:
+
+- required production files: [`crates/world/src/session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:16), [`crates/world/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/lib.rs:148)
+- validation seams that may change only if a regression test proves they must: [`crates/world-agent/src/service.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs:2328), [`crates/world-agent/src/pty.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/pty.rs:211), [`crates/shell/src/execution/repl_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/repl_persistent_session.rs:308)
+- required tests and docs: targeted files listed later in this plan
+
+No new crate, no new public API surface, no new persisted schema, no new background worker.
+
 ### Completeness check
 
 Shortcut versions of this fix are not acceptable:
@@ -116,6 +138,33 @@ No new artifact type is introduced. No CI/CD changes are required beyond normal 
 7. Malformed owner-bearing metadata must be warned on and treated as non-reusable or ambiguous. It must not be silently deleted during shared-owner recovery.
 8. Generic compatible reuse remains unchanged for non-owner flows.
 9. Same-owner allocation and replacement must be serialized inside the Linux backend so concurrent requests cannot create duplicate generation `0` worlds.
+
+### Architecture dependency graph
+
+```text
+SHARED-OWNER REPLACE DEPENDENCY GRAPH
+=====================================
+LinuxLocalBackend::ensure_session()
+    |
+    +--> shared-owner action gate
+          |
+          +--> AttachOrCreate
+          |     |
+          |     +--> recover_shared_active_from_root()
+          |     \--> create_shared_owner_session()
+          |
+          \--> ReplaceExpectedGeneration
+                |
+                \--> replace_shared_owner_session()
+                      |
+                      +--> SessionWorld::set_shared_binding_state(Active -> Replacing)
+                      +--> SessionWorld::persist_metadata() [atomic]
+                      +--> create_shared_owner_session(generation + 1)
+                      +--> SessionWorld::set_shared_binding_state(Replacing -> Replaced)
+                      \--> rollback on failure: SessionWorld::set_shared_binding_state(Replacing -> Active)
+```
+
+All state transitions funnel through `SessionWorld`. All request serialization lives in `LinuxLocalBackend`. Downstream proof readers stay read-only and fail closed.
 
 ### Current unsafe flow
 
@@ -150,7 +199,7 @@ old Replacing(g=N)
     | create replacement root + persist new Active(g=N+1)
     +--> failure before commit
     |       |
-    |       | rollback old to Active(g=N), best-effort cleanup new root
+    |       | rollback old to Active(g=N), then attempt cleanup of the new root
     |       v
     |   old Active(g=N)
     |
@@ -176,7 +225,7 @@ scan owner-matching session.json files
     |
     +--> 1 Active(g=N+1), 1 Replacing(g=N)
     |       -> return newer Active
-    |       -> best-effort finalize/ignore older Replacing
+    |       -> do not reuse older Replacing
     |
     +--> 2+ Active
     |       -> fail closed, do not guess
@@ -203,9 +252,9 @@ Do not build a lock-file protocol. Not for this fix.
 
 ### 1. `crates/world/src/session.rs`
 
-#### 1.1 Replace one-way mutation with a generic internal transition helper
+#### 1.1 Replace one-way mutation with a single internal transition helper
 
-Replace [`mark_shared_binding_replaced()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:176) with a helper like:
+Replace [`mark_shared_binding_replaced()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:176) with this helper:
 
 ```rust
 fn set_shared_binding_state(
@@ -218,27 +267,41 @@ fn set_shared_binding_state(
 Rules:
 
 - allow transitions `Active -> Replacing`, `Replacing -> Active`, `Replacing -> Replaced`
+- reject every other transition with an error that names the current and requested state
 - keep `world_id` and `world_generation` unchanged during pre-commit and rollback
 - set `last_restart_reason=Some(reason)` only when entering `Replacing` or finalizing `Replaced` after a committed replacement
 - clear `last_restart_reason` on rollback to `Active`
 - persist via the new atomic metadata writer every time
+- no other function in `session.rs` may write `binding_state` or `last_restart_reason` directly for shared-owner worlds
+
+Done when:
+
+- `mark_shared_binding_replaced()` is gone,
+- the helper is the only shared-binding state mutation path,
+- tests cover all three allowed transitions and at least one rejected transition.
 
 #### 1.2 Add an atomic metadata writer
 
-Replace raw [`fs::write()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:484) with the same-directory temp file pattern already used by [`write_atomic_json()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:912):
+Replace raw [`fs::write()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:484) with the same-directory temp-file pattern already used by [`write_atomic_json()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:912):
 
 1. `create_dir_all(parent)`
 2. `NamedTempFile::new_in(parent)`
 3. `serde_json::to_writer_pretty(temp)`
 4. `temp.sync_all()`
-5. `persist()` or same-filesystem atomic rename into `session.json`
-6. best-effort `sync_all()` on the parent directory on Linux
+5. `persist()` into `session.json`
+6. on Linux, attempt a parent-directory `sync_all()` after rename; warn on unsupported directory sync, but do not undo a successful rename
 
 Durability contract on successful return:
 
 - readers see old full JSON or new full JSON,
 - never torn bytes,
 - parent directory metadata is flushed when supported.
+
+Done when:
+
+- `persist_metadata()` still owns the public write contract,
+- the implementation no longer calls `fs::write()` for `session.json`,
+- a forced write failure test proves the prior readable metadata remains intact.
 
 #### 1.3 Reconcile shared-owner recovery
 
@@ -252,6 +315,21 @@ Refactor [`recover_shared_active_from_root()`](/Users/spensermcconnell/__Active_
 - never auto-deletes malformed owner-bearing metadata during shared-owner scan.
 
 Generic recovery may keep its current cleanup behavior for purely generic metadata. Shared-owner recovery cannot.
+
+Deterministic resolution order:
+
+1. parse all owner-matching shared candidates,
+2. separate malformed owner-bearing metadata from valid candidates,
+3. partition valid candidates by `binding_state`,
+4. resolve exactly one of the cases in the recovery decision tree,
+5. if no valid reusable candidate exists, return `Ok(None)`,
+6. if the valid set is ambiguous, return an error and leave files on disk for inspection.
+
+Done when:
+
+- shared-owner recovery never deletes malformed owner-bearing metadata,
+- ambiguous multi-`Active` ownership fails closed,
+- lone `Replacing` rollback recovery and `Active + Replacing` reconciliation both have regression tests.
 
 ### 2. `crates/world/src/lib.rs`
 
@@ -276,8 +354,22 @@ Rollback path:
 
 - if replacement creation fails before the commit point, restore old world `Replacing -> Active`,
 - clear stale restart reason on rollback,
-- best-effort remove any partially created replacement root,
-- return the original failure if cleanup also fails, but only after old world is back to `Active`.
+- attempt cleanup of any partially created replacement root after the old world is back to `Active`,
+- return an error that preserves the original creation failure and also mentions rollback or cleanup failure if either secondary step fails.
+
+Additional implementation rules:
+
+- do not call `create_shared_owner_session()` until pre-commit metadata persistence succeeds,
+- do not finalize the old world until the new world is created, persisted, and inserted into the backend cache,
+- `world_generation` increments only on the new committed world,
+- the old world keeps generation `N` in both `Replacing` and `Replaced`,
+- the rollback path must execute in the same request before returning an error.
+
+Done when:
+
+- a successful replace leaves exactly one committed `Active` world at generation `N+1`,
+- a failed replace leaves the original world committed as `Active` at generation `N`,
+- no code path returns with zero recoverable world for the owner.
 
 #### 2.2 Serialize same-owner shared-world ensure paths
 
@@ -293,6 +385,17 @@ That closes the window where:
 3. request B creates a second generation `0` world.
 
 That race is unacceptable.
+
+Implementation requirement:
+
+- use one backend-local mutex guarding only the shared-owner branch,
+- hold it across lookup, pre-commit, create, rollback, and finalize,
+- do not widen the lock to generic reuse flows.
+
+Done when:
+
+- concurrent same-owner attach and replace tests cannot create duplicate generation `0` worlds,
+- generic non-owner flows still execute without taking the shared-owner lock.
 
 ### 3. Downstream proof seams
 
@@ -316,6 +419,32 @@ Update:
 - [`llm-last-mile/PLAN-03.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-03.md) only where it still describes replace ordering that no longer matches implementation
 - [`llm-last-mile/03-shared-world-ownership-linux-first.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/03-shared-world-ownership-linux-first.md) to mark the shell-authoritative binding-store proposal as stale
 - [`docs/WORLD.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md) to document the two-phase replace window and recovery guarantees for Linux metadata authority
+
+Doc update contract:
+
+- `PLAN-03` must match the final replacement ordering,
+- `03-shared-world-ownership-linux-first.md` must explicitly say Linux metadata is authoritative now and the shell-side binding-store idea is historical only,
+- `docs/WORLD.md` must document the `Replacing` crash window and the recovery rules from this plan.
+
+## Implementation Sequence
+
+Execute the work in this order. No later step starts before the prior step satisfies its done-when checks.
+
+1. **State machine and persistence core**
+   - implement `set_shared_binding_state()`
+   - switch `persist_metadata()` to atomic writes
+   - make shared-owner recovery deterministic
+2. **Backend transaction and serialization**
+   - rewrite `replace_shared_owner_session()`
+   - add the shared-owner mutex in `ensure_session()`
+3. **Proof seam regressions**
+   - extend `world`, `world-agent`, and `shell` coverage to prove only committed `Active` proof escapes
+4. **Docs and drift correction**
+   - update `PLAN-03`, `03-shared-world-ownership-linux-first.md`, and `docs/WORLD.md`
+5. **Validation**
+   - run the exact command set in `Validation commands`
+
+The only allowed parallelism is the one described later in `Worktree Parallelization Strategy`.
 
 ## State Machine
 
@@ -421,6 +550,8 @@ Add or extend backend tests for:
 3. replacement create failure rolls old world back to original `Active`
 4. concurrent same-owner `AttachOrCreate` or replace paths do not create duplicate generation `0` worlds
 
+These tests are the regression floor. The implementation is not done if only the happy path passes.
+
 #### `crates/world/src/session.rs`
 
 Extend shared metadata tests for:
@@ -449,6 +580,14 @@ Extend the stub in [`crates/shell/tests/support/repl_world_agent.rs`](/Users/spe
 - replace failure does not strand the orchestration session,
 - subsequent attach or retry still observes a valid committed `Active` proof.
 
+### Validation evidence required in the implementation PR
+
+The implementation PR description must include:
+
+1. the exact `cargo` commands run from the list below,
+2. a short note confirming whether any proof-seam production files changed,
+3. the observed result for the rollback regression, the lone-`Replacing` recovery regression, and the concurrent same-owner race regression.
+
 ### Validation commands
 
 Run at minimum:
@@ -459,10 +598,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p world -- --nocapture
 cargo test -p world-agent -- --nocapture
 cargo test -p shell repl_persistent_session_client_fail_closed -- --nocapture
-cargo test -p shell repl_world_first_routing_v1 -- --nocapture
+cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
 ```
-
-If the `shell` package target names differ locally, run the repo’s equivalent targeted shell test commands for those files.
 
 ## Operator and DX Notes
 
@@ -473,35 +610,35 @@ This repo is a developer tool, so DX still matters even with no dedicated UI rev
 - docs must explain why only committed `Active` proofs are surfaced,
 - stale-doc cleanup is part of the fix because bad authority docs cause real future bugs.
 
-There is no separate `/plan-devex-review` skill installed in the current gstack path, so these DX obligations are folded into this plan directly.
-
 ## Worktree Parallelization Strategy
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| A. transaction and recovery core | `crates/world/src/` | — |
-| B. proof seam regression tests | `crates/world-agent/src/`, `crates/shell/src/execution/`, `crates/shell/tests/` | A |
-| C. docs drift correction | `docs/`, `llm-last-mile/` | A |
+| A. state machine and atomic persistence | `crates/world/src/` | — |
+| B. backend transaction and serialization | `crates/world/src/` | A |
+| C. proof seam regression tests | `crates/world-agent/src/`, `crates/shell/src/execution/`, `crates/shell/tests/` | B |
+| D. docs drift correction | `docs/`, `llm-last-mile/` | B |
 
 ### Parallel lanes
 
-- Lane A: Step A only. Sequential, shared `crates/world/src/` core.
-- Lane B: Step B after A. Mostly independent from docs, but shared proof contract means it should start only after the transaction semantics freeze.
-- Lane C: Step C after A, can run in parallel with B once the new state machine wording is stable.
+- Lane A: Step A -> Step B. Sequential, both touch `crates/world/src/`.
+- Lane B: Step C after Step B. Independent from docs once the core proof contract is frozen.
+- Lane C: Step D after Step B. Independent from tests once the state machine wording is final.
 
 ### Execution order
 
-1. Launch A first.
-2. After A stabilizes, launch B and C in parallel worktrees.
-3. Merge B and C.
-4. Run validation stack.
+1. Launch Lane A first and finish both core steps.
+2. After Lane A lands locally, launch Lane B and Lane C in parallel worktrees.
+3. Merge Lane B and Lane C back into the main worktree.
+4. Run the full validation stack in the merged tree.
 
 ### Conflict flags
 
 - `crates/world/src/lib.rs` and `crates/world/src/session.rs` are a single-lane choke point.
-- proof tests in shell and world-agent can run parallel to docs after the core transaction contract is frozen.
+- no parallel work starts before the `crates/world/src/` contract is frozen,
+- proof tests and docs can run in parallel only because they touch different module directories.
 
 ## Deferred and TODO Disposition
 
@@ -513,7 +650,7 @@ Reason:
 - none of those deferred items blocks the hardening fix,
 - adding vague TODOs here would preserve less context than the explicit deferred list already does.
 
-If follow-on work is needed later, the likely candidates are:
+If follow-on work is needed later, the candidates are:
 
 1. extract a shared atomic JSON writer once both `state_store` and `crates/world` prove stable on the pattern
 2. narrow the coarse shared-owner mutex to a per-owner lock only if real contention appears
@@ -529,7 +666,9 @@ This slice is complete only when all of these are true:
 4. `session.json` writes are atomic and never expose torn bytes on successful return
 5. recovery from every replace crash window is deterministic and generation-safe
 6. world-agent and shell proof validators still reject non-`Active` proof states
-7. stale authority docs are corrected so future work does not reintroduce the wrong seam
+7. concurrent same-owner attach or replace requests cannot create duplicate generation `0` worlds
+8. malformed owner-bearing metadata is never silently deleted by shared-owner recovery
+9. stale authority docs are corrected so future work does not reintroduce the wrong seam
 
 ## Decision Audit Trail
 
