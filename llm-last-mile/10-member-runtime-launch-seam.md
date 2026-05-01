@@ -1,6 +1,6 @@
 # SOW: Production Member Runtime Launch Seam
 
-Status: implementation-oriented draft. This document defines the missing production seam for launching and tracking world-scoped member runtimes inside an existing orchestration session. It is intentionally bounded to launch and lifecycle plumbing. It does not reopen shared-world authority, replacement ordering, or cleanup/cutover design that belongs to earlier `llm-last-mile` slices.
+Status: implementation-oriented draft. This document defines the missing production seam for launching and tracking world-scoped member runtimes inside an existing orchestration session. It is intentionally bounded to launch and lifecycle plumbing. It consumes the authority and cutover contracts already frozen by earlier `llm-last-mile` slices and does not reopen shared-world authority, replacement ordering, event-emission authority, or live-state compatibility-cutover design.
 
 ## Objective
 
@@ -22,8 +22,10 @@ What already exists:
 
 - participant-capable runtime records in [session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs)
 - session-centric runtime storage in [state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+- canonical session-root parent plus participant records are now the frozen live-state authority boundary, with flat compatibility files and legacy handles explicitly demoted to bounded bridge/input roles by [PLAN-09.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-09.md)
 - shared-world authority and generation plumbing from [PLAN-03.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-03.md), [04-thread-world-binding-into-runtime-state.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/04-thread-world-binding-into-runtime-state.md), and [07-world-replacement-ordering-rollback-atomic-metadata.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/07-world-replacement-ordering-rollback-atomic-metadata.md)
 - stale-generation invalidation rules in [05-restart-invalidation-semantics.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/05-restart-invalidation-semantics.md)
+- shell-owned orchestration-scoped trace rows now already obey the explicit real-id-or-suppress event contract from [PLAN-08.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-08.md)
 - live status/toolbox projections that can already consume member participants once real producers exist in [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
 
 What is still missing:
@@ -116,6 +118,8 @@ That mismatch is now the bottleneck. The repo can describe member participants h
 - redefining shared-world owner authority, generation assignment, or Linux reuse behavior already owned by [PLAN-03.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-03.md)
 - replacement ordering, rollback, or backend atomic metadata work already owned by [07-world-replacement-ordering-rollback-atomic-metadata.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/07-world-replacement-ordering-rollback-atomic-metadata.md)
 - broader authority/cutover cleanup slices
+- reopening the live-state authority ladder or compatibility-bridge posture already frozen by [PLAN-09.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-09.md)
+- reopening shell-owned event-emission authority cleanup already landed by [PLAN-08.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-08.md)
 - a generalized `/v1/agents` service or new top-level agent-hub daemon
 - public dispatch UX, scheduler design, or speculative multi-member productization
 - repurposing toolbox or gateway lifecycle as a substitute for member session ownership
@@ -224,7 +228,19 @@ Once a real member runtime exists:
 - invalidated members must not be resurrected through trace fallback
 - toolbox selection remains anchored to the live orchestrator session and does not switch to a member runtime
 
-### 7. Gateway boundary remains separate
+### 7. Persistence and authority boundary
+
+The member-launch seam must consume the live-state authority and write-ownership rules already frozen upstream.
+
+Required rules:
+
+- member launch persists parent plus participant state only through store-owned helpers and the existing snapshot writer choke points
+- member launch must treat canonical session-root parent plus participant records as the only authoritative live-state target
+- member launch must not directly write flat compatibility parent, participant, or lease files from callers
+- member launch must not directly write or depend on legacy `handles/*.json`
+- compatibility bridge behavior, if still present in the store, remains an implementation detail of store-owned persistence rather than a contract of the member-launch seam
+
+### 8. Gateway boundary remains separate
 
 Nested gateway lifecycle and member runtime lifecycle are different contracts.
 
@@ -283,6 +299,7 @@ This keeps the seam concrete without forcing a speculative agent-hub service or 
 - [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
   - add any lookup helpers needed by the member launch path
   - preserve session-centric persistence as the live authority boundary
+  - preserve store-owned compatibility bridging as an internal persistence concern instead of a caller-owned write path
   - keep invalidation session-local and generation-aware
 
 ### Consumer validation surfaces
@@ -382,4 +399,4 @@ cargo test -p shell async_repl -- --nocapture
 
 - The repo currently launches only the host orchestrator runtime in production; member constructors and store helpers do not count as a real launch seam.
 - The first required capability expansion is one bounded shell-owned world-member launch primitive, not a generalized orchestration service.
-- Member launch must consume already-authoritative world/session state and must stay isolated from authority, rollback, and cleanup/cutover slices.
+- Member launch must consume already-authoritative world/session state and must stay isolated from authority, rollback, event-emission-authority, and cleanup/cutover slices.
