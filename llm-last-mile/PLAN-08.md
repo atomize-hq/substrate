@@ -120,7 +120,16 @@ The minimal correct production seam is six files:
 5. [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
 6. [docs/TRACE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/TRACE.md)
 
-Tests will expand that touch set. Production code should not.
+Clarification so this does not turn into scope theater:
+
+- the **core behavior seam** is really the first four files,
+- `state_store.rs` is a mechanical cleanup/guard seam because production callers stop using the
+  PID helper even if the helper itself remains for tests or diagnostics,
+- `docs/TRACE.md` is the contract lock, not new runtime logic,
+- `crates/shell/src/execution/invocation/runtime.rs` and compile-fix test call sites are allowed
+  one-line fallout if `execute_command(...)` gains an explicit optional context parameter.
+
+Tests will expand the touch set. New production behavior should not.
 
 So the scope reduction is explicit:
 
@@ -294,6 +303,27 @@ Hard rule:
 That matters because `docs/TRACE.md` already treats `run_id` as a required join key for structured
 agent events.
 
+### Per-path authority and correlation matrix
+
+This is the part that has to be explicit or the implementation will drift.
+
+| Path | Authority source | `run_id` source | `span_id` source | If authority/correlation is missing |
+| --- | --- | --- | --- | --- |
+| REPL command completion | `RuntimeOrchestrationContext` plus active manifest/world binding snapshot | caller-owned `cmd_id` for that command-completion row | attach only if the caller already has one | suppress the orchestration-scoped row |
+| Host external command stream | caller-owned explicit shell event context passed into `execute_command(...)` / `execute_external(...)` | stable caller-owned command/run id captured before stream threads start, never `"unknown"` | attach if command-span or downstream span is known | suppress the orchestration-scoped row, keep stdout/stderr |
+| World non-PTY deny before agent start | caller-owned explicit shell event context from launch boundary | stable caller-owned command/run id from launch boundary | parent command span when known | suppress the orchestration-scoped row, still print deny text |
+| World non-PTY started stream frames | same explicit caller-owned context captured before frame processing | same stable caller-owned run id as launch, do not swap it mid-stream | attach `ExecuteStreamFrame::Start { span_id }` when it arrives | suppress the orchestration-scoped row until both context and stable run correlation are real |
+| Non-REPL host invocation callers | none, by design | none | none | always pass `None`; this slice does not fabricate orchestration context for wrap/pipe/runtime helpers |
+
+Two hard clarifications:
+
+1. this slice does **not** re-derive orchestration context for
+   [crates/shell/src/execution/invocation/runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/invocation/runtime.rs);
+   those call sites remain non-orchestrator callers and pass `None`,
+2. once the launch boundary chooses the command/run correlation for a shell-owned row, downstream
+   frame processing may attach more metadata like `span_id`, but it may not silently replace the
+   chosen `run_id` with a later convenience value.
+
 ### Existing explicit runtime translation remains the model
 
 The stronger paths are already correct in principle:
@@ -343,7 +373,9 @@ Required behavior:
 
 - remove `resolve_active_orchestration_session_id()`,
 - thread optional explicit event context into `execute_command(...)` and `execute_external(...)`,
-- capture caller-owned `cmd_id` and, when available, `span_id` / `run_id`,
+- capture caller-owned command/run correlation before any background stream thread starts,
+- thread `None` explicitly from non-orchestrator callers such as
+  [crates/shell/src/execution/invocation/runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/invocation/runtime.rs),
 - stop emitting orchestration-scoped host stream rows with `run_id = "unknown"`,
 - keep host output behavior unchanged when no orchestration context exists.
 
@@ -391,6 +423,8 @@ Required behavior:
 - derive shell event context from `RuntimeOrchestrationContext` and the live manifest snapshot
   when the runtime exists,
 - pass that context into host/world execution helpers,
+- keep the command/run correlation choice stable at the launch boundary instead of letting world
+  stream frame handlers invent or swap it later,
 - keep host-only `--no-world` behavior suppression-only when there is no orchestrator runtime,
 - preserve existing restart-alert explicit-context behavior.
 
@@ -606,7 +640,7 @@ USER FLOW COVERAGE
 ===========================
 [+] REPL host escape inside active orchestrator runtime
     │
-    ├── [GAP] [→E2E] command completes and emits a completion row from explicit runtime context
+    ├── [GAP] [→INTEGRATION] command completes and emits a completion row from explicit runtime context
     └── [GAP]         completion does not consult PID-owned runtime state
 
 [+] REPL host-only command with no active orchestrator runtime
@@ -616,7 +650,7 @@ USER FLOW COVERAGE
 
 [+] World non-PTY command stream
     │
-    ├── [GAP] [→E2E] stream chunks emit with caller-owned orchestration authority and real run correlation
+    ├── [GAP] [→INTEGRATION] stream chunks emit with caller-owned orchestration authority and real run correlation
     ├── [GAP]         missing start/run correlation suppresses orchestration row only
     └── [★★★ TESTED] chunk helper itself preserves terminal output
 
@@ -635,7 +669,7 @@ USER FLOW COVERAGE
 
 ─────────────────────────────────
 COVERAGE: 2/11 flows tested (18%)
-GAPS: 9 flows need tests (2 deserve integration-style coverage)
+GAPS: 9 flows need tests (2 deserve integration-style crate coverage rather than unit-only assertions)
 ─────────────────────────────────
 ```
 
@@ -665,7 +699,10 @@ Add coverage for:
 Add regression coverage for:
 
 - explicit event context threaded into `execute_command(...)` / `execute_external(...)`,
+- non-REPL callers that pass `None` continuing to execute normally while suppressing
+  orchestration-scoped rows,
 - host stream rows suppressing when real run correlation is absent,
+- host stream rows keeping the launch-owned correlation stable instead of inventing a later one,
 - no host stream row emitting with `run_id = "unknown"`,
 - stdout/stderr still being mirrored when the orchestration-scoped row is suppressed.
 
@@ -676,6 +713,8 @@ Add regression coverage for:
 - `stream_non_pty_via_agent(...)` no longer consulting PID lookup,
 - `process_agent_stream_body(...)` suppressing orchestration rows if a real run id is not
   authoritative yet,
+- `ExecuteStreamFrame::Start { span_id }` enriching later chunk rows with `span_id` without
+  replacing the launch-owned run correlation,
 - deny-path stderr printing surviving row suppression,
 - repo-contract tests for no synthetic correlation.
 
@@ -708,10 +747,25 @@ cargo test -p world-api -- --nocapture
 cargo test -p agent-api-types -- --nocapture
 ```
 
+Only treat that second block as required if the implementation actually changes shared request,
+stream-frame, or cross-crate event-shape assumptions. If this stays inside shell-local authority
+plumbing, `cargo test -p shell -- --nocapture` is the non-negotiable gate and the cross-crate
+runs are blast-radius confidence.
+
 ### QA artifact
 
-Primary QA handoff artifact:
-[spensermcconnell-feat-session-centric-state-store-eng-review-test-plan-20260501-142115.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/spensermcconnell-feat-session-centric-state-store-eng-review-test-plan-20260501-142115.md)
+Generate the standard eng-review handoff artifact at:
+
+```text
+~/.gstack/projects/$SLUG/{user}-{branch}-eng-review-test-plan-{datetime}.md
+```
+
+Required contents for this slice:
+
+- affected shell execution paths: REPL completion, host external stream, world non-PTY stream,
+- the suppression-only scenarios that must preserve stdout/stderr and trace spans,
+- the negative assertions that no orchestration-scoped row is emitted when explicit context is
+  absent or correlation would be synthetic.
 
 ## Failure Modes Registry
 
@@ -752,32 +806,42 @@ protect a bug.
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| A. Define explicit shell event context and REPL authority extraction | `crates/shell/src/execution/`, `crates/shell/src/repl/` | — |
-| B. Thread host and world stream plumbing onto the new context | `crates/shell/src/execution/routing/dispatch/` | A |
-| C. Regression tests and trace doc wording | `crates/shell/src/`, `docs/`, `~/.gstack/projects/` | A, B |
+| A. Freeze the context contract and launch-boundary mapping | `crates/shell/src/execution/`, `crates/shell/src/repl/` | — |
+| B. Re-plumb host and world stream emitters onto the frozen contract | `crates/shell/src/execution/routing/dispatch/` | A |
+| C. Land regression guards, test-plan artifact, and trace wording | `crates/shell/src/`, `docs/`, `~/.gstack/projects/` | A, B |
 
 ### Parallel lanes
 
 - Lane A: step A
-- Lane B: step B
-- Lane C: step C
+- Lane B: step B, only after Lane A lands
+- Lane C: step C, can split from Lane B only after signatures stop moving
 
 ### Execution order
 
-1. land Lane A first because it freezes the context contract,
-2. then land Lane B once the type and REPL extraction rules are stable,
-3. finish with Lane C after the final helper signatures settle.
+1. land Lane A first because it freezes both the context type and the per-path
+   authority/correlation mapping,
+2. land Lane B next because `exec.rs` and `world_ops.rs` both depend on that exact contract,
+3. once Lane B settles, Lane C can be handled as a short follow-up or parallel cleanup across
+   tests/docs only.
 
 ### Conflict flags
 
 - `agent_events.rs`, `async_repl.rs`, `exec.rs`, and `world_ops.rs` are one coupled seam.
-- Production-code parallelization before the context type freezes is asking for merge-conflict
+- `execute_command(...)` signature fallout into
+  [invocation/runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/invocation/runtime.rs)
+  is mechanically small, but it is still contract fallout and belongs with Lane A or B, not a
+  free-floating branch.
+- Production-code parallelization before the context contract freezes is asking for merge-conflict
   soup.
 
 ### Parallelization verdict
 
-This slice is mostly sequential. There are **three lanes**, but **zero safe production-code
-parallel lanes before the context contract is frozen**.
+This slice is mostly sequential.
+
+- There are **three lanes** on paper.
+- There are **zero safe parallel production-code lanes** before Lane A finishes.
+- The only realistic post-freeze split is: one branch finishes execution plumbing, one branch
+  finishes regression/doc guardrails after the helper signatures stop moving.
 
 ## Deferred Work
 
