@@ -78,9 +78,19 @@ When explicit shared-owner reuse is active, the authoritative proof surface is `
 Current enforcement boundary:
 
 - Linux is the only platform that implements owner-bound shared-world reuse semantics, and those semantics live in `crates/world`.
+- On Linux, the persisted authority is `SessionWorldMetadata` in `crates/world/src/session.rs`; there is no shell-owned co-authoritative binding store in this slice.
+- `set_shared_binding_state()` is the only shared-binding mutation path, and `persist_metadata()` writes `session.json` atomically.
 - Reuse requires both exact owner match and compatible world inputs; generic compatibility alone is not enough.
-- When a caller explicitly requests shared-owner reuse, the proof echoed back to request/PTY callers must describe the same `orchestration_session_id` and `world_id`, and the proof must be in `binding_state=active`.
+- Same-owner Linux shared-world ensure/replace paths are serialized by a backend-local mutex in `crates/world` so attach/create and replace do not race each other inside one backend instance.
+- When a caller explicitly requests shared-owner reuse, the proof echoed back to request/PTY callers must describe the same `orchestration_session_id` and `world_id`, and the proof must be in `binding_state=active`. `active` remains the only binding proof downstream surfaces may expose or accept.
 - macOS and Windows do not implement independent shared-owner behavior in this slice. The shell rejects explicit shared-owner requests before non-Linux world bootstrap or fallback logic runs.
+
+Replacement and recovery guarantees on Linux:
+
+- `replace_expected_generation` runs in four stages inside `crates/world`: pre-commit the current world to `binding_state=replacing`, commit the replacement world as `binding_state=active` with `world_generation + 1`, roll the old world back to `active` if replacement creation fails, then finalize the old world to `binding_state=replaced`.
+- The commit window is intentionally two-phase: recovery may observe either one `active` world or one lone `replacing` world for an owner, but never treat `replacing` as a downstream proof state.
+- Recovery reconciles a lone `replacing` world back to `active`, prefers a newer `active` world over an older `replacing` world, and fails closed on ambiguous same-owner states or malformed owner metadata.
+- Ownerless legacy metadata, partial owner metadata, and `replaced`/`abandoned` bindings are never reusable for shared-owner flows.
 
 Deliberate boundary for later lanes:
 
