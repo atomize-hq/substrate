@@ -20,13 +20,18 @@ use crate::execution::agent_events::{
     publish_command_completion, schedule_demo_burst, schedule_demo_events,
     ShellCommandEventContext, ShellEventEmissionContext,
 };
-use crate::execution::agent_inventory::load_effective_agent_inventory;
+use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInventoryEntryV1};
+use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
+use crate::execution::agent_runtime::validator::{
+    member_selection_error_exit_code, validate_member_selection,
+};
 use crate::execution::agent_runtime::{
     backend_allowed, build_gateway_for_descriptor, runtime_realizability_error_exit_code,
-    validate_orchestrator_selection, validate_runtime_realizability, AgentRuntimeSessionManifest,
-    AgentRuntimeSessionState, AgentRuntimeStateStore, OrchestrationSessionRecord,
-    OrchestrationSessionState, PURE_AGENT_PROTOCOL, SESSION_HANDLE_SCHEMA_V1,
+    validate_orchestrator_selection, validate_runtime_realizability, AgentRuntimeParticipantRecord,
+    AgentRuntimeParticipantWorldBinding, AgentRuntimeSessionManifest, AgentRuntimeSessionState,
+    AgentRuntimeStateStore, OrchestrationSessionRecord, OrchestrationSessionState, MEMBER_ROLE,
+    ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, SESSION_HANDLE_SCHEMA_V1,
 };
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
@@ -39,7 +44,7 @@ use crate::execution::{
     ShellConfig, PTY_ACTIVE,
 };
 use crate::repl::editor;
-use substrate_broker::{detect_profile, world_fs_policy};
+use substrate_broker::{detect_profile, world_fs_policy, Policy};
 use substrate_common::agent_events::{AgentEvent, MessageEventKind};
 
 #[derive(Clone)]
@@ -517,6 +522,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                 return Ok(failure.exit_code);
             }
         };
+        let mut member_runtime: Option<AsyncReplAgentRuntime> = None;
+        let mut pending_member_replacement: Option<AgentRuntimeParticipantRecord> = None;
 
         let mut should_exit = false;
         let mut termination_cause = ReplTerminationCause::NormalExit;
@@ -728,6 +735,33 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     should_exit = true;
                                     continue 'repl_loop;
                                 }
+                                if let Err(err) = reconcile_member_runtime_generation(
+                                    world_session.as_ref(),
+                                    &mut member_runtime,
+                                    &mut pending_member_replacement,
+                                    &agent_printer,
+                                    &mut telemetry,
+                                )
+                                .await
+                                {
+                                    fatal_runtime_error = Some(err);
+                                    should_exit = true;
+                                    continue 'repl_loop;
+                                }
+                                if let Err(err) = ensure_member_runtime_ready(
+                                    startup_context.as_ref(),
+                                    world_session.as_ref(),
+                                    &mut member_runtime,
+                                    &mut pending_member_replacement,
+                                    &agent_printer,
+                                    &mut telemetry,
+                                )
+                                .await
+                                {
+                                    fatal_runtime_error = Some(err);
+                                    should_exit = true;
+                                    continue 'repl_loop;
+                                }
                                 let command_event_context =
                                     build_repl_shell_command_event_context(
                                         startup_context.as_ref(),
@@ -770,6 +804,19 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     should_exit = true;
                                     continue 'repl_loop;
                                 }
+                                if let Err(err) = reconcile_member_runtime_generation(
+                                    world_session.as_ref(),
+                                    &mut member_runtime,
+                                    &mut pending_member_replacement,
+                                    &agent_printer,
+                                    &mut telemetry,
+                                )
+                                .await
+                                {
+                                    fatal_runtime_error = Some(err);
+                                    should_exit = true;
+                                    continue 'repl_loop;
+                                }
                                 let status = exit_status_from_code(exit_code);
                                 report_nonzero_status(&status);
                                 publish_command_completion(
@@ -792,6 +839,33 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         )
                         .await;
                         if let Err(err) = drift_check {
+                            fatal_runtime_error = Some(err);
+                            should_exit = true;
+                            continue 'repl_loop;
+                        }
+                        if let Err(err) = reconcile_member_runtime_generation(
+                            world_session.as_ref(),
+                            &mut member_runtime,
+                            &mut pending_member_replacement,
+                            &agent_printer,
+                            &mut telemetry,
+                        )
+                        .await
+                        {
+                            fatal_runtime_error = Some(err);
+                            should_exit = true;
+                            continue 'repl_loop;
+                        }
+                        if let Err(err) = ensure_member_runtime_ready(
+                            startup_context.as_ref(),
+                            world_session.as_ref(),
+                            &mut member_runtime,
+                            &mut pending_member_replacement,
+                            &agent_printer,
+                            &mut telemetry,
+                        )
+                        .await
+                        {
                             fatal_runtime_error = Some(err);
                             should_exit = true;
                             continue 'repl_loop;
@@ -847,6 +921,19 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         )
                         .await;
                         if let Err(err) = drift_check {
+                            fatal_runtime_error = Some(err);
+                            should_exit = true;
+                            continue 'repl_loop;
+                        }
+                        if let Err(err) = reconcile_member_runtime_generation(
+                            world_session.as_ref(),
+                            &mut member_runtime,
+                            &mut pending_member_replacement,
+                            &agent_printer,
+                            &mut telemetry,
+                        )
+                        .await
+                        {
                             fatal_runtime_error = Some(err);
                             should_exit = true;
                             continue 'repl_loop;
@@ -1060,6 +1147,9 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
         prompt_worker.shutdown_with_disposition(shutdown_disposition_for_termination_cause(
             termination_cause,
         ));
+        if let Some(runtime) = member_runtime.take() {
+            shutdown_host_orchestrator_runtime(runtime, &agent_printer, &mut telemetry).await;
+        }
         if let Some(runtime) = agent_runtime.take() {
             shutdown_host_orchestrator_runtime(runtime, &agent_printer, &mut telemetry).await;
         }
@@ -1407,6 +1497,9 @@ struct RuntimeBootstrapFailure {
 struct RuntimeOrchestrationContext {
     store: AgentRuntimeStateStore,
     orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
+    effective_config: crate::execution::config_model::SubstrateConfig,
+    base_policy: Policy,
+    inventory: BTreeMap<String, AgentInventoryEntryV1>,
 }
 
 impl RuntimeOrchestrationContext {
@@ -1426,7 +1519,7 @@ impl RuntimeOrchestrationContext {
     }
 }
 
-struct PreparedHostOrchestratorRuntime {
+struct PreparedAgentRuntime {
     descriptor: RuntimeSelectionDescriptor,
     gateway: agent_api::AgentWrapperGateway,
     agent_kind: agent_api::AgentWrapperKind,
@@ -1464,6 +1557,76 @@ struct AsyncReplAgentRuntime {
     shutdown_requested: Arc<AtomicBool>,
     heartbeat_stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
     heartbeat_task: Option<tokio::task::JoinHandle<()>>,
+}
+
+fn runtime_controls_parent_session(role: &str) -> bool {
+    role == ORCHESTRATOR_ROLE
+}
+
+fn runtime_registered_message(role: &str) -> &'static str {
+    if role == MEMBER_ROLE {
+        "world-scoped member session handle allocated"
+    } else {
+        "shell-owned orchestrator session handle allocated"
+    }
+}
+
+fn runtime_task_start_message(role: &str) -> &'static str {
+    if role == MEMBER_ROLE {
+        "starting long-lived world-scoped member control turn"
+    } else {
+        "starting long-lived shell-owned orchestrator control turn"
+    }
+}
+
+fn runtime_bootstrap_prompt(role: &str) -> &'static str {
+    if role == MEMBER_ROLE {
+        "Enter persistent Substrate world-scoped member mode. Keep this control session attached for the lifetime of the parent REPL session and do not exit until the client cancels the run."
+    } else {
+        "Enter persistent Substrate host orchestrator mode. Keep this control session attached for the lifetime of the host REPL and do not exit until the client cancels the run."
+    }
+}
+
+fn runtime_ready_message(role: &str) -> &'static str {
+    if role == MEMBER_ROLE {
+        "world-scoped member session is ready via retained attached control ownership"
+    } else {
+        "shell-owned orchestrator session is ready via retained attached control ownership"
+    }
+}
+
+fn runtime_stopping_message(role: &str, uaa_session_handle_id: &str) -> String {
+    if role == MEMBER_ROLE {
+        format!(
+            "world-scoped member session stopping (uaa_session_handle_id={uaa_session_handle_id})"
+        )
+    } else {
+        format!("shell-owned orchestrator session stopping (uaa_session_handle_id={uaa_session_handle_id})")
+    }
+}
+
+fn runtime_stopped_message(role: &str) -> &'static str {
+    if role == MEMBER_ROLE {
+        "world-scoped member session stopped"
+    } else {
+        "shell-owned orchestrator session stopped"
+    }
+}
+
+fn runtime_stream_closed_alert_code(role: &str) -> &'static str {
+    if role == MEMBER_ROLE {
+        "member_runtime_stream_closed"
+    } else {
+        "orchestrator_runtime_stream_closed"
+    }
+}
+
+fn runtime_invalidated_alert_code(role: &str) -> &'static str {
+    if role == MEMBER_ROLE {
+        "member_runtime_invalidated"
+    } else {
+        "orchestrator_runtime_invalidated"
+    }
 }
 
 fn build_repl_shell_event_emission_context(
@@ -1525,7 +1688,7 @@ async fn start_host_orchestrator_runtime(
 
 fn prepare_host_orchestrator_runtime_startup(
     config: &Arc<ShellConfig>,
-) -> std::result::Result<Option<PreparedHostOrchestratorRuntime>, RuntimeBootstrapFailure> {
+) -> std::result::Result<Option<PreparedAgentRuntime>, RuntimeBootstrapFailure> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let effective_config = crate::execution::config_model::resolve_effective_config(
         &cwd,
@@ -1625,13 +1788,16 @@ fn prepare_host_orchestrator_runtime_startup(
             message: format!("failed to persist orchestration session record: {err:#}"),
         })?;
 
-    Ok(Some(PreparedHostOrchestratorRuntime {
+    Ok(Some(PreparedAgentRuntime {
         descriptor,
         gateway,
         agent_kind,
         startup_context: RuntimeOrchestrationContext {
             store: state_store,
             orchestration_session,
+            effective_config,
+            base_policy,
+            inventory,
         },
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
@@ -1639,7 +1805,7 @@ fn prepare_host_orchestrator_runtime_startup(
 }
 
 async fn start_host_orchestrator_runtime_with_prepared(
-    prepared: Option<PreparedHostOrchestratorRuntime>,
+    prepared: Option<PreparedAgentRuntime>,
     initial_world_binding: Option<&PersistedWorldBinding>,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
@@ -1647,7 +1813,7 @@ async fn start_host_orchestrator_runtime_with_prepared(
     let Some(prepared) = prepared else {
         return Ok(None);
     };
-    let PreparedHostOrchestratorRuntime {
+    let PreparedAgentRuntime {
         descriptor: _descriptor,
         gateway,
         agent_kind,
@@ -1655,6 +1821,15 @@ async fn start_host_orchestrator_runtime_with_prepared(
         manifest,
         run_id,
     } = prepared;
+    let runtime_role = {
+        manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned")
+            .handle
+            .role
+            .clone()
+    };
+    let controls_parent_session = runtime_controls_parent_session(&runtime_role);
     if let Err(err) = persist_world_binding_authority(&startup_context, initial_world_binding) {
         mark_orchestration_session_failed(
             &startup_context.store,
@@ -1696,7 +1871,7 @@ async fn start_host_orchestrator_runtime_with_prepared(
             &orchestration_snapshot,
             run_id.clone(),
             MessageEventKind::Registered,
-            "shell-owned orchestrator session handle allocated",
+            runtime_registered_message(&runtime_role),
         ),
         telemetry,
         agent_printer,
@@ -1707,14 +1882,14 @@ async fn start_host_orchestrator_runtime_with_prepared(
             &orchestration_snapshot,
             run_id.clone(),
             MessageEventKind::TaskStart,
-            "starting long-lived shell-owned orchestrator control turn",
+            runtime_task_start_message(&runtime_role),
         ),
         telemetry,
         agent_printer,
     );
 
     let request = agent_api::AgentWrapperRunRequest {
-        prompt: "Enter persistent Substrate host orchestrator mode. Keep this control session attached for the lifetime of the host REPL and do not exit until the client cancels the run.".to_string(),
+        prompt: runtime_bootstrap_prompt(&runtime_role).to_string(),
         working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
         timeout: None,
         env: BTreeMap::new(),
@@ -1752,8 +1927,10 @@ async fn start_host_orchestrator_runtime_with_prepared(
     let event_manifest = Arc::clone(&manifest);
     let startup_signal_for_events = Arc::clone(&startup_signal);
     let shutdown_for_events = Arc::clone(&shutdown_requested);
+    let runtime_role_for_events = runtime_role.clone();
     let mut events = events;
     let event_task = tokio::spawn(async move {
+        let controls_parent_session = runtime_controls_parent_session(&runtime_role_for_events);
         while let Some(wrapper_event) = events.next().await {
             let mut startup_became_live = false;
             let (orchestration_snapshot, manifest_snapshot, event) = {
@@ -1772,10 +1949,14 @@ async fn start_host_orchestrator_runtime_with_prepared(
                     {
                         manifest_guard.transition_state(AgentRuntimeSessionState::Ready);
                         manifest_guard.touch_heartbeat();
-                        orchestration_guard.bind_active_session_handle(
-                            manifest_guard.handle.participant_id.clone(),
-                        );
-                        orchestration_guard.transition_state(OrchestrationSessionState::Active);
+                        if controls_parent_session {
+                            orchestration_guard.bind_active_session_handle(
+                                manifest_guard.handle.participant_id.clone(),
+                            );
+                            orchestration_guard.transition_state(OrchestrationSessionState::Active);
+                        } else if orchestration_guard.state == OrchestrationSessionState::Active {
+                            orchestration_guard.touch_active();
+                        }
                         startup_became_live = true;
                     }
                 } else if manifest_guard.handle.state == AgentRuntimeSessionState::Ready
@@ -1816,7 +1997,7 @@ async fn start_host_orchestrator_runtime_with_prepared(
                     &orchestration_snapshot,
                     run_id_for_tasks.clone(),
                     MessageEventKind::Status,
-                    "shell-owned orchestrator session is ready via retained attached control ownership",
+                    runtime_ready_message(&runtime_role_for_events),
                 ));
                 signal_runtime_startup(&startup_signal_for_events, RuntimeStartupSignal::Running);
             }
@@ -1842,24 +2023,35 @@ async fn start_host_orchestrator_runtime_with_prepared(
                 manifest_guard.mark_terminal_state(reason.clone());
                 manifest_guard.internal.last_error_bucket = Some("bootstrap_run".to_string());
                 manifest_guard.internal.last_error_message = Some(reason.clone());
-                orchestration_guard.transition_state(OrchestrationSessionState::Failed);
-                orchestration_guard.mark_terminal(reason.clone());
+                if controls_parent_session {
+                    orchestration_guard.transition_state(OrchestrationSessionState::Failed);
+                    orchestration_guard.mark_terminal(reason.clone());
+                } else {
+                    orchestration_guard.touch_active();
+                }
                 startup_failure = Some(reason);
             } else if !shutdown_for_events.load(Ordering::SeqCst) && was_live {
-                let reason =
+                let reason = if runtime_role_for_events == MEMBER_ROLE {
+                    "world-scoped member control stream ended before completion observation"
+                } else {
                     "shell-owned orchestrator control stream ended before completion observation"
-                        .to_string();
+                }
+                .to_string();
                 manifest_guard.transition_state(AgentRuntimeSessionState::Invalidated);
                 manifest_guard.mark_terminal_state(reason.clone());
                 manifest_guard.internal.last_error_bucket = Some("runtime_lifecycle".to_string());
                 manifest_guard.internal.last_error_message = Some(reason.clone());
-                orchestration_guard.transition_state(OrchestrationSessionState::Invalidated);
-                orchestration_guard.mark_terminal(reason.clone());
+                if controls_parent_session {
+                    orchestration_guard.transition_state(OrchestrationSessionState::Invalidated);
+                    orchestration_guard.mark_terminal(reason.clone());
+                } else {
+                    orchestration_guard.touch_active();
+                }
                 let mut event = AgentEvent::alert(
                     manifest_guard.handle.agent_id.clone(),
                     manifest_guard.handle.orchestration_session_id.clone(),
                     run_id_for_tasks.clone(),
-                    "orchestrator_runtime_stream_closed",
+                    runtime_stream_closed_alert_code(&runtime_role_for_events),
                     reason,
                 );
                 apply_runtime_participant_lineage(&mut event, &manifest_guard);
@@ -1886,7 +2078,9 @@ async fn start_host_orchestrator_runtime_with_prepared(
     let startup_signal_for_completion = Arc::clone(&startup_signal);
     let shutdown_for_completion = Arc::clone(&shutdown_requested);
     let run_id_for_completion = run_id.clone();
+    let runtime_role_for_completion = runtime_role.clone();
     let completion_task = tokio::spawn(async move {
+        let controls_parent_session = runtime_controls_parent_session(&runtime_role_for_completion);
         let completion = completion.await;
         let shutdown_requested = shutdown_for_completion.load(Ordering::SeqCst);
         let mut startup_failure: Option<String> = None;
@@ -1925,8 +2119,12 @@ async fn start_host_orchestrator_runtime_with_prepared(
                         manifest_guard.internal.last_error_bucket =
                             Some("bootstrap_run".to_string());
                         manifest_guard.internal.last_error_message = Some(reason.clone());
-                        orchestration_guard.transition_state(OrchestrationSessionState::Failed);
-                        orchestration_guard.mark_terminal(reason.clone());
+                        if controls_parent_session {
+                            orchestration_guard.transition_state(OrchestrationSessionState::Failed);
+                            orchestration_guard.mark_terminal(reason.clone());
+                        } else {
+                            orchestration_guard.touch_active();
+                        }
                         startup_failure = Some(reason);
                     } else if shutdown_requested
                         && manifest_guard.handle.state == AgentRuntimeSessionState::Stopping
@@ -1934,8 +2132,13 @@ async fn start_host_orchestrator_runtime_with_prepared(
                         manifest_guard.transition_state(AgentRuntimeSessionState::Stopped);
                         manifest_guard.mark_terminal_state("stopped");
                         manifest_guard.touch_heartbeat();
-                        orchestration_guard.transition_state(OrchestrationSessionState::Stopped);
-                        orchestration_guard.mark_terminal("stopped");
+                        if controls_parent_session {
+                            orchestration_guard
+                                .transition_state(OrchestrationSessionState::Stopped);
+                            orchestration_guard.mark_terminal("stopped");
+                        } else {
+                            orchestration_guard.touch_active();
+                        }
                     } else if shutdown_requested
                         && manifest_guard.handle.state == AgentRuntimeSessionState::Failed
                     {
@@ -1949,8 +2152,13 @@ async fn start_host_orchestrator_runtime_with_prepared(
                         manifest_guard.transition_state(AgentRuntimeSessionState::Stopped);
                         manifest_guard.mark_terminal_state("stopped");
                         manifest_guard.touch_heartbeat();
-                        orchestration_guard.transition_state(OrchestrationSessionState::Stopped);
-                        orchestration_guard.mark_terminal("stopped");
+                        if controls_parent_session {
+                            orchestration_guard
+                                .transition_state(OrchestrationSessionState::Stopped);
+                            orchestration_guard.mark_terminal("stopped");
+                        } else {
+                            orchestration_guard.touch_active();
+                        }
                     } else {
                         let reason = format!(
                             "attached control turn exited with status {}",
@@ -1961,14 +2169,18 @@ async fn start_host_orchestrator_runtime_with_prepared(
                         manifest_guard.internal.last_error_bucket =
                             Some("runtime_lifecycle".to_string());
                         manifest_guard.internal.last_error_message = Some(reason.clone());
-                        orchestration_guard
-                            .transition_state(OrchestrationSessionState::Invalidated);
-                        orchestration_guard.mark_terminal(reason.clone());
+                        if controls_parent_session {
+                            orchestration_guard
+                                .transition_state(OrchestrationSessionState::Invalidated);
+                            orchestration_guard.mark_terminal(reason.clone());
+                        } else {
+                            orchestration_guard.touch_active();
+                        }
                         let mut event = AgentEvent::alert(
                             manifest_guard.handle.agent_id.clone(),
                             manifest_guard.handle.orchestration_session_id.clone(),
                             run_id_for_completion.clone(),
-                            "orchestrator_runtime_invalidated",
+                            runtime_invalidated_alert_code(&runtime_role_for_completion),
                             reason,
                         );
                         apply_runtime_participant_lineage(&mut event, &manifest_guard);
@@ -1988,8 +2200,12 @@ async fn start_host_orchestrator_runtime_with_prepared(
                         manifest_guard.internal.last_error_bucket =
                             Some("bootstrap_run".to_string());
                         manifest_guard.internal.last_error_message = Some(reason.clone());
-                        orchestration_guard.transition_state(OrchestrationSessionState::Failed);
-                        orchestration_guard.mark_terminal(reason.clone());
+                        if controls_parent_session {
+                            orchestration_guard.transition_state(OrchestrationSessionState::Failed);
+                            orchestration_guard.mark_terminal(reason.clone());
+                        } else {
+                            orchestration_guard.touch_active();
+                        }
                         startup_failure = Some(reason);
                     } else if shutdown_requested
                         && manifest_guard.handle.state == AgentRuntimeSessionState::Stopping
@@ -1998,8 +2214,13 @@ async fn start_host_orchestrator_runtime_with_prepared(
                         manifest_guard.transition_state(AgentRuntimeSessionState::Stopped);
                         manifest_guard.mark_terminal_state("stopped");
                         manifest_guard.touch_heartbeat();
-                        orchestration_guard.transition_state(OrchestrationSessionState::Stopped);
-                        orchestration_guard.mark_terminal("stopped");
+                        if controls_parent_session {
+                            orchestration_guard
+                                .transition_state(OrchestrationSessionState::Stopped);
+                            orchestration_guard.mark_terminal("stopped");
+                        } else {
+                            orchestration_guard.touch_active();
+                        }
                     } else if shutdown_requested
                         && manifest_guard.handle.state == AgentRuntimeSessionState::Failed
                     {
@@ -2016,8 +2237,12 @@ async fn start_host_orchestrator_runtime_with_prepared(
                         manifest_guard.internal.last_error_bucket =
                             Some("runtime_shutdown".to_string());
                         manifest_guard.internal.last_error_message = Some(reason.clone());
-                        orchestration_guard.transition_state(OrchestrationSessionState::Failed);
-                        orchestration_guard.mark_terminal(reason);
+                        if controls_parent_session {
+                            orchestration_guard.transition_state(OrchestrationSessionState::Failed);
+                            orchestration_guard.mark_terminal(reason);
+                        } else {
+                            orchestration_guard.touch_active();
+                        }
                     } else {
                         let reason = format!("attached control turn ended unexpectedly: {reason}");
                         manifest_guard.transition_state(AgentRuntimeSessionState::Invalidated);
@@ -2025,14 +2250,18 @@ async fn start_host_orchestrator_runtime_with_prepared(
                         manifest_guard.internal.last_error_bucket =
                             Some("runtime_lifecycle".to_string());
                         manifest_guard.internal.last_error_message = Some(reason.clone());
-                        orchestration_guard
-                            .transition_state(OrchestrationSessionState::Invalidated);
-                        orchestration_guard.mark_terminal(reason.clone());
+                        if controls_parent_session {
+                            orchestration_guard
+                                .transition_state(OrchestrationSessionState::Invalidated);
+                            orchestration_guard.mark_terminal(reason.clone());
+                        } else {
+                            orchestration_guard.touch_active();
+                        }
                         let mut event = AgentEvent::alert(
                             manifest_guard.handle.agent_id.clone(),
                             manifest_guard.handle.orchestration_session_id.clone(),
                             run_id_for_completion.clone(),
-                            "orchestrator_runtime_invalidated",
+                            runtime_invalidated_alert_code(&runtime_role_for_completion),
                             reason,
                         );
                         apply_runtime_participant_lineage(&mut event, &manifest_guard);
@@ -2107,7 +2336,10 @@ async fn start_host_orchestrator_runtime_with_prepared(
             .expect("orchestration session mutex poisoned");
         let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
         manifest_guard.mark_runtime_ownership_retained();
-        orchestration_guard.touch_active();
+        if orchestration_guard.state == OrchestrationSessionState::Active || controls_parent_session
+        {
+            orchestration_guard.touch_active();
+        }
         (orchestration_guard.clone(), manifest_guard.clone())
     };
     persist_runtime_snapshots(
@@ -2170,7 +2402,12 @@ async fn start_host_orchestrator_runtime_with_prepared(
             )
             .await;
             let message = format!(
-                "timed out waiting for shell-owned orchestrator control ownership: {agent_id}"
+                "timed out waiting for {} control ownership: {agent_id}",
+                if runtime_role == MEMBER_ROLE {
+                    "world-scoped member"
+                } else {
+                    "shell-owned orchestrator"
+                }
             );
             mark_runtime_startup_failed(
                 &startup_context.store,
@@ -2229,12 +2466,365 @@ async fn start_host_orchestrator_runtime_with_prepared(
     }))
 }
 
+fn current_world_binding(world_session: &WorldSession) -> PersistedWorldBinding {
+    PersistedWorldBinding {
+        world_id: world_session.world_id.clone(),
+        world_generation: world_session.world_generation,
+    }
+}
+
+fn runtime_manifest_snapshot(runtime: &AsyncReplAgentRuntime) -> AgentRuntimeParticipantRecord {
+    runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .clone()
+}
+
+fn select_member_runtime_descriptor(
+    startup_context: &RuntimeOrchestrationContext,
+) -> std::result::Result<Option<RuntimeSelectionDescriptor>, RuntimeBootstrapFailure> {
+    validate_member_selection(
+        &startup_context.effective_config,
+        &startup_context.inventory,
+    )
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: member_selection_error_exit_code(&err),
+        message: err.reason,
+    })
+}
+
+fn ensure_member_backend_allowed(
+    startup_context: &RuntimeOrchestrationContext,
+    descriptor: &RuntimeSelectionDescriptor,
+) -> std::result::Result<(), RuntimeBootstrapFailure> {
+    if backend_allowed(&startup_context.base_policy, &descriptor.backend_id) {
+        Ok(())
+    } else {
+        Err(RuntimeBootstrapFailure {
+            exit_code: 5,
+            message: format!(
+                "required world-scoped member backend '{}' is not allowlisted by effective policy agents.allowed_backends",
+                descriptor.backend_id
+            ),
+        })
+    }
+}
+
+fn resolve_live_member_parent(
+    startup_context: &RuntimeOrchestrationContext,
+) -> std::result::Result<AgentRuntimeParticipantRecord, RuntimeBootstrapFailure> {
+    let orchestration_snapshot = startup_context.snapshot();
+    let (parent_session, parent_participant) = startup_context
+        .store
+        .resolve_live_orchestrator_participant(&orchestration_snapshot.orchestrator_agent_id)
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!(
+                "failed to resolve the live orchestrator parent required for member launch: {err:#}"
+            ),
+        })?
+        .ok_or_else(|| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message:
+                "member launch requires exactly one live orchestrator parent, but none is active"
+                    .to_string(),
+        })?;
+    if parent_session.orchestration_session_id != orchestration_snapshot.orchestration_session_id {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!(
+                "member launch resolved a live orchestrator parent from a different orchestration session (expected {}, got {})",
+                orchestration_snapshot.orchestration_session_id,
+                parent_session.orchestration_session_id
+            ),
+        });
+    }
+    Ok(parent_participant)
+}
+
+fn authoritative_member_world_binding(
+    startup_context: &RuntimeOrchestrationContext,
+    world_binding: &PersistedWorldBinding,
+) -> std::result::Result<AgentRuntimeParticipantWorldBinding, RuntimeBootstrapFailure> {
+    let orchestration_snapshot = startup_context.snapshot();
+    let Some(authoritative_world_id) = orchestration_snapshot.world_id.clone() else {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message:
+                "member launch requires an authoritative world binding, but world_id is missing"
+                    .to_string(),
+        });
+    };
+    let Some(authoritative_world_generation) = orchestration_snapshot.world_generation else {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message:
+                "member launch requires an authoritative world binding, but world_generation is missing"
+                    .to_string(),
+        });
+    };
+    if authoritative_world_id != world_binding.world_id
+        || authoritative_world_generation != world_binding.world_generation
+    {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!(
+                "member launch requires the authoritative parent world binding to match the active world session (authoritative={},{} active={},{} )",
+                authoritative_world_id,
+                authoritative_world_generation,
+                world_binding.world_id,
+                world_binding.world_generation,
+            ),
+        });
+    }
+    Ok(AgentRuntimeParticipantWorldBinding {
+        world_id: authoritative_world_id,
+        world_generation: authoritative_world_generation,
+    })
+}
+
+fn live_member_for_generation(
+    startup_context: &RuntimeOrchestrationContext,
+    descriptor: &RuntimeSelectionDescriptor,
+    world_generation: u64,
+) -> std::result::Result<Option<AgentRuntimeParticipantRecord>, RuntimeBootstrapFailure> {
+    let orchestration_session_id = startup_context.orchestration_session_id();
+    let mut live_members = startup_context
+        .store
+        .list_live_participants_for_session(&orchestration_session_id)
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!(
+                "failed to inspect live member participants for the current session: {err:#}"
+            ),
+        })?
+        .into_iter()
+        .filter(|participant| {
+            participant.handle.role == MEMBER_ROLE
+                && participant.handle.agent_id == descriptor.agent_id
+                && participant.handle.execution.scope
+                    == crate::execution::config_model::AgentExecutionScope::World
+                && participant.handle.world_generation == Some(world_generation)
+        })
+        .collect::<Vec<_>>();
+    match live_members.len() {
+        0 => Ok(None),
+        1 => Ok(live_members.pop()),
+        _ => Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!(
+                "member launch found multiple live '{}' participants for world generation {} in the current orchestration session",
+                descriptor.agent_id, world_generation
+            ),
+        }),
+    }
+}
+
+fn prepare_member_runtime_startup_for_descriptor(
+    startup_context: &RuntimeOrchestrationContext,
+    descriptor: RuntimeSelectionDescriptor,
+    world_binding: &PersistedWorldBinding,
+    resumed_from: Option<&AgentRuntimeParticipantRecord>,
+) -> std::result::Result<PreparedAgentRuntime, RuntimeBootstrapFailure> {
+    ensure_member_backend_allowed(startup_context, &descriptor)?;
+    let parent_participant = resolve_live_member_parent(startup_context)?;
+    let authoritative_world = authoritative_member_world_binding(startup_context, world_binding)?;
+
+    if live_member_for_generation(
+        startup_context,
+        &descriptor,
+        authoritative_world.world_generation,
+    )?
+    .is_some()
+    {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!(
+                "member launch found an existing authoritative-live '{}' participant for world generation {} without a retained runtime handle in the current REPL",
+                descriptor.agent_id, authoritative_world.world_generation
+            ),
+        });
+    }
+
+    let participant_id = format!("ash_{}", Uuid::now_v7());
+    let lease_token = Uuid::now_v7().to_string();
+    let run_id = Uuid::now_v7().to_string();
+    let manifest = if let Some(previous_participant) = resumed_from {
+        AgentRuntimeSessionManifest::new_replacement_participant(
+            &descriptor,
+            AgentRuntimeReplacementParticipantInit {
+                orchestration_session_id: startup_context.orchestration_session_id(),
+                participant_id,
+                role: MEMBER_ROLE.to_string(),
+                orchestrator_participant_id: Some(parent_participant.handle.participant_id.clone()),
+                parent_participant_id: None,
+                resumed_from_participant_id: previous_participant.handle.participant_id.clone(),
+                world: Some(authoritative_world),
+                lease_token,
+            },
+        )
+    } else {
+        AgentRuntimeSessionManifest::new_member_participant(
+            &descriptor,
+            startup_context.orchestration_session_id(),
+            participant_id,
+            parent_participant.handle.participant_id.clone(),
+            None,
+            Some(authoritative_world),
+            lease_token,
+        )
+    }
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!("failed to construct world-scoped member participant state: {err:#}"),
+    })?;
+    let mut manifest = manifest;
+    manifest.internal.latest_run_id = Some(run_id.clone());
+
+    let gateway =
+        build_gateway_for_descriptor(&descriptor).map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to build world-scoped member UAA runtime registry: {err:#}"),
+        })?;
+    let agent_kind = agent_api::AgentWrapperKind::new(descriptor.backend_kind.as_agent_kind_str())
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 2,
+            message: format!("failed to resolve member runtime backend kind: {err}"),
+        })?;
+
+    Ok(PreparedAgentRuntime {
+        descriptor,
+        gateway,
+        agent_kind,
+        startup_context: startup_context.clone(),
+        manifest: Arc::new(Mutex::new(manifest)),
+        run_id,
+    })
+}
+
+async fn start_member_runtime_with_prepared(
+    prepared: Option<PreparedAgentRuntime>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    start_host_orchestrator_runtime_with_prepared(prepared, None, agent_printer, telemetry).await
+}
+
+async fn reconcile_member_runtime_generation(
+    world_session: Option<&WorldSession>,
+    member_runtime: &mut Option<AsyncReplAgentRuntime>,
+    pending_member_replacement: &mut Option<AgentRuntimeParticipantRecord>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> Result<()> {
+    let Some(world_session) = world_session else {
+        return Ok(());
+    };
+    let Some(runtime) = member_runtime.as_ref() else {
+        return Ok(());
+    };
+    let manifest_snapshot = runtime_manifest_snapshot(runtime);
+    if manifest_snapshot.handle.role != MEMBER_ROLE
+        || manifest_snapshot.handle.world_generation == Some(world_session.world_generation)
+    {
+        return Ok(());
+    }
+
+    let Some(runtime) = member_runtime.take() else {
+        return Ok(());
+    };
+    let (orchestration_snapshot, invalidated_manifest) = {
+        let mut manifest_guard = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        if manifest_guard.handle.state != AgentRuntimeSessionState::Invalidated {
+            let _ = manifest_guard.invalidate_for_world_generation_rollover();
+        }
+        let orchestration_snapshot = runtime
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned")
+            .clone();
+        (orchestration_snapshot, manifest_guard.clone())
+    };
+    persist_runtime_snapshots(
+        &runtime.store,
+        &orchestration_snapshot,
+        &invalidated_manifest,
+    )
+    .context("persist invalidated stale member runtime state after world generation rollover")?;
+    *pending_member_replacement = Some(invalidated_manifest.clone());
+    shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
+    Ok(())
+}
+
+async fn ensure_member_runtime_ready(
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    world_session: Option<&WorldSession>,
+    member_runtime: &mut Option<AsyncReplAgentRuntime>,
+    pending_member_replacement: &mut Option<AgentRuntimeParticipantRecord>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> Result<()> {
+    let Some(startup_context) = startup_context else {
+        return Ok(());
+    };
+    let Some(world_session) = world_session else {
+        return Ok(());
+    };
+
+    let Some(descriptor) = select_member_runtime_descriptor(startup_context)
+        .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?
+    else {
+        return Ok(());
+    };
+    ensure_member_backend_allowed(startup_context, &descriptor)
+        .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
+
+    if let Some(runtime) = member_runtime.as_ref() {
+        let manifest_snapshot = runtime_manifest_snapshot(runtime);
+        if manifest_snapshot.handle.role == MEMBER_ROLE
+            && manifest_snapshot.handle.agent_id == descriptor.agent_id
+            && manifest_snapshot.handle.world_generation == Some(world_session.world_generation)
+            && manifest_snapshot.is_authoritative_live()
+        {
+            return Ok(());
+        }
+    }
+
+    if let Some(runtime) = member_runtime.take() {
+        shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
+    }
+
+    let resumed_from = pending_member_replacement
+        .as_ref()
+        .filter(|participant| participant.handle.agent_id == descriptor.agent_id);
+    let prepared = prepare_member_runtime_startup_for_descriptor(
+        startup_context,
+        descriptor,
+        &current_world_binding(world_session),
+        resumed_from,
+    )
+    .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
+
+    let runtime = start_member_runtime_with_prepared(Some(prepared), agent_printer, telemetry)
+        .await
+        .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
+    if runtime.is_some() {
+        pending_member_replacement.take();
+    }
+    *member_runtime = runtime;
+    Ok(())
+}
+
 async fn shutdown_host_orchestrator_runtime(
     mut runtime: AsyncReplAgentRuntime,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) {
-    let (run_id, should_attempt_stop) = {
+    let (run_id, should_attempt_stop, runtime_role) = {
         let guard = runtime
             .manifest
             .lock()
@@ -2246,8 +2836,10 @@ async fn shutdown_host_orchestrator_runtime(
                 .clone()
                 .unwrap_or_else(|| Uuid::now_v7().to_string()),
             guard.internal.control_owner_retained || guard.internal.completion_observer_retained,
+            guard.handle.role.clone(),
         )
     };
+    let controls_parent_session = runtime_controls_parent_session(&runtime_role);
     if should_attempt_stop {
         let (orchestration_session, manifest) = {
             let mut orchestration_guard = runtime
@@ -2262,7 +2854,9 @@ async fn shutdown_host_orchestrator_runtime(
                 manifest_guard.transition_state(AgentRuntimeSessionState::Stopping);
                 manifest_guard.touch_heartbeat();
             }
-            if orchestration_guard.state == OrchestrationSessionState::Active {
+            if controls_parent_session
+                && orchestration_guard.state == OrchestrationSessionState::Active
+            {
                 orchestration_guard.transition_state(OrchestrationSessionState::Stopping);
             }
             (orchestration_guard.clone(), manifest_guard.clone())
@@ -2274,10 +2868,7 @@ async fn shutdown_host_orchestrator_runtime(
                 &orchestration_session,
                 run_id.clone(),
                 MessageEventKind::Status,
-                format!(
-                    "shell-owned orchestrator session stopping (uaa_session_handle_id={})",
-                    runtime.uaa_session_handle_id
-                ),
+                runtime_stopping_message(&runtime_role, &runtime.uaa_session_handle_id),
             ),
             telemetry,
             agent_printer,
@@ -2321,8 +2912,12 @@ async fn shutdown_host_orchestrator_runtime(
             manifest_guard.mark_terminal_state(reason.clone());
             manifest_guard.internal.last_error_bucket = Some("runtime_shutdown".to_string());
             manifest_guard.internal.last_error_message = Some(reason.clone());
-            orchestration_guard.transition_state(OrchestrationSessionState::Failed);
-            orchestration_guard.mark_terminal(reason.clone());
+            if controls_parent_session {
+                orchestration_guard.transition_state(OrchestrationSessionState::Failed);
+                orchestration_guard.mark_terminal(reason.clone());
+            } else {
+                orchestration_guard.touch_active();
+            }
             (orchestration_guard.clone(), manifest_guard.clone())
         };
         let _ = persist_runtime_snapshots(&runtime.store, &orchestration_session, &manifest);
@@ -2330,7 +2925,7 @@ async fn shutdown_host_orchestrator_runtime(
             manifest.handle.agent_id.clone(),
             manifest.handle.orchestration_session_id.clone(),
             run_id,
-            "orchestrator_runtime_invalidated",
+            runtime_invalidated_alert_code(&runtime_role),
             reason,
         );
         apply_runtime_participant_lineage(&mut event, &manifest);
@@ -2355,7 +2950,7 @@ async fn shutdown_host_orchestrator_runtime(
                 &orchestration_session,
                 run_id,
                 MessageEventKind::Status,
-                "shell-owned orchestrator session stopped",
+                runtime_stopped_message(&runtime_role),
             ),
             telemetry,
             agent_printer,
@@ -2406,6 +3001,7 @@ fn mark_runtime_startup_failed(
 ) {
     let (orchestration_snapshot, manifest_snapshot) = {
         let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+        let controls_parent_session = runtime_controls_parent_session(&manifest_guard.handle.role);
         if manifest_guard.handle.state == AgentRuntimeSessionState::Allocating {
             manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
         }
@@ -2414,10 +3010,18 @@ fn mark_runtime_startup_failed(
         }
         manifest_guard.internal.last_error_bucket = Some("bootstrap_run".to_string());
         manifest_guard.internal.last_error_message = Some(message.to_string());
-        let orchestration_snapshot = orchestration_session
-            .lock()
-            .expect("orchestration session mutex poisoned")
-            .clone();
+        let orchestration_snapshot = {
+            let mut orchestration_guard = orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned");
+            if controls_parent_session {
+                orchestration_guard.transition_state(OrchestrationSessionState::Failed);
+                orchestration_guard.mark_terminal(message.to_string());
+            } else {
+                orchestration_guard.touch_active();
+            }
+            orchestration_guard.clone()
+        };
         (orchestration_snapshot, manifest_guard.clone())
     };
     let _ = persist_runtime_snapshots(store, &orchestration_snapshot, &manifest_snapshot);
@@ -4571,6 +5175,73 @@ mod tests {
     }
 
     #[cfg(unix)]
+    fn write_runtime_inventory_with_world_member(
+        substrate_home: &Path,
+        orchestrator_binary: &Path,
+        member_binary: &Path,
+    ) {
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: claude_code\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:claude_code\n    - cli:codex\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("claude_code.yaml"),
+            format!(
+                "version: 1\nid: claude_code\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+                orchestrator_binary.display()
+            ),
+        )
+        .expect("write claude_code agent file");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            format!(
+                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: world\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+                member_binary.display()
+            ),
+        )
+        .expect("write codex agent file");
+    }
+
+    #[cfg(unix)]
+    fn seed_live_orchestrator_parent(
+        startup_context: &RuntimeOrchestrationContext,
+        manifest: &Arc<Mutex<AgentRuntimeSessionManifest>>,
+        world_binding: &PersistedWorldBinding,
+    ) {
+        persist_world_binding_authority(startup_context, Some(world_binding))
+            .expect("persist parent world binding");
+        let (orchestration_snapshot, manifest_snapshot) = {
+            let mut orchestration_guard = startup_context
+                .orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned");
+            let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+            manifest_guard.set_uaa_session_id("thread-parent".to_string());
+            manifest_guard.mark_runtime_ownership_retained();
+            manifest_guard.transition_state(AgentRuntimeSessionState::Ready);
+            manifest_guard.touch_heartbeat();
+            orchestration_guard
+                .bind_active_session_handle(manifest_guard.handle.participant_id.clone());
+            orchestration_guard.transition_state(OrchestrationSessionState::Active);
+            (orchestration_guard.clone(), manifest_guard.clone())
+        };
+        persist_runtime_snapshots(
+            &startup_context.store,
+            &orchestration_snapshot,
+            &manifest_snapshot,
+        )
+        .expect("persist live orchestrator parent");
+    }
+
+    #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn start_host_orchestrator_runtime_persists_participant_snapshots_across_lifecycle_states() {
@@ -5030,6 +5701,221 @@ mod tests {
                 manifest.internal.termination_reason.as_deref(),
                 Some("stopped")
             );
+        });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn start_member_runtime_reuses_parent_session_and_persists_world_binding() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let prepared = prepare_host_orchestrator_runtime_startup(&config)
+                .expect("prepare host runtime should succeed")
+                .expect("host runtime should be configured");
+            let startup_context = prepared.startup_context.clone();
+            let host_manifest = prepared.manifest.clone();
+            let initial_world_binding = PersistedWorldBinding {
+                world_id: "wld_member_test".to_string(),
+                world_generation: 7,
+            };
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+            let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+                .expect("member selection should succeed")
+                .expect("one world-scoped member should be selected");
+            let member_prepared = prepare_member_runtime_startup_for_descriptor(
+                &startup_context,
+                selected_descriptor,
+                &initial_world_binding,
+                None,
+            )
+            .expect("member runtime prepare should succeed");
+            let member_runtime = start_member_runtime_with_prepared(
+                Some(member_prepared),
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("member runtime start should succeed")
+            .expect("member runtime");
+
+            let parent = startup_context.snapshot();
+            let live_members = startup_context
+                .store
+                .list_live_participants_for_session(&parent.orchestration_session_id)
+                .expect("list live participants")
+                .into_iter()
+                .filter(|participant| participant.handle.role == MEMBER_ROLE)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                live_members.len(),
+                1,
+                "expected exactly one live member runtime"
+            );
+            let member = &live_members[0];
+            assert_eq!(member.handle.agent_id, "codex");
+            assert_eq!(member.handle.world_id.as_deref(), Some("wld_member_test"));
+            assert_eq!(member.handle.world_generation, Some(7));
+            assert_eq!(
+                parent.active_session_handle_id.as_deref(),
+                Some(
+                    host_manifest
+                        .lock()
+                        .expect("host runtime manifest")
+                        .handle
+                        .participant_id
+                        .as_str()
+                ),
+                "member launch must not replace the authoritative orchestrator participant"
+            );
+
+            let member_snapshot = runtime_manifest_snapshot(&member_runtime);
+            assert_eq!(member_snapshot.handle.role, MEMBER_ROLE);
+            assert_eq!(member_snapshot.handle.world_generation, Some(7));
+            assert!(member_snapshot.is_authoritative_live());
+
+            shutdown_host_orchestrator_runtime(
+                member_runtime,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+        });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn prepare_member_replacement_runtime_preserves_resumed_from_lineage() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let prepared = prepare_host_orchestrator_runtime_startup(&config)
+                .expect("prepare host runtime should succeed")
+                .expect("host runtime should be configured");
+            let startup_context = prepared.startup_context.clone();
+            let host_manifest = prepared.manifest.clone();
+            let initial_world_binding = PersistedWorldBinding {
+                world_id: "wld_member_old".to_string(),
+                world_generation: 2,
+            };
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+            let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+                .expect("member selection should succeed")
+                .expect("one world-scoped member should be selected");
+            let member_prepared = prepare_member_runtime_startup_for_descriptor(
+                &startup_context,
+                selected_descriptor.clone(),
+                &initial_world_binding,
+                None,
+            )
+            .expect("member runtime prepare should succeed");
+            let member_runtime = start_member_runtime_with_prepared(
+                Some(member_prepared),
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("member runtime start should succeed")
+            .expect("member runtime");
+
+            let previous_member = runtime_manifest_snapshot(&member_runtime);
+            let replacement_binding = PersistedWorldBinding {
+                world_id: "wld_member_new".to_string(),
+                world_generation: 3,
+            };
+            persist_world_binding_authority(&startup_context, Some(&replacement_binding))
+                .expect("persist replacement binding");
+            startup_context
+                .store
+                .invalidate_stale_world_members_for_session(
+                    &startup_context.orchestration_session_id(),
+                    replacement_binding.world_generation,
+                )
+                .expect("invalidate stale world members");
+
+            let replacement_prepared = prepare_member_runtime_startup_for_descriptor(
+                &startup_context,
+                selected_descriptor,
+                &replacement_binding,
+                Some(&previous_member),
+            )
+            .expect("replacement prepare should succeed");
+            let replacement_manifest = replacement_prepared
+                .manifest
+                .lock()
+                .expect("replacement manifest")
+                .clone();
+            assert_eq!(replacement_manifest.handle.role, MEMBER_ROLE);
+            assert_eq!(
+                replacement_manifest
+                    .handle
+                    .resumed_from_participant_id
+                    .as_deref(),
+                Some(previous_member.handle.participant_id.as_str())
+            );
+            assert_ne!(
+                replacement_manifest.handle.participant_id,
+                previous_member.handle.participant_id
+            );
+            assert_eq!(
+                replacement_manifest.handle.world_generation,
+                Some(replacement_binding.world_generation)
+            );
+            assert_eq!(
+                replacement_manifest.handle.world_id.as_deref(),
+                Some(replacement_binding.world_id.as_str())
+            );
+
+            shutdown_host_orchestrator_runtime(
+                member_runtime,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
         });
         std::env::remove_var("SUBSTRATE_HOME");
     }

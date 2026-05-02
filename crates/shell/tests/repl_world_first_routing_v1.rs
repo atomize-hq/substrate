@@ -274,10 +274,113 @@ agents:
 }
 
 #[cfg(target_os = "linux")]
+fn write_orchestrator_and_world_member_runtime_world_config(
+    home_substrate: &Path,
+    fake_orchestrator: &Path,
+    fake_member: &Path,
+    on_drift: &str,
+) {
+    fs::create_dir_all(home_substrate.join("agents")).expect("create agents dir");
+    let config = format!(
+        r#"world:
+  enabled: true
+  anchor_mode: workspace
+  anchor_path: ''
+  caged: false
+  net:
+    filter: false
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
+agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+    world_restart:
+      on_drift: {on_drift}
+"#
+    );
+    fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
+    write_member_runtime_policy(home_substrate, true);
+    fs::write(
+        home_substrate.join("agents/claude_code.yaml"),
+        format!(
+            "version: 1\nid: claude_code\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            fake_orchestrator.display()
+        ),
+    )
+    .expect("write claude_code agent file");
+    fs::write(
+        home_substrate.join("agents/codex.yaml"),
+        format!(
+            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            fake_member.display()
+        ),
+    )
+    .expect("write codex agent file");
+}
+
+#[cfg(target_os = "linux")]
+fn write_member_runtime_policy(home_substrate: &Path, require_world: bool) {
+    fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
+    let require_world = if require_world { "true" } else { "false" };
+    let policy = format!(
+        r#"id: test-global-policy
+name: Test Global Policy
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: {require_world}
+  write:
+    enabled: true
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+metadata: {{}}
+agents:
+  allowed_backends:
+    - cli:claude_code
+    - cli:codex
+"#
+    );
+    fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
+}
+
+#[cfg(target_os = "linux")]
 fn write_fake_codex_script(temp: &Path) -> PathBuf {
     let path = temp.join("fake-codex.sh");
     let body = "#!/bin/sh\ntrap 'exit 0' INT TERM\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}\\r\\n'\nwhile :; do sleep 1; done\n";
     fs::write(&path, body).expect("write fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("fake codex metadata")
+        .permissions();
+    use std::os::unix::fs::PermissionsExt;
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake codex permissions");
+    path
+}
+
+#[cfg(target_os = "linux")]
+fn write_fake_codex_script_first_success_then_fail_without_session_handle(temp: &Path) -> PathBuf {
+    let path = temp.join("fake-codex-first-success-then-fail.sh");
+    let state_path = temp.join("fake-codex-first-success-then-fail.count");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nprintf 'bootstrap-without-session-handle\\n'\n",
+        state_path.display()
+    );
+    fs::write(&path, body).expect("write fake codex replacement failure script");
     let mut perms = fs::metadata(&path)
         .expect("fake codex metadata")
         .permissions();
@@ -614,6 +717,85 @@ fn live_world_member_generations_for_session(
         .collect::<Vec<_>>();
     live.sort();
     live
+}
+
+#[cfg(target_os = "linux")]
+fn world_member_manifests_for_session(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> Vec<Value> {
+    let mut manifests = session_participant_manifests(substrate_home, orchestration_session_id)
+        .into_iter()
+        .filter(|manifest| manifest.get("role").and_then(Value::as_str) == Some("member"))
+        .filter(|manifest| {
+            manifest.pointer("/execution/scope").and_then(Value::as_str) == Some("world")
+        })
+        .collect::<Vec<_>>();
+    manifests.sort_by(|left, right| {
+        left.get("participant_id")
+            .and_then(Value::as_str)
+            .cmp(&right.get("participant_id").and_then(Value::as_str))
+    });
+    manifests
+}
+
+#[cfg(target_os = "linux")]
+fn authoritative_live_world_member_manifests_for_session(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> Vec<Value> {
+    world_member_manifests_for_session(substrate_home, orchestration_session_id)
+        .into_iter()
+        .filter(participant_is_authoritative_live)
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn assert_world_member_absent_for_interval(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    interval: Duration,
+) {
+    let deadline = Instant::now() + interval;
+    while Instant::now() < deadline {
+        let members = authoritative_live_world_member_manifests_for_session(
+            substrate_home,
+            orchestration_session_id,
+        );
+        assert!(
+            members.is_empty(),
+            "world member must remain absent before the first world-backed command: {members:?}"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_live_world_member_count(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    expected_count: usize,
+    timeout: Duration,
+) -> Vec<Value> {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let members = authoritative_live_world_member_manifests_for_session(
+            substrate_home,
+            orchestration_session_id,
+        );
+        if members.len() == expected_count {
+            return members;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    panic!(
+        "timed out waiting for authoritative live world member count == {expected_count}; got {:?}",
+        authoritative_live_world_member_manifests_for_session(
+            substrate_home,
+            orchestration_session_id
+        ),
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -1374,6 +1556,185 @@ fn c3_first_start_shared_world_attach_create_is_owner_bound() {
 #[cfg(target_os = "linux")]
 #[test]
 #[serial]
+fn c3_first_world_backed_command_lazily_launches_member_runtime() {
+    let temp = temp_dir("substrate-c3-first-world-command-lazy-member-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_codex_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-lazy-member-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let initial_session = read_orchestration_session(&orchestration_session_path(
+        &substrate_home,
+        &orchestration_session_id,
+    ));
+    assert_world_member_absent_for_interval(
+        &substrate_home,
+        &orchestration_session_id,
+        Duration::from_millis(250),
+    );
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    assert_eq!(
+        member.get("agent_id").and_then(Value::as_str),
+        Some("codex")
+    );
+    assert_eq!(member.get("state").and_then(Value::as_str), Some("ready"));
+    assert_eq!(
+        member.get("world_generation").and_then(Value::as_u64),
+        Some(0)
+    );
+    assert_eq!(
+        member.get("world_id").and_then(Value::as_str),
+        initial_session.get("world_id").and_then(Value::as_str),
+        "lazy member launch must bind to the current authoritative world"
+    );
+    assert_eq!(
+        member
+            .get("orchestrator_participant_id")
+            .and_then(Value::as_str),
+        initial_session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str),
+        "lazy member launch must retain the live orchestrator seam"
+    );
+    assert!(
+        member
+            .get("resumed_from_participant_id")
+            .is_none_or(Value::is_null),
+        "first member launch must not claim replacement lineage: {member:?}"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_same_generation_world_command_reuses_live_member_runtime() {
+    let temp = temp_dir("substrate-c3-same-generation-member-reuse-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_codex_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-member-reuse-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+    let first_live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let first_member_id = first_live_members[0]
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("first member participant_id")
+        .to_string();
+
+    repl.send_line("echo second");
+    wait_for_min_records(&records, 2, 1, Duration::from_secs(3));
+    repl.wait_for_output("second", Duration::from_secs(3))
+        .expect("second command output");
+    std::thread::sleep(Duration::from_millis(100));
+
+    let members = world_member_manifests_for_session(&substrate_home, &orchestration_session_id);
+    assert_eq!(
+        members.len(),
+        1,
+        "same-generation second command must reuse the existing member instead of creating a sibling: {members:?}"
+    );
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(2),
+    );
+    let member = &live_members[0];
+    assert_eq!(
+        member.get("participant_id").and_then(Value::as_str),
+        Some(first_member_id.as_str()),
+        "same-generation second command must reuse the live member"
+    );
+    assert_eq!(
+        member.get("world_generation").and_then(Value::as_u64),
+        Some(0)
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
 fn c3_startup_drift_before_first_command_retains_persisted_startup_context() {
     let temp = temp_dir("substrate-c3-startup-drift-context-");
     let home = temp.path().join("home");
@@ -1715,6 +2076,238 @@ fn c3_world_restart_invalidates_stale_member_generation_before_publish() {
             "stale member invalidation reason must explain generation rollover: {manifest:?}"
         );
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_world_restart_launches_live_member_replacement_on_new_generation() {
+    let temp = temp_dir("substrate-c3-world-restart-live-member-replacement-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_codex_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-live-member-replacement-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+    let first_live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let first_member = &first_live_members[0];
+    let first_member_id = first_member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("first member participant_id")
+        .to_string();
+    let orchestrator_participant_id = first_member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("member orchestrator_participant_id")
+        .to_string();
+
+    write_member_runtime_policy(&substrate_home, false);
+    std::thread::sleep(Duration::from_millis(25));
+
+    repl.send_line("echo second");
+    let alert = wait_for_world_restarted_alert_without_stale_liveness(
+        &trace_path,
+        &substrate_home,
+        &orchestration_session_id,
+        0,
+        Duration::from_secs(15),
+    );
+    wait_for_min_records(&records, 2, 1, Duration::from_secs(3));
+    repl.wait_for_output("second", Duration::from_secs(3))
+        .expect("second command output");
+
+    let replacement_live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let replacement = &replacement_live_members[0];
+    let replacement_id = replacement
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("replacement participant_id");
+    assert_ne!(
+        replacement_id, first_member_id,
+        "restart must create a distinct replacement member runtime"
+    );
+    assert_eq!(
+        replacement.get("world_generation").and_then(Value::as_u64),
+        Some(1),
+        "replacement member must bind to the new world generation"
+    );
+    assert_eq!(
+        replacement.get("world_id").and_then(Value::as_str),
+        alert.get("world_id").and_then(Value::as_str),
+        "replacement member must bind to the replacement world id"
+    );
+    assert_eq!(
+        replacement
+            .get("orchestrator_participant_id")
+            .and_then(Value::as_str),
+        Some(orchestrator_participant_id.as_str()),
+        "replacement member must preserve the retained-control seam"
+    );
+    assert_eq!(
+        replacement
+            .get("resumed_from_participant_id")
+            .and_then(Value::as_str),
+        Some(first_member_id.as_str()),
+        "replacement member must retain explicit lineage to the previous generation"
+    );
+
+    let stale = read_participant_manifest(&substrate_home, &first_member_id);
+    assert_eq!(
+        stale.get("state").and_then(Value::as_str),
+        Some("invalidated"),
+        "previous generation member must be invalidated after replacement launch: {stale:?}"
+    );
+
+    let persisted = read_orchestration_session(&session_path);
+    assert_session_world_binding(&persisted, Some("wld_stub_0002"), Some(1));
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
+    let temp = temp_dir("substrate-c3-world-restart-failed-member-replacement-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_codex_script(temp.path());
+    let fake_member =
+        write_fake_codex_script_first_success_then_fail_without_session_handle(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-failed-member-replacement-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+    let first_live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let first_member_id = first_live_members[0]
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("first member participant_id")
+        .to_string();
+
+    write_member_runtime_policy(&substrate_home, false);
+    std::thread::sleep(Duration::from_millis(25));
+
+    repl.send_line("echo second");
+    let _alert = wait_for_world_restarted_alert_without_stale_liveness(
+        &trace_path,
+        &substrate_home,
+        &orchestration_session_id,
+        0,
+        Duration::from_secs(15),
+    );
+    wait_for_min_records(&records, 2, 1, Duration::from_secs(3));
+    repl.wait_for_output("second", Duration::from_secs(3))
+        .expect("second command output");
+
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        0,
+        Duration::from_secs(5),
+    );
+    assert!(
+        live_members.is_empty(),
+        "replacement failure must leave no authoritative-live world member"
+    );
+    let stale = read_participant_manifest(&substrate_home, &first_member_id);
+    assert_eq!(
+        stale.get("state").and_then(Value::as_str),
+        Some("invalidated"),
+        "replacement failure must not resurrect the stale member: {stale:?}"
+    );
+    assert!(
+        world_member_manifests_for_session(&substrate_home, &orchestration_session_id)
+            .into_iter()
+            .all(|manifest| !participant_is_authoritative_live(&manifest)),
+        "replacement failure must leave honest absence rather than any authoritative-live member"
+    );
+    let persisted = read_orchestration_session(&session_path);
+    assert_session_world_binding(&persisted, Some("wld_stub_0002"), Some(1));
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 }
 
 #[cfg(target_os = "linux")]

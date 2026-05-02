@@ -859,6 +859,212 @@ fn flattened_agent_event_records_retain_participant_lineage_when_present() {
 }
 
 #[test]
+fn world_member_registered_status_and_terminal_trace_rows_preserve_top_level_world_identity() {
+    let mut registered = AgentEvent::message(
+        "runtime-agent",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f15",
+        MessageEventKind::Registered,
+        "world member registered",
+    );
+    registered.participant_id = Some("ash_member_live".to_string());
+    registered.parent_participant_id = Some("ash_orchestrator_live".to_string());
+    registered.role = Some("member".to_string());
+    registered.world_id = Some("wld_trace_member_0001".to_string());
+    registered.world_generation = Some(8);
+
+    let mut status = AgentEvent::message(
+        "runtime-agent",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f16",
+        MessageEventKind::Status,
+        "world member still live",
+    );
+    status.participant_id = Some("ash_member_live".to_string());
+    status.parent_participant_id = Some("ash_orchestrator_live".to_string());
+    status.role = Some("member".to_string());
+    status.world_id = Some("wld_trace_member_0001".to_string());
+    status.world_generation = Some(8);
+
+    let mut terminal = AgentEvent::message(
+        "runtime-agent",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f17",
+        MessageEventKind::TaskEnd,
+        "world member exited cleanly",
+    );
+    terminal.participant_id = Some("ash_member_live".to_string());
+    terminal.parent_participant_id = Some("ash_orchestrator_live".to_string());
+    terminal.role = Some("member".to_string());
+    terminal.world_id = Some("wld_trace_member_0001".to_string());
+    terminal.world_generation = Some(8);
+
+    for (event, expected_kind) in [
+        (registered, "registered"),
+        (status, "status"),
+        (terminal, "task_end"),
+    ] {
+        let mut record = event.to_trace_record().expect("flatten agent event");
+        let obj = record
+            .as_object_mut()
+            .expect("agent event trace record should be an object");
+        obj.insert(
+            "event_type".to_string(),
+            Value::String("agent_event".to_string()),
+        );
+        obj.insert(
+            "session_id".to_string(),
+            Value::String("ses_agent_hub".to_string()),
+        );
+        obj.insert(
+            "component".to_string(),
+            Value::String("agent-hub".to_string()),
+        );
+
+        assert_eq!(
+            record.get("kind").and_then(Value::as_str),
+            Some(expected_kind),
+            "member trace rows must preserve their event kind: {record:?}"
+        );
+        assert_eq!(
+            record.get("participant_id").and_then(Value::as_str),
+            Some("ash_member_live")
+        );
+        assert_eq!(
+            record.get("parent_participant_id").and_then(Value::as_str),
+            Some("ash_orchestrator_live")
+        );
+        assert_eq!(record.get("role").and_then(Value::as_str), Some("member"));
+        assert_eq!(
+            record.get("world_id").and_then(Value::as_str),
+            Some("wld_trace_member_0001"),
+            "world-scoped member trace rows must keep world_id at the top level: {record:?}"
+        );
+        assert_eq!(
+            record.get("world_generation").and_then(Value::as_u64),
+            Some(8),
+            "world-scoped member trace rows must keep world_generation at the top level: {record:?}"
+        );
+    }
+}
+
+#[test]
+fn replacement_member_trace_rows_preserve_lineage_while_terminal_predecessors_stay_auditable() {
+    let mut predecessor_terminal = AgentEvent::message(
+        "runtime-agent",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f18",
+        MessageEventKind::TaskEnd,
+        "old world member terminated before replacement",
+    );
+    predecessor_terminal.participant_id = Some("ash_member_old".to_string());
+    predecessor_terminal.parent_participant_id = Some("ash_orchestrator_live".to_string());
+    predecessor_terminal.role = Some("member".to_string());
+    predecessor_terminal.world_id = Some("wld_trace_member_old".to_string());
+    predecessor_terminal.world_generation = Some(7);
+
+    let mut replacement_registered = AgentEvent::message(
+        "runtime-agent",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6f12",
+        "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6f19",
+        MessageEventKind::Registered,
+        "replacement world member registered",
+    );
+    replacement_registered.participant_id = Some("ash_member_new".to_string());
+    replacement_registered.parent_participant_id = Some("ash_orchestrator_live".to_string());
+    replacement_registered.resumed_from_participant_id = Some("ash_member_old".to_string());
+    replacement_registered.role = Some("member".to_string());
+    replacement_registered.world_id = Some("wld_trace_member_new".to_string());
+    replacement_registered.world_generation = Some(8);
+
+    let mut terminal_record = predecessor_terminal
+        .to_trace_record()
+        .expect("flatten predecessor terminal event");
+    let terminal_obj = terminal_record
+        .as_object_mut()
+        .expect("terminal trace record should be an object");
+    terminal_obj.insert(
+        "event_type".to_string(),
+        Value::String("agent_event".to_string()),
+    );
+    terminal_obj.insert(
+        "session_id".to_string(),
+        Value::String("ses_agent_hub".to_string()),
+    );
+    terminal_obj.insert(
+        "component".to_string(),
+        Value::String("agent-hub".to_string()),
+    );
+
+    let mut replacement_record = replacement_registered
+        .to_trace_record()
+        .expect("flatten replacement registered event");
+    let replacement_obj = replacement_record
+        .as_object_mut()
+        .expect("replacement trace record should be an object");
+    replacement_obj.insert(
+        "event_type".to_string(),
+        Value::String("agent_event".to_string()),
+    );
+    replacement_obj.insert(
+        "session_id".to_string(),
+        Value::String("ses_agent_hub".to_string()),
+    );
+    replacement_obj.insert(
+        "component".to_string(),
+        Value::String("agent-hub".to_string()),
+    );
+
+    assert_eq!(
+        terminal_record.get("kind").and_then(Value::as_str),
+        Some("task_end"),
+        "stale terminal rows must remain auditable as terminal events: {terminal_record:?}"
+    );
+    assert_eq!(
+        terminal_record
+            .get("participant_id")
+            .and_then(Value::as_str),
+        Some("ash_member_old")
+    );
+    assert_eq!(
+        terminal_record.get("world_id").and_then(Value::as_str),
+        Some("wld_trace_member_old")
+    );
+    assert!(
+        terminal_record.get("resumed_from_participant_id").is_none(),
+        "terminal predecessor rows must not be rewritten with replacement lineage: {terminal_record:?}"
+    );
+
+    assert_eq!(
+        replacement_record.get("kind").and_then(Value::as_str),
+        Some("registered")
+    );
+    assert_eq!(
+        replacement_record
+            .get("participant_id")
+            .and_then(Value::as_str),
+        Some("ash_member_new")
+    );
+    assert_eq!(
+        replacement_record
+            .get("resumed_from_participant_id")
+            .and_then(Value::as_str),
+        Some("ash_member_old"),
+        "replacement trace rows must preserve resumed_from_participant_id lineage at the top level: {replacement_record:?}"
+    );
+    assert_eq!(
+        replacement_record.get("world_id").and_then(Value::as_str),
+        Some("wld_trace_member_new")
+    );
+    assert_eq!(
+        replacement_record
+            .get("world_generation")
+            .and_then(Value::as_u64),
+        Some(8)
+    );
+}
+
+#[test]
 fn world_alert_rows_omit_synthesized_participant_lineage_without_runtime_context() {
     let event = AgentEvent::alert(
         "shell",

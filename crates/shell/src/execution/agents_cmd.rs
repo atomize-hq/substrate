@@ -2,6 +2,9 @@ use crate::execution::agent_inventory::{
     discover_agent_files, load_effective_agent_inventory, validate_agent_file,
     AgentInventoryEntryV1,
 };
+use crate::execution::agent_runtime::validator::{
+    member_selection_error_exit_code, validate_member_selection,
+};
 use crate::execution::agent_runtime::{
     runtime_realizability_error_exit_code, validate_orchestrator_selection,
     validate_runtime_realizability, AgentRuntimeParticipantRecord, AgentRuntimeSessionRecord,
@@ -1378,16 +1381,6 @@ fn backend_allowed(policy: &Policy, backend_id: &str) -> bool {
         .any(|allowed| allowed == backend_id)
 }
 
-fn enabled_world_member_exists(
-    inventory: &BTreeMap<String, AgentInventoryEntryV1>,
-    effective_config: &SubstrateConfig,
-) -> bool {
-    inventory.values().any(|entry| {
-        entry.file.config.enabled
-            && entry.effective_scope(effective_config) == AgentExecutionScope::World
-    })
-}
-
 #[derive(Serialize)]
 struct DoctorOrchestratorJson<'a> {
     agent_id: String,
@@ -1413,6 +1406,8 @@ struct DoctorReportJson<'a> {
     world_boundary_exit_code: Option<i32>,
     #[serde(skip)]
     runtime_realizability_exit_code: Option<i32>,
+    #[serde(skip)]
+    member_selection_exit_code: Option<i32>,
 }
 
 enum RequiredWorldBoundaryState {
@@ -1499,6 +1494,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 checks,
                 world_boundary_exit_code: None,
                 runtime_realizability_exit_code: None,
+                member_selection_exit_code: None,
             });
         }
     };
@@ -1531,6 +1527,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 checks,
                 world_boundary_exit_code: None,
                 runtime_realizability_exit_code: Some(exit_code),
+                member_selection_exit_code: None,
             });
         }
     };
@@ -1557,11 +1554,53 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 checks,
                 world_boundary_exit_code: None,
                 runtime_realizability_exit_code: None,
+                member_selection_exit_code: None,
             });
         }
     }
 
-    if let Some(reason) = policy_allowlist_failure(&effective_config, &inventory, &base_policy) {
+    let selected_member = match validate_member_selection(&effective_config, &inventory) {
+        Ok(Some(descriptor)) => {
+            checks.push(DoctorCheckJson {
+                check: "member_selection".to_string(),
+                status: "pass".to_string(),
+                reason: None,
+            });
+            Some(descriptor)
+        }
+        Ok(None) => {
+            checks.push(DoctorCheckJson {
+                check: "member_selection".to_string(),
+                status: "not_applicable".to_string(),
+                reason: None,
+            });
+            None
+        }
+        Err(err) => {
+            let exit_code = member_selection_error_exit_code(&err);
+            checks.push(DoctorCheckJson {
+                check: "member_selection".to_string(),
+                status: "fail".to_string(),
+                reason: Some(err.reason),
+            });
+            return Ok(DoctorReportJson {
+                healthy: false,
+                fail_closed: true,
+                orchestrator: Some(orchestrator),
+                checks,
+                world_boundary_exit_code: None,
+                runtime_realizability_exit_code: None,
+                member_selection_exit_code: Some(exit_code),
+            });
+        }
+    };
+
+    if let Some(reason) = policy_allowlist_failure(
+        &effective_config,
+        &inventory,
+        &base_policy,
+        selected_member.as_ref(),
+    ) {
         checks.push(DoctorCheckJson {
             check: "policy_allowlist".to_string(),
             status: "fail".to_string(),
@@ -1574,6 +1613,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
             checks,
             world_boundary_exit_code: None,
             runtime_realizability_exit_code: None,
+            member_selection_exit_code: None,
         });
     }
     checks.push(DoctorCheckJson {
@@ -1582,7 +1622,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
         reason: None,
     });
 
-    if enabled_world_member_exists(&inventory, &effective_config) {
+    if selected_member.is_some() {
         if !effective_config.world.enabled {
             checks.push(DoctorCheckJson {
                 check: "world_boundary".to_string(),
@@ -1599,6 +1639,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 checks,
                 world_boundary_exit_code: Some(3),
                 runtime_realizability_exit_code: None,
+                member_selection_exit_code: None,
             });
         }
 
@@ -1623,6 +1664,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                     checks,
                     world_boundary_exit_code: Some(exit_code),
                     runtime_realizability_exit_code: None,
+                    member_selection_exit_code: None,
                 });
             }
         }
@@ -1641,6 +1683,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
         checks,
         world_boundary_exit_code: None,
         runtime_realizability_exit_code: None,
+        member_selection_exit_code: None,
     })
 }
 
@@ -1660,6 +1703,7 @@ fn failed_doctor_report(
         }],
         world_boundary_exit_code: None,
         runtime_realizability_exit_code: None,
+        member_selection_exit_code: None,
     }
 }
 
@@ -1798,6 +1842,9 @@ fn policy_allowlist_failure(
     effective_config: &SubstrateConfig,
     inventory: &BTreeMap<String, AgentInventoryEntryV1>,
     base_policy: &Policy,
+    selected_member: Option<
+        &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+    >,
 ) -> Option<String> {
     let orchestrator = validate_orchestrator_selection(effective_config, inventory).ok()?;
     let orchestrator_backend_id = orchestrator.derived_backend_id();
@@ -1808,17 +1855,11 @@ fn policy_allowlist_failure(
         ));
     }
 
-    for entry in inventory.values() {
-        if !entry.file.config.enabled
-            || entry.effective_scope(effective_config) != AgentExecutionScope::World
-        {
-            continue;
-        }
-        let backend_id = entry.derived_backend_id();
-        if !backend_allowed(base_policy, &backend_id) {
+    if let Some(selected_member) = selected_member {
+        if !backend_allowed(base_policy, &selected_member.backend_id) {
             return Some(format!(
                 "required world-scoped member backend '{}' is not allowlisted by effective policy agents.allowed_backends",
-                backend_id
+                selected_member.backend_id
             ));
         }
     }
@@ -1844,6 +1885,7 @@ fn doctor_exit_code(report: &DoctorReportJson<'_>) -> i32 {
         "policy_allowlist" => 5,
         "world_boundary" => report.world_boundary_exit_code.unwrap_or(3),
         "runtime_realizability" => report.runtime_realizability_exit_code.unwrap_or(2),
+        "member_selection" => report.member_selection_exit_code.unwrap_or(2),
         "inventory_scan" | "orchestrator_selection" | "participant_store" => 2,
         _ => 1,
     }

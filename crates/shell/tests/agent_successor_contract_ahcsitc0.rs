@@ -1876,6 +1876,106 @@ fn agent_toolbox_surfaces_fall_back_to_flat_participant_when_canonical_root_is_i
 }
 
 #[test]
+fn agent_toolbox_surfaces_stay_orchestrator_anchored_when_live_member_exists() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb7",
+        "ash_toolbox_parent_live",
+        "2026-04-06T00:00:02Z",
+    );
+    write_active_orchestration_session_with_world_binding(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb7",
+        Some("ash_toolbox_parent_live"),
+        "2026-04-06T00:00:02Z",
+        "wld_parent_binding_0007",
+        12,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_toolbox_member_live",
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb7",
+        RuntimeParticipantOptions::world_member(
+            "running",
+            true,
+            "2026-04-06T00:00:03Z",
+            "wld_member_runtime_9999",
+            2,
+            "ash_toolbox_parent_live",
+        ),
+    );
+
+    let status_output = fixture.run(&["agent", "toolbox", "status", "--json"]);
+    assert!(
+        status_output.status.success(),
+        "toolbox status must stay readable when a live world member exists beside the orchestrator: {status_output:?}"
+    );
+    let status_json = parse_json_output(&status_output);
+    assert_eq!(
+        status_json
+            .pointer("/active_orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb7")
+    );
+    assert_eq!(
+        status_json
+            .pointer("/orchestrator/agent_id")
+            .and_then(Value::as_str),
+        Some("claude_code"),
+        "toolbox status must stay anchored to the selected host orchestrator even when a member is live: {status_json}"
+    );
+    assert_eq!(
+        status_json
+            .pointer("/orchestrator/execution/scope")
+            .and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        status_json
+            .pointer("/active_world_binding/world_id")
+            .and_then(Value::as_str),
+        Some("wld_parent_binding_0007"),
+        "toolbox status must derive active world binding from the parent orchestration session, not the member runtime row: {status_json}"
+    );
+    assert_eq!(
+        status_json
+            .pointer("/active_world_binding/world_generation")
+            .and_then(Value::as_u64),
+        Some(12)
+    );
+
+    let env_output = fixture.run(&["agent", "toolbox", "env", "--json"]);
+    assert!(
+        env_output.status.success(),
+        "toolbox env must remain anchored to the orchestrator session when a live member exists: {env_output:?}"
+    );
+    let env_json = parse_json_output(&env_output);
+    let expected_endpoint = format!(
+        "unix://{}/run/agent-toolbox/0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb7.sock",
+        fixture.substrate_home.display()
+    );
+    assert_eq!(
+        env_json
+            .pointer("/SUBSTRATE_AGENT_TOOLBOX_ENDPOINT")
+            .and_then(Value::as_str),
+        Some(expected_endpoint.as_str()),
+        "toolbox env must keep using the orchestrator-scoped endpoint contract even when the member runtime is live: {env_json}"
+    );
+    let env_body = serde_json::to_string(&env_json).expect("serialize toolbox env json");
+    assert!(
+        !env_body.contains("ash_toolbox_member_live")
+            && !env_body.contains("wld_member_runtime_9999"),
+        "toolbox env must not pivot to member-scoped participant or world identity fields: {env_json}"
+    );
+}
+
+#[test]
 fn agent_status_selected_host_row_stays_unchanged_when_parent_session_has_world_binding() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
@@ -2556,6 +2656,186 @@ fn agent_status_persists_resumed_from_participant_id_for_replacement_members() {
 }
 
 #[test]
+fn agent_status_json_prefers_live_runtime_member_manifest_with_top_level_world_identity() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb6",
+        "ash_orchestrator_runtime_member",
+        "2026-04-05T00:00:01Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb6",
+        Some("ash_orchestrator_runtime_member"),
+        "2026-04-05T00:00:01Z",
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_codex_runtime_member",
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb6",
+        RuntimeParticipantOptions::world_member(
+            "running",
+            true,
+            "2026-04-05T00:00:02Z",
+            "wld_runtime_member_0004",
+            9,
+            "ash_orchestrator_runtime_member",
+        ),
+    );
+    fixture.write_trace_events(&[json!({
+        "ts": "2026-04-05T00:00:03Z",
+        "event_type": "agent_event",
+        "session_id": "ses_agent_hub",
+        "component": "agent-hub",
+        "kind": "status",
+        "agent_id": "codex",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb6",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fb7",
+        "participant_id": "ash_trace_member_should_lose",
+        "backend_id": "cli:codex",
+        "client": "codex",
+        "router": "agent_hub",
+        "protocol": "uaa.agent.session",
+        "role": "member",
+        "world_id": "wld_trace_member_should_lose",
+        "world_generation": 3,
+        "data": { "message": "trace fallback should not override the live runtime member manifest" }
+    })]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status --json should surface the live runtime member from authoritative state: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let member = find_session_by_agent(sessions, "codex");
+    assert_eq!(
+        member.pointer("/participant_id").and_then(Value::as_str),
+        Some("ash_codex_runtime_member"),
+        "the selected live member must come from runtime state rather than trace fallback: {json}"
+    );
+    assert_eq!(
+        member.pointer("/execution/scope").and_then(Value::as_str),
+        Some("world")
+    );
+    assert_eq!(
+        member.pointer("/world_id").and_then(Value::as_str),
+        Some("wld_runtime_member_0004"),
+        "runtime-owned world members must publish world_id at the top level on agent status --json: {json}"
+    );
+    assert_eq!(
+        member.pointer("/world_generation").and_then(Value::as_u64),
+        Some(9),
+        "runtime-owned world members must publish world_generation at the top level on agent status --json: {json}"
+    );
+}
+
+#[test]
+fn agent_status_keeps_stale_terminal_member_trace_rows_auditable_without_reviving_them() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb8",
+        "ash_orchestrator_terminal_audit",
+        "2026-04-05T00:00:01Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb8",
+        Some("ash_orchestrator_terminal_audit"),
+        "2026-04-05T00:00:01Z",
+    );
+    write_invalidated_world_member_manifest(
+        &fixture,
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb8",
+        "ash_codex_terminal_old",
+        "ash_orchestrator_terminal_audit",
+        "wld_terminal_old_0008",
+        5,
+        None,
+        "2026-04-05T00:00:02Z",
+    );
+    write_replacement_world_member_manifest(
+        &fixture,
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb8",
+        "ash_codex_terminal_new",
+        "ash_orchestrator_terminal_audit",
+        "wld_terminal_new_0008",
+        6,
+        "ash_codex_terminal_old",
+        "2026-04-05T00:00:03Z",
+    );
+    fixture.write_trace_events(&[json!({
+        "ts": "2026-04-05T00:00:04Z",
+        "event_type": "agent_event",
+        "session_id": "ses_agent_hub",
+        "component": "agent-hub",
+        "kind": "task_end",
+        "agent_id": "codex",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb8",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fb9",
+        "participant_id": "ash_codex_terminal_old",
+        "backend_id": "cli:codex",
+        "client": "codex",
+        "router": "agent_hub",
+        "protocol": "uaa.agent.session",
+        "role": "member",
+        "world_id": "wld_terminal_old_0008",
+        "world_generation": 5,
+        "data": { "message": "historical terminal row remains auditable but must not become live again" }
+    })]);
+
+    let output = fixture.run(&["agent", "status", "--scope", "world", "--json"]);
+    assert!(
+        output.status.success(),
+        "world status should suppress stale terminal trace rows once a replacement member is live: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        sessions.len(),
+        1,
+        "stale terminal trace rows must remain auditable without reviving an old live member: {json}"
+    );
+    let replacement = find_session_by_agent(sessions, "codex");
+    assert_eq!(
+        replacement
+            .pointer("/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_codex_terminal_new")
+    );
+    assert_eq!(
+        replacement.pointer("/world_id").and_then(Value::as_str),
+        Some("wld_terminal_new_0008")
+    );
+    assert_eq!(
+        replacement
+            .pointer("/world_generation")
+            .and_then(Value::as_u64),
+        Some(6)
+    );
+}
+
+#[test]
 fn agent_status_prefers_newest_pure_session_event_when_trace_lines_are_out_of_order() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
@@ -3074,6 +3354,7 @@ fn agent_doctor_json_locks_field_names_omissions_and_check_order() {
             "orchestrator_selection",
             "runtime_realizability",
             "participant_store",
+            "member_selection",
             "policy_allowlist",
             "world_boundary",
         ],
@@ -3091,7 +3372,15 @@ fn agent_doctor_json_locks_field_names_omissions_and_check_order() {
         .collect();
     assert_eq!(
         statuses,
-        vec!["pass", "pass", "pass", "pass", "pass", "not_applicable"],
+        vec![
+            "pass",
+            "pass",
+            "pass",
+            "pass",
+            "not_applicable",
+            "pass",
+            "not_applicable",
+        ],
         "host-only doctor fixture should report a not_applicable world boundary after the four required passes: {json}"
     );
 }
@@ -3324,7 +3613,7 @@ fn agent_doctor_fails_at_runtime_realizability_when_selected_cli_mode_is_per_req
     assert_eq!(
         checks[2].pointer("/reason").and_then(Value::as_str),
         Some(
-            "selected orchestrator 'claude_code' is not runtime-realizable because cli.mode=per_request is unsupported; only cli.mode=persistent is supported for the first caller path"
+            "selected runtime 'claude_code' is not runtime-realizable because cli.mode=per_request is unsupported; only cli.mode=persistent is supported for the first caller path"
         )
     );
 }
@@ -3605,16 +3894,192 @@ metadata: {}
             "orchestrator_selection",
             "runtime_realizability",
             "participant_store",
+            "member_selection",
             "policy_allowlist",
         ],
         "fail-closed routing must stop at the member backend allowlist before world_boundary: {json}"
     );
     assert_eq!(
-        checks[4].pointer("/reason").and_then(Value::as_str),
+        checks[5].pointer("/reason").and_then(Value::as_str),
         Some(
             "required world-scoped member backend 'cli:codex' is not allowlisted by effective policy agents.allowed_backends"
         ),
         "member dispatch must be gated by the derived backend_id before world boundary handling: {json}"
+    );
+}
+
+#[test]
+fn agent_doctor_host_only_inventory_keeps_zero_world_member_candidates_not_applicable() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_doctor_contract();
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert!(
+        output.status.success(),
+        "doctor should preserve host-only behavior when zero eligible world members exist: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let checks = json["checks"]
+        .as_array()
+        .expect("checks should be an array");
+    assert_eq!(
+        checks[4].pointer("/check").and_then(Value::as_str),
+        Some("member_selection")
+    );
+    assert_eq!(
+        checks[4].pointer("/status").and_then(Value::as_str),
+        Some("not_applicable"),
+        "zero eligible world members must preserve a not_applicable member-selection posture: {json}"
+    );
+    assert_eq!(
+        checks[6].pointer("/check").and_then(Value::as_str),
+        Some("world_boundary")
+    );
+    assert_eq!(
+        checks[6].pointer("/status").and_then(Value::as_str),
+        Some("not_applicable"),
+        "zero eligible world members must keep world-boundary checks dormant: {json}"
+    );
+}
+
+#[test]
+fn agent_doctor_exactly_one_world_member_candidate_continues_into_world_boundary_checks() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.write_global_config_patch(
+        r#"world:
+  enabled: false
+agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+"#,
+    );
+    fixture.write_global_policy_patch(
+        r#"id: "ahcsitc2-policy"
+name: "ahcsitc2-policy"
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: true
+  write:
+    enabled: true
+
+agents:
+  allowed_backends:
+    - "cli:claude_code"
+    - "cli:codex"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+"#,
+    );
+    fixture.write_agent_file(
+        "claude_code.yaml",
+        &cli_agent_file("claude_code", "host", true, true, true),
+    );
+    fixture.write_agent_file(
+        "codex.yaml",
+        &cli_agent_file("codex", "world", true, false, true),
+    );
+
+    let output = fixture.run(&["agent", "doctor", "--json"]);
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "exactly one eligible world member must continue through world-boundary validation: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let checks = json["checks"]
+        .as_array()
+        .expect("checks should be an array");
+    let observed: Vec<&str> = checks
+        .iter()
+        .map(|check| {
+            check
+                .pointer("/check")
+                .and_then(Value::as_str)
+                .expect("check id should be a string")
+        })
+        .collect();
+    assert_eq!(
+        observed,
+        vec![
+            "inventory_scan",
+            "orchestrator_selection",
+            "runtime_realizability",
+            "participant_store",
+            "member_selection",
+            "policy_allowlist",
+            "world_boundary",
+        ],
+        "a unique world member candidate must advance through member_selection and policy_allowlist before world_boundary: {json}"
+    );
+    assert_eq!(
+        checks[4].pointer("/status").and_then(Value::as_str),
+        Some("pass"),
+        "exactly one eligible world member must satisfy member_selection: {json}"
+    );
+    assert_eq!(
+        checks[5].pointer("/status").and_then(Value::as_str),
+        Some("pass"),
+        "the unique selected member must continue through policy_allowlist: {json}"
+    );
+    assert_eq!(
+        checks[6].pointer("/status").and_then(Value::as_str),
+        Some("fail")
+    );
+    assert_eq!(
+        checks[6].pointer("/reason").and_then(Value::as_str),
+        Some("world-scoped member posture requires world isolation but world is disabled"),
+        "world-boundary failure must be reported only after unique member selection succeeds: {json}"
+    );
+}
+
+#[test]
+fn doctor_member_selection_contract_source_locks_ambiguous_fail_closed_path() {
+    let validator = read_repo_file("crates/shell/src/execution/agent_runtime/validator.rs");
+    assert!(
+        validator.contains(
+            "ambiguous world member selection: multiple eligible world-scoped members found"
+        ),
+        "validator.rs must retain the shared ambiguous world-member fail-closed reason"
+    );
+
+    let agents_cmd = read_repo_file("crates/shell/src/execution/agents_cmd.rs");
+    let member_selection = agents_cmd
+        .find("check: \"member_selection\"")
+        .expect("agents_cmd.rs must report a doctor member_selection check");
+    let policy_allowlist = agents_cmd
+        .find("check: \"policy_allowlist\"")
+        .expect("agents_cmd.rs must report a doctor policy_allowlist check");
+    let world_boundary = agents_cmd
+        .find("check: \"world_boundary\"")
+        .expect("agents_cmd.rs must report a doctor world_boundary check");
+    assert!(
+        member_selection < policy_allowlist && policy_allowlist < world_boundary,
+        "doctor must keep member_selection ahead of policy_allowlist and world_boundary in source order"
+    );
+    assert!(
+        agents_cmd.contains("validate_member_selection(&effective_config, &inventory)"),
+        "doctor must reuse the shared runtime member-selection helper rather than drifting to a separate truth source"
     );
 }
 
