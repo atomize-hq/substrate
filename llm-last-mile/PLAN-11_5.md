@@ -1,47 +1,38 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-session-centric-state-store-autoplan-restore-20260502-155340.md -->
+# PLAN-11_5: Refreeze Member Dispatch Runtime Descriptor And Complete In-World Cutover
 
-# PLAN-11: Refreeze Member Dispatch Runtime Descriptor And Complete In-World Cutover
-
-Source file: [11-in-world-member-dispatch-over-existing-host-world-transport.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/11-in-world-member-dispatch-over-existing-host-world-transport.md)  
-Supersedes: the blocked earlier draft state of this file, as recorded in:
+Supersedes: the blocked remainder of [PLAN-11.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-11.md) only.  
+Depends on accepted carryover artifacts from the blocked `PLAN-11` run:
 - [.runs/plan-11/run-state.json](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-11/run-state.json)
 - [.runs/plan-11/blocked.json](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-11/blocked.json)
 - [.runs/plan-11/session.log](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-11/session.log)
 
 Branch: `feat/session-centric-state-store`  
-Plan type: Linux-first transport-backed placement cutover, no UI scope, strong runtime and DX scope  
-Review posture: `/autoplan`-style consolidation with `/plan-eng-review` rigor, rewritten as a single execution document  
-Status: execution-ready as one cohesive plan; outside voice remains unavailable on 2026-05-02 because `claude` CLI is installed but unauthenticated
+Plan type: continuation and unblock plan, Linux-first, no UI scope, strong runtime and DX scope  
+Review posture: `/autoplan`-style consolidation with `/plan-eng-review` rigor  
+Outside voice: unavailable on 2026-05-02 because `claude` CLI is installed but unauthenticated on this machine
 
 ## Objective
 
-This slice is not a second agent hub.
+`PLAN-11` found a real seam and stopped honestly.
 
-It is the honesty pass on member placement, now updated to incorporate what the blocked
-execution proved instead of pretending the earlier transport freeze was already sufficient.
-
-The accepted freeze work already proved three important things:
+The accepted freeze work already proved three things:
 
 1. the shell can serialize typed member dispatch over the existing `/v1/execute/stream` seam,
 2. the shell test harnesses can capture and script that traffic,
-3. the old freeze was still missing the one fact `world-agent` actually needs to start the
-   member with the same UAA retained-control path the shell uses today.
+3. the old freeze was still missing the one fact `world-agent` actually needs to start the member with the same UAA retained-control path the shell uses today.
 
-This consolidated `PLAN-11` does not restart from zero.
+`PLAN-11_5` does not start over.
 
-It carries forward the accepted transport and harness work, reopens the unshipped internal
-request contract exactly once, adds the resolved runtime descriptor that the blocked run proved
-is mandatory, fixes the missing builder export seam, then completes the original runtime cutover
-and regression wall.
+It resumes from the accepted Gate A and Gate B carryover, reopens the unshipped internal request contract once, adds the resolved runtime descriptor that the blocked run proved is mandatory, fixes the missing builder export seam, then completes the original runtime cutover and regression wall.
 
-The required user outcome is unchanged:
+The required user outcome remains unchanged:
 
 - when a world-scoped member says it is live on generation `N` of world `W`,
 - it is actually running inside `world-agent` on generation `N` of world `W`,
 - with real remote retained control, real remote cancel delivery, real replacement behavior,
 - and producer-backed `status` plus trace rows that do not lie about placement.
 
-## Why The Earlier Draft Blocked
+## Why PLAN-11 Blocked
 
 The blocker is not hypothetical. It is captured in the run artifacts above.
 
@@ -66,17 +57,11 @@ Those surfaces already prove:
 The blocked run exposed two real gaps:
 
 1. **Parent-fixable shell seam**
-   - [crates/shell/src/execution/routing/dispatch/prelude.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/prelude.rs)
-     does not re-export the frozen member-dispatch builder, so the shell lane could not consume
-     the already-frozen transport helper from
-     [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs).
+   - [crates/shell/src/execution/routing/dispatch/prelude.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/prelude.rs) does not re-export the frozen member-dispatch builder, so the shell lane could not consume the already-frozen transport helper from [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs).
 2. **Actual hard stop**
-   - the frozen `member_dispatch` payload carries lineage, backend identity, protocol, run id,
-     and world identity,
-   - but it does **not** carry the resolved runtime descriptor from
-     [RuntimeSelectionDescriptor](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs),
-   - and `world-agent` cannot honestly rebuild the same UAA startup path from `backend_id` plus
-     `protocol` alone without inventing a second resolver.
+   - the frozen `member_dispatch` payload carries lineage, backend identity, protocol, run id, and world identity,
+   - but it does **not** carry the resolved runtime descriptor from [RuntimeSelectionDescriptor](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs),
+   - and `world-agent` cannot honestly rebuild the same UAA startup path from `backend_id` plus `protocol` alone without inventing a second resolver.
 
 That second gap is the whole game.
 
@@ -102,15 +87,13 @@ The blocked run left two plausible unblock paths:
 | Carry the resolved runtime descriptor over `member_dispatch` and let `world-agent` consume it directly | **Accepted** | Smallest honest diff. It removes the second resolver and gives `world-agent` the exact launch facts the shell already resolved. |
 | Extract a new shared gateway/UAA startup crate first, then make both shell and `world-agent` consume it | **Rejected for this slice** | Overbuilt. It spends an innovation token, widens the blast radius, and still does not remove the need to carry the resolved launch facts over transport. |
 
-This is the key architecture decision in the consolidated `PLAN-11`.
+This is the key architecture decision in `PLAN-11_5`.
 
 ### 0C. Exact refreeze decision
 
 Keep the existing internal type name `MemberDispatchRequestV1`.
 
-Do **not** pay a fake `V2` tax for an unshipped internal seam. The earlier freeze was never
-released outside this branch. Rewriting the same internal `V1` before the runtime cutover is the
-minimal diff.
+Do **not** pay a fake `V2` tax for an unshipped internal seam. The previous freeze was never released outside this branch. Rewriting the same internal `V1` before the runtime cutover is the minimal diff.
 
 Refreeze `member_dispatch` by adding a required nested resolved-runtime payload:
 
@@ -139,15 +122,12 @@ Rules:
 1. `backend_kind` is explicit and boring. No backend-kind inference from `backend_id`.
 2. `binary_path` is the already-resolved absolute path from the shell selector.
 3. the top-level `agent_id` remains authoritative for traces, budgets, and diagnostics.
-4. `protocol` remains part of the transport identity contract even though `world-agent` uses
-   `resolved_runtime.backend_kind` for UAA backend construction.
-5. validation remains at the deserialize/parse boundary in
-   [crates/agent-api-types/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs).
+4. `protocol` remains part of the transport identity contract even though `world-agent` uses `resolved_runtime.backend_kind` for UAA backend construction.
+5. validation remains at the deserialize/parse boundary in [crates/agent-api-types/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs).
 
 ### 0D. Complexity check
 
-The plan still touches more than 8 files. That is acceptable and still the minimal complete
-version.
+The plan still touches more than 8 files. That is acceptable and still the minimal complete version.
 
 The tight production path is:
 
@@ -168,13 +148,11 @@ The shortcut path would be:
 
 - keep the old contract,
 - special-case local launch or backend-specific CLI startup in `world-agent`,
-- and try to infer readiness from something weaker than the existing session-handle event
-  contract.
+- and try to infer readiness from something weaker than the existing session-handle event contract.
 
 That shortcut is bad software.
 
-It would save almost nothing with CC+gstack and it would preserve the exact lie this slice exists
-to remove.
+It would save almost nothing with CC+gstack and it would preserve the exact lie this slice exists to remove.
 
 ### 0F. NOT in scope
 
@@ -191,43 +169,35 @@ to remove.
 
 ### Hard invariants
 
-1. The shell remains the only canonical writer of orchestration session state and participant
-   state.
-2. `world-agent` owns in-world member execution, remote cancel delivery, event streaming, and
-   completion observation only.
+1. The shell remains the only canonical writer of orchestration session state and participant state.
+2. `world-agent` owns in-world member execution, remote cancel delivery, event streaming, and completion observation only.
 3. World-scoped member launch fails closed. No host fallback.
 4. `/v1/execute/stream` and `/v1/execute/cancel` remain the only transport seam.
 5. `ExecuteStreamFrame::{Start,Event,Exit,Error}` remain the only stream families.
-6. Remote readiness still depends on the existing session-handle event contract unless the parent
-   explicitly refreezes it before worker lanes open.
+6. Remote readiness still depends on the existing session-handle event contract unless the parent explicitly refreezes it before worker lanes open.
 7. The shell must represent retained control explicitly as local vs remote.
 8. The shell must use an explicit remote-prepared launch shape for members.
 9. Linux-first remains explicit. Non-Linux member dispatch fails closed.
 
 ### New contract detail: resolved runtime descriptor
 
-`world-agent` must not perform runtime selection from agent inventory, effective config, or
-host-side shell-only helpers.
+`world-agent` must not perform runtime selection from agent inventory, effective config, or host-side shell-only helpers.
 
-The shell already did that work in
-[validate_runtime_realizability(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs).
+The shell already did that work in [validate_runtime_realizability(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs).
 
-This plan makes that result transport-visible instead of forcing `world-agent` to guess.
+`PLAN-11_5` makes that result transport-visible instead of forcing `world-agent` to guess.
 
 ### New dependency decision
 
-Add direct `unified-agent-api` dependency to
-[crates/world-agent/Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/Cargo.toml).
+Add direct `unified-agent-api` dependency to [crates/world-agent/Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/Cargo.toml).
 
 Do not extract a new shared crate in this slice.
 
 Rationale:
 
 1. `world-agent` must actually call the same UAA retained-control path the shell already trusts.
-2. the only new cross-crate drift risk that matters here is the launch descriptor, and the
-   transport contract now pins that explicitly.
-3. duplicating a tiny backend registration helper is acceptable in-slice; extracting a new crate
-   is deferred until a third backend or a second consumer makes the duplication real.
+2. the only new cross-crate drift risk that matters here is the launch descriptor, and the transport contract now pins that explicitly.
+3. duplicating a tiny backend registration helper is acceptable in-slice; extracting a new crate is deferred until a third backend or a second consumer makes the duplication real.
 
 ### Builder export decision
 
@@ -270,8 +240,7 @@ shell retained-control consumer
 
 ### Retained-control model
 
-The original `PLAN-11` was already right about the shell-side abstraction. This consolidated
-version keeps it.
+`PLAN-11` was already right about the shell-side abstraction. `PLAN-11_5` keeps it.
 
 ```text
 RetainedRuntimeControl
@@ -566,7 +535,7 @@ USER FLOW COVERAGE
     └── [GAP]         Old generation never regains liveness
 
 [+] Operator inspection
-    ├── [GAP]         `substrate agent status --json` reflects the real remote producer
+    ├── [GAP]         substrate agent status --json reflects the real remote producer
     └── [GAP]         trace rows remain participant-correct after cancel and replacement
 ```
 
@@ -589,9 +558,9 @@ USER FLOW COVERAGE
 
 ### Test artifact
 
-The eng-review QA artifact for this plan is:
+The eng-review QA artifact for this unblock plan is:
 
-- [spensermcconnell-feat-session-centric-state-store-eng-review-test-plan-20260502-154419.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/spensermcconnell-feat-session-centric-state-store-eng-review-test-plan-20260502-154419.md)
+- [/Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/spensermcconnell-feat-session-centric-state-store-eng-review-test-plan-20260502-154419.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/spensermcconnell-feat-session-centric-state-store-eng-review-test-plan-20260502-154419.md)
 
 ## Failure Modes Registry
 
@@ -608,8 +577,7 @@ The eng-review QA artifact for this plan is:
 
 Critical gap rule:
 
-If any path can still advertise a world member live without a real remote session handle, a real
-remote cancel path, and real remote completion observation, the slice is not done.
+If any path can still advertise a world member live without a real remote session handle, a real remote cancel path, and real remote completion observation, the slice is not done.
 
 ## Performance Review
 
@@ -633,11 +601,9 @@ This slice is for developers and operators, not end-users.
 
 Required DX posture:
 
-1. the resolved runtime descriptor must be inspectable in tests, not hidden behind opaque helper
-   state
+1. the resolved runtime descriptor must be inspectable in tests, not hidden behind opaque helper state
 2. failure messages must name the problem and the fix
-3. the plan must reduce "why did the first `PLAN-11` pass block?" from code archaeology to one
-   plan section and one blocked artifact link
+3. the unblock plan must reduce "why did PLAN-11 block?" from code archaeology to one plan section and one blocked artifact link
 4. proving real placement should remain under 10 minutes by reading plan plus tests
 
 ## Worktree Parallelization Strategy
@@ -667,37 +633,30 @@ Required DX posture:
 
 ### Conflict flags
 
-- B and C both depend on the refrozen request shape. If either lane requests another contract
-  change, stop and refreeze in the parent.
+- B and C both depend on the refrozen request shape. If either lane requests another contract change, stop and refreeze in the parent.
 - C and D both touch shell tests. D stays last.
-- The accepted ready-event contract remains shared risk. Do not let either worker rename it
-  independently.
+- The accepted ready-event contract remains shared risk. Do not let either worker rename it independently.
 
 ### Parallelization verdict
 
 Same worker cap as the blocked run: exactly `2`.
 
-That is still the honest cap. There are still only two real runtime seams after the parent-owned
-refreeze.
+That is still the honest cap. There are still only two real runtime seams after the parent-owned refreeze.
 
 ## Deferred Work
 
-1. Extract a shared gateway/UAA startup helper only if a third backend or a second consumer makes
-   the duplication real.
-2. Revisit explicit wire version bump only if the internal member-dispatch seam becomes externally
-   consumed.
-3. Revisit secret-safe auth-bundle transport only after this placement seam is boring in
-   production.
+1. Extract a shared gateway/UAA startup helper only if a third backend or a second consumer makes the duplication real.
+2. Revisit explicit wire version bump only if the internal member-dispatch seam becomes externally consumed.
+3. Revisit secret-safe auth-bundle transport only after this placement seam is boring in production.
 4. Add macOS and Windows parity later.
 
 ## Definition of Done
 
-This slice is done only when all of the following are true:
+This continuation slice is done only when all of the following are true:
 
 1. the member-dispatch request carries the resolved runtime descriptor
-2. `async_repl` consumes the exported builder, not a hand-rolled request
-3. `world-agent` starts the member with the real UAA retained-control path inside the world
-   boundary
+2. async_repl consumes the exported builder, not a hand-rolled request
+3. world-agent starts the member with the real UAA retained-control path inside the world boundary
 4. the shell uses explicit remote retained control for members
 5. cancel reaches live member spans through `/v1/execute/cancel`
 6. failure before readiness becomes `Failed`
@@ -742,8 +701,7 @@ cargo test -p shell --test repl_world_first_routing_v1 -- --no-run
 - Failure modes: 8 critical gaps called out for the implementation wall
 - Outside voice: unavailable because `claude` CLI auth is missing
 - Parallelization: 4 execution phases, 1 real parallel window, worker cap stays `2`
-- Lake Score: complete option chosen for the unblock instead of shortcut fallback or overbuilt
-  extraction
+- Lake Score: complete option chosen for the unblock instead of shortcut fallback or overbuilt extraction
 
 <!-- AUTONOMOUS DECISION LOG -->
 ## Decision Audit Trail
@@ -769,9 +727,6 @@ cargo test -p shell --test repl_world_first_routing_v1 -- --no-run
 | Eng Review | `/plan-eng-review` | Architecture and tests (required) | 5 | CLEAR | Locked the resolved-runtime refreeze, the builder export seam, the direct world-agent UAA startup path, and the full regression wall for cancel/replacement/status/trace truth |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | SKIPPED | No UI scope |
 
-**UNRESOLVED:** 0 plan-level decision points remain. The remaining work is implementation and
-verification only.
+**UNRESOLVED:** 0 plan-level decision points remain. The remaining work is implementation and verification only.
 
-**VERDICT:** CEO + ENG CLEARED. `PLAN-11` is now the single honest execution plan for the
-in-world member placement cutover, including the contract refreeze the blocked run proved was
-required.
+**VERDICT:** CEO + ENG CLEARED. `PLAN-11_5` is the honest continuation plan that picks up from the blocked `PLAN-11` state, fixes the missing contract facts, and finishes the original in-world placement cutover without widening scope.
