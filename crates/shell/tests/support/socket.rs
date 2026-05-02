@@ -1121,6 +1121,16 @@ struct ExecuteRequestStub {
     member_dispatch: Option<agent_api_types::MemberDispatchRequestV1>,
 }
 
+fn assert_member_dispatch_capture(
+    dispatch: &agent_api_types::MemberDispatchRequestV1,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        Path::new(&dispatch.resolved_runtime.binary_path).is_absolute(),
+        "captured member dispatch binary_path must remain absolute"
+    );
+    Ok(())
+}
+
 fn handle_host_execute(request: &HttpRequest, scopes: &[String]) -> anyhow::Result<String> {
     let parsed: ExecuteRequestStub = serde_json::from_slice(&request.body)?;
     let output = run_host_command(&parsed)?;
@@ -1158,7 +1168,8 @@ struct HostCommandOutput {
 fn run_host_command(request: &ExecuteRequestStub) -> anyhow::Result<HostCommandOutput> {
     use std::process::Command;
 
-    if request.member_dispatch.is_some() {
+    if let Some(dispatch) = request.member_dispatch.as_ref() {
+        assert_member_dispatch_capture(dispatch)?;
         return Ok(HostCommandOutput {
             exit: 0,
             stdout: Vec::new(),

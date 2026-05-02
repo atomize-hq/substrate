@@ -106,6 +106,13 @@ pub struct ReplWorldAgentStub {
     handle: Option<thread::JoinHandle<()>>,
 }
 
+fn assert_member_dispatch_capture(dispatch: &agent_api_types::MemberDispatchRequestV1) {
+    assert!(
+        Path::new(&dispatch.resolved_runtime.binary_path).is_absolute(),
+        "captured member dispatch binary_path must remain absolute"
+    );
+}
+
 impl ReplWorldAgentStub {
     pub fn start(path: &Path, behavior: StreamBehavior) -> Self {
         Self::start_with_overrides(path, behavior, None, None, Vec::new())
@@ -413,6 +420,7 @@ impl ReplWorldAgentStub {
                         };
 
                         if let Some(dispatch) = parsed.member_dispatch.clone() {
+                            assert_member_dispatch_capture(&dispatch);
                             if let Ok(mut guard) = records_for_thread.lock() {
                                 guard.member_dispatch_requests.push(parsed.clone());
                             }

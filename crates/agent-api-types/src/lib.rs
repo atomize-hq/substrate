@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::path::Path;
 use substrate_common::agent_events::AgentEvent;
 pub use substrate_common::{
     validate_identity_tuple_and_placement_posture, FsDiff, IdentityTuple, PlacementExecution,
@@ -658,6 +659,56 @@ pub struct WorldNetworkRoutingV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "ResolvedMemberRuntimeDescriptorDef")]
+pub struct ResolvedMemberRuntimeDescriptorV1 {
+    pub backend_kind: MemberRuntimeBackendKindV1,
+    pub binary_path: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MemberRuntimeBackendKindV1 {
+    Codex,
+    ClaudeCode,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResolvedMemberRuntimeDescriptorDef {
+    backend_kind: MemberRuntimeBackendKindV1,
+    binary_path: String,
+}
+
+impl ResolvedMemberRuntimeDescriptorV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_non_empty_request_field(
+            "member_dispatch.resolved_runtime.binary_path",
+            &self.binary_path,
+        )?;
+        if !Path::new(&self.binary_path).is_absolute() {
+            return Err(
+                "member_dispatch.resolved_runtime.binary_path must be an absolute path"
+                    .to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
+impl TryFrom<ResolvedMemberRuntimeDescriptorDef> for ResolvedMemberRuntimeDescriptorV1 {
+    type Error = String;
+
+    fn try_from(value: ResolvedMemberRuntimeDescriptorDef) -> Result<Self, Self::Error> {
+        let descriptor = Self {
+            backend_kind: value.backend_kind,
+            binary_path: value.binary_path,
+        };
+        descriptor.validate()?;
+        Ok(descriptor)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "MemberDispatchRequestDef")]
 pub struct MemberDispatchRequestV1 {
     #[serde(default = "member_dispatch_request_v1_default_schema_version")]
@@ -674,6 +725,7 @@ pub struct MemberDispatchRequestV1 {
     pub run_id: String,
     pub world_id: String,
     pub world_generation: u64,
+    pub resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -693,6 +745,7 @@ struct MemberDispatchRequestDef {
     run_id: String,
     world_id: String,
     world_generation: u64,
+    resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
 }
 
 fn member_dispatch_request_v1_default_schema_version() -> u32 {
@@ -729,6 +782,7 @@ impl MemberDispatchRequestV1 {
         validate_non_empty_request_field("member_dispatch.protocol", &self.protocol)?;
         validate_non_empty_request_field("member_dispatch.run_id", &self.run_id)?;
         validate_non_empty_request_field("member_dispatch.world_id", &self.world_id)?;
+        self.resolved_runtime.validate()?;
 
         if self.orchestrator_participant_id == self.participant_id {
             return Err(
@@ -771,6 +825,7 @@ impl TryFrom<MemberDispatchRequestDef> for MemberDispatchRequestV1 {
             run_id: value.run_id,
             world_id: value.world_id,
             world_generation: value.world_generation,
+            resolved_runtime: value.resolved_runtime,
         };
         request.validate()?;
         Ok(request)
@@ -2386,6 +2441,10 @@ mod tests {
                 run_id: "run_123".into(),
                 world_id: "world_123".into(),
                 world_generation: 7,
+                resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                    backend_kind: MemberRuntimeBackendKindV1::Codex,
+                    binary_path: "/usr/bin/codex".into(),
+                },
             }),
         };
 
@@ -2408,6 +2467,10 @@ mod tests {
                 run_id: "run_123".into(),
                 world_id: "world_123".into(),
                 world_generation: 7,
+                resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                    backend_kind: MemberRuntimeBackendKindV1::Codex,
+                    binary_path: "/usr/bin/codex".into(),
+                },
             })
         );
     }
@@ -2473,7 +2536,11 @@ mod tests {
                 "protocol": "uaa.agent.session",
                 "run_id": "run_123",
                 "world_id": "world_123",
-                "world_generation": 7
+                "world_generation": 7,
+                "resolved_runtime": {
+                    "backend_kind": "codex",
+                    "binary_path": "/usr/bin/codex"
+                }
             }
         }))
         .expect_err("mixed cmd + member dispatch should fail");
@@ -2515,7 +2582,11 @@ mod tests {
                 "protocol": "uaa.agent.session",
                 "run_id": "run_123",
                 "world_id": "world_123",
-                "world_generation": 7
+                "world_generation": 7,
+                "resolved_runtime": {
+                    "backend_kind": "codex",
+                    "binary_path": "/usr/bin/codex"
+                }
             }
         }))
         .expect_err("pty member dispatch should fail");
@@ -2537,13 +2608,84 @@ mod tests {
             "protocol": "uaa.agent.session",
             "run_id": "run_123",
             "world_id": "world_123",
-            "world_generation": 7
+            "world_generation": 7,
+            "resolved_runtime": {
+                "backend_kind": "codex",
+                "binary_path": "/usr/bin/codex"
+            }
         }))
         .expect_err("self-referential lineage should fail");
 
         assert!(
             err.to_string()
                 .contains("orchestrator_participant_id must not equal participant_id"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn execute_request_rejects_member_dispatch_without_resolved_runtime_at_boundary() {
+        let err = serde_json::from_value::<ExecuteRequest>(serde_json::json!({
+            "cmd": "",
+            "cwd": "/tmp",
+            "pty": false,
+            "agent_id": "tester",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": {
+                        "enabled": true,
+                        "allow_list": ["."],
+                        "deny_list": []
+                    }
+                }
+            },
+            "member_dispatch": {
+                "schema_version": 1,
+                "orchestration_session_id": "orch_123",
+                "participant_id": "ash_member_123",
+                "orchestrator_participant_id": "ash_orch_123",
+                "backend_id": "cli:codex",
+                "protocol": "uaa.agent.session",
+                "run_id": "run_123",
+                "world_id": "world_123",
+                "world_generation": 7
+            }
+        }))
+        .expect_err("member dispatch without resolved_runtime should fail");
+
+        assert!(
+            err.to_string().contains("missing field `resolved_runtime`"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn member_dispatch_rejects_non_absolute_resolved_runtime_binary_path() {
+        let err = serde_json::from_value::<MemberDispatchRequestV1>(serde_json::json!({
+            "schema_version": 1,
+            "orchestration_session_id": "orch_123",
+            "participant_id": "ash_member_123",
+            "orchestrator_participant_id": "ash_orch_123",
+            "backend_id": "cli:codex",
+            "protocol": "uaa.agent.session",
+            "run_id": "run_123",
+            "world_id": "world_123",
+            "world_generation": 7,
+            "resolved_runtime": {
+                "backend_kind": "codex",
+                "binary_path": "codex"
+            }
+        }))
+        .expect_err("relative binary path should fail");
+
+        assert!(
+            err.to_string()
+                .contains("member_dispatch.resolved_runtime.binary_path must be an absolute path"),
             "unexpected error: {err}"
         );
     }

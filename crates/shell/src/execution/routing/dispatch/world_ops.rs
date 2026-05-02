@@ -21,7 +21,8 @@ use agent_api_client::AgentClient;
 #[cfg(not(target_os = "windows"))]
 use agent_api_types::ExecuteCancelRequestV1;
 use agent_api_types::{
-    ExecuteRequest, ExecuteStreamFrame, MemberDispatchRequestV1, ProcessTelemetry, WorldFsMode,
+    ExecuteRequest, ExecuteStreamFrame, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
+    ProcessTelemetry, ResolvedMemberRuntimeDescriptorV1, WorldFsMode,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -210,6 +211,8 @@ pub(crate) struct MemberDispatchTransportRequest {
     pub run_id: String,
     pub world_id: String,
     pub world_generation: u64,
+    pub backend_kind: MemberRuntimeBackendKindV1,
+    pub binary_path: String,
 }
 
 fn build_execute_request(
@@ -255,6 +258,10 @@ fn build_member_dispatch_payload(
         run_id: request.run_id.clone(),
         world_id: request.world_id.clone(),
         world_generation: request.world_generation,
+        resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+            backend_kind: request.backend_kind,
+            binary_path: request.binary_path.clone(),
+        },
     }
 }
 
@@ -2205,8 +2212,9 @@ mod tests {
         ShellCommandEventContext, ShellEventEmissionContext,
     };
     use agent_api_types::{
-        ExecuteStreamFrame, PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3,
-        PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldFsMode,
+        ExecuteStreamFrame, MemberRuntimeBackendKindV1, PolicySnapshotV3,
+        PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
+        PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1, WorldFsMode,
         WorldNetworkRoutingV1,
     };
     use base64::Engine;
@@ -2347,6 +2355,8 @@ mod tests {
             run_id: "run_123".to_string(),
             world_id: "world_123".to_string(),
             world_generation: 9,
+            backend_kind: MemberRuntimeBackendKindV1::Codex,
+            binary_path: "/usr/bin/codex".to_string(),
         });
 
         assert_eq!(payload.schema_version, 1);
@@ -2363,6 +2373,13 @@ mod tests {
         assert_eq!(payload.run_id, "run_123");
         assert_eq!(payload.world_id, "world_123");
         assert_eq!(payload.world_generation, 9);
+        assert_eq!(
+            payload.resolved_runtime,
+            ResolvedMemberRuntimeDescriptorV1 {
+                backend_kind: MemberRuntimeBackendKindV1::Codex,
+                binary_path: "/usr/bin/codex".to_string(),
+            }
+        );
     }
 
     #[test]
@@ -2406,6 +2423,8 @@ mod tests {
                 run_id: "run_123".to_string(),
                 world_id: "world_123".to_string(),
                 world_generation: 9,
+                backend_kind: MemberRuntimeBackendKindV1::Codex,
+                binary_path: "/usr/bin/codex".to_string(),
             })),
         );
 
@@ -2415,6 +2434,13 @@ mod tests {
         assert_eq!(
             request.member_dispatch.as_ref().map(|dispatch| dispatch.run_id.as_str()),
             Some("run_123")
+        );
+        assert_eq!(
+            request
+                .member_dispatch
+                .as_ref()
+                .map(|dispatch| dispatch.resolved_runtime.binary_path.as_str()),
+            Some("/usr/bin/codex")
         );
         request.validate().expect("typed member dispatch request validates");
     }
