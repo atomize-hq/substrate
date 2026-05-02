@@ -145,6 +145,7 @@ fn build_agent_execute_request(
         shared_world: None,
         world_network: Some(world_network),
         world_fs_mode: Some(substrate_broker::world_fs_mode()),
+        member_dispatch: None,
     })
 }
 

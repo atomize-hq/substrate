@@ -657,7 +657,128 @@ pub struct WorldNetworkRoutingV1 {
     pub allowed_domains: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "MemberDispatchRequestDef")]
+pub struct MemberDispatchRequestV1 {
+    #[serde(default = "member_dispatch_request_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub orchestration_session_id: String,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_participant_id: Option<String>,
+    pub backend_id: String,
+    pub protocol: String,
+    pub run_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MemberDispatchRequestDef {
+    #[serde(default = "member_dispatch_request_v1_default_schema_version")]
+    schema_version: u32,
+    orchestration_session_id: String,
+    participant_id: String,
+    orchestrator_participant_id: String,
+    #[serde(default)]
+    parent_participant_id: Option<String>,
+    #[serde(default)]
+    resumed_from_participant_id: Option<String>,
+    backend_id: String,
+    protocol: String,
+    run_id: String,
+    world_id: String,
+    world_generation: u64,
+}
+
+fn member_dispatch_request_v1_default_schema_version() -> u32 {
+    1
+}
+
+impl MemberDispatchRequestV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported member_dispatch.schema_version: {} (expected 1)",
+                self.schema_version
+            ));
+        }
+
+        validate_non_empty_request_field(
+            "member_dispatch.orchestration_session_id",
+            &self.orchestration_session_id,
+        )?;
+        validate_non_empty_request_field("member_dispatch.participant_id", &self.participant_id)?;
+        validate_non_empty_request_field(
+            "member_dispatch.orchestrator_participant_id",
+            &self.orchestrator_participant_id,
+        )?;
+        validate_optional_non_empty_request_field(
+            "member_dispatch.parent_participant_id",
+            self.parent_participant_id.as_deref(),
+        )?;
+        validate_optional_non_empty_request_field(
+            "member_dispatch.resumed_from_participant_id",
+            self.resumed_from_participant_id.as_deref(),
+        )?;
+        validate_non_empty_request_field("member_dispatch.backend_id", &self.backend_id)?;
+        validate_non_empty_request_field("member_dispatch.protocol", &self.protocol)?;
+        validate_non_empty_request_field("member_dispatch.run_id", &self.run_id)?;
+        validate_non_empty_request_field("member_dispatch.world_id", &self.world_id)?;
+
+        if self.orchestrator_participant_id == self.participant_id {
+            return Err(
+                "member_dispatch.orchestrator_participant_id must not equal participant_id"
+                    .to_string(),
+            );
+        }
+
+        if self.parent_participant_id.as_deref() == Some(self.participant_id.as_str()) {
+            return Err(
+                "member_dispatch.parent_participant_id must not point to participant_id"
+                    .to_string(),
+            );
+        }
+
+        if self.resumed_from_participant_id.as_deref() == Some(self.participant_id.as_str()) {
+            return Err(
+                "member_dispatch.resumed_from_participant_id must not point to participant_id"
+                    .to_string(),
+            );
+        }
+
+        Ok(())
+    }
+}
+
+impl TryFrom<MemberDispatchRequestDef> for MemberDispatchRequestV1 {
+    type Error = String;
+
+    fn try_from(value: MemberDispatchRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            schema_version: value.schema_version,
+            orchestration_session_id: value.orchestration_session_id,
+            participant_id: value.participant_id,
+            orchestrator_participant_id: value.orchestrator_participant_id,
+            parent_participant_id: value.parent_participant_id,
+            resumed_from_participant_id: value.resumed_from_participant_id,
+            backend_id: value.backend_id,
+            protocol: value.protocol,
+            run_id: value.run_id,
+            world_id: value.world_id,
+            world_generation: value.world_generation,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "ExecuteRequestDef")]
 pub struct ExecuteRequest {
     pub profile: Option<String>,
     pub cmd: String,
@@ -673,6 +794,84 @@ pub struct ExecuteRequest {
     pub world_network: Option<WorldNetworkRoutingV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_fs_mode: Option<WorldFsMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member_dispatch: Option<MemberDispatchRequestV1>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExecuteRequestDef {
+    profile: Option<String>,
+    cmd: String,
+    cwd: Option<String>,
+    env: Option<HashMap<String, String>>,
+    pty: bool,
+    agent_id: String,
+    budget: Option<Budget>,
+    policy_snapshot: PolicySnapshotV3,
+    #[serde(default)]
+    shared_world: Option<SharedWorldOwnerSpec>,
+    #[serde(default)]
+    world_network: Option<WorldNetworkRoutingV1>,
+    #[serde(default)]
+    world_fs_mode: Option<WorldFsMode>,
+    #[serde(default)]
+    member_dispatch: Option<MemberDispatchRequestV1>,
+}
+
+impl ExecuteRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        let cmd_is_empty = self.cmd.trim().is_empty();
+
+        match self.member_dispatch.as_ref() {
+            Some(member_dispatch) => {
+                member_dispatch.validate()?;
+                if !cmd_is_empty {
+                    return Err(
+                        "execute request member_dispatch requires cmd.trim().is_empty()".to_string(),
+                    );
+                }
+                if self.pty {
+                    return Err(
+                        "execute request member_dispatch requires pty=false".to_string(),
+                    );
+                }
+            }
+            None => {
+                if cmd_is_empty {
+                    return Err(
+                        "execute request process exec requires a non-empty cmd when member_dispatch is absent"
+                            .to_string(),
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl TryFrom<ExecuteRequestDef> for ExecuteRequest {
+    type Error = String;
+
+    fn try_from(value: ExecuteRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            profile: value.profile,
+            cmd: value.cmd,
+            cwd: value.cwd,
+            env: value.env,
+            pty: value.pty,
+            agent_id: value.agent_id,
+            budget: value.budget,
+            policy_snapshot: value.policy_snapshot,
+            shared_world: value.shared_world,
+            world_network: value.world_network,
+            world_fs_mode: value.world_fs_mode,
+            member_dispatch: value.member_dispatch,
+        };
+        request.validate()?;
+        Ok(request)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -738,6 +937,23 @@ pub struct PendingDiffRecordV1 {
 
 fn pending_diff_record_v1_default_schema_version() -> u32 {
     1
+}
+
+fn validate_non_empty_request_field(field: &str, value: &str) -> Result<(), String> {
+    if value.trim().is_empty() {
+        return Err(format!("{field} must not be empty"));
+    }
+    Ok(())
+}
+
+fn validate_optional_non_empty_request_field(
+    field: &str,
+    value: Option<&str>,
+) -> Result<(), String> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    validate_non_empty_request_field(field, value)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1978,6 +2194,7 @@ mod tests {
                 allowed_domains: vec!["github.com".to_string()],
             }),
             world_fs_mode: Some(WorldFsMode::ReadOnly),
+            member_dispatch: None,
         };
 
         let json = serde_json::to_string(&req).expect("serialize request");
@@ -2050,6 +2267,7 @@ mod tests {
             shared_world: None,
             world_network: None,
             world_fs_mode: None,
+            member_dispatch: None,
         };
 
         let json = serde_json::to_string(&req).expect("serialize request");
@@ -2122,6 +2340,212 @@ mod tests {
         let back: ExecuteCancelRequestV1 =
             serde_json::from_str(&json).expect("deserialize cancel request");
         assert_eq!(back, req);
+    }
+
+    #[test]
+    fn execute_request_member_dispatch_round_trip() {
+        let snapshot = PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: Vec::new(),
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: None,
+                read: None,
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: true,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+
+        let req = ExecuteRequest {
+            profile: None,
+            cmd: String::new(),
+            cwd: Some("/tmp".into()),
+            env: None,
+            pty: false,
+            agent_id: "tester".into(),
+            budget: None,
+            policy_snapshot: snapshot,
+            shared_world: None,
+            world_network: None,
+            world_fs_mode: None,
+            member_dispatch: Some(MemberDispatchRequestV1 {
+                schema_version: 1,
+                orchestration_session_id: "orch_123".into(),
+                participant_id: "ash_member_123".into(),
+                orchestrator_participant_id: "ash_orch_123".into(),
+                parent_participant_id: Some("ash_parent_123".into()),
+                resumed_from_participant_id: Some("ash_old_123".into()),
+                backend_id: "cli:codex".into(),
+                protocol: "uaa.agent.session".into(),
+                run_id: "run_123".into(),
+                world_id: "world_123".into(),
+                world_generation: 7,
+            }),
+        };
+
+        let json = serde_json::to_string(&req).expect("serialize request");
+        assert!(json.contains("\"member_dispatch\""));
+
+        let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
+        assert!(back.cmd.is_empty());
+        assert_eq!(
+            back.member_dispatch,
+            Some(MemberDispatchRequestV1 {
+                schema_version: 1,
+                orchestration_session_id: "orch_123".into(),
+                participant_id: "ash_member_123".into(),
+                orchestrator_participant_id: "ash_orch_123".into(),
+                parent_participant_id: Some("ash_parent_123".into()),
+                resumed_from_participant_id: Some("ash_old_123".into()),
+                backend_id: "cli:codex".into(),
+                protocol: "uaa.agent.session".into(),
+                run_id: "run_123".into(),
+                world_id: "world_123".into(),
+                world_generation: 7,
+            })
+        );
+    }
+
+    #[test]
+    fn execute_request_rejects_empty_process_exec_cmd_at_boundary() {
+        let err = serde_json::from_value::<ExecuteRequest>(serde_json::json!({
+            "profile": null,
+            "cmd": "   ",
+            "cwd": "/tmp",
+            "pty": false,
+            "agent_id": "tester",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": {
+                        "enabled": true,
+                        "allow_list": ["."],
+                        "deny_list": []
+                    }
+                }
+            }
+        }))
+        .expect_err("empty process cmd should fail");
+
+        assert!(
+            err.to_string().contains("non-empty cmd"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn execute_request_rejects_member_dispatch_with_non_empty_cmd_at_boundary() {
+        let err = serde_json::from_value::<ExecuteRequest>(serde_json::json!({
+            "cmd": "echo hi",
+            "cwd": "/tmp",
+            "pty": false,
+            "agent_id": "tester",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": {
+                        "enabled": true,
+                        "allow_list": ["."],
+                        "deny_list": []
+                    }
+                }
+            },
+            "member_dispatch": {
+                "schema_version": 1,
+                "orchestration_session_id": "orch_123",
+                "participant_id": "ash_member_123",
+                "orchestrator_participant_id": "ash_orch_123",
+                "backend_id": "cli:codex",
+                "protocol": "uaa.agent.session",
+                "run_id": "run_123",
+                "world_id": "world_123",
+                "world_generation": 7
+            }
+        }))
+        .expect_err("mixed cmd + member dispatch should fail");
+
+        assert!(
+            err.to_string()
+                .contains("member_dispatch requires cmd.trim().is_empty()"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn execute_request_rejects_member_dispatch_with_pty_at_boundary() {
+        let err = serde_json::from_value::<ExecuteRequest>(serde_json::json!({
+            "cmd": "",
+            "cwd": "/tmp",
+            "pty": true,
+            "agent_id": "tester",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": {
+                        "enabled": true,
+                        "allow_list": ["."],
+                        "deny_list": []
+                    }
+                }
+            },
+            "member_dispatch": {
+                "schema_version": 1,
+                "orchestration_session_id": "orch_123",
+                "participant_id": "ash_member_123",
+                "orchestrator_participant_id": "ash_orch_123",
+                "backend_id": "cli:codex",
+                "protocol": "uaa.agent.session",
+                "run_id": "run_123",
+                "world_id": "world_123",
+                "world_generation": 7
+            }
+        }))
+        .expect_err("pty member dispatch should fail");
+
+        assert!(
+            err.to_string().contains("member_dispatch requires pty=false"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn member_dispatch_rejects_self_referential_lineage() {
+        let err = serde_json::from_value::<MemberDispatchRequestV1>(serde_json::json!({
+            "schema_version": 1,
+            "orchestration_session_id": "orch_123",
+            "participant_id": "ash_member_123",
+            "orchestrator_participant_id": "ash_member_123",
+            "backend_id": "cli:codex",
+            "protocol": "uaa.agent.session",
+            "run_id": "run_123",
+            "world_id": "world_123",
+            "world_generation": 7
+        }))
+        .expect_err("self-referential lineage should fail");
+
+        assert!(
+            err.to_string()
+                .contains("orchestrator_participant_id must not equal participant_id"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

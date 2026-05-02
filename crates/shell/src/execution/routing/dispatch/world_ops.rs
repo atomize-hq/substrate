@@ -20,7 +20,9 @@ use crate::execution::{policy_snapshot::bootstrap_world_spec, socket_activation}
 use agent_api_client::AgentClient;
 #[cfg(not(target_os = "windows"))]
 use agent_api_types::ExecuteCancelRequestV1;
-use agent_api_types::{ExecuteRequest, ExecuteStreamFrame, ProcessTelemetry, WorldFsMode};
+use agent_api_types::{
+    ExecuteRequest, ExecuteStreamFrame, MemberDispatchRequestV1, ProcessTelemetry, WorldFsMode,
+};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
@@ -193,6 +195,67 @@ pub(crate) struct PtyWorldOutcome {
     pub(crate) exit_code: i32,
     pub(crate) fs_strategy: Option<WorldFsStrategyTraceMeta>,
     pub(crate) process_telemetry: ProcessTelemetry,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct MemberDispatchTransportRequest {
+    pub orchestration_session_id: String,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    pub parent_participant_id: Option<String>,
+    pub resumed_from_participant_id: Option<String>,
+    pub backend_id: String,
+    pub protocol: String,
+    pub run_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+}
+
+fn build_execute_request(
+    profile: Option<String>,
+    cmd: String,
+    cwd: String,
+    env_map: std::collections::HashMap<String, String>,
+    agent_id: String,
+    policy_snapshot: agent_api_types::PolicySnapshotV3,
+    world_network: agent_api_types::WorldNetworkRoutingV1,
+    world_fs_mode: WorldFsMode,
+    member_dispatch: Option<MemberDispatchRequestV1>,
+) -> ExecuteRequest {
+    ExecuteRequest {
+        profile,
+        cmd,
+        cwd: Some(cwd),
+        env: Some(env_map),
+        pty: false,
+        agent_id,
+        budget: None,
+        policy_snapshot,
+        shared_world: None,
+        world_network: Some(world_network),
+        world_fs_mode: Some(world_fs_mode),
+        member_dispatch,
+    }
+}
+
+#[allow(dead_code)]
+fn build_member_dispatch_payload(
+    request: &MemberDispatchTransportRequest,
+) -> MemberDispatchRequestV1 {
+    MemberDispatchRequestV1 {
+        schema_version: 1,
+        orchestration_session_id: request.orchestration_session_id.clone(),
+        participant_id: request.participant_id.clone(),
+        orchestrator_participant_id: request.orchestrator_participant_id.clone(),
+        parent_participant_id: request.parent_participant_id.clone(),
+        resumed_from_participant_id: request.resumed_from_participant_id.clone(),
+        backend_id: request.backend_id.clone(),
+        protocol: request.protocol.clone(),
+        run_id: request.run_id.clone(),
+        world_id: request.world_id.clone(),
+        world_generation: request.world_generation,
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -1000,6 +1063,17 @@ pub(crate) fn build_agent_client_and_request_with_trace_metadata(
     build_agent_client_and_request_impl(cmd, parent_span_id, parent_cmd_id)
 }
 
+#[allow(dead_code)]
+pub(crate) fn build_agent_client_and_member_dispatch_request(
+    request: &MemberDispatchTransportRequest,
+) -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::ExecuteRequest,
+    String,
+)> {
+    build_agent_client_and_member_dispatch_request_impl(request)
+}
+
 pub(crate) fn build_agent_client_and_pending_diff_request() -> anyhow::Result<(
     agent_api_client::AgentClient,
     agent_api_types::PendingDiffRequestV1,
@@ -1073,19 +1147,64 @@ fn build_agent_client_and_request_impl(
     preserve_world_project_dir_override(&mut env_map);
     inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
-    let request = ExecuteRequest {
-        profile: current_world_request_profile(),
-        cmd: cmd.to_string(),
-        cwd: Some(cwd),
-        env: Some(env_map),
-        pty: false,
-        agent_id: agent_id.clone(),
-        budget: None,
+    let request = build_execute_request(
+        current_world_request_profile(),
+        cmd.to_string(),
+        cwd,
+        env_map,
+        agent_id.clone(),
         policy_snapshot,
-        shared_world: None,
-        world_network: Some(world_network),
-        world_fs_mode: Some(current_world_fs_mode()),
-    };
+        world_network,
+        current_world_fs_mode(),
+        None,
+    );
+
+    Ok((client, request, agent_id))
+}
+
+#[allow(dead_code)]
+#[cfg(target_os = "linux")]
+fn build_agent_client_and_member_dispatch_request_impl(
+    dispatch: &MemberDispatchTransportRequest,
+) -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::ExecuteRequest,
+    String,
+)> {
+    ensure_world_agent_ready()?;
+
+    let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
+
+    let client = AgentClient::unix_socket(&socket_path)?;
+    let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let cwd = cwd_path.display().to_string();
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
+    let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
+    if inherit_from_host {
+        eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+    }
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+        &policy_snapshot,
+        &mut env_map,
+    )?;
+    ensure_world_deps_bin_on_path(&mut env_map);
+    preserve_world_project_dir_override(&mut env_map);
+    let request = build_execute_request(
+        current_world_request_profile(),
+        String::new(),
+        cwd,
+        env_map,
+        agent_id.clone(),
+        policy_snapshot,
+        world_network,
+        current_world_fs_mode(),
+        Some(build_member_dispatch_payload(dispatch)),
+    );
 
     Ok((client, request, agent_id))
 }
@@ -1170,19 +1289,17 @@ fn build_agent_client_and_request_impl(
         )?;
         inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
-        let request = ExecuteRequest {
-            profile: current_world_request_profile(),
-            cmd: cmd.to_string(),
-            cwd: Some(cwd),
-            env: Some(env_map),
-            pty: false,
-            agent_id: agent_id.clone(),
-            budget: None,
+        let request = build_execute_request(
+            current_world_request_profile(),
+            cmd.to_string(),
+            cwd,
+            env_map,
+            agent_id.clone(),
             policy_snapshot,
-            shared_world: None,
-            world_network: Some(world_network),
-            world_fs_mode: Some(current_world_fs_mode()),
-        };
+            world_network,
+            current_world_fs_mode(),
+            None,
+        );
 
         return Ok((client, request, agent_id));
     }
@@ -1224,19 +1341,108 @@ fn build_agent_client_and_request_impl(
     )?;
     inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
-    let request = ExecuteRequest {
-        profile: current_world_request_profile(),
-        cmd: cmd.to_string(),
-        cwd: Some(cwd),
-        env: Some(env_map),
-        pty: false,
-        agent_id: agent_id.clone(),
-        budget: None,
+    let request = build_execute_request(
+        current_world_request_profile(),
+        cmd.to_string(),
+        cwd,
+        env_map,
+        agent_id.clone(),
         policy_snapshot,
-        shared_world: None,
-        world_network: Some(world_network),
-        world_fs_mode: Some(current_world_fs_mode()),
+        world_network,
+        current_world_fs_mode(),
+        None,
+    );
+
+    Ok((client, request, agent_id))
+}
+
+#[allow(dead_code)]
+#[cfg(target_os = "macos")]
+fn build_agent_client_and_member_dispatch_request_impl(
+    dispatch: &MemberDispatchTransportRequest,
+) -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::ExecuteRequest,
+    String,
+)> {
+    if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
+        let socket_path = std::path::PathBuf::from(socket_path);
+        let client = AgentClient::unix_socket(&socket_path)?;
+        let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let cwd = cwd_path.display().to_string();
+        let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
+        if inherit_from_host {
+            eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+        }
+        normalize_env_for_linux_guest(&mut env_map);
+        ensure_world_deps_bin_on_path(&mut env_map);
+        let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+        let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+        let world_network = request_world_network_routing(&network_policy);
+        let policy_snapshot = network_policy.snapshot;
+        crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+            &policy_snapshot,
+            &mut env_map,
+        )?;
+        let request = build_execute_request(
+            current_world_request_profile(),
+            String::new(),
+            cwd,
+            env_map,
+            agent_id.clone(),
+            policy_snapshot,
+            world_network,
+            current_world_fs_mode(),
+            Some(build_member_dispatch_payload(dispatch)),
+        );
+
+        return Ok((client, request, agent_id));
+    }
+
+    let ctx = match pw::get_context() {
+        Some(ctx) => ctx,
+        None => {
+            let detected =
+                pw::detect().map_err(|e| anyhow::anyhow!("platform world detect failed: {e:#}"))?;
+            pw::store_context_globally(detected);
+            pw::get_context().ok_or_else(|| anyhow::anyhow!("no platform world context"))?
+        }
     };
+    (ctx.ensure_ready.as_ref())()?;
+
+    let client = match &ctx.transport {
+        pw::WorldTransport::Unix(path) => AgentClient::unix_socket(path),
+        pw::WorldTransport::Tcp { host, port } => AgentClient::tcp(host, *port),
+        pw::WorldTransport::Vsock { port } => AgentClient::tcp("127.0.0.1", *port),
+    }?;
+
+    let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let cwd = cwd_path.display().to_string();
+    let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&cwd_path)?;
+    if inherit_from_host {
+        eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+    }
+    normalize_env_for_linux_guest(&mut env_map);
+    ensure_world_deps_bin_on_path(&mut env_map);
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let network_policy = resolve_world_network_policy_for_cwd(&cwd_path)?;
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+        &policy_snapshot,
+        &mut env_map,
+    )?;
+    let request = build_execute_request(
+        current_world_request_profile(),
+        String::new(),
+        cwd,
+        env_map,
+        agent_id.clone(),
+        policy_snapshot,
+        world_network,
+        current_world_fs_mode(),
+        Some(build_member_dispatch_payload(dispatch)),
+    );
 
     Ok((client, request, agent_id))
 }
@@ -1374,19 +1580,82 @@ fn build_agent_client_and_request_impl(
     )?;
     inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
-    let request = ExecuteRequest {
+    let request = build_execute_request(
         profile,
-        cmd: cmd.to_string(),
-        cwd: Some(cwd),
-        env: Some(env_map),
-        pty: false,
-        agent_id: agent_id.clone(),
-        budget: None,
+        cmd.to_string(),
+        cwd,
+        env_map,
+        agent_id.clone(),
         policy_snapshot,
-        shared_world: None,
-        world_network: Some(world_network),
-        world_fs_mode: Some(current_world_fs_mode()),
-    };
+        world_network,
+        current_world_fs_mode(),
+        None,
+    );
+
+    Ok((client, request, agent_id))
+}
+
+#[allow(dead_code)]
+#[cfg(target_os = "windows")]
+fn build_agent_client_and_member_dispatch_request_impl(
+    dispatch: &MemberDispatchTransportRequest,
+) -> anyhow::Result<(
+    agent_api_client::AgentClient,
+    agent_api_types::ExecuteRequest,
+    String,
+)> {
+    use crate::execution::platform_world::windows;
+    let backend = windows::get_backend()?;
+    #[cfg(test)]
+    let _env_guard = world_env_guard();
+
+    let client = windows::build_agent_client()?;
+    let cwd = windows::current_dir_wsl()?;
+    let host_cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let network_policy = resolve_world_network_policy_for_cwd(&host_cwd)?;
+    let spec = world_spec_for_network_policy(
+        crate::execution::settings::world_root_from_env().path,
+        world_fs_mode(),
+        &network_policy,
+    );
+    let handle = backend.ensure_session(&spec)?;
+
+    std::env::set_var("SUBSTRATE_WORLD", "enabled");
+    std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+
+    let profile = current_world_request_profile();
+    let (mut env_map, inherit_from_host) = build_world_env_map_for_cwd(&host_cwd)?;
+    if inherit_from_host {
+        eprintln!("substrate: warning: world env is forwarding selected host env vars (world.env.inherit_from_host=true)");
+    }
+    normalize_env_for_linux_guest(&mut env_map);
+    if profile.as_deref() == Some("world-deps-provision") {
+        env_map.retain(|k, _| {
+            k == "PATH"
+                || k == "HOME"
+                || k.starts_with("SUBSTRATE_")
+                || k.starts_with("WORLD_")
+                || k.starts_with("SHIM_")
+        });
+    }
+    let agent_id = std::env::var("SUBSTRATE_AGENT_ID").unwrap_or_else(|_| "human".to_string());
+    let world_network = request_world_network_routing(&network_policy);
+    let policy_snapshot = network_policy.snapshot;
+    crate::execution::policy_snapshot::inject_world_fs_enforcement_plan_env(
+        &policy_snapshot,
+        &mut env_map,
+    )?;
+    let request = build_execute_request(
+        profile,
+        String::new(),
+        cwd,
+        env_map,
+        agent_id.clone(),
+        policy_snapshot,
+        world_network,
+        current_world_fs_mode(),
+        Some(build_member_dispatch_payload(dispatch)),
+    );
 
     Ok((client, request, agent_id))
 }
@@ -1925,15 +2194,21 @@ pub(super) fn emit_stream_chunk(
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
     use super::{
+        build_execute_request, build_member_dispatch_payload,
         current_world_request_profile, emit_stream_chunk, ensure_world_deps_bin_on_path,
         extract_process_telemetry_from_ws_exit, preserve_world_project_dir_override,
-        process_agent_stream_body, BASE64, WORLD_PROJECT_DIR_OVERRIDE_ENV,
+        process_agent_stream_body, MemberDispatchTransportRequest, BASE64,
+        WORLD_PROJECT_DIR_OVERRIDE_ENV,
     };
     use crate::execution::agent_events::{
         acquire_event_test_guard, clear_agent_event_sender, init_event_channel,
         ShellCommandEventContext, ShellEventEmissionContext,
     };
-    use agent_api_types::ExecuteStreamFrame;
+    use agent_api_types::{
+        ExecuteStreamFrame, PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3,
+        PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldFsMode,
+        WorldNetworkRoutingV1,
+    };
     use base64::Engine;
     use futures::stream;
     use http_body_util::StreamBody;
@@ -2057,6 +2332,91 @@ mod tests {
                 );
             },
         );
+    }
+
+    #[test]
+    fn member_dispatch_payload_preserves_frozen_lineage_and_world_fields() {
+        let payload = build_member_dispatch_payload(&MemberDispatchTransportRequest {
+            orchestration_session_id: "orch_123".to_string(),
+            participant_id: "ash_member_123".to_string(),
+            orchestrator_participant_id: "ash_orch_123".to_string(),
+            parent_participant_id: Some("ash_parent_123".to_string()),
+            resumed_from_participant_id: Some("ash_prev_123".to_string()),
+            backend_id: "cli:codex".to_string(),
+            protocol: "uaa.agent.session".to_string(),
+            run_id: "run_123".to_string(),
+            world_id: "world_123".to_string(),
+            world_generation: 9,
+        });
+
+        assert_eq!(payload.schema_version, 1);
+        assert_eq!(payload.orchestration_session_id, "orch_123");
+        assert_eq!(payload.participant_id, "ash_member_123");
+        assert_eq!(payload.orchestrator_participant_id, "ash_orch_123");
+        assert_eq!(payload.parent_participant_id.as_deref(), Some("ash_parent_123"));
+        assert_eq!(
+            payload.resumed_from_participant_id.as_deref(),
+            Some("ash_prev_123")
+        );
+        assert_eq!(payload.backend_id, "cli:codex");
+        assert_eq!(payload.protocol, "uaa.agent.session");
+        assert_eq!(payload.run_id, "run_123");
+        assert_eq!(payload.world_id, "world_123");
+        assert_eq!(payload.world_generation, 9);
+    }
+
+    #[test]
+    fn build_execute_request_supports_typed_member_dispatch_shape() {
+        let request = build_execute_request(
+            Some("world-member-dispatch".to_string()),
+            String::new(),
+            "/tmp/worktree".to_string(),
+            std::collections::HashMap::new(),
+            "tester".to_string(),
+            PolicySnapshotV3 {
+                schema_version: 3,
+                net_allowed: Vec::new(),
+                world_fs: PolicySnapshotWorldFsV3 {
+                    host_visible: true,
+                    fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                    deny_enforcement: None,
+                    caged_required: false,
+                    discover: None,
+                    read: None,
+                    write: PolicySnapshotWorldFsWriteV3 {
+                        enabled: true,
+                        allow_list: vec![".".to_string()],
+                        deny_list: Vec::new(),
+                    },
+                },
+            },
+            WorldNetworkRoutingV1 {
+                isolate_network: false,
+                allowed_domains: Vec::new(),
+            },
+            WorldFsMode::Writable,
+            Some(build_member_dispatch_payload(&MemberDispatchTransportRequest {
+                orchestration_session_id: "orch_123".to_string(),
+                participant_id: "ash_member_123".to_string(),
+                orchestrator_participant_id: "ash_orch_123".to_string(),
+                parent_participant_id: None,
+                resumed_from_participant_id: None,
+                backend_id: "cli:codex".to_string(),
+                protocol: "uaa.agent.session".to_string(),
+                run_id: "run_123".to_string(),
+                world_id: "world_123".to_string(),
+                world_generation: 9,
+            })),
+        );
+
+        assert!(request.cmd.is_empty());
+        assert!(!request.pty);
+        assert_eq!(request.agent_id, "tester");
+        assert_eq!(
+            request.member_dispatch.as_ref().map(|dispatch| dispatch.run_id.as_str()),
+            Some("run_123")
+        );
+        request.validate().expect("typed member dispatch request validates");
     }
 
     #[test]

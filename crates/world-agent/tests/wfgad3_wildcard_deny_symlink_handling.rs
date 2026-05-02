@@ -103,6 +103,7 @@ fn execute_non_pty(
         shared_world: None,
         world_network: None,
         world_fs_mode: None,
+        member_dispatch: None,
     };
 
     let rt = Runtime::new().expect("runtime");

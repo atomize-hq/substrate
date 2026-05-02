@@ -50,6 +50,7 @@ fn make_request(cwd: &Path, cmd: &str) -> ExecuteRequest {
         shared_world: None,
         world_network: None,
         world_fs_mode: None,
+        member_dispatch: None,
     }
 }
 

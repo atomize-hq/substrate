@@ -93,6 +93,7 @@ fn non_pty_read_only_mode_blocks_writes() {
         shared_world: None,
         world_network: None,
         world_fs_mode: Some(WorldFsMode::ReadOnly),
+        member_dispatch: None,
     };
 
     let rt = Runtime::new().expect("runtime");
@@ -158,6 +159,7 @@ fn non_pty_read_only_mode_blocks_absolute_project_writes() {
         shared_world: None,
         world_network: None,
         world_fs_mode: Some(WorldFsMode::ReadOnly),
+        member_dispatch: None,
     };
 
     let rt = Runtime::new().expect("runtime");
@@ -213,6 +215,7 @@ fn non_pty_writable_mode_records_diffs_for_writes() {
         shared_world: None,
         world_network: None,
         world_fs_mode: Some(WorldFsMode::Writable),
+        member_dispatch: None,
     };
 
     let rt = Runtime::new().expect("runtime");
@@ -462,6 +465,7 @@ async fn pty_writable_mode_keeps_writes_in_overlay() {
             shared_world: None,
             world_network: None,
             world_fs_mode: Some(WorldFsMode::Writable),
+            member_dispatch: None,
         };
 
         match service.execute(verify_req).await {
@@ -521,6 +525,7 @@ async fn pty_and_non_pty_share_overlay_state_across_mode_switch() {
         shared_world: None,
         world_network: None,
         world_fs_mode: Some(WorldFsMode::Writable),
+        member_dispatch: None,
     };
 
     match service.execute(write_non_pty).await {
@@ -623,6 +628,7 @@ async fn pty_and_non_pty_share_overlay_state_across_mode_switch() {
         shared_world: None,
         world_network: None,
         world_fs_mode: Some(WorldFsMode::ReadOnly),
+        member_dispatch: None,
     };
 
     match service.execute(verify_ro).await {

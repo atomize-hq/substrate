@@ -823,6 +823,7 @@ async fn legacy_world_doctor_report_v1_via_execute(
         shared_world: None,
         world_network: Some(world_network),
         world_fs_mode: Some(WorldFsMode::Writable),
+        member_dispatch: None,
     };
 
     let resp = client.execute(req).await?;

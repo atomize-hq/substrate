@@ -5,7 +5,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use futures::{SinkExt, StreamExt};
 use serde_json::Value as JsonValue;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -52,6 +52,26 @@ pub struct ReplWorldAgentRecords {
     pub persistent_stdin: Vec<Vec<u8>>,
     pub persistent_signals: Vec<String>,
     pub legacy_pty_starts: Vec<LegacyPtyStartRecord>,
+    pub member_dispatch_requests: Vec<agent_api_types::ExecuteRequest>,
+    pub execute_cancel_requests: Vec<agent_api_types::ExecuteCancelRequestV1>,
+}
+
+#[derive(Debug, Clone)]
+pub enum MemberDispatchStreamScript {
+    ReadyAndExit {
+        session_handle_id: String,
+        exit_code: i32,
+    },
+    ReadyAndHoldUntilCancel {
+        session_handle_id: String,
+        exit_code_on_cancel: i32,
+    },
+    ExitWithoutReady {
+        exit_code: i32,
+    },
+    ErrorBeforeReady {
+        message: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,12 +102,13 @@ pub struct ReplWorldAgentStub {
     connections: Arc<AtomicUsize>,
     records: Arc<Mutex<ReplWorldAgentRecords>>,
     persistent_exec_stdout_override: Option<PersistentExecStdoutOverride>,
+    member_dispatch_scripts: Arc<Mutex<VecDeque<MemberDispatchStreamScript>>>,
     handle: Option<thread::JoinHandle<()>>,
 }
 
 impl ReplWorldAgentStub {
     pub fn start(path: &Path, behavior: StreamBehavior) -> Self {
-        Self::start_with_overrides(path, behavior, None, None)
+        Self::start_with_overrides(path, behavior, None, None, Vec::new())
     }
 
     pub fn start_with_persistent_exec_stdout_override(
@@ -106,6 +127,7 @@ impl ReplWorldAgentStub {
                 out_of_band_after_complete: None,
             }),
             None,
+            Vec::new(),
         )
     }
 
@@ -113,7 +135,7 @@ impl ReplWorldAgentStub {
         path: &Path,
         script: PersistentExecStdoutOverride,
     ) -> Self {
-        Self::start_with_overrides(path, StreamBehavior::Normal, Some(script), None)
+        Self::start_with_overrides(path, StreamBehavior::Normal, Some(script), None, Vec::new())
     }
 
     pub fn start_with_first_ready_cwd_override(
@@ -121,7 +143,15 @@ impl ReplWorldAgentStub {
         behavior: StreamBehavior,
         ready_cwd: impl Into<String>,
     ) -> Self {
-        Self::start_with_overrides(path, behavior, None, Some(ready_cwd.into()))
+        Self::start_with_overrides(path, behavior, None, Some(ready_cwd.into()), Vec::new())
+    }
+
+    pub fn start_with_member_dispatch_scripts(
+        path: &Path,
+        behavior: StreamBehavior,
+        scripts: Vec<MemberDispatchStreamScript>,
+    ) -> Self {
+        Self::start_with_overrides(path, behavior, None, None, scripts)
     }
 
     fn start_with_overrides(
@@ -129,6 +159,7 @@ impl ReplWorldAgentStub {
         behavior: StreamBehavior,
         persistent_exec_stdout_override: Option<PersistentExecStdoutOverride>,
         first_ready_cwd_override: Option<String>,
+        member_dispatch_scripts: Vec<MemberDispatchStreamScript>,
     ) -> Self {
         let _ = std::fs::remove_file(path);
         if let Some(parent) = path.parent() {
@@ -144,6 +175,8 @@ impl ReplWorldAgentStub {
         let records = Arc::new(Mutex::new(ReplWorldAgentRecords::default()));
         let records_for_thread = records.clone();
         let persistent_exec_stdout_override_for_thread = persistent_exec_stdout_override.clone();
+        let member_dispatch_scripts = Arc::new(Mutex::new(VecDeque::from(member_dispatch_scripts)));
+        let member_dispatch_scripts_for_thread = member_dispatch_scripts.clone();
         let mut first_ready_cwd_override = first_ready_cwd_override;
 
         let handle = thread::spawn(move || {
@@ -276,8 +309,74 @@ impl ReplWorldAgentStub {
                     let _ = stream.shutdown().await;
                 }
 
+                async fn write_http_stream_start(stream: &mut tokio::net::UnixStream) {
+                    let resp = "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n";
+                    let _ = stream.write_all(resp.as_bytes()).await;
+                    let _ = stream.flush().await;
+                }
+
+                async fn write_chunked_frame(
+                    stream: &mut tokio::net::UnixStream,
+                    frame: &agent_api_types::ExecuteStreamFrame,
+                ) {
+                    let mut payload = serde_json::to_vec(frame).expect("serialize stream frame");
+                    payload.push(b'\n');
+                    let header = format!("{:X}\r\n", payload.len());
+                    let _ = stream.write_all(header.as_bytes()).await;
+                    let _ = stream.write_all(&payload).await;
+                    let _ = stream.write_all(b"\r\n").await;
+                    let _ = stream.flush().await;
+                }
+
+                async fn finish_chunked_stream(stream: &mut tokio::net::UnixStream) {
+                    let _ = stream.write_all(b"0\r\n\r\n").await;
+                    let _ = stream.flush().await;
+                    let _ = stream.shutdown().await;
+                }
+
+                fn build_member_dispatch_ready_event(
+                    request: &agent_api_types::ExecuteRequest,
+                    dispatch: &agent_api_types::MemberDispatchRequestV1,
+                    span_id: &str,
+                    session_handle_id: &str,
+                ) -> agent_api_types::ExecuteStreamFrame {
+                    agent_api_types::ExecuteStreamFrame::Event {
+                        event: substrate_common::agent_events::AgentEvent {
+                            ts: chrono::Utc::now(),
+                            agent_id: request.agent_id.clone(),
+                            kind: substrate_common::agent_events::AgentEventKind::Registered,
+                            orchestration_session_id: dispatch.orchestration_session_id.clone(),
+                            run_id: dispatch.run_id.clone(),
+                            parent_run_id: None,
+                            participant_id: Some(dispatch.participant_id.clone()),
+                            parent_participant_id: dispatch.parent_participant_id.clone(),
+                            resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
+                            backend_id: Some(dispatch.backend_id.clone()),
+                            thread_id: None,
+                            role: Some("member".to_string()),
+                            world_id: Some(dispatch.world_id.clone()),
+                            world_generation: Some(dispatch.world_generation),
+                            cmd_id: None,
+                            span_id: Some(span_id.to_string()),
+                            channel: None,
+                            identity_tuple: None,
+                            placement_posture: None,
+                            project: None,
+                            data: serde_json::json!({
+                                "schema": "agent_api.session.handle.v1",
+                                "session": {
+                                    "id": session_handle_id,
+                                }
+                            }),
+                        },
+                    }
+                }
+
                 let listener = UnixListener::bind(&path_buf).expect("bind stub socket");
                 let mut next_world_id: u64 = 1;
+                let active_member_dispatch_cancels: Arc<
+                    Mutex<HashMap<String, Arc<AtomicBool>>>,
+                > = Arc::new(Mutex::new(HashMap::new()));
 
                 while !shutdown_for_thread.load(Ordering::SeqCst) {
                     let accept = tokio::time::timeout(
@@ -312,6 +411,127 @@ impl ReplWorldAgentStub {
                                 continue;
                             }
                         };
+
+                        if let Some(dispatch) = parsed.member_dispatch.clone() {
+                            if let Ok(mut guard) = records_for_thread.lock() {
+                                guard.member_dispatch_requests.push(parsed.clone());
+                            }
+
+                            let span_id = format!("member-span-{}", dispatch.participant_id);
+                            let script = member_dispatch_scripts_for_thread
+                                .lock()
+                                .ok()
+                                .and_then(|mut guard| guard.pop_front())
+                                .unwrap_or(MemberDispatchStreamScript::ReadyAndExit {
+                                    session_handle_id: format!("session-{}", dispatch.participant_id),
+                                    exit_code: 0,
+                                });
+
+                            write_http_stream_start(&mut stream).await;
+                            write_chunked_frame(
+                                &mut stream,
+                                &agent_api_types::ExecuteStreamFrame::Start {
+                                    span_id: span_id.clone(),
+                                },
+                            )
+                            .await;
+
+                            match script {
+                                MemberDispatchStreamScript::ReadyAndExit {
+                                    session_handle_id,
+                                    exit_code,
+                                } => {
+                                    write_chunked_frame(
+                                        &mut stream,
+                                        &build_member_dispatch_ready_event(
+                                            &parsed,
+                                            &dispatch,
+                                            &span_id,
+                                            &session_handle_id,
+                                        ),
+                                    )
+                                    .await;
+                                    write_chunked_frame(
+                                        &mut stream,
+                                        &agent_api_types::ExecuteStreamFrame::Exit {
+                                            exit: exit_code,
+                                            span_id: span_id.clone(),
+                                            scopes_used: Vec::new(),
+                                            fs_diff: None,
+                                            process_telemetry:
+                                                agent_api_types::ProcessTelemetry::default(),
+                                        },
+                                    )
+                                    .await;
+                                    finish_chunked_stream(&mut stream).await;
+                                }
+                                MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                                    session_handle_id,
+                                    exit_code_on_cancel,
+                                } => {
+                                    let cancelled = Arc::new(AtomicBool::new(false));
+                                    if let Ok(mut guard) = active_member_dispatch_cancels.lock() {
+                                        guard.insert(span_id.clone(), cancelled.clone());
+                                    }
+                                    write_chunked_frame(
+                                        &mut stream,
+                                        &build_member_dispatch_ready_event(
+                                            &parsed,
+                                            &dispatch,
+                                            &span_id,
+                                            &session_handle_id,
+                                        ),
+                                    )
+                                    .await;
+                                    while !shutdown_for_thread.load(Ordering::SeqCst)
+                                        && !cancelled.load(Ordering::SeqCst)
+                                    {
+                                        tokio::time::sleep(std::time::Duration::from_millis(25))
+                                            .await;
+                                    }
+                                    if let Ok(mut guard) = active_member_dispatch_cancels.lock() {
+                                        guard.remove(&span_id);
+                                    }
+                                    write_chunked_frame(
+                                        &mut stream,
+                                        &agent_api_types::ExecuteStreamFrame::Exit {
+                                            exit: exit_code_on_cancel,
+                                            span_id: span_id.clone(),
+                                            scopes_used: Vec::new(),
+                                            fs_diff: None,
+                                            process_telemetry:
+                                                agent_api_types::ProcessTelemetry::default(),
+                                        },
+                                    )
+                                    .await;
+                                    finish_chunked_stream(&mut stream).await;
+                                }
+                                MemberDispatchStreamScript::ExitWithoutReady { exit_code } => {
+                                    write_chunked_frame(
+                                        &mut stream,
+                                        &agent_api_types::ExecuteStreamFrame::Exit {
+                                            exit: exit_code,
+                                            span_id: span_id.clone(),
+                                            scopes_used: Vec::new(),
+                                            fs_diff: None,
+                                            process_telemetry:
+                                                agent_api_types::ProcessTelemetry::default(),
+                                        },
+                                    )
+                                    .await;
+                                    finish_chunked_stream(&mut stream).await;
+                                }
+                                MemberDispatchStreamScript::ErrorBeforeReady { message } => {
+                                    write_chunked_frame(
+                                        &mut stream,
+                                        &agent_api_types::ExecuteStreamFrame::Error { message },
+                                    )
+                                    .await;
+                                    finish_chunked_stream(&mut stream).await;
+                                }
+                            }
+                            continue;
+                        }
 
                         let mut cmd = std::process::Command::new("bash");
                         cmd.arg("-lc").arg(&parsed.cmd);
@@ -368,6 +588,36 @@ impl ReplWorldAgentStub {
                         frames.push('\n');
 
                         write_http_json(&mut stream, "200 OK", &frames).await;
+                        continue;
+                    }
+
+                    if first_line.starts_with("POST /v1/execute/cancel ") {
+                        let parsed: agent_api_types::ExecuteCancelRequestV1 =
+                            match serde_json::from_slice(&body) {
+                                Ok(p) => p,
+                                Err(_) => {
+                                    write_http_json(&mut stream, "400 Bad Request", r#"{"error":"bad_request","message":"invalid json"}"#).await;
+                                    continue;
+                                }
+                            };
+                        if let Ok(mut guard) = records_for_thread.lock() {
+                            guard.execute_cancel_requests.push(parsed.clone());
+                        }
+                        let delivered = active_member_dispatch_cancels
+                            .lock()
+                            .ok()
+                            .and_then(|guard| guard.get(&parsed.span_id).cloned())
+                            .map(|flag| {
+                                flag.store(true, Ordering::SeqCst);
+                                true
+                            })
+                            .unwrap_or(false);
+                        let response = serde_json::json!({
+                            "schema_version": 1,
+                            "delivered": delivered,
+                        })
+                        .to_string();
+                        write_http_json(&mut stream, "200 OK", &response).await;
                         continue;
                     }
 
@@ -900,6 +1150,7 @@ impl ReplWorldAgentStub {
             connections,
             records,
             persistent_exec_stdout_override,
+            member_dispatch_scripts,
             handle: Some(handle),
         }
     }

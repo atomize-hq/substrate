@@ -5,7 +5,7 @@
 Source file: [11-in-world-member-dispatch-over-existing-host-world-transport.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/11-in-world-member-dispatch-over-existing-host-world-transport.md)  
 Branch: `feat/session-centric-state-store`  
 Plan type: host<->world transport placement seam, no UI scope, strong DX scope  
-Review posture: `/autoplan`-style scope tightening with `/plan-eng-review` structure and rigor  
+Review posture: `/autoplan`-style consolidation with `/plan-eng-review` rigor, tightened into one execution document  
 Status: execution-ready after [PLAN-10.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-10.md), with outside voice skipped on 2026-05-02 because `claude` CLI auth is missing
 
 ## Objective
@@ -14,31 +14,30 @@ This slice is not a second agent hub.
 
 It is the honesty pass on member placement.
 
-After [PLAN-10.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-10.md),
-the shell can already:
+After [PLAN-10.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-10.md), the shell can already:
 
 - select one world-scoped member backend,
-- persist canonical parent and member participants,
+- persist canonical orchestrator and member participants,
 - invalidate stale generations,
 - create replacement lineage,
 - and project that state through `substrate agent status`.
 
-What it still does not do is actually run the member inside the world boundary it claims to be
+What it still cannot do honestly is run the member inside the world boundary it claims to be
 bound to.
 
 Today `start_member_runtime_with_prepared(...)` in
 [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
-simply reuses `start_host_orchestrator_runtime_with_prepared(...)`, which means the member
-ultimately still reaches `gateway.run_control(...)` inside the shell process.
+still delegates to `start_host_orchestrator_runtime_with_prepared(...)`, which means the
+member's `gateway.run_control(...)` turn still starts inside the shell process.
 
-`PLAN-11` fixes that with the smallest complete vertical slice:
+`PLAN-11` closes that gap with the smallest complete vertical slice:
 
-1. extend the existing `ExecuteRequest` shape with one typed member-dispatch payload,
+1. extend `ExecuteRequest` with one typed member-dispatch payload,
 2. reuse `POST /v1/execute/stream` and `POST /v1/execute/cancel` as the only transport seam,
 3. add one Linux-first internal member-runtime manager in `world-agent`,
-4. switch the shell member runtime path from local `run_control(...)` to remote retained control,
-5. keep canonical session-root state ownership in the shell,
-6. prove placement, cancellation, replacement, and trace identity with real tests.
+4. switch the shell member path from local `run_control(...)` to remote retained control,
+5. keep canonical session-root state authority in the shell,
+6. prove placement, cancellation, replacement, status, and trace identity with real tests.
 
 The user outcome is simple:
 
@@ -46,43 +45,68 @@ The user outcome is simple:
 - it is actually running inside `world-agent` on generation `N` of world `W`,
 - not just correlated to that world in metadata.
 
+## Why This Slice Exists
+
+The repo already has most of the hard state work:
+
+- shell-owned orchestration session authority is real,
+- world binding and generation plumbing are real,
+- stale-generation invalidation is real,
+- replacement lineage is real,
+- status and trace projection already consume real participant records.
+
+The remaining lie is narrow but important:
+
+- `prepare_member_runtime_startup_for_descriptor(...)` and
+  `ensure_member_runtime_ready(...)` already decide *which* member should exist,
+- but `start_member_runtime_with_prepared(...)` still reuses the local host-orchestrator launch
+  path,
+- which means the member is only *described* as world-scoped,
+- not actually *executed* in-world.
+
+This plan fixes placement without reopening:
+
+- member selection,
+- replacement ordering,
+- world-generation authority,
+- session-root state ownership,
+- or a new public `/v1/member/*` API family.
+
 ## Step 0: Scope Challenge
 
 ### 0A. Repo truth and why this slice exists
 
-The SOW is right about the missing seam.
-
-The repo already proves all the setup around it:
+The repo already proves the prerequisites this slice needs:
 
 1. `prepare_member_runtime_startup_for_descriptor(...)`,
    `ensure_member_runtime_ready(...)`, and
    `reconcile_member_runtime_generation(...)` in
-   [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+   [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
    already select the member, validate the parent session, bind it to the authoritative world,
    and preserve replacement lineage.
 2. `AgentRuntimeParticipantRecord::new_member_participant(...)`,
    `new_replacement_participant(...)`,
    `can_advertise_live()`, and
    `is_authoritative_live()` in
-   [crates/shell/src/execution/agent_runtime/session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs)
+   [session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs)
    already encode the correct liveness bar.
 3. `persist_participant(...)`,
    `resolve_live_orchestrator_participant(...)`,
    `list_live_participants_for_session(...)`, and
    `invalidate_stale_world_members_for_session(...)` in
-   [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-   already give this slice the persistence and invalidation truth it needs.
+   [state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+   already give this slice persistence and invalidation truth.
 4. `build_agent_client_and_request_with_trace_metadata(...)`,
    `stream_non_pty_via_agent(...)`, and
    `process_agent_stream_body(...)` in
-   [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs)
+   [world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs)
    already prove the repo has one real host<->world execute-stream transport.
 5. `WorldAgentService::execute_stream(...)` and `execute_cancel(...)` in
-   [crates/world-agent/src/service.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs)
+   [service.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs)
    already own the Linux-first NDJSON streaming and cancel loop.
 6. `GatewayRuntimeManager` in
-   [crates/world-agent/src/gateway_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/gateway_runtime.rs)
-   already demonstrates the level of rigor the in-world manager should match for start, ready,
+   [gateway_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/gateway_runtime.rs)
+   already demonstrates the rigor level the in-world manager should match for start, ready,
    cancel, and cleanup.
 7. the shell and world-agent test harnesses already have the right leverage:
    - recorded `/v1/execute/stream` payloads in
@@ -94,46 +118,29 @@ The repo already proves all the setup around it:
 
 What is still missing:
 
-1. `ExecuteRequest` can only describe process execution today.
+1. `ExecuteRequest` cannot describe typed member dispatch today.
 2. `world-agent` cannot start and retain a pure-agent member runtime today.
 3. `/v1/execute/cancel` only knows about process exec spans today.
 4. the shell member path still shares the local host-orchestrator startup function.
 5. existing tests prove state semantics, but not actual world placement semantics.
 
-### 0B. Premise challenge
+### 0B. Accepted premises and rejected shortcuts
 
-Premise check, one by one:
+| Premise | Decision | Why |
+| --- | --- | --- |
+| Reuse existing execute-stream and execute-cancel transport | Accepted | This is the boring path. Routing, NDJSON streaming, and cancel semantics already exist. |
+| Keep canonical session-root state authority in the shell | Accepted | Moving writes into `world-agent` would reopen [PLAN-09.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-09.md). |
+| Use typed transport data, not a magic command string | Accepted | `cmd="__member_dispatch__ ..."` is clever in the bad way. |
+| Keep v1 to one shell-owned orchestrator plus one active world-scoped member | Accepted | This slice is about placement honesty, not scheduler design. |
+| Add a new public `/v1/member/*` or `/v1/agents/*` family now | Rejected | That spends an innovation token on packaging before the control path is even real. |
+| Allow host fallback if remote member dispatch fails | Rejected | That would make status and trace lie in the exact failure mode this slice exists to close. |
 
-1. **The existing execute-stream transport should stay the seam.**
-   - Accepted.
-   - The repo already has a stable request/stream/cancel path. Reusing it is the boring choice.
+Hard posture:
 
-2. **Shell authority over canonical session-root state must remain intact.**
-   - Accepted.
-   - Moving persistence authority into `world-agent` would reopen [PLAN-09.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-09.md).
+- the remote path fails closed,
+- and a world-scoped member never silently falls back to local launch.
 
-3. **The world-member launch contract needs typed transport data, not a magic shell command.**
-   - Accepted.
-   - Encoding "launch member" as `cmd="__member_dispatch__ ..."` is clever in the bad way.
-
-4. **The first slice should stay one shell-owned orchestrator plus one active world-scoped member.**
-   - Accepted.
-   - This plan is about placement honesty, not scheduler design.
-
-5. **We should build a new public `/v1/member/*` or `/v1/agents/*` API family now.**
-   - Rejected.
-   - That spends an innovation token on packaging before the underlying control path is even real.
-
-6. **Host fallback is acceptable if the remote path fails.**
-   - Rejected.
-   - That would make the status surface lie in the exact failure mode this slice exists to close.
-
-Premise gate posture:
-
-- accepted as-is for this plan,
-- with one hard constraint: the remote path fails closed, or it does not ship.
-
-### 0C. Existing code to reuse
+### 0C. What already exists
 
 | Sub-problem | Existing code | Plan |
 | --- | --- | --- |
@@ -145,61 +152,33 @@ Premise gate posture:
 | store-owned persistence | `persist_participant(...)` and `persist_orchestration_session(...)` in [state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse exactly |
 | stale-generation invalidation | `invalidate_stale_world_members_for_session(...)` in [state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse exactly |
 | command transport client creation | `build_agent_client_and_request_with_trace_metadata(...)` in [world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs) | Reuse pattern, add member-dispatch builder |
-| streamed frame consumption | `process_agent_stream_body(...)` in [world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs) | Reuse, extend for member frames only if needed |
 | Linux execute-stream service | `execute_stream(...)` and `execute_cancel(...)` in [service.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs) | Reuse as outer transport shell |
 | in-world lifecycle rigor | `GatewayRuntimeManager` in [gateway_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/gateway_runtime.rs) | Reuse as implementation pattern, not as the member runtime itself |
 | operator status projection | `build_status_report(...)` and `build_toolbox_status_report(...)` in [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Consume unchanged unless the real transport path proves drift |
 
-### 0D. Dream state and 12-month ideal
+### 0D. NOT in scope
 
-```text
-CURRENT REPO
-    │
-    ├── shell owns orchestration session state correctly
-    ├── member participants carry correct world_id/world_generation metadata
-    ├── execute-stream transport exists for world commands
-    ├── world-agent can stream and cancel process exec spans
-    └── member run_control still starts inside the shell process
-            │
-            ▼
-THIS PLAN
-    │
-    ├── shell still owns canonical participant/session persistence
-    ├── member startup request crosses /v1/execute/stream with typed payload
-    ├── world-agent starts and retains member run_control in-world
-    ├── cancel and terminal handling reuse /v1/execute/cancel
-    └── trace/status/replacement semantics stay participant-correct
-            │
-            ▼
-12-MONTH IDEAL
-    │
-    ├── multiple world members can be routed intentionally
-    ├── public control-plane UX can be layered later if needed
-    ├── host/orchestrator vs world/member placement stays explicit
-    ├── auth-bundle handoff is secret-safe in-world
-    └── platform parity follows from one already-honest transport contract
-```
+- a new public `/v1/member/*` or `/v1/agents/*` API family
+- broad `substrate agent start|resume|fork|stop` productization
+- host-side fallback for world-scoped member launch
+- changing the authoritative session-root store contract from [PLAN-09.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-09.md)
+- changing the member-selection rule from [PLAN-10.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-10.md) except where typed transport serialization needs explicit fields
+- moving the host orchestrator into `world-agent`
+- auth-bundle carrier replacement for gateway secrets
+- macOS and Windows parity beyond explicit fail-closed posture
+- UI changes
 
-### 0E. Implementation alternatives
+### 0E. Complexity, completeness, and distribution checks
 
-| Approach | Summary | Effort | Risk | Decision |
-| --- | --- | --- | --- | --- |
-| A. Add `member_dispatch` to `ExecuteRequest` and branch inside existing execute-stream service | Smallest complete slice, reuses transport and cancel family | Medium | Low | **Accepted** |
-| B. Replace `ExecuteRequest` with a tagged transport-target enum now | Cleaner long-term, bigger immediate blast radius across callers and tests | Medium-Large | Medium | Deferred |
-| C. Encode member launch as a fake `cmd` string | Small diff, terrible contract clarity, easy to break silently | Small | High | Rejected |
-| D. Add a new `/v1/member/*` public API family | Productizes too early, duplicates routing/cancel/stream concerns | Large | High | Rejected |
-
-### 0F. Complexity, search, completeness, and distribution checks
-
-The complexity check triggers on raw file count. That is expected here.
+The raw file count will exceed 8. That is expected here.
 
 This seam spans:
 
 1. transport types,
-2. shell request construction and retained-control plumbing,
-3. world-agent runtime ownership,
-4. integration stubs,
-5. contract tests.
+2. shell request construction,
+3. shell retained-control ownership,
+4. world-agent runtime ownership,
+5. contract and integration tests.
 
 That does **not** mean the plan is overbuilt.
 
@@ -213,60 +192,67 @@ The minimal production logic surface is still tight:
 
 Everything else is test or glue.
 
-`[Layer 1]` wins:
-
-- reuse `/v1/execute/stream`,
-- reuse `/v1/execute/cancel`,
-- reuse `ExecuteStreamFrame`,
-- reuse shell store/state helpers,
-- reuse world-agent cancel-delivery pattern,
-- reuse test stubs that already record execute-stream JSON.
-
 Completeness check:
 
-- the complete version is to move launch, cancel, replacement, and trace identity together,
-- the shortcut is to move launch only and leave cancel or replacement semantics lying,
-- with AI-assisted implementation, the shortcut saves almost nothing and leaves the most dangerous
+- the complete version moves launch, cancel, replacement, and trace identity together,
+- the shortcut moves launch only and leaves cancel or terminal convergence lying,
+- with AI-assisted implementation, that shortcut saves almost nothing and keeps the dangerous
   footguns alive.
 
 Distribution check:
 
 - no new binary, package, container image, or installer surface is introduced,
-- distribution work is not applicable.
-
-### 0G. What already exists
-
-1. shell-owned orchestration session truth already exists,
-2. member participant lineage and world binding already exist,
-3. restart invalidation and replacement semantics already exist in shell state,
-4. execute-stream and execute-cancel transport already exist,
-5. world-agent already supports streamed process execution and cancel,
-6. world-agent already has a runtime-manager pattern worth copying,
-7. shell and world-agent tests already have stream-recording harnesses,
-8. the remaining gap is placement, not state semantics.
-
-### 0H. NOT in scope
-
-- a new public `/v1/member/*` or `/v1/agents/*` API family
-- broad `substrate agent start|resume|fork|stop` productization
-- host-side fallback for world-scoped member launch
-- changing the authoritative session-root store contract from [PLAN-09.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-09.md)
-- changing the member-selection rule from [PLAN-10.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-10.md) except where typed transport serialization requires explicit fields
-- moving the host orchestrator into `world-agent`
-- auth-bundle carrier replacement for gateway secrets
-- macOS and Windows parity beyond explicit fail-closed posture
-- UI changes
+- distribution work is not applicable for this slice.
 
 ## Architecture Contract
 
-### V1 transport contract
+### Hard invariants
+
+1. **Shell authority remains authoritative.**
+   - `world-agent` owns in-world member execution and remote control retention.
+   - the shell owns canonical `AgentRuntimeStateStore` writes and the status surface.
+
+2. **No host-side fallback for world-scoped members.**
+   - once `execution.scope=world` is selected, failure is explicit failure, not local launch.
+
+3. **The active world binding remains authoritative.**
+   - the shell dispatches the member against the already-authoritative `world_id` and
+     `world_generation`,
+   - and `world-agent` must reject a mismatch instead of normalizing it.
+
+4. **The existing transport endpoints remain the seam.**
+   - `POST /v1/execute/stream` for launch plus long-lived control streaming,
+   - `POST /v1/execute/cancel` for cancellation,
+   - existing `ExecuteStreamFrame::{Start,Event,Exit,Error}` families only.
+
+5. **Readiness stays strict.**
+   - a member may be persisted as `Allocating`,
+   - but it may advertise live only after a real remote session handle exists, cancel ownership is
+     retained, event streaming is active, completion observation is retained, and the shell has
+     persisted the updated snapshot.
+
+6. **Linux-first is explicit.**
+   - non-Linux platforms remain unavailable for this slice and must fail closed with an explicit
+     error, not a compatibility fallback.
+
+### V1 request contract
 
 Add one additive field to `ExecuteRequest` in
 [crates/agent-api-types/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs):
 
 ```text
 ExecuteRequest
-    ├── existing process exec fields
+    ├── profile
+    ├── cmd
+    ├── cwd
+    ├── env
+    ├── pty
+    ├── agent_id
+    ├── budget
+    ├── policy_snapshot
+    ├── shared_world
+    ├── world_network
+    ├── world_fs_mode
     └── member_dispatch: Option<MemberDispatchRequestV1>
 ```
 
@@ -280,7 +266,6 @@ MemberDispatchRequestV1
     ├── orchestrator_participant_id
     ├── parent_participant_id
     ├── resumed_from_participant_id
-    ├── agent_id
     ├── backend_id
     ├── protocol
     ├── run_id
@@ -290,13 +275,126 @@ MemberDispatchRequestV1
 
 Rules:
 
-1. `cmd` stays present for regular process execution and is ignored for typed member dispatch.
-2. `agent_id` at the request top level remains the selected member agent id so budgets, traces,
-   and diagnostics stay agent-correct.
-3. `member_dispatch` and regular process execution are mutually exclusive in validation.
-4. no magic command strings.
+1. regular process exec is:
+   - `member_dispatch=None`
+   - `cmd.trim().is_empty()==false`
+2. typed member dispatch is:
+   - `member_dispatch=Some(...)`
+   - `cmd.trim().is_empty()==true`
+3. top-level `agent_id` remains authoritative for budgets, traces, and diagnostics, so
+   `MemberDispatchRequestV1` does **not** duplicate `agent_id`.
+4. `pty=true` is invalid for member dispatch.
+5. no magic command strings.
 
-### Shell-to-world launch flow
+Implementation rule:
+
+- validate the contract at the type boundary, not ad hoc in the handler.
+- mirror the existing `GatewayLifecycleRequestV1` pattern in `agent-api-types`:
+  introduce an internal `ExecuteRequestDef` plus `TryFrom<ExecuteRequestDef>` validation so the
+  mutual-exclusion rules fail during deserialize/parse, not deep inside `service.rs`.
+
+### Stream and event contract
+
+Do **not** invent a new stream frame family.
+
+Use the existing `ExecuteStreamFrame` contract:
+
+- `Start { span_id }` announces the cancellable remote control span.
+- `Event { event }` carries member lifecycle events and status messages.
+- `Exit { ... }` marks normal terminal completion.
+- `Error { message }` marks startup or transport failure.
+
+Required event rules:
+
+1. the event that first exposes a real session handle is what allows the shell to call
+   `set_uaa_session_id(...)`,
+2. the shell flips `Allocating -> Ready` only after that session-handle event arrives **and**
+   retained remote ownership is established,
+3. subsequent lifecycle messages may move `Ready -> Running`,
+4. stream loss before readiness becomes `Failed`,
+5. stream loss after authoritative live ownership becomes `Invalidated`,
+6. terminal success or explicit cancel becomes `Stopped`,
+7. all forwarded `AgentEvent` rows must keep top-level participant lineage and world identity.
+
+### Retained-control ownership model
+
+This is the biggest structural clarification missing from the previous draft.
+
+The shell cannot pretend a remote member runtime is the same thing as the local
+`RetainedRunControl` carrier.
+
+`AsyncReplAgentRuntime` currently stores a local UAA cancel handle plus event and completion
+tasks. Remote member dispatch does not have that shape. It has:
+
+- a remote `span_id`,
+- a remote cancel path through `POST /v1/execute/cancel`,
+- a long-lived stream task,
+- and shell-owned manifest/state transitions driven by remote events.
+
+Required design:
+
+```text
+RetainedRuntimeControl
+    ├── LocalUaa(RetainedRunControl)
+    └── RemoteMember(RemoteMemberControl)
+
+RemoteMemberControl
+    ├── span_id
+    ├── stream_task
+    ├── cancel_path
+    └── completion_observer
+```
+
+Rules:
+
+1. keep the manifest, store, heartbeat, and liveness rules shared above this abstraction,
+2. do not overload `RetainedRunControl` with fake remote values,
+3. do not fork the state machine just because the cancel mechanism differs,
+4. prefer one small enum over a trait hierarchy.
+
+### Prepared-launch split
+
+This is the second structural clarification missing from the previous draft.
+
+`PreparedAgentRuntime` is local-gateway shaped today:
+
+- it contains a gateway,
+- it contains an agent kind resolved for local `run_control(...)`,
+- and it assumes the shell will own the control turn.
+
+Remote member dispatch does not need that.
+
+Required design:
+
+```text
+PreparedHostRuntime
+    ├── descriptor
+    ├── gateway
+    ├── agent_kind
+    ├── startup_context
+    ├── manifest
+    └── run_id
+
+PreparedMemberDispatch
+    ├── descriptor
+    ├── startup_context
+    ├── manifest
+    ├── run_id
+    └── authoritative world binding metadata
+```
+
+Recommendation:
+
+- introduce a dedicated `PreparedMemberDispatch` instead of stuffing `Option<gateway>` and
+  `Option<agent_kind>` into the existing struct.
+
+Why:
+
+- explicit over clever,
+- smaller blast radius than a generic "maybe local, maybe remote" mega-struct,
+- easier for a tired engineer to read at 3am.
+
+### Launch flow
 
 ```text
 shell REPL
@@ -323,6 +421,7 @@ world-agent execute_stream(member_dispatch)
     ▼
 shell retained-control consumer
     │
+    ├── store remote span_id in RemoteMemberControl
     ├── surface real UAA session handle
     ├── mark runtime ownership retained
     ├── transition Allocating -> Ready -> Running
@@ -330,38 +429,24 @@ shell retained-control consumer
     └── publish canonical AgentEvent rows
 ```
 
-### Cancel and terminal handling
-
-```text
-shell shutdown / ctrl-c / restart invalidation
-    │
-    └── POST /v1/execute/cancel { span_id, sig }
-             │
-             ├── process exec span? -> existing world::exec path
-             └── member dispatch span? -> retained run_control cancel path
-                          │
-                          ├── delivered = true  -> shell converges to stopped/failed/invalidated
-                          └── delivered = false -> shell must not keep advertising live forever
-```
-
 ### Lifecycle state machine
 
 ```text
 Allocating
     │
-    ├── typed dispatch accepted, control retained, handle surfaced
+    ├── typed dispatch accepted, remote control retained, session handle surfaced
     ▼
 Ready
     │
-    ├── first runtime event / active control loop
+    ├── first steady-state lifecycle event / active control loop
     ▼
 Running
     │
-    ├── clean cancel / clean terminal completion -> Stopped
-    ├── bootstrap failure before readiness      -> Failed
-    ├── stream closes before readiness          -> Failed
-    ├── stream closes after readiness           -> Invalidated
-    └── world generation rollover               -> Invalidated, then replacement Allocating
+    ├── clean cancel / clean completion      -> Stopped
+    ├── bootstrap failure before readiness   -> Failed
+    ├── stream closes before readiness       -> Failed
+    ├── stream closes after readiness        -> Invalidated
+    └── world generation rollover            -> Invalidated, then replacement Allocating
 ```
 
 ### Dependency graph
@@ -369,9 +454,9 @@ Running
 ```text
 agent-api-types::ExecuteRequest
         │
-        ├── shell/world_ops request builder
+        ├── shell/world_ops member-dispatch request builder
         │       │
-        │       └── shell/async_repl member launch + replacement
+        │       └── shell/async_repl remote member startup + replacement
         │
         └── world-agent/service execute_stream branch
                 │
@@ -383,92 +468,95 @@ agent-api-types::ExecuteRequest
                         └── cancel registry integration
 ```
 
-### Error & Rescue Registry
-
-| Failure | Detection point | Required behavior | Rescue |
-| --- | --- | --- | --- |
-| `member_dispatch` payload missing required identity fields | request validation in `agent-api-types` and handler parse | reject before world launch | fix shell builder, no state mutation beyond existing allocating snapshot |
-| authoritative world binding does not match active session world | shell preflight and world-agent recheck | fail closed, no local fallback | restart or rebind world first |
-| in-world backend cannot start | world-agent member manager | emit terminal error, shell persists failed member | operator sees explicit failure, stale member stays dead |
-| control stream closes before handle surfaces | shell retained-control consumer | mark failed, never live | retry only through normal next launch path |
-| control stream closes after live ownership | shell retained-control consumer | invalidate, persist terminal reason, clear liveness | next command or restart can create replacement |
-| cancel delivery misses span | `execute_cancel` response or timeout | shutdown surfaces failure and shell converges non-live | operator retries or stops REPL, but no fake liveness |
-| replacement launch fails after stale invalidation | replacement path in `async_repl.rs` | honest absence, predecessor remains invalidated | next valid command attempts fresh launch |
-
 ## File Plan
 
-### Primary implementation surfaces
-
-#### 1. `crates/agent-api-types/src/lib.rs`
+### 1. `crates/agent-api-types/src/lib.rs`
 
 Deliver:
 
 - `MemberDispatchRequestV1`
 - additive `ExecuteRequest.member_dispatch`
-- validation that regular exec and member dispatch are mutually exclusive
-- round-trip tests for the new typed payload
+- request validation via typed deserialize/parse rules
+- round-trip and invalid-shape tests for the new contract
 
-#### 2. `crates/shell/src/execution/routing/dispatch/world_ops.rs`
+Do not:
+
+- convert the whole transport family into a new target-enum abstraction in this slice.
+
+### 2. `crates/shell/src/execution/routing/dispatch/world_ops.rs`
 
 Deliver:
 
 - a dedicated member-dispatch request builder that reuses existing transport/client creation,
 - request-level trace metadata and policy/world inputs,
-- stream-consumption helpers that can drive retained-control semantics instead of stdout/stderr-only
-  command output.
+- additive NDJSON decode helpers only if `async_repl.rs` needs shared parsing support.
 
-This file should stay transport-focused.
+Do not:
 
-Do not move orchestration session ownership into it.
+- move participant persistence or liveness state transitions into this file.
 
-#### 3. `crates/shell/src/repl/async_repl.rs`
+This file stays transport-focused.
+
+### 3. `crates/shell/src/repl/async_repl.rs`
 
 Deliver:
 
-- split member remote startup from host orchestrator local startup,
-- persist member participant in `Allocating` before remote launch,
-- consume remote start/event/terminal/cancel outcomes through the same liveness rules already used
-  for local runtimes,
-- keep replacement lineage and invalidation behavior intact.
+- a dedicated `PreparedMemberDispatch` path,
+- a transport-agnostic retained-control carrier (`LocalUaa` vs `RemoteMember`),
+- member participant persistence in `Allocating` before remote launch,
+- remote stream consumption that drives the existing liveness rules,
+- shutdown and replacement logic that can cancel a remote span and converge honestly,
+- host orchestrator startup unchanged.
 
-#### 4. `crates/world-agent/src/service.rs`
+Do not:
+
+- fork the lifecycle state machine into a second member-only live model.
+
+### 4. `crates/world-agent/src/service.rs`
 
 Deliver:
 
 - branch `execute_stream(...)` on `member_dispatch`,
-- route ordinary process exec exactly as before,
+- keep ordinary process exec exactly as before,
 - route member dispatch into the new internal manager,
 - extend `execute_cancel(...)` so a span can address either process exec or member dispatch.
 
-#### 5. `crates/world-agent/src/member_runtime.rs`
+Do not:
+
+- jam the whole member-runtime lifecycle into `execute_stream(...)`.
+
+This file is the branch point, not the framework.
+
+### 5. `crates/world-agent/src/member_runtime.rs`
 
 New internal module.
 
 Deliver:
 
 - Linux-first member runtime manager,
-- start context validation against world binding,
+- start-context validation against world binding,
 - `run_control(...)` startup in-world,
 - cancel/event/completion retention,
 - `ExecuteStreamFrame` emission,
 - cleanup on completion, cancel, and abnormal stream loss.
 
-#### 6. `crates/shell/tests/support/socket.rs`
+Use `GatewayRuntimeManager` as the rigor reference, not as the implementation target.
+
+### 6. `crates/shell/tests/support/socket.rs`
 
 Deliver:
 
 - additive request-stub support for `member_dispatch`,
-- assertions that recorded `/v1/execute/stream` payloads include the typed member contract when the
-  shell launches a world member.
+- assertions that recorded `/v1/execute/stream` payloads include the typed member contract.
 
-#### 7. `crates/shell/tests/support/repl_world_agent.rs`
+### 7. `crates/shell/tests/support/repl_world_agent.rs`
 
 Deliver:
 
-- additive capture of typed member-dispatch payloads and their lineage fields,
-- optional canned lifecycle scripting for ready, event, cancel, and terminal cases.
+- additive capture of typed member-dispatch payloads and lineage fields,
+- optional canned lifecycle scripting for ready, cancel, terminal success, and failure cases.
 
-#### 8. Test owners
+### 8. Primary test owners
 
 - [crates/shell/tests/repl_world_first_routing_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs)
 - [crates/shell/tests/agent_successor_contract_ahcsitc0.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs)
@@ -505,21 +593,23 @@ This is the rigor reference, not the implementation target for world members.
 
 ## Implementation Sequence
 
-### Step 1. Add the typed transport contract in `agent-api-types`
+### Step 1. Freeze the typed transport contract
 
 Deliverables:
 
 1. additive `MemberDispatchRequestV1`,
-2. `ExecuteRequest.member_dispatch`,
-3. request validation and round-trip tests,
-4. no behavior change for ordinary process execution callers.
+2. additive `ExecuteRequest.member_dispatch`,
+3. typed request validation,
+4. round-trip and invalid-shape tests,
+5. no behavior change for ordinary process execution callers.
 
 Acceptance gate:
 
 - all existing transport callers still compile unchanged,
-- new typed payload round-trips cleanly.
+- regular process exec still deserializes and executes unchanged,
+- invalid `cmd` plus `member_dispatch` combinations fail at the request boundary.
 
-### Step 2. Extend shell test stubs and request builders before touching runtime behavior
+### Step 2. Teach the shell stubs and request builders the new contract
 
 Deliverables:
 
@@ -529,7 +619,8 @@ Deliverables:
 
 Acceptance gate:
 
-- tests can assert payload contents before the shell runtime switch lands.
+- tests can assert payload contents before the runtime switch lands,
+- and the shell-side transport builder is pinned before lifecycle work begins.
 
 ### Step 3. Add the Linux-first world-agent member runtime manager
 
@@ -537,24 +628,24 @@ Deliverables:
 
 1. new internal `member_runtime.rs`,
 2. start/ready/event/completion ownership in-world,
-3. stream-frame emission for lifecycle events,
-4. span registration for cancel delivery,
-5. strict world-binding validation against authoritative `world_id` and `world_generation`.
+3. span registration for cancel delivery,
+4. explicit world-binding validation,
+5. startup, cancel, and abnormal-termination tests at the world-agent layer.
 
 Acceptance gate:
 
-- unit/integration tests can start and cancel a typed member dispatch without involving shell REPL
+- world-agent tests can start and cancel a typed member dispatch without involving shell REPL
   logic yet.
 
-### Step 4. Switch `async_repl.rs` member launch from local to remote retained control
+### Step 4. Cut the shell member path off the local gateway path
 
 Deliverables:
 
-1. `prepare_member_runtime_startup_for_descriptor(...)` no longer builds a local gateway for the
-   member path,
-2. `start_member_runtime_with_prepared(...)` becomes the remote member transport path,
-3. `ensure_member_runtime_ready(...)` and replacement startup both consume the new remote path,
-4. host orchestrator startup remains unchanged.
+1. `PreparedMemberDispatch` or an equivalently explicit remote-prepared shape,
+2. `RetainedRuntimeControl::{LocalUaa,RemoteMember}` or an equivalently explicit ownership split,
+3. `start_member_runtime_with_prepared(...)` becomes the remote member transport path,
+4. `ensure_member_runtime_ready(...)` and replacement startup consume the remote path,
+5. host orchestrator startup remains unchanged.
 
 Acceptance gate:
 
@@ -562,98 +653,27 @@ Acceptance gate:
 - same-generation reuse still works,
 - missing parent/binding/selection still fail before remote launch.
 
-### Step 5. Wire cancel, abnormal terminal convergence, and restart replacement
+### Step 5. Land cancel, replacement, status, and trace regression closure
 
 Deliverables:
 
-1. `/v1/execute/cancel` can reach world-member spans,
-2. shutdown and restart paths converge member state to stopped/failed/invalidated honestly,
+1. `/v1/execute/cancel` reaches world-member spans,
+2. shutdown and restart paths converge member state to stopped, failed, or invalidated honestly,
 3. replacement launch on the new generation keeps fresh `participant_id` and correct
-   `resumed_from_participant_id`.
+   `resumed_from_participant_id`,
+4. status and trace stay producer-backed and participant-correct.
 
 Acceptance gate:
 
 - restart with a live member yields either a live replacement or honest absence,
-- stale generation never regains liveness.
+- stale generation never regains liveness,
+- trace rows come from the real remote producer, not from fixture-only paths.
 
-### Step 6. Close the test wall before any opportunistic cleanup
-
-Required test owners:
-
-1. `agent-api-types` unit tests for transport typing,
-2. `world-agent` tests for member dispatch startup/cancel/terminal cleanup,
-3. `async_repl.rs` runtime tests for remote member startup and replacement,
-4. shell integration/contract tests for status, trace, and replacement behavior.
-
-Acceptance gate:
-
-- targeted validation commands below are green,
-- no docs or cleanup work starts first.
-
-### Step 7. Only then touch docs if runtime wording changed
+### Step 6. Only then touch docs if wording changed
 
 This is not a docs-first slice.
 
-Touch docs only if the implementation changes operator-visible transport wording or trace examples.
-
-## Code Quality Review
-
-### Issue 1. Do not fork the retained-control state machine
-
-The easy bad move is a second "member-specific" startup state machine in the shell that mostly
-copies the local orchestrator path.
-
-Recommendation:
-
-- keep one retained-control lifecycle discipline,
-- split only the launch transport and world-agent ownership details.
-
-Why:
-
-- DRY matters here because "live" is the whole product claim.
-
-### Issue 2. Keep transport typing explicit, not clever
-
-There are two viable shapes:
-
-- additive `member_dispatch` field now,
-- or a broader tagged execute-target enum.
-
-Recommendation:
-
-- use the additive field for this slice,
-- leave the enum refactor for later if the transport family genuinely grows.
-
-Why:
-
-- minimal diff and explicit over clever.
-
-### Issue 3. Keep `world_ops.rs` transport-focused
-
-Do not let `world_ops.rs` become an orchestration-runtime brain.
-
-Recommendation:
-
-- request construction and stream framing in `world_ops.rs`,
-- participant/store ownership stays in `async_repl.rs`.
-
-Why:
-
-- module boundaries stay boring and readable.
-
-### Issue 4. Keep `service.rs` as the branch point, not the whole implementation
-
-Jamming all member-runtime ownership code into `WorldAgentService::execute_stream(...)` would
-create a 500-line switchboard nobody wants to maintain.
-
-Recommendation:
-
-- let `service.rs` validate and dispatch,
-- let `member_runtime.rs` own the internal lifecycle.
-
-Why:
-
-- engineered enough, not under-engineered and not a new framework.
+Touch docs only if implementation changes operator-visible transport wording or trace examples.
 
 ## Test Review
 
@@ -662,7 +682,7 @@ Why:
 - Runtime: Rust
 - Framework: `cargo test`
 - Primary packages: `agent-api-types`, `world-agent`, `shell`
-- No LLM prompt/eval suite expansion is required for this slice
+- No LLM prompt or eval suite expansion is required for this slice
 
 ### Code path coverage
 
@@ -674,13 +694,13 @@ CODE PATH COVERAGE
     ├── ExecuteRequest.member_dispatch
     │   ├── [GAP]         Regular process exec request still validates
     │   ├── [GAP]         Member-dispatch request validates with full identity tuple
-    │   ├── [GAP]         Missing participant/world fields fail closed
+    │   ├── [GAP]         Empty cmd + member_dispatch is accepted only for typed dispatch
     │   └── [GAP]         Process exec + member_dispatch together fails closed
     │
     └── ExecuteStreamFrame compatibility
-        └── [★★★ TESTED] Existing frame families already round-trip for process execution
+        └── [★★★ TESTED] Existing Start/Event/Exit/Error families already round-trip
 
-[+] crates/world-agent/src/service.rs
+[+] crates/world-agent/src/service.rs + member_runtime.rs
     │
     ├── execute_stream()
     │   ├── [★★★ TESTED] Regular streamed process exec path already works
@@ -688,19 +708,13 @@ CODE PATH COVERAGE
     │   ├── [GAP]         Rejects mismatched/non-authoritative world binding
     │   └── [GAP]         Registers member span for cancel delivery
     │
-    └── execute_cancel()
-        ├── [★★★ TESTED] Process-exec cancel path already works
-        └── [GAP]         Member-dispatch cancel reaches retained control and converges terminally
-
-[+] crates/world-agent/src/member_runtime.rs
+    ├── execute_cancel()
+    │   ├── [★★★ TESTED] Process-exec cancel path already works
+    │   └── [GAP]         Member-dispatch cancel reaches retained control and converges terminally
     │
-    ├── start()
-    │   ├── [GAP]         Build backend in-world and start run_control(...)
-    │   ├── [GAP]         Surface session handle before Ready
-    │   ├── [GAP]         Emit lifecycle events with participant identity
-    │   └── [GAP]         Bootstrap failure emits Error/terminal cleanup
-    │
-    └── abnormal termination
+    └── member runtime lifecycle
+        ├── [GAP]         In-world backend start emits Start + session-bearing Event
+        ├── [GAP]         Bootstrap failure emits Error and cleanup
         ├── [GAP]         Stream closes before readiness -> failed
         └── [GAP]         Stream closes after readiness -> invalidated
 
@@ -711,21 +725,24 @@ CODE PATH COVERAGE
     │   ├── [GAP]         Carries participant/lineage/world fields correctly
     │   └── [GAP]         Preserves trace parent metadata
     │
-    └── stream consumption
-        ├── [GAP]         Ready/Status/Event frames advance shell liveness correctly
-        └── [GAP]         Cancel failure does not leave fake liveness
+    └── decode support
+        └── [GAP]         Any shared frame parsing stays transport-only, not lifecycle-owning
 
 [+] crates/shell/src/repl/async_repl.rs
     │
-    ├── start_member_runtime_with_prepared()
+    ├── PreparedMemberDispatch / remote startup path
     │   ├── [GAP] [->E2E] Uses remote member-dispatch transport, not local gateway reuse
     │   ├── [GAP]         Persists Allocating before remote ownership
-    │   ├── [GAP]         Ready -> Running only after retained control is proven
+    │   ├── [GAP]         Ready -> Running only after retained ownership is proven
     │   └── [GAP]         Bootstrap failure marks participant failed
+    │
+    ├── retained control abstraction
+    │   ├── [GAP]         Remote member cancel uses execute-cancel span path
+    │   └── [GAP]         Shutdown path converges non-live if cancel delivery fails
     │
     ├── ensure_member_runtime_ready()
     │   ├── [GAP] [->E2E] First world-backed command launches member lazily over transport
-    │   ├── [GAP]         Same-generation command reuses live remote member
+    │   ├── [GAP]         Same-generation command reuses the live remote member
     │   └── [GAP]         Missing parent/binding fails before transport call
     │
     └── reconcile_member_runtime_generation()
@@ -782,47 +799,50 @@ USER FLOW COVERAGE
     └── [GAP]         doctor/toolbox remain honest and orchestrator-anchored
 ```
 
-### Missing tests to add to the plan
+### Required tests to add to the plan
 
 1. **`crates/agent-api-types/src/lib.rs`**
-   - Add round-trip and validation tests for:
+   - add round-trip and validation tests for:
      - well-formed `member_dispatch`
+     - empty `cmd` accepted only with `member_dispatch`
      - missing required fields
      - illegal combination of process exec + member dispatch
 
-2. **`crates/world-agent/tests/streamed_execute_cancel_v1.rs` or new focused world-agent tests**
-   - Add Linux-first tests for:
+2. **`crates/world-agent/tests/streamed_execute_cancel_v1.rs` or focused world-agent tests**
+   - add Linux-first tests for:
      - successful member-dispatch startup
      - member-dispatch cancel delivery
      - bootstrap failure before readiness
      - abnormal post-ready termination cleanup
 
 3. **`crates/shell/src/repl/async_repl.rs`**
-   - Add runtime tests for:
+   - add runtime tests for:
      - remote member startup uses transport instead of local `gateway.run_control(...)`
-     - Allocating -> Ready -> Running progression only after ownership is retained
+     - `Allocating -> Ready -> Running` progression only after remote ownership is retained
      - missing parent/binding/selection fail before launch
      - replacement launch preserves `resumed_from_participant_id`
+     - remote cancel path converges the member non-live
 
 4. **`crates/shell/tests/repl_world_first_routing_v1.rs`**
-   - Add integration cases for:
+   - add integration cases for:
      - first world-backed command launches member through typed execute-stream payload
      - restart replacement uses typed execute-stream payload on the new generation
      - replacement failure leaves no authoritative-live member
 
 5. **`crates/shell/tests/agent_successor_contract_ahcsitc0.rs`**
-   - Add contract cases for:
+   - add contract cases for:
      - status remains correct for a real remotely launched member
-     - cancel/restart terminal states stay non-live
+     - cancel and restart terminal states stay non-live
      - toolbox remains anchored to the orchestrator session
 
 6. **`crates/shell/tests/agent_hub_trace_persistence.rs`**
-   - Add producer-backed cases for:
-     - remote member Registered / Status / terminal event emission
+   - add producer-backed cases for:
+     - remote member lifecycle event emission
      - replacement lineage staying top-level in trace rows
 
 7. **`crates/shell/tests/support/socket.rs` and `crates/shell/tests/support/repl_world_agent.rs`**
-   - Add harness assertions that typed member-dispatch payloads are actually recorded and inspectable.
+   - add harness assertions that typed member-dispatch payloads are actually recorded and
+     inspectable.
 
 ### Test artifact
 
@@ -834,130 +854,53 @@ The eng-review QA artifact for this plan is:
 
 | New codepath | Real production failure | Test covers it? | Error handling exists? | User sees clear error? | Critical gap? |
 | --- | --- | --- | --- | --- | --- |
-| typed request construction | shell sends malformed lineage/world metadata and world-agent guesses | no | not yet | no | yes until transport validation lands |
-| shell preflight | missing authoritative world binding still emits a remote launch attempt | no | partial | partial | yes until preflight-fails-before-transport test lands |
+| typed request construction | shell sends malformed lineage/world metadata and world-agent guesses | no | not yet | no | yes until request-boundary validation lands |
+| shell preflight | missing authoritative world binding still emits a remote launch attempt | no | partial | partial | yes until preflight-fails-before-transport coverage lands |
+| remote ownership carrier | shutdown path treats a remote member like a local cancel handle and leaves state live | no | not yet | no | yes until `RemoteMemberControl` convergence tests land |
 | world-agent startup | backend cannot start in-world but participant becomes live anyway | no | not yet | no | yes until bootstrap-failure coverage lands |
-| remote readiness | session handle never surfaces but shell transitions Ready | no | partial | no | yes until Ready gating test lands |
+| remote readiness | session handle never surfaces but shell transitions Ready | no | partial | no | yes until Ready-gating tests land |
 | cancel delivery | `/v1/execute/cancel` misses the member span and shell keeps advertising live | no | partial | partial | yes until cancel convergence coverage lands |
 | replacement launch | stale member invalidates, replacement fails, stale trace row looks live again | partial | partial | no | yes until replacement + trace suppression tests land |
-| status/trace projection | remote producer emits wrong participant/world identity | no | partial | yes | yes until producer-backed status/trace tests land |
+| status and trace projection | remote producer emits wrong participant/world identity | no | partial | yes | yes until producer-backed status/trace tests land |
 
 Critical gap rule:
 
 If this slice can launch a member locally on fallback, advertise live before remote ownership is
-retained, or leave stale liveness after cancel/restart failure, the implementation is not done.
+retained, or leave stale liveness after cancel or restart failure, the implementation is not
+done.
 
 ## Performance Review
 
-This is still correctness-first. The performance risk is architectural sprawl, not CPU.
+This is correctness-first. The performance risk is architectural sprawl, not CPU.
 
 Performance rules:
 
-1. do not build a second client/transport stack for member dispatch,
+1. do not build a second client or transport stack for member dispatch,
 2. do not re-run remote launch if a matching authoritative-live member already exists for the
    current generation,
 3. do not add extra full-store scans to steady-state command execution if the current REPL already
    owns the live member handle,
-4. do not make `execute_cancel` poll forever waiting for delivery.
+4. do not make `execute_cancel` poll forever waiting for delivery,
+5. do not invent a scheduler or cache to "optimize" a one-member placement seam.
 
-Performance issues found:
+Performance verdict:
 
-- 0 throughput blockers
-- 1 structural caution: keep cancel delivery bounded and reuse the existing span registry pattern
+- 0 throughput blockers,
+- 1 structural caution: keep cancel delivery bounded and reuse the existing span-registry pattern.
 
-The bad optimization here would be inventing a scheduler or cache to "speed up" a single-member
-placement seam. Don't.
+## DX Guardrails
 
-## DX Review
+This slice has no UI scope. It has strong developer and operator scope.
 
-This slice has no UI scope. It has strong developer/operator scope.
+Required DX posture:
 
-The user here is the maintainer asking:
-"If `status` says my world member is live, can I trust that it is actually in the world?"
-
-### Developer journey map
-
-| Stage | What the developer is doing | Current friction | Target after this slice |
-| --- | --- | --- | --- |
-| 1 | enable one world-scoped member backend | low-medium | keep low |
-| 2 | start REPL with shared world enabled | low | keep low |
-| 3 | run first world-backed command | high, placement is still shell-local today | transport-backed lazy launch |
-| 4 | inspect recorded execute-stream request during tests | high, no typed member payload exists | explicit typed payload visible in stubs |
-| 5 | inspect `substrate agent status --json` | medium | live member row reflects actual remote runtime |
-| 6 | cancel or stop the session | medium-high | same cancel seam as process exec, honest terminal state |
-| 7 | restart the shared world | medium-high | replacement launches through the same remote seam |
-| 8 | inspect trace rows | medium | producer-backed world/member identity stays top-level |
-| 9 | extend later to more members/platforms | high | clear boundary around what v1 does and does not do |
-
-### Developer empathy narrative
-
-Right now the repo makes you do too much trust-based reasoning.
-
-You can read the shell store, see a member participant with the right `world_id`, and still have
-to remember that the actual `run_control(...)` turn is local. That is bad product for a developer
-tool. It turns status into folklore.
-
-After this slice, the mental model gets simpler. If the member is live, it crossed the world
-transport and retained ownership there. If the remote path failed, you see honest absence or
-explicit failure. Painful sometimes. But true.
-
-### DX Scorecard
-
-| Dimension | Score | Notes |
-| --- | --- | --- |
-| Getting started | 6/10 | world-member configuration exists, placement truth is still hidden today |
-| API/CLI naming | 8/10 | execute-stream and cancel naming are already good |
-| Error messages | 7/10 | fail-closed posture exists, but member-specific transport failures need first-class wording |
-| Docs findability | 6/10 | planning docs are good, implementation truth still stops one seam short |
-| Upgrade path safety | 8/10 | additive transport contract keeps existing callers stable |
-| Observability | 8/10 | store + trace + recorded request stubs make this inspectable once the producer is real |
-| Recovery guidance | 7/10 | restart invalidation is solid, remote replacement failure needs explicit terminal reasons |
-| Escape hatches | 6/10 | fail-closed is right, but operator remediation needs to be obvious |
-
-Overall DX score: **7/10**
-
-### DX Implementation Checklist
-
-- make typed member transport visible in tests and diagnostics,
-- keep every remote failure message in problem + cause + fix style,
-- keep `status` and `toolbox` consuming existing shell authority instead of remote guesses,
-- preserve top-level `world_id` and `world_generation` in trace rows,
-- document any new operator-visible error only if implementation wording changes.
-
-### TTHW assessment
-
-Current TTHW for "prove whether world-scoped member placement is real" is about **15 minutes**.
-
-You have to read the seam doc, `async_repl.rs`, the transport service, and the tests to discover
-that the member still launches locally.
-
-Target after this slice: **under 8 minutes**.
-
-That means a maintainer can:
-
-1. read `PLAN-11.md`,
-2. inspect one typed `ExecuteRequest`,
-3. run the targeted tests,
-4. trust that status and trace are describing the actual execution boundary.
-
-## Cross-Phase Themes
-
-These themes showed up across scope, engineering, and DX review:
-
-1. **Keep one transport family.**
-   - New public APIs here would be theater, not leverage.
-
-2. **Keep shell authority separate from world execution.**
-   - The whole design works because those jobs are different.
-
-3. **Typed beats magical.**
-   - A real transport contract is worth the extra struct.
-
-4. **Fail closed on placement truth.**
-   - Local fallback would make the product lie in its most important state transition.
-
-5. **Tests must prove placement, not just metadata.**
-   - The repo already proves the metadata story. This slice is about the last mile.
+- typed member transport must be visible in tests and diagnostics,
+- every remote failure message must follow problem + cause + fix wording,
+- `status` and `toolbox` must keep consuming shell authority instead of remote guesses,
+- top-level `world_id` and `world_generation` must stay present in trace rows,
+- docs only change if operator-visible wording changes,
+- proving whether world-member placement is real should drop from roughly 15 minutes of code
+  reading to under 8 minutes of plan + test inspection.
 
 ## Worktree Parallelization Strategy
 
@@ -965,29 +908,31 @@ These themes showed up across scope, engineering, and DX review:
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| Transport contract | `crates/agent-api-types/`, `crates/shell/tests/support/` | — |
-| World-agent manager | `crates/world-agent/src/`, `crates/world-agent/tests/` | Transport contract |
-| Shell runtime switch | `crates/shell/src/repl/`, `crates/shell/src/execution/routing/dispatch/`, `crates/shell/tests/` | Transport contract |
-| Trace/status regression wall | `crates/shell/tests/`, maybe `crates/shell/src/execution/` | World-agent manager, Shell runtime switch |
+| A. Transport contract freeze | `crates/agent-api-types/`, `crates/shell/tests/support/` | — |
+| B. World-agent member manager | `crates/world-agent/src/`, `crates/world-agent/tests/` | A |
+| C. Shell remote runtime carrier and launch switch | `crates/shell/src/repl/`, `crates/shell/src/execution/routing/dispatch/`, `crates/shell/tests/` | A |
+| D. Status, trace, and replacement regression wall | `crates/shell/tests/`, maybe `crates/shell/src/execution/` | B + C |
 
 ### Parallel lanes
 
 - Lane A: transport contract and stub capture support
 - Lane B: world-agent member manager after Lane A
-- Lane C: shell runtime switch after Lane A
-- Lane D: integration/trace/status regression wall after B + C
+- Lane C: shell runtime-carrier split and remote launch cutover after Lane A
+- Lane D: integration, status, and trace regression wall after B + C
 
 ### Execution order
 
-1. Launch Lane A first.
+1. Launch Lane A first and freeze the typed request contract.
 2. After A merges cleanly, run Lane B and Lane C in parallel worktrees.
 3. Merge B + C.
 4. Run Lane D last because it verifies the full end-to-end seam.
 
 ### Conflict flags
 
-- Lanes B and C are safe in parallel if both avoid editing `agent-api-types` after Lane A lands.
-- Lane D touches the shared shell test surface and should stay last.
+- Lanes B and C are safe in parallel only if both avoid reopening `agent-api-types` after Lane A
+  lands.
+- Lane C and Lane D both touch shell test surfaces. Keep D last.
+- If B needs to rename any event payload fields after C starts, stop and refreeze the contract.
 
 ### Parallelization verdict
 
@@ -1015,16 +960,19 @@ This slice is done only when all of the following are true:
    shell-owned `gateway.run_control(...)`,
 2. the shell persists the member as `Allocating` first and only advertises live after remote
    ownership is retained,
-3. `/v1/execute/cancel` can cancel a live member-dispatch span,
-4. abnormal stream loss or startup failure converges the member to a non-live terminal state,
-5. replacement launch after world-generation rollover crosses the same transport and preserves
+3. remote retained control is represented explicitly in the shell, not by pretending it is a
+   local UAA cancel handle,
+4. `/v1/execute/cancel` can cancel a live member-dispatch span,
+5. abnormal stream loss or startup failure converges the member to a non-live terminal state,
+6. replacement launch after world-generation rollover crosses the same transport and preserves
    `resumed_from_participant_id`,
-6. `substrate agent status --json` and trace rows remain participant-correct and world-correct for
+7. `substrate agent status --json` and trace rows remain participant-correct and world-correct for
    the real remote producer,
-7. no host fallback exists for world-scoped members,
-8. targeted validation commands below are green.
+8. no host fallback exists for world-scoped members,
+9. targeted validation commands below are green,
+10. the plan remains Linux-first and explicitly fail-closed elsewhere.
 
-### Recommended verification commands
+## Recommended verification commands
 
 ```bash
 cargo test -p agent-api-types -- --nocapture
@@ -1037,15 +985,17 @@ cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
 ## Completion Summary
 
 - Step 0: scope accepted as transport-placement slice, no new public API family
-- Architecture Review: 4 issues found, all about keeping one honest retained-control and transport contract
-- Code Quality Review: 4 issues found, all about avoiding split brains between shell, transport, and world-agent
-- Test Review: diagram produced, 19 direct gaps identified
+- Architecture: tightened around one typed request, one remote control abstraction, and one
+  explicit prepared-launch split
+- Code Quality: no second lifecycle state machine, no fake remote-as-local carrier, no transport
+  brain in `world_ops.rs`
+- Test Review: diagrams produced, 19 direct gaps identified
 - Performance Review: 1 structural caution, 0 throughput blockers
-- DX Review: 7/10 overall, TTHW 15 min to target under 8 min
+- DX Guardrails: explicit and fail-closed, TTHW target under 8 minutes
 - NOT in scope: written
 - What already exists: written
-- TODOS.md updates: 0, repo has no root `TODOS.md`, deferred work captured here
-- Failure modes: 7 critical gaps flagged for the implementation to close through tests and fail-closed behavior
+- Failure modes: 8 critical gaps flagged for implementation to close through tests and fail-closed
+  behavior
 - Outside voice: skipped, `claude` CLI is installed but unauthenticated on 2026-05-02
 - Parallelization: 4 steps, 1 real parallel window after the transport contract lands
 - Lake Score: complete option chosen for every in-slice decision
@@ -1057,12 +1007,14 @@ cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Scope | Keep `/v1/execute/stream` and `/v1/execute/cancel` as the only transport seam | Mechanical | Boring by default | Existing transport already solves routing, NDJSON streaming, and cancel delivery | New `/v1/member/*` family |
 | 2 | Transport | Use additive `ExecuteRequest.member_dispatch` now | Taste | Explicit over clever | Smallest complete change that keeps old callers stable and makes the new intent readable | Immediate tagged target-enum refactor |
-| 3 | Authority | Keep canonical session-root writes in the shell only | Mechanical | Systems over heroes | `world-agent` execution and shell authority are intentionally different jobs | Remote canonical-state writes |
-| 4 | Failure posture | Deny world-member launch rather than falling back locally | Mechanical | Completeness | A fallback would make status and trace lie about placement | Host-side fallback |
-| 5 | World-agent structure | Add one internal `member_runtime.rs` instead of bloating `service.rs` | Mechanical | Engineered enough | `service.rs` should branch, not become the lifecycle implementation | 500-line `execute_stream` branch |
-| 6 | Reuse | Preserve existing liveness and lineage helpers in `session.rs` | Mechanical | DRY | The model already encodes the correct live bar and replacement semantics | Parallel remote-only state model |
-| 7 | Tests | Extend existing shell and world-agent stubs instead of building a new harness | Mechanical | Pragmatic | The repo already records execute-stream payloads and scripted world-agent streams | New bespoke integration harness |
-| 8 | Rollout | Land transport contract first, then runtime switch, then regression wall | Mechanical | Incremental over revolutionary | This keeps contract churn separate from lifecycle churn | Big-bang multi-crate rewrite |
+| 3 | Validation | Validate member-dispatch exclusivity at the request type boundary | Mechanical | Systems over heroes | Failing at deserialize/parse is more reliable than hoping every handler remembers the rules | Ad hoc handler-only validation |
+| 4 | Authority | Keep canonical session-root writes in the shell only | Mechanical | Systems over heroes | `world-agent` execution and shell authority are intentionally different jobs | Remote canonical-state writes |
+| 5 | Ownership carrier | Split local and remote retained control with one small enum | Mechanical | Explicit over clever | Remote execute spans are not local UAA cancel handles, and pretending otherwise is a maintenance trap | Stuffing remote state into `RetainedRunControl` |
+| 6 | Prepared launch | Introduce a dedicated remote-prepared shape for member dispatch | Taste | Minimal diff | A separate remote-prepared struct is clearer than optional gateway fields everywhere | One mega-struct with optional local-only fields |
+| 7 | Failure posture | Deny world-member launch rather than falling back locally | Mechanical | Completeness | A fallback would make status and trace lie about placement | Host-side fallback |
+| 8 | World-agent structure | Add one internal `member_runtime.rs` instead of bloating `service.rs` | Mechanical | Engineered enough | `service.rs` should branch, not become the lifecycle implementation | 500-line `execute_stream` branch |
+| 9 | Reuse | Preserve existing liveness and lineage helpers in `session.rs` | Mechanical | DRY | The model already encodes the correct live bar and replacement semantics | Parallel remote-only state model |
+| 10 | Rollout | Land transport contract first, then runtime switch, then regression wall | Mechanical | Incremental over revolutionary | This keeps contract churn separate from lifecycle churn | Big-bang multi-crate rewrite |
 
 ## GSTACK REVIEW REPORT
 
@@ -1070,7 +1022,7 @@ cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
 | --- | --- | --- | --- | --- | --- |
 | CEO Review | `/plan-ceo-review` | Scope and strategy | 1 | CLEAR | Kept the slice narrow, rejected a new public API family, and froze the host-authority/world-execution split |
 | Codex Review | `/codex review` | Independent 2nd opinion | 0 | SKIPPED | No separate outside-model review run, and `claude` CLI auth is missing for outside voice on this machine |
-| Eng Review | `/plan-eng-review` | Architecture and tests (required) | 1 | CLEAR | Locked the typed transport contract, the fail-closed placement posture, and the full test wall for placement/cancel/replacement correctness |
+| Eng Review | `/plan-eng-review` | Architecture and tests (required) | 1 | CLEAR | Locked the typed transport contract, the explicit local-vs-remote control split, the fail-closed placement posture, and the full test wall for placement/cancel/replacement correctness |
 | Design Review | `/plan-design-review` | UI/UX gaps | 0 | SKIPPED | No UI scope |
 
 **UNRESOLVED:** 0 plan-level decision points remain. The remaining work is implementation of the

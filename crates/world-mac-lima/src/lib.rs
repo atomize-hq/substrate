@@ -310,6 +310,7 @@ impl MacLimaBackend {
             shared_world: None,
             world_network: None,
             world_fs_mode: Some(fs_mode),
+            member_dispatch: None,
         }
     }
 
