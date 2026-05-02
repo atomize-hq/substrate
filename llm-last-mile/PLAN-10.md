@@ -1,4 +1,4 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-session-centric-state-store-autoplan-restore-20260501-194949.md -->
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-session-centric-state-store-autoplan-restore-20260501-200440.md -->
 
 # PLAN-10: Production World-Scoped Member Runtime Launch
 
@@ -144,7 +144,7 @@ Premise check, one by one:
 | Restart invalidation | `invalidate_stale_world_members_after_binding(...)` in [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) and `invalidate_stale_world_members_for_session(...)` in [state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse, then add replacement launch on top |
 | Lifecycle ownership gating | `can_advertise_live()` and `is_authoritative_live()` in [session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs) | Reuse exactly |
 | Event and snapshot machinery | `translate_wrapper_event(...)`, `build_runtime_message_event(...)`, `persist_runtime_snapshots(...)` in [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | Reuse, parameterize role-specific messages only |
-| Operator projections | `build_status_report(...)` and `build_toolbox_status_report(...)` in [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Reuse, touch only if launch preflight must align |
+| Operator projections | `build_status_report(...)` and `build_toolbox_status_report(...)` in [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Reuse, with required doctor-preflight alignment |
 
 ### 0D. Dream state and 12-month ideal
 
@@ -194,7 +194,7 @@ The production seam must stay bounded anyway:
 
 1. [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs)
 2. [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
-3. optional small alignment in
+3. required doctor-alignment work in
    [crates/shell/src/execution/agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
 4. test files:
    - [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
@@ -206,7 +206,6 @@ Default no-touch posture unless the implementation proves otherwise:
 
 - [crates/shell/src/execution/agent_runtime/registry.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/registry.rs)
 - [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-- [crates/shell/src/execution/agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
 
 `[Layer 1]` wins:
 
@@ -306,9 +305,10 @@ Fail-closed rules:
 
 ### First production caller
 
-The first production caller is the world-backed command path in
+The first production caller is the `world_session.is_some()` command branch in
 [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
-immediately before `execute_command(...)`.
+after `ensure_no_policy_drift(...)` succeeds and immediately before dispatch to either
+`exec_world_pty(...)` or `exec_world_line(...)`.
 
 New internal helper:
 
@@ -332,6 +332,9 @@ This is the right owner because `async_repl.rs` already holds:
 - the host orchestrator runtime,
 - the restart boundary,
 - and the command loop that actually needs the member runtime.
+
+It also avoids a factual mistake in the earlier wording: `execute_command(...)` is the host-only
+path. If this slice hooks there, world-backed commands still skip the member launch seam.
 
 ### Runtime ownership and lifecycle
 
@@ -490,7 +493,8 @@ This is the real seam.
 
 Add:
 
-1. lazy `ensure_member_runtime_ready(...)` before the world-backed `execute_command(...)` path,
+1. lazy `ensure_member_runtime_ready(...)` in the world-backed command branch before
+   `exec_world_pty(...)` / `exec_world_line(...)`,
 2. `prepare_member_runtime_startup(...)`,
 3. `start_member_runtime_with_prepared(...)`,
 4. `shutdown_member_runtime(...)`,
@@ -505,29 +509,39 @@ Implementation rule:
 
 #### 3. `agents_cmd.rs`
 
-Touch only if needed to align operator preflight with reality.
+This file is required for this slice because the current doctor flow is still too loose.
 
-Preferred alignment:
+Current repo truth:
 
-- doctor should fail closed when multiple enabled world-scoped members exist, because the runtime
-  will fail closed too,
-- doctor should use the same member-selection truth as launch preflight instead of a looser
-  boolean-only posture.
+- `build_doctor_report(...)` validates orchestrator selection and runtime realizability,
+- `enabled_world_member_exists(...)` only answers "is there at least one world member,"
+- that means doctor currently cannot fail closed on ambiguous world-member selection even though the
+  runtime must.
 
-`status` and `toolbox` logic should not need redesign. They are consumers, not the seam owner.
+Required alignment:
 
-### Validation-first, likely no-change surfaces
+1. doctor must call the same member-selection helper or the same underlying rule set as runtime
+   launch preflight,
+2. zero eligible world members must preserve host-only behavior,
+3. exactly one eligible world member must continue through allowlist and world-boundary checks,
+4. more than one eligible world member must fail closed with the same ambiguity posture the launch
+   path uses.
+
+`status` and `toolbox` still should not need redesign. They are consumers, not the seam owner.
+
+### Validation-first no-change gates
 
 #### `registry.rs`
 
-Default expectation: no logic change.
+Default: no logic change.
 
 `build_gateway_for_descriptor(...)` is already descriptor-generic. Only touch if the member path
-reveals a concrete backend-kind registration gap.
+reveals a concrete backend-kind registration gap during real launch. If the selected descriptor
+builds a gateway successfully in tests, this file stays untouched.
 
 #### `state_store.rs`
 
-Default expectation: no new semantics.
+Default: no new semantics.
 
 The store already has:
 
@@ -536,13 +550,103 @@ The store already has:
 - session-local live participant listing,
 - stale-generation invalidation.
 
-Only add a helper if the launch code would otherwise duplicate a real store rule. Do not move
+Only add a helper if `async_repl.rs` would otherwise have to reimplement an existing store-owned
+truth, for example "find the existing live member for this session/generation/agent." Do not move
 launch ownership into the store.
 
 #### `world_gateway.rs`
 
-Do not touch unless a test proves unavoidable. It is adjacent infrastructure, not the member
-runtime lifecycle owner.
+No changes in this slice. It is adjacent infrastructure, not the member runtime lifecycle owner.
+
+## Implementation Sequence
+
+This is the exact order to build the slice without reopening solved seams.
+
+### Step 1. Land the shared member-selection contract in `validator.rs`
+
+Deliverables:
+
+1. `validate_member_selection(...)` returns the unique eligible world-scoped member descriptor or a
+   fail-closed reason,
+2. helper wording is neutralized so `validate_runtime_realizability(...)` can describe any selected
+   runtime, not only the orchestrator,
+3. the low-level descriptor shape stays generic and reusable by both doctor and launch code.
+
+Acceptance gate:
+
+- unit coverage proves zero, one, and many eligible member cases,
+- no REPL or doctor behavior changes yet.
+
+### Step 2. Align `agents_cmd.rs` doctor preflight to the same contract
+
+Deliverables:
+
+1. `build_doctor_report(...)` stops using a boolean "any world member exists" posture for launch
+   truth,
+2. doctor reports host-only success when there are zero eligible members,
+3. doctor fails closed on ambiguous selection before any world-member boundary claim is made,
+4. allowlist and world-boundary checks continue to run only for the unique selected member path.
+
+Acceptance gate:
+
+- `substrate agent doctor --json` can distinguish zero vs one vs many world-member candidates,
+- doctor and runtime now share one selection truth instead of two similar-but-different ones.
+
+### Step 3. Land the lazy member launch seam in `async_repl.rs`
+
+Deliverables:
+
+1. `ensure_member_runtime_ready(...)` runs in the world-backed command branch after
+   `ensure_no_policy_drift(...)` and before `exec_world_pty(...)` / `exec_world_line(...)`,
+2. the helper reuses the shared selection contract and the existing authoritative parent-world
+   binding from `RuntimeOrchestrationContext`,
+3. the REPL loop gains one `member_runtime: Option<AsyncReplAgentRuntime>` slot and one
+   `selected_member_agent_id: Option<String>` slot,
+4. the member remains `allocating` until retained UAA control, event stream, and completion
+   observer are all live.
+
+Acceptance gate:
+
+- first world-backed command launches lazily,
+- second command on the same generation reuses the live member,
+- failed preflight exits without a half-live participant.
+
+### Step 4. Land restart replacement on the same retained-control seam
+
+Deliverables:
+
+1. once a new authoritative world binding is persisted and stale members are invalidated, the REPL
+   either launches a replacement participant for the new generation or leaves honest absence,
+2. replacement uses `new_replacement_participant(...)` with fresh `participant_id` and
+   `resumed_from_participant_id=<old participant>`,
+3. stale member state never regains liveness through trace fallback.
+
+Acceptance gate:
+
+- restart with a live member yields either a live replacement on the new generation or a clear
+  failed replacement outcome,
+- stale generation never appears live again.
+
+### Step 5. Close the test wall before any opportunistic cleanup
+
+Required test owners:
+
+1. `async_repl.rs` for launch-state progression and replacement lifecycle,
+2. `agent_successor_contract_ahcsitc0.rs` for doctor/status/toolbox contract coverage,
+3. `repl_world_first_routing_v1.rs` for world-backed command and restart integration,
+4. `agent_hub_trace_persistence.rs` for trace lineage and terminal-row persistence.
+
+Acceptance gate:
+
+- all targeted `cargo test -p shell ...` commands below pass,
+- no extra refactor or cleanup work starts before the runtime/test wall is green.
+
+### Step 6. Only then touch docs if the runtime wording actually changed
+
+This is not a docs-first slice.
+
+Touch `TRACE.md` or operator wording only if the landed runtime behavior changed user-visible
+language or trace examples. If the code and tests align without doc drift, skip doc edits.
 
 ## Code Quality Review
 
@@ -876,44 +980,50 @@ These themes showed up across scope review, engineering review, and DX review:
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| A. Member selection and preflight contract | `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/execution/` | — |
-| B. Lazy launch + retained-control lifecycle reuse | `crates/shell/src/repl/` | A |
-| C. Status/doctor/trace contract tests | `crates/shell/tests/`, `crates/shell/src/execution/` | A, B |
-| D. Restart replacement integration tests | `crates/shell/tests/`, `crates/shell/src/repl/` | A, B |
-| E. Optional docs alignment + final validation | `docs/`, `crates/shell/` | C, D |
+| A. Shared member-selection contract | `crates/shell/src/execution/agent_runtime/` | — |
+| B. Doctor alignment | `crates/shell/src/execution/` | A |
+| C. Lazy launch + retained-control lifecycle reuse | `crates/shell/src/repl/` | A |
+| D. Status/toolbox/trace contract tests | `crates/shell/tests/` | B, C |
+| E. Restart replacement integration tests | `crates/shell/tests/`, `crates/shell/src/repl/` | C |
+| F. Optional docs alignment + final validation | `docs/`, `crates/shell/` | D, E |
 
 ### Parallel lanes
 
-- Lane A: member-selection and preflight helper work
-- Lane B: runtime lifecycle work after Lane A
-- Lane C: status/doctor/trace tests after Lane B
-- Lane D: restart replacement integration tests after Lane B, in parallel with Lane C
-- Lane E: final validation and optional docs after C and D
+- Lane A: shared selection helper work
+- Lane B: doctor alignment after Lane A
+- Lane C: runtime lifecycle work after Lane A
+- Lane D: status/toolbox/trace tests after Lanes B and C
+- Lane E: restart replacement integration tests after Lane C, in parallel with Lane D
+- Lane F: final validation and optional docs after Lanes D and E
 
 ### Execution order
 
 1. Launch Lane A first.
 2. Merge Lane A into the working base.
-3. Launch Lane B.
-4. Once Lane B compiles, launch Lanes C and D in parallel worktrees.
-5. Merge C and D, then run Lane E for cleanup and the targeted command wall.
+3. Launch Lanes B and C in parallel worktrees because they share the selection contract but not the
+   same primary module.
+4. Merge B and C.
+5. Launch Lanes D and E in parallel worktrees.
+6. Merge D and E, then run Lane F for cleanup and the targeted command wall.
 
 ### Conflict flags
 
-- `async_repl.rs` belongs to Lane B. Do not let test lanes patch it casually.
-- `agents_cmd.rs` belongs to Lane A only if doctor alignment is required; otherwise leave it to
-  Lane C test fallout only.
-- `agent_successor_contract_ahcsitc0.rs` belongs to Lane C.
-- `repl_world_first_routing_v1.rs` belongs to Lane D.
-- `agent_hub_trace_persistence.rs` belongs to Lane C.
+- `validator.rs` belongs to Lane A. Do not let downstream lanes fork their own selection rules.
+- `agents_cmd.rs` belongs to Lane B.
+- `async_repl.rs` belongs to Lane C and Lane E. Lane E should only change it for restart-test
+  fallout, not for fresh architectural decisions.
+- `agent_successor_contract_ahcsitc0.rs` and `agent_hub_trace_persistence.rs` belong to Lane D.
+- `repl_world_first_routing_v1.rs` belongs to Lane E.
 
 ### Parallelization verdict
 
-This slice is sequential at the runtime seam, then parallelizable at the test wall.
+This slice has two clean parallel windows once the shared selection contract lands.
 
-- **5 lanes total**
-- **2 lanes can run in parallel after lifecycle work lands**
-- **2 sequential checkpoints remain non-negotiable: selection/preflight first, full validation last**
+- **6 lanes total**
+- **Window 1:** Lanes B + C in parallel after Lane A
+- **Window 2:** Lanes D + E in parallel after Lanes B + C
+- **2 sequential checkpoints remain non-negotiable:** shared selection truth first, full
+  validation last
 
 ## Deferred Work
 
@@ -965,7 +1075,7 @@ cargo test -p shell agent_hub_trace_persistence -- --nocapture
 - TODOS.md updates: 0, repo has no root `TODOS.md`, deferrals captured here
 - Failure modes: 6 critical gaps flagged
 - Outside voice: skipped, `claude` CLI is installed but unauthenticated on 2026-05-01
-- Parallelization: 5 lanes, with test lanes parallel only after lifecycle work lands
+- Parallelization: 6 lanes, with one parallel window after selection-contract work and a second at the test wall
 - Lake Score: complete option chosen for every in-slice decision
 
 <!-- AUTONOMOUS DECISION LOG -->
@@ -981,6 +1091,9 @@ cargo test -p shell agent_hub_trace_persistence -- --nocapture
 | 6 | Restart | Include replacement launch in the same slice | Mechanical | Completeness | Invalidation without replacement leaves the product half-real | Defer replacement producer |
 | 7 | Validation | Keep orchestrator and member selection helpers distinct, while sharing low-level realizability plumbing | Mechanical | Explicit over clever | The product concepts differ even if the runtime descriptor is generic | One vague dual-purpose selector |
 | 8 | Tests | Treat real-launch integration coverage as mandatory, not optional cleanup | Mechanical | Boil the lake | This seam is exactly where fixture-only truth stops being enough | Happy-path-only unit coverage |
+| 9 | Caller location | Hook member launch into the world-backed REPL branch before `exec_world_pty(...)` / `exec_world_line(...)` | Mechanical | Explicit over clever | That is the real world-mode execution seam; `execute_command(...)` is host-only | Hooking the host-only path |
+| 10 | Doctor contract | Make `agents_cmd.rs` a required production surface for this slice | Mechanical | Systems over heroes | Doctor and launch must share one fail-closed selection truth or operators will debug ghosts | Keeping doctor on a boolean world-member posture |
+| 11 | Parallelization | Split doctor alignment from REPL lifecycle after the shared validator contract lands | Taste | Pragmatic | The modules are disjoint enough to parallelize safely once selection semantics are frozen | Forcing the whole slice through one serial lane |
 
 ## GSTACK REVIEW REPORT
 
