@@ -19,121 +19,125 @@ Outside voice: unavailable on 2026-05-02 because `claude` CLI is installed but u
 
 ## Objective
 
-`PLAN-11_5` got close and still blocked on the wrong seam.
+This is the continuation plan. Not another design reset.
 
-The runtime contract is no longer the problem. The accepted carryover already froze the
-member-dispatch payload, the shell-side builder, and the test harnesses. The remaining
-problem is that the shell lane still cannot legally *construct* the already-frozen request
-through `crate::execution::*`.
+`PLAN-11_5` already froze the payload contract, preserved the right worker artifacts, and proved
+that the remaining blocker is not runtime design. The remaining blocker is that the shell lane
+still cannot legally construct the already-frozen member-dispatch request through the sanctioned
+`crate::execution::*` surface.
 
-This plan finishes the slice by doing three things:
+This plan does exactly three things:
 
-1. explicitly thawing the crate-surface request-construction bridge that `PLAN-11_5`
-   froze too aggressively,
-2. authorizing the parent to choose the correct bridge shape without re-opening the
-   runtime contract again,
-3. then resuming the exact same world-agent, shell, and regression-wall work needed to
-   satisfy the original SOW.
+1. thaw the crate-surface request bridge without reopening the payload contract,
+2. finish the real remote member-runtime cutover in `world-agent` and `async_repl.rs`,
+3. prove status and trace truth so world-scoped members stop lying about where they run.
 
-The required user outcome is unchanged:
+The user-visible outcome is unchanged:
 
 - when a world-scoped member says it is live on generation `N` of world `W`,
 - it is actually running inside `world-agent` on generation `N` of world `W`,
 - with real remote cancel delivery, real replacement behavior, and real retained control,
 - and `substrate agent status` plus trace rows do not lie about placement.
 
-## Why `PLAN-11_5` Blocked Again
+## Locked Starting State
 
-The blocked state is now concrete, not speculative.
+### Accepted carryover
 
-1. `crates/shell/src/execution/routing.rs` already re-exports
-   `build_agent_client_and_member_dispatch_request(...)`.
-2. The builder input type,
-   `MemberDispatchTransportRequest`, still lives only in
-   [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs).
-3. `async_repl.rs` therefore cannot consume the builder from `crate::execution::*`
-   without either:
-   - reaching into private routing modules, or
-   - forcing a parent-owned export change outside the old allowed blast radius.
-4. The old plan froze exactly the files that contain the missing bridge:
-   - [crates/shell/src/execution/routing/dispatch/prelude.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/prelude.rs)
-   - optionally [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs)
-
-That is the third block. Not runtime uncertainty. Not transport uncertainty. Plan authority
-uncertainty.
-
-## Imported Truth
-
-The current accepted parent state is:
+The accepted parent state entering `PLAN-12` is:
 
 - Gate A carryover: accepted
 - Gate B carryover: accepted
 - Gate C: blocked
 - Gate D: not reached
 
-Accepted branch truth that remains valid:
+The following branch truth already exists and remains authoritative unless a later proof fails:
 
 - [crates/agent-api-types/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs)
 - [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs)
 - [crates/shell/src/execution/routing/dispatch/prelude.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/prelude.rs)
 - [crates/shell/tests/support/socket.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/support/socket.rs)
 - [crates/shell/tests/support/repl_world_agent.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/support/repl_world_agent.rs)
+- [crates/shell/src/execution/routing.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing.rs), which already re-exports `build_agent_client_and_member_dispatch_request(...)`
 
-Already-landed parent unblock that stays valid:
+The preserved worker artifacts are evidence and logic references only. They are not accepted
+branch truth until the parent reopens the correct lanes and integrates them.
 
-- [crates/shell/src/execution/routing.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing.rs)
-  now re-exports the builder function itself
+### Exact blocker
 
-Preserved but unintegrated evidence:
+The blocked state is concrete:
 
-- the `world-agent` worker patch is preserved as reference implementation only
-- the shell worker returned blocked with no accepted code changes
-- no worker output beyond the parent-owned `routing.rs` change is branch truth today
+1. [crates/shell/src/execution/routing.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing.rs) re-exports
+   `build_agent_client_and_member_dispatch_request(...)` at lines 40-43.
+2. [crates/shell/src/execution/routing/dispatch/prelude.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/prelude.rs)
+   re-exports the same builder at lines 15-19.
+3. [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs)
+   still keeps `MemberDispatchTransportRequest` crate-private at lines 203-216.
+4. [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+   therefore cannot consume the builder through `crate::execution::*` without either reaching
+   into private modules or recreating the request shape locally.
 
-## Explicit Authority Reset
+That is the block. Not runtime uncertainty. Not transport uncertainty. Not test ambiguity.
 
-This is the whole point of `PLAN-12`.
+## Frozen Execution Contract
 
-`PLAN-12` explicitly grants the parent authority to finish the crate-surface request bridge
-before reopening worker lanes. No additional approval is required during execution if the work
-stays within the bounds below.
+This section is the part implementers are not allowed to reinterpret.
 
-### Parent-owned bridge decision
+### Non-negotiable invariants
 
-The parent must choose exactly one of these bridge shapes at Step 1:
+1. The shell remains the only canonical writer of orchestration session state and participant state.
+2. `world-agent` owns in-world member execution, remote cancel delivery, event streaming, and completion observation only.
+3. World-scoped member launch fails closed. Host fallback is forbidden.
+4. `POST /v1/execute/stream` and `POST /v1/execute/cancel` remain the only transport seam.
+5. `ExecuteStreamFrame::{Start,Event,Exit,Error}` remain the only stream families.
+6. Remote readiness still depends on the existing session-handle `AgentEvent` contract.
+7. The shell must represent retained control explicitly as local vs remote.
+8. The shell must use an explicit remote prepared-launch shape for members. It must not reuse the host-local orchestrator prepared-launch path as a shortcut.
+9. `world-agent` must validate the shell-supplied `world_id` and `world_generation` and reject mismatches.
+10. Linux-first remains explicit. Non-Linux member-dispatch paths fail closed in this slice.
+
+### Frozen payload, thawed crate-surface bridge
+
+The payload contract stays frozen, but the parent is now explicitly authorized to thaw the
+crate-surface request bridge before reopening lanes. The plan chooses a preferred fix, direct
+re-export of `MemberDispatchTransportRequest` through the allowed crate surface, and
+pre-authorizes one fallback, a sanctioned adapter helper, so the run cannot block again on the
+same boundary mistake.
+
+That means:
+
+- `MemberDispatchRequestV1` does not change.
+- `resolved_runtime` does not change.
+- `resolved_runtime.binary_path` stays absolute.
+- `resolved_runtime.backend_kind` stays explicit. No inference from `backend_id`.
+- top-level `agent_id` remains authoritative for traces, budgets, and diagnostics.
+- `protocol` remains part of the transport identity contract.
 
 #### Preferred bridge, default
 
 Re-export `MemberDispatchTransportRequest` through the same crate-level surface that already
 exports `build_agent_client_and_member_dispatch_request(...)`.
 
-That means:
+Required shape:
 
 1. re-export the type from `dispatch/prelude.rs`,
 2. re-export the type from `routing.rs`,
-3. keep `world_ops.rs` behavior unchanged.
+3. leave request serialization behavior in `world_ops.rs` unchanged.
 
 #### Authorized fallback bridge
 
-If direct type export proves to be the wrong seam after reading the code carefully, the parent
-is pre-authorized to add a crate-local adapter helper in `world_ops.rs`, then re-export that
-adapter through `dispatch/prelude.rs` and `routing.rs`.
+If direct type export proves to be the wrong seam after code review, the parent is pre-authorized
+to add one crate-local adapter helper in `world_ops.rs`, then re-export that helper through
+`dispatch/prelude.rs` and `routing.rs`.
 
-Hard rule:
+Hard rules:
 
-- this fallback may change visibility and helper shape only,
+- the fallback may change visibility and helper shape only,
 - it may not change serialized payload fields,
 - it may not change `MemberDispatchRequestV1`,
-- it may not add a second request-construction path inside `async_repl.rs`.
+- it may not add a second request-construction path inside `async_repl.rs`,
+- it may not move runtime selection into `world-agent`.
 
-### Why this is authorized
-
-The old plan treated the request-construction surface as frozen contract. That was wrong.
-
-The payload contract is frozen. The crate-surface bridge is not. `PLAN-12` separates those two
-facts explicitly so the run cannot block again on a plan-boundary technicality.
-
-### Revised file authority
+### File authority and escalation boundary
 
 | Boundary | Files | Rule |
 | --- | --- | --- |
@@ -143,20 +147,19 @@ facts explicitly so the run cannot block again on a plan-boundary technicality.
 | Worker-safe world-agent lane | `crates/world-agent/Cargo.toml`, `crates/world-agent/src/lib.rs`, `crates/world-agent/src/service.rs`, `crates/world-agent/src/member_runtime.rs`, `crates/world-agent/tests/streamed_execute_cancel_v1.rs` | Lane B only. |
 | Worker-safe shell lane | `crates/shell/src/repl/async_repl.rs`, `crates/shell/tests/repl_world_first_routing_v1.rs` | Lane C only. |
 | Parent-owned regression wall | `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, `crates/shell/tests/agent_hub_trace_persistence.rs` | Parent only after B and C integrate. |
-| Escalation-only surfaces | `crates/shell/src/execution/agent_runtime/session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agents_cmd.rs` | Touch only if the regression wall proves the current assumptions false. |
+| Escalation-only surfaces | `crates/shell/src/execution/agent_runtime/session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agents_cmd.rs` | Touch only if the regression wall proves current assumptions false. |
 
-### Revised stop conditions
+### Stop and escalate conditions
 
 Stop the run and write blocked state again only if one of these becomes true:
 
-1. the parent bridge step requires changing `crates/agent-api-types/src/lib.rs`
-2. the parent bridge step requires changing the serialized `member_dispatch` payload
-3. the shell lane still cannot construct the request through `crate::execution::*` after the
-   parent bridge lands
-4. either worker lane needs to edit the other lane's files
-5. the world-agent lane needs a second runtime selector or backend inference from `backend_id`
-6. status or trace truth requires unplanned production logic outside the escalation-only surfaces
-7. a third independent worker lane becomes necessary
+1. the parent bridge step requires changing `crates/agent-api-types/src/lib.rs`,
+2. the parent bridge step requires changing the serialized `member_dispatch` payload,
+3. the shell lane still cannot construct the request through `crate::execution::*` after the parent bridge lands,
+4. either worker lane needs to edit the other lane's files,
+5. the world-agent lane needs a second runtime selector or backend inference from `backend_id`,
+6. status or trace truth requires unplanned production logic outside the escalation-only surfaces,
+7. a third independent worker lane becomes necessary.
 
 ## Step 0: Scope Challenge
 
@@ -164,11 +167,11 @@ Stop the run and write blocked state again only if one of these becomes true:
 
 | Sub-problem | Existing code | Decision |
 | --- | --- | --- |
-| typed `member_dispatch` payload with resolved runtime | [crates/agent-api-types/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs), [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs) | Reuse exactly. Do not refreeze payload shape again. |
+| typed `member_dispatch` payload with resolved runtime | [crates/agent-api-types/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs), [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs) | Reuse exactly. Do not reopen payload shape. |
 | builder function already visible at crate surface | [crates/shell/src/execution/routing.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing.rs) | Keep. The missing piece is request construction, not function visibility. |
 | request-construction type lives one layer too low | [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs) | Bridge it. Do not duplicate it. |
-| shell-owned member lifecycle semantics | [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | Reuse persistence, invalidation, and lineage semantics. Change placement only. |
-| world-owned retained-control reference pattern | [crates/world-agent/src/gateway_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/gateway_runtime.rs) | Reuse as lifecycle pattern, not as a second owner model. |
+| shell-owned member lifecycle semantics | [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | Reuse persistence, invalidation, lineage, and status semantics. Change placement only. |
+| world-owned retained-control lifecycle pattern | [crates/world-agent/src/gateway_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/gateway_runtime.rs) | Reuse as a lifecycle pattern, not as a second owner model. |
 | status and trace truth consumers | [crates/shell/tests/agent_successor_contract_ahcsitc0.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs), [crates/shell/tests/agent_hub_trace_persistence.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_hub_trace_persistence.rs) | Reuse. The regression wall proves the producer is now actually remote. |
 
 ### 0B. Minimum diff decision
@@ -177,13 +180,13 @@ The smallest honest diff is:
 
 1. thaw the request-construction bridge only,
 2. keep the payload contract frozen,
-3. reseed the same two runtime lanes,
+3. reopen the same two runtime lanes,
 4. integrate the preserved `world-agent` lane work only after the shell lane is unblocked,
-5. finish the status and trace wall.
+5. finish the status and trace regression wall.
 
 Anything smaller is fake progress. Anything larger is unnecessary scope.
 
-### 0C. Complexity check
+### 0C. Complexity, completeness, and search check
 
 This continuation still touches more than 8 files. That is justified and still minimal.
 
@@ -202,38 +205,30 @@ The production path is:
 11. `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
 12. `crates/shell/tests/agent_hub_trace_persistence.rs`
 
-That is still one slice. Not pretty. Necessary.
+Search-before-building result:
 
-### 0D. Search-before-building result
-
-- **[Layer 1]** Keep using the existing `crate::execution::*` export pattern instead of adding
-  another import seam.
+- **[Layer 1]** Keep using the existing `crate::execution::*` export pattern instead of adding another import seam.
 - **[Layer 1]** Keep using `/v1/execute/stream` and `/v1/execute/cancel` only.
 - **[Layer 1]** Keep using the existing session-handle readiness event as the live gate.
-- **[Layer 3]** Treat the bridge as crate-surface plumbing, not as contract refreeze. The
-  payload already carries the authoritative runtime facts.
+- **[Layer 3]** Treat the bridge as crate-surface plumbing, not as contract refreeze. The payload already carries the authoritative runtime facts.
 
-### 0E. Completeness check
+Completeness decision:
 
-The shortcut would be:
+- private-module reach-in from `async_repl.rs`: rejected
+- local reconstruction of `MemberDispatchTransportRequest`: rejected
+- second ad hoc builder near the REPL: rejected
 
-- private-module reach-in from `async_repl.rs`,
-- local reconstruction of `MemberDispatchTransportRequest`,
-- or a second ad hoc builder shape near the REPL.
+Those shortcuts save minutes and permanently preserve drift in one of the most fragile seams in
+the slice.
 
-Reject all of them.
-
-That would save minutes and permanently preserve drift in one of the most fragile seams in the
-slice.
-
-### 0F. Distribution check
+### 0D. Distribution check
 
 No new distributable artifact type is introduced here.
 
 This slice changes runtime truth inside existing crates only. No new binary, package, container,
 or publish pipeline is required.
 
-### 0G. NOT in scope
+### 0E. NOT in scope
 
 - another `MemberDispatchRequestV1` shape change
 - a `V2` rename for an unshipped internal seam
@@ -248,7 +243,7 @@ or publish pipeline is required.
 
 ### Findings
 
-`[P1] (confidence: 10/10) crates/shell/src/execution/routing.rs:40-41 + crates/shell/src/execution/routing/dispatch/prelude.rs:16 + crates/shell/src/execution/routing/dispatch/world_ops.rs:203,1074 — the crate-level surface exports the member-dispatch builder but not the request-construction surface needed to call it, so the shell cutover is blocked by module boundaries, not by runtime design.`
+`[P1] (confidence: 10/10) crates/shell/src/execution/routing.rs:40-43 + crates/shell/src/execution/routing/dispatch/prelude.rs:15-19 + crates/shell/src/execution/routing/dispatch/world_ops.rs:203-216 — the crate-level surface exports the member-dispatch builder but not the request-construction surface needed to call it, so the shell cutover is blocked by module boundaries, not by runtime design.`
 
 Recommendation:
 
@@ -256,7 +251,7 @@ Recommendation:
 - if that feels wrong after code review, add one sanctioned adapter in `world_ops.rs`
 - do not reopen the payload contract
 
-`[P1] (confidence: 10/10) crates/shell/src/repl/async_repl.rs:2624,2706,2763 — member startup still flows through prepare/start helpers that end at host-local orchestrator startup, so world-scoped members can still claim remote placement while running in the shell process.`
+`[P1] (confidence: 10/10) crates/shell/src/repl/async_repl.rs:2624-2819 — member startup still flows through preparation helpers that end at host-local runtime launch and shutdown helpers, so world-scoped members can still claim remote placement while control remains rooted in the shell process.`
 
 Recommendation:
 
@@ -264,7 +259,7 @@ Recommendation:
 - keep local startup for the orchestrator path only
 - move member startup, cancel retention, and completion observation onto the remote path
 
-`[P1] (confidence: 9/10) crates/world-agent/src/service.rs:1415 — execute_cancel only knows the ordinary process-exec span registry today, so remote member spans still need a world-owned retained-control registry and cancel path.`
+`[P1] (confidence: 9/10) crates/world-agent/src/service.rs:1415-1438 — execute_cancel only knows the ordinary process-exec span registry today, so remote member spans still need a world-owned retained-control registry and cancel path.`
 
 Recommendation:
 
@@ -375,8 +370,8 @@ Recommendation:
 5. No silent reopening of the payload schema.
 6. No worker edits to the bridge files after Step 1 lands.
 
-If the implementation needs any of those, stop and escalate. That means the plan assumptions
-were wrong.
+If implementation needs any of those, stop and escalate. That means the plan assumptions were
+wrong.
 
 ## Test Review
 
@@ -495,7 +490,7 @@ remote cancel path, and a real remote terminal observer, the slice is not done.
 
 ## Performance Review
 
-This is still correctness-first.
+This is correctness-first.
 
 Performance cautions:
 
@@ -513,14 +508,14 @@ This is a developer tool. Failure messages matter.
 Required error-message posture:
 
 1. bridge failures must name the missing crate surface explicitly
-2. remote launch failures must include `participant_id`, `world_id`, `world_generation`, and
-   backend kind
-3. cancel failures must say whether delivery failed before span registration or after remote
-   startup
-4. replacement failures must say whether stale generation was already invalidated and whether
-   the successor ever reached remote readiness
+2. remote launch failures must include `participant_id`, `world_id`, `world_generation`, and backend kind
+3. cancel failures must say whether delivery failed before span registration or after remote startup
+4. replacement failures must say whether stale generation was already invalidated and whether the successor ever reached remote readiness
 
 ## Worktree Parallelization Strategy
+
+This slice has one real parallel window and no more. The bridge must land first. The regression
+wall must land last.
 
 ### Dependency table
 
@@ -538,6 +533,14 @@ Required error-message posture:
 - Lane C: `L2`, independent after `P0`
 - Lane D: `P1`, sequential after B and C integrate
 
+### Suggested worktree ownership
+
+- Parent worktree: bridge + integration + regression wall
+- `wt/plan12-world-agent`: Lane B only
+- `wt/plan12-shell`: Lane C only
+
+No worker gets bridge-file ownership after Step 1. That is what keeps the merge cheap.
+
 ### Execution order
 
 1. Parent lands the crate-surface bridge.
@@ -552,21 +555,16 @@ Required error-message posture:
 - Lane B and Lane C stay parallel only if neither reopens the bridge files after `P0`
 - if either lane needs `crates/agent-api-types/src/lib.rs`, stop
 - if the shell lane needs `session.rs`, `state_store.rs`, or `agents_cmd.rs`, escalate before editing
+- if the world-agent lane starts inferring runtime from `backend_id`, stop immediately
 
 ### Parallelization verdict
 
 One real parallel window remains. Worker cap stays exactly `2`.
 
-## Deferred Work
-
-- shared startup-crate extraction, if a third consumer ever makes the duplication real
-- non-Linux member-dispatch parity
-- docs cleanup after the regression wall is green
-- status and doctor UX polish after placement truth is proven
-
-No new `TODOS.md` entry is required here. These are explicit non-goals, not forgotten work.
-
 ## Implementation Sequence
+
+This is the execution contract. Steps are ordered. Do not skip a gate because later work seems
+obvious.
 
 ### Step 1. Parent crate-surface bridge
 
@@ -576,22 +574,24 @@ Files:
 - [crates/shell/src/execution/routing/dispatch/prelude.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/prelude.rs)
 - optional surface-only fallback in [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs)
 
-Deliverables:
+Work:
 
 1. choose the preferred type export or the sanctioned adapter
 2. keep serialized payload behavior unchanged
 3. prove the shell lane can construct the request through `crate::execution::*`
 4. record the bridge choice in run-state and closeout notes
 
-Acceptance:
+Validation gate:
 
 - `async_repl.rs` no longer needs private-module reach-in
 - no second payload-construction path exists
 - `cargo test -p shell --lib -- --nocapture` passes before workers reopen
 
-Stop condition:
+Escalate if:
 
-- if Step 1 needs payload-schema edits, stop and reassess
+- Step 1 needs payload-schema edits
+- neighboring exports regress
+- the sanctioned surface still does not unblock the shell lane
 
 ### Step 2. World-agent lane
 
@@ -603,7 +603,7 @@ Files:
 - new `crates/world-agent/src/member_runtime.rs`
 - [crates/world-agent/tests/streamed_execute_cancel_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/streamed_execute_cancel_v1.rs)
 
-Deliverables:
+Work:
 
 1. add direct `agent_api` dependency
 2. add Linux-only `member_runtime.rs`
@@ -611,11 +611,12 @@ Deliverables:
 4. register remote member spans for cancel delivery
 5. fail closed on binding mismatch, missing binary, or unsupported backend
 
-Acceptance:
+Validation gate:
 
 - world-agent launches from the shell-resolved runtime descriptor
 - member dispatch fails closed on world mismatch or missing runtime facts
 - remote cancel reports truthfully against the member span registry
+- `cargo test -p world-agent --test streamed_execute_cancel_v1 -- --nocapture` passes
 
 Use the preserved worker patch as logic reference only. Do not blindly apply it.
 
@@ -626,18 +627,25 @@ Files:
 - [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
 - [crates/shell/tests/repl_world_first_routing_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs)
 
-Deliverables:
+Work:
 
 1. split host-local orchestrator launch from remote member launch explicitly
 2. consume only the sanctioned crate-surface bridge
 3. wire startup, readiness, cancel, and replacement through the remote path
 4. preserve same-generation reuse for already-live remote members
 
-Acceptance:
+Validation gate:
 
 - first world-backed member launch crosses typed execute-stream
 - `Ready` and `Running` require session-handle evidence
 - replacement preserves lineage and fails closed honestly
+- `cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture` passes
+
+Escalate if:
+
+- the shell lane needs to edit bridge files after Step 1
+- remote readiness cannot be proven without reopening the readiness contract
+- status truth starts depending on local optimistic state again
 
 ### Step 4. Parent regression wall
 
@@ -646,38 +654,45 @@ Files:
 - [crates/shell/tests/agent_successor_contract_ahcsitc0.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs)
 - [crates/shell/tests/agent_hub_trace_persistence.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_hub_trace_persistence.rs)
 
-Deliverables:
+Work:
 
 1. add status truth assertions for real remote producer state
 2. add trace truth assertions for launch, cancel, and replacement
 3. prove stale generation never revives after failed replacement
 
-Acceptance:
+Validation gate:
 
-- all verification commands below are green in order
+- `cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture` passes
+- `cargo test -p shell --test agent_hub_trace_persistence -- --nocapture` passes
 - remote producer truth is observable through status and trace, not inferred from optimistic state
 
 ### Step 5. Closeout
 
-Deliverables:
+Work:
 
 1. update run-state with accepted worker outputs and final validation
 2. leave quarantined but unused worker artifacts as evidence only
 3. record whether the bridge choice was direct type export or adapter fallback
+4. capture the final ordered verification transcript
+
+Closeout is not done until the bridge choice, lane outputs, and proof commands are all recorded.
 
 ## Definition of Done
 
-1. the crate surface exposes a sanctioned request-construction bridge for member dispatch
+1. the crate surface exposes one sanctioned request-construction bridge for member dispatch
 2. `async_repl.rs` launches world-scoped members through the remote path only
 3. `world-agent` owns member retained control inside the active world
 4. `execute_cancel` reaches both process-exec spans and member spans
 5. status and trace show the real remote producer
 6. same-generation reuse still avoids redundant relaunch
 7. replacement preserves lineage and fails closed honestly
-8. all targeted tests pass
-9. the run cannot be blocked again by missing plan authority for the crate-surface bridge
+8. all targeted tests pass in order
+9. no worker lane reopened the payload contract
+10. the run cannot block again on missing plan authority for the crate-surface bridge
 
-## Recommended verification commands
+## Recommended Verification Commands
+
+Run in this order. Do not skip forward.
 
 ```bash
 cargo test -p shell --lib -- --nocapture
@@ -688,6 +703,15 @@ cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
 cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
 cargo test -p shell --test agent_hub_trace_persistence -- --nocapture
 ```
+
+## Deferred Work
+
+- shared startup-crate extraction, if a third consumer ever makes the duplication real
+- non-Linux member-dispatch parity
+- docs cleanup after the regression wall is green
+- status and doctor UX polish after placement truth is proven
+
+No new `TODOS.md` entry is required here. These are explicit non-goals, not forgotten work.
 
 ## Completion Summary
 
@@ -715,7 +739,8 @@ cargo test -p shell --test agent_hub_trace_persistence -- --nocapture
 | 4 | Boundaries | Expand parent-owned bridge files to `routing.rs` + `prelude.rs` and optionally surface-only `world_ops.rs` | Mechanical | Blast radius instinct | That is the smallest authority expansion that removes the false blocker | Freezing the bridge seam again |
 | 5 | Runtime ownership | Keep runtime selection in the shell and retained control in `world-agent` | Mechanical | Systems over heroes | Two selectors would drift, two state writers would lie | Letting `world-agent` infer runtime from `backend_id` |
 | 6 | Shell cutover | Split local orchestrator control from remote member control explicitly | Mechanical | Explicit over clever | The current coupling is the remaining placement lie | Reusing host-local runtime launch for members |
-| 7 | Regression wall | Keep status and trace proof parent-owned after both runtime lanes merge | Mechanical | Blast radius instinct | Producer truth crosses lane boundaries and needs one integrator | Letting a worker lane redefine status truth alone |
+| 7 | Parallelization | Keep the worker cap at `2` with parent-owned bridge first and regression wall last | Mechanical | Minimal diff | That is the only merge-cheap parallel window in this slice | Opening a third lane or parallelizing the bridge |
+| 8 | Regression wall | Keep status and trace proof parent-owned after both runtime lanes merge | Mechanical | Blast radius instinct | Producer truth crosses lane boundaries and needs one integrator | Letting a worker lane redefine status truth alone |
 
 ## GSTACK REVIEW REPORT
 
@@ -730,5 +755,5 @@ cargo test -p shell --test agent_hub_trace_persistence -- --nocapture
 verification only.
 
 **VERDICT:** ENG CLEARED. `PLAN-12` replaces `PLAN-11_5` as the honest continuation plan:
-explicitly thaw the request bridge, resume the two runtime lanes, and finish the placement-truth
+thaw the request bridge, reopen exactly two runtime lanes, and finish the placement-truth
 regression wall without reopening the payload contract.
