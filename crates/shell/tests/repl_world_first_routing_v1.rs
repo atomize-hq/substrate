@@ -13,11 +13,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use support::{
-    binary_path, ensure_substrate_built, temp_dir, ReplWorldAgentStub, StreamBehavior,
-};
 #[cfg(target_os = "linux")]
 use support::MemberDispatchStreamScript;
+use support::{binary_path, ensure_substrate_built, temp_dir, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
 
 #[cfg(unix)]
