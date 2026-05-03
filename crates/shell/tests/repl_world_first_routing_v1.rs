@@ -13,10 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-use support::{
-    binary_path, ensure_substrate_built, temp_dir, MemberDispatchStreamScript, ReplWorldAgentStub,
-    StreamBehavior,
-};
+use support::{binary_path, ensure_substrate_built, temp_dir, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
 
 #[cfg(unix)]
@@ -372,20 +369,6 @@ fn write_fake_codex_script(temp: &Path) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
     perms.set_mode(0o755);
     fs::set_permissions(&path, perms).expect("set fake codex permissions");
-    path
-}
-
-#[cfg(target_os = "linux")]
-fn write_fake_claude_script(temp: &Path) -> PathBuf {
-    let path = temp.join("fake-claude.sh");
-    let body = "#!/bin/sh\ntrap 'exit 0' INT TERM\nprintf '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"sess-test\"}\\r\\n'\nwhile :; do sleep 1; done\n";
-    fs::write(&path, body).expect("write fake claude script");
-    let mut perms = fs::metadata(&path)
-        .expect("fake claude metadata")
-        .permissions();
-    use std::os::unix::fs::PermissionsExt;
-    perms.set_mode(0o755);
-    fs::set_permissions(&path, perms).expect("set fake claude permissions");
     path
 }
 
@@ -1583,7 +1566,7 @@ fn c3_first_world_backed_command_lazily_launches_member_runtime() {
     fs::create_dir_all(&substrate_home).expect("create substrate home");
     fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
     write_profile(&project);
-    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_orchestrator = write_fake_codex_script(temp.path());
     let fake_member = write_fake_codex_script(temp.path());
     write_orchestrator_and_world_member_runtime_world_config(
         &substrate_home,
@@ -1633,13 +1616,7 @@ fn c3_first_world_backed_command_lazily_launches_member_runtime() {
         member.get("agent_id").and_then(Value::as_str),
         Some("codex")
     );
-    assert!(
-        member
-            .get("state")
-            .and_then(Value::as_str)
-            .is_some_and(|state| state == "ready" || state == "running"),
-        "lazy member launch must become authoritative-live: {member:?}"
-    );
+    assert_eq!(member.get("state").and_then(Value::as_str), Some("ready"));
     assert_eq!(
         member.get("world_generation").and_then(Value::as_u64),
         Some(0)
@@ -1682,7 +1659,7 @@ fn c3_same_generation_world_command_reuses_live_member_runtime() {
     fs::create_dir_all(&substrate_home).expect("create substrate home");
     fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
     write_profile(&project);
-    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_orchestrator = write_fake_codex_script(temp.path());
     let fake_member = write_fake_codex_script(temp.path());
     write_orchestrator_and_world_member_runtime_world_config(
         &substrate_home,
@@ -2115,7 +2092,7 @@ fn c3_world_restart_launches_live_member_replacement_on_new_generation() {
     fs::create_dir_all(&substrate_home).expect("create substrate home");
     fs::write(&trace_path, "").expect("seed trace");
     write_profile(&project);
-    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_orchestrator = write_fake_codex_script(temp.path());
     let fake_member = write_fake_codex_script(temp.path());
     write_orchestrator_and_world_member_runtime_world_config(
         &substrate_home,
@@ -2246,7 +2223,7 @@ fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
     fs::create_dir_all(&substrate_home).expect("create substrate home");
     fs::write(&trace_path, "").expect("seed trace");
     write_profile(&project);
-    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_orchestrator = write_fake_codex_script(temp.path());
     let fake_member =
         write_fake_codex_script_first_success_then_fail_without_session_handle(temp.path());
     write_orchestrator_and_world_member_runtime_world_config(
@@ -2258,17 +2235,7 @@ fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
 
     let sock_temp = short_socket_dir("sub-c3ws-failed-member-replacement-");
     let sock = sock_temp.path().join("world.sock");
-    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
-        &sock,
-        StreamBehavior::Normal,
-        vec![
-            MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
-                session_handle_id: "session-first-member".to_string(),
-                exit_code_on_cancel: 130,
-            },
-            MemberDispatchStreamScript::ExitWithoutReady { exit_code: 1 },
-        ],
-    );
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);

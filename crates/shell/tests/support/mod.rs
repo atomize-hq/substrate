@@ -15,8 +15,8 @@ mod socket;
 pub use socket::{AgentSocket, PendingDiffAckError, PendingDiffAckState, SocketResponse};
 mod repl_world_agent;
 pub use repl_world_agent::{
-    MemberDispatchStreamScript, PersistentExecRecord, PersistentExecStdoutOverride,
-    PersistentStartSessionRecord, ReplWorldAgentRecords, ReplWorldAgentStub, StreamBehavior,
+    PersistentExecRecord, PersistentExecStdoutOverride, PersistentStartSessionRecord,
+    ReplWorldAgentRecords, ReplWorldAgentStub, StreamBehavior,
 };
 
 pub const PAYLOAD_MARKER: &str = "__SUBSTRATE_PAYLOAD__";

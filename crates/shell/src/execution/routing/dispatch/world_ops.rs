@@ -1180,12 +1180,12 @@ fn build_agent_client_and_member_dispatch_request_impl(
     agent_api_types::ExecuteRequest,
     String,
 )> {
+    ensure_world_agent_ready()?;
+
     let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
 
-    // Member dispatch only runs after the REPL has already established a live world session,
-    // so re-probing readiness here is redundant and can race against single-connection test stubs.
     let client = AgentClient::unix_socket(&socket_path)?;
     let cwd_path = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let cwd = cwd_path.display().to_string();
