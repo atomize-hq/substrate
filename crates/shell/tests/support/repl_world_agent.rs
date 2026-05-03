@@ -184,7 +184,7 @@ impl ReplWorldAgentStub {
         let persistent_exec_stdout_override_for_thread = persistent_exec_stdout_override.clone();
         let member_dispatch_scripts = Arc::new(Mutex::new(VecDeque::from(member_dispatch_scripts)));
         let member_dispatch_scripts_for_thread = member_dispatch_scripts.clone();
-        let mut first_ready_cwd_override = first_ready_cwd_override;
+        let first_ready_cwd_override = Arc::new(Mutex::new(first_ready_cwd_override));
 
         let handle = thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread()
@@ -380,7 +380,7 @@ impl ReplWorldAgentStub {
                 }
 
                 let listener = UnixListener::bind(&path_buf).expect("bind stub socket");
-                let mut next_world_id: u64 = 1;
+                let next_world_id = Arc::new(Mutex::new(1u64));
                 let active_member_dispatch_cancels: Arc<
                     Mutex<HashMap<String, Arc<AtomicBool>>>,
                 > = Arc::new(Mutex::new(HashMap::new()));
@@ -435,109 +435,123 @@ impl ReplWorldAgentStub {
                                     exit_code: 0,
                                 });
 
-                            write_http_stream_start(&mut stream).await;
-                            write_chunked_frame(
-                                &mut stream,
-                                &agent_api_types::ExecuteStreamFrame::Start {
-                                    span_id: span_id.clone(),
-                                },
-                            )
-                            .await;
+                            let shutdown_for_member_dispatch = shutdown_for_thread.clone();
+                            let active_member_dispatch_cancels =
+                                active_member_dispatch_cancels.clone();
+                            tokio::spawn(async move {
+                                write_http_stream_start(&mut stream).await;
+                                write_chunked_frame(
+                                    &mut stream,
+                                    &agent_api_types::ExecuteStreamFrame::Start {
+                                        span_id: span_id.clone(),
+                                    },
+                                )
+                                .await;
 
-                            match script {
-                                MemberDispatchStreamScript::ReadyAndExit {
-                                    session_handle_id,
-                                    exit_code,
-                                } => {
-                                    write_chunked_frame(
-                                        &mut stream,
-                                        &build_member_dispatch_ready_event(
-                                            &parsed,
-                                            &dispatch,
-                                            &span_id,
-                                            &session_handle_id,
-                                        ),
-                                    )
-                                    .await;
-                                    write_chunked_frame(
-                                        &mut stream,
-                                        &agent_api_types::ExecuteStreamFrame::Exit {
-                                            exit: exit_code,
-                                            span_id: span_id.clone(),
-                                            scopes_used: Vec::new(),
-                                            fs_diff: None,
-                                            process_telemetry:
-                                                agent_api_types::ProcessTelemetry::default(),
-                                        },
-                                    )
-                                    .await;
-                                    finish_chunked_stream(&mut stream).await;
-                                }
-                                MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
-                                    session_handle_id,
-                                    exit_code_on_cancel,
-                                } => {
-                                    let cancelled = Arc::new(AtomicBool::new(false));
-                                    if let Ok(mut guard) = active_member_dispatch_cancels.lock() {
-                                        guard.insert(span_id.clone(), cancelled.clone());
+                                match script {
+                                    MemberDispatchStreamScript::ReadyAndExit {
+                                        session_handle_id,
+                                        exit_code,
+                                    } => {
+                                        write_chunked_frame(
+                                            &mut stream,
+                                            &build_member_dispatch_ready_event(
+                                                &parsed,
+                                                &dispatch,
+                                                &span_id,
+                                                &session_handle_id,
+                                            ),
+                                        )
+                                        .await;
+                                        write_chunked_frame(
+                                            &mut stream,
+                                            &agent_api_types::ExecuteStreamFrame::Exit {
+                                                exit: exit_code,
+                                                span_id: span_id.clone(),
+                                                scopes_used: Vec::new(),
+                                                fs_diff: None,
+                                                process_telemetry:
+                                                    agent_api_types::ProcessTelemetry::default(),
+                                            },
+                                        )
+                                        .await;
+                                        finish_chunked_stream(&mut stream).await;
                                     }
-                                    write_chunked_frame(
-                                        &mut stream,
-                                        &build_member_dispatch_ready_event(
-                                            &parsed,
-                                            &dispatch,
-                                            &span_id,
-                                            &session_handle_id,
-                                        ),
-                                    )
-                                    .await;
-                                    while !shutdown_for_thread.load(Ordering::SeqCst)
-                                        && !cancelled.load(Ordering::SeqCst)
-                                    {
-                                        tokio::time::sleep(std::time::Duration::from_millis(25))
+                                    MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                                        session_handle_id,
+                                        exit_code_on_cancel,
+                                    } => {
+                                        let cancelled = Arc::new(AtomicBool::new(false));
+                                        if let Ok(mut guard) =
+                                            active_member_dispatch_cancels.lock()
+                                        {
+                                            guard.insert(span_id.clone(), cancelled.clone());
+                                        }
+                                        write_chunked_frame(
+                                            &mut stream,
+                                            &build_member_dispatch_ready_event(
+                                                &parsed,
+                                                &dispatch,
+                                                &span_id,
+                                                &session_handle_id,
+                                            ),
+                                        )
+                                        .await;
+                                        while !shutdown_for_member_dispatch
+                                            .load(Ordering::SeqCst)
+                                            && !cancelled.load(Ordering::SeqCst)
+                                        {
+                                            tokio::time::sleep(
+                                                std::time::Duration::from_millis(25),
+                                            )
                                             .await;
+                                        }
+                                        if let Ok(mut guard) =
+                                            active_member_dispatch_cancels.lock()
+                                        {
+                                            guard.remove(&span_id);
+                                        }
+                                        write_chunked_frame(
+                                            &mut stream,
+                                            &agent_api_types::ExecuteStreamFrame::Exit {
+                                                exit: exit_code_on_cancel,
+                                                span_id: span_id.clone(),
+                                                scopes_used: Vec::new(),
+                                                fs_diff: None,
+                                                process_telemetry:
+                                                    agent_api_types::ProcessTelemetry::default(),
+                                            },
+                                        )
+                                        .await;
+                                        finish_chunked_stream(&mut stream).await;
                                     }
-                                    if let Ok(mut guard) = active_member_dispatch_cancels.lock() {
-                                        guard.remove(&span_id);
+                                    MemberDispatchStreamScript::ExitWithoutReady { exit_code } => {
+                                        write_chunked_frame(
+                                            &mut stream,
+                                            &agent_api_types::ExecuteStreamFrame::Exit {
+                                                exit: exit_code,
+                                                span_id: span_id.clone(),
+                                                scopes_used: Vec::new(),
+                                                fs_diff: None,
+                                                process_telemetry:
+                                                    agent_api_types::ProcessTelemetry::default(),
+                                            },
+                                        )
+                                        .await;
+                                        finish_chunked_stream(&mut stream).await;
                                     }
-                                    write_chunked_frame(
-                                        &mut stream,
-                                        &agent_api_types::ExecuteStreamFrame::Exit {
-                                            exit: exit_code_on_cancel,
-                                            span_id: span_id.clone(),
-                                            scopes_used: Vec::new(),
-                                            fs_diff: None,
-                                            process_telemetry:
-                                                agent_api_types::ProcessTelemetry::default(),
-                                        },
-                                    )
-                                    .await;
-                                    finish_chunked_stream(&mut stream).await;
+                                    MemberDispatchStreamScript::ErrorBeforeReady { message } => {
+                                        write_chunked_frame(
+                                            &mut stream,
+                                            &agent_api_types::ExecuteStreamFrame::Error {
+                                                message,
+                                            },
+                                        )
+                                        .await;
+                                        finish_chunked_stream(&mut stream).await;
+                                    }
                                 }
-                                MemberDispatchStreamScript::ExitWithoutReady { exit_code } => {
-                                    write_chunked_frame(
-                                        &mut stream,
-                                        &agent_api_types::ExecuteStreamFrame::Exit {
-                                            exit: exit_code,
-                                            span_id: span_id.clone(),
-                                            scopes_used: Vec::new(),
-                                            fs_diff: None,
-                                            process_telemetry:
-                                                agent_api_types::ProcessTelemetry::default(),
-                                        },
-                                    )
-                                    .await;
-                                    finish_chunked_stream(&mut stream).await;
-                                }
-                                MemberDispatchStreamScript::ErrorBeforeReady { message } => {
-                                    write_chunked_frame(
-                                        &mut stream,
-                                        &agent_api_types::ExecuteStreamFrame::Error { message },
-                                    )
-                                    .await;
-                                    finish_chunked_stream(&mut stream).await;
-                                }
-                            }
+                            });
                             continue;
                         }
 
@@ -685,38 +699,148 @@ impl ReplWorldAgentStub {
                         continue;
                     }
 
-                    // The request bytes were already read. Replay them into the websocket acceptor.
-                    let raw = header.into_bytes();
-                    let replay = ReplayStream {
-                        prefix: std::io::Cursor::new(raw),
-                        inner: stream,
-                    };
+                    let records_for_ws = records_for_thread.clone();
+                    let persistent_exec_stdout_override_for_ws =
+                        persistent_exec_stdout_override_for_thread.clone();
+                    let first_ready_cwd_override = first_ready_cwd_override.clone();
+                    let next_world_id = next_world_id.clone();
+                    tokio::spawn(async move {
+                        // The request bytes were already read. Replay them into the websocket acceptor.
+                        let raw = header.into_bytes();
+                        let replay = ReplayStream {
+                            prefix: std::io::Cursor::new(raw),
+                            inner: stream,
+                        };
 
-                    let ws = match tungs::accept_async(replay).await {
-                        Ok(ws) => ws,
-                        Err(_) => continue,
-                    };
-                    let (mut sink, mut ws_stream) = ws.split();
+                        let ws = match tungs::accept_async(replay).await {
+                            Ok(ws) => ws,
+                            Err(_) => return,
+                        };
+                        let (mut sink, mut ws_stream) = ws.split();
 
-                    let first = ws_stream.next().await;
-                    let Some(Ok(Message::Text(first_text))) = first else {
-                        continue;
-                    };
+                        let first = ws_stream.next().await;
+                        let Some(Ok(Message::Text(first_text))) = first else {
+                            return;
+                        };
 
-                    let Ok(first_json) = serde_json::from_str::<JsonValue>(&first_text) else {
-                        let _ = sink.send(Message::Close(None)).await;
-                        continue;
-                    };
+                        let Ok(first_json) = serde_json::from_str::<JsonValue>(&first_text) else {
+                            let _ = sink.send(Message::Close(None)).await;
+                            return;
+                        };
 
-                    let ty = first_json.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                        let ty = first_json.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
-                    if ty == "start" {
-                        // Legacy per-command PTY protocol.
-                        let cmd = first_json
-                            .get("cmd")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
+                        if ty == "start" {
+                            let cmd = first_json
+                                .get("cmd")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let cwd = first_json
+                                .get("cwd")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let env = first_json
+                                .get("env")
+                                .and_then(|v| v.as_object())
+                                .map(|m| {
+                                    m.iter()
+                                        .filter_map(|(k, v)| {
+                                            Some((k.clone(), v.as_str()?.to_string()))
+                                        })
+                                        .collect::<HashMap<String, String>>()
+                                })
+                                .unwrap_or_default();
+                            let env = env
+                                .into_iter()
+                                .map(|(k, v)| {
+                                    let keep = matches!(
+                                        k.as_str(),
+                                        "SUBSTRATE_ANCHOR_MODE"
+                                            | "SUBSTRATE_ANCHOR_PATH"
+                                            | "SUBSTRATE_CAGED"
+                                            | "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR"
+                                            | "PATH"
+                                            | "HOME"
+                                            | "TERM"
+                                            | "XDG_CACHE_HOME"
+                                            | "XDG_CONFIG_HOME"
+                                            | "XDG_DATA_HOME"
+                                    );
+                                    if keep {
+                                        (k, v)
+                                    } else {
+                                        (k, "<redacted>".to_string())
+                                    }
+                                })
+                                .collect::<HashMap<String, String>>();
+                            let span_id = first_json
+                                .get("span_id")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let cols =
+                                first_json.get("cols").and_then(|v| v.as_u64()).unwrap_or(80)
+                                    as u16;
+                            let rows =
+                                first_json.get("rows").and_then(|v| v.as_u64()).unwrap_or(24)
+                                    as u16;
+
+                            if let Ok(mut guard) = records_for_ws.lock() {
+                                guard.legacy_pty_starts.push(LegacyPtyStartRecord {
+                                    cmd: cmd.clone(),
+                                    cwd,
+                                    env,
+                                    span_id,
+                                    cols,
+                                    rows,
+                                });
+                            }
+
+                            let stdout = format!("__LEGACY_PTY_STUB__ {cmd}\n");
+                            let out = serde_json::json!({
+                                "type": "stdout",
+                                "data_b64": BASE64.encode(stdout.as_bytes()),
+                            })
                             .to_string();
+                            let _ = sink.send(Message::Text(out)).await;
+
+                            let exit = serde_json::json!({
+                                "type": "exit",
+                                "code": 0,
+                                "world_fs_strategy_primary": "overlay",
+                                "world_fs_strategy_final": "overlay",
+                                "world_fs_strategy_fallback_reason": "none",
+                            })
+                            .to_string();
+                            let _ = sink.send(Message::Text(exit)).await;
+                            let _ = sink.send(Message::Close(None)).await;
+                            return;
+                        }
+
+                        if ty != "start_session" {
+                            let _ = sink.send(Message::Close(None)).await;
+                            return;
+                        }
+
+                        if behavior == StreamBehavior::CloseBeforeReady {
+                            let _ = sink.send(Message::Close(None)).await;
+                            return;
+                        }
+                        if behavior == StreamBehavior::FatalBeforeReady {
+                            let err = serde_json::json!({
+                                "type": "error",
+                                "code": "simulated_start_failure",
+                                "message": "simulated persistent start failure",
+                                "fatal": true,
+                            })
+                            .to_string();
+                            let _ = sink.send(Message::Text(err)).await;
+                            let _ = sink.send(Message::Close(None)).await;
+                            return;
+                        }
+
                         let cwd = first_json
                             .get("cwd")
                             .and_then(|v| v.as_str())
@@ -731,8 +855,6 @@ impl ReplWorldAgentStub {
                                     .collect::<HashMap<String, String>>()
                             })
                             .unwrap_or_default();
-                        // Avoid leaking host secrets into test failure output: keep a small allowlist
-                        // of routing/env keys, redact everything else.
                         let env = env
                             .into_iter()
                             .map(|(k, v)| {
@@ -756,374 +878,289 @@ impl ReplWorldAgentStub {
                                 }
                             })
                             .collect::<HashMap<String, String>>();
-                        let span_id = first_json
-                            .get("span_id")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string();
-                        let cols = first_json.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
-                        let rows = first_json.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
+                        let policy_snapshot = first_json
+                            .get("policy_snapshot")
+                            .cloned()
+                            .unwrap_or(JsonValue::Null);
+                        let shared_world = first_json
+                            .get("shared_world")
+                            .cloned()
+                            .and_then(|value| serde_json::from_value(value).ok());
+                        let world_network = first_json
+                            .get("world_network")
+                            .cloned()
+                            .unwrap_or(JsonValue::Null);
+                        let cols =
+                            first_json.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
+                        let rows =
+                            first_json.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
 
-                        if let Ok(mut guard) = records_for_thread.lock() {
-                            guard.legacy_pty_starts.push(LegacyPtyStartRecord {
-                                cmd: cmd.clone(),
-                                cwd,
+                        if let Ok(mut guard) = records_for_ws.lock() {
+                            guard.persistent_start_sessions.push(PersistentStartSessionRecord {
+                                cwd: cwd.clone(),
                                 env,
-                                span_id,
+                                policy_snapshot,
+                                shared_world: shared_world.clone(),
+                                world_network,
                                 cols,
                                 rows,
                             });
                         }
 
-                        // Minimal happy-path: produce one stdout frame and then exit.
-                        let stdout = format!("__LEGACY_PTY_STUB__ {cmd}\n");
-                        let out = serde_json::json!({
-                            "type": "stdout",
-                            "data_b64": BASE64.encode(stdout.as_bytes()),
-                        })
-                        .to_string();
-                        let _ = sink.send(Message::Text(out)).await;
-
-                        let exit = serde_json::json!({
-                            "type": "exit",
-                            "code": 0,
-                            "world_fs_strategy_primary": "overlay",
-                            "world_fs_strategy_final": "overlay",
-                            "world_fs_strategy_fallback_reason": "none",
-                        })
-                        .to_string();
-                        let _ = sink.send(Message::Text(exit)).await;
-                        let _ = sink.send(Message::Close(None)).await;
-                        continue;
-                    }
-
-                    if ty != "start_session" {
-                        let _ = sink.send(Message::Close(None)).await;
-                        continue;
-                    }
-
-                    if behavior == StreamBehavior::CloseBeforeReady {
-                        let _ = sink.send(Message::Close(None)).await;
-                        continue;
-                    }
-                    if behavior == StreamBehavior::FatalBeforeReady {
-                        let err = serde_json::json!({
-                            "type": "error",
-                            "code": "simulated_start_failure",
-                            "message": "simulated persistent start failure",
-                            "fatal": true,
-                        })
-                        .to_string();
-                        let _ = sink.send(Message::Text(err)).await;
-                        let _ = sink.send(Message::Close(None)).await;
-                        continue;
-                    }
-
-                    // Persistent session protocol v1.
-                    let cwd = first_json
-                        .get("cwd")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let env = first_json
-                        .get("env")
-                        .and_then(|v| v.as_object())
-                        .map(|m| {
-                            m.iter()
-                                .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
-                                .collect::<HashMap<String, String>>()
-                        })
-                        .unwrap_or_default();
-                    // Avoid leaking host secrets into test failure output: keep a small allowlist
-                    // of REPL routing/env keys, redact everything else.
-                    let env = env
-                        .into_iter()
-                        .map(|(k, v)| {
-                            let keep = matches!(
-                                k.as_str(),
-                                "SUBSTRATE_ANCHOR_MODE"
-                                    | "SUBSTRATE_ANCHOR_PATH"
-                                    | "SUBSTRATE_CAGED"
-                                    | "SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR"
-                                    | "PATH"
-                                    | "HOME"
-                                    | "TERM"
-                                    | "XDG_CACHE_HOME"
-                                    | "XDG_CONFIG_HOME"
-                                    | "XDG_DATA_HOME"
-                            );
-                            if keep {
-                                (k, v)
-                            } else {
-                                (k, "<redacted>".to_string())
-                            }
-                        })
-                        .collect::<HashMap<String, String>>();
-                    let policy_snapshot = first_json
-                        .get("policy_snapshot")
-                        .cloned()
-                        .unwrap_or(JsonValue::Null);
-                    let shared_world = first_json
-                        .get("shared_world")
-                        .cloned()
-                        .and_then(|value| serde_json::from_value(value).ok());
-                    let world_network = first_json
-                        .get("world_network")
-                        .cloned()
-                        .unwrap_or(JsonValue::Null);
-                    let cols = first_json.get("cols").and_then(|v| v.as_u64()).unwrap_or(80) as u16;
-                    let rows = first_json.get("rows").and_then(|v| v.as_u64()).unwrap_or(24) as u16;
-
-                    if let Ok(mut guard) = records_for_thread.lock() {
-                        guard.persistent_start_sessions.push(PersistentStartSessionRecord {
-                            cwd: cwd.clone(),
-                            env,
-                            policy_snapshot,
-                            shared_world: shared_world.clone(),
-                            world_network,
-                            cols,
-                            rows,
-                        });
-                    }
-
-                    let mut session_cwd = if let Some(override_cwd) = first_ready_cwd_override.take()
-                    {
-                        override_cwd
-                    } else if cwd.trim().is_empty() {
-                        "/".to_string()
-                    } else {
-                        cwd
-                    };
-
-                    // Respond with a deterministic ready.
-                    let world_id = format!("wld_stub_{next_world_id:04}");
-                    next_world_id = next_world_id.saturating_add(1);
-                    let ready_world_id = world_id.clone();
-                    let ready = serde_json::json!({
-                        "type": "ready",
-                        "session_nonce": "0123456789abcdef0123456789abcdef",
-                        "world_id": world_id,
-                        "cwd": session_cwd,
-                        "protocol_version": 1,
-                        "shared_world": shared_world.as_ref().map(|request| {
-                            let world_generation = match request.action {
-                                agent_api_types::SharedWorldOwnerAction::AttachOrCreate => 0,
-                                agent_api_types::SharedWorldOwnerAction::ReplaceExpectedGeneration {
-                                    expected_generation,
-                                    ..
-                                } => expected_generation.saturating_add(1),
-                            };
-                            serde_json::json!({
-                                "orchestration_session_id": request.orchestration_session_id,
-                                "world_id": ready_world_id,
-                                "world_generation": world_generation,
-                                "binding_state": "active",
-                            })
-                        }),
-                    })
-                    .to_string();
-                    let _ = sink.send(Message::Text(ready)).await;
-
-                    while let Some(next) = ws_stream.next().await {
-                        let Ok(msg) = next else {
-                            break;
+                        let mut session_cwd = if let Some(override_cwd) = first_ready_cwd_override
+                            .lock()
+                            .expect("first ready cwd override mutex poisoned")
+                            .take()
+                        {
+                            override_cwd
+                        } else if cwd.trim().is_empty() {
+                            "/".to_string()
+                        } else {
+                            cwd
                         };
-                        let Message::Text(text) = msg else {
-                            if msg.is_close() {
+
+                        let world_id = {
+                            let mut guard = next_world_id
+                                .lock()
+                                .expect("next world id mutex poisoned");
+                            let world_id = format!("wld_stub_{:04}", *guard);
+                            *guard = guard.saturating_add(1);
+                            world_id
+                        };
+                        let ready_world_id = world_id.clone();
+                        let ready = serde_json::json!({
+                            "type": "ready",
+                            "session_nonce": "0123456789abcdef0123456789abcdef",
+                            "world_id": world_id,
+                            "cwd": session_cwd,
+                            "protocol_version": 1,
+                            "shared_world": shared_world.as_ref().map(|request| {
+                                let world_generation = match request.action {
+                                    agent_api_types::SharedWorldOwnerAction::AttachOrCreate => 0,
+                                    agent_api_types::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                                        expected_generation,
+                                        ..
+                                    } => expected_generation.saturating_add(1),
+                                };
+                                serde_json::json!({
+                                    "orchestration_session_id": request.orchestration_session_id,
+                                    "world_id": ready_world_id,
+                                    "world_generation": world_generation,
+                                    "binding_state": "active",
+                                })
+                            }),
+                        })
+                        .to_string();
+                        let _ = sink.send(Message::Text(ready)).await;
+
+                        while let Some(next) = ws_stream.next().await {
+                            let Ok(msg) = next else {
                                 break;
-                            }
-                            continue;
-                        };
+                            };
+                            let Message::Text(text) = msg else {
+                                if msg.is_close() {
+                                    break;
+                                }
+                                continue;
+                            };
 
-                        let Ok(frame) = serde_json::from_str::<JsonValue>(&text) else {
-                            break;
-                        };
-                        let fty = frame.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                            let Ok(frame) = serde_json::from_str::<JsonValue>(&text) else {
+                                break;
+                            };
+                            let fty = frame.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
-                        match fty {
-                            "exec" => {
-                                let seq = frame.get("seq").and_then(|v| v.as_u64()).unwrap_or(0);
-                                let token_hex = frame
-                                    .get("token_hex")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string();
-                                let cmd_id = frame
-                                    .get("cmd_id")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string();
-                                let stdin_mode = frame
-                                    .get("stdin_mode")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string();
-                                let program_b64 = frame
-                                    .get("program_b64")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("");
-                                let program_utf8 = BASE64
-                                    .decode(program_b64)
-                                    .ok()
-                                    .and_then(|b| String::from_utf8(b).ok())
-                                    .unwrap_or_default();
+                            match fty {
+                                "exec" => {
+                                    let seq =
+                                        frame.get("seq").and_then(|v| v.as_u64()).unwrap_or(0);
+                                    let token_hex = frame
+                                        .get("token_hex")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    let cmd_id = frame
+                                        .get("cmd_id")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    let stdin_mode = frame
+                                        .get("stdin_mode")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    let program_b64 = frame
+                                        .get("program_b64")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    let program_utf8 = BASE64
+                                        .decode(program_b64)
+                                        .ok()
+                                        .and_then(|b| String::from_utf8(b).ok())
+                                        .unwrap_or_default();
 
-                                // Minimal cwd tracking: support basic `cd <path>` commands so REPL
-                                // drift restarts can be tested against real host paths.
-                                let trimmed = program_utf8.trim();
-                                if let Some(rest) = trimmed.strip_prefix("cd ") {
-                                    let arg = rest.trim();
-                                    if !arg.is_empty() {
-                                        let next = if arg.starts_with('/') {
-                                            PathBuf::from(arg)
-                                        } else {
-                                            PathBuf::from(&session_cwd).join(arg)
-                                        };
-                                        let mut normalized = PathBuf::new();
-                                        for comp in next.components() {
-                                            match comp {
-                                                std::path::Component::RootDir => normalized.push("/"),
-                                                std::path::Component::CurDir => {}
-                                                std::path::Component::ParentDir => {
-                                                    normalized.pop();
+                                    let trimmed = program_utf8.trim();
+                                    if let Some(rest) = trimmed.strip_prefix("cd ") {
+                                        let arg = rest.trim();
+                                        if !arg.is_empty() {
+                                            let next = if arg.starts_with('/') {
+                                                PathBuf::from(arg)
+                                            } else {
+                                                PathBuf::from(&session_cwd).join(arg)
+                                            };
+                                            let mut normalized = PathBuf::new();
+                                            for comp in next.components() {
+                                                match comp {
+                                                    std::path::Component::RootDir => {
+                                                        normalized.push("/")
+                                                    }
+                                                    std::path::Component::CurDir => {}
+                                                    std::path::Component::ParentDir => {
+                                                        normalized.pop();
+                                                    }
+                                                    std::path::Component::Normal(seg) => {
+                                                        normalized.push(seg);
+                                                    }
+                                                    std::path::Component::Prefix(_) => {}
                                                 }
-                                                std::path::Component::Normal(seg) => {
-                                                    normalized.push(seg);
-                                                }
-                                                std::path::Component::Prefix(_) => {}
                                             }
+                                            if normalized.as_os_str().is_empty() {
+                                                normalized.push("/");
+                                            }
+                                            session_cwd =
+                                                normalized.to_string_lossy().to_string();
                                         }
-                                        if normalized.as_os_str().is_empty() {
-                                            normalized.push("/");
-                                        }
-                                        session_cwd = normalized.to_string_lossy().to_string();
                                     }
-                                }
 
-                                if let Ok(mut guard) = records_for_thread.lock() {
-                                    guard.persistent_execs.push(PersistentExecRecord {
-                                        seq,
-                                        token_hex: token_hex.clone(),
-                                        cmd_id,
-                                        stdin_mode: stdin_mode.clone(),
-                                        program_utf8: program_utf8.clone(),
+                                    if let Ok(mut guard) = records_for_ws.lock() {
+                                        guard.persistent_execs.push(PersistentExecRecord {
+                                            seq,
+                                            token_hex: token_hex.clone(),
+                                            cmd_id,
+                                            stdin_mode: stdin_mode.clone(),
+                                            program_utf8: program_utf8.clone(),
+                                        });
+                                    }
+
+                                    let mut stdout_bytes = None;
+                                    if let Some(ov) = &persistent_exec_stdout_override_for_ws {
+                                        if !ov.marker.is_empty()
+                                            && program_utf8.contains(&ov.marker)
+                                        {
+                                            stdout_bytes = Some(ov.bytes.clone());
+                                        }
+                                    }
+
+                                    let stdout_bytes = stdout_bytes.unwrap_or_else(|| {
+                                        format!(
+                                            "__PERSISTENT_EXEC_STUB__ {stdin_mode} {program_utf8}\n"
+                                        )
+                                        .into_bytes()
                                     });
-                                }
 
-                                // Minimal stdout for observability (optionally overridden for tests).
-                                let mut stdout_bytes = None;
-                                if let Some(ov) = &persistent_exec_stdout_override_for_thread {
-                                    if !ov.marker.is_empty() && program_utf8.contains(&ov.marker) {
-                                        stdout_bytes = Some(ov.bytes.clone());
-                                    }
-                                }
-
-                                let stdout_bytes = stdout_bytes.unwrap_or_else(|| {
-                                    format!(
-                                        "__PERSISTENT_EXEC_STUB__ {stdin_mode} {program_utf8}\n"
-                                    )
-                                    .into_bytes()
-                                });
-
-                                // Allow testing output buffering by splitting the stream.
-                                if stdout_bytes.len() > 3 {
-                                    let split_at = stdout_bytes.len() / 2;
-                                    for chunk in [&stdout_bytes[..split_at], &stdout_bytes[split_at..]]
-                                    {
+                                    if stdout_bytes.len() > 3 {
+                                        let split_at = stdout_bytes.len() / 2;
+                                        for chunk in
+                                            [&stdout_bytes[..split_at], &stdout_bytes[split_at..]]
+                                        {
+                                            let stdout = serde_json::json!({
+                                                "type": "stdout",
+                                                "data_b64": BASE64.encode(chunk),
+                                            })
+                                            .to_string();
+                                            let _ = sink.send(Message::Text(stdout)).await;
+                                        }
+                                    } else {
                                         let stdout = serde_json::json!({
                                             "type": "stdout",
-                                            "data_b64": BASE64.encode(chunk),
+                                            "data_b64": BASE64.encode(&stdout_bytes),
                                         })
                                         .to_string();
                                         let _ = sink.send(Message::Text(stdout)).await;
                                     }
-                                } else {
-                                    let stdout = serde_json::json!({
-                                        "type": "stdout",
-                                        "data_b64": BASE64.encode(&stdout_bytes),
+
+                                    if let Some(ov) = &persistent_exec_stdout_override_for_ws {
+                                        if !ov.marker.is_empty()
+                                            && program_utf8.contains(&ov.marker)
+                                        {
+                                            if let (Some(delay_ms), Some(suffix)) =
+                                                (ov.delay_before_suffix_ms, ov.suffix_bytes.as_ref())
+                                            {
+                                                tokio::time::sleep(
+                                                    std::time::Duration::from_millis(delay_ms),
+                                                )
+                                                .await;
+                                                let stdout = serde_json::json!({
+                                                    "type": "stdout",
+                                                    "data_b64": BASE64.encode(suffix),
+                                                })
+                                                .to_string();
+                                                let _ = sink.send(Message::Text(stdout)).await;
+                                            }
+                                        }
+                                    }
+
+                                    let complete = serde_json::json!({
+                                        "type": "command_complete",
+                                        "seq": seq,
+                                        "token_hex": token_hex,
+                                        "exit": 0,
+                                        "cwd": session_cwd,
                                     })
                                     .to_string();
-                                    let _ = sink.send(Message::Text(stdout)).await;
-                                }
+                                    let _ = sink.send(Message::Text(complete)).await;
 
-                                if let Some(ov) = &persistent_exec_stdout_override_for_thread {
-                                    if !ov.marker.is_empty() && program_utf8.contains(&ov.marker) {
-                                        if let (Some(delay_ms), Some(suffix)) =
-                                            (ov.delay_before_suffix_ms, ov.suffix_bytes.as_ref())
+                                    if let Some(ov) = &persistent_exec_stdout_override_for_ws {
+                                        if ov.marker.is_empty()
+                                            || !program_utf8.contains(&ov.marker)
                                         {
-                                            tokio::time::sleep(std::time::Duration::from_millis(
-                                                delay_ms,
-                                            ))
+                                        } else if let Some((delay_ms, bytes)) =
+                                            ov.out_of_band_after_complete.as_ref()
+                                        {
+                                            tokio::time::sleep(
+                                                std::time::Duration::from_millis(*delay_ms),
+                                            )
                                             .await;
                                             let stdout = serde_json::json!({
                                                 "type": "stdout",
-                                                "data_b64": BASE64.encode(suffix),
+                                                "data_b64": BASE64.encode(bytes),
                                             })
                                             .to_string();
                                             let _ = sink.send(Message::Text(stdout)).await;
                                         }
                                     }
                                 }
-
-                                let complete = serde_json::json!({
-                                    "type": "command_complete",
-                                    "seq": seq,
-                                    "token_hex": token_hex,
-                                    "exit": 0,
-                                    "cwd": session_cwd,
-                                })
-                                .to_string();
-                                let _ = sink.send(Message::Text(complete)).await;
-
-                                if let Some(ov) = &persistent_exec_stdout_override_for_thread {
-                                    if ov.marker.is_empty() || !program_utf8.contains(&ov.marker) {
-                                        // no-op
-                                    } else if let Some((delay_ms, bytes)) =
-                                        ov.out_of_band_after_complete.as_ref()
-                                    {
-                                        tokio::time::sleep(std::time::Duration::from_millis(
-                                            *delay_ms,
-                                        ))
-                                        .await;
-                                        let stdout = serde_json::json!({
-                                            "type": "stdout",
-                                            "data_b64": BASE64.encode(bytes),
-                                        })
+                                "stdin" => {
+                                    let data_b64 = frame
+                                        .get("data_b64")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("");
+                                    if let Ok(bytes) = BASE64.decode(data_b64.as_bytes()) {
+                                        if let Ok(mut guard) = records_for_ws.lock() {
+                                            guard.persistent_stdin.push(bytes);
+                                        }
+                                    }
+                                }
+                                "signal" => {
+                                    let signal = frame
+                                        .get("sig")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
                                         .to_string();
-                                        let _ = sink.send(Message::Text(stdout)).await;
+                                    if let Ok(mut guard) = records_for_ws.lock() {
+                                        guard.persistent_signals.push(signal);
                                     }
                                 }
-                            }
-                            "stdin" => {
-                                let data_b64 = frame
-                                    .get("data_b64")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("");
-                                if let Ok(bytes) = BASE64.decode(data_b64.as_bytes()) {
-                                    if let Ok(mut guard) = records_for_thread.lock() {
-                                        guard.persistent_stdin.push(bytes);
-                                    }
+                                "close" => {
+                                    let exit =
+                                        serde_json::json!({ "type": "exit", "code": 0 }).to_string();
+                                    let _ = sink.send(Message::Text(exit)).await;
+                                    let _ = sink.send(Message::Close(None)).await;
+                                    break;
                                 }
+                                _ => {}
                             }
-                            "signal" => {
-                                let signal = frame
-                                    .get("sig")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("")
-                                    .to_string();
-                                if let Ok(mut guard) = records_for_thread.lock() {
-                                    guard.persistent_signals.push(signal);
-                                }
-                            }
-                            "close" => {
-                                let exit = serde_json::json!({ "type": "exit", "code": 0 }).to_string();
-                                let _ = sink.send(Message::Text(exit)).await;
-                                let _ = sink.send(Message::Close(None)).await;
-                                break;
-                            }
-                            _ => {}
                         }
-                    }
+                    });
                 }
             });
         });

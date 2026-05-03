@@ -25,6 +25,8 @@ use crate::execution::agent_events::{
     ShellCommandEventContext, ShellEventEmissionContext,
 };
 use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInventoryEntryV1};
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 #[cfg(any(test, target_os = "linux"))]
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
@@ -2729,7 +2731,7 @@ fn prepare_member_runtime_startup_for_descriptor(
     })
 }
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(test)]
 async fn start_member_runtime_with_prepared(
     prepared: Option<PreparedAgentRuntime>,
     agent_printer: &ReplPrinter,
@@ -2743,12 +2745,8 @@ fn member_runtime_backend_kind(
     descriptor: &RuntimeSelectionDescriptor,
 ) -> MemberRuntimeBackendKindV1 {
     match descriptor.backend_kind {
-        crate::execution::agent_runtime::AgentRuntimeBackendKind::Codex => {
-            MemberRuntimeBackendKindV1::Codex
-        }
-        crate::execution::agent_runtime::AgentRuntimeBackendKind::ClaudeCode => {
-            MemberRuntimeBackendKindV1::ClaudeCode
-        }
+        AgentRuntimeBackendKind::Codex => MemberRuntimeBackendKindV1::Codex,
+        AgentRuntimeBackendKind::ClaudeCode => MemberRuntimeBackendKindV1::ClaudeCode,
     }
 }
 
@@ -2810,11 +2808,11 @@ async fn abort_remote_member_bootstrap_runtime(
     observe_task: &mut Option<tokio::task::JoinHandle<()>>,
 ) {
     shutdown_requested.store(true, Ordering::SeqCst);
-    if let Some(span_id) = span_id
+    let span_id = span_id
         .lock()
         .expect("remote member span mutex poisoned")
-        .clone()
-    {
+        .clone();
+    if let Some(span_id) = span_id {
         let _ = client
             .cancel_execute(ExecuteCancelRequestV1 {
                 span_id,
@@ -3056,10 +3054,17 @@ async fn start_remote_member_runtime_with_prepared(
                             } else if shutdown_for_events.load(Ordering::SeqCst)
                                 || matches!(exit, 0 | 129 | 130 | 131 | 143)
                             {
-                                manifest_guard.transition_state(AgentRuntimeSessionState::Stopped);
-                                manifest_guard
-                                    .mark_terminal_state("world-scoped member session stopped");
-                                orchestration_guard.touch_active();
+                                if manifest_guard.handle.state
+                                    == AgentRuntimeSessionState::Invalidated
+                                {
+                                    orchestration_guard.touch_active();
+                                } else {
+                                    manifest_guard
+                                        .transition_state(AgentRuntimeSessionState::Stopped);
+                                    manifest_guard
+                                        .mark_terminal_state("world-scoped member session stopped");
+                                    orchestration_guard.touch_active();
+                                }
                             } else {
                                 let reason = format!(
                                     "world-scoped member session exited with status {exit}"
@@ -3398,9 +3403,18 @@ async fn ensure_member_runtime_ready(
     .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
 
     let runtime =
-        start_remote_member_runtime_with_prepared(Some(prepared), agent_printer, telemetry)
+        match start_remote_member_runtime_with_prepared(Some(prepared), agent_printer, telemetry)
             .await
-            .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
+        {
+            Ok(runtime) => runtime,
+            Err(failure) => {
+                agent_printer.print(format!(
+                    "substrate: warning: world-scoped member runtime unavailable: {}",
+                    failure.message
+                ));
+                return Ok(());
+            }
+        };
     if runtime.is_some() {
         pending_member_replacement.take();
     }

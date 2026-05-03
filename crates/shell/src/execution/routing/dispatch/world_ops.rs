@@ -1180,8 +1180,6 @@ fn build_agent_client_and_member_dispatch_request_impl(
     agent_api_types::ExecuteRequest,
     String,
 )> {
-    ensure_world_agent_ready()?;
-
     let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
