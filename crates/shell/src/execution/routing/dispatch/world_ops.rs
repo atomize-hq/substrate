@@ -215,7 +215,24 @@ pub(crate) struct MemberDispatchTransportRequest {
     pub binary_path: String,
 }
 
-fn build_execute_request(
+fn build_execute_request(input: ExecuteRequestInput) -> ExecuteRequest {
+    ExecuteRequest {
+        profile: input.profile,
+        cmd: input.cmd,
+        cwd: Some(input.cwd),
+        env: Some(input.env_map),
+        pty: false,
+        agent_id: input.agent_id,
+        budget: None,
+        policy_snapshot: input.policy_snapshot,
+        shared_world: None,
+        world_network: Some(input.world_network),
+        world_fs_mode: Some(input.world_fs_mode),
+        member_dispatch: input.member_dispatch,
+    }
+}
+
+struct ExecuteRequestInput {
     profile: Option<String>,
     cmd: String,
     cwd: String,
@@ -225,21 +242,6 @@ fn build_execute_request(
     world_network: agent_api_types::WorldNetworkRoutingV1,
     world_fs_mode: WorldFsMode,
     member_dispatch: Option<MemberDispatchRequestV1>,
-) -> ExecuteRequest {
-    ExecuteRequest {
-        profile,
-        cmd,
-        cwd: Some(cwd),
-        env: Some(env_map),
-        pty: false,
-        agent_id,
-        budget: None,
-        policy_snapshot,
-        shared_world: None,
-        world_network: Some(world_network),
-        world_fs_mode: Some(world_fs_mode),
-        member_dispatch,
-    }
 }
 
 #[allow(dead_code)]
@@ -1154,17 +1156,17 @@ fn build_agent_client_and_request_impl(
     preserve_world_project_dir_override(&mut env_map);
     inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
-    let request = build_execute_request(
-        current_world_request_profile(),
-        cmd.to_string(),
+    let request = build_execute_request(ExecuteRequestInput {
+        profile: current_world_request_profile(),
+        cmd: cmd.to_string(),
         cwd,
         env_map,
-        agent_id.clone(),
+        agent_id: agent_id.clone(),
         policy_snapshot,
         world_network,
-        current_world_fs_mode(),
-        None,
-    );
+        world_fs_mode: current_world_fs_mode(),
+        member_dispatch: None,
+    });
 
     Ok((client, request, agent_id))
 }
@@ -1201,17 +1203,17 @@ fn build_agent_client_and_member_dispatch_request_impl(
     )?;
     ensure_world_deps_bin_on_path(&mut env_map);
     preserve_world_project_dir_override(&mut env_map);
-    let request = build_execute_request(
-        current_world_request_profile(),
-        String::new(),
+    let request = build_execute_request(ExecuteRequestInput {
+        profile: current_world_request_profile(),
+        cmd: String::new(),
         cwd,
         env_map,
-        agent_id.clone(),
+        agent_id: agent_id.clone(),
         policy_snapshot,
         world_network,
-        current_world_fs_mode(),
-        Some(build_member_dispatch_payload(dispatch)),
-    );
+        world_fs_mode: current_world_fs_mode(),
+        member_dispatch: Some(build_member_dispatch_payload(dispatch)),
+    });
 
     Ok((client, request, agent_id))
 }
@@ -1296,17 +1298,17 @@ fn build_agent_client_and_request_impl(
         )?;
         inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
-        let request = build_execute_request(
-            current_world_request_profile(),
-            cmd.to_string(),
+        let request = build_execute_request(ExecuteRequestInput {
+            profile: current_world_request_profile(),
+            cmd: cmd.to_string(),
             cwd,
             env_map,
-            agent_id.clone(),
+            agent_id: agent_id.clone(),
             policy_snapshot,
             world_network,
-            current_world_fs_mode(),
-            None,
-        );
+            world_fs_mode: current_world_fs_mode(),
+            member_dispatch: None,
+        });
 
         return Ok((client, request, agent_id));
     }
@@ -1348,17 +1350,17 @@ fn build_agent_client_and_request_impl(
     )?;
     inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
-    let request = build_execute_request(
-        current_world_request_profile(),
-        cmd.to_string(),
+    let request = build_execute_request(ExecuteRequestInput {
+        profile: current_world_request_profile(),
+        cmd: cmd.to_string(),
         cwd,
         env_map,
-        agent_id.clone(),
+        agent_id: agent_id.clone(),
         policy_snapshot,
         world_network,
-        current_world_fs_mode(),
-        None,
-    );
+        world_fs_mode: current_world_fs_mode(),
+        member_dispatch: None,
+    });
 
     Ok((client, request, agent_id))
 }
@@ -1391,17 +1393,17 @@ fn build_agent_client_and_member_dispatch_request_impl(
             &policy_snapshot,
             &mut env_map,
         )?;
-        let request = build_execute_request(
-            current_world_request_profile(),
-            String::new(),
+        let request = build_execute_request(ExecuteRequestInput {
+            profile: current_world_request_profile(),
+            cmd: String::new(),
             cwd,
             env_map,
-            agent_id.clone(),
+            agent_id: agent_id.clone(),
             policy_snapshot,
             world_network,
-            current_world_fs_mode(),
-            Some(build_member_dispatch_payload(dispatch)),
-        );
+            world_fs_mode: current_world_fs_mode(),
+            member_dispatch: Some(build_member_dispatch_payload(dispatch)),
+        });
 
         return Ok((client, request, agent_id));
     }
@@ -1439,17 +1441,17 @@ fn build_agent_client_and_member_dispatch_request_impl(
         &policy_snapshot,
         &mut env_map,
     )?;
-    let request = build_execute_request(
-        current_world_request_profile(),
-        String::new(),
+    let request = build_execute_request(ExecuteRequestInput {
+        profile: current_world_request_profile(),
+        cmd: String::new(),
         cwd,
         env_map,
-        agent_id.clone(),
+        agent_id: agent_id.clone(),
         policy_snapshot,
         world_network,
-        current_world_fs_mode(),
-        Some(build_member_dispatch_payload(dispatch)),
-    );
+        world_fs_mode: current_world_fs_mode(),
+        member_dispatch: Some(build_member_dispatch_payload(dispatch)),
+    });
 
     Ok((client, request, agent_id))
 }
@@ -1587,17 +1589,17 @@ fn build_agent_client_and_request_impl(
     )?;
     inject_process_trace_env(&mut env_map, parent_span_id, parent_cmd_id);
 
-    let request = build_execute_request(
+    let request = build_execute_request(ExecuteRequestInput {
         profile,
-        cmd.to_string(),
+        cmd: cmd.to_string(),
         cwd,
         env_map,
-        agent_id.clone(),
+        agent_id: agent_id.clone(),
         policy_snapshot,
         world_network,
-        current_world_fs_mode(),
-        None,
-    );
+        world_fs_mode: current_world_fs_mode(),
+        member_dispatch: None,
+    });
 
     Ok((client, request, agent_id))
 }
@@ -1652,17 +1654,17 @@ fn build_agent_client_and_member_dispatch_request_impl(
         &policy_snapshot,
         &mut env_map,
     )?;
-    let request = build_execute_request(
+    let request = build_execute_request(ExecuteRequestInput {
         profile,
-        String::new(),
+        cmd: String::new(),
         cwd,
         env_map,
-        agent_id.clone(),
+        agent_id: agent_id.clone(),
         policy_snapshot,
         world_network,
-        current_world_fs_mode(),
-        Some(build_member_dispatch_payload(dispatch)),
-    );
+        world_fs_mode: current_world_fs_mode(),
+        member_dispatch: Some(build_member_dispatch_payload(dispatch)),
+    });
 
     Ok((client, request, agent_id))
 }
@@ -2201,11 +2203,10 @@ pub(super) fn emit_stream_chunk(
 #[cfg(all(test, any(target_os = "linux", target_os = "macos")))]
 mod tests {
     use super::{
-        build_execute_request, build_member_dispatch_payload,
-        current_world_request_profile, emit_stream_chunk, ensure_world_deps_bin_on_path,
-        extract_process_telemetry_from_ws_exit, preserve_world_project_dir_override,
-        process_agent_stream_body, MemberDispatchTransportRequest, BASE64,
-        WORLD_PROJECT_DIR_OVERRIDE_ENV,
+        build_execute_request, build_member_dispatch_payload, current_world_request_profile,
+        emit_stream_chunk, ensure_world_deps_bin_on_path, extract_process_telemetry_from_ws_exit,
+        preserve_world_project_dir_override, process_agent_stream_body, ExecuteRequestInput,
+        MemberDispatchTransportRequest, BASE64, WORLD_PROJECT_DIR_OVERRIDE_ENV,
     };
     use crate::execution::agent_events::{
         acquire_event_test_guard, clear_agent_event_sender, init_event_channel,
@@ -2213,9 +2214,8 @@ mod tests {
     };
     use agent_api_types::{
         ExecuteStreamFrame, MemberRuntimeBackendKindV1, PolicySnapshotV3,
-        PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
-        PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1, WorldFsMode,
-        WorldNetworkRoutingV1,
+        PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+        ResolvedMemberRuntimeDescriptorV1, WorldFsMode, WorldNetworkRoutingV1,
     };
     use base64::Engine;
     use futures::stream;
@@ -2363,7 +2363,10 @@ mod tests {
         assert_eq!(payload.orchestration_session_id, "orch_123");
         assert_eq!(payload.participant_id, "ash_member_123");
         assert_eq!(payload.orchestrator_participant_id, "ash_orch_123");
-        assert_eq!(payload.parent_participant_id.as_deref(), Some("ash_parent_123"));
+        assert_eq!(
+            payload.parent_participant_id.as_deref(),
+            Some("ash_parent_123")
+        );
         assert_eq!(
             payload.resumed_from_participant_id.as_deref(),
             Some("ash_prev_123")
@@ -2384,13 +2387,13 @@ mod tests {
 
     #[test]
     fn build_execute_request_supports_typed_member_dispatch_shape() {
-        let request = build_execute_request(
-            Some("world-member-dispatch".to_string()),
-            String::new(),
-            "/tmp/worktree".to_string(),
-            std::collections::HashMap::new(),
-            "tester".to_string(),
-            PolicySnapshotV3 {
+        let request = build_execute_request(ExecuteRequestInput {
+            profile: Some("world-member-dispatch".to_string()),
+            cmd: String::new(),
+            cwd: "/tmp/worktree".to_string(),
+            env_map: std::collections::HashMap::new(),
+            agent_id: "tester".to_string(),
+            policy_snapshot: PolicySnapshotV3 {
                 schema_version: 3,
                 net_allowed: Vec::new(),
                 world_fs: PolicySnapshotWorldFsV3 {
@@ -2407,32 +2410,37 @@ mod tests {
                     },
                 },
             },
-            WorldNetworkRoutingV1 {
+            world_network: WorldNetworkRoutingV1 {
                 isolate_network: false,
                 allowed_domains: Vec::new(),
             },
-            WorldFsMode::Writable,
-            Some(build_member_dispatch_payload(&MemberDispatchTransportRequest {
-                orchestration_session_id: "orch_123".to_string(),
-                participant_id: "ash_member_123".to_string(),
-                orchestrator_participant_id: "ash_orch_123".to_string(),
-                parent_participant_id: None,
-                resumed_from_participant_id: None,
-                backend_id: "cli:codex".to_string(),
-                protocol: "uaa.agent.session".to_string(),
-                run_id: "run_123".to_string(),
-                world_id: "world_123".to_string(),
-                world_generation: 9,
-                backend_kind: MemberRuntimeBackendKindV1::Codex,
-                binary_path: "/usr/bin/codex".to_string(),
-            })),
-        );
+            world_fs_mode: WorldFsMode::Writable,
+            member_dispatch: Some(build_member_dispatch_payload(
+                &MemberDispatchTransportRequest {
+                    orchestration_session_id: "orch_123".to_string(),
+                    participant_id: "ash_member_123".to_string(),
+                    orchestrator_participant_id: "ash_orch_123".to_string(),
+                    parent_participant_id: None,
+                    resumed_from_participant_id: None,
+                    backend_id: "cli:codex".to_string(),
+                    protocol: "uaa.agent.session".to_string(),
+                    run_id: "run_123".to_string(),
+                    world_id: "world_123".to_string(),
+                    world_generation: 9,
+                    backend_kind: MemberRuntimeBackendKindV1::Codex,
+                    binary_path: "/usr/bin/codex".to_string(),
+                },
+            )),
+        });
 
         assert!(request.cmd.is_empty());
         assert!(!request.pty);
         assert_eq!(request.agent_id, "tester");
         assert_eq!(
-            request.member_dispatch.as_ref().map(|dispatch| dispatch.run_id.as_str()),
+            request
+                .member_dispatch
+                .as_ref()
+                .map(|dispatch| dispatch.run_id.as_str()),
             Some("run_123")
         );
         assert_eq!(
@@ -2442,7 +2450,9 @@ mod tests {
                 .map(|dispatch| dispatch.resolved_runtime.binary_path.as_str()),
             Some("/usr/bin/codex")
         );
-        request.validate().expect("typed member dispatch request validates");
+        request
+            .validate()
+            .expect("typed member dispatch request validates");
     }
 
     #[test]
