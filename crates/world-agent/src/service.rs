@@ -63,6 +63,8 @@ use crate::gateway_runtime::{
     GatewayControlSettings, GatewayRuntimeFailure, GatewayRuntimeManager,
     GatewayRuntimeStartContext,
 };
+#[cfg(target_os = "linux")]
+use crate::member_runtime::MemberRuntimeManager;
 use crate::request_routing::resolve_snapshot_routing;
 
 pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
@@ -181,6 +183,8 @@ pub struct WorldAgentService {
     #[cfg(target_os = "linux")]
     gateway_runtime: Arc<GatewayRuntimeManager>,
     #[cfg(target_os = "linux")]
+    member_runtime: Arc<MemberRuntimeManager>,
+    #[cfg(target_os = "linux")]
     pending_diff_origin: Arc<RwLock<HashMap<String, PendingDiffOriginTracker>>>,
     #[allow(dead_code)]
     worlds: Arc<RwLock<HashMap<String, WorldHandle>>>,
@@ -250,6 +254,7 @@ impl WorldAgentService {
                 backend,
                 linux_backend,
                 gateway_runtime: Arc::new(GatewayRuntimeManager::new()),
+                member_runtime: Arc::new(MemberRuntimeManager::new()),
                 pending_diff_origin: Arc::new(RwLock::new(HashMap::new())),
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
@@ -434,6 +439,13 @@ impl WorldAgentService {
 
     /// Execute a command with budget tracking.
     pub async fn execute(&self, req: ExecuteRequest) -> Result<ExecuteResponse> {
+        if req.member_dispatch.is_some() {
+            return Err(BadRequestError::new(
+                "member_dispatch requires POST /v1/execute/stream".to_string(),
+            )
+            .into());
+        }
+
         // Validate agent_id
         if req.agent_id.is_empty() {
             anyhow::bail!("agent_id is required for API calls");
@@ -1197,11 +1209,7 @@ impl WorldAgentService {
         self.record_doctor_request_context(policy_resolution_mode, isolate_network);
         let always_isolate = should_always_isolate(&req);
 
-        let host_visible = !isolation_full;
-        let empty_env: HashMap<String, String> = HashMap::new();
-        let guard_env = req.env.as_ref().unwrap_or(&empty_env);
-        let guard_deny =
-            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible);
+        let shared_owner_spec = requested_shared_world_owner_spec(&req);
 
         let spec = build_world_spec(
             project_dir,
@@ -1209,7 +1217,7 @@ impl WorldAgentService {
             fs_mode,
             isolate_network,
             allowed_domains,
-            req.shared_world.as_ref(),
+            shared_owner_spec.as_ref(),
         );
 
         let world = match self.backend.ensure_session(&spec) {
@@ -1220,7 +1228,30 @@ impl WorldAgentService {
                 anyhow::bail!("Failed to ensure session world");
             }
         };
-        let shared_world = resolve_shared_world_binding(req.shared_world.as_ref(), &world)?;
+        let shared_world = resolve_shared_world_binding(shared_owner_spec.as_ref(), &world)?;
+
+        if let Some(dispatch) = req.member_dispatch.clone() {
+            let authoritative_binding = validate_member_dispatch_binding(&dispatch, &world)?;
+            let env_map = req.env.clone().unwrap_or_default();
+            let span_id = format!("spn_{}", uuid::Uuid::now_v7());
+            return self
+                .member_runtime
+                .launch(
+                    req.agent_id.clone(),
+                    cwd,
+                    env_map,
+                    span_id,
+                    dispatch,
+                    authoritative_binding,
+                )
+                .await;
+        }
+
+        let host_visible = !isolation_full;
+        let empty_env: HashMap<String, String> = HashMap::new();
+        let guard_env = req.env.as_ref().unwrap_or(&empty_env);
+        let guard_deny =
+            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible);
 
         if let Some(deny) = guard_deny {
             let span_id = format!("spn_{}", uuid::Uuid::now_v7());
@@ -1418,6 +1449,17 @@ impl WorldAgentService {
     ) -> Result<ExecuteCancelResponseV1> {
         if req.span_id.trim().is_empty() {
             return Err(BadRequestError::new("span_id is required".to_string()).into());
+        }
+
+        let delivered = self
+            .member_runtime
+            .cancel(&req.span_id, &req.sig)
+            .with_context(|| format!("failed to cancel member runtime span {}", req.span_id))?;
+        if delivered {
+            return Ok(ExecuteCancelResponseV1 {
+                schema_version: 1,
+                delivered: true,
+            });
         }
 
         let mut delivered = false;
@@ -2323,6 +2365,62 @@ pub(crate) fn build_world_spec(
         always_isolate,
         fs_mode,
     }
+}
+
+#[cfg(target_os = "linux")]
+fn requested_shared_world_owner_spec(req: &ExecuteRequest) -> Option<SharedWorldOwnerSpec> {
+    req.shared_world.clone().or_else(|| {
+        req.member_dispatch
+            .as_ref()
+            .map(|dispatch| SharedWorldOwnerSpec {
+                orchestration_session_id: dispatch.orchestration_session_id.clone(),
+                action: world_api::SharedWorldOwnerAction::AttachOrCreate,
+            })
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn validate_member_dispatch_binding(
+    dispatch: &agent_api_types::MemberDispatchRequestV1,
+    world: &WorldHandle,
+) -> Result<SharedWorldBindingSnapshot> {
+    let binding = world.shared_binding.clone().ok_or_else(|| {
+        BadRequestError::new(format!(
+            "member_dispatch requires authoritative shared world binding for orchestration session {}",
+            dispatch.orchestration_session_id
+        ))
+    })?;
+
+    if binding.orchestration_session_id != dispatch.orchestration_session_id {
+        return Err(BadRequestError::new(format!(
+            "member_dispatch.orchestration_session_id mismatch (expected {}, got {})",
+            binding.orchestration_session_id, dispatch.orchestration_session_id
+        ))
+        .into());
+    }
+    if binding.world_id != dispatch.world_id {
+        return Err(BadRequestError::new(format!(
+            "member_dispatch.world_id mismatch (expected {}, got {})",
+            binding.world_id, dispatch.world_id
+        ))
+        .into());
+    }
+    if binding.world_generation != dispatch.world_generation {
+        return Err(BadRequestError::new(format!(
+            "member_dispatch.world_generation mismatch (expected {}, got {})",
+            binding.world_generation, dispatch.world_generation
+        ))
+        .into());
+    }
+    if world.id != dispatch.world_id {
+        return Err(BadRequestError::new(format!(
+            "member_dispatch.world_id mismatch (expected {}, got {})",
+            world.id, dispatch.world_id
+        ))
+        .into());
+    }
+
+    Ok(binding)
 }
 
 pub(crate) fn resolve_shared_world_binding(

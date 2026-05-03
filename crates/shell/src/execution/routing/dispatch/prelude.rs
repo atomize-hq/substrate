@@ -15,7 +15,7 @@ pub(crate) use super::world_ops::init_linux_world;
 pub(crate) use super::world_ops::{
     build_agent_client_and_member_dispatch_request, build_agent_client_and_pending_diff_request,
     build_agent_client_and_request, consume_agent_stream_buffer, stream_non_pty_via_agent,
-    AgentStreamOutcome,
+    AgentStreamOutcome, MemberDispatchTransportRequest,
 };
 #[cfg(all(test, target_os = "linux"))]
 pub(crate) use super::world_ops::{init_linux_world_with_probe, LinuxWorldInit};

@@ -6,6 +6,8 @@ mod gateway_runtime;
 pub mod gc;
 pub mod handlers;
 pub mod internal_exec;
+#[cfg(target_os = "linux")]
+mod member_runtime;
 pub mod pty;
 mod request_routing;
 pub mod service;

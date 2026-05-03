@@ -5731,6 +5731,7 @@ dependencies = [
  "tower 0.4.13",
  "tracing",
  "tracing-subscriber",
+ "unified-agent-api",
  "uuid",
  "world",
  "world-api",

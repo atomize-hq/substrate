@@ -14,6 +14,10 @@ use tokio::runtime::Builder as TokioRuntimeBuilder;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task;
 use uuid::Uuid;
+#[cfg(target_os = "linux")]
+use agent_api_client::AgentClient;
+#[cfg(target_os = "linux")]
+use agent_api_types::{ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1};
 
 use crate::execution::agent_events::{
     clear_agent_event_sender, format_event_line, init_event_channel, publish_agent_event,
@@ -42,6 +46,10 @@ use crate::execution::{
     is_shell_stream_event, needs_pty, policy_snapshot, resolve_world_root, setup_signal_handlers,
     MinimalTerminalGuard, ReplPersistentSessionClient, ReplSessionStartParams, ReplStdinMode,
     ShellConfig, PTY_ACTIVE,
+};
+#[cfg(target_os = "linux")]
+use crate::execution::{
+    build_agent_client_and_member_dispatch_request, MemberDispatchTransportRequest,
 };
 use crate::repl::editor;
 use substrate_broker::{detect_profile, world_fs_policy, Policy};
@@ -1542,10 +1550,23 @@ enum RuntimeStartupSignal {
 // The REPL retains live UAA runtime ownership via the cancel handle plus the two
 // long-lived tasks that own the non-clonable `run_control.handle` facets. A manifest
 // may only advertise a live orchestrator session while all three remain retained.
-struct RetainedRunControl {
+struct LocalRetainedRunControl {
     cancel: agent_api::AgentWrapperCancelHandle,
     event_task: Option<tokio::task::JoinHandle<()>>,
     completion_task: Option<tokio::task::JoinHandle<()>>,
+}
+
+#[cfg(target_os = "linux")]
+struct RemoteRetainedRunControl {
+    client: Arc<AgentClient>,
+    span_id: String,
+    observe_task: Option<tokio::task::JoinHandle<()>>,
+}
+
+enum RetainedRunControl {
+    Local(LocalRetainedRunControl),
+    #[cfg(target_os = "linux")]
+    Remote(RemoteRetainedRunControl),
 }
 
 struct AsyncReplAgentRuntime {
@@ -2351,7 +2372,7 @@ async fn start_host_orchestrator_runtime_with_prepared(
         exit_code: 1,
         message: format!("failed to persist retained runtime ownership: {err:#}"),
     })?;
-    let mut retained_control = RetainedRunControl {
+    let mut retained_control = LocalRetainedRunControl {
         cancel,
         event_task: Some(event_task),
         completion_task: Some(completion_task),
@@ -2459,7 +2480,7 @@ async fn start_host_orchestrator_runtime_with_prepared(
         manifest,
         store: startup_context.store,
         uaa_session_handle_id,
-        retained_control,
+        retained_control: RetainedRunControl::Local(retained_control),
         shutdown_requested,
         heartbeat_stop_tx,
         heartbeat_task,
@@ -2711,6 +2732,561 @@ async fn start_member_runtime_with_prepared(
     start_host_orchestrator_runtime_with_prepared(prepared, None, agent_printer, telemetry).await
 }
 
+#[cfg(target_os = "linux")]
+fn member_runtime_backend_kind(
+    descriptor: &RuntimeSelectionDescriptor,
+) -> MemberRuntimeBackendKindV1 {
+    match descriptor.backend_kind {
+        crate::execution::agent_runtime::AgentRuntimeBackendKind::Codex => {
+            MemberRuntimeBackendKindV1::Codex
+        }
+        crate::execution::agent_runtime::AgentRuntimeBackendKind::ClaudeCode => {
+            MemberRuntimeBackendKindV1::ClaudeCode
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn build_member_dispatch_transport_request(
+    prepared: &PreparedAgentRuntime,
+) -> std::result::Result<MemberDispatchTransportRequest, RuntimeBootstrapFailure> {
+    let manifest = prepared
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .clone();
+    let world_id = manifest.handle.world_id.clone().ok_or_else(|| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: "member dispatch requires an authoritative world_id".to_string(),
+    })?;
+    let world_generation = manifest
+        .handle
+        .world_generation
+        .ok_or_else(|| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "member dispatch requires an authoritative world_generation".to_string(),
+        })?;
+    let orchestrator_participant_id = manifest
+        .handle
+        .orchestrator_participant_id
+        .clone()
+        .ok_or_else(|| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "member dispatch requires orchestrator_participant_id".to_string(),
+        })?;
+
+    Ok(MemberDispatchTransportRequest {
+        orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
+        participant_id: manifest.handle.participant_id.clone(),
+        orchestrator_participant_id,
+        parent_participant_id: manifest.handle.parent_participant_id.clone(),
+        resumed_from_participant_id: manifest.handle.resumed_from_participant_id.clone(),
+        backend_id: prepared.descriptor.backend_id.clone(),
+        protocol: prepared.descriptor.protocol.clone(),
+        run_id: prepared.run_id.clone(),
+        world_id,
+        world_generation,
+        backend_kind: member_runtime_backend_kind(&prepared.descriptor),
+        binary_path: prepared.descriptor.binary_path.display().to_string(),
+    })
+}
+
+#[cfg(target_os = "linux")]
+async fn abort_remote_member_bootstrap_runtime(
+    shutdown_requested: &Arc<AtomicBool>,
+    client: &AgentClient,
+    span_id: &Arc<Mutex<Option<String>>>,
+    observe_task: &mut Option<tokio::task::JoinHandle<()>>,
+) {
+    shutdown_requested.store(true, Ordering::SeqCst);
+    if let Some(span_id) = span_id
+        .lock()
+        .expect("remote member span mutex poisoned")
+        .clone()
+    {
+        let _ = client
+            .cancel_execute(ExecuteCancelRequestV1 {
+                span_id,
+                sig: "INT".to_string(),
+            })
+            .await;
+    }
+    if let Some(task) = observe_task.take() {
+        let _ = task.await;
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn start_remote_member_runtime_with_prepared(
+    prepared: Option<PreparedAgentRuntime>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    use http_body_util::BodyExt as _;
+
+    let Some(prepared) = prepared else {
+        return Ok(None);
+    };
+    let transport_request = build_member_dispatch_transport_request(&prepared)?;
+    let PreparedAgentRuntime {
+        descriptor: _descriptor,
+        gateway: _gateway,
+        agent_kind: _agent_kind,
+        startup_context,
+        manifest,
+        run_id,
+    } = prepared;
+
+    let runtime_role = {
+        manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned")
+            .handle
+            .role
+            .clone()
+    };
+    let persist_participant_result = {
+        let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+        startup_context.store.persist_participant(&manifest_guard)
+    };
+    if let Err(err) = persist_participant_result {
+        mark_runtime_startup_failed(
+            &startup_context.store,
+            &startup_context.orchestration_session,
+            &manifest,
+            &format!("failed to persist agent runtime participant record: {err:#}"),
+        );
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to persist agent runtime participant record: {err:#}"),
+        });
+    }
+
+    let orchestration_snapshot = startup_context
+        .orchestration_session
+        .lock()
+        .expect("orchestration session mutex poisoned")
+        .clone();
+    let manifest_snapshot = manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .clone();
+    emit_runtime_event(
+        build_runtime_message_event(
+            &manifest_snapshot,
+            &orchestration_snapshot,
+            run_id.clone(),
+            MessageEventKind::Registered,
+            runtime_registered_message(&runtime_role),
+        ),
+        telemetry,
+        agent_printer,
+    );
+    emit_runtime_event(
+        build_runtime_message_event(
+            &manifest_snapshot,
+            &orchestration_snapshot,
+            run_id.clone(),
+            MessageEventKind::TaskStart,
+            runtime_task_start_message(&runtime_role),
+        ),
+        telemetry,
+        agent_printer,
+    );
+
+    let (client, request, _agent_id) = build_agent_client_and_member_dispatch_request(&transport_request)
+        .map_err(runtime_bootstrap_failure_from_anyhow)?;
+    let response = client
+        .execute_stream(request)
+        .await
+        .map_err(runtime_bootstrap_failure_from_anyhow)?;
+
+    let (retained_orchestration_snapshot, retained_manifest_snapshot) = {
+        let mut orchestration_guard = startup_context
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned");
+        let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+        manifest_guard.mark_runtime_ownership_retained();
+        orchestration_guard.touch_active();
+        (orchestration_guard.clone(), manifest_guard.clone())
+    };
+    persist_runtime_snapshots(
+        &startup_context.store,
+        &retained_orchestration_snapshot,
+        &retained_manifest_snapshot,
+    )
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!("failed to persist retained runtime ownership: {err:#}"),
+    })?;
+
+    let shutdown_requested = Arc::new(AtomicBool::new(false));
+    let (startup_tx, startup_rx) = tokio::sync::oneshot::channel::<RuntimeStartupSignal>();
+    let startup_signal = Arc::new(Mutex::new(Some(startup_tx)));
+    let span_id = Arc::new(Mutex::new(None::<String>));
+
+    let event_store = startup_context.store.clone();
+    let event_orchestration_session = Arc::clone(&startup_context.orchestration_session);
+    let event_manifest = Arc::clone(&manifest);
+    let startup_signal_for_events = Arc::clone(&startup_signal);
+    let shutdown_for_events = Arc::clone(&shutdown_requested);
+    let runtime_role_for_events = runtime_role.clone();
+    let run_id_for_events = run_id.clone();
+    let span_id_for_events = Arc::clone(&span_id);
+
+    let observe_task = tokio::spawn(async move {
+        let mut body = std::pin::pin!(response.into_body());
+        let mut buffer = Vec::new();
+        let mut saw_terminal = false;
+
+        while let Some(frame) = body.as_mut().frame().await {
+            let Ok(frame) = frame else {
+                break;
+            };
+            let Some(data) = frame.data_ref() else {
+                continue;
+            };
+            buffer.extend_from_slice(data);
+
+            while let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
+                let line: Vec<u8> = buffer.drain(..=pos).collect();
+                if line.len() <= 1 {
+                    continue;
+                }
+                let payload = &line[..line.len() - 1];
+                if payload.is_empty() {
+                    continue;
+                }
+                let Ok(frame) = serde_json::from_slice::<ExecuteStreamFrame>(payload) else {
+                    continue;
+                };
+
+                match frame {
+                    ExecuteStreamFrame::Start { span_id: stream_span_id } => {
+                        *span_id_for_events
+                            .lock()
+                            .expect("remote member span mutex poisoned") = Some(stream_span_id);
+                    }
+                    ExecuteStreamFrame::Event { event } => {
+                        let mut startup_became_live = false;
+                        let (orchestration_snapshot, manifest_snapshot) = {
+                            let mut orchestration_guard = event_orchestration_session
+                                .lock()
+                                .expect("orchestration session mutex poisoned");
+                            let mut manifest_guard = event_manifest
+                                .lock()
+                                .expect("runtime manifest mutex poisoned");
+                            if let Some(session_id) = extract_session_handle_id(Some(&event.data)) {
+                                if manifest_guard.internal.uaa_session_id.as_deref()
+                                    != Some(session_id)
+                                {
+                                    manifest_guard.set_uaa_session_id(session_id.to_string());
+                                }
+                                if manifest_guard.handle.state
+                                    == AgentRuntimeSessionState::Allocating
+                                    && manifest_guard.can_advertise_live()
+                                {
+                                    manifest_guard.transition_state(
+                                        AgentRuntimeSessionState::Ready,
+                                    );
+                                    manifest_guard.touch_heartbeat();
+                                    orchestration_guard.touch_active();
+                                    startup_became_live = true;
+                                }
+                            }
+                            manifest_guard.touch_event(event.ts);
+                            orchestration_guard.touch_active();
+                            (orchestration_guard.clone(), manifest_guard.clone())
+                        };
+                        let _ = persist_runtime_snapshots(
+                            &event_store,
+                            &orchestration_snapshot,
+                            &manifest_snapshot,
+                        );
+                        let _ = publish_agent_event(event);
+                        if startup_became_live {
+                            let _ = publish_agent_event(build_runtime_message_event(
+                                &manifest_snapshot,
+                                &orchestration_snapshot,
+                                run_id_for_events.clone(),
+                                MessageEventKind::Status,
+                                runtime_ready_message(&runtime_role_for_events),
+                            ));
+                            signal_runtime_startup(
+                                &startup_signal_for_events,
+                                RuntimeStartupSignal::Running,
+                            );
+                        }
+                    }
+                    ExecuteStreamFrame::Exit { exit, .. } => {
+                        saw_terminal = true;
+                        let mut startup_failure = None;
+                        let (orchestration_snapshot, manifest_snapshot) = {
+                            let mut orchestration_guard = event_orchestration_session
+                                .lock()
+                                .expect("orchestration session mutex poisoned");
+                            let mut manifest_guard = event_manifest
+                                .lock()
+                                .expect("runtime manifest mutex poisoned");
+                            if manifest_guard.handle.state == AgentRuntimeSessionState::Allocating {
+                                let reason = format!(
+                                    "world-scoped member runtime exited with status {exit} before ownership could be established"
+                                );
+                                manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
+                                manifest_guard.mark_terminal_state(reason.clone());
+                                manifest_guard.internal.last_error_bucket =
+                                    Some("bootstrap_run".to_string());
+                                manifest_guard.internal.last_error_message =
+                                    Some(reason.clone());
+                                orchestration_guard.touch_active();
+                                startup_failure = Some(reason);
+                            } else if shutdown_for_events.load(Ordering::SeqCst)
+                                || matches!(exit, 0 | 129 | 130 | 131 | 143)
+                            {
+                                manifest_guard.transition_state(AgentRuntimeSessionState::Stopped);
+                                manifest_guard
+                                    .mark_terminal_state("world-scoped member session stopped");
+                                orchestration_guard.touch_active();
+                            } else {
+                                let reason =
+                                    format!("world-scoped member session exited with status {exit}");
+                                manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
+                                manifest_guard.mark_terminal_state(reason.clone());
+                                manifest_guard.internal.last_error_bucket =
+                                    Some("runtime_lifecycle".to_string());
+                                manifest_guard.internal.last_error_message =
+                                    Some(reason.clone());
+                                orchestration_guard.touch_active();
+                            }
+                            (orchestration_guard.clone(), manifest_guard.clone())
+                        };
+                        let _ = persist_runtime_snapshots(
+                            &event_store,
+                            &orchestration_snapshot,
+                            &manifest_snapshot,
+                        );
+                        if let Some(reason) = startup_failure {
+                            signal_runtime_startup(
+                                &startup_signal_for_events,
+                                RuntimeStartupSignal::Failed(reason),
+                            );
+                        }
+                        break;
+                    }
+                    ExecuteStreamFrame::Error { message } => {
+                        saw_terminal = true;
+                        let mut startup_failure = None;
+                        let (orchestration_snapshot, manifest_snapshot, alert) = {
+                            let mut orchestration_guard = event_orchestration_session
+                                .lock()
+                                .expect("orchestration session mutex poisoned");
+                            let mut manifest_guard = event_manifest
+                                .lock()
+                                .expect("runtime manifest mutex poisoned");
+                            let reason = format!("remote member runtime failed: {message}");
+                            if manifest_guard.handle.state == AgentRuntimeSessionState::Allocating {
+                                manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
+                                startup_failure = Some(reason.clone());
+                            } else {
+                                manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
+                            }
+                            manifest_guard.mark_terminal_state(reason.clone());
+                            manifest_guard.internal.last_error_bucket =
+                                Some("runtime_lifecycle".to_string());
+                            manifest_guard.internal.last_error_message = Some(reason.clone());
+                            orchestration_guard.touch_active();
+                            let mut event = AgentEvent::alert(
+                                manifest_guard.handle.agent_id.clone(),
+                                manifest_guard.handle.orchestration_session_id.clone(),
+                                run_id_for_events.clone(),
+                                runtime_invalidated_alert_code(&runtime_role_for_events),
+                                reason,
+                            );
+                            apply_runtime_participant_lineage(&mut event, &manifest_guard);
+                            (
+                                orchestration_guard.clone(),
+                                manifest_guard.clone(),
+                                event,
+                            )
+                        };
+                        let _ = persist_runtime_snapshots(
+                            &event_store,
+                            &orchestration_snapshot,
+                            &manifest_snapshot,
+                        );
+                        let _ = publish_agent_event(alert);
+                        if let Some(reason) = startup_failure {
+                            signal_runtime_startup(
+                                &startup_signal_for_events,
+                                RuntimeStartupSignal::Failed(reason),
+                            );
+                        }
+                        break;
+                    }
+                    ExecuteStreamFrame::Stdout { .. }
+                    | ExecuteStreamFrame::Stderr { .. } => {}
+                }
+            }
+        }
+
+        if saw_terminal {
+            return;
+        }
+
+        let mut publish_events = Vec::new();
+        let mut startup_failure = None;
+        let (orchestration_snapshot, manifest_snapshot) = {
+            let mut orchestration_guard = event_orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned");
+            let mut manifest_guard = event_manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned");
+            let was_allocating =
+                manifest_guard.handle.state == AgentRuntimeSessionState::Allocating;
+            let was_live = manifest_guard.is_authoritative_live();
+            manifest_guard.set_event_stream_active(false);
+            if was_allocating {
+                let reason =
+                    "attached control turn ended before ownership could be established".to_string();
+                manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
+                manifest_guard.mark_terminal_state(reason.clone());
+                manifest_guard.internal.last_error_bucket = Some("bootstrap_run".to_string());
+                manifest_guard.internal.last_error_message = Some(reason.clone());
+                orchestration_guard.touch_active();
+                startup_failure = Some(reason);
+            } else if !shutdown_for_events.load(Ordering::SeqCst) && was_live {
+                let reason =
+                    "world-scoped member control stream ended before completion observation"
+                        .to_string();
+                manifest_guard.transition_state(AgentRuntimeSessionState::Invalidated);
+                manifest_guard.mark_terminal_state(reason.clone());
+                manifest_guard.internal.last_error_bucket =
+                    Some("runtime_lifecycle".to_string());
+                manifest_guard.internal.last_error_message = Some(reason.clone());
+                orchestration_guard.touch_active();
+                let mut event = AgentEvent::alert(
+                    manifest_guard.handle.agent_id.clone(),
+                    manifest_guard.handle.orchestration_session_id.clone(),
+                    run_id_for_events.clone(),
+                    runtime_stream_closed_alert_code(&runtime_role_for_events),
+                    reason,
+                );
+                apply_runtime_participant_lineage(&mut event, &manifest_guard);
+                publish_events.push(event);
+            }
+            (orchestration_guard.clone(), manifest_guard.clone())
+        };
+        let _ = persist_runtime_snapshots(&event_store, &orchestration_snapshot, &manifest_snapshot);
+        for event in publish_events {
+            let _ = publish_agent_event(event);
+        }
+        if let Some(reason) = startup_failure {
+            signal_runtime_startup(&startup_signal_for_events, RuntimeStartupSignal::Failed(reason));
+        }
+    });
+
+    let mut observe_task = Some(observe_task);
+    match tokio::time::timeout(Duration::from_secs(10), startup_rx).await {
+        Ok(Ok(RuntimeStartupSignal::Running)) => {}
+        Ok(Ok(RuntimeStartupSignal::Failed(message))) => {
+            abort_remote_member_bootstrap_runtime(
+                &shutdown_requested,
+                &client,
+                &span_id,
+                &mut observe_task,
+            )
+            .await;
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 4,
+                message,
+            });
+        }
+        Ok(Err(_)) => {
+            abort_remote_member_bootstrap_runtime(
+                &shutdown_requested,
+                &client,
+                &span_id,
+                &mut observe_task,
+            )
+            .await;
+            let message = "failed to establish attached control ownership".to_string();
+            mark_runtime_startup_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                &manifest,
+                &message,
+            );
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message,
+            });
+        }
+        Err(_) => {
+            abort_remote_member_bootstrap_runtime(
+                &shutdown_requested,
+                &client,
+                &span_id,
+                &mut observe_task,
+            )
+            .await;
+            let message =
+                "timed out waiting for world-scoped member control ownership".to_string();
+            mark_runtime_startup_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                &manifest,
+                &message,
+            );
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 4,
+                message,
+            });
+        }
+    }
+
+    let surfaced_uaa_session_handle_id = {
+        manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned")
+            .internal
+            .uaa_session_id
+            .clone()
+    };
+    let uaa_session_handle_id = surfaced_uaa_session_handle_id.ok_or_else(|| {
+        RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "runtime startup signalled ready without a surfaced UAA session handle"
+                .to_string(),
+        }
+    })?;
+    let span_id = span_id
+        .lock()
+        .expect("remote member span mutex poisoned")
+        .clone()
+        .ok_or_else(|| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "runtime startup signalled ready without a streamed execute span_id"
+                .to_string(),
+        })?;
+
+    Ok(Some(AsyncReplAgentRuntime {
+        orchestration_session: startup_context.orchestration_session,
+        manifest,
+        store: startup_context.store,
+        uaa_session_handle_id,
+        retained_control: RetainedRunControl::Remote(RemoteRetainedRunControl {
+            client: Arc::new(client),
+            span_id,
+            observe_task,
+        }),
+        shutdown_requested,
+        heartbeat_stop_tx: None,
+        heartbeat_task: None,
+    }))
+}
+
 async fn reconcile_member_runtime_generation(
     world_session: Option<&WorldSession>,
     member_runtime: &mut Option<AsyncReplAgentRuntime>,
@@ -2780,6 +3356,15 @@ async fn ensure_member_runtime_ready(
     else {
         return Ok(());
     };
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (descriptor, world_session, member_runtime, pending_member_replacement);
+        return Err(anyhow!(
+            "substrate: error: world-scoped member runtime dispatch is supported on Linux only"
+        ));
+    }
+    #[cfg(target_os = "linux")]
+    {
     ensure_member_backend_allowed(startup_context, &descriptor)
         .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
 
@@ -2809,13 +3394,15 @@ async fn ensure_member_runtime_ready(
     )
     .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
 
-    let runtime = start_member_runtime_with_prepared(Some(prepared), agent_printer, telemetry)
+    #[cfg(target_os = "linux")]
+    let runtime = start_remote_member_runtime_with_prepared(Some(prepared), agent_printer, telemetry)
         .await
         .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
     if runtime.is_some() {
         pending_member_replacement.take();
     }
     *member_runtime = runtime;
+    }
     Ok(())
 }
 
@@ -2879,18 +3466,41 @@ async fn shutdown_host_orchestrator_runtime(
     if let Some(stop_tx) = runtime.heartbeat_stop_tx.take() {
         let _ = stop_tx.send(());
     }
-    runtime.retained_control.cancel.cancel();
-
     let mut stop_failed = false;
     let mut completion_observed = false;
-    if let Some(task) = runtime.retained_control.completion_task.take() {
-        match tokio::time::timeout(Duration::from_secs(5), task).await {
-            Ok(Ok(())) => completion_observed = true,
-            Ok(Err(_)) | Err(_) => stop_failed = true,
+    match &mut runtime.retained_control {
+        RetainedRunControl::Local(retained_control) => {
+            retained_control.cancel.cancel();
+            if let Some(task) = retained_control.completion_task.take() {
+                match tokio::time::timeout(Duration::from_secs(5), task).await {
+                    Ok(Ok(())) => completion_observed = true,
+                    Ok(Err(_)) | Err(_) => stop_failed = true,
+                }
+            }
+            if let Some(task) = retained_control.event_task.take() {
+                let _ = tokio::time::timeout(Duration::from_secs(5), task).await;
+            }
         }
-    }
-    if let Some(task) = runtime.retained_control.event_task.take() {
-        let _ = tokio::time::timeout(Duration::from_secs(5), task).await;
+        #[cfg(target_os = "linux")]
+        RetainedRunControl::Remote(retained_control) => {
+            if retained_control
+                .client
+                .cancel_execute(ExecuteCancelRequestV1 {
+                    span_id: retained_control.span_id.clone(),
+                    sig: "INT".to_string(),
+                })
+                .await
+                .is_err()
+            {
+                stop_failed = true;
+            }
+            if let Some(task) = retained_control.observe_task.take() {
+                match tokio::time::timeout(Duration::from_secs(5), task).await {
+                    Ok(Ok(())) => completion_observed = true,
+                    Ok(Err(_)) | Err(_) => stop_failed = true,
+                }
+            }
+        }
     }
     if let Some(task) = runtime.heartbeat_task.take() {
         let _ = task.await;
@@ -2960,7 +3570,7 @@ async fn shutdown_host_orchestrator_runtime(
 
 async fn abort_bootstrap_runtime(
     shutdown_requested: &Arc<AtomicBool>,
-    retained_control: &mut RetainedRunControl,
+    retained_control: &mut LocalRetainedRunControl,
     heartbeat_stop_tx: &mut Option<tokio::sync::oneshot::Sender<()>>,
     heartbeat_task: &mut Option<tokio::task::JoinHandle<()>>,
 ) {
