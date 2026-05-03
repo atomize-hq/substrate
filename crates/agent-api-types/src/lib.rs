@@ -687,8 +687,7 @@ impl ResolvedMemberRuntimeDescriptorV1 {
         )?;
         if !Path::new(&self.binary_path).is_absolute() {
             return Err(
-                "member_dispatch.resolved_runtime.binary_path must be an absolute path"
-                    .to_string(),
+                "member_dispatch.resolved_runtime.binary_path must be an absolute path".to_string(),
             );
         }
         Ok(())
@@ -883,13 +882,12 @@ impl ExecuteRequest {
                 member_dispatch.validate()?;
                 if !cmd_is_empty {
                     return Err(
-                        "execute request member_dispatch requires cmd.trim().is_empty()".to_string(),
+                        "execute request member_dispatch requires cmd.trim().is_empty()"
+                            .to_string(),
                     );
                 }
                 if self.pty {
-                    return Err(
-                        "execute request member_dispatch requires pty=false".to_string(),
-                    );
+                    return Err("execute request member_dispatch requires pty=false".to_string());
                 }
             }
             None => {
@@ -2592,7 +2590,8 @@ mod tests {
         .expect_err("pty member dispatch should fail");
 
         assert!(
-            err.to_string().contains("member_dispatch requires pty=false"),
+            err.to_string()
+                .contains("member_dispatch requires pty=false"),
             "unexpected error: {err}"
         );
     }
