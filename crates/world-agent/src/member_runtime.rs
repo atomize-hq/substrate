@@ -21,12 +21,15 @@ use serde_json::json;
 use std::{
     collections::{BTreeMap, HashMap},
     convert::Infallible,
+    fs,
     path::Path,
     sync::{Arc, Mutex, RwLock},
 };
 use substrate_common::agent_events::{AgentEvent, AgentEventKind, MessageEventKind};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use world_api::SharedWorldBindingSnapshot;
+
+use crate::gateway_runtime::{prepare_linux_world_entry_launcher, LinuxWorldPlacementContext};
 
 const MEMBER_ROLE: &str = "member";
 const SESSION_HANDLE_SCHEMA_V1: &str = "agent_api.session.handle.v1";
@@ -40,6 +43,7 @@ pub(crate) struct MemberRuntimeManager {
 struct ActiveMemberRuntime {
     cancel: AgentWrapperCancelHandle,
     last_signal: Mutex<Option<String>>,
+    launcher_dir: Option<std::path::PathBuf>,
 }
 
 impl MemberRuntimeManager {
@@ -50,32 +54,44 @@ impl MemberRuntimeManager {
     pub(crate) async fn launch(
         &self,
         agent_id: String,
-        cwd: std::path::PathBuf,
         env: HashMap<String, String>,
         span_id: String,
         dispatch: MemberDispatchRequestV1,
         binding: SharedWorldBindingSnapshot,
+        placement: LinuxWorldPlacementContext,
     ) -> Result<Response> {
-        validate_member_runtime_binary(&dispatch)?;
+        let actual_binary = validate_member_runtime_binary(&dispatch)?;
+        let prepared_launcher = prepare_member_runtime_launcher(&actual_binary, &placement)?;
 
-        let (gateway, agent_kind) = build_gateway_for_dispatch(&dispatch)?;
-        let AgentWrapperRunControl { handle, cancel } = gateway
+        let (gateway, agent_kind) =
+            build_gateway_for_dispatch(&dispatch, prepared_launcher.launcher_path.clone())?;
+        let AgentWrapperRunControl { handle, cancel } = match gateway
             .run_control(
                 &agent_kind,
                 AgentWrapperRunRequest {
                     prompt: runtime_bootstrap_prompt().to_string(),
-                    working_dir: Some(cwd),
+                    working_dir: Some(placement.working_dir.clone()),
                     timeout: None,
-                    env: env.into_iter().collect::<BTreeMap<_, _>>(),
+                    env: env
+                        .into_iter()
+                        .chain(prepared_launcher.env.iter().cloned())
+                        .collect::<BTreeMap<_, _>>(),
                     extensions: BTreeMap::new(),
                 },
             )
             .await
-            .map_err(map_wrapper_error)?;
+        {
+            Ok(control) => control,
+            Err(err) => {
+                let _ = fs::remove_dir_all(&prepared_launcher.launcher_dir);
+                return Err(map_wrapper_error(err));
+            }
+        };
 
         let active = Arc::new(ActiveMemberRuntime {
             cancel,
             last_signal: Mutex::new(None),
+            launcher_dir: Some(prepared_launcher.launcher_dir),
         });
         self.register(span_id.clone(), active);
 
@@ -150,7 +166,11 @@ impl MemberRuntimeManager {
 
     fn unregister(&self, span_id: &str) {
         if let Ok(mut guard) = self.active.write() {
-            guard.remove(span_id);
+            if let Some(active) = guard.remove(span_id) {
+                if let Some(launcher_dir) = active.launcher_dir.as_ref() {
+                    let _ = fs::remove_dir_all(launcher_dir);
+                }
+            }
         }
     }
 
@@ -173,7 +193,9 @@ fn runtime_bootstrap_prompt() -> &'static str {
     "Enter persistent Substrate world-scoped member mode. Keep this control session attached for the lifetime of the parent REPL session and do not exit until the client cancels the run."
 }
 
-fn validate_member_runtime_binary(dispatch: &MemberDispatchRequestV1) -> Result<()> {
+fn validate_member_runtime_binary(
+    dispatch: &MemberDispatchRequestV1,
+) -> Result<std::path::PathBuf> {
     let path = Path::new(&dispatch.resolved_runtime.binary_path);
     if !path.is_file() {
         return Err(anyhow!(
@@ -181,14 +203,15 @@ fn validate_member_runtime_binary(dispatch: &MemberDispatchRequestV1) -> Result<
             dispatch.resolved_runtime.binary_path
         ));
     }
-    Ok(())
+    Ok(path.to_path_buf())
 }
 
 fn build_gateway_for_dispatch(
     dispatch: &MemberDispatchRequestV1,
+    binary_path: std::path::PathBuf,
 ) -> Result<(AgentWrapperGateway, AgentWrapperKind)> {
     let mut gateway = AgentWrapperGateway::new();
-    let binary_path = Some(dispatch.resolved_runtime.binary_path.clone().into());
+    let binary_path = Some(binary_path);
 
     let agent_kind = match dispatch.resolved_runtime.backend_kind {
         MemberRuntimeBackendKindV1::Codex => {
@@ -212,6 +235,30 @@ fn build_gateway_for_dispatch(
     };
 
     Ok((gateway, agent_kind))
+}
+
+struct PreparedMemberRuntimeLauncher {
+    launcher_path: std::path::PathBuf,
+    launcher_dir: std::path::PathBuf,
+    env: Vec<(String, String)>,
+}
+
+fn prepare_member_runtime_launcher(
+    actual_binary_path: &Path,
+    placement: &LinuxWorldPlacementContext,
+) -> Result<PreparedMemberRuntimeLauncher> {
+    let launcher_dir = std::env::temp_dir().join(format!(
+        "substrate-member-runtime-entry-{}",
+        uuid::Uuid::now_v7()
+    ));
+    let launcher = prepare_linux_world_entry_launcher(&launcher_dir, actual_binary_path, placement)
+        .map_err(|err| anyhow!(err.to_string()))?;
+
+    Ok(PreparedMemberRuntimeLauncher {
+        launcher_path: launcher.launcher_path,
+        launcher_dir,
+        env: launcher.env,
+    })
 }
 
 fn frame_from_wrapper_event(

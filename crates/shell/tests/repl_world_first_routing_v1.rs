@@ -14,9 +14,10 @@ use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use support::{
-    binary_path, ensure_substrate_built, temp_dir, MemberDispatchStreamScript, ReplWorldAgentStub,
-    StreamBehavior,
+    binary_path, ensure_substrate_built, temp_dir, ReplWorldAgentStub, StreamBehavior,
 };
+#[cfg(target_os = "linux")]
+use support::MemberDispatchStreamScript;
 use tempfile::TempDir;
 
 #[cfg(unix)]
@@ -2340,9 +2341,39 @@ fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
         0,
         Duration::from_secs(15),
     );
-    wait_for_min_records(&records, 2, 1, Duration::from_secs(3));
-    repl.wait_for_output("second", Duration::from_secs(3))
-        .expect("second command output");
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(3) {
+        if repl.try_wait().expect("try_wait") {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    let (code, out) = repl.shutdown();
+    assert_eq!(
+        code, 1,
+        "replacement startup failure must fail closed instead of continuing; output:\n{out}"
+    );
+    assert!(
+        out.contains("world-scoped member runtime exited with status 1 before ownership could be established"),
+        "replacement startup failure must surface the member bootstrap error; output:\n{out}"
+    );
+    assert!(
+        !out.contains("second"),
+        "replacement startup failure must block the second command from executing; output:\n{out}"
+    );
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.persistent_execs.len(),
+        1,
+        "fail-closed member startup must not fall through to a host-local or restarted-world second exec; records: {guard:#?}"
+    );
+    assert!(
+        guard.persistent_start_sessions.len() >= 2,
+        "world restart should still allocate the replacement world before the member bootstrap failure; records: {guard:#?}"
+    );
+    drop(guard);
 
     let live_members = wait_for_live_world_member_count(
         &substrate_home,
@@ -2368,9 +2399,6 @@ fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
     );
     let persisted = read_orchestration_session(&session_path);
     assert_session_world_binding(&persisted, Some("wld_stub_0002"), Some(1));
-
-    repl.send_line("exit");
-    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 }
 
 #[cfg(target_os = "linux")]

@@ -45,6 +45,7 @@ const GATEWAY_RUNTIME_MANIFEST_NAME: &str = "runtime.json";
 const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(8);
 const GATEWAY_RUNTIME_DIR_MODE: u32 = 0o750;
 const GATEWAY_RUNTIME_FILE_MODE: u32 = 0o640;
+const WORLD_ENTRY_WRAPPER_MODE: u32 = 0o755;
 const KNOWN_GATEWAY_AUTH_ENV_VARS: &[&str] = &[
     CODEX_ACCOUNT_ID_ENV,
     CODEX_ACCESS_TOKEN_ENV,
@@ -52,6 +53,10 @@ const KNOWN_GATEWAY_AUTH_ENV_VARS: &[&str] = &[
 ];
 const REQUIRED_GATEWAY_CAPABILITIES: &[&str] =
     &["agent_api.run", "agent_api.events", "agent_api.events.live"];
+const WORLD_ENTRY_BINARY_ENV: &str = "SUBSTRATE_WORLD_ENTRY_BINARY";
+const WORLD_ENTRY_WORKING_DIR_ENV: &str = "SUBSTRATE_WORLD_ENTRY_WORKING_DIR";
+const WORLD_ENTRY_CGROUP_PROCS_ENV: &str = "SUBSTRATE_WORLD_ENTRY_CGROUP_PROCS_PATH";
+const WORLD_ENTRY_REQUIRE_CGROUP_ATTACH_ENV: &str = "SUBSTRATE_WORLD_ENTRY_REQUIRE_CGROUP_ATTACH";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -229,6 +234,35 @@ pub(crate) struct GatewayRuntimeStartContext {
     pub require_cgroup_attach: bool,
     pub binding: &'static GatewayBackendBinding,
     pub integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct LinuxWorldPlacementContext {
+    pub working_dir: PathBuf,
+    pub cgroup_path: PathBuf,
+    pub require_cgroup_attach: bool,
+}
+
+impl LinuxWorldPlacementContext {
+    pub(crate) fn cgroup_procs_path(&self) -> PathBuf {
+        self.cgroup_path.join("cgroup.procs")
+    }
+}
+
+impl From<&GatewayRuntimeStartContext> for LinuxWorldPlacementContext {
+    fn from(value: &GatewayRuntimeStartContext) -> Self {
+        Self {
+            working_dir: value.project_dir.clone(),
+            cgroup_path: value.cgroup_path.clone(),
+            require_cgroup_attach: value.require_cgroup_attach,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct PreparedLinuxWorldEntryLauncher {
+    pub launcher_path: PathBuf,
+    pub env: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -632,6 +666,8 @@ fn start_runtime(
     ctx: GatewayRuntimeStartContext,
 ) -> Result<ManagedGatewayRuntime, GatewayRuntimeFailure> {
     validate_binding_capabilities(ctx.binding)?;
+    let placement = LinuxWorldPlacementContext::from(&ctx);
+    validate_linux_world_placement_context(&placement)?;
     let port = pick_free_port().map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
     let runtime_dir = runtime_dir_for_world(&ctx.world_id, ctx.binding.backend_id);
     let home_dir = runtime_dir.join("home");
@@ -693,9 +729,7 @@ fn start_runtime(
         .with_context(|| format!("failed to spawn {}", binary_path.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
-    if let Err(err) =
-        attach_child_to_cgroup(child.id(), &ctx.cgroup_path, ctx.require_cgroup_attach)
-    {
+    if let Err(err) = attach_pid_to_linux_world_cgroup(child.id(), &placement) {
         let _ = kill_child_process(&mut child);
         return Err(err);
     }
@@ -735,15 +769,35 @@ fn stop_runtime(runtime: ManagedGatewayRuntime) -> Result<()> {
     stop_process(&mut process)
 }
 
-fn attach_child_to_cgroup(
-    pid: u32,
-    cgroup_path: &Path,
-    required: bool,
+pub(crate) fn validate_linux_world_placement_context(
+    placement: &LinuxWorldPlacementContext,
 ) -> Result<(), GatewayRuntimeFailure> {
-    let cgroup_procs = cgroup_path.join("cgroup.procs");
+    if !placement.working_dir.is_dir() {
+        return Err(GatewayRuntimeFailure::transient(format!(
+            "world entry working_dir is missing or not a directory: {}",
+            placement.working_dir.display()
+        )));
+    }
+
+    let cgroup_procs = placement.cgroup_procs_path();
+    if placement.require_cgroup_attach && !cgroup_procs.is_file() {
+        return Err(GatewayRuntimeFailure::transient(format!(
+            "world entry cgroup attach target is missing: {}",
+            cgroup_procs.display()
+        )));
+    }
+
+    Ok(())
+}
+
+pub(crate) fn attach_pid_to_linux_world_cgroup(
+    pid: u32,
+    placement: &LinuxWorldPlacementContext,
+) -> Result<(), GatewayRuntimeFailure> {
+    let cgroup_procs = placement.cgroup_procs_path();
     match fs::write(&cgroup_procs, pid.to_string()) {
         Ok(()) => Ok(()),
-        Err(_err) if !required => Ok(()),
+        Err(_err) if !placement.require_cgroup_attach => Ok(()),
         Err(err) => Err(GatewayRuntimeFailure::transient(format!(
             "failed to attach gateway pid {} to {}: {}",
             pid,
@@ -751,6 +805,113 @@ fn attach_child_to_cgroup(
             err
         ))),
     }
+}
+
+pub(crate) fn prepare_linux_world_entry_launcher(
+    launcher_dir: &Path,
+    actual_binary_path: &Path,
+    placement: &LinuxWorldPlacementContext,
+) -> Result<PreparedLinuxWorldEntryLauncher, GatewayRuntimeFailure> {
+    validate_linux_world_placement_context(placement)?;
+
+    if !actual_binary_path.is_file() {
+        return Err(GatewayRuntimeFailure::invalid_integration(format!(
+            "world entry binary does not exist or is not a file: {}",
+            actual_binary_path.display()
+        )));
+    }
+
+    ensure_directory_with_mode(launcher_dir, GATEWAY_RUNTIME_DIR_MODE)
+        .with_context(|| {
+            format!(
+                "failed to create world entry launcher dir {}",
+                launcher_dir.display()
+            )
+        })
+        .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
+
+    let launcher_path = launcher_dir.join("world-entry.sh");
+    write_file_with_mode(
+        &launcher_path,
+        render_linux_world_entry_wrapper().as_bytes(),
+        WORLD_ENTRY_WRAPPER_MODE,
+    )
+    .with_context(|| format!("failed to write {}", launcher_path.display()))
+    .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
+
+    Ok(PreparedLinuxWorldEntryLauncher {
+        launcher_path,
+        env: vec![
+            (
+                WORLD_ENTRY_BINARY_ENV.to_string(),
+                actual_binary_path.display().to_string(),
+            ),
+            (
+                WORLD_ENTRY_WORKING_DIR_ENV.to_string(),
+                placement.working_dir.display().to_string(),
+            ),
+            (
+                WORLD_ENTRY_CGROUP_PROCS_ENV.to_string(),
+                placement.cgroup_procs_path().display().to_string(),
+            ),
+            (
+                WORLD_ENTRY_REQUIRE_CGROUP_ATTACH_ENV.to_string(),
+                if placement.require_cgroup_attach {
+                    "1".to_string()
+                } else {
+                    "0".to_string()
+                },
+            ),
+        ],
+    })
+}
+
+fn render_linux_world_entry_wrapper() -> &'static str {
+    r#"#!/bin/sh
+set -eu
+
+binary="${SUBSTRATE_WORLD_ENTRY_BINARY:-}"
+working_dir="${SUBSTRATE_WORLD_ENTRY_WORKING_DIR:-}"
+cgroup_procs_path="${SUBSTRATE_WORLD_ENTRY_CGROUP_PROCS_PATH:-}"
+require_cgroup_attach="${SUBSTRATE_WORLD_ENTRY_REQUIRE_CGROUP_ATTACH:-1}"
+
+if [ -z "$binary" ]; then
+  echo "substrate: error: world entry missing binary path" >&2
+  exit 125
+fi
+if [ ! -f "$binary" ]; then
+  echo "substrate: error: world entry binary missing: $binary" >&2
+  exit 125
+fi
+if [ -z "$working_dir" ]; then
+  echo "substrate: error: world entry missing working_dir" >&2
+  exit 125
+fi
+if [ ! -d "$working_dir" ]; then
+  echo "substrate: error: world entry working_dir missing: $working_dir" >&2
+  exit 125
+fi
+cd "$working_dir"
+
+if [ "$require_cgroup_attach" = "1" ]; then
+  if [ -z "$cgroup_procs_path" ]; then
+    echo "substrate: error: world entry missing cgroup attach target" >&2
+    exit 125
+  fi
+  if [ ! -e "$cgroup_procs_path" ]; then
+    echo "substrate: error: world entry cgroup attach target does not exist: $cgroup_procs_path" >&2
+    exit 125
+  fi
+  if ! printf '%s\n' "$$" > "$cgroup_procs_path"; then
+    echo "substrate: error: world entry cgroup attach failed: $cgroup_procs_path" >&2
+    exit 125
+  fi
+elif [ -n "$cgroup_procs_path" ] && [ -e "$cgroup_procs_path" ]; then
+  printf '%s\n' "$$" > "$cgroup_procs_path" 2>/dev/null || true
+fi
+
+exec "$binary" "$@"
+"#
 }
 
 fn append_gateway_start_args(command: &mut Command, config_path: &Path) {

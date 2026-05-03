@@ -3407,13 +3407,7 @@ async fn ensure_member_runtime_ready(
             .await
         {
             Ok(runtime) => runtime,
-            Err(failure) => {
-                agent_printer.print(format!(
-                    "substrate: warning: world-scoped member runtime unavailable: {}",
-                    failure.message
-                ));
-                return Ok(());
-            }
+            Err(failure) => return Err(anyhow!("substrate: error: {}", failure.message)),
         };
     if runtime.is_some() {
         pending_member_replacement.take();

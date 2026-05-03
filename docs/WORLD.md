@@ -2,7 +2,7 @@
 
 This document describes the world execution model, transport topology, and validation evidence used by Substrate. It is descriptive context for `docs/contracts/substrate-gateway-runtime-parity.md`, `docs/contracts/substrate-gateway-operator-contract.md`, and `docs/contracts/substrate-gateway-status-schema.md`; it does not redefine those operator contracts.
 
-Status: Linux and macOS default to "always-in-world" execution. Windows uses the same gateway semantics through WSL-backed transport, with permitted backend divergence in the hidden transport layer.
+Status: Linux host-native and macOS Lima-backed worlds are the supported provisioning paths in this slice. Windows/WSL helper scripts are intentionally fail-closed until their placement contract matches the Linux-first runtime contract.
 
 ---
 
@@ -22,7 +22,7 @@ On Linux the agent runs directly on the host. On macOS the agent runs inside a L
 
 Helper scripts (`scripts/mac/lima-*.sh`, `scripts/mac/smoke.sh`) keep the Lima environment reproducible.
 
-`/tmp` is included in the guest unit’s `ReadWritePaths` list so replay and shim flows can surface temp‑file diffs on both platforms. The provisioning script embeds this setting in the unit automatically—no manual tuning needed.
+`/tmp` is included in the guest unit’s `ReadWritePaths` list so replay and shim flows can surface temp‑file diffs on both platforms. The provisioning scripts also wire `SUBSTRATE_HOME` into the service unit and keep that path writable under `ReadWritePaths`, so manager/config/runtime state lands in the same canonical home on Linux host-native and macOS Lima guest paths.
 
 ### Transport boundary and multi-user posture
 
@@ -56,7 +56,7 @@ Always-on by default (unless disabled via `SUBSTRATE_WORLD=disabled`):
   - If `world_fs.require_world=false` and the agent/socket is unavailable (or a transport handshake fails), the shell prints exactly one warning and runs on the host path for that command. Subsequent commands continue to attempt world routing.
   - If `world_fs.require_world=true`, Substrate fails closed when the world backend is unavailable (or disabled via `--no-world`/`SUBSTRATE_WORLD=disabled`) instead of falling back to host execution.
 
-Windows (WSL backend) follows the same operator-facing lifecycle/status meaning; only the transport/bootstrap implementation differs. When the world backend is unavailable, the same `world_fs.require_world` rules apply (fallback only when `false`).
+Windows/WSL helper support is intentionally fail-closed in this slice. The older WSL bootstrap path is not documented here as a supported operator flow because its socket/group and `SUBSTRATE_HOME` placement do not yet match the Linux/macOS contract.
 
 ### Shared-owner world reuse (Linux-first)
 
@@ -106,6 +106,10 @@ Deliberate boundary for later lanes:
   world-agent under `/usr/local/bin`, write the `.service` **and** `.socket` units,
   and enable socket activation. The script uses `sudo` for filesystem and systemd operations and
   will prompt if elevated credentials are required.
+- The generated service unit exports `SUBSTRATE_HOME` (default: `<invoking-user-home>/.substrate`,
+  or the explicit `SUBSTRATE_HOME` you pass to the helper) and keeps that path in
+  `ReadWritePaths` alongside `/var/lib/substrate`, `/run`, `/run/substrate`, `/sys/fs/cgroup`,
+  and `/tmp`.
 - The helper ensures the Linux `substrate` group exists, adds the invoking user when possible,
   and rewrites the socket/service units so `/run/substrate` is recreated as
   `root:substrate 0750`, `/run/substrate.sock` is created as `root:substrate 0660`,
@@ -172,7 +176,7 @@ Substrate on macOS uses a Lima VM (“substrate”) to host the world-agent. The
 Hosted installer behavior coverage on macOS flows through this Lima-backed Linux guest/world-agent path; package-manager selection itself remains Linux-only and does not define native macOS package-manager selection.
 
 - Provisioning & lifecycle
-- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` and managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, with `/tmp` included in `ReadWritePaths`.
+- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` and managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
   - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` reports health (virtualization, agent socket, service status, forwarding tools).
   - The helper scripts substitute the active project path so `/src` inside the VM mirrors the host repo checkout.
   - If full isolation writable allowlists fail with `EPERM` in the guest, confirm the guest service has `cap_chown`:
@@ -191,7 +195,7 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
 - Validation
   - `scripts/mac/smoke.sh` exercises non‑PTY, PTY, and replay flows on macOS and asserts that the replay `fs_diff` contains project paths.
   - `scripts/mac/smoke.sh --bedpm-installer-conformance` runs the BEDPM Linux smoke wrapper through the same Lima-backed guest path so hosted installer verification reuses the authoritative Linux harness instead of implying native macOS package-manager selection.
-  - `scripts/linux/agent-hub-isolation-verify.sh` verifies `world_fs.mode=read_only` and `world_fs.isolation=full` enforcement (on macOS it drives the Lima-backed world; on Windows, use WSL-specific tooling instead).
+  - `scripts/linux/agent-hub-isolation-verify.sh` verifies `world_fs.mode=read_only` and `world_fs.isolation=full` enforcement (on macOS it drives the Lima-backed world). WSL-specific provisioning helpers are intentionally disabled in this slice.
 
 ## 4) Isolation Details (Linux)
 
@@ -272,13 +276,12 @@ Notes
 
 ## 6) Shell Behavior
 
-- Default‑on world (Linux, macOS, Windows)
+- Default‑on world (Linux, macOS)
   - On startup, the shell ensures a session world and sets `SUBSTRATE_WORLD=enabled` plus `SUBSTRATE_WORLD_ID`.
   - macOS builds warm the Lima VM, establish forwarding, and reuse the same backend factory used on Linux.
-  - Windows hosts call `platform_world::windows::ensure_world_ready`, which provisions/warms the `substrate-wsl` distro (via the PowerShell helpers) and keeps the world agent reachable through the forwarder named pipe.
   - The gateway lifecycle/status meaning is owned by the runtime parity contract; this section only records how the shell reaches the agent on each platform.
 - Routing
-  - Non‑PTY: POST to `/v1/execute` over UDS (Linux) or the forwarded socket/port (macOS/Windows).
+  - Non‑PTY: POST to `/v1/execute` over UDS (Linux) or the forwarded socket/port (macOS).
   - PTY: use WS to `/v1/stream` over the active transport; host fallback only occurs when `world_fs.require_world=false`.
   - Explicit shared-owner requests are Linux-first. On macOS and Windows, the shell rejects them before platform bootstrap/fallback rather than silently degrading to generic reuse.
 - Prompt safety
@@ -287,7 +290,7 @@ Notes
   - The shell probes `/v1/capabilities`; if stale socket is found, it removes it.
   - If the agent isn’t running, the shell attempts to spawn it (Linux dev flow: `target/debug/world-agent`).
   - macOS invokes the Lima backend ensure path to boot the VM and wire up its tunnel.
-  - Windows triggers the forwarder warm routine; see `docs/cross-platform/wsl_world_setup.md` for the underlying PowerShell flow.
+  - Windows/WSL helper flows are intentionally fail-closed in this slice; see `docs/cross-platform/wsl_world_setup.md`.
 - Fallback
   - With `world_fs.require_world=false`, exactly one warning is printed if the world cannot be reached; execution continues on the host in that situation.
   - With `world_fs.require_world=true`, world routing failures are treated as hard errors (no host fallback).
@@ -420,7 +423,7 @@ Implemented features:
 
 - The host CLI exposes the same inventory via `substrate world cleanup`. Without flags it reports idle/active namespaces, cgroups, and host-level nft tables plus the exact manual commands needed to purge them.
 - Add `--purge` (and run as root/CAP_NET_ADMIN) to delete idle `substrate-<WORLD_ID>` netns entries, their nft tables, and matching `/sys/fs/cgroup/substrate/<WORLD_ID>` directories.
-- macOS + Lima: run the helper inside the guest (`limactl shell substrate sudo substrate world cleanup --purge`). WSL follows the same pattern (`wsl -d substrate-wsl -- sudo substrate world cleanup --purge`).
+- macOS + Lima: run the helper inside the guest (`limactl shell substrate sudo substrate world cleanup --purge`).
 - When purge isn't available, follow the printed instructions (`sudo ip netns exec ... nft delete table inet substrate_<WORLD_ID>`, `sudo ip netns delete ...`, `sudo rm -rf /sys/fs/cgroup/substrate/<WORLD_ID>`).
 
 ### Isolation fallback diagnostics
@@ -437,7 +440,7 @@ Implemented features:
 ## 12) Limitations & Next Steps
 
 - PTY overlay fs_diff is intentionally deferred; non‑PTY continues to provide `fs_diff`.
-- macOS/Windows support is "observe‑only" for worlds.
+- Windows/WSL provisioning helpers remain unsupported in this slice and exit fail-closed instead of mutating the guest.
 - Next steps
   - Consider PTY overlay or post‑exit diff per span as a follow‑up phase
 

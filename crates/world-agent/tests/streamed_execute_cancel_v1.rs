@@ -1,11 +1,12 @@
 #![cfg(all(unix, target_os = "linux"))]
 
 use agent_api_types::{
-    ExecuteCancelRequestV1, ExecuteRequest, ExecuteStreamFrame, MemberDispatchRequestV1,
-    MemberRuntimeBackendKindV1, PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3,
-    PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1,
+    ExecuteCancelRequestV1, ExecuteRequest, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
+    PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
+    PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1,
 };
 use hyper::body::HttpBody;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -97,7 +98,7 @@ fn write_fake_member_runtime(temp: &Path) -> std::path::PathBuf {
     path
 }
 
-async fn next_stream_frame<B>(body: &mut B, buffer: &mut Vec<u8>) -> ExecuteStreamFrame
+async fn next_stream_frame_value<B>(body: &mut B, buffer: &mut Vec<u8>) -> Value
 where
     B: HttpBody<Data = hyper::body::Bytes> + Unpin,
     B::Error: std::fmt::Debug + std::fmt::Display,
@@ -106,7 +107,7 @@ where
         if let Some(pos) = buffer.iter().position(|&b| b == b'\n') {
             let line: Vec<u8> = buffer.drain(..=pos).collect();
             let payload = &line[..line.len() - 1];
-            return serde_json::from_slice(payload).expect("valid stream frame json");
+            return serde_json::from_slice(payload).expect("valid stream frame json value");
         }
 
         let chunk = timeout(Duration::from_secs(5), body.data())
@@ -116,6 +117,46 @@ where
             .expect("stream chunk error");
         buffer.extend_from_slice(&chunk);
     }
+}
+
+fn frame_start_span_id(frame: &Value) -> Option<&str> {
+    if frame.get("type")?.as_str() == Some("start") {
+        return frame.get("span_id")?.as_str();
+    }
+    frame.get("Start")?.get("span_id")?.as_str()
+}
+
+fn frame_exit(frame: &Value) -> Option<(i32, &str)> {
+    if frame.get("type")?.as_str() == Some("exit") {
+        let exit = frame.get("exit")?.as_i64()?;
+        let span_id = frame.get("span_id")?.as_str()?;
+        return Some((exit as i32, span_id));
+    }
+    let exit = frame.get("Exit")?.get("exit")?.as_i64()?;
+    let span_id = frame.get("Exit")?.get("span_id")?.as_str()?;
+    Some((exit as i32, span_id))
+}
+
+fn frame_error_message(frame: &Value) -> Option<&str> {
+    if frame.get("type")?.as_str() == Some("error") {
+        return frame.get("message")?.as_str();
+    }
+    frame.get("Error")?.get("message")?.as_str()
+}
+
+fn frame_event(frame: &Value) -> Option<&Value> {
+    if frame.get("type").and_then(Value::as_str) == Some("event") {
+        return frame.get("event");
+    }
+    frame.get("Event")?.get("event")
+}
+
+fn is_stream_chunk_frame(frame: &Value) -> bool {
+    matches!(
+        frame.get("type").and_then(Value::as_str),
+        Some("stdout" | "stderr")
+    ) || frame.get("Stdout").is_some()
+        || frame.get("Stderr").is_some()
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -141,11 +182,10 @@ async fn execute_stream_cancel_interrupts_live_non_pty_command() {
     let mut body = response.into_body();
     let mut buffer = Vec::new();
 
-    let start = next_stream_frame(&mut body, &mut buffer).await;
-    let span_id = match start {
-        ExecuteStreamFrame::Start { span_id } => span_id,
-        other => panic!("expected start frame, got {other:?}"),
-    };
+    let start = next_stream_frame_value(&mut body, &mut buffer).await;
+    let span_id = frame_start_span_id(&start)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| panic!("expected start frame, got {start:?}"));
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
@@ -159,27 +199,22 @@ async fn execute_stream_cancel_interrupts_live_non_pty_command() {
     assert!(cancel.delivered, "expected cancel signal delivery");
 
     loop {
-        match next_stream_frame(&mut body, &mut buffer).await {
-            ExecuteStreamFrame::Stdout { .. }
-            | ExecuteStreamFrame::Stderr { .. }
-            | ExecuteStreamFrame::Event { .. } => continue,
-            ExecuteStreamFrame::Exit {
-                exit,
-                span_id: exit_span,
-                process_telemetry: _,
-                ..
-            } => {
-                assert_eq!(exit_span, span_id);
-                assert_eq!(exit, 130, "SIGINT exit should follow shell convention");
-                break;
-            }
-            ExecuteStreamFrame::Error { message } => {
-                panic!("unexpected streamed execute error: {message}");
-            }
-            ExecuteStreamFrame::Start { .. } => {
-                panic!("unexpected duplicate start frame");
-            }
+        let frame = next_stream_frame_value(&mut body, &mut buffer).await;
+        if is_stream_chunk_frame(&frame)
+            || frame_event(&frame).is_some()
+            || frame_start_span_id(&frame).is_some()
+        {
+            continue;
         }
+        if let Some((exit, exit_span)) = frame_exit(&frame) {
+            assert_eq!(exit_span, span_id);
+            assert_eq!(exit, 130, "SIGINT exit should follow shell convention");
+            break;
+        }
+        if let Some(message) = frame_error_message(&frame) {
+            panic!("unexpected streamed execute error: {message}");
+        }
+        panic!("unexpected streamed execute frame: {frame:?}");
     }
 }
 
@@ -206,7 +241,7 @@ async fn execute_stream_cancel_interrupts_live_member_runtime() {
         enable_preload: false,
         allowed_domains: Vec::new(),
         project_dir: tmp.path().to_path_buf(),
-        always_isolate: false,
+        always_isolate: true,
         fs_mode: substrate_common::WorldFsMode::Writable,
     };
     let world = match service.ensure_session_world(&world_spec) {
@@ -238,33 +273,39 @@ async fn execute_stream_cancel_interrupts_live_member_runtime() {
     let mut body = response.into_body();
     let mut buffer = Vec::new();
 
-    let start = next_stream_frame(&mut body, &mut buffer).await;
-    let span_id = match start {
-        ExecuteStreamFrame::Start { span_id } => span_id,
-        other => panic!("expected start frame, got {other:?}"),
-    };
+    let start = next_stream_frame_value(&mut body, &mut buffer).await;
+    let span_id = frame_start_span_id(&start)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| panic!("expected start frame, got {start:?}"));
 
-    let ready = next_stream_frame(&mut body, &mut buffer).await;
-    match ready {
-        ExecuteStreamFrame::Event { event } => {
-            assert_eq!(
-                event.kind,
-                substrate_common::agent_events::AgentEventKind::Registered
-            );
-            assert_eq!(
-                event.data.get("schema").and_then(serde_json::Value::as_str),
-                Some("agent_api.session.handle.v1")
-            );
-            assert_eq!(
-                event.participant_id.as_deref(),
-                Some("ash_member_cancel_test")
-            );
-            assert_eq!(event.world_id.as_deref(), Some(binding.world_id.as_str()));
-            assert_eq!(event.world_generation, Some(binding.world_generation));
-            assert_eq!(event.span_id.as_deref(), Some(span_id.as_str()));
-        }
-        other => panic!("expected member registered event, got {other:?}"),
-    }
+    let ready = next_stream_frame_value(&mut body, &mut buffer).await;
+    let event = frame_event(&ready)
+        .cloned()
+        .unwrap_or_else(|| panic!("expected member registered event, got {ready:?}"));
+    assert_eq!(
+        event.get("kind").and_then(Value::as_str),
+        Some("registered")
+    );
+    assert_eq!(
+        event.pointer("/data/schema").and_then(Value::as_str),
+        Some("agent_api.session.handle.v1")
+    );
+    assert_eq!(
+        event.get("participant_id").and_then(Value::as_str),
+        Some("ash_member_cancel_test")
+    );
+    assert_eq!(
+        event.get("world_id").and_then(Value::as_str),
+        Some(binding.world_id.as_str())
+    );
+    assert_eq!(
+        event.get("world_generation").and_then(Value::as_u64),
+        Some(binding.world_generation)
+    );
+    assert_eq!(
+        event.get("span_id").and_then(Value::as_str),
+        Some(span_id.as_str())
+    );
 
     let cancel = service
         .execute_cancel(ExecuteCancelRequestV1 {
@@ -276,26 +317,24 @@ async fn execute_stream_cancel_interrupts_live_member_runtime() {
     assert!(cancel.delivered, "expected member cancel delivery");
 
     loop {
-        match next_stream_frame(&mut body, &mut buffer).await {
-            ExecuteStreamFrame::Event { .. } => continue,
-            ExecuteStreamFrame::Exit {
-                exit,
-                span_id: exit_span,
-                ..
-            } => {
-                assert_eq!(exit_span, span_id);
-                assert_eq!(
-                    exit, 130,
-                    "member runtime cancel should report SIGINT shell exit"
-                );
-                break;
-            }
-            ExecuteStreamFrame::Error { message } => {
-                panic!("unexpected member streamed error: {message}");
-            }
-            ExecuteStreamFrame::Start { .. }
-            | ExecuteStreamFrame::Stdout { .. }
-            | ExecuteStreamFrame::Stderr { .. } => continue,
+        let frame = next_stream_frame_value(&mut body, &mut buffer).await;
+        if frame_event(&frame).is_some()
+            || is_stream_chunk_frame(&frame)
+            || frame_start_span_id(&frame).is_some()
+        {
+            continue;
         }
+        if let Some((exit, exit_span)) = frame_exit(&frame) {
+            assert_eq!(exit_span, span_id);
+            assert_eq!(
+                exit, 130,
+                "member runtime cancel should report SIGINT shell exit"
+            );
+            break;
+        }
+        if let Some(message) = frame_error_message(&frame) {
+            panic!("unexpected member streamed error: {message}");
+        }
+        panic!("unexpected member streamed frame: {frame:?}");
     }
 }

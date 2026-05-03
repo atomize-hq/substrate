@@ -1254,6 +1254,7 @@ VERSION_LABEL="dev"
 ENABLE_WORLD_NETFILTER=0
 IS_LINUX=0
 IS_MAC=0
+IS_WSL=0
 HOST_STATE_PATH=""
 HOST_STATE_GROUP_EXISTED=""
 HOST_STATE_GROUP_CREATED=0
@@ -1267,6 +1268,9 @@ PKG_MANAGER=""
 PKG_MANAGER_SOURCE=""
 if [[ "$(uname -s)" == "Linux" ]]; then
   IS_LINUX=1
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    IS_WSL=1
+  fi
 fi
 if [[ "$(uname -s)" == "Darwin" ]]; then
   IS_MAC=1
@@ -1334,6 +1338,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${IS_WSL}" -eq 1 && "${WORLD_ENABLED}" -eq 1 ]]; then
+  printf '[%s][ERROR] %s\n' "${SCRIPT_NAME}" "WSL world provisioning is intentionally fail-closed in this slice because the WSL helper path is not aligned with the Linux/macOS placement contract. Re-run with --no-world for a CLI-only dev install inside WSL." >&2
+  exit 4
+fi
 
 HOST_STATE_PATH="${PREFIX%/}/install_state.json"
 

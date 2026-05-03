@@ -61,7 +61,7 @@ use crate::enforcement_plan;
 use crate::gateway_runtime::{
     resolve_gateway_backend_binding, unavailable_response as gateway_unavailable_response_impl,
     GatewayControlSettings, GatewayRuntimeFailure, GatewayRuntimeManager,
-    GatewayRuntimeStartContext,
+    GatewayRuntimeStartContext, LinuxWorldPlacementContext,
 };
 #[cfg(target_os = "linux")]
 use crate::member_runtime::MemberRuntimeManager;
@@ -1212,7 +1212,7 @@ impl WorldAgentService {
         let shared_owner_spec = requested_shared_world_owner_spec(&req);
 
         let spec = build_world_spec(
-            project_dir,
+            project_dir.clone(),
             always_isolate,
             fs_mode,
             isolate_network,
@@ -1231,18 +1231,35 @@ impl WorldAgentService {
         let shared_world = resolve_shared_world_binding(shared_owner_spec.as_ref(), &world)?;
 
         if let Some(dispatch) = req.member_dispatch.clone() {
-            let authoritative_binding = validate_member_dispatch_binding(&dispatch, &world)?;
-            let env_map = req.env.clone().unwrap_or_default();
+            let placement = self.resolve_authoritative_member_placement_context(
+                &dispatch,
+                world,
+                shared_world.as_ref(),
+                &project_dir,
+                &cwd,
+                isolation_full,
+            )?;
+            let env_map = build_member_runtime_launch_env(
+                req.env.clone().unwrap_or_default(),
+                &placement.placement_root,
+                isolation_full,
+                &write_allowlist_prefixes,
+                &landlock_discover_paths,
+                &landlock_read_paths,
+                &landlock_write_paths,
+                enforcement_plan_b64.as_deref(),
+            );
             let span_id = format!("spn_{}", uuid::Uuid::now_v7());
+            let launch_placement = placement.launch_placement();
             return self
                 .member_runtime
                 .launch(
                     req.agent_id.clone(),
-                    cwd,
                     env_map,
                     span_id,
                     dispatch,
-                    authoritative_binding,
+                    placement.binding,
+                    launch_placement,
                 )
                 .await;
         }
@@ -1559,6 +1576,39 @@ impl WorldAgentService {
     }
 
     #[cfg(target_os = "linux")]
+    fn resolve_authoritative_member_placement_context(
+        &self,
+        dispatch: &agent_api_types::MemberDispatchRequestV1,
+        world: WorldHandle,
+        authoritative_binding: Option<&SharedWorldBindingSnapshot>,
+        project_dir: &Path,
+        cwd: &Path,
+        isolation_full: bool,
+    ) -> Result<AuthoritativeMemberPlacementContext> {
+        let binding = validate_member_dispatch_binding(dispatch, &world, authoritative_binding)?;
+        let cgroup_path = self
+            .session_cgroup_path(&world)
+            .with_context(|| format!("failed to resolve session cgroup for world {}", world.id))?;
+        let placement_root = if isolation_full {
+            self.linux_backend
+                .ensure_overlay_root(&world)
+                .with_context(|| format!("failed to resolve overlay root for world {}", world.id))?
+        } else {
+            project_dir.to_path_buf()
+        };
+        let effective_cwd =
+            resolve_member_runtime_effective_cwd(project_dir, &placement_root, cwd)?;
+
+        Ok(AuthoritativeMemberPlacementContext {
+            world,
+            binding,
+            placement_root,
+            effective_cwd,
+            cgroup_path,
+        })
+    }
+
+    #[cfg(target_os = "linux")]
     fn resolve_gateway_runtime_binding(
         &self,
         prepared: PreparedGatewayRuntimeRequest,
@@ -1694,6 +1744,28 @@ struct PreparedGatewayRuntimeRequest {
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Debug, Clone)]
+struct AuthoritativeMemberPlacementContext {
+    #[allow(dead_code)]
+    world: WorldHandle,
+    binding: SharedWorldBindingSnapshot,
+    placement_root: PathBuf,
+    effective_cwd: PathBuf,
+    cgroup_path: PathBuf,
+}
+
+#[cfg(target_os = "linux")]
+impl AuthoritativeMemberPlacementContext {
+    fn launch_placement(&self) -> LinuxWorldPlacementContext {
+        LinuxWorldPlacementContext {
+            working_dir: self.effective_cwd.clone(),
+            cgroup_path: self.cgroup_path.clone(),
+            require_cgroup_attach: true,
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
 #[derive(Clone, Copy)]
 enum GatewayRuntimeBindingMode {
     EnsureSession,
@@ -1795,6 +1867,85 @@ fn isolated_gateway_runtime_id(world_id: &str, backend_id: &str) -> String {
 #[cfg(target_os = "linux")]
 fn gateway_runtime_error(err: GatewayRuntimeFailure) -> anyhow::Error {
     anyhow!(err.to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn build_member_runtime_launch_env(
+    mut env_map: HashMap<String, String>,
+    placement_root: &Path,
+    isolation_full: bool,
+    write_allowlist_prefixes: &[String],
+    landlock_discover_paths: &[String],
+    landlock_read_paths: &[String],
+    landlock_write_paths: &[String],
+    enforcement_plan_b64: Option<&str>,
+) -> HashMap<String, String> {
+    env_map.insert(
+        WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+        placement_root.display().to_string(),
+    );
+    env_map.insert(
+        WORLD_FS_ISOLATION_ENV.to_string(),
+        if isolation_full {
+            "full".to_string()
+        } else {
+            "workspace".to_string()
+        },
+    );
+    if isolation_full && !write_allowlist_prefixes.is_empty() {
+        env_map.insert(
+            WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
+            write_allowlist_prefixes.join("\n"),
+        );
+    }
+
+    let landlock_supported = world::landlock::detect_support().supported;
+    if isolation_full {
+        apply_full_isolation_helper_env(
+            &mut env_map,
+            landlock_supported,
+            landlock_discover_paths,
+            landlock_read_paths,
+            landlock_write_paths,
+            enforcement_plan_b64,
+        );
+    }
+
+    env_map
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_member_runtime_effective_cwd(
+    project_dir: &Path,
+    placement_root: &Path,
+    requested_cwd: &Path,
+) -> Result<PathBuf> {
+    let requested_cwd =
+        std::fs::canonicalize(requested_cwd).unwrap_or_else(|_| requested_cwd.to_path_buf());
+    let project_dir =
+        std::fs::canonicalize(project_dir).unwrap_or_else(|_| project_dir.to_path_buf());
+
+    if requested_cwd == project_dir {
+        return Ok(placement_root.to_path_buf());
+    }
+
+    let relative = requested_cwd.strip_prefix(&project_dir).map_err(|_| {
+        anyhow!(
+            "member runtime cwd {} is outside the authoritative project root {}",
+            requested_cwd.display(),
+            project_dir.display()
+        )
+    })?;
+    let effective_cwd = placement_root.join(relative);
+    if !effective_cwd.is_dir() {
+        anyhow::bail!(
+            "member runtime cwd {} is missing from authoritative placement root {}",
+            requested_cwd.display(),
+            placement_root.display()
+        );
+    }
+
+    Ok(effective_cwd)
 }
 
 #[cfg(test)]
@@ -2383,8 +2534,12 @@ fn requested_shared_world_owner_spec(req: &ExecuteRequest) -> Option<SharedWorld
 fn validate_member_dispatch_binding(
     dispatch: &agent_api_types::MemberDispatchRequestV1,
     world: &WorldHandle,
+    authoritative_binding: Option<&SharedWorldBindingSnapshot>,
 ) -> Result<SharedWorldBindingSnapshot> {
-    let binding = world.shared_binding.clone().ok_or_else(|| {
+    let binding = authoritative_binding
+        .cloned()
+        .or_else(|| world.shared_binding.clone())
+        .ok_or_else(|| {
         BadRequestError::new(format!(
             "member_dispatch requires authoritative shared world binding for orchestration session {}",
             dispatch.orchestration_session_id
@@ -2409,6 +2564,13 @@ fn validate_member_dispatch_binding(
         return Err(BadRequestError::new(format!(
             "member_dispatch.world_generation mismatch (expected {}, got {})",
             binding.world_generation, dispatch.world_generation
+        ))
+        .into());
+    }
+    if binding.binding_state != SharedWorldBindingState::Active {
+        return Err(BadRequestError::new(format!(
+            "member_dispatch requires active shared world binding, got {:?}",
+            binding.binding_state
         ))
         .into());
     }

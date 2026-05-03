@@ -65,6 +65,13 @@ fatal() {
   exit 1
 }
 
+fatal_with_code() {
+  local code="$1"
+  shift
+  printf '[%s][ERROR] %s\n' "${INSTALLER_NAME}" "$*" >&2
+  exit "${code}"
+}
+
 print_usage() {
   cat <<'EOF'
 Substrate Installer
@@ -1163,6 +1170,14 @@ detect_platform() {
   esac
 }
 
+ensure_supported_linux_world_posture() {
+  if [[ "${PLATFORM}" != "linux" || "${IS_WSL}" -ne 1 || "${NO_WORLD}" -eq 1 ]]; then
+    return
+  fi
+
+  fatal_with_code 4 "WSL world provisioning is intentionally fail-closed in this slice because the WSL helper path is not aligned with the Linux/macOS placement contract. Re-run with --no-world for a CLI-only install inside WSL, or use a supported Linux host-native or macOS Lima world backend."
+}
+
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -1989,8 +2004,8 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=${home_path} /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_SYS_PTRACE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_SYS_PTRACE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 
 [Install]
 WantedBy=multi-user.target
@@ -2373,6 +2388,7 @@ main() {
   normalize_prefix
   initialize_metadata_paths
   detect_platform
+  ensure_supported_linux_world_posture
   prepare_tmpdir
 
   case "${PLATFORM}" in
