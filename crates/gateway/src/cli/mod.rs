@@ -456,7 +456,7 @@ fn ensure_env_reference_allowed(
         return Ok(());
     };
 
-    if blocked_env_vars.iter().any(|blocked| *blocked == env_var) {
+    if blocked_env_vars.contains(&env_var) {
         anyhow::bail!(
             "Integrated gateway startup forbids env-based secret delivery via ${} for {} '{}'",
             env_var,

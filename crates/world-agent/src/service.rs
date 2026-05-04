@@ -1241,13 +1241,15 @@ impl WorldAgentService {
             )?;
             let env_map = build_member_runtime_launch_env(
                 req.env.clone().unwrap_or_default(),
-                &placement.placement_root,
-                isolation_full,
-                &write_allowlist_prefixes,
-                &landlock_discover_paths,
-                &landlock_read_paths,
-                &landlock_write_paths,
-                enforcement_plan_b64.as_deref(),
+                MemberRuntimeLaunchEnvContext {
+                    placement_root: &placement.placement_root,
+                    isolation_full,
+                    write_allowlist_prefixes: &write_allowlist_prefixes,
+                    landlock_discover_paths: &landlock_discover_paths,
+                    landlock_read_paths: &landlock_read_paths,
+                    landlock_write_paths: &landlock_write_paths,
+                    enforcement_plan_b64: enforcement_plan_b64.as_deref(),
+                },
             );
             let span_id = format!("spn_{}", uuid::Uuid::now_v7());
             let launch_placement = placement.launch_placement();
@@ -1870,44 +1872,49 @@ fn gateway_runtime_error(err: GatewayRuntimeFailure) -> anyhow::Error {
 }
 
 #[cfg(target_os = "linux")]
+struct MemberRuntimeLaunchEnvContext<'a> {
+    placement_root: &'a Path,
+    isolation_full: bool,
+    write_allowlist_prefixes: &'a [String],
+    landlock_discover_paths: &'a [String],
+    landlock_read_paths: &'a [String],
+    landlock_write_paths: &'a [String],
+    enforcement_plan_b64: Option<&'a str>,
+}
+
+#[cfg(target_os = "linux")]
 fn build_member_runtime_launch_env(
     mut env_map: HashMap<String, String>,
-    placement_root: &Path,
-    isolation_full: bool,
-    write_allowlist_prefixes: &[String],
-    landlock_discover_paths: &[String],
-    landlock_read_paths: &[String],
-    landlock_write_paths: &[String],
-    enforcement_plan_b64: Option<&str>,
+    ctx: MemberRuntimeLaunchEnvContext<'_>,
 ) -> HashMap<String, String> {
     env_map.insert(
         WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
-        placement_root.display().to_string(),
+        ctx.placement_root.display().to_string(),
     );
     env_map.insert(
         WORLD_FS_ISOLATION_ENV.to_string(),
-        if isolation_full {
+        if ctx.isolation_full {
             "full".to_string()
         } else {
             "workspace".to_string()
         },
     );
-    if isolation_full && !write_allowlist_prefixes.is_empty() {
+    if ctx.isolation_full && !ctx.write_allowlist_prefixes.is_empty() {
         env_map.insert(
             WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
-            write_allowlist_prefixes.join("\n"),
+            ctx.write_allowlist_prefixes.join("\n"),
         );
     }
 
     let landlock_supported = world::landlock::detect_support().supported;
-    if isolation_full {
+    if ctx.isolation_full {
         apply_full_isolation_helper_env(
             &mut env_map,
             landlock_supported,
-            landlock_discover_paths,
-            landlock_read_paths,
-            landlock_write_paths,
-            enforcement_plan_b64,
+            ctx.landlock_discover_paths,
+            ctx.landlock_read_paths,
+            ctx.landlock_write_paths,
+            ctx.enforcement_plan_b64,
         );
     }
 
