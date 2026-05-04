@@ -1159,15 +1159,16 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         };
 
-        prompt_worker.shutdown_with_disposition(shutdown_disposition_for_termination_cause(
-            termination_cause,
-        ));
         if let Some(runtime) = member_runtime.take() {
             shutdown_host_orchestrator_runtime(runtime, &agent_printer, &mut telemetry).await;
         }
         if let Some(runtime) = agent_runtime.take() {
             shutdown_host_orchestrator_runtime(runtime, &agent_printer, &mut telemetry).await;
         }
+        drain_pending_agent_events(&mut agent_rx, &mut telemetry, &agent_printer);
+        prompt_worker.shutdown_with_disposition(shutdown_disposition_for_termination_cause(
+            termination_cause,
+        ));
         clear_agent_event_sender();
 
         let auto_sync_exit_code: i32 = {
@@ -1500,6 +1501,20 @@ fn handle_agent_event(
     telemetry.persist_agent_event(&event);
     telemetry.record_agent_event();
     agent_printer.print(format_event_line(&event));
+}
+
+fn drain_pending_agent_events(
+    agent_rx: &mut tokio::sync::mpsc::UnboundedReceiver<AgentEvent>,
+    telemetry: &mut ReplSessionTelemetry,
+    agent_printer: &ReplPrinter,
+) {
+    loop {
+        match agent_rx.try_recv() {
+            Ok(event) => handle_agent_event(event, telemetry, agent_printer),
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+            | Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
+        }
+    }
 }
 
 #[derive(Debug)]

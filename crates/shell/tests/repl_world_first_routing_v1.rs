@@ -2357,7 +2357,7 @@ fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
         "replacement startup failure must surface the member bootstrap error; output:\n{out}"
     );
     assert!(
-        !out.contains("second"),
+        !out.contains("__PERSISTENT_EXEC_STUB__ eof echo second"),
         "replacement startup failure must block the second command from executing; output:\n{out}"
     );
 
