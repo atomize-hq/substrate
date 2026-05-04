@@ -1508,12 +1508,8 @@ fn drain_pending_agent_events(
     telemetry: &mut ReplSessionTelemetry,
     agent_printer: &ReplPrinter,
 ) {
-    loop {
-        match agent_rx.try_recv() {
-            Ok(event) => handle_agent_event(event, telemetry, agent_printer),
-            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
-            | Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => break,
-        }
+    while let Ok(event) = agent_rx.try_recv() {
+        handle_agent_event(event, telemetry, agent_printer);
     }
 }
 
