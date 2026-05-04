@@ -30,7 +30,7 @@ Concrete rules:
 - Host credential file reads are permitted only as a host-side fallback when the required env auth handoff is absent; file material must not override, supplement, or merge with an already-present env handoff.
 - If env auth material is present but blocked by `llm.secrets.env_allowed`, the result is policy denial; host credential file fallback must not be used to bypass that denial.
 - If partial env auth material is present for the selected backend, the request is invalid integration and must fail closed rather than backfilling missing fields from a host credential file read.
-- Those precedence rules govern the content of the integrated handoff, not the durable host-to-world carrier. Current integrated delivery may still use env-based transport for the closed auth field set, while the preferred additive direction is a Substrate-owned secret-channel payload plus inherited FD/pipe-style auth-bundle delivery so secret values do not live in the in-world process environment by default.
+- Those precedence rules govern the content of the integrated handoff, not the durable host-to-world carrier. The landed integrated carrier is a Substrate-owned secret-channel auth bundle delivered over an inherited FD (`SUBSTRATE_LLM_AUTH_BUNDLE_FD`), and the in-world gateway must consume that pointer once without depending on secret-bearing child env vars.
 - Backend-specific auth renderers may differ, but they must preserve the same precedence and
   fail-closed rules above; carrier choice does not change policy authorization.
 - Gateway-local config, admin mutation surfaces, and token persistence remain implementation details of `substrate-gateway`; they do not become trusted policy inputs.
@@ -51,6 +51,6 @@ Not defined here:
 - host secret sourcing and delivery remain policy-gated and Substrate-owned
 - treat complete allowlisted env auth material as primary and host credential files as fallback-only when env auth is absent
 - do not merge partial env auth material with host credential file reads; fail as invalid integration instead
-- keep auth-source precedence separate from carrier choice; current env delivery is compatible with this rule, but the preferred additive transport remains a secret-channel FD/auth-bundle path
+- keep auth-source precedence separate from carrier choice; the landed integrated transport is the secret-channel FD/auth-bundle path, and carrier choice does not relax precedence or fail-closed rules
 - policy evaluation remains part of the Substrate operator surface
 - keep invalid integration state distinct from dependency unavailability and policy denial

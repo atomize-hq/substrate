@@ -2,8 +2,9 @@
 
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use once_cell::sync::Lazy;
 use secrecy::{ExposeSecret, SecretString};
-use std::{env, path::PathBuf};
+use std::{collections::HashMap, env, path::PathBuf, sync::RwLock};
 
 use super::codex_auth_state::CodexAuthState;
 
@@ -38,12 +39,35 @@ pub struct CodexIntegratedAuthHandoff {
     pub access_token: SecretString,
 }
 
+static INTEGRATED_CODEX_AUTH_HANDOFF: Lazy<RwLock<Option<CodexIntegratedAuthHandoff>>> =
+    Lazy::new(|| RwLock::new(None));
+
 impl CodexIntegratedAuthHandoff {
     pub fn new(account_id: Option<String>, access_token: SecretString) -> Self {
         Self {
             account_id,
             access_token,
         }
+    }
+
+    pub fn from_fields(fields: &HashMap<String, String>) -> Result<Self> {
+        let access_token = fields
+            .get(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN)
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                anyhow!(
+                    "integrated Codex auth handoff is missing required field {}",
+                    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN
+                )
+            })?;
+
+        let account_id = fields
+            .get(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID)
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
+        Ok(Self::new(account_id, SecretString::new(access_token)))
     }
 
     pub fn from_env() -> Result<Option<Self>> {
@@ -66,6 +90,23 @@ impl CodexIntegratedAuthHandoff {
     }
 }
 
+pub(crate) fn install_integrated_codex_auth_handoff(
+    handoff: Option<CodexIntegratedAuthHandoff>,
+) -> Result<()> {
+    let mut guard = INTEGRATED_CODEX_AUTH_HANDOFF
+        .write()
+        .map_err(|_| anyhow!("integrated Codex auth handoff lock poisoned"))?;
+    *guard = handoff;
+    Ok(())
+}
+
+fn integrated_codex_auth_handoff() -> Result<Option<CodexIntegratedAuthHandoff>> {
+    INTEGRATED_CODEX_AUTH_HANDOFF
+        .read()
+        .map(|guard| guard.clone())
+        .map_err(|_| anyhow!("integrated Codex auth handoff lock poisoned"))
+}
+
 #[derive(Debug, Clone)]
 pub enum CodexAuthSource {
     Integrated,
@@ -83,9 +124,9 @@ impl CodexAuthSource {
     pub fn resolve(&self) -> Result<ResolvedCodexAuthContext> {
         match self {
             Self::Integrated => {
-                let Some(handoff) = CodexIntegratedAuthHandoff::from_env()? else {
+                let Some(handoff) = integrated_codex_auth_handoff()? else {
                     return Err(anyhow!(
-                        "integrated Codex auth source is unavailable: Substrate-delivered auth handoff is missing"
+                        "integrated Codex auth source is unavailable: startup-owned integrated auth handoff is missing"
                     ));
                 };
 
@@ -277,7 +318,29 @@ mod tests {
     #[test]
     fn integrated_source_uses_canonical_field_names() {
         let _env_lock_guard = ENV_LOCK.lock().unwrap();
+        let _handoff_guard = InstalledHandoffGuard::set(Some(
+            CodexIntegratedAuthHandoff::from_fields(&HashMap::from([
+                (
+                    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID.to_string(),
+                    "acct_env_explicit".to_string(),
+                ),
+                (
+                    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN.to_string(),
+                    "header.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjdF9lbnZfand0In19.signature".to_string(),
+                ),
+            ]))
+            .unwrap(),
+        ));
 
+        let resolved = CodexAuthSource::Integrated.resolve().unwrap();
+        assert_eq!(resolved.mode, CodexAuthMode::Integrated);
+        assert_eq!(resolved.account_id, "acct_env_explicit");
+        assert_eq!(resolved.account_id_source, CodexAccountIdSource::Explicit);
+    }
+
+    #[test]
+    fn from_env_reads_canonical_cli_codex_field_names() {
+        let _env_lock_guard = ENV_LOCK.lock().unwrap();
         let _account_id_guard = EnvGuard::set(
             SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
             "acct_env_explicit",
@@ -287,10 +350,9 @@ mod tests {
             "header.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjdF9lbnZfand0In19.signature",
         );
 
-        let resolved = CodexAuthSource::Integrated.resolve().unwrap();
-        assert_eq!(resolved.mode, CodexAuthMode::Integrated);
-        assert_eq!(resolved.account_id, "acct_env_explicit");
-        assert_eq!(resolved.account_id_source, CodexAccountIdSource::Explicit);
+        let handoff = CodexIntegratedAuthHandoff::from_env().unwrap().unwrap();
+        assert_eq!(handoff.account_id.as_deref(), Some("acct_env_explicit"));
+        assert!(handoff.access_token.expose_secret().contains('.'));
     }
 
     struct EnvGuard {
@@ -322,18 +384,33 @@ mod tests {
         }
     }
 
+    struct InstalledHandoffGuard {
+        previous: Option<CodexIntegratedAuthHandoff>,
+    }
+
+    impl InstalledHandoffGuard {
+        fn set(next: Option<CodexIntegratedAuthHandoff>) -> Self {
+            let previous = integrated_codex_auth_handoff().unwrap();
+            install_integrated_codex_auth_handoff(next).unwrap();
+            Self { previous }
+        }
+    }
+
+    impl Drop for InstalledHandoffGuard {
+        fn drop(&mut self) {
+            install_integrated_codex_auth_handoff(self.previous.take()).unwrap();
+        }
+    }
+
     #[test]
     fn integrated_source_requires_substrate_handoff() {
         let _env_lock_guard = ENV_LOCK.lock().unwrap();
-
-        let _account_id_guard = EnvGuard::clear(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
-        let _access_token_guard =
-            EnvGuard::clear(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
+        let _handoff_guard = InstalledHandoffGuard::set(None);
 
         let err = CodexAuthSource::Integrated.resolve().unwrap_err();
         assert!(
             err.to_string()
-                .contains("Substrate-delivered auth handoff is missing"),
+                .contains("startup-owned integrated auth handoff is missing"),
             "unexpected error: {err}"
         );
     }
@@ -341,10 +418,7 @@ mod tests {
     #[test]
     fn integrated_source_does_not_read_local_auth_files() {
         let _env_lock_guard = ENV_LOCK.lock().unwrap();
-
-        let _account_id_guard = EnvGuard::clear(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
-        let _access_token_guard =
-            EnvGuard::clear(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
+        let _handoff_guard = InstalledHandoffGuard::set(None);
 
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().join("auth.json");
@@ -360,9 +434,40 @@ mod tests {
         let err = CodexAuthSource::Integrated.resolve().unwrap_err();
         assert!(
             err.to_string()
-                .contains("Substrate-delivered auth handoff is missing"),
+                .contains("startup-owned integrated auth handoff is missing"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn integrated_handoff_from_fields_accepts_required_cli_codex_fields() {
+        let handoff = CodexIntegratedAuthHandoff::from_fields(&HashMap::from([
+            (
+                SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN.to_string(),
+                codex_access_token("acct_jwt").expose_secret().to_string(),
+            ),
+            (
+                SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID.to_string(),
+                "acct_explicit".to_string(),
+            ),
+        ]))
+        .unwrap();
+
+        assert_eq!(handoff.account_id.as_deref(), Some("acct_explicit"));
+        assert!(handoff.access_token.expose_secret().contains('.'));
+    }
+
+    #[test]
+    fn integrated_handoff_from_fields_rejects_missing_access_token() {
+        let err = CodexIntegratedAuthHandoff::from_fields(&HashMap::from([(
+            SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID.to_string(),
+            "acct_explicit".to_string(),
+        )]))
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN));
     }
 
     #[test]

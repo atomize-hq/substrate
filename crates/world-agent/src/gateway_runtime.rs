@@ -8,12 +8,19 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener as StdTcpListener, TcpStream};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
+use substrate_common::{
+    GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_SCHEMA_VERSION, SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+    SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+};
 use tokio::sync::Mutex as AsyncMutex;
 
 pub(crate) const GATEWAY_REQUEST_ENABLED_ENV: &str = "SUBSTRATE_LLM_GATEWAY_ENABLED";
@@ -27,8 +34,6 @@ const GATEWAY_LAUNCH_DISABLE_TOKEN_PERSISTENCE_ENV: &str =
 const GATEWAY_MODE_IN_WORLD: &str = "in_world";
 const GATEWAY_MODE_HOST_ONLY: &str = "host_only";
 
-const CODEX_ACCOUNT_ID_ENV: &str = "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID";
-const CODEX_ACCESS_TOKEN_ENV: &str = "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN";
 const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 const GATEWAY_BINARY_OVERRIDE_ENV: &str = "SUBSTRATE_GATEWAY_BINARY";
 const HEALTH_PATH: &str = "/health";
@@ -47,8 +52,9 @@ const GATEWAY_RUNTIME_DIR_MODE: u32 = 0o750;
 const GATEWAY_RUNTIME_FILE_MODE: u32 = 0o640;
 const WORLD_ENTRY_WRAPPER_MODE: u32 = 0o755;
 const KNOWN_GATEWAY_AUTH_ENV_VARS: &[&str] = &[
-    CODEX_ACCOUNT_ID_ENV,
-    CODEX_ACCESS_TOKEN_ENV,
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+    SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
     OPENAI_API_KEY_ENV,
 ];
 const REQUIRED_GATEWAY_CAPABILITIES: &[&str] =
@@ -133,8 +139,13 @@ enum GatewayIntegratedAuthKind {
 
 #[derive(Debug, Clone, Copy)]
 enum GatewayProviderAuthConfig {
-    OAuth { oauth_provider: &'static str },
-    ApiKey { env_var: &'static str },
+    OAuth {
+        oauth_provider: &'static str,
+    },
+    ApiKey {
+        env_var: &'static str,
+        bundle_field: &'static str,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -187,6 +198,7 @@ const API_OPENAI_BACKEND_BINDING: GatewayBackendBinding = GatewayBackendBinding 
     required_capabilities: REQUIRED_GATEWAY_CAPABILITIES,
     provider_auth: GatewayProviderAuthConfig::ApiKey {
         env_var: OPENAI_API_KEY_ENV,
+        bundle_field: SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
     },
     auth_kind: GatewayIntegratedAuthKind::ApiEnv,
 };
@@ -703,7 +715,8 @@ fn start_runtime(
         .with_context(|| format!("failed to create {}", stderr_log.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
 
-    let auth = resolve_integrated_auth_handoff(ctx.binding, ctx.integrated_auth)?;
+    let auth_bundle_handoff =
+        prepare_gateway_auth_bundle_handoff(ctx.binding, ctx.integrated_auth)?;
 
     let mut command = Command::new(&binary_path);
     command
@@ -714,13 +727,15 @@ fn start_runtime(
         .env("HOME", &home_dir)
         .env(GATEWAY_LAUNCH_MODE_ENV, GATEWAY_MODE_IN_WORLD)
         .env(GATEWAY_LAUNCH_CONFIG_PATH_ENV, &config_path)
-        .env(GATEWAY_LAUNCH_DISABLE_TOKEN_PERSISTENCE_ENV, "1");
+        .env(GATEWAY_LAUNCH_DISABLE_TOKEN_PERSISTENCE_ENV, "1")
+        .env_remove(SUBSTRATE_LLM_AUTH_BUNDLE_FD)
+        .env(
+            SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+            &auth_bundle_handoff.fd_env_value,
+        );
 
     for env_key in KNOWN_GATEWAY_AUTH_ENV_VARS {
         command.env_remove(env_key);
-    }
-    for (env_key, value) in auth.env_vars {
-        command.env(env_key, value);
     }
     append_gateway_start_args(&mut command, &config_path);
 
@@ -728,6 +743,7 @@ fn start_runtime(
         .spawn()
         .with_context(|| format!("failed to spawn {}", binary_path.display()))
         .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
+    drop(auth_bundle_handoff);
 
     if let Err(err) = attach_pid_to_linux_world_cgroup(child.id(), &placement) {
         let _ = kill_child_process(&mut child);
@@ -1088,14 +1104,74 @@ fn render_provider_auth_config(binding: &GatewayBackendBinding) -> String {
         GatewayProviderAuthConfig::OAuth { oauth_provider } => {
             format!("auth_type = \"oauth\"\noauth_provider = \"{oauth_provider}\"")
         }
-        GatewayProviderAuthConfig::ApiKey { env_var } => {
+        GatewayProviderAuthConfig::ApiKey { env_var, .. } => {
             format!("auth_type = \"apikey\"\napi_key = \"${env_var}\"")
         }
     }
 }
 
 struct ResolvedGatewayAuthHandoff {
-    env_vars: Vec<(&'static str, String)>,
+    bundle: GatewayAuthBundleV1,
+}
+
+struct GatewayAuthBundleHandoff {
+    _read_fd: OwnedFd,
+    fd_env_value: String,
+}
+
+fn prepare_gateway_auth_bundle_handoff(
+    binding: &GatewayBackendBinding,
+    auth: Option<GatewayIntegratedAuthPayloadV1>,
+) -> Result<GatewayAuthBundleHandoff, GatewayRuntimeFailure> {
+    let bundle = resolve_integrated_auth_handoff(binding, auth)?.bundle;
+    bundle.validate().map_err(|err| {
+        GatewayRuntimeFailure::transient(format!("invalid gateway auth bundle: {err}"))
+    })?;
+    let encoded = serde_json::to_vec(&bundle)
+        .context("failed to encode gateway auth bundle")
+        .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
+    let (read_fd, mut write_file) = create_inherited_auth_bundle_pipe()
+        .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
+    write_file
+        .write_all(&encoded)
+        .context("failed to write gateway auth bundle")
+        .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
+    drop(write_file);
+
+    Ok(GatewayAuthBundleHandoff {
+        fd_env_value: read_fd.as_raw_fd().to_string(),
+        _read_fd: read_fd,
+    })
+}
+
+fn create_inherited_auth_bundle_pipe() -> Result<(OwnedFd, fs::File)> {
+    let mut fds = [-1; 2];
+    let rc = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) };
+    if rc != 0 {
+        return Err(std::io::Error::last_os_error()).context("failed to create auth bundle pipe");
+    }
+
+    let read_fd = unsafe { OwnedFd::from_raw_fd(fds[0]) };
+    let write_fd = unsafe { OwnedFd::from_raw_fd(fds[1]) };
+    clear_close_on_exec(read_fd.as_raw_fd())?;
+
+    Ok((read_fd, fs::File::from(write_fd)))
+}
+
+fn clear_close_on_exec(fd: i32) -> Result<()> {
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    if flags < 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("failed to inspect auth bundle fd flags");
+    }
+
+    let rc = unsafe { libc::fcntl(fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC) };
+    if rc != 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("failed to mark auth bundle fd inheritable");
+    }
+
+    Ok(())
 }
 
 fn resolve_integrated_auth_handoff(
@@ -1136,7 +1212,7 @@ fn resolve_codex_auth_handoff(
     if access_token.is_empty() {
         return Err(GatewayRuntimeFailure::invalid_integration(format!(
             "request-provided {} is empty",
-            CODEX_ACCESS_TOKEN_ENV
+            SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN
         )));
     }
 
@@ -1145,19 +1221,35 @@ fn resolve_codex_auth_handoff(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    let mut env_vars = vec![(CODEX_ACCESS_TOKEN_ENV, access_token)];
+    let mut fields = HashMap::from([(
+        SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN.to_string(),
+        access_token,
+    )]);
     if let Some(account_id) = account_id {
-        env_vars.push((CODEX_ACCOUNT_ID_ENV, account_id));
+        fields.insert(
+            SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID.to_string(),
+            account_id,
+        );
     }
 
-    Ok(ResolvedGatewayAuthHandoff { env_vars })
+    Ok(ResolvedGatewayAuthHandoff {
+        bundle: GatewayAuthBundleV1 {
+            schema_version: GATEWAY_AUTH_BUNDLE_SCHEMA_VERSION,
+            backend_id: DEFAULT_BACKEND.to_string(),
+            fields,
+        },
+    })
 }
 
 fn resolve_api_env_auth_handoff(
     binding: &GatewayBackendBinding,
     auth: &GatewayIntegratedAuthPayloadV1,
 ) -> Result<ResolvedGatewayAuthHandoff, GatewayRuntimeFailure> {
-    let GatewayProviderAuthConfig::ApiKey { env_var } = binding.provider_auth else {
+    let GatewayProviderAuthConfig::ApiKey {
+        env_var,
+        bundle_field,
+    } = binding.provider_auth
+    else {
         return Err(GatewayRuntimeFailure::invalid_integration(format!(
             "backend '{}' is not configured for api env auth",
             binding.backend_id
@@ -1186,7 +1278,11 @@ fn resolve_api_env_auth_handoff(
     }
 
     Ok(ResolvedGatewayAuthHandoff {
-        env_vars: vec![(env_var, value)],
+        bundle: GatewayAuthBundleV1 {
+            schema_version: GATEWAY_AUTH_BUNDLE_SCHEMA_VERSION,
+            backend_id: binding.backend_id.to_string(),
+            fields: HashMap::from([(bundle_field.to_string(), value)]),
+        },
     })
 }
 
@@ -1473,8 +1569,36 @@ mod tests {
     }
 
     fn start_context(project_dir: &Path, world_id: &str) -> GatewayRuntimeStartContext {
+        start_context_with_codex_auth(
+            project_dir,
+            world_id,
+            "header.payload.signature",
+            Some("acct_test"),
+        )
+    }
+
+    fn start_context_with_codex_auth(
+        project_dir: &Path,
+        world_id: &str,
+        access_token: &str,
+        account_id: Option<&str>,
+    ) -> GatewayRuntimeStartContext {
         let binding = resolve_gateway_backend_binding(DEFAULT_BACKEND).expect("codex binding");
-        start_context_with_binding(project_dir, world_id, binding)
+        GatewayRuntimeStartContext {
+            world_id: world_id.to_string(),
+            project_dir: project_dir.to_path_buf(),
+            cgroup_path: project_dir.join("missing-cgroup"),
+            require_cgroup_attach: false,
+            binding,
+            integrated_auth: Some(GatewayIntegratedAuthPayloadV1 {
+                backend_id: binding.backend_id.to_string(),
+                cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                    account_id: account_id.map(str::to_string),
+                    access_token: access_token.to_string(),
+                }),
+                api_env: None,
+            }),
+        }
     }
 
     fn start_context_with_binding(
@@ -1519,9 +1643,17 @@ mod tests {
         }
     }
 
+    fn auth_bundle_snapshot_path(temp_dir: &TempDir, launch: u32) -> PathBuf {
+        temp_dir
+            .path()
+            .join("auth-bundles")
+            .join(format!("{launch}.json"))
+    }
+
     fn delayed_gateway_binary(temp_dir: &TempDir, delay_ms: u64) -> (PathBuf, PathBuf, PathBuf) {
         let path = temp_dir.path().join("delayed-gateway.sh");
         let pid_dir = temp_dir.path().join("pids");
+        let bundle_dir = temp_dir.path().join("auth-bundles");
         let launch_count_path = temp_dir.path().join("launch-count.txt");
         fs::write(
             &path,
@@ -1549,8 +1681,8 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
-  echo "missing Codex access token env" >&2
+if [ -z "${{SUBSTRATE_LLM_AUTH_BUNDLE_FD:-}}" ]; then
+  echo "missing gateway auth bundle fd env" >&2
   exit 65
 fi
 
@@ -1566,6 +1698,35 @@ PY
 )"
 mkdir -p "{pid_dir}"
 printf '%s\n' "$$" >"{pid_dir}/$launch.pid"
+
+python3 - "$launch" "{bundle_dir}" <<'PY'
+import json
+import os
+import pathlib
+import sys
+
+launch = sys.argv[1]
+bundle_dir = pathlib.Path(sys.argv[2])
+bundle_dir.mkdir(parents=True, exist_ok=True)
+for forbidden in (
+    "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
+    "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+    "SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY",
+    "OPENAI_API_KEY",
+):
+    if os.environ.get(forbidden):
+        raise SystemExit("forbidden secret env present: " + forbidden)
+fd_raw = os.environ["SUBSTRATE_LLM_AUTH_BUNDLE_FD"]
+with os.fdopen(int(fd_raw), "rb") as handle:
+    payload = handle.read()
+bundle = json.loads(payload)
+(bundle_dir / (launch + ".json")).write_bytes(payload)
+if bundle.get("backend_id") != "cli:codex":
+    raise SystemExit("unexpected backend_id")
+fields = bundle.get("fields") or dict()
+if "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN" not in fields:
+    raise SystemExit("missing Codex token field")
+PY
 
 port="$(python3 - "$config" <<'PY'
 import re
@@ -1585,6 +1746,7 @@ printf 'ok' >"$root/health"
 exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 "#,
                 launch_count_path = launch_count_path.display(),
+                bundle_dir = bundle_dir.display(),
                 pid_dir = pid_dir.display(),
                 delay_s = format_delay_seconds(delay_ms),
             ),
@@ -1599,6 +1761,7 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
     fn first_launch_hangs_second_ready_binary(temp_dir: &TempDir) -> (PathBuf, PathBuf, PathBuf) {
         let path = temp_dir.path().join("phased-gateway.sh");
         let pid_dir = temp_dir.path().join("pids");
+        let bundle_dir = temp_dir.path().join("auth-bundles");
         let launch_count_path = temp_dir.path().join("launch-count.txt");
         fs::write(
             &path,
@@ -1626,8 +1789,8 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
-  echo "missing Codex access token env" >&2
+if [ -z "${{SUBSTRATE_LLM_AUTH_BUNDLE_FD:-}}" ]; then
+  echo "missing gateway auth bundle fd env" >&2
   exit 65
 fi
 
@@ -1643,6 +1806,35 @@ PY
 )"
 mkdir -p "{pid_dir}"
 printf '%s\n' "$$" >"{pid_dir}/$launch.pid"
+
+python3 - "$launch" "{bundle_dir}" <<'PY'
+import json
+import os
+import pathlib
+import sys
+
+launch = sys.argv[1]
+bundle_dir = pathlib.Path(sys.argv[2])
+bundle_dir.mkdir(parents=True, exist_ok=True)
+for forbidden in (
+    "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
+    "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+    "SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY",
+    "OPENAI_API_KEY",
+):
+    if os.environ.get(forbidden):
+        raise SystemExit("forbidden secret env present: " + forbidden)
+fd_raw = os.environ["SUBSTRATE_LLM_AUTH_BUNDLE_FD"]
+with os.fdopen(int(fd_raw), "rb") as handle:
+    payload = handle.read()
+bundle = json.loads(payload)
+(bundle_dir / (launch + ".json")).write_bytes(payload)
+if bundle.get("backend_id") != "cli:codex":
+    raise SystemExit("unexpected backend_id")
+fields = bundle.get("fields") or dict()
+if "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN" not in fields:
+    raise SystemExit("missing Codex token field")
+PY
 
 if [ "$launch" = "1" ]; then
   sleep 30
@@ -1665,6 +1857,7 @@ printf 'ok' >"$root/health"
 exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 "#,
                 launch_count_path = launch_count_path.display(),
+                bundle_dir = bundle_dir.display(),
                 pid_dir = pid_dir.display(),
             ),
         )
@@ -1688,6 +1881,23 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
                 if pid > 0 {
                     return pid;
                 }
+            }
+            assert!(
+                Instant::now() < deadline,
+                "timed out waiting for {}",
+                path.display()
+            );
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    fn wait_for_auth_bundle_snapshot(temp_dir: &TempDir, launch: u32) -> GatewayAuthBundleV1 {
+        let path = auth_bundle_snapshot_path(temp_dir, launch);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Ok(raw) = fs::read(&path) {
+                return serde_json::from_slice(&raw)
+                    .unwrap_or_else(|err| panic!("invalid {}: {err}", path.display()));
             }
             assert!(
                 Instant::now() < deadline,
@@ -1886,8 +2096,11 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
         .expect("openai auth handoff");
 
         assert_eq!(
-            auth.env_vars,
-            vec![(OPENAI_API_KEY_ENV, "sk-openai-proof".to_string())]
+            auth.bundle.fields,
+            HashMap::from([(
+                SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY.to_string(),
+                "sk-openai-proof".to_string(),
+            )])
         );
     }
 
@@ -1970,6 +2183,20 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
             GATEWAY_RUNTIME_FILE_MODE,
         );
         assert_mode(&runtime.manifest_path, GATEWAY_RUNTIME_FILE_MODE);
+        let bundle = wait_for_auth_bundle_snapshot(&temp_dir, 1);
+        assert_eq!(bundle.backend_id, DEFAULT_BACKEND);
+        assert_eq!(
+            bundle
+                .fields
+                .get(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN),
+            Some(&"header.payload.signature".to_string())
+        );
+        assert_eq!(
+            bundle
+                .fields
+                .get(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID),
+            Some(&"acct_test".to_string())
+        );
 
         stop_runtime(runtime).expect("stop runtime");
     }
@@ -2133,5 +2360,60 @@ exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 
         let response = restart.await.unwrap().expect("restart should finish");
         assert_eq!(response.status, GatewayStatusV1::Available);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn restart_redelivers_a_fresh_auth_bundle() {
+        let _env_lock = ENV_LOCK.lock().await;
+        let temp_dir = TempDir::new().unwrap();
+        let runtime_root = temp_dir.path().join("runtime-root");
+        let _runtime_root_guard = EnvGuard::set("SUBSTRATE_GATEWAY_RUNTIME_ROOT", &runtime_root);
+        let (binary, _pid_dir, launch_count_path) = delayed_gateway_binary(&temp_dir, 0);
+        let _binary_guard = EnvGuard::set(GATEWAY_BINARY_OVERRIDE_ENV, binary);
+        let manager = Arc::new(GatewayRuntimeManager::new());
+
+        let first = start_context_with_codex_auth(
+            temp_dir.path(),
+            "bundle-rotate",
+            "token-one",
+            Some("acct-one"),
+        );
+        manager
+            .sync_with_timeout(first, Duration::from_secs(3))
+            .await
+            .expect("initial sync");
+        let first_bundle = wait_for_auth_bundle_snapshot(&temp_dir, 1);
+        assert_eq!(
+            first_bundle
+                .fields
+                .get(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN),
+            Some(&"token-one".to_string())
+        );
+
+        let second = start_context_with_codex_auth(
+            temp_dir.path(),
+            "bundle-rotate",
+            "token-two",
+            Some("acct-two"),
+        );
+        manager
+            .restart(second)
+            .await
+            .expect("restart should redeliver auth");
+
+        let second_bundle = wait_for_auth_bundle_snapshot(&temp_dir, 2);
+        assert_eq!(read_launch_count(&launch_count_path), 2);
+        assert_eq!(
+            second_bundle
+                .fields
+                .get(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN),
+            Some(&"token-two".to_string())
+        );
+        assert_eq!(
+            second_bundle
+                .fields
+                .get(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID),
+            Some(&"acct-two".to_string())
+        );
     }
 }
