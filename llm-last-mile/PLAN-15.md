@@ -11,57 +11,59 @@ Outside voice: not used for this document generation
 
 ## Objective
 
-The runtime substrate is already real. The missing piece is the operator-facing turn surface.
+Land one narrow, production-honest caller surface where the interactive REPL can submit explicit follow-up turns to a named backend that is already part of the live orchestration session.
 
-This plan lands one narrow, production-honest path where the interactive REPL can:
+The shipped behavior is:
 
-1. recognize only one explicit targeted-turn grammar, `::<backend_id> <prompt>`,
-2. resolve that token to one exact configured backend such as `cli:codex`,
-3. route by explicit `backend_id` instead of the current "single eligible world member" heuristic,
-4. submit the prompt as a real follow-up turn into the already-established UAA session for that backend,
-5. stream the resulting agent output back through the REPL with backend identity attached,
-6. preserve current shell-first REPL semantics for all non-targeted input,
-7. keep `substrate -c` untouched as shell wrap mode.
+1. the REPL accepts exactly one targeted-turn grammar, `::<backend_id> <prompt>`
+2. the shell resolves that token to one exact configured backend such as `cli:codex`
+3. routing is by explicit `backend_id`, never by "the one eligible member"
+4. host-scoped turns resume the shell-owned UAA session locally
+5. world-scoped turns resume the world-owned UAA session through a new typed `world-agent` route
+6. streamed output comes back through the REPL with backend identity attached
+7. plain REPL input still means shell execution
+8. `substrate -c` stays wrap mode
 
-The critical implementation decision is this:
+This is the whole point of the slice. Not new agent product surface. Not a generalized daemon. Not a broader CLI redesign. Just explicit targeted REPL turns that are true to the ownership model already in the repo.
 
-- targeted turns do not try to inject text into the original bootstrap process,
-- they reuse the surfaced UAA session handle through UAA resume semantics,
-- and they do it through two explicit lanes:
-  - shell-local host submission for host-scoped backends,
-  - a new typed `world-agent` submit-turn route for Linux world-scoped backends.
+## Plan Summary
 
-That is the smallest honest answer. Anything smaller either lies about the existing ownership model or pretends a post-bootstrap submission primitive already exists when it does not.
+This plan does not try to inject text into the original bootstrap process. That would be fake progress.
+
+It standardizes targeted turns as fresh submitted control runs against the exact surfaced UAA session id that bootstrap already established. Host turns stay shell-local. World turns go through one new typed `world-agent` stream route and reuse the existing host-to-world execution seam for placement, cancel, and authoritative world binding.
+
+The first landing is intentionally serialized for world members: one retained world member per REPL session, explicit stop-and-start when switching backends, no hidden multiplexing.
 
 ## Locked Starting State
 
-### What is already done
+### What already exists
 
-The following work is landed and is not reopened here:
+The repo already has the hard parts that this slice should reuse:
 
 - shell-owned orchestrator bootstrap through UAA in [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
 - authoritative runtime state persistence in [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-- canonical backend identity derivation and inventory loading in [crates/shell/src/execution/agent_inventory.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_inventory.rs)
+- canonical backend identity derivation in [crates/shell/src/execution/agent_inventory.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_inventory.rs)
 - runtime realizability and protocol gating in [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs)
-- Linux world-member launch over the existing host-to-world transport seam in [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) and [crates/world-agent/src/service.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs)
-- retained control ownership inside `world-agent` for active member runtimes in [crates/world-agent/src/member_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/member_runtime.rs)
-- UAA session-handle surfacing and resume capability in the external `unified-agent-api` dependency already consumed by `shell` and `world-agent`
+- Linux world-member bootstrap over the existing host-to-world stream seam in [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) and [crates/world-agent/src/service.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs)
+- retained world-member control ownership inside [crates/world-agent/src/member_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/member_runtime.rs)
+- surfaced UAA session ids already persisted into runtime manifests during bootstrap
+- focused test seams in [crates/shell/tests/repl_world_first_routing_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs), [crates/shell/tests/support/repl_world_agent.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/support/repl_world_agent.rs), and [crates/world-agent/tests/streamed_execute_cancel_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/streamed_execute_cancel_v1.rs)
 
 ### Exact remaining gap
 
-The remaining gap is concrete and narrower than the SOW originally needed to assume:
+The remaining gap is smaller than the SOW had to assume:
 
-1. the REPL still only treats `:host` and `:pty` as directives, and every other one-line input falls through to shell execution in [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:669)
-2. world-member routing still depends on `validate_member_selection(...)`, which fails closed on multiple eligible members instead of resolving the backend the operator named in [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs:176)
-3. host bootstrap and world-member bootstrap both use fixed bootstrap prompts, but neither surface a repo-owned helper for arbitrary post-bootstrap turn submission
-4. `world-agent` only exposes launch, stream, and cancel for member runtimes today, not "submit a prompt to the already-live session"
-5. `MemberRuntimeManager` keys active runtimes by launch `span_id`, which is enough for cancel, but wrong for later targeted turns that naturally address a stable participant/backend identity
-6. the REPL only retains one local `member_runtime` handle at a time, so the first targeted-turn landing must codify one-at-a-time world-member ownership instead of pretending simultaneous retained world members already exist
-7. `substrate -c` and the public `substrate agent` namespace still intentionally stay outside this slice
+1. the REPL only treats `:host` and `:pty` as directives on single-line input, then falls through to shell execution
+2. world-member routing still uses `validate_member_selection(...)`, which fails closed on ambiguity instead of selecting the exact backend the operator named
+3. both host and world bootstrap paths are fixed bootstrap prompts, not arbitrary follow-up prompt submission
+4. `world-agent` only exposes launch, stream, and cancel today, not "submit a turn to the already-live member session"
+5. `MemberRuntimeManager` is keyed by launch `span_id`, which is fine for launch cancel and wrong for later participant-targeted resume
+6. the shell still retains only one `member_runtime: Option<AsyncReplAgentRuntime>`, so the first targeted-turn landing must embrace one-at-a-time world-member ownership
+7. `substrate -c` and a broader public `substrate agent start|resume|fork|stop` surface remain intentionally out of scope
 
 ## Frozen Execution Contract
 
-This section removes the implementation wiggle room.
+This section removes the wiggle room. If implementation wants to do something else, this plan is wrong and should be revised first.
 
 ### Non-negotiable invariants
 
@@ -69,16 +71,16 @@ This section removes the implementation wiggle room.
 2. Only explicit `::<backend_id> <prompt>` input enters the targeted-agent lane.
 3. `:host` and `:pty` keep their current meaning.
 4. `substrate -c` remains `ShellMode::Wrap`.
-5. Backend selection for targeted turns is by exact `backend_id`, never by "pick the one eligible member."
+5. Backend selection for targeted turns is by exact `backend_id`, never by eligible-member heuristics.
 6. Targeted turns reuse surfaced UAA session identity through resume semantics. They do not replay the bootstrap prompt.
 7. Host-scoped targeted turns stay shell-local.
 8. World-scoped targeted turns stay Linux-first and go through `world-agent`.
-9. The first landing supports at most one retained world-member runtime per REPL session at a time. Switching world backends is explicit stop-and-start, not hidden multiplexing.
-10. Cancellation remains span-based and best-effort. Submitted turns get their own span ids and use the existing cancel surface.
+9. The first landing supports at most one retained world-member runtime per REPL session at a time.
+10. Cancellation remains span-based. Bootstrap lifetime spans and submitted-turn spans are different things and must stay different.
 
-### Chosen caller grammar
+### Caller grammar
 
-The grammar is frozen to one spelling:
+Grammar is frozen to one spelling:
 
 - accepted: `::<backend_id> <prompt>`
 - accepted example: `::cli:codex summarize the last failure`
@@ -90,55 +92,65 @@ The grammar is frozen to one spelling:
 Parser rules:
 
 1. directive parsing only runs when `has_embedded_newlines(...) == false`
-2. the parser checks targeted-turn syntax before shell fallback execution
-3. malformed targeted-turn syntax returns REPL-facing user errors, not shell execution
+2. targeted-turn parsing runs before shell fallback execution
+3. malformed targeted-turn syntax returns a REPL error, never shell execution
 4. non-targeted input never partially matches and never rewrites into agent execution
 
-### Chosen backend-resolution contract
+### Backend-resolution contract
 
-Targeted turns use a new additive selector in [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs):
+Targeted turns use one new additive selector in [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs):
 
 `validate_targeted_backend_selection(requested_backend_id, effective_config, inventory, base_policy) -> RuntimeSelectionDescriptor`
 
-The helper must:
+That helper must:
 
 1. validate `requested_backend_id` syntax
 2. resolve one exact effective inventory entry
 3. require `derived_backend_id == requested_backend_id`
 4. require `protocol == PURE_AGENT_PROTOCOL`
-5. reuse existing runtime-realizability checks
-6. require `backend_allowed(...) == true`
+5. reuse current runtime-realizability checks
+6. reuse current backend allowlist checks
 7. preserve the entry's configured `execution.scope`
 
 It must not call `validate_member_selection(...)` internally.
 
-### Chosen session-resume contract
+### Session-resume contract
 
-This plan resolves the biggest ambiguity explicitly:
-
-targeted turns are session-level follow-up runs, not stdin injection into the original bootstrap process.
+Targeted turns are session-level follow-up runs, not stdin injection into the original process.
 
 That means:
 
-1. bootstrap still exists only to establish authoritative runtime ownership and surfaced UAA session identity
-2. each targeted turn starts a new short-lived submitted control turn against the same UAA session handle
-3. the submitted turn carries a new `run_id` and `span_id`
-4. the participant identity, `backend_id`, `orchestration_session_id`, and world binding remain the same
-5. host and world paths both use exact surfaced `internal.uaa_session_id`; they do not rely on `resume last`
+1. bootstrap still exists only to establish runtime ownership and surfaced UAA session identity
+2. each targeted turn starts a new short-lived submitted control run against that same UAA session id
+3. the submitted turn carries a fresh `run_id` and `span_id`
+4. `participant_id`, `backend_id`, `orchestration_session_id`, and world binding stay stable
+5. both host and world paths use the exact surfaced `internal.uaa_session_id`, not "resume last"
 
-For host-scoped backends:
+### Host contract
 
-- the shell rebuilds a gateway via [crates/shell/src/execution/agent_runtime/registry.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/registry.rs)
-- it sends `AgentWrapperRunRequest { prompt, extensions["agent_api.session.resume.v1"] = { selector: "id", id: <uaa_session_id> } }`
-- it streams events back into the REPL and trace layer as a submitted targeted turn
+Host behavior is intentionally narrow:
 
-For world-scoped backends:
+1. the only active host-side agent runtime in this slice is the orchestrator runtime already attached to the current REPL session
+2. a host-targeted turn is valid only when `requested_backend_id == retained_orchestrator_manifest.backend_id`
+3. if the backend is host-scoped but does not match the active orchestrator backend for this REPL session, fail closed with a REPL-visible error
+4. the shell rebuilds a gateway via [crates/shell/src/execution/agent_runtime/registry.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/registry.rs)
+5. it submits `AgentWrapperRunRequest { prompt, working_dir, extensions["agent_api.session.resume.v1"] = { selector: "id", id: <uaa_session_id> } }`
+6. shell-side output translation must tag the targeted `backend_id` and must end with a targeted-turn completion, not a shell-command completion
 
-- `world-agent` stores the surfaced `uaa_session_id` in the stable active member registry
-- `world-agent` starts a new short-lived submitted control turn against that stored session id
-- the shell never tries to recreate world placement locally
+### World contract
 
-### Chosen world submit-turn transport contract
+World behavior is also narrow:
+
+1. the shell never recreates world placement locally
+2. `world-agent` remains the retained owner of the live world-member runtime after bootstrap
+3. world submission goes through one new typed stream route
+4. the route resolves the active member by stable participant identity, not launch span
+5. the route validates `backend_id`, `orchestration_session_id`, `world_id`, and `world_generation` against the retained runtime
+6. the route rejects submission when no surfaced `uaa_session_id` is retained
+7. the route rejects concurrent submitted turns for the same participant
+8. switching between world backends is explicit stop-and-start because the shell still owns only one retained `member_runtime` pointer
+
+### Wire contract
 
 The world path gets one additive typed route. It does not overload `ExecuteRequest.member_dispatch`.
 
@@ -160,7 +172,7 @@ Frozen fields:
 | `world_generation` | authoritative generation that must still match |
 | `prompt` | non-empty targeted user prompt |
 
-New route in `world-agent`:
+New route:
 
 - `POST /v1/member_turn/stream`
 
@@ -168,20 +180,17 @@ New client method in [crates/agent-api-client/src/lib.rs](/Users/spensermcconnel
 
 - `submit_member_turn_stream(MemberTurnSubmitRequestV1) -> Response<Incoming>`
 
-The route contract is:
+Response contract:
 
-1. validate the request shape at the transport boundary
-2. resolve one active member runtime by stable participant identity, not launch span
-3. confirm `backend_id`, `orchestration_session_id`, `world_id`, and `world_generation` still match the retained runtime
-4. reject submission if no surfaced `uaa_session_id` is retained
-5. start one submitted control turn with UAA resume semantics
-6. stream NDJSON frames back to the shell
-7. register the submitted-turn cancel handle by submitted-turn `span_id`
-8. reject concurrent submitted turns for the same participant with a clear error
+1. reuse `ExecuteStreamFrame` as the NDJSON envelope so the shell does not need a second stream-decoding model
+2. emit a fresh `Start { span_id }`
+3. emit translated events/output for the submitted turn
+4. emit `Exit { span_id }` for the submitted turn
+5. keep cancel span identity aligned with that submitted-turn `span_id`
 
-### Chosen member-runtime registry contract
+### Member-runtime registry contract
 
-`MemberRuntimeManager` stops pretending launch span is stable identity.
+`MemberRuntimeManager` must stop pretending launch span is stable identity.
 
 The refactor is frozen to two registries:
 
@@ -190,9 +199,9 @@ The refactor is frozen to two registries:
    - value: retained bootstrap ownership and resume context
 2. `active_turns_by_span_id`
    - key: submitted-turn `span_id`
-   - value: cancel handle and participant association for the active targeted turn
+   - value: cancel handle plus participant association
 
-`ActiveMemberRuntime` must retain:
+`ActiveMemberRuntime` must retain at least:
 
 - `participant_id`
 - `orchestration_session_id`
@@ -203,20 +212,30 @@ The refactor is frozen to two registries:
 - `backend_kind`
 - `binary_path`
 - `working_dir`
-- effective env overrides for resumed turns
+- effective env overrides needed for resumed runs
 - surfaced `uaa_session_id`
-- bootstrap cancel handle and launcher cleanup state
+- bootstrap cancel handle
+- launcher cleanup state
 
-This is required so the world submit-turn route can resume exactly the session that launch established, inside the same world placement, without copying control back into the shell.
+### Cancel contract
 
-### Failure taxonomy freeze
+Cancel semantics are frozen because this is an easy place to lie accidentally:
 
-Request and routing failures are not all the same:
+1. the bootstrap lifetime span still cancels the retained member runtime itself
+2. a submitted-turn span cancels only that submitted turn
+3. `world-agent` must be able to resolve both span classes correctly
+4. canceling a submitted turn must not silently tear down the retained bootstrap runtime
+5. if a future cleanup step intentionally tears down the retained member, that is a separate action
+
+### Failure taxonomy
+
+Request and routing failures are not interchangeable:
 
 - malformed targeted syntax, unknown backend id, wrong protocol, missing prompt: REPL user error
-- backend not allowlisted: policy-style deny with the current exit posture
+- backend not allowlisted: policy-style deny with current exit posture
 - host runtime missing surfaced `uaa_session_id`: fail-closed runtime error
-- world targeted turn on non-Linux: explicit Linux-only error
+- host backend mismatch against active orchestrator backend: fail-closed runtime error
+- world targeted turn on non-Linux: explicit Linux-first error
 - world binding mismatch or stale generation: fail-closed runtime error
 - participant not present in `world-agent` active registry: runtime unavailable
 - concurrent submitted turn for one participant: conflict-style runtime error
@@ -228,15 +247,15 @@ Request and routing failures are not all the same:
 
 | Sub-problem | Existing code | Decision |
 | --- | --- | --- |
-| REPL one-line directive interception | [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | Reuse the existing one-line directive gate and insert targeted-turn parsing before shell fallback. |
-| canonical `backend_id` derivation and inventory resolution | [crates/shell/src/execution/agent_inventory.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_inventory.rs) | Reuse. Do not invent a second backend naming layer. |
-| runtime realizability and allowlist checks | [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs) | Reuse the realizability checks, add one explicit targeted-backend selector. |
-| shell-local backend construction | [crates/shell/src/execution/agent_runtime/registry.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/registry.rs) | Reuse for host-targeted submitted turns. |
-| authoritative live runtime identity | [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse. No new shell-only session registry. |
-| shell-to-world member launch transport | [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs) and [crates/world-agent/src/service.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs) | Reuse for launch only. Add a second typed route for submitted turns. |
-| member runtime bootstrap ownership in world-agent | [crates/world-agent/src/member_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/member_runtime.rs) | Extend. Do not replace with a shell-owned world helper. |
-| UAA resume semantics | external `unified-agent-api` already consumed by `shell` and `world-agent` | Reuse `agent_api.session.resume.v1`; do not invent a bespoke post-bootstrap backend protocol. |
-| existing shell/world integration tests | [crates/shell/tests/repl_world_first_routing_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs), [crates/world-agent/tests/streamed_execute_cancel_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/streamed_execute_cancel_v1.rs) | Extend. Do not create a brand-new test harness unless the existing stub cannot express the new stream route. |
+| REPL one-line directive interception | [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | Reuse the existing one-line directive gate. Insert targeted-turn parsing before shell fallback. |
+| canonical `backend_id` derivation and inventory resolution | [crates/shell/src/execution/agent_inventory.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_inventory.rs) | Reuse. No second backend naming layer. |
+| runtime realizability and allowlist checks | [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs) | Reuse realizability checks and add one explicit targeted selector. |
+| shell-local backend construction | [crates/shell/src/execution/agent_runtime/registry.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/registry.rs) | Reuse for host-targeted resume runs. |
+| authoritative live runtime identity | [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse. No shadow session registry. |
+| shell-to-world member launch transport | [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs) and [crates/world-agent/src/service.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs) | Reuse for launch only. Add one second typed route for submitted turns. |
+| retained world-member control ownership | [crates/world-agent/src/member_runtime.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/member_runtime.rs) | Extend. Do not move control ownership back into the shell. |
+| UAA resume semantics | external `unified-agent-api` already consumed by `shell` and `world-agent` | Reuse `agent_api.session.resume.v1`. Do not invent a bespoke prompt-submission protocol. |
+| integration harnesses | [crates/shell/tests/repl_world_first_routing_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs) and [crates/world-agent/tests/streamed_execute_cancel_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/streamed_execute_cancel_v1.rs) | Extend. Do not create a brand-new harness unless the current stub cannot express the route. |
 
 ### 0B. Minimum honest diff
 
@@ -244,26 +263,32 @@ The minimum honest implementation is:
 
 1. add a targeted-turn parser to the REPL loop
 2. add exact named-backend selection in `validator.rs`
-3. add a shell-local host submitted-turn path that uses UAA resume against stored session id
+3. add a shell-local host submitted-turn path that uses UAA resume against the stored session id
 4. add one typed world submit-turn route plus client
-5. refactor `MemberRuntimeManager` to resolve active members by participant identity and submitted turns by span
-6. extend integration tests and the gap matrix so the repo truth matches the code truth
+5. refactor `MemberRuntimeManager` to resolve active members by participant identity and active turns by span
+6. extend integration tests and the gap matrix so repo truth matches code truth
 
 Anything smaller is fake progress.
 
-Specifically rejected:
+Rejected shortcuts:
 
 - overloading `substrate -c`
-- trying to inject follow-up prompt text into the bootstrap process stdin
+- injecting prompt text into the bootstrap process stdin
 - overloading `ExecuteRequest.member_dispatch` for both launch and submit
-- adding a generic new "agent hub daemon" or broader runtime service
+- adding a generic new agent hub daemon
 - pretending simultaneous retained world members already exist in the shell
 
 ### 0C. Complexity check
 
-This slice touches more than 8 files. That is justified and still minimal because the seam is cross-boundary by definition.
+This slice touches more than 8 files. That is still the minimal blast radius because the seam crosses:
 
-Expected primary files:
+- REPL grammar and routing
+- backend validation and policy gating
+- typed host-to-world transport
+- retained runtime identity inside `world-agent`
+- integration tests proving shell semantics did not drift
+
+Primary files expected to move:
 
 1. [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
 2. [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs)
@@ -280,44 +305,34 @@ Expected primary files:
 13. [crates/world-agent/tests/streamed_execute_cancel_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/streamed_execute_cancel_v1.rs)
 14. [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
 
-That looks large. It is still the minimal blast radius because the change spans:
-
-- user-facing REPL grammar
-- backend policy/routing
-- typed host/world transport
-- runtime ownership inside `world-agent`
-- end-to-end regression tests
-
 ### 0D. Search and completeness check
 
-Search-before-building result:
+Search-before-building result, in practical terms:
 
-- **[Layer 1]** reuse UAA `agent_api.session.resume.v1` instead of inventing a new backend protocol
-- **[Layer 1]** reuse `build_gateway_for_descriptor(...)` for host resumed turns instead of a second backend registry
-- **[Layer 1]** reuse the existing cancel surface by span id instead of adding a second cancel API
+- **[Layer 1]** reuse UAA `agent_api.session.resume.v1`
+- **[Layer 1]** reuse `build_gateway_for_descriptor(...)` for host resume runs
+- **[Layer 1]** reuse the existing span-based cancel surface
 - **[Layer 1]** keep `ExecuteRequest.member_dispatch` launch-only and add a separate typed request for submitted turns
-- **[EUREKA]** the real world-path blocker is not parsing or transport. It is that `MemberRuntimeManager` stores active runtime ownership by launch span, which is the wrong key for any later targeted resume operation
-- **[EUREKA]** the shell's single `member_runtime: Option<AsyncReplAgentRuntime>` is a hard product boundary for this slice. The clean first landing is explicit one-at-a-time world backend switching, not hidden multi-member concurrency
+- **[EUREKA]** the real world-path blocker is not parser work. It is the registry keying model in `MemberRuntimeManager`
+- **[EUREKA]** the shell's single `member_runtime: Option<AsyncReplAgentRuntime>` is a product boundary, not an annoyance to paper over
 
-Shortcut options rejected because they save human work, not AI work:
+Completeness rule for this plan:
 
-- collapse host and world submit semantics into one implicit helper
-- silently use `resume last` instead of the exact surfaced session id
-- support multi-line targeted prompts in the same landing
-- broaden the public `substrate agent` namespace while this REPL seam is still landing
+- support the full explicit host path
+- support the full explicit Linux world path
+- include the regression floor for shell input, `:host`, `:pty`, and `-c`
+- do not defer error handling for malformed syntax, backend deny, stale world generation, or submitted-turn cancel
 
 ### 0E. Distribution and runtime contract check
 
 No new artifact type is introduced. This is not a packaging plan.
 
-The real ship surface is:
+The ship surface is behavioral:
 
-- REPL syntax and error behavior
-- `world-agent` typed transport contract
-- runtime ownership correctness for active world members
-- regression tests proving `substrate -c` and shell-first REPL semantics did not drift
-
-That means the required proof is test and behavior proof, not release-pipeline work.
+- REPL grammar and error posture
+- typed `world-agent` transport contract
+- retained runtime ownership correctness
+- regression proof that shell semantics did not drift
 
 ### 0F. NOT in scope
 
@@ -346,23 +361,23 @@ That means the required proof is test and behavior proof, not release-pipeline w
 
 **Issue 1. Host follow-up turns cannot be "inject into the existing process."**
 
-The current UAA boundary exposes `run_control(...)`, cancellation, session handles, and resume extensions. It does not expose "write another prompt into this already-running control handle."
+The UAA boundary exposes new control runs, cancellation, surfaced session handles, and resume extensions. It does not expose "write another prompt into the already-running control handle." This plan standardizes follow-up turns as fresh resume runs keyed to the stored session id.
 
-The plan resolves this by standardizing submitted turns as UAA resume runs keyed to the surfaced session id. That is explicit, supported by the dependency, and testable.
+**Issue 2. Host routing has to acknowledge the real product shape.**
 
-**Issue 2. Overloading `ExecuteRequest.member_dispatch` would mix two incompatible meanings.**
+There is only one active host-side agent runtime in this slice: the orchestrator already booted by the REPL. This plan makes that explicit instead of pretending there is a general pool of host participants. A host-targeted turn either matches the active orchestrator backend or fails closed.
 
-Launch needs `resolved_runtime.binary_path` and empty `cmd`. A submitted turn needs a prompt and a stable active participant lookup. Combining them would produce a muddy request model and more conditionals than the extra route saves.
+**Issue 3. Overloading `ExecuteRequest.member_dispatch` would collapse two different meanings into one struct.**
 
-The plan resolves this by adding `MemberTurnSubmitRequestV1` as a second typed transport contract.
+Launch needs runtime descriptor and empty `cmd`. Submit needs prompt plus active participant lookup. That is not one request with optional knobs. That is two different contracts. The plan keeps them separate.
 
-**Issue 3. World runtime identity is keyed incorrectly for later targeted turns.**
+**Issue 4. World runtime identity is keyed incorrectly for later targeted turns.**
 
-Today the registry is keyed by launch span. That is enough for cancellation of the bootstrap stream and not enough for exact resume against a stable participant. The plan fixes the keying model before adding the submit route.
+Launch span is good enough for bootstrap cancellation and bad for later follow-up turns. The plan fixes the registry model before layering the new route on top.
 
-**Issue 4. Multi-backend world targeting is larger than the current shell ownership model.**
+**Issue 5. Multi-backend world targeting is larger than the current shell ownership model.**
 
-The shell already keeps only one retained world-member runtime handle. The plan does not pretend otherwise. It freezes one-at-a-time world backend ownership for this landing and makes switching explicit.
+The shell already keeps one retained world-member pointer. This plan freezes one-at-a-time world backend ownership and makes switching explicit instead of hiding that product boundary.
 
 ### Architecture ASCII diagrams
 
@@ -390,8 +405,9 @@ operator input
     v                  v
 submit_host_       ensure_targeted_member_runtime_ready(...)
 targeted_turn(...)     |
-    |                  +--> switch backend if current retained world member differs
-    |                  +--> fail closed on non-Linux / stale world binding
+    |                  +--> same backend + same generation? reuse
+    |                  +--> different backend? stop old member, launch requested one
+    |                  +--> non-Linux / stale binding? fail closed
     |                  v
     |             POST /v1/member_turn/stream
     |                  |
@@ -412,7 +428,7 @@ targeted_turn(...)     |
 ```text
 shell REPL session
     |
-    +-- authoritative state store
+    +-- authoritative runtime state store
     |      orchestration_session_id
     |      participant_id
     |      backend_id
@@ -421,7 +437,7 @@ shell REPL session
     +-- retained local pointer
            member_runtime: Option<AsyncReplAgentRuntime>
                 |
-                +-- one active world member at a time in this slice
+                +-- at most one active world member in this slice
                 |
                 +-- points to world-agent-owned runtime
                           |
@@ -432,12 +448,17 @@ shell REPL session
                                  submit span -> cancel handle
 ```
 
-### Transport field mapping
+### Cancel model
 
-| Surface | Identity source | Prompt source | Stream identity |
-| --- | --- | --- | --- |
-| host targeted turn | shell manifest `internal.uaa_session_id` + `backend_id` | REPL input text | submitted-turn `run_id` + `span_id`, same participant/backend |
-| world targeted turn | `world-agent` active member registry `uaa_session_id` + request participant/backend fields | `MemberTurnSubmitRequestV1.prompt` | submitted-turn `run_id` + `span_id`, same participant/backend |
+```text
+bootstrap launch
+    |
+    +-- bootstrap span_id ----------------------------> cancel retained member lifetime
+    |
+submitted targeted turn
+    |
+    +-- submitted-turn span_id -----------------------> cancel this turn only
+```
 
 ## Code Quality Review
 
@@ -445,47 +466,48 @@ shell REPL session
 
 **Issue 1. Parser sprawl in `async_repl.rs`.**
 
-The file is already large. The plan keeps the parser tiny and local:
+Keep the parser small and local:
 
 - one small `TargetedAgentTurn` value type
 - one parser helper
 - one routed handler per scope
 
-No generic directive framework. No new parser module.
+No generic directive framework. No new parser crate. Minimal diff wins here.
 
 **Issue 2. Selection logic drift risk.**
 
-Backend validation already lives in `validator.rs`. The plan keeps targeted-turn routing there too, instead of re-implementing backend-id checks inside the REPL loop.
+Backend validation already lives in `validator.rs`. This plan keeps targeted-turn routing logic there too instead of re-implementing backend-id checks inside the REPL loop.
 
 **Issue 3. Event translation duplication risk.**
 
-The host path and world path should both stamp `backend_id`, `participant_id`, `run_id`, `span_id`, and scope consistently. The plan reuses the existing event-building style and adds one submitted-turn translation helper instead of letting host and world invent separate event shapes.
+Host and world paths must both stamp `backend_id`, `participant_id`, `run_id`, `span_id`, and scope consistently. Add one submitted-turn translation helper or equivalent shared path. Do not let host and world invent incompatible output shapes.
 
-**Issue 4. Registry correctness is more important than micro-abstraction purity.**
+**Issue 4. Registry explicitness is more important than abstraction purity.**
 
-The world registry changes are structural, not cosmetic. This plan spends the extra explicit fields to make submit-turn routing obvious. That is the right trade for a control-plane boundary.
+The world registry changes are structural, not cosmetic. This plan prefers a blunt, obvious `ActiveMemberRuntime` over a clever generic state machine.
 
 ### Allowed code shape
 
-1. Keep targeted-turn parsing inside [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs).
-2. Keep backend selection inside [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs).
+1. Keep targeted-turn parsing in [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs).
+2. Keep backend selection in [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs).
 3. Add only one new typed host-to-world request for submitted turns.
-4. Keep `MemberRuntimeManager` explicit. No trait hierarchy. No generic state machine abstraction for two maps.
+4. Keep `MemberRuntimeManager` explicit. No trait hierarchy. No generalized runtime state machine.
 5. Do not add new global shell state beyond what the REPL already owns.
 
 ## Test Review
 
 ### Test framework detection
 
-This repo is Rust-first. The test framework is the existing Rust unit/integration suite driven by `cargo test`.
+This repo is Rust-first. The test surface for this plan is the existing Rust unit and integration suite driven by `cargo test`.
 
-Relevant current suites already exist in:
+Relevant suites already exist in:
 
 - [crates/shell/tests/repl_world_first_routing_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs)
 - [crates/world-agent/tests/streamed_execute_cancel_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/streamed_execute_cancel_v1.rs)
 - [crates/world-agent/tests/member_runtime_world_placement_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/member_runtime_world_placement_v1.rs)
 - unit tests in [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs)
-- CLI wrap-mode tests in [crates/shell/src/execution/invocation/tests.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/invocation/tests.rs)
+- wrap-mode tests in [crates/shell/src/execution/invocation/tests.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/invocation/tests.rs)
+- config validation tests in [crates/shell/tests/agents_validate.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agents_validate.rs)
 
 ### Code path coverage
 
@@ -510,6 +532,7 @@ CODE PATH COVERAGE
     ├── submit_host_targeted_turn(...)
     │   ├── [GAP] Exact surfaced session id mapped into resume extension
     │   ├── [GAP] Missing stored session id fails closed
+    │   ├── [GAP] Host backend mismatch fails closed
     │   └── [GAP] Streamed completion is surfaced as targeted-turn completion
     |
     └── ensure_targeted_member_runtime_ready(...)
@@ -542,9 +565,9 @@ CODE PATH COVERAGE
         └── [GAP] Round-trip serde boundary
 
 ─────────────────────────────────
-COVERAGE: 0/18 targeted paths covered today
+COVERAGE: 0/19 targeted paths covered today
 QUALITY TARGET: every new path reaches at least ★★, and all regressions reach ★★★
-GAPS: 18 new/changed paths need tests
+GAPS: 19 new/changed paths need tests
 ─────────────────────────────────
 ```
 
@@ -557,14 +580,15 @@ USER FLOW COVERAGE
     |
     ├── [GAP] "::cli:codex hello" routes to host backend, not shell execution
     ├── [GAP] streamed output is visible in REPL
-    └── [GAP] completion/failure is visibly distinct from shell command completion
+    ├── [GAP] completion/failure is visibly distinct from shell command completion
+    └── [GAP] host backend mismatch returns explicit guidance
 
 [+] Operator targeted world turn
     |
     ├── [GAP] "::cli:codex hello" on Linux launches or reuses world member then submits turn
     ├── [GAP] world backend switch tears down previous retained backend explicitly
     ├── [GAP] stale world generation fails closed
-    └── [GAP] cancel stops the submitted turn, not the whole bootstrap registry
+    └── [GAP] cancel stops the submitted turn, not the bootstrap runtime
 
 [+] Operator error states
     |
@@ -583,30 +607,32 @@ USER FLOW COVERAGE
 
 ### Required tests to add or extend
 
-1. Add parser unit tests in [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) for exact syntax, missing prompt, and multi-line rejection.
-2. Add unit tests in [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs) for exact backend selection, deny, wrong protocol, and multi-member explicit routing.
+1. Add parser unit tests in [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) for exact syntax, missing prompt, backend-id extraction, and multi-line rejection.
+2. Add unit tests in [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs) for exact backend selection, deny, wrong protocol, unknown backend, and multi-member explicit routing.
 3. Extend [crates/shell/tests/repl_world_first_routing_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs) to prove:
    - targeted syntax is not shell execution
    - plain shell input is unchanged
    - targeted host turn emits a resume request against the stored session id
+   - host backend mismatch fails closed
    - targeted world turn uses the new world submit route
    - targeted world turn chooses the named backend when multiple world members exist
    - switching world backends is explicit and one-at-a-time
-4. Extend [crates/shell/tests/support/repl_world_agent.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/support/repl_world_agent.rs) to capture and script the new `/v1/member_turn/stream` route.
+4. Extend [crates/shell/tests/support/repl_world_agent.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/support/repl_world_agent.rs) to capture and script `/v1/member_turn/stream`.
 5. Add request boundary tests in [crates/agent-api-types/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs) for `MemberTurnSubmitRequestV1`.
 6. Extend [crates/world-agent/tests/streamed_execute_cancel_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/streamed_execute_cancel_v1.rs) to cover submitted-turn streaming and cancel.
-7. Keep [crates/world-agent/tests/member_runtime_world_placement_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/member_runtime_world_placement_v1.rs) green to prove the registry refactor did not break world placement.
-8. Add or extend a regression in [crates/shell/src/execution/invocation/tests.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/invocation/tests.rs) proving `-c` still remains wrap mode after targeted-turn support lands.
+7. Keep [crates/world-agent/tests/member_runtime_world_placement_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/member_runtime_world_placement_v1.rs) green to prove the registry refactor did not break placement.
+8. Keep [crates/shell/tests/agents_validate.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agents_validate.rs) green to prove config/inventory validation posture did not drift.
+9. Add or extend a regression in [crates/shell/src/execution/invocation/tests.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/invocation/tests.rs) proving `-c` remains wrap mode after targeted-turn support lands.
 
 ### Regression rule for this slice
 
-This slice changes existing REPL parsing behavior. That makes these regression tests mandatory:
+This slice changes existing REPL parsing behavior. That makes these regressions mandatory:
 
 1. plain shell input still executes as shell input
 2. `:host` and `:pty` still behave exactly as before
 3. `substrate -c` still remains wrap mode
 
-These are not optional. They are the highest-priority regression floor for this feature.
+These are the highest-priority tests in the plan. If they fail, the feature is not shippable.
 
 ## Failure Modes Registry
 
@@ -616,33 +642,34 @@ These are not optional. They are the highest-priority regression floor for this 
 | backend id not in inventory | selector | yes | fail closed | "unknown backend `<id>`" |
 | backend denied by policy | selector | yes | fail closed | deny naming exact backend |
 | host runtime missing `uaa_session_id` | host submit | yes | fail closed | runtime unavailable error |
-| world target on non-Linux | shell route | yes | fail closed | explicit Linux-only error |
+| host backend mismatch | host submit | yes | fail closed | explicit mismatch guidance |
+| world target on non-Linux | shell route | yes | fail closed | explicit Linux-first error |
 | targeted world backend on stale generation | shell + world-agent | yes | fail closed | stale-generation error |
 | participant not in `world-agent` registry | world submit | yes | fail closed | runtime unavailable error |
 | concurrent submitted turn for one participant | world submit | yes | fail closed | "turn already in flight" |
-| cancel delivered to wrong span class | world cancel | yes | handle both bootstrap and submitted turn spans | correct turn stops |
+| cancel delivered to wrong span class | world cancel | yes | handle both bootstrap and submitted-turn spans | correct target stops |
 | plain shell input accidentally intercepted | shell parser | yes, regression | reject targeted parser path | shell behavior preserved |
 
 Critical gap rule for this plan:
 
-no failure mode is allowed to be both untested and silent. Every fail-closed path must either produce a typed transport error or a REPL-visible error message.
+no failure mode is allowed to be both untested and silent. Every fail-closed path must produce either a typed transport error or a REPL-visible error message.
 
 ## Performance Review
 
-This slice is latency-sensitive but not throughput-sensitive.
+This slice is latency-sensitive and human-paced, not throughput-sensitive.
 
 ### Findings resolved in-plan
 
-1. Each targeted turn spawns a new short-lived resume process. That is acceptable here because targeted turns are human-paced and agent latency dominates process-spawn cost.
-2. The plan explicitly avoids a new long-lived daemon or generic multiplexor. That keeps operational complexity down and spends zero extra innovation tokens on infrastructure.
-3. The one-at-a-time world-member rule is also a performance guardrail. It prevents hidden concurrency and cross-turn contention in the first landing.
+1. Each targeted turn spawns a new short-lived resume process. That is acceptable because operator pacing and agent latency dominate process-spawn cost.
+2. The plan avoids a new long-lived daemon or generic multiplexor. That keeps operational complexity down and spends zero extra innovation tokens on infrastructure.
+3. The one-at-a-time world-member rule is also a performance guardrail. It prevents hidden concurrency and shared-state contention in the first landing.
 
 ### Performance posture
 
 - no new N+1 style concern exists
 - no caching layer is needed
 - no new background polling loop is introduced
-- the only persistent new memory is the stable `world-agent` member registry entry per active participant plus one submitted-turn entry per active targeted turn
+- the only persistent new memory is one stable active-member record per retained participant plus one active-turn record per submitted turn
 
 ## DX Guardrails
 
@@ -653,22 +680,23 @@ Required operator experience:
 1. malformed syntax errors must show the exact accepted format: `::<backend_id> <prompt>`
 2. unknown backend errors should suggest `substrate agent list`
 3. policy denies must name the exact blocked backend id
-4. world-target errors on non-Linux must say Linux-first explicitly
-5. submitted-turn status/error lines should include the targeted `backend_id`
+4. host backend mismatch must explain that the active REPL session is attached to a different host backend
+5. world-target errors on non-Linux must say Linux-first explicitly
+6. submitted-turn status and completion lines should include the targeted `backend_id`
 
-This is small stuff. It matters because this feature is pure operator UX.
+Small details. Real product impact.
 
 ## Worktree Parallelization Strategy
 
-This plan has real parallelization opportunities after the transport contract is frozen.
+This plan has real parallelization opportunities after the wire contract is frozen.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| Freeze targeted-turn contract | `crates/agent-api-types/`, `crates/world-agent/src/`, `crates/shell/src/repl/` | — |
+| Freeze targeted-turn contract | `crates/agent-api-types/`, `crates/agent-api-client/`, `crates/world-agent/src/` | — |
 | Shell parser + selector + host submit path | `crates/shell/src/repl/`, `crates/shell/src/execution/agent_runtime/` | Freeze targeted-turn contract |
-| World submit route + member registry refactor | `crates/agent-api-types/`, `crates/agent-api-client/`, `crates/world-agent/src/` | Freeze targeted-turn contract |
+| World submit route + member registry refactor | `crates/world-agent/src/`, `crates/agent-api-types/`, `crates/agent-api-client/` | Freeze targeted-turn contract |
 | Integration tests + stubs + docs | `crates/shell/tests/`, `crates/world-agent/tests/`, repo docs | Shell parser + selector + host submit path, World submit route + member registry refactor |
 
 ### Parallel lanes
@@ -678,20 +706,20 @@ This plan has real parallelization opportunities after the transport contract is
 - Lane B: World submit route + member registry refactor
   - sequential inside the lane because these steps share `crates/world-agent/src/` and the new typed request/client contract
 - Lane C: Integration tests + stubs + docs
-  - starts after A and B because the test stub must know the final request shape
+  - starts after A and B because the test stub must know the final route and request shape
 
 ### Execution order
 
 1. Freeze the transport and resume contract.
 2. Launch Lane A and Lane B in parallel worktrees.
 3. Merge A and B.
-4. Run Lane C on top for integration tests, cancel-path proof, and gap-matrix closeout.
+4. Run Lane C on top for integration proof, cancel-path proof, and gap-matrix closeout.
 
 ### Conflict flags
 
 - Lane A and Lane C both touch `crates/shell/tests/repl_world_first_routing_v1.rs`. Keep that file owned by Lane C after A lands.
 - Lane B and Lane C both touch `crates/world-agent/tests/streamed_execute_cancel_v1.rs`. Same rule: B lands runtime changes, C lands final proof coverage.
-- `crates/agent-api-types/src/lib.rs` is a contract hotspot. Only one lane should edit it at a time.
+- `crates/agent-api-types/src/lib.rs` is the contract hotspot. Only one lane edits it at a time.
 
 ### Parallelization verdict
 
@@ -699,7 +727,7 @@ Three workstreams, two parallel implementation lanes, one final integration lane
 
 ## Implementation Sequence
 
-### Step 1. Freeze the targeted-turn contract
+### Step 1. Freeze the submit-turn wire contract
 
 Files:
 
@@ -707,15 +735,17 @@ Files:
 - [crates/agent-api-client/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-client/src/lib.rs)
 - [crates/world-agent/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/lib.rs)
 - [crates/world-agent/src/handlers.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/handlers.rs)
+- [crates/world-agent/src/service.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs)
 
 Deliver:
 
 1. add `MemberTurnSubmitRequestV1`
-2. add validation for non-empty prompt and identity fields
+2. validate non-empty prompt plus required identity fields
 3. add `AgentClient::submit_member_turn_stream(...)`
-4. add the new `world-agent` route and handler skeleton
+4. add `POST /v1/member_turn/stream`
+5. reuse `ExecuteStreamFrame` for stream output
 
-Done means the contract compiles and the request round-trip boundary tests exist before any runtime logic is layered on top.
+Done means the new transport contract compiles, validates at the boundary, and has request round-trip tests before any runtime logic is layered on top.
 
 ### Step 2. Add exact targeted-turn parsing and selection in the shell
 
@@ -732,7 +762,7 @@ Deliver:
 4. route targeted turns before shell fallback and after the current single-line directive gate
 5. keep plain shell input, `:host`, and `:pty` behavior unchanged
 
-Done means the shell can parse and route targeted turns to a scope-specific handler without yet requiring the world path to be implemented.
+Done means the shell can parse and route targeted turns to a scope-specific handler without depending on the world submit path yet.
 
 ### Step 3. Implement the shell-local host submitted-turn path
 
@@ -743,18 +773,19 @@ Files:
 
 Deliver:
 
-1. resolve the active host runtime for the targeted backend
-2. require exact backend match with the retained orchestrator participant
-3. build a new `AgentWrapperRunRequest` carrying:
+1. resolve the active host runtime from the retained orchestrator manifest
+2. require `requested_backend_id == retained_orchestrator.backend_id`
+3. fail closed if the retained manifest does not contain a surfaced `uaa_session_id`
+4. build a new `AgentWrapperRunRequest` carrying:
    - the operator prompt
    - current working directory
    - `agent_api.session.resume.v1 = { selector: "id", id: <uaa_session_id> }`
-4. translate wrapper events into targeted-turn REPL/trace output
-5. surface completion and failures distinctly from shell commands
+5. translate wrapper events into targeted-turn REPL and trace output
+6. surface completion and failures distinctly from shell-command completion
 
-Done means `::cli:codex hello` works for host-scoped `cli:codex` with no world path involved.
+Done means `::cli:codex hello` works for a host-scoped `cli:codex` REPL session and errors clearly when the requested host backend is not the active orchestrator backend.
 
-### Step 4. Refactor world-agent member ownership for submitted turns
+### Step 4. Refactor `world-agent` member ownership for submitted turns
 
 Files:
 
@@ -770,10 +801,10 @@ Deliver:
    - validates participant/backend/world identity
    - rejects concurrent active turns
    - uses UAA resume by exact session id
-   - streams frames back as NDJSON
-5. extend cancel handling so `execute_cancel` or its successor can stop both bootstrap and submitted-turn spans correctly
+   - streams `ExecuteStreamFrame` NDJSON back to the caller
+5. extend cancel handling so both bootstrap spans and submitted-turn spans resolve correctly
 
-Done means `world-agent` can resume an already-live member session truthfully instead of only launching it.
+Done means `world-agent` can truthfully resume an already-live member session instead of only launching it.
 
 ### Step 5. Wire the targeted Linux world path in the REPL
 
@@ -784,14 +815,14 @@ Files:
 Deliver:
 
 1. add `ensure_targeted_member_runtime_ready(...)`
-2. when the targeted backend differs from the currently retained world member:
-   - stop the current retained world member cleanly
-   - launch the requested backend through the existing member-dispatch seam
-3. submit the targeted prompt through `submit_member_turn_stream(...)`
-4. reject non-Linux world targets explicitly
-5. preserve current world drift and generation reconciliation behavior
+2. when no world member is retained, launch the requested backend through the existing member-dispatch seam
+3. when the requested backend matches the retained backend and generation, reuse it
+4. when the requested backend differs, stop the current retained member cleanly and launch the requested backend
+5. submit the targeted prompt through `submit_member_turn_stream(...)`
+6. reject non-Linux world targets explicitly
+7. preserve current world drift and generation reconciliation behavior
 
-Done means explicit backend targeting actually works end to end for Linux world members, even when multiple world backends are configured.
+Done means explicit backend targeting works end to end for Linux world members, including backend switching, without pretending simultaneous retained members already exist.
 
 ### Step 6. Close the regression floor and repo truth
 
@@ -800,18 +831,19 @@ Files:
 - [crates/shell/tests/repl_world_first_routing_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs)
 - [crates/shell/tests/support/repl_world_agent.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/support/repl_world_agent.rs)
 - [crates/world-agent/tests/streamed_execute_cancel_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/tests/streamed_execute_cancel_v1.rs)
+- [crates/shell/tests/agents_validate.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agents_validate.rs)
 - [crates/shell/src/execution/invocation/tests.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/invocation/tests.rs)
 - [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
 
 Deliver:
 
 1. targeted-turn integration tests for host and world paths
-2. submit-route capture and scripted responses in the test stub
+2. submit-route capture and scripted responses in the REPL world-agent stub
 3. cancel-path proof for submitted turns
 4. explicit wrap-mode regression for `substrate -c`
 5. gap-matrix update that marks explicit targeted turns and real user-turn submission as landed, while keeping broader CLI productization open
 
-Done means the repo documentation tells the truth and the regression floor is real.
+Done means the docs tell the truth and the regression floor is real.
 
 ## Recommended Verification Commands
 
@@ -819,11 +851,10 @@ Done means the repo documentation tells the truth and the regression floor is re
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p shell --lib -- --nocapture
-cargo test -p shell repl_world_first_routing_v1 -- --nocapture
-cargo test -p world-agent streamed_execute_cancel_v1 -- --nocapture
-cargo test -p world-agent member_runtime_world_placement_v1 -- --nocapture
+cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
 cargo test -p shell --test agents_validate -- --nocapture
-cargo test -p shell invocation -- --nocapture
+cargo test -p world-agent --test streamed_execute_cancel_v1 -- --nocapture
+cargo test -p world-agent --test member_runtime_world_placement_v1 -- --nocapture
 ```
 
 ## Definition of Done
@@ -832,13 +863,14 @@ cargo test -p shell invocation -- --nocapture
 2. Plain REPL input still runs as shell input.
 3. `:host` and `:pty` still behave as before.
 4. Host-targeted turns resume the exact surfaced UAA session id.
-5. Linux world-targeted turns go through the new typed `world-agent` submit route.
-6. Multiple configured world members no longer block targeted routing when the backend id is explicit.
-7. The first landing enforces one retained world-member runtime at a time and makes backend switching explicit.
-8. Submitted turns stream output visibly in the REPL and return a distinct completion signal.
-9. Submitted-turn cancel works by returned span id.
-10. `substrate -c` still remains wrap mode.
-11. Tests and gap-matrix docs are updated together.
+5. Host-targeted turns fail closed when the requested host backend is not the active orchestrator backend for the current REPL session.
+6. Linux world-targeted turns go through the new typed `world-agent` submit route.
+7. Multiple configured world members no longer block targeted routing when `backend_id` is explicit.
+8. The first landing enforces one retained world-member runtime at a time and makes backend switching explicit.
+9. Submitted turns stream output visibly in the REPL and return a distinct completion signal.
+10. Submitted-turn cancel works by returned span id without tearing down the retained runtime accidentally.
+11. `substrate -c` still remains wrap mode.
+12. Tests and gap-matrix docs are updated together.
 
 ## Deferred Work
 
@@ -852,9 +884,9 @@ cargo test -p shell invocation -- --nocapture
 ## Completion Summary
 
 - Step 0: Scope Challenge, scope accepted as-is with one explicit constraint added: one retained world member at a time
-- Architecture Review: 4 issues found, all resolved in-plan
+- Architecture Review: 5 issues found, all resolved in-plan
 - Code Quality Review: 4 issues found, all resolved in-plan
-- Test Review: diagram produced, 18 targeted gaps identified
+- Test Review: diagram produced, 19 targeted gaps identified
 - Performance Review: 3 issues found, all resolved in-plan
 - NOT in scope: written
 - What already exists: written
@@ -862,15 +894,18 @@ cargo test -p shell invocation -- --nocapture
 - Failure modes: 0 acceptable silent gaps, 0 unresolved critical gaps after planned coverage lands
 - Outside voice: skipped for this document generation
 - Parallelization: 3 lanes, 2 parallel / 1 sequential integration lane
-- Lake Score: 8/8 recommendations chose the complete option
+- Lake Score: 9/9 recommendations chose the complete option
 
 ## Decision Audit Trail
 
 | # | Phase | Decision | Classification | Principle | Rationale | Rejected |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Step 0 | Freeze grammar to `::<backend_id> <prompt>` only | Mechanical | Explicit over clever | One spelling keeps parsing and docs honest | `@backend`, implicit default-agent routing |
+| 1 | Step 0 | Freeze grammar to `::<backend_id> <prompt>` only | Mechanical | Explicit over clever | One spelling keeps parser, docs, and tests honest | `@backend`, implicit default-agent routing |
 | 2 | Architecture | Use UAA resume semantics for submitted turns | Mechanical | DRY | The dependency already supports resume; do not invent a second backend protocol | stdin injection into bootstrap process |
-| 3 | Architecture | Add `MemberTurnSubmitRequestV1` instead of overloading `member_dispatch` | Mechanical | Explicit over clever | Launch and submit are different contracts and should stay different | dual-purpose `ExecuteRequest.member_dispatch` |
-| 4 | Architecture | Refactor `MemberRuntimeManager` to key active members by participant id | Mechanical | Systems over heroes | Stable participant identity is required for later targeted turns and cancel correctness | launch-span-only registry |
-| 5 | Scope | Support one retained world member at a time in this landing | Taste, resolved | Pragmatic | Matches the current shell ownership model and keeps the diff bounded | pretending simultaneous retained members already exist |
-| 6 | Test Review | Make plain-shell and `-c` behavior regressions mandatory | Mechanical | Completeness | Parser work is dangerous if the old shell contract is not explicitly proven | relying on manual validation |
+| 3 | Architecture | Make host-targeted turns valid only for the active orchestrator backend of the current REPL session | Mechanical | Systems over heroes | There is one real host runtime in this slice, not a synthetic pool of host participants | fake host multi-runtime routing |
+| 4 | Architecture | Add `MemberTurnSubmitRequestV1` instead of overloading `member_dispatch` | Mechanical | Explicit over clever | Launch and submit are different contracts and should stay different | dual-purpose `ExecuteRequest.member_dispatch` |
+| 5 | Architecture | Refactor `MemberRuntimeManager` to key active members by participant id and active turns by span id | Mechanical | Systems over heroes | Stable participant identity is required for follow-up turns and correct cancel behavior | launch-span-only registry |
+| 6 | Scope | Support one retained world member at a time in this landing | Taste, resolved | Pragmatic | Matches the current shell ownership model and keeps the diff bounded | pretending simultaneous retained members already exist |
+| 7 | Test Review | Make plain-shell and `-c` behavior regressions mandatory | Mechanical | Completeness | Parser work is dangerous if the old shell contract is not explicitly proven | relying on manual validation |
+| 8 | DX | Require explicit backend-specific errors for deny, mismatch, and Linux-only failures | Mechanical | Completeness | This feature is pure operator UX, so vague errors are product bugs | generic runtime failures |
+| 9 | Parallelization | Freeze the wire contract first, then run shell and world lanes in parallel | Mechanical | Pragmatic | The request shape is the shared seam; parallel work is safe only after that stabilizes | parallel edits to the request contract |
