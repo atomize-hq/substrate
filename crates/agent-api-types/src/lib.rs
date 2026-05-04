@@ -831,6 +831,103 @@ impl TryFrom<MemberDispatchRequestDef> for MemberDispatchRequestV1 {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "MemberTurnSubmitRequestDef")]
+pub struct MemberTurnSubmitRequestV1 {
+    #[serde(default = "member_turn_submit_request_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub orchestration_session_id: String,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    pub backend_id: String,
+    pub run_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub prompt: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MemberTurnSubmitRequestDef {
+    #[serde(default = "member_turn_submit_request_v1_default_schema_version")]
+    schema_version: u32,
+    orchestration_session_id: String,
+    participant_id: String,
+    orchestrator_participant_id: String,
+    backend_id: String,
+    run_id: String,
+    world_id: String,
+    world_generation: u64,
+    prompt: String,
+}
+
+fn member_turn_submit_request_v1_default_schema_version() -> u32 {
+    1
+}
+
+impl MemberTurnSubmitRequestV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported member_turn_submit.schema_version: {} (expected 1)",
+                self.schema_version
+            ));
+        }
+
+        validate_non_empty_request_field(
+            "member_turn_submit.orchestration_session_id",
+            &self.orchestration_session_id,
+        )?;
+        validate_non_empty_request_field(
+            "member_turn_submit.participant_id",
+            &self.participant_id,
+        )?;
+        validate_non_empty_request_field(
+            "member_turn_submit.orchestrator_participant_id",
+            &self.orchestrator_participant_id,
+        )?;
+        validate_non_empty_request_field("member_turn_submit.backend_id", &self.backend_id)?;
+        validate_gateway_backend_id_selector(self.backend_id.trim()).map_err(|_| {
+            format!(
+                "invalid member_turn_submit.backend_id '{}'; expected <kind>:<name>",
+                self.backend_id.trim()
+            )
+        })?;
+        validate_non_empty_request_field("member_turn_submit.run_id", &self.run_id)?;
+        validate_non_empty_request_field("member_turn_submit.world_id", &self.world_id)?;
+        validate_non_empty_request_field("member_turn_submit.prompt", &self.prompt)?;
+
+        if self.orchestrator_participant_id == self.participant_id {
+            return Err(
+                "member_turn_submit.orchestrator_participant_id must not equal participant_id"
+                    .to_string(),
+            );
+        }
+
+        Ok(())
+    }
+}
+
+impl TryFrom<MemberTurnSubmitRequestDef> for MemberTurnSubmitRequestV1 {
+    type Error = String;
+
+    fn try_from(value: MemberTurnSubmitRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            schema_version: value.schema_version,
+            orchestration_session_id: value.orchestration_session_id,
+            participant_id: value.participant_id,
+            orchestrator_participant_id: value.orchestrator_participant_id,
+            backend_id: value.backend_id,
+            run_id: value.run_id,
+            world_id: value.world_id,
+            world_generation: value.world_generation,
+            prompt: value.prompt,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "ExecuteRequestDef")]
 pub struct ExecuteRequest {
@@ -2470,6 +2567,70 @@ mod tests {
                     binary_path: "/usr/bin/codex".into(),
                 },
             })
+        );
+    }
+
+    #[test]
+    fn member_turn_submit_request_round_trip() {
+        let req = MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "orch_123".into(),
+            participant_id: "ash_member_123".into(),
+            orchestrator_participant_id: "ash_orch_123".into(),
+            backend_id: "cli:codex".into(),
+            run_id: "run_123".into(),
+            world_id: "world_123".into(),
+            world_generation: 7,
+            prompt: "summarize the failure".into(),
+        };
+
+        let json = serde_json::to_string(&req).expect("serialize member turn submit request");
+        let back: MemberTurnSubmitRequestV1 =
+            serde_json::from_str(&json).expect("deserialize member turn submit request");
+        assert_eq!(back, req);
+    }
+
+    #[test]
+    fn member_turn_submit_rejects_invalid_backend_id() {
+        let err = serde_json::from_value::<MemberTurnSubmitRequestV1>(serde_json::json!({
+            "schema_version": 1,
+            "orchestration_session_id": "orch_123",
+            "participant_id": "ash_member_123",
+            "orchestrator_participant_id": "ash_orch_123",
+            "backend_id": "codex",
+            "run_id": "run_123",
+            "world_id": "world_123",
+            "world_generation": 7,
+            "prompt": "resume"
+        }))
+        .expect_err("invalid backend id should fail");
+
+        assert!(
+            err.to_string()
+                .contains("invalid member_turn_submit.backend_id"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn member_turn_submit_rejects_empty_prompt() {
+        let err = serde_json::from_value::<MemberTurnSubmitRequestV1>(serde_json::json!({
+            "schema_version": 1,
+            "orchestration_session_id": "orch_123",
+            "participant_id": "ash_member_123",
+            "orchestrator_participant_id": "ash_orch_123",
+            "backend_id": "cli:codex",
+            "run_id": "run_123",
+            "world_id": "world_123",
+            "world_generation": 7,
+            "prompt": "   "
+        }))
+        .expect_err("blank prompt should fail");
+
+        assert!(
+            err.to_string()
+                .contains("member_turn_submit.prompt must not be empty"),
+            "unexpected error: {err}"
         );
     }
 
