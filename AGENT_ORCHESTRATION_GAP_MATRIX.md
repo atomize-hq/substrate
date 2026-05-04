@@ -80,11 +80,10 @@ Terminology rule for this repository:
   - Canonical `AgentEvent` production is live for the REPL-owned orchestrator/member runtime, and `substrate agent status` now prefers live runtime state with trace fallback.
 - Recent validation tightened several earlier suspected gaps:
   - Linux shared-world replacement ordering and `session.json` durability are already landed in the current backend.
-  - Shell-side replacement member semantics across world-generation rollover are already landed; the remaining gap is placement of that member runtime inside the world transport boundary.
+  - Linux world-scoped member runtime placement over the existing host↔world execute-stream transport is now landed, including authoritative world binding validation, replacement-member relaunch, and fail-closed startup semantics.
   - The broad PID-based orchestration-stamping concern is mostly retired from production event emission; the remaining authority cleanup is narrower.
 - The gateway runtime is also real for nested LLM/gateway lifecycle work, but it is still a separate runtime path from pure-agent orchestration.
 - The main remaining gaps are:
-  - world-scoped member execution is still not launched through the host↔world execute-stream transport,
   - `resume` / `fork` are not surfaced under the `substrate agent` CLI namespace,
   - `substrate agent status` still fails closed on ambiguity/stale parent linkage and its trace-only fallback is not fully participant-aware,
   - gateway auth handoff inside the world is still env-based,
@@ -95,7 +94,7 @@ Terminology rule for this repository:
 | Area | Status | What exists now | What is missing for the intended v1 path |
 |---|---|---|---|
 | Product intent | `Now explicit` | This file now records the intended v1 and later product shape | Keep downstream docs aligned to this statement |
-| Unified Agent API adoption | `Landed in shell REPL runtime` | `crates/shell/Cargo.toml` now pulls `unified-agent-api`, `agent_runtime/registry.rs` registers Codex / Claude Code backends, and `repl/async_repl.rs` uses `run_control` to keep attached-control ownership alive | The world-scoped member path still does not cross into the world over Substrate transport; today UAA is only hosted in the shell process |
+| Unified Agent API adoption | `Landed for host orchestrator and Linux world member runtime` | `crates/shell/Cargo.toml` now pulls `unified-agent-api`, `agent_runtime/registry.rs` registers Codex / Claude Code backends, the REPL keeps the host orchestrator under attached control, and Linux world-scoped members now launch through `world-agent` over the existing host↔world transport | Remaining v1 work is no longer basic UAA runtime adoption; it is on operator-facing controls, status resilience, secure gateway auth delivery, and broader platform parity |
 | UAA vs local `agent-api-*` boundary | `Partially clarified` | Code now distinguishes shell-owned UAA runtime from local host/world transport; `PURE_AGENT_PROTOCOL` comments explicitly say `uaa.agent.session` is a Substrate-local normalized label, not an upstream protocol claim | Local crates are still named `agent-api-*`, and the `uaa.agent.session` label still exists, so naming confusion has been reduced but not removed |
 | Agent config and inventory | `Landed` | Inventory schema, capability gates, derived `backend_id`, scope resolution, and backend selection are live in `agent_inventory.rs` and `agent_runtime/validator.rs` | No major v1 inventory gap remains; future work is mostly on runtime breadth rather than selection modeling |
 | Agent CLI inspection surface | `Partially landed` | `substrate agent list|status|doctor|toolbox status|env` is live, and `agent status` now merges live runtime-state snapshots with trace fallback instead of relying only on projection from history | The namespace still does not expose first-class `start|resume|fork|stop` actions |
@@ -107,9 +106,9 @@ Terminology rule for this repository:
 | Host orchestrator process management | `Landed` | A real host-scoped orchestrator backend is launched via UAA, tracked through persisted lifecycle states, and stopped authoritatively on teardown | No major thin-slice blocker remains here |
 | Explicit shared-world ownership | `Mostly landed, Linux-first` | Persistent world startup now sends `SharedWorldOwnerSpec`, world-agent echoes `SharedWorldBindingSnapshot`, Linux session metadata persists `orchestration_session_id` / `world_generation`, shared-world replacement rolls back correctly on failure, and the shell invalidates stale world members after rollover | Linux is still the strongest ownership/reuse implementation; macOS and Windows depend on delegated Lima/WSL behavior rather than equivalent native backend ownership logic |
 | Shared-world replacement ordering and world metadata durability | `Landed` | Linux replacement already uses a two-phase `Active -> Replacing -> Replaced` flow with rollback on creation failure, and world `session.json` persistence is atomic-by-rename with failure-preserving behavior | No current correctness gap was confirmed here; only future hardening beyond the current contract would remain |
-| In-world member dispatch over existing host↔world transport | `Not landed` | Member participants, lineage, world binding, replacement, and invalidation semantics are implemented in shell runtime/state models | The actual member UAA runtime still starts in the shell process. It is correlated to a world binding, but it is not launched inside `world-agent` over `/v1/execute` or `/v1/execute/stream` |
-| Replacement-member semantics across world-generation rollover | `Landed in shell runtime semantics` | Restart/drift handling already invalidates stale members, advances `world_generation`, and creates a distinct replacement participant with preserved lineage | The remaining open work is not replacement semantics themselves, but moving that replacement launch into the in-world transport path above |
-| Agent event schema and trace flattening | `Landed` | Tuple-aware `AgentEvent` schema is live, runtime events are emitted from orchestrator/member lifecycle code, and status surfaces validate world identity + nested parent correlation | The remaining work is on adding more producers once in-world member launch exists, not on the schema itself |
+| In-world member dispatch over existing host↔world transport | `Landed, Linux-first` | The shell now emits typed `member_dispatch` requests over `/v1/execute/stream`, `world-agent` validates the authoritative shared-world binding and launches the member UAA runtime inside the active world, `/v1/execute/cancel` reaches retained in-world control ownership, and Linux tests cover lazy launch, reuse, replacement, and fail-closed startup behavior | Remaining work is broader platform parity and follow-on hardening, not the core placement seam itself |
+| Replacement-member semantics across world-generation rollover | `Landed` | Restart/drift handling invalidates stale members, advances `world_generation`, creates a distinct replacement participant with preserved lineage, and relaunches the replacement member through the in-world transport path on Linux | Remaining work is mainly parity and operator-surface breadth rather than replacement correctness |
+| Agent event schema and trace flattening | `Landed` | Tuple-aware `AgentEvent` schema is live, runtime events are emitted from orchestrator/member lifecycle code, and status surfaces validate world identity + nested parent correlation | Remaining work is narrower read-side cleanup and producer breadth, not missing support for the now-landed in-world member launch path |
 | Event-emission authority plumbing | `Mostly landed` | Production REPL/host/world emitters now require explicit runtime-owned orchestration context before publishing orchestration-scoped `agent_event` rows | Remaining cleanup is narrower: command rows still use synthetic `run_id = cmd_id`, and read-side utilities still keep heuristic recovery helpers such as PID lookup / synthetic parent reconstruction |
 | Bootstrap ordering | `Mostly landed` | Parent orchestration session persistence now happens before persisted child/runtime state, and the parent is not marked live until the runtime surfaces a session handle | The remaining nuance is in-memory construction order: the child manifest is still built with the new `orchestration_session_id` before the authoritative parent record is persisted |
 | Nested gateway identity split | `Landed` | `substrate agent status` now separates pure-agent sessions from nested gateway-backed rows using live runtime state plus trace correlation | Remaining work here is secondary and mostly depends on broader runtime rollout, not a schema gap |
@@ -138,11 +137,9 @@ These are the decisions that still need to be made to keep the path forward clea
 - This is closely related to the `uaa.agent.session` decision above, but it is a crate/module/package naming question rather than a protocol/identity-label question.
 - The recent runtime landing makes this more pressing from a governance/clarity standpoint, even though it is not a direct runtime-correctness blocker.
 
-4. Whether the first in-world member path should be implemented as:
-   - a hidden shell↔world-agent helper using the existing execute/stream transport, or
-   - a broader reusable world-owned UAA service surface.
-- The current repo state leans toward the thinner option first: host orchestrator on the shell, world member launched through the existing world transport seam, without building a broad new hub service up front.
-- The validated gap is member placement, not missing replacement semantics or missing shared-world ownership rules.
+4. Whether to stop at the newly landed hidden shell↔world-agent helper over the existing execute/stream transport, or continue on to a broader reusable world-owned UAA service surface.
+- The current repo state has now landed the thinner option first: host orchestrator on the shell, world member launched through the existing world transport seam, without building a broad new hub service up front.
+- The remaining question is product breadth and reuse, not whether member placement can work through the existing transport seam.
 
 5. Whether and when to retire the remaining flat compatibility outputs after the `agent-hub` cutover is considered complete.
 - Code and docs are already aligned that compatibility dual-writes are still intentional today.
@@ -158,9 +155,9 @@ The thin-slice recommendation is still correct, but the remaining scope is now m
 
 1. Keep the existing shell-owned orchestrator runtime and live state registry.
 2. Reuse the existing shared-world owner binding model and world-generation invalidation rules.
-3. Replace the current host-side member runtime with a world-owned member launch over the existing host↔world execute-stream seam.
+3. Keep the newly landed Linux world-owned member launch over the existing host↔world execute-stream seam as the v1 baseline.
 4. Make `substrate agent status` degrade cleanly on ambiguity/stale parent linkage and make its trace fallback participant-aware.
 5. Land the auth-bundle handoff into `world-agent` so nested/in-world gateway work stops depending on secret-bearing child env vars.
 6. Surface `resume`, `fork`, and `stop` under `substrate agent` after the in-world member path is real.
 
-At this point, the missing work is runtime placement and secure delivery, not basic UAA adoption, session persistence, or event modeling.
+At this point, the missing work is secure delivery, status/control-plane hardening, and parity decisions, not basic UAA adoption, session persistence, event modeling, or Linux member-runtime placement.
