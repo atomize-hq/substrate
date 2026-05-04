@@ -25,6 +25,7 @@ This directory contains **standards only** (normative rules). Prompt payloads li
 
 - `docs/project_management/system/standards/execution/EXECUTION_PREFLIGHT_GATE_STANDARD.md`
 - `docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md`
+- `docs/project_management/system/standards/execution/PROVING_RUN_CLOSEOUT_PREPARATION_STANDARD.md`
 
 ### Triad
 
@@ -76,6 +77,7 @@ Templates:
 Schema:
 
 - Tasks schema: `docs/project_management/system/schemas/tasks.schema.json`
+- Proving-run closeout schema: `docs/project_management/system/schemas/proving_run_closeout.schema.json`
 
 Machine-readable map:
 

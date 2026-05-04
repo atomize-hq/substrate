@@ -41,6 +41,10 @@ standards:
     category: execution
     path: docs/project_management/system/standards/execution/SLICE_CLOSEOUT_GATE_STANDARD.md
     description: "Slice closeout gate standard."
+  - id: proving_run_closeout_preparation_standard
+    category: execution
+    path: docs/project_management/system/standards/execution/PROVING_RUN_CLOSEOUT_PREPARATION_STANDARD.md
+    description: "Repo-owned proving-run closeout preparation standard."
 
   - id: task_triads_and_feature_setup
     category: triad
