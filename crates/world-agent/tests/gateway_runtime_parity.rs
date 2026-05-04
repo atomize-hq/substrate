@@ -15,6 +15,7 @@ use substrate_common::{
     GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
     GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
     SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
 };
 use tempfile::TempDir;
 use tokio::sync::Mutex;
@@ -484,7 +485,7 @@ fd_raw = os.environ["SUBSTRATE_LLM_AUTH_BUNDLE_FD"]
 with os.fdopen(int(fd_raw), "rb") as handle:
     payload = handle.read()
 bundle = json.loads(payload)
-fields = bundle.get("fields") or {}
+fields = bundle.get("fields") or {{}}
 
 if 'api_key = "$OPENAI_API_KEY"' in config:
     if bundle.get("backend_id") != "api:openai":
@@ -756,10 +757,16 @@ async fn gateway_sync_makes_status_available_and_is_idempotent() {
         GatewayAuthBundleV1 {
             schema_version: 1,
             backend_id: GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX.to_string(),
-            fields: std::collections::HashMap::from([(
-                SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN.to_string(),
-                "header.payload.signature".to_string(),
-            )]),
+            fields: std::collections::HashMap::from([
+                (
+                    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID.to_string(),
+                    "acct_test".to_string(),
+                ),
+                (
+                    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN.to_string(),
+                    "header.payload.signature".to_string(),
+                ),
+            ]),
         }
     );
     assert!(
@@ -910,7 +917,9 @@ async fn gateway_restart_uses_fresh_codex_bundle_after_rotation() {
     let initial_pid = wait_for_pid(&pid_dir, 1);
     let first_bundle = wait_for_auth_bundle_snapshot(&temp_dir, 1);
     assert_eq!(
-        first_bundle.fields.get("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"),
+        first_bundle
+            .fields
+            .get("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"),
         Some(&"acct_first".to_string())
     );
     assert_eq!(
@@ -941,7 +950,9 @@ async fn gateway_restart_uses_fresh_codex_bundle_after_rotation() {
     assert_eq!(read_launch_count(&launch_count_path), 2);
     assert_process_exited(initial_pid);
     assert_eq!(
-        second_bundle.fields.get("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"),
+        second_bundle
+            .fields
+            .get("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"),
         Some(&"acct_second".to_string())
     );
     assert_eq!(

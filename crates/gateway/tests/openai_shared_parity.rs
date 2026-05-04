@@ -12,6 +12,11 @@ use std::fs;
 use std::io::{Seek, SeekFrom, Write};
 use std::os::fd::IntoRawFd;
 use std::path::PathBuf;
+use substrate_common::{
+    GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
+    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+    SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+};
 use substrate_gateway::auth::CodexAuthSource;
 use substrate_gateway::core::{
     GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage,
@@ -20,16 +25,11 @@ use substrate_gateway::launch::GatewayMode;
 use substrate_gateway::models::{ContentBlock, MessageContent};
 use substrate_gateway::providers::error::ProviderError;
 use substrate_gateway::providers::{GatewayProvider, ProviderRegistry};
-use substrate_gateway::server::IntegratedGatewayAuthContext;
 use substrate_gateway::server::openai_conformance_test_support::{
     read_json_fixture, response_text, response_text_response, ConformanceHarness, FixtureNamespace,
     StubProvider,
 };
-use substrate_common::{
-    GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
-    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, SUBSTRATE_LLM_AUTH_BUNDLE_FD,
-    SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
-};
+use substrate_gateway::server::IntegratedGatewayAuthContext;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 

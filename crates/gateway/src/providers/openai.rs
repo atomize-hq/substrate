@@ -3650,15 +3650,16 @@ impl super::GatewayProvider for OpenAIProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::codex_auth_context::{CodexAccountIdSource, CodexAuthMode};
+    use crate::auth::codex_auth_context::{
+        CodexAccountIdSource, CodexAuthMode, CodexIntegratedAuthHandoff, InstalledHandoffGuard,
+    };
     use crate::auth::CodexAuthSource;
     use crate::models::SystemPrompt;
     use crate::providers::GatewayProvider;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use secrecy::SecretString;
     use serde::Deserialize;
-    use std::{env, fs};
-    use tempfile::TempDir;
+    use std::env;
     use tokio::sync::Mutex;
 
     static ENV_LOCK: once_cell::sync::Lazy<Mutex<()>> =
@@ -3826,58 +3827,18 @@ mod tests {
     }
 
     #[test]
-    fn codex_auth_resolution_prefers_integrated_env_handoff_before_local_path() {
+    fn codex_auth_resolution_uses_startup_owned_integrated_handoff() {
         let _guard = ENV_LOCK.blocking_lock();
-        let temp_dir = TempDir::new().unwrap();
-        let bogus_home = temp_dir.path().join("home-as-file");
-        fs::write(&bogus_home, "not a directory").unwrap();
-
-        let original_home = env::var_os("HOME");
-        let original_account_id = env::var_os(
-            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
-        );
-        let original_access_token = env::var_os(
-            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
-        );
-
-        env::set_var("HOME", &bogus_home);
-        env::set_var(
-            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
-            "acct_env_explicit",
-        );
-        env::set_var(
-            crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
-            codex_access_token("acct_env_jwt"),
-        );
+        let _handoff_guard = InstalledHandoffGuard::set(Some(CodexIntegratedAuthHandoff::new(
+            Some("acct_handoff_explicit".to_string()),
+            SecretString::new(codex_access_token("acct_handoff_jwt")),
+        )));
 
         let provider = test_oauth_provider();
         let resolved = provider.resolve_codex_auth_context().unwrap();
 
-        assert_eq!(resolved.account_id, "acct_env_explicit");
+        assert_eq!(resolved.account_id, "acct_handoff_explicit");
         assert_eq!(resolved.account_id_source, CodexAccountIdSource::Explicit);
-
-        match original_home {
-            Some(value) => env::set_var("HOME", value),
-            None => env::remove_var("HOME"),
-        }
-        match original_account_id {
-            Some(value) => env::set_var(
-                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
-                value,
-            ),
-            None => env::remove_var(
-                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
-            ),
-        }
-        match original_access_token {
-            Some(value) => env::set_var(
-                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
-                value,
-            ),
-            None => env::remove_var(
-                crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
-            ),
-        }
     }
 
     fn codex_request_with_tool_choice(tool_choice: serde_json::Value) -> GatewayRequest {

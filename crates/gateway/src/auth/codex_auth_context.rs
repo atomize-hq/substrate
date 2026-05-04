@@ -107,6 +107,27 @@ fn integrated_codex_auth_handoff() -> Result<Option<CodexIntegratedAuthHandoff>>
         .map_err(|_| anyhow!("integrated Codex auth handoff lock poisoned"))
 }
 
+#[cfg(test)]
+pub(crate) struct InstalledHandoffGuard {
+    previous: Option<CodexIntegratedAuthHandoff>,
+}
+
+#[cfg(test)]
+impl InstalledHandoffGuard {
+    pub(crate) fn set(next: Option<CodexIntegratedAuthHandoff>) -> Self {
+        let previous = integrated_codex_auth_handoff().unwrap();
+        install_integrated_codex_auth_handoff(next).unwrap();
+        Self { previous }
+    }
+}
+
+#[cfg(test)]
+impl Drop for InstalledHandoffGuard {
+    fn drop(&mut self) {
+        install_integrated_codex_auth_handoff(self.previous.take()).unwrap();
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum CodexAuthSource {
     Integrated,
@@ -381,24 +402,6 @@ mod tests {
             } else {
                 env::remove_var(self.key);
             }
-        }
-    }
-
-    struct InstalledHandoffGuard {
-        previous: Option<CodexIntegratedAuthHandoff>,
-    }
-
-    impl InstalledHandoffGuard {
-        fn set(next: Option<CodexIntegratedAuthHandoff>) -> Self {
-            let previous = integrated_codex_auth_handoff().unwrap();
-            install_integrated_codex_auth_handoff(next).unwrap();
-            Self { previous }
-        }
-    }
-
-    impl Drop for InstalledHandoffGuard {
-        fn drop(&mut self) {
-            install_integrated_codex_auth_handoff(self.previous.take()).unwrap();
         }
     }
 
