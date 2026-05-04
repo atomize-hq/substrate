@@ -19,6 +19,8 @@ This directory contains the reviewed statement-of-work packet for the prerequisi
   shared-world replacement now has explicit ordering, rollback, cleanup, and atomic metadata expectations that later shell/runtime slices can rely on.
 - `08` through `10` are the remaining follow-on SOWs after the replacement-ordering and replacement-member work:
   they cover event-emission authority cleanup, live-state authority/cutover cleanup, and the missing production member-launch seam.
+- `11` through `13` are addenda after the original packet:
+  they cover the host↔world member transport cutover, the gateway auth-bundle last-mile security slice, and the final true in-world member-placement hardening pass.
 
 ## Reviewed Execution Order
 
@@ -55,6 +57,5 @@ This directory contains the reviewed statement-of-work packet for the prerequisi
 ## Non-Goals in This Packet
 
 - Full `agent start/resume/fork/stop` CLI productization
-- Auth-bundle / `SUBSTRATE_LLM_AUTH_BUNDLE_FD` work
 - macOS and Windows shared-world parity
 - Renaming the local `agent-api-*` crates
