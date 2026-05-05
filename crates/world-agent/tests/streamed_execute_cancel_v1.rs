@@ -64,21 +64,46 @@ fn make_member_dispatch_request(
     world_id: &str,
     world_generation: u64,
 ) -> ExecuteRequest {
+    make_member_dispatch_request_with_backend(
+        cwd,
+        binary_path,
+        world_id,
+        world_generation,
+        "orch-streamed-member-cancel",
+        "ash_member_cancel_test",
+        "run-member-cancel-test",
+        "cli:codex",
+        MemberRuntimeBackendKindV1::Codex,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn make_member_dispatch_request_with_backend(
+    cwd: &Path,
+    binary_path: &Path,
+    world_id: &str,
+    world_generation: u64,
+    orchestration_session_id: &str,
+    participant_id: &str,
+    run_id: &str,
+    backend_id: &str,
+    backend_kind: MemberRuntimeBackendKindV1,
+) -> ExecuteRequest {
     let mut request = make_request(cwd, "");
     request.member_dispatch = Some(MemberDispatchRequestV1 {
         schema_version: 1,
-        orchestration_session_id: "orch-streamed-member-cancel".to_string(),
-        participant_id: "ash_member_cancel_test".to_string(),
+        orchestration_session_id: orchestration_session_id.to_string(),
+        participant_id: participant_id.to_string(),
         orchestrator_participant_id: "ash_orchestrator_cancel_test".to_string(),
         parent_participant_id: None,
         resumed_from_participant_id: None,
-        backend_id: "cli:codex".to_string(),
+        backend_id: backend_id.to_string(),
         protocol: "uaa.agent.session".to_string(),
-        run_id: "run-member-cancel-test".to_string(),
+        run_id: run_id.to_string(),
         world_id: world_id.to_string(),
         world_generation,
         resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
-            backend_kind: MemberRuntimeBackendKindV1::Codex,
+            backend_kind,
             binary_path: binary_path.display().to_string(),
         },
     });
@@ -151,12 +176,79 @@ fn frame_event(frame: &Value) -> Option<&Value> {
     frame.get("Event")?.get("event")
 }
 
+fn assert_registered_event(
+    frame: &Value,
+    expected_participant_id: &str,
+    expected_backend_id: &str,
+    expected_world_id: &str,
+    expected_world_generation: u64,
+    expected_span_id: &str,
+) {
+    let event = frame
+        .get("event")
+        .or_else(|| frame.pointer("/Event/event"))
+        .unwrap_or_else(|| panic!("expected member registered event, got {frame:?}"));
+    assert_eq!(
+        event.get("kind").and_then(Value::as_str),
+        Some("registered")
+    );
+    assert_eq!(
+        event.pointer("/data/schema").and_then(Value::as_str),
+        Some("agent_api.session.handle.v1")
+    );
+    assert_eq!(
+        event.get("participant_id").and_then(Value::as_str),
+        Some(expected_participant_id)
+    );
+    assert_eq!(
+        event.get("backend_id").and_then(Value::as_str),
+        Some(expected_backend_id)
+    );
+    assert_eq!(
+        event.get("world_id").and_then(Value::as_str),
+        Some(expected_world_id)
+    );
+    assert_eq!(
+        event.get("world_generation").and_then(Value::as_u64),
+        Some(expected_world_generation)
+    );
+    assert_eq!(
+        event.get("span_id").and_then(Value::as_str),
+        Some(expected_span_id)
+    );
+}
+
 fn is_stream_chunk_frame(frame: &Value) -> bool {
     matches!(
         frame.get("type").and_then(Value::as_str),
         Some("stdout" | "stderr")
     ) || frame.get("Stdout").is_some()
         || frame.get("Stderr").is_some()
+}
+
+async fn assert_stream_exit_for_span<B>(body: &mut B, buffer: &mut Vec<u8>, span_id: &str)
+where
+    B: HttpBody<Data = hyper::body::Bytes> + Unpin,
+    B::Error: std::fmt::Debug + std::fmt::Display,
+{
+    loop {
+        let frame = next_stream_frame_value(body, buffer).await;
+        if is_stream_chunk_frame(&frame)
+            || frame_event(&frame).is_some()
+            || frame_start_span_id(&frame).is_some()
+        {
+            continue;
+        }
+        if let Some((exit, exit_span)) = frame_exit(&frame) {
+            assert_eq!(exit_span, span_id);
+            assert_eq!(exit, 130, "SIGINT exit should follow shell convention");
+            return;
+        }
+        if let Some(message) = frame_error_message(&frame) {
+            panic!("unexpected streamed execute error: {message}");
+        }
+        panic!("unexpected streamed execute frame: {frame:?}");
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -279,32 +371,13 @@ async fn execute_stream_cancel_interrupts_live_member_runtime() {
         .unwrap_or_else(|| panic!("expected start frame, got {start:?}"));
 
     let ready = next_stream_frame_value(&mut body, &mut buffer).await;
-    let event = frame_event(&ready)
-        .cloned()
-        .unwrap_or_else(|| panic!("expected member registered event, got {ready:?}"));
-    assert_eq!(
-        event.get("kind").and_then(Value::as_str),
-        Some("registered")
-    );
-    assert_eq!(
-        event.pointer("/data/schema").and_then(Value::as_str),
-        Some("agent_api.session.handle.v1")
-    );
-    assert_eq!(
-        event.get("participant_id").and_then(Value::as_str),
-        Some("ash_member_cancel_test")
-    );
-    assert_eq!(
-        event.get("world_id").and_then(Value::as_str),
-        Some(binding.world_id.as_str())
-    );
-    assert_eq!(
-        event.get("world_generation").and_then(Value::as_u64),
-        Some(binding.world_generation)
-    );
-    assert_eq!(
-        event.get("span_id").and_then(Value::as_str),
-        Some(span_id.as_str())
+    assert_registered_event(
+        &ready,
+        "ash_member_cancel_test",
+        "cli:codex",
+        &binding.world_id,
+        binding.world_generation,
+        &span_id,
     );
 
     let cancel = service
@@ -316,25 +389,156 @@ async fn execute_stream_cancel_interrupts_live_member_runtime() {
         .expect("member execute_cancel should succeed");
     assert!(cancel.delivered, "expected member cancel delivery");
 
-    loop {
-        let frame = next_stream_frame_value(&mut body, &mut buffer).await;
-        if frame_event(&frame).is_some()
-            || is_stream_chunk_frame(&frame)
-            || frame_start_span_id(&frame).is_some()
-        {
-            continue;
+    assert_stream_exit_for_span(&mut body, &mut buffer, &span_id).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplicates() {
+    let service = match WorldAgentService::new() {
+        Ok(svc) => svc,
+        Err(err) => {
+            eprintln!("skipping member backend slot test: service init failed: {err}");
+            return;
         }
-        if let Some((exit, exit_span)) = frame_exit(&frame) {
-            assert_eq!(exit_span, span_id);
-            assert_eq!(
-                exit, 130,
-                "member runtime cancel should report SIGINT shell exit"
-            );
-            break;
+    };
+
+    let tmp = tempdir().expect("tempdir");
+    let member_binary = write_fake_member_runtime(tmp.path());
+    let orchestration_session_id = "orch-streamed-member-backend-slots";
+    let world_spec = WorldSpec {
+        reuse_session: true,
+        reuse_mode: WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
+            orchestration_session_id: orchestration_session_id.to_string(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        }),
+        isolate_network: false,
+        limits: world_api::ResourceLimits::default(),
+        enable_preload: false,
+        allowed_domains: Vec::new(),
+        project_dir: tmp.path().to_path_buf(),
+        always_isolate: true,
+        fs_mode: substrate_common::WorldFsMode::Writable,
+    };
+    let world = match service.ensure_session_world(&world_spec) {
+        Ok(world) => world,
+        Err(err) => {
+            eprintln!("skipping member backend slot test: failed to ensure shared world: {err}");
+            return;
         }
-        if let Some(message) = frame_error_message(&frame) {
-            panic!("unexpected member streamed error: {message}");
-        }
-        panic!("unexpected member streamed frame: {frame:?}");
-    }
+    };
+    let Some(binding) = world.shared_binding.clone() else {
+        eprintln!("skipping member backend slot test: shared world binding missing");
+        return;
+    };
+
+    let codex_request = make_member_dispatch_request_with_backend(
+        tmp.path(),
+        &member_binary,
+        &binding.world_id,
+        binding.world_generation,
+        orchestration_session_id,
+        "ash_member_codex_slot_test",
+        "run-member-codex-slot-test",
+        "cli:codex",
+        MemberRuntimeBackendKindV1::Codex,
+    );
+    let codex_response = service
+        .execute_stream(codex_request)
+        .await
+        .expect("codex member launch should succeed");
+    let mut codex_body = codex_response.into_body();
+    let mut codex_buffer = Vec::new();
+    let codex_start = next_stream_frame_value(&mut codex_body, &mut codex_buffer).await;
+    let codex_span_id = frame_start_span_id(&codex_start)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| panic!("expected start frame, got {codex_start:?}"));
+    let codex_ready = next_stream_frame_value(&mut codex_body, &mut codex_buffer).await;
+    assert_registered_event(
+        &codex_ready,
+        "ash_member_codex_slot_test",
+        "cli:codex",
+        &binding.world_id,
+        binding.world_generation,
+        &codex_span_id,
+    );
+
+    let claude_request = make_member_dispatch_request_with_backend(
+        tmp.path(),
+        &member_binary,
+        &binding.world_id,
+        binding.world_generation,
+        orchestration_session_id,
+        "ash_member_claude_slot_test",
+        "run-member-claude-slot-test",
+        "cli:claude_code",
+        MemberRuntimeBackendKindV1::ClaudeCode,
+    );
+    let claude_response = service
+        .execute_stream(claude_request)
+        .await
+        .expect("claude_code member launch should succeed");
+    let mut claude_body = claude_response.into_body();
+    let mut claude_buffer = Vec::new();
+    let claude_start = next_stream_frame_value(&mut claude_body, &mut claude_buffer).await;
+    let claude_span_id = frame_start_span_id(&claude_start)
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| panic!("expected start frame, got {claude_start:?}"));
+    let claude_ready = next_stream_frame_value(&mut claude_body, &mut claude_buffer).await;
+    assert_registered_event(
+        &claude_ready,
+        "ash_member_claude_slot_test",
+        "cli:claude_code",
+        &binding.world_id,
+        binding.world_generation,
+        &claude_span_id,
+    );
+
+    let duplicate_request = make_member_dispatch_request_with_backend(
+        tmp.path(),
+        &member_binary,
+        &binding.world_id,
+        binding.world_generation,
+        orchestration_session_id,
+        "ash_member_codex_duplicate_slot_test",
+        "run-member-codex-duplicate-slot-test",
+        "cli:codex",
+        MemberRuntimeBackendKindV1::Codex,
+    );
+    let duplicate_err = service
+        .execute_stream(duplicate_request)
+        .await
+        .expect_err("duplicate cli:codex slot should fail closed");
+    let duplicate_message = duplicate_err.to_string();
+    assert!(
+        duplicate_message.contains("a retained world member is already active"),
+        "unexpected duplicate error: {duplicate_message}"
+    );
+    assert!(
+        duplicate_message.contains("backend_id cli:codex"),
+        "unexpected duplicate error: {duplicate_message}"
+    );
+
+    let codex_cancel = service
+        .execute_cancel(ExecuteCancelRequestV1 {
+            span_id: codex_span_id.clone(),
+            sig: "INT".to_string(),
+        })
+        .await
+        .expect("codex execute_cancel should succeed");
+    assert!(codex_cancel.delivered, "expected codex cancel delivery");
+
+    let claude_cancel = service
+        .execute_cancel(ExecuteCancelRequestV1 {
+            span_id: claude_span_id.clone(),
+            sig: "INT".to_string(),
+        })
+        .await
+        .expect("claude_code execute_cancel should succeed");
+    assert!(
+        claude_cancel.delivered,
+        "expected claude_code cancel delivery"
+    );
+
+    assert_stream_exit_for_span(&mut codex_body, &mut codex_buffer, &codex_span_id).await;
+    assert_stream_exit_for_span(&mut claude_body, &mut claude_buffer, &claude_span_id).await;
 }

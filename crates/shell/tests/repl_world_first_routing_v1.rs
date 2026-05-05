@@ -851,6 +851,34 @@ fn world_member_manifests_for_session(
 }
 
 #[cfg(target_os = "linux")]
+fn authoritative_live_participant_manifests_for_session(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> Vec<Value> {
+    let mut manifests = session_participant_manifests(substrate_home, orchestration_session_id)
+        .into_iter()
+        .filter(participant_is_authoritative_live)
+        .collect::<Vec<_>>();
+    manifests.sort_by(|left, right| {
+        left.get("backend_id")
+            .and_then(Value::as_str)
+            .cmp(&right.get("backend_id").and_then(Value::as_str))
+    });
+    manifests
+}
+
+#[cfg(target_os = "linux")]
+fn authoritative_live_participant_manifest_for_backend<'a>(
+    manifests: &'a [Value],
+    backend_id: &str,
+) -> &'a Value {
+    manifests
+        .iter()
+        .find(|manifest| manifest.get("backend_id").and_then(Value::as_str) == Some(backend_id))
+        .unwrap_or_else(|| panic!("missing authoritative-live participant for {backend_id}"))
+}
+
+#[cfg(target_os = "linux")]
 fn authoritative_live_world_member_manifests_for_session(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -1886,6 +1914,52 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
 
+    let orchestration_session = read_orchestration_session(&orchestration_session_path(
+        &substrate_home,
+        &orchestration_session_id,
+    ));
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    assert_eq!(
+        live_participants.len(),
+        2,
+        "first world-backed command must leave both the host orchestrator and world member authoritative-live: {live_participants:?}"
+    );
+    assert_eq!(
+        live_participants
+            .iter()
+            .map(|manifest| manifest.get("backend_id").and_then(Value::as_str))
+            .collect::<Vec<_>>(),
+        vec![Some("cli:claude_code"), Some("cli:codex")],
+        "first world-backed command must establish authoritative-live coexistence for exactly cli:claude_code and cli:codex"
+    );
+    let orchestrator =
+        authoritative_live_participant_manifest_for_backend(&live_participants, "cli:claude_code");
+    let orchestrator_participant_id = orchestrator
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("orchestrator participant_id")
+        .to_string();
+    assert_eq!(
+        orchestrator.get("role").and_then(Value::as_str),
+        Some("orchestrator")
+    );
+    assert_eq!(
+        orchestrator
+            .pointer("/execution/scope")
+            .and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        Some(orchestrator_participant_id.as_str()),
+        orchestration_session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str),
+        "the active orchestration seam must remain owned by cli:claude_code after cli:codex becomes live"
+    );
+
     let live_members = wait_for_live_world_member_count(
         &substrate_home,
         &orchestration_session_id,
@@ -1898,11 +1972,16 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         .and_then(Value::as_str)
         .expect("member participant_id")
         .to_string();
-    let orchestrator_participant_id = member
+    let member_orchestrator_participant_id = member
         .get("orchestrator_participant_id")
         .and_then(Value::as_str)
         .expect("member orchestrator_participant_id")
         .to_string();
+    assert_eq!(
+        member_orchestrator_participant_id,
+        orchestrator_participant_id,
+        "the retained cli:codex world member must stay linked to the authoritative cli:claude_code orchestrator participant"
+    );
     let world_id = member
         .get("world_id")
         .and_then(Value::as_str)
@@ -1932,7 +2011,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
     assert_eq!(submit.participant_id, member_participant_id);
     assert_eq!(
         submit.orchestrator_participant_id,
-        orchestrator_participant_id
+        member_orchestrator_participant_id
     );
     assert_eq!(submit.backend_id, "cli:codex");
     assert_eq!(submit.world_id, world_id);
@@ -1952,6 +2031,41 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
             .and_then(Value::as_str),
         Some(member_participant_id.as_str()),
         "targeted submit must keep one retained world member rather than swap or duplicate it"
+    );
+    let live_participants_after = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    assert_eq!(
+        live_participants_after.len(),
+        2,
+        "targeted follow-up turns must keep the same two authoritative-live backends after coexistence is established: {live_participants_after:?}"
+    );
+    assert_eq!(
+        live_participants_after
+            .iter()
+            .map(|manifest| manifest.get("backend_id").and_then(Value::as_str))
+            .collect::<Vec<_>>(),
+        vec![Some("cli:claude_code"), Some("cli:codex")],
+        "targeted follow-up turns must preserve authoritative-live coexistence for exactly cli:claude_code and cli:codex"
+    );
+    let orchestrator_after = authoritative_live_participant_manifest_for_backend(
+        &live_participants_after,
+        "cli:claude_code",
+    );
+    assert_eq!(
+        orchestrator_after
+            .get("participant_id")
+            .and_then(Value::as_str),
+        Some(orchestrator_participant_id.as_str()),
+        "cli:claude_code targeted coexistence must reuse the original orchestrator participant"
+    );
+    let member_after =
+        authoritative_live_participant_manifest_for_backend(&live_participants_after, "cli:codex");
+    assert_eq!(
+        member_after.get("participant_id").and_then(Value::as_str),
+        Some(member_participant_id.as_str()),
+        "cli:codex targeted coexistence must reuse the original world member participant"
     );
 
     repl.send_line("exit");
