@@ -123,6 +123,19 @@ fn write_fake_member_runtime(temp: &Path) -> std::path::PathBuf {
     path
 }
 
+fn write_fake_claude_member_runtime(temp: &Path) -> std::path::PathBuf {
+    let path = temp.join("fake-member-runtime-claude.sh");
+    let body = "#!/bin/sh\ntrap 'exit 0' INT TERM HUP QUIT\nprintf '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"sess-member-cancel\"}\\n'\nwhile :; do sleep 1; done\n";
+    fs::write(&path, body).expect("write fake claude member runtime");
+    let mut perms = fs::metadata(&path)
+        .expect("fake claude member runtime metadata")
+        .permissions();
+    use std::os::unix::fs::PermissionsExt;
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake claude member runtime permissions");
+    path
+}
+
 async fn next_stream_frame_value<B>(body: &mut B, buffer: &mut Vec<u8>) -> Value
 where
     B: HttpBody<Data = hyper::body::Bytes> + Unpin,
@@ -226,6 +239,34 @@ fn is_stream_chunk_frame(frame: &Value) -> bool {
         || frame.get("Stderr").is_some()
 }
 
+async fn next_registered_frame<B>(body: &mut B, buffer: &mut Vec<u8>, span_id: &str) -> Value
+where
+    B: HttpBody<Data = hyper::body::Bytes> + Unpin,
+    B::Error: std::fmt::Debug + std::fmt::Display,
+{
+    loop {
+        let frame = next_stream_frame_value(body, buffer).await;
+        if let Some(event) = frame_event(&frame) {
+            if event.get("kind").and_then(Value::as_str) == Some("registered") {
+                return frame;
+            }
+            continue;
+        }
+        if is_stream_chunk_frame(&frame) || frame_start_span_id(&frame).is_some() {
+            continue;
+        }
+        if let Some((exit, exit_span)) = frame_exit(&frame) {
+            panic!(
+                "expected member registered event before exit, got exit={exit} span_id={exit_span} expected_span_id={span_id}"
+            );
+        }
+        if let Some(message) = frame_error_message(&frame) {
+            panic!("unexpected streamed execute error before registered event: {message}");
+        }
+        panic!("unexpected streamed execute frame before registered event: {frame:?}");
+    }
+}
+
 async fn assert_stream_exit_for_span<B>(body: &mut B, buffer: &mut Vec<u8>, span_id: &str)
 where
     B: HttpBody<Data = hyper::body::Bytes> + Unpin,
@@ -321,7 +362,7 @@ async fn execute_stream_cancel_interrupts_live_member_runtime() {
     };
 
     let tmp = tempdir().expect("tempdir");
-    let member_binary = write_fake_member_runtime(tmp.path());
+    let codex_member_binary = write_fake_member_runtime(tmp.path());
     let world_spec = WorldSpec {
         reuse_session: true,
         reuse_mode: WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
@@ -350,7 +391,7 @@ async fn execute_stream_cancel_interrupts_live_member_runtime() {
 
     let request = make_member_dispatch_request(
         tmp.path(),
-        &member_binary,
+        &codex_member_binary,
         &binding.world_id,
         binding.world_generation,
     );
@@ -370,7 +411,7 @@ async fn execute_stream_cancel_interrupts_live_member_runtime() {
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| panic!("expected start frame, got {start:?}"));
 
-    let ready = next_stream_frame_value(&mut body, &mut buffer).await;
+    let ready = next_registered_frame(&mut body, &mut buffer, &span_id).await;
     assert_registered_event(
         &ready,
         "ash_member_cancel_test",
@@ -403,7 +444,8 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
     };
 
     let tmp = tempdir().expect("tempdir");
-    let member_binary = write_fake_member_runtime(tmp.path());
+    let codex_member_binary = write_fake_member_runtime(tmp.path());
+    let claude_member_binary = write_fake_claude_member_runtime(tmp.path());
     let orchestration_session_id = "orch-streamed-member-backend-slots";
     let world_spec = WorldSpec {
         reuse_session: true,
@@ -433,7 +475,7 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
 
     let codex_request = make_member_dispatch_request_with_backend(
         tmp.path(),
-        &member_binary,
+        &codex_member_binary,
         &binding.world_id,
         binding.world_generation,
         orchestration_session_id,
@@ -452,7 +494,8 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
     let codex_span_id = frame_start_span_id(&codex_start)
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| panic!("expected start frame, got {codex_start:?}"));
-    let codex_ready = next_stream_frame_value(&mut codex_body, &mut codex_buffer).await;
+    let codex_ready =
+        next_registered_frame(&mut codex_body, &mut codex_buffer, &codex_span_id).await;
     assert_registered_event(
         &codex_ready,
         "ash_member_codex_slot_test",
@@ -464,7 +507,7 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
 
     let claude_request = make_member_dispatch_request_with_backend(
         tmp.path(),
-        &member_binary,
+        &claude_member_binary,
         &binding.world_id,
         binding.world_generation,
         orchestration_session_id,
@@ -483,7 +526,8 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
     let claude_span_id = frame_start_span_id(&claude_start)
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| panic!("expected start frame, got {claude_start:?}"));
-    let claude_ready = next_stream_frame_value(&mut claude_body, &mut claude_buffer).await;
+    let claude_ready =
+        next_registered_frame(&mut claude_body, &mut claude_buffer, &claude_span_id).await;
     assert_registered_event(
         &claude_ready,
         "ash_member_claude_slot_test",
@@ -495,7 +539,7 @@ async fn member_runtime_backend_slots_allow_distinct_backends_and_reject_duplica
 
     let duplicate_request = make_member_dispatch_request_with_backend(
         tmp.path(),
-        &member_binary,
+        &codex_member_binary,
         &binding.world_id,
         binding.world_generation,
         orchestration_session_id,
