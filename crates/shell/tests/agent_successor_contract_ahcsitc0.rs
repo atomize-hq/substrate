@@ -985,18 +985,41 @@ fn assert_parent_resolution_fail_closed(
     }
 }
 
-fn assert_parent_resolution_fail_closed_across_operator_surfaces(
+fn assert_toolbox_parent_resolution_fail_closed_across_operator_surfaces(
     fixture: &AgentSuccessorFixture,
     expected_stderr_fragments: &[&str],
 ) {
     for args in [
-        vec!["agent", "status", "--json"],
         vec!["agent", "toolbox", "status", "--json"],
         vec!["agent", "toolbox", "env", "--json"],
     ] {
         let output = fixture.run(&args);
         assert_parent_resolution_fail_closed(&output, &args.join(" "), expected_stderr_fragments);
     }
+}
+
+fn assert_status_succeeds_with_expected_warnings(
+    output: &Output,
+    expected_warning_fragments: &[&str],
+) -> Value {
+    assert!(
+        output.status.success(),
+        "agent status should stay readable on degraded parent/session state: {output:?}"
+    );
+    let json = parse_json_output(output);
+    let warnings = json["warnings"]
+        .as_array()
+        .expect("warnings should be an array");
+    for needle in expected_warning_fragments {
+        assert!(
+            warnings
+                .iter()
+                .filter_map(Value::as_str)
+                .any(|warning| warning.contains(needle)),
+            "status warnings must contain `{needle}`: {json}"
+        );
+    }
+    json
 }
 
 fn find_session_by_agent<'a>(sessions: &'a [Value], agent_id: &str) -> &'a Value {
@@ -1025,6 +1048,15 @@ fn find_session_by_agent_and_orchestration_session<'a>(
                 "expected session row for agent `{agent_id}` in orchestration session `{orchestration_session_id}`"
             )
         })
+}
+
+fn find_session_by_participant<'a>(sessions: &'a [Value], participant_id: &str) -> &'a Value {
+    sessions
+        .iter()
+        .find(|session| {
+            session.pointer("/participant_id").and_then(Value::as_str) == Some(participant_id)
+        })
+        .unwrap_or_else(|| panic!("expected session row for participant `{participant_id}`"))
 }
 
 fn seed_nested_gateway_status_fixture(fixture: &AgentSuccessorFixture) {
@@ -1466,7 +1498,8 @@ fn agent_toolbox_env_prefers_live_manifest_over_trace_fallback() {
 }
 
 #[test]
-fn operator_surfaces_fail_closed_when_live_orchestrator_child_has_no_parent_session() {
+fn agent_status_degrades_but_toolbox_fails_closed_when_live_orchestrator_child_has_no_parent_session(
+) {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_toolbox_contracts("uds");
@@ -1478,14 +1511,35 @@ fn operator_surfaces_fail_closed_when_live_orchestrator_child_has_no_parent_sess
         "2026-04-06T00:00:02Z",
     );
 
-    assert_parent_resolution_fail_closed_across_operator_surfaces(
+    let status = fixture.run(&["agent", "status", "--json"]);
+    let json = assert_status_succeeds_with_expected_warnings(
+        &status,
+        &["missing authoritative parent session metadata"],
+    );
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        sessions.len(),
+        1,
+        "status should keep the visible participant: {json}"
+    );
+    assert_eq!(
+        find_session_by_agent(sessions, "claude_code")
+            .pointer("/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_missing_parent")
+    );
+
+    assert_toolbox_parent_resolution_fail_closed_across_operator_surfaces(
         &fixture,
         &["live host-scoped orchestrator participant exists for agent claude_code without an active parent session"],
     );
 }
 
 #[test]
-fn operator_surfaces_fail_closed_when_live_orchestrator_parent_is_inactive() {
+fn agent_status_stays_readable_but_toolbox_fails_closed_when_live_orchestrator_parent_is_inactive()
+{
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_toolbox_contracts("uds");
@@ -1504,14 +1558,41 @@ fn operator_surfaces_fail_closed_when_live_orchestrator_parent_is_inactive() {
         "2026-04-06T00:00:02Z",
     );
 
-    assert_parent_resolution_fail_closed_across_operator_surfaces(
+    let status = fixture.run(&["agent", "status", "--json"]);
+    let json = parse_json_output(&status);
+    assert!(
+        status.status.success(),
+        "status should stay readable when only an inactive parent session remains: {status:?}"
+    );
+    assert_eq!(
+        json["warnings"].as_array().map(Vec::len),
+        Some(0),
+        "inactive parent records should not invent a degraded warning on agent status: {json}"
+    );
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        sessions.len(),
+        1,
+        "status should keep the visible participant: {json}"
+    );
+    assert_eq!(
+        find_session_by_agent(sessions, "claude_code")
+            .pointer("/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_inactive_parent")
+    );
+
+    assert_toolbox_parent_resolution_fail_closed_across_operator_surfaces(
         &fixture,
         &["live host-scoped orchestrator participant exists for agent claude_code without an active parent session"],
     );
 }
 
 #[test]
-fn operator_surfaces_fail_closed_when_active_parent_omits_active_session_handle_id() {
+fn agent_status_degrades_but_toolbox_fails_closed_when_active_parent_omits_active_session_handle_id(
+) {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_toolbox_contracts("uds");
@@ -1530,7 +1611,27 @@ fn operator_surfaces_fail_closed_when_active_parent_omits_active_session_handle_
         "2026-04-06T00:00:02Z",
     );
 
-    assert_parent_resolution_fail_closed_across_operator_surfaces(
+    let status = fixture.run(&["agent", "status", "--json"]);
+    let json = assert_status_succeeds_with_expected_warnings(
+        &status,
+        &["is missing active_session_handle_id"],
+    );
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        sessions.len(),
+        1,
+        "status should keep the visible participant: {json}"
+    );
+    assert_eq!(
+        find_session_by_agent(sessions, "claude_code")
+            .pointer("/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_missing_active_handle")
+    );
+
+    assert_toolbox_parent_resolution_fail_closed_across_operator_surfaces(
         &fixture,
         &[
             "active orchestration session 0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fae is missing active_session_handle_id",
@@ -1539,7 +1640,8 @@ fn operator_surfaces_fail_closed_when_active_parent_omits_active_session_handle_
 }
 
 #[test]
-fn operator_surfaces_fail_closed_when_active_parent_points_to_different_live_handle() {
+fn agent_status_degrades_but_toolbox_fails_closed_when_active_parent_points_to_different_live_handle(
+) {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_toolbox_contracts("uds");
@@ -1558,7 +1660,27 @@ fn operator_surfaces_fail_closed_when_active_parent_points_to_different_live_han
         "2026-04-06T00:00:02Z",
     );
 
-    assert_parent_resolution_fail_closed_across_operator_surfaces(
+    let status = fixture.run(&["agent", "status", "--json"]);
+    let json = assert_status_succeeds_with_expected_warnings(
+        &status,
+        &["references missing participant ash_other_handle"],
+    );
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        sessions.len(),
+        1,
+        "status should keep the visible participant: {json}"
+    );
+    assert_eq!(
+        find_session_by_agent(sessions, "claude_code")
+            .pointer("/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_live_handle")
+    );
+
+    assert_toolbox_parent_resolution_fail_closed_across_operator_surfaces(
         &fixture,
         &[
             "active orchestration session 0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6faf references missing participant ash_other_handle",
@@ -1567,7 +1689,8 @@ fn operator_surfaces_fail_closed_when_active_parent_points_to_different_live_han
 }
 
 #[test]
-fn operator_surfaces_fail_closed_when_active_parent_selects_inactive_participant() {
+fn agent_status_degrades_but_toolbox_fails_closed_when_active_parent_selects_inactive_participant()
+{
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_toolbox_contracts("uds");
@@ -1586,23 +1709,50 @@ fn operator_surfaces_fail_closed_when_active_parent_selects_inactive_participant
         "2026-04-06T00:00:02Z",
     );
 
-    assert_parent_resolution_fail_closed_across_operator_surfaces(
+    let status = fixture.run(&["agent", "status", "--json"]);
+    let json = assert_status_succeeds_with_expected_warnings(
+        &status,
+        &["references incomplete live orchestrator participant ash_inactive_selected"],
+    );
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert!(
+        sessions.is_empty(),
+        "status should omit incomplete orchestrator rows while surfacing the degraded warning: {json}"
+    );
+
+    assert_toolbox_parent_resolution_fail_closed_across_operator_surfaces(
         &fixture,
         &[ "active orchestration session 0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb0 references inactive participant ash_inactive_selected" ],
     );
 }
 
 #[test]
-fn operator_surfaces_fail_closed_when_multiple_active_parent_candidates_exist() {
+fn agent_status_keeps_multiple_active_parent_candidates_visible_but_toolbox_fails_closed() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_toolbox_contracts("uds");
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb0",
+        "ash_parent_one",
+        "2026-04-06T00:00:02Z",
+    );
     write_active_orchestration_session(
         &fixture,
         "claude_code",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb0",
         Some("ash_parent_one"),
         "2026-04-06T00:00:02Z",
+    );
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb1",
+        "ash_parent_two",
+        "2026-04-06T00:00:03Z",
     );
     write_active_orchestration_session(
         &fixture,
@@ -1612,7 +1762,40 @@ fn operator_surfaces_fail_closed_when_multiple_active_parent_candidates_exist() 
         "2026-04-06T00:00:03Z",
     );
 
-    assert_parent_resolution_fail_closed_across_operator_surfaces(
+    let status = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        status.status.success(),
+        "status should stay readable when multiple active parent candidates exist: {status:?}"
+    );
+    let json = parse_json_output(&status);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let claude_rows: Vec<&Value> = sessions
+        .iter()
+        .filter(|session| {
+            session.pointer("/agent_id").and_then(Value::as_str) == Some("claude_code")
+        })
+        .collect();
+    assert_eq!(
+        claude_rows.len(),
+        2,
+        "status should keep both active parent candidates visible on the read surface: {json}"
+    );
+    assert_eq!(
+        find_session_by_participant(sessions, "ash_parent_one")
+            .pointer("/orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb0")
+    );
+    assert_eq!(
+        find_session_by_participant(sessions, "ash_parent_two")
+            .pointer("/orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb1")
+    );
+
+    assert_toolbox_parent_resolution_fail_closed_across_operator_surfaces(
         &fixture,
         &["multiple active orchestration session candidates found for agent claude_code"],
     );
@@ -2456,18 +2639,6 @@ fn agent_status_keeps_same_agent_concurrent_live_sessions_visible_from_session_r
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
     fixture.seed_inventory_for_list_and_status_contracts();
-    fixture.write_global_policy_patch(
-        r#"agents:
-  allowed_backends:
-    - cli:claude_code
-    - cli:codex
-    - cli:helper
-"#,
-    );
-    fixture.write_agent_file(
-        "helper.yaml",
-        &cli_agent_file("helper", "host", true, false, true),
-    );
     write_live_runtime_manifest(
         &fixture,
         "claude_code",
@@ -2498,14 +2669,14 @@ fn agent_status_keeps_same_agent_concurrent_live_sessions_visible_from_session_r
     );
     write_live_runtime_manifest(
         &fixture,
-        "helper",
+        "claude_code",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc2",
         "ash_orchestrator_session_two",
         "2026-04-05T00:00:03Z",
     );
     write_active_orchestration_session(
         &fixture,
-        "helper",
+        "claude_code",
         "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fc2",
         Some("ash_orchestrator_session_two"),
         "2026-04-05T00:00:03Z",
@@ -2542,7 +2713,7 @@ fn agent_status_keeps_same_agent_concurrent_live_sessions_visible_from_session_r
     assert_eq!(
         codex_rows.len(),
         2,
-        "same-agent concurrent visibility must survive the session-record regrouping cutover: {json}"
+        "same-agent concurrent visibility must survive the session-record regrouping cutover when both parent sessions are selected candidates: {json}"
     );
     assert_eq!(
         find_session_by_agent_and_orchestration_session(
@@ -2563,6 +2734,283 @@ fn agent_status_keeps_same_agent_concurrent_live_sessions_visible_from_session_r
         .pointer("/participant_id")
         .and_then(Value::as_str),
         Some("ash_codex_session_two")
+    );
+}
+
+#[test]
+fn agent_status_trace_only_participant_aware_fallback_keeps_same_agent_siblings_visible() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
+            "participant_id": "ash_trace_codex_one",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd2",
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "member",
+            "world_id": "wld_trace_0001",
+            "world_generation": 9,
+            "data": { "message": "first trace-only sibling remains visible" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd1",
+            "participant_id": "ash_trace_codex_two",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd3",
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "member",
+            "world_id": "wld_trace_0001",
+            "world_generation": 9,
+            "data": { "message": "second trace-only sibling remains visible" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--scope", "world", "--json"]);
+    assert!(
+        output.status.success(),
+        "world status should preserve participant-scoped trace siblings: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let codex_rows: Vec<&Value> = sessions
+        .iter()
+        .filter(|session| session.pointer("/agent_id").and_then(Value::as_str) == Some("codex"))
+        .collect();
+    assert_eq!(
+        codex_rows.len(),
+        2,
+        "participant-aware trace fallback must keep same-agent siblings in one orchestration session distinct: {json}"
+    );
+    assert_eq!(
+        find_session_by_participant(sessions, "ash_trace_codex_one")
+            .pointer("/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_trace_codex_one")
+    );
+    assert_eq!(
+        find_session_by_participant(sessions, "ash_trace_codex_two")
+            .pointer("/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_trace_codex_two")
+    );
+}
+
+#[test]
+fn agent_status_sibling_specific_suppression_keeps_other_trace_participants_visible() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_invalidated_world_member_manifest(
+        &fixture,
+        "codex",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd4",
+        "ash_trace_suppressed",
+        "ash_orchestrator",
+        "wld_trace_0002",
+        10,
+        None,
+        "2026-04-05T00:00:02Z",
+    );
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:03Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd4",
+            "participant_id": "ash_trace_suppressed",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd5",
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "member",
+            "world_id": "wld_trace_0002",
+            "world_generation": 10,
+            "data": { "message": "matching tombstoned participant must be suppressed" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:04Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "codex",
+            "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd4",
+            "participant_id": "ash_trace_survives",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd6",
+            "backend_id": "cli:codex",
+            "client": "codex",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "member",
+            "world_id": "wld_trace_0002",
+            "world_generation": 10,
+            "data": { "message": "sibling participant must remain visible" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--scope", "world", "--json"]);
+    assert!(
+        output.status.success(),
+        "world status should keep non-suppressed sibling trace participants visible: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    assert_eq!(
+        sessions.len(),
+        1,
+        "participant-specific suppression must not collapse unrelated siblings: {json}"
+    );
+    assert_eq!(
+        find_session_by_participant(sessions, "ash_trace_survives")
+            .pointer("/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_trace_survives")
+    );
+}
+
+#[test]
+fn agent_status_nested_parent_correlation_prefers_parent_participant_id_when_siblings_exist() {
+    let fixture = AgentSuccessorFixture::new();
+    seed_nested_gateway_status_fixture(&fixture);
+    let orchestration_session_id = "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fd7";
+    fixture.write_trace_events(&[
+        json!({
+            "ts": "2026-04-05T00:00:00Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "participant_id": "ash_parent_one",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd8",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_nested_0001",
+            "world_generation": 11,
+            "data": { "message": "first pure-agent sibling is visible" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:01Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "participant_id": "ash_parent_two",
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd9",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "agent_hub",
+            "protocol": "uaa.agent.session",
+            "role": "orchestrator",
+            "world_id": "wld_nested_0001",
+            "world_generation": 11,
+            "data": { "message": "second pure-agent sibling is visible" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:02Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fda",
+            "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd8",
+            "parent_participant_id": "ash_parent_one",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "nested record binds to the first sibling parent" }
+        }),
+        json!({
+            "ts": "2026-04-05T00:00:03Z",
+            "event_type": "agent_event",
+            "session_id": "ses_agent_hub",
+            "component": "agent-hub",
+            "kind": "status",
+            "agent_id": "claude_code",
+            "orchestration_session_id": orchestration_session_id,
+            "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fdb",
+            "parent_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fd9",
+            "parent_participant_id": "ash_parent_two",
+            "backend_id": "cli:claude_code",
+            "client": "claude_code",
+            "router": "substrate_gateway",
+            "protocol": "openai.responses",
+            "provider": "openai",
+            "auth_authority": "codex_subscription",
+            "data": { "summary": "nested record binds to the second sibling parent" }
+        }),
+    ]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "status should correlate nested rows by parent_participant_id when sibling parents exist: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    assert_eq!(
+        json["warnings"].as_array().map(Vec::len),
+        Some(0),
+        "participant-aware nested correlation should avoid coarse-match warnings: {json}"
+    );
+    let nested = json["nested_llm_records"]
+        .as_array()
+        .expect("nested_llm_records should be an array");
+    assert_eq!(
+        nested.len(),
+        2,
+        "both sibling-bound nested rows should survive: {json}"
+    );
+    assert_eq!(
+        nested[0]
+            .pointer("/parent/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_parent_one")
+    );
+    assert_eq!(
+        nested[1]
+            .pointer("/parent/participant_id")
+            .and_then(Value::as_str),
+        Some("ash_parent_two")
     );
 }
 
@@ -3748,6 +4196,39 @@ fn ahcsitc3_configuration_doc_locks_successor_config_surface() {
             "docs/CONFIGURATION.md must document successor config surface `{required}`"
         );
     }
+}
+
+#[test]
+fn closeout_docs_keep_session_and_participant_terms_aligned_to_runtime_truth() {
+    let matrix = read_repo_file("AGENT_ORCHESTRATION_GAP_MATRIX.md");
+    for required in [
+        "Status ambiguity handling",
+        "Trace-only participant-aware fallback",
+        "orchestration_session_id",
+        "participant_id",
+    ] {
+        assert!(
+            matrix.contains(required),
+            "gap matrix must retain closeout terminology `{required}`"
+        );
+    }
+
+    let packet = read_repo_file("llm-last-mile/README.md");
+    for required in [
+        "`~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/session.json`",
+        "`~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/<participant_id>.json`",
+        "trace.jsonl` remains audit history, not live state authority",
+        "read-only status can degrade to warnings",
+    ] {
+        assert!(
+            packet.contains(required),
+            "llm-last-mile README must document the runtime truth `{required}`"
+        );
+    }
+    assert!(
+        !packet.contains("`~/.substrate/run/agent-sessions/<orchestration_session_id>.json`"),
+        "llm-last-mile README must not keep the superseded agent-sessions path"
+    );
 }
 
 #[test]
