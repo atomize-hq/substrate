@@ -424,58 +424,8 @@ impl AgentRuntimeStateStore {
         &self,
         orchestrator_agent_id: &str,
     ) -> Result<Vec<AgentRuntimeSessionRecord>> {
-        let participants = self.list_participants_across_sources()?;
-        let mut participants_by_session = BTreeMap::new();
-        for participant in participants {
-            participants_by_session
-                .entry(participant.handle.orchestration_session_id.clone())
-                .or_insert_with(Vec::new)
-                .push(participant);
-        }
-
-        let mut session_ids = BTreeSet::new();
-        for session_id in self.canonical_session_root_ids()? {
-            if self
-                .load_authoritative_session(&session_id)?
-                .is_some_and(|session| session.orchestrator_agent_id == orchestrator_agent_id)
-            {
-                session_ids.insert(session_id);
-            }
-        }
-        for session_id in self.flat_session_ids()? {
-            if self
-                .load_authoritative_session(&session_id)?
-                .is_some_and(|session| session.orchestrator_agent_id == orchestrator_agent_id)
-            {
-                session_ids.insert(session_id);
-            }
-        }
-        for (session_id, session_participants) in &participants_by_session {
-            if session_participants.iter().any(|participant| {
-                participant.handle.agent_id == orchestrator_agent_id
-                    && participant.handle.role == ORCHESTRATOR_ROLE
-                    && participant.handle.execution.scope == AgentExecutionScope::Host
-            }) {
-                session_ids.insert(session_id.clone());
-            }
-        }
-
-        let mut sessions = Vec::new();
-        for session_id in session_ids {
-            let session = self.load_authoritative_session(&session_id)?;
-            let participants = participants_by_session
-                .remove(&session_id)
-                .unwrap_or_default();
-            sessions.push(self.build_session_record(&session_id, session, participants));
-        }
-
-        sessions.sort_by(|left, right| {
-            left.last_updated_at().cmp(&right.last_updated_at()).then(
-                left.orchestration_session_id()
-                    .cmp(right.orchestration_session_id()),
-            )
-        });
-        Ok(sessions)
+        let _ = orchestrator_agent_id;
+        self.list_sessions()
     }
 
     #[allow(dead_code)]
