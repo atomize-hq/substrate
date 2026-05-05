@@ -15,7 +15,9 @@ use agent_api_types::{
     MemberTurnSubmitRequestV1,
 };
 use anyhow::{anyhow, Context, Result};
+#[cfg(target_os = "linux")]
 use base64::engine::general_purpose::STANDARD as BASE64;
+#[cfg(target_os = "linux")]
 use base64::Engine;
 use chrono::Utc;
 use futures::{pin_mut, FutureExt, StreamExt};
@@ -37,8 +39,11 @@ use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
-    exact_backend_selection_error_exit_code, member_selection_error_exit_code,
-    validate_exact_backend_selection, validate_member_selection,
+    exact_backend_selection_error_exit_code, validate_exact_backend_selection,
+};
+#[cfg(any(test, target_os = "linux"))]
+use crate::execution::agent_runtime::validator::{
+    member_selection_error_exit_code, validate_member_selection,
 };
 #[cfg(any(test, target_os = "linux"))]
 use crate::execution::agent_runtime::AgentRuntimeParticipantWorldBinding;
@@ -2633,6 +2638,7 @@ fn runtime_manifest_snapshot(runtime: &AsyncReplAgentRuntime) -> AgentRuntimePar
         .clone()
 }
 
+#[cfg(any(test, target_os = "linux"))]
 fn select_member_runtime_descriptor(
     startup_context: &RuntimeOrchestrationContext,
 ) -> std::result::Result<Option<RuntimeSelectionDescriptor>, RuntimeBootstrapFailure> {
@@ -3629,6 +3635,28 @@ async fn ensure_member_runtime_ready_for_descriptor(
     Ok(())
 }
 
+#[cfg(not(target_os = "linux"))]
+async fn ensure_member_runtime_ready_for_descriptor(
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    world_session: Option<&WorldSession>,
+    _descriptor: &RuntimeSelectionDescriptor,
+    _member_runtime: &mut Option<AsyncReplAgentRuntime>,
+    _pending_member_replacement: &mut Option<AgentRuntimeParticipantRecord>,
+    _agent_printer: &ReplPrinter,
+    _telemetry: &mut ReplSessionTelemetry,
+) -> Result<()> {
+    let Some(_startup_context) = startup_context else {
+        return Ok(());
+    };
+    let Some(_world_session) = world_session else {
+        return Ok(());
+    };
+
+    Err(anyhow!(
+        "substrate: error: world-scoped member runtime dispatch is supported on Linux only"
+    ))
+}
+
 #[cfg(target_os = "linux")]
 async fn ensure_member_runtime_ready(
     startup_context: Option<&RuntimeOrchestrationContext>,
@@ -3668,7 +3696,7 @@ async fn ensure_member_runtime_ready(
     _agent_printer: &ReplPrinter,
     _telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
-    let Some(startup_context) = startup_context else {
+    let Some(_startup_context) = startup_context else {
         return Ok(());
     };
     let Some(_world_session) = world_session else {
