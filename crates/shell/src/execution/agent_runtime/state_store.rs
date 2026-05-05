@@ -418,6 +418,17 @@ impl AgentRuntimeStateStore {
         Ok(sessions)
     }
 
+    pub(crate) fn list_status_sessions_for_agent(
+        &self,
+        orchestrator_agent_id: &str,
+    ) -> Result<Vec<AgentRuntimeSessionRecord>> {
+        Ok(self
+            .list_sessions()?
+            .into_iter()
+            .filter(|record| record.session.orchestrator_agent_id == orchestrator_agent_id)
+            .collect())
+    }
+
     pub(crate) fn list_live_sessions(&self) -> Result<Vec<AgentRuntimeSessionRecord>> {
         Ok(self
             .list_sessions()?
