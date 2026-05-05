@@ -687,86 +687,27 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                             continue;
                         };
 
-                        let route = match resolve_targeted_turn_route(
-                            startup_context.as_ref(),
-                            agent_runtime.as_ref(),
-                            targeted_turn.backend_id,
-                        ) {
-                            Ok(route) => route,
-                            Err(failure) => {
+                        let result = match dispatch_targeted_follow_up_turn(
+                            targeted_turn,
+                            TargetedTurnDispatchContext {
+                                startup_context: startup_context.as_ref(),
+                                agent_runtime: &mut agent_runtime,
+                                world_session: &mut world_session,
+                                member_runtimes: &mut member_runtimes,
+                                pending_member_replacements: &mut pending_member_replacements,
+                                agent_printer: &agent_printer,
+                                telemetry: &mut telemetry,
+                            },
+                        )
+                        .await
+                        {
+                            Ok(TargetedTurnDispatchStatus::Submitted) => Ok(()),
+                            Ok(TargetedTurnDispatchStatus::Rejected(failure)) => {
                                 agent_printer
                                     .print(format!("substrate: error: {}", failure.message));
                                 continue;
                             }
-                        };
-
-                        let result = match route {
-                            TargetedTurnRoute::Host => {
-                                match agent_runtime.as_mut() {
-                                    Some(runtime) => {
-                                        submit_host_targeted_turn(
-                                            runtime,
-                                            targeted_turn.prompt,
-                                            &agent_printer,
-                                            &mut telemetry,
-                                        )
-                                        .await
-                                    }
-                                    None => Err(anyhow!(
-                                        "substrate: error: no active orchestrator runtime is available for targeted follow-up turns"
-                                    )),
-                                }
-                            }
-                            TargetedTurnRoute::World(descriptor) => {
-                                let drift_check = ensure_no_policy_drift(
-                                    &mut world_session,
-                                    startup_context.as_ref(),
-                                    &agent_printer,
-                                    &mut telemetry,
-                                )
-                                .await;
-                                if let Err(err) = drift_check {
-                                    Err(err)
-                                } else if let Err(err) = reconcile_member_runtime_generation(
-                                    world_session.as_ref(),
-                                    &mut member_runtimes,
-                                    &mut pending_member_replacements,
-                                    &agent_printer,
-                                    &mut telemetry,
-                                )
-                                .await
-                                {
-                                    Err(err)
-                                } else if let Err(err) = ensure_member_runtime_ready_for_descriptor(
-                                    startup_context.as_ref(),
-                                    world_session.as_ref(),
-                                    &descriptor,
-                                    &mut member_runtimes,
-                                    &mut pending_member_replacements,
-                                    &agent_printer,
-                                    &mut telemetry,
-                                )
-                                .await
-                                {
-                                    Err(err)
-                                } else {
-                                    let runtime = member_runtimes
-                                        .get_mut(targeted_turn.backend_id)
-                                        .ok_or_else(|| {
-                                        anyhow!(
-                                            "substrate: error: world-scoped member runtime is unavailable for targeted follow-up turns for backend '{}'",
-                                            targeted_turn.backend_id
-                                        )
-                                    })?;
-                                    submit_world_targeted_turn(
-                                        runtime,
-                                        targeted_turn.prompt,
-                                        &agent_printer,
-                                        &mut telemetry,
-                                    )
-                                    .await
-                                }
-                            }
+                            Err(err) => Err(err),
                         };
 
                         if let Err(err) = result {
@@ -1639,6 +1580,21 @@ struct TargetedTurn<'a> {
 enum TargetedTurnRoute {
     Host,
     World(RuntimeSelectionDescriptor),
+}
+
+enum TargetedTurnDispatchStatus {
+    Submitted,
+    Rejected(RuntimeBootstrapFailure),
+}
+
+struct TargetedTurnDispatchContext<'a> {
+    startup_context: Option<&'a RuntimeOrchestrationContext>,
+    agent_runtime: &'a mut Option<AsyncReplAgentRuntime>,
+    world_session: &'a mut Option<WorldSession>,
+    member_runtimes: &'a mut RetainedMemberRuntimeMap,
+    pending_member_replacements: &'a mut PendingMemberReplacementMap,
+    agent_printer: &'a ReplPrinter,
+    telemetry: &'a mut ReplSessionTelemetry,
 }
 
 #[derive(Clone)]
@@ -2746,6 +2702,76 @@ fn resolve_targeted_turn_route(
         exit_code: 2,
         message: format!("no exact targeted-turn backend match for '{backend_id}'"),
     })
+}
+
+async fn dispatch_targeted_follow_up_turn(
+    targeted_turn: TargetedTurn<'_>,
+    context: TargetedTurnDispatchContext<'_>,
+) -> std::result::Result<TargetedTurnDispatchStatus, anyhow::Error> {
+    let TargetedTurnDispatchContext {
+        startup_context,
+        agent_runtime,
+        world_session,
+        member_runtimes,
+        pending_member_replacements,
+        agent_printer,
+        telemetry,
+    } = context;
+
+    let route = match resolve_targeted_turn_route(
+        startup_context,
+        agent_runtime.as_ref(),
+        targeted_turn.backend_id,
+    ) {
+        Ok(route) => route,
+        Err(failure) => return Ok(TargetedTurnDispatchStatus::Rejected(failure)),
+    };
+
+    match route {
+        TargetedTurnRoute::Host => {
+            let runtime = agent_runtime.as_mut().ok_or_else(|| {
+                anyhow!(
+                    "substrate: error: no active orchestrator runtime is available for targeted follow-up turns"
+                )
+            })?;
+            submit_host_targeted_turn(runtime, targeted_turn.prompt, agent_printer, telemetry)
+                .await?;
+        }
+        TargetedTurnRoute::World(descriptor) => {
+            ensure_no_policy_drift(world_session, startup_context, agent_printer, telemetry)
+                .await?;
+            reconcile_member_runtime_generation(
+                world_session.as_ref(),
+                member_runtimes,
+                pending_member_replacements,
+                agent_printer,
+                telemetry,
+            )
+            .await?;
+            ensure_member_runtime_ready_for_descriptor(
+                startup_context,
+                world_session.as_ref(),
+                &descriptor,
+                member_runtimes,
+                pending_member_replacements,
+                agent_printer,
+                telemetry,
+            )
+            .await?;
+            let runtime = member_runtimes
+                .get_mut(targeted_turn.backend_id)
+                .ok_or_else(|| {
+                    anyhow!(
+                        "substrate: error: world-scoped member runtime is unavailable for targeted follow-up turns for backend '{}'",
+                        targeted_turn.backend_id
+                    )
+                })?;
+            submit_world_targeted_turn(runtime, targeted_turn.prompt, agent_printer, telemetry)
+                .await?;
+        }
+    }
+
+    Ok(TargetedTurnDispatchStatus::Submitted)
 }
 
 #[cfg(any(test, target_os = "linux"))]

@@ -484,6 +484,24 @@ fn write_fake_claude_script(temp: &Path) -> PathBuf {
 }
 
 #[cfg(target_os = "linux")]
+fn write_fake_claude_script_first_session_then_exit(temp: &Path) -> PathBuf {
+    let path = temp.join("fake-claude-first-session-then-exit.sh");
+    let state_path = temp.join("fake-claude-first-session-then-exit.count");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  printf '{{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"session-test\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nexit 0\n",
+        state_path.display()
+    );
+    fs::write(&path, body).expect("write fake claude first-session-then-exit script");
+    let mut perms = fs::metadata(&path)
+        .expect("fake claude first-session-then-exit metadata")
+        .permissions();
+    use std::os::unix::fs::PermissionsExt;
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake claude first-session-then-exit permissions");
+    path
+}
+
+#[cfg(target_os = "linux")]
 fn write_fake_codex_script_first_success_then_fail_without_session_handle(temp: &Path) -> PathBuf {
     let path = temp.join("fake-codex-first-success-then-fail.sh");
     let state_path = temp.join("fake-codex-first-success-then-fail.count");
@@ -2067,6 +2085,249 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         Some(member_participant_id.as_str()),
         "cli:codex targeted coexistence must reuse the original world member participant"
     );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
+    let temp = temp_dir("substrate-c3-targeted-world-relaunch-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    let trace_path = home.join(".substrate/trace.jsonl");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(&trace_path, "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-targeted-world-relaunch-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![
+            MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-first-member".to_string(),
+                exit_code_on_cancel: 130,
+            },
+            MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+                session_handle_id: "session-replacement-member".to_string(),
+                exit_code_on_cancel: 130,
+            },
+        ],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+    let first_live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let first_member = &first_live_members[0];
+    let first_member_id = first_member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("first member participant_id")
+        .to_string();
+    let orchestrator_participant_id = first_member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("member orchestrator_participant_id")
+        .to_string();
+
+    write_member_runtime_policy(&substrate_home, false);
+    std::thread::sleep(Duration::from_millis(25));
+
+    repl.send_line("::cli:codex second");
+    let alert = wait_for_world_restarted_alert_without_stale_liveness(
+        &trace_path,
+        &substrate_home,
+        &orchestration_session_id,
+        0,
+        Duration::from_secs(15),
+    );
+    wait_for_min_member_dispatch_requests(&records, 2, Duration::from_secs(3));
+    wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("__MEMBER_TURN_SUBMIT_STUB__ second", Duration::from_secs(3))
+        .expect("replacement typed submit output");
+
+    let replacement_live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let replacement = &replacement_live_members[0];
+    let replacement_id = replacement
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("replacement participant_id")
+        .to_string();
+    assert_ne!(
+        replacement_id, first_member_id,
+        "targeted follow-up after restart must relaunch a distinct exact-backend member runtime"
+    );
+    assert_eq!(
+        replacement.get("world_generation").and_then(Value::as_u64),
+        Some(1),
+        "replacement member must bind to the new world generation"
+    );
+    assert_eq!(
+        replacement.get("world_id").and_then(Value::as_str),
+        alert.get("world_id").and_then(Value::as_str),
+        "replacement member must bind to the replacement world id"
+    );
+    assert_eq!(
+        replacement
+            .get("orchestrator_participant_id")
+            .and_then(Value::as_str),
+        Some(orchestrator_participant_id.as_str()),
+        "replacement member must preserve the retained-control seam"
+    );
+    assert_eq!(
+        replacement
+            .get("resumed_from_participant_id")
+            .and_then(Value::as_str),
+        Some(first_member_id.as_str()),
+        "replacement member must preserve lineage to the stale exact-backend runtime"
+    );
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.persistent_execs.len(),
+        1,
+        "targeted world follow-up must not fall back to a second shell/persistent exec after restart: {guard:#?}"
+    );
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        2,
+        "targeted world follow-up after restart must relaunch the exact backend slot before submit: {guard:#?}"
+    );
+    let submit = guard
+        .member_turn_submit_requests
+        .first()
+        .expect("member turn submit request");
+    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
+    assert_eq!(submit.participant_id, replacement_id);
+    assert_eq!(
+        submit.orchestrator_participant_id,
+        orchestrator_participant_id
+    );
+    assert_eq!(submit.backend_id, "cli:codex");
+    assert_eq!(
+        submit.world_id,
+        replacement
+            .get("world_id")
+            .and_then(Value::as_str)
+            .expect("replacement world_id")
+    );
+    assert_eq!(submit.world_generation, 1);
+    assert_eq!(submit.prompt, "second");
+    drop(guard);
+
+    let stale = read_participant_manifest(&substrate_home, &first_member_id);
+    assert_eq!(
+        stale.get("state").and_then(Value::as_str),
+        Some("invalidated"),
+        "stale generation member must remain invalidated after targeted relaunch submit: {stale:?}"
+    );
+    let persisted = read_orchestration_session(&session_path);
+    assert_session_world_binding(&persisted, Some("wld_stub_0002"), Some(1));
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_targeted_host_turn_resumes_active_orchestrator_backend() {
+    let temp = temp_dir("substrate-c3-targeted-host-active-resume-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script_first_session_then_exit(temp.path());
+    let fake_secondary_host = write_fake_codex_script(temp.path());
+    write_dual_host_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_secondary_host,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-targeted-host-active-resume-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+
+    repl.send_line("::cli:claude_code resume active host");
+    repl.wait_for_output(
+        "submitted targeted follow-up turn to cli:claude_code",
+        Duration::from_secs(3),
+    )
+    .expect("targeted host submit started");
+    repl.wait_for_output(
+        "targeted follow-up turn completed for cli:claude_code",
+        Duration::from_secs(3),
+    )
+    .expect("targeted host submit completion");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt after targeted host submit");
+
+    let guard = records.lock().expect("lock records");
+    assert!(
+        guard.member_dispatch_requests.is_empty(),
+        "targeted host follow-up must not launch a world member runtime: {guard:#?}"
+    );
+    assert!(
+        guard.member_turn_submit_requests.is_empty(),
+        "targeted host follow-up must not hit the typed world submit route: {guard:#?}"
+    );
+    drop(guard);
 
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
