@@ -220,6 +220,50 @@ fn wait_for_min_records(
     );
 }
 
+fn wait_for_min_member_dispatch_requests(
+    records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
+    min_requests: usize,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let guard = records.lock().expect("lock records");
+        if guard.member_dispatch_requests.len() >= min_requests {
+            return;
+        }
+        drop(guard);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    let guard = records.lock().expect("lock records");
+    panic!(
+        "timed out waiting for member_dispatch requests >= {min_requests}; got {}; records: {guard:#?}",
+        guard.member_dispatch_requests.len(),
+    );
+}
+
+fn wait_for_min_member_turn_submit_requests(
+    records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
+    min_requests: usize,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let guard = records.lock().expect("lock records");
+        if guard.member_turn_submit_requests.len() >= min_requests {
+            return;
+        }
+        drop(guard);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    let guard = records.lock().expect("lock records");
+    panic!(
+        "timed out waiting for member_turn_submit requests >= {min_requests}; got {}; records: {guard:#?}",
+        guard.member_turn_submit_requests.len(),
+    );
+}
+
 fn read_trace(trace_path: &Path) -> Vec<Value> {
     fs::read_to_string(trace_path)
         .expect("read trace")
@@ -321,6 +365,57 @@ agents:
         format!(
             "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
             fake_member.display()
+        ),
+    )
+    .expect("write codex agent file");
+}
+
+#[cfg(target_os = "linux")]
+fn write_dual_host_runtime_world_config(
+    home_substrate: &Path,
+    fake_orchestrator: &Path,
+    fake_secondary_host: &Path,
+    on_drift: &str,
+) {
+    fs::create_dir_all(home_substrate.join("agents")).expect("create agents dir");
+    let config = format!(
+        r#"world:
+  enabled: true
+  anchor_mode: workspace
+  anchor_path: ''
+  caged: false
+  net:
+    filter: false
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
+agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: claude_code
+    world_restart:
+      on_drift: {on_drift}
+"#
+    );
+    fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
+    write_member_runtime_policy(home_substrate, true);
+    fs::write(
+        home_substrate.join("agents/claude_code.yaml"),
+        format!(
+            "version: 1\nid: claude_code\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            fake_orchestrator.display()
+        ),
+    )
+    .expect("write claude_code agent file");
+    fs::write(
+        home_substrate.join("agents/codex.yaml"),
+        format!(
+            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            fake_secondary_host.display()
         ),
     )
     .expect("write codex agent file");
@@ -1670,6 +1765,256 @@ fn c3_first_world_backed_command_lazily_launches_member_runtime() {
             .is_none_or(Value::is_null),
         "first member launch must not claim replacement lineage: {member:?}"
     );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_targeted_turn_requires_exact_double_colon_grammar_before_shell_fallback() {
+    let temp = temp_dir("substrate-c3-targeted-turn-grammar-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-targeted-turn-grammar-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+
+    repl.send_line("::cli:codex");
+    repl.wait_for_output(
+        "substrate: error: targeted follow-up turns require exact syntax '::<backend_id> <prompt>' on a single line",
+        Duration::from_secs(3),
+    )
+    .expect("malformed syntax rejection");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt after malformed syntax");
+    std::thread::sleep(Duration::from_millis(100));
+
+    let guard = records.lock().expect("lock records");
+    assert!(
+        guard.persistent_execs.is_empty(),
+        "malformed targeted syntax must fail before shell fallback: {guard:#?}"
+    );
+    assert!(
+        guard.member_dispatch_requests.is_empty(),
+        "malformed targeted syntax must not lazy-launch a member runtime: {guard:#?}"
+    );
+    assert!(
+        guard.member_turn_submit_requests.is_empty(),
+        "malformed targeted syntax must not hit the typed submit route: {guard:#?}"
+    );
+    drop(guard);
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
+    let temp = temp_dir("substrate-c3-targeted-world-submit-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-targeted-world-submit-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-targeted-world".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+
+    repl.send_line("echo first");
+    wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("first", Duration::from_secs(3))
+        .expect("first command output");
+
+    let live_members = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    let member_participant_id = member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+    let orchestrator_participant_id = member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("member orchestrator_participant_id")
+        .to_string();
+    let world_id = member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("member world_id")
+        .to_string();
+    let world_generation = member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("member world_generation");
+
+    repl.send_line("::cli:codex second");
+    wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_output("__MEMBER_TURN_SUBMIT_STUB__ second", Duration::from_secs(3))
+        .expect("typed submit route output");
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_dispatch_requests.len(),
+        1,
+        "targeted follow-up turn must reuse the retained member instead of relaunching it: {guard:#?}"
+    );
+    let submit = guard
+        .member_turn_submit_requests
+        .first()
+        .expect("member turn submit request");
+    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
+    assert_eq!(submit.participant_id, member_participant_id);
+    assert_eq!(submit.orchestrator_participant_id, orchestrator_participant_id);
+    assert_eq!(submit.backend_id, "cli:codex");
+    assert_eq!(submit.world_id, world_id);
+    assert_eq!(submit.world_generation, world_generation);
+    assert_eq!(submit.prompt, "second");
+    drop(guard);
+
+    let live_members_after = wait_for_live_world_member_count(
+        &substrate_home,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(3),
+    );
+    assert_eq!(
+        live_members_after[0]
+            .get("participant_id")
+            .and_then(Value::as_str),
+        Some(member_participant_id.as_str()),
+        "targeted submit must keep one retained world member rather than swap or duplicate it"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_targeted_host_turn_rejects_non_active_orchestrator_backend() {
+    let temp = temp_dir("substrate-c3-targeted-host-rejects-nonactive-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_secondary_host = write_fake_codex_script(temp.path());
+    write_dual_host_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_secondary_host,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-targeted-host-rejects-nonactive-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+
+    repl.send_line("::cli:codex should fail");
+    repl.wait_for_output(
+        "substrate: error: targeted host follow-up turns may only target the active orchestrator backend for this REPL session",
+        Duration::from_secs(3),
+    )
+    .expect("non-active host backend rejection");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt after non-active host backend rejection");
+    std::thread::sleep(Duration::from_millis(100));
+
+    let guard = records.lock().expect("lock records");
+    assert!(
+        guard.persistent_execs.is_empty(),
+        "rejected host targeted turn must not fall back to shell execution: {guard:#?}"
+    );
+    assert!(
+        guard.member_dispatch_requests.is_empty(),
+        "rejected host targeted turn must not launch a world member runtime: {guard:#?}"
+    );
+    assert!(
+        guard.member_turn_submit_requests.is_empty(),
+        "rejected host targeted turn must not hit the typed world submit route: {guard:#?}"
+    );
+    drop(guard);
 
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));

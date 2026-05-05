@@ -53,6 +53,7 @@ pub struct ReplWorldAgentRecords {
     pub persistent_signals: Vec<String>,
     pub legacy_pty_starts: Vec<LegacyPtyStartRecord>,
     pub member_dispatch_requests: Vec<agent_api_types::ExecuteRequest>,
+    pub member_turn_submit_requests: Vec<agent_api_types::MemberTurnSubmitRequestV1>,
     pub execute_cancel_requests: Vec<agent_api_types::ExecuteCancelRequestV1>,
 }
 
@@ -640,6 +641,51 @@ impl ReplWorldAgentStub {
                         })
                         .to_string();
                         write_http_json(&mut stream, "200 OK", &response).await;
+                        continue;
+                    }
+
+                    if first_line.starts_with("POST /v1/member_turn/stream ") {
+                        let parsed: agent_api_types::MemberTurnSubmitRequestV1 =
+                            match serde_json::from_slice(&body) {
+                                Ok(p) => p,
+                                Err(_) => {
+                                    write_http_json(&mut stream, "400 Bad Request", r#"{"error":"bad_request","message":"invalid json"}"#).await;
+                                    continue;
+                                }
+                            };
+                        if let Ok(mut guard) = records_for_thread.lock() {
+                            guard.member_turn_submit_requests.push(parsed.clone());
+                        }
+
+                        let span_id = format!("member-turn-span-{}", parsed.participant_id);
+                        let stdout = format!("__MEMBER_TURN_SUBMIT_STUB__ {}\n", parsed.prompt);
+                        write_http_stream_start(&mut stream).await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &agent_api_types::ExecuteStreamFrame::Start {
+                                span_id: span_id.clone(),
+                            },
+                        )
+                        .await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &agent_api_types::ExecuteStreamFrame::Stdout {
+                                chunk_b64: BASE64.encode(stdout.as_bytes()),
+                            },
+                        )
+                        .await;
+                        write_chunked_frame(
+                            &mut stream,
+                            &agent_api_types::ExecuteStreamFrame::Exit {
+                                exit: 0,
+                                span_id,
+                                scopes_used: Vec::new(),
+                                fs_diff: None,
+                                process_telemetry: agent_api_types::ProcessTelemetry::default(),
+                            },
+                        )
+                        .await;
+                        finish_chunked_stream(&mut stream).await;
                         continue;
                     }
 
