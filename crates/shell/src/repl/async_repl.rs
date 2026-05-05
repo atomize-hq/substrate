@@ -10,8 +10,14 @@ use std::time::Duration;
 #[cfg(target_os = "linux")]
 use agent_api_client::AgentClient;
 #[cfg(target_os = "linux")]
-use agent_api_types::{ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1};
+use agent_api_types::{
+    ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1,
+    MemberTurnSubmitRequestV1,
+};
 use anyhow::{anyhow, Context, Result};
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use chrono::Utc;
 use futures::{pin_mut, FutureExt, StreamExt};
 use reedline::{ExternalPrinter, Prompt, Reedline, Signal};
 use tokio::runtime::Builder as TokioRuntimeBuilder;
@@ -31,7 +37,8 @@ use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
-    member_selection_error_exit_code, validate_member_selection,
+    exact_backend_selection_error_exit_code, member_selection_error_exit_code,
+    validate_exact_backend_selection, validate_member_selection,
 };
 #[cfg(any(test, target_os = "linux"))]
 use crate::execution::agent_runtime::AgentRuntimeParticipantWorldBinding;
@@ -48,7 +55,8 @@ use crate::execution::ReplSessionTelemetry;
 use crate::execution::WorldRootSettings;
 #[cfg(target_os = "linux")]
 use crate::execution::{
-    build_agent_client_and_member_dispatch_request, MemberDispatchTransportRequest,
+    build_agent_client_and_member_dispatch_request, build_agent_client_and_pending_diff_request,
+    MemberDispatchTransportRequest,
 };
 use crate::execution::{
     canonicalize_or, enforce_caged_destination, execute_command, find_workspace_root,
@@ -665,6 +673,104 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                     telemetry.record_input_event();
 
                     let cmd_id = Uuid::now_v7().to_string();
+
+                    if trimmed.starts_with("::") {
+                        let Some(targeted_turn) = parse_targeted_turn(trimmed) else {
+                            agent_printer.print(
+                                "substrate: error: targeted follow-up turns require exact syntax '::<backend_id> <prompt>' on a single line",
+                            );
+                            continue;
+                        };
+
+                        let route = match resolve_targeted_turn_route(
+                            startup_context.as_ref(),
+                            agent_runtime.as_ref(),
+                            targeted_turn.backend_id,
+                        ) {
+                            Ok(route) => route,
+                            Err(failure) => {
+                                agent_printer
+                                    .print(format!("substrate: error: {}", failure.message));
+                                continue;
+                            }
+                        };
+
+                        let result = match route {
+                            TargetedTurnRoute::Host => {
+                                match agent_runtime.as_mut() {
+                                    Some(runtime) => {
+                                        submit_host_targeted_turn(
+                                            runtime,
+                                            targeted_turn.prompt,
+                                            &agent_printer,
+                                            &mut telemetry,
+                                        )
+                                        .await
+                                    }
+                                    None => Err(anyhow!(
+                                        "substrate: error: no active orchestrator runtime is available for targeted follow-up turns"
+                                    )),
+                                }
+                            }
+                            TargetedTurnRoute::World(descriptor) => {
+                                let drift_check = ensure_no_policy_drift(
+                                    &mut world_session,
+                                    startup_context.as_ref(),
+                                    &agent_printer,
+                                    &mut telemetry,
+                                )
+                                .await;
+                                if let Err(err) = drift_check {
+                                    Err(err)
+                                } else {
+                                    if let Err(err) = reconcile_member_runtime_generation(
+                                        world_session.as_ref(),
+                                        &mut member_runtime,
+                                        &mut pending_member_replacement,
+                                        &agent_printer,
+                                        &mut telemetry,
+                                    )
+                                    .await
+                                    {
+                                        Err(err)
+                                    } else if let Err(err) =
+                                        ensure_member_runtime_ready_for_descriptor(
+                                            startup_context.as_ref(),
+                                            world_session.as_ref(),
+                                            &descriptor,
+                                            &mut member_runtime,
+                                            &mut pending_member_replacement,
+                                            &agent_printer,
+                                            &mut telemetry,
+                                        )
+                                        .await
+                                    {
+                                        Err(err)
+                                    } else {
+                                        let runtime = member_runtime.as_mut().ok_or_else(|| {
+                                            anyhow!(
+                                                "substrate: error: world-scoped member runtime is unavailable for targeted follow-up turns"
+                                            )
+                                        })?;
+                                        submit_world_targeted_turn(
+                                            runtime,
+                                            targeted_turn.prompt,
+                                            &agent_printer,
+                                            &mut telemetry,
+                                        )
+                                        .await
+                                    }
+                                }
+                            }
+                        };
+
+                        if let Err(err) = result {
+                            fatal_runtime_error = Some(err);
+                            should_exit = true;
+                            continue 'repl_loop;
+                        }
+                        continue;
+                    }
 
                     if !has_embedded_newlines(&command) {
                         if trimmed == ":host" {
@@ -1519,6 +1625,19 @@ struct RuntimeBootstrapFailure {
     message: String,
 }
 
+const AGENT_API_SESSION_RESUME_V1: &str = "agent_api.session.resume.v1";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct TargetedTurn<'a> {
+    backend_id: &'a str,
+    prompt: &'a str,
+}
+
+enum TargetedTurnRoute {
+    Host,
+    World(RuntimeSelectionDescriptor),
+}
+
 #[derive(Clone)]
 struct RuntimeOrchestrationContext {
     store: AgentRuntimeStateStore,
@@ -1589,6 +1708,7 @@ enum RetainedRunControl {
 }
 
 struct AsyncReplAgentRuntime {
+    descriptor: RuntimeSelectionDescriptor,
     orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
     manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
     store: AgentRuntimeStateStore,
@@ -1855,7 +1975,7 @@ async fn start_host_orchestrator_runtime_with_prepared(
         return Ok(None);
     };
     let PreparedAgentRuntime {
-        descriptor: _descriptor,
+        descriptor,
         gateway,
         agent_kind,
         startup_context,
@@ -2496,6 +2616,7 @@ async fn start_host_orchestrator_runtime_with_prepared(
     };
 
     Ok(Some(AsyncReplAgentRuntime {
+        descriptor,
         orchestration_session: startup_context.orchestration_session,
         manifest,
         store: startup_context.store,
@@ -2525,6 +2646,94 @@ fn select_member_runtime_descriptor(
     .map_err(|err| RuntimeBootstrapFailure {
         exit_code: member_selection_error_exit_code(&err),
         message: err.reason,
+    })
+}
+
+fn select_exact_runtime_descriptor(
+    startup_context: &RuntimeOrchestrationContext,
+    scope: crate::execution::config_model::AgentExecutionScope,
+    backend_id: &str,
+) -> std::result::Result<Option<RuntimeSelectionDescriptor>, RuntimeBootstrapFailure> {
+    validate_exact_backend_selection(
+        &startup_context.effective_config,
+        &startup_context.inventory,
+        scope,
+        backend_id,
+    )
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: exact_backend_selection_error_exit_code(&err),
+        message: err.reason,
+    })
+}
+
+fn select_member_runtime_descriptor_for_backend(
+    startup_context: &RuntimeOrchestrationContext,
+    backend_id: &str,
+) -> std::result::Result<Option<RuntimeSelectionDescriptor>, RuntimeBootstrapFailure> {
+    select_exact_runtime_descriptor(
+        startup_context,
+        crate::execution::config_model::AgentExecutionScope::World,
+        backend_id,
+    )
+}
+
+fn select_host_runtime_descriptor_for_backend(
+    startup_context: &RuntimeOrchestrationContext,
+    backend_id: &str,
+) -> std::result::Result<Option<RuntimeSelectionDescriptor>, RuntimeBootstrapFailure> {
+    select_exact_runtime_descriptor(
+        startup_context,
+        crate::execution::config_model::AgentExecutionScope::Host,
+        backend_id,
+    )
+}
+
+fn active_orchestrator_backend_id(runtime: &AsyncReplAgentRuntime) -> String {
+    runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .handle
+        .backend_id
+        .clone()
+}
+
+fn resolve_targeted_turn_route(
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    agent_runtime: Option<&AsyncReplAgentRuntime>,
+    backend_id: &str,
+) -> std::result::Result<TargetedTurnRoute, RuntimeBootstrapFailure> {
+    if let Some(runtime) = agent_runtime {
+        let active_backend_id = active_orchestrator_backend_id(runtime);
+        if active_backend_id == backend_id {
+            return Ok(TargetedTurnRoute::Host);
+        }
+    }
+
+    if let Some(startup_context) = startup_context {
+        if select_host_runtime_descriptor_for_backend(startup_context, backend_id)?.is_some() {
+            let expected = agent_runtime
+                .map(active_orchestrator_backend_id)
+                .unwrap_or_else(|| "<none>".to_string());
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 2,
+                message: format!(
+                    "targeted host follow-up turns may only target the active orchestrator backend for this REPL session (expected '{}', got '{}')",
+                    expected, backend_id
+                ),
+            });
+        }
+
+        if let Some(descriptor) =
+            select_member_runtime_descriptor_for_backend(startup_context, backend_id)?
+        {
+            return Ok(TargetedTurnRoute::World(descriptor));
+        }
+    }
+
+    Err(RuntimeBootstrapFailure {
+        exit_code: 2,
+        message: format!("no exact targeted-turn backend match for '{backend_id}'"),
     })
 }
 
@@ -2849,7 +3058,7 @@ async fn start_remote_member_runtime_with_prepared(
     };
     let transport_request = build_member_dispatch_transport_request(&prepared)?;
     let PreparedAgentRuntime {
-        descriptor: _descriptor,
+        descriptor,
         gateway: _gateway,
         agent_kind: _agent_kind,
         startup_context,
@@ -3296,6 +3505,7 @@ async fn start_remote_member_runtime_with_prepared(
         })?;
 
     Ok(Some(AsyncReplAgentRuntime {
+        descriptor,
         orchestration_session: startup_context.orchestration_session,
         manifest,
         store: startup_context.store,
@@ -3361,9 +3571,10 @@ async fn reconcile_member_runtime_generation(
 }
 
 #[cfg(target_os = "linux")]
-async fn ensure_member_runtime_ready(
+async fn ensure_member_runtime_ready_for_descriptor(
     startup_context: Option<&RuntimeOrchestrationContext>,
     world_session: Option<&WorldSession>,
+    descriptor: &RuntimeSelectionDescriptor,
     member_runtime: &mut Option<AsyncReplAgentRuntime>,
     pending_member_replacement: &mut Option<AgentRuntimeParticipantRecord>,
     agent_printer: &ReplPrinter,
@@ -3375,13 +3586,7 @@ async fn ensure_member_runtime_ready(
     let Some(world_session) = world_session else {
         return Ok(());
     };
-
-    let Some(descriptor) = select_member_runtime_descriptor(startup_context)
-        .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?
-    else {
-        return Ok(());
-    };
-    ensure_member_backend_allowed(startup_context, &descriptor)
+    ensure_member_backend_allowed(startup_context, descriptor)
         .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
 
     if let Some(runtime) = member_runtime.as_ref() {
@@ -3404,7 +3609,7 @@ async fn ensure_member_runtime_ready(
         .filter(|participant| participant.handle.agent_id == descriptor.agent_id);
     let prepared = prepare_member_runtime_startup_for_descriptor(
         startup_context,
-        descriptor,
+        descriptor.clone(),
         &PersistedWorldBinding {
             world_id: world_session.world_id.clone(),
             world_generation: world_session.world_generation,
@@ -3427,6 +3632,36 @@ async fn ensure_member_runtime_ready(
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+async fn ensure_member_runtime_ready(
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    world_session: Option<&WorldSession>,
+    member_runtime: &mut Option<AsyncReplAgentRuntime>,
+    pending_member_replacement: &mut Option<AgentRuntimeParticipantRecord>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> Result<()> {
+    let Some(startup_context) = startup_context else {
+        return Ok(());
+    };
+    let Some(descriptor) = select_member_runtime_descriptor(startup_context)
+        .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?
+    else {
+        return Ok(());
+    };
+
+    ensure_member_runtime_ready_for_descriptor(
+        Some(startup_context),
+        world_session,
+        &descriptor,
+        member_runtime,
+        pending_member_replacement,
+        agent_printer,
+        telemetry,
+    )
+    .await
+}
+
 #[cfg(not(target_os = "linux"))]
 async fn ensure_member_runtime_ready(
     startup_context: Option<&RuntimeOrchestrationContext>,
@@ -3443,14 +3678,322 @@ async fn ensure_member_runtime_ready(
         return Ok(());
     };
 
-    let Some(_descriptor) = select_member_runtime_descriptor(startup_context)
-        .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?
-    else {
-        return Ok(());
-    };
-
     Err(anyhow!(
         "substrate: error: world-scoped member runtime dispatch is supported on Linux only"
+    ))
+}
+
+fn build_session_resume_extension(session_id: &str) -> serde_json::Value {
+    serde_json::json!({
+        "selector": "id",
+        "id": session_id,
+    })
+}
+
+fn note_submitted_turn_started(
+    runtime: &AsyncReplAgentRuntime,
+    run_id: &str,
+    message: &str,
+    telemetry: &mut ReplSessionTelemetry,
+    agent_printer: &ReplPrinter,
+) -> Result<()> {
+    let (orchestration_snapshot, manifest_snapshot, event) = {
+        let mut orchestration_guard = runtime
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned");
+        let mut manifest_guard = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        manifest_guard.internal.latest_run_id = Some(run_id.to_string());
+        orchestration_guard.touch_active();
+        let event = build_runtime_message_event(
+            &manifest_guard,
+            &orchestration_guard,
+            run_id.to_string(),
+            MessageEventKind::TaskStart,
+            message,
+        );
+        (orchestration_guard.clone(), manifest_guard.clone(), event)
+    };
+    persist_runtime_snapshots(&runtime.store, &orchestration_snapshot, &manifest_snapshot)?;
+    emit_runtime_event(event, telemetry, agent_printer);
+    Ok(())
+}
+
+fn note_submitted_turn_completed(
+    runtime: &AsyncReplAgentRuntime,
+    run_id: &str,
+    message: impl Into<String>,
+    telemetry: &mut ReplSessionTelemetry,
+    agent_printer: &ReplPrinter,
+) -> Result<()> {
+    let (orchestration_snapshot, manifest_snapshot, event) = {
+        let mut orchestration_guard = runtime
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned");
+        let manifest_guard = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        orchestration_guard.touch_active();
+        let event = build_runtime_message_event(
+            &manifest_guard,
+            &orchestration_guard,
+            run_id.to_string(),
+            MessageEventKind::Status,
+            message,
+        );
+        (orchestration_guard.clone(), manifest_guard.clone(), event)
+    };
+    persist_runtime_snapshots(&runtime.store, &orchestration_snapshot, &manifest_snapshot)?;
+    emit_runtime_event(event, telemetry, agent_printer);
+    Ok(())
+}
+
+async fn submit_host_targeted_turn(
+    runtime: &mut AsyncReplAgentRuntime,
+    prompt: &str,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> Result<()> {
+    let gateway = build_gateway_for_descriptor(&runtime.descriptor)
+        .context("build host targeted-turn gateway")?;
+    let agent_kind =
+        agent_api::AgentWrapperKind::new(runtime.descriptor.backend_kind.as_agent_kind_str())
+            .map_err(|err| anyhow!("substrate: error: {err}"))?;
+    let run_id = Uuid::now_v7().to_string();
+    note_submitted_turn_started(
+        runtime,
+        &run_id,
+        format!(
+            "submitted targeted follow-up turn to {}",
+            runtime.descriptor.backend_id
+        )
+        .as_str(),
+        telemetry,
+        agent_printer,
+    )?;
+
+    let request = agent_api::AgentWrapperRunRequest {
+        prompt: prompt.to_string(),
+        working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
+        timeout: None,
+        env: BTreeMap::new(),
+        extensions: BTreeMap::from([(
+            AGENT_API_SESSION_RESUME_V1.to_string(),
+            build_session_resume_extension(&runtime.uaa_session_handle_id),
+        )]),
+    };
+    let control = gateway
+        .run_control(&agent_kind, request)
+        .await
+        .map_err(|err| anyhow!("substrate: error: {}", err))?;
+    let agent_api::AgentWrapperRunControl { handle, cancel: _ } = control;
+    let agent_api::AgentWrapperRunHandle {
+        mut events,
+        completion,
+    } = handle;
+
+    while let Some(wrapper_event) = events.next().await {
+        let (orchestration_snapshot, manifest_snapshot, event) = {
+            let mut orchestration_guard = runtime
+                .orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned");
+            let mut manifest_guard = runtime
+                .manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned");
+            if let Some(session_id) = extract_session_handle_id(wrapper_event.data.as_ref()) {
+                if manifest_guard.internal.uaa_session_id.as_deref() != Some(session_id) {
+                    manifest_guard.set_uaa_session_id(session_id.to_string());
+                }
+            }
+            manifest_guard.touch_event(Utc::now());
+            orchestration_guard.touch_active();
+            let event = translate_wrapper_event(
+                &manifest_guard,
+                &orchestration_guard,
+                &run_id,
+                wrapper_event,
+            );
+            (orchestration_guard.clone(), manifest_guard.clone(), event)
+        };
+        persist_runtime_snapshots(&runtime.store, &orchestration_snapshot, &manifest_snapshot)?;
+        emit_runtime_event(event, telemetry, agent_printer);
+    }
+
+    let completion = completion
+        .await
+        .map_err(|err| anyhow!("substrate: error: {}", err))?;
+    if let Some(session_id) = extract_session_handle_id(completion.data.as_ref()) {
+        let mut manifest_guard = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        if manifest_guard.internal.uaa_session_id.as_deref() != Some(session_id) {
+            manifest_guard.set_uaa_session_id(session_id.to_string());
+        }
+    }
+    let exit_code = completion.status.code().unwrap_or(-1);
+    report_nonzero_status(&completion.status);
+    note_submitted_turn_completed(
+        runtime,
+        &run_id,
+        if completion.status.success() {
+            format!(
+                "targeted follow-up turn completed for {}",
+                runtime.descriptor.backend_id
+            )
+        } else {
+            format!(
+                "targeted follow-up turn exited with status {} for {}",
+                exit_code, runtime.descriptor.backend_id
+            )
+        },
+        telemetry,
+        agent_printer,
+    )?;
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+async fn submit_world_targeted_turn(
+    runtime: &mut AsyncReplAgentRuntime,
+    prompt: &str,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> Result<()> {
+    use http_body_util::BodyExt as _;
+
+    let run_id = Uuid::now_v7().to_string();
+    note_submitted_turn_started(
+        runtime,
+        &run_id,
+        format!(
+            "submitted targeted follow-up turn to {}",
+            runtime.descriptor.backend_id
+        )
+        .as_str(),
+        telemetry,
+        agent_printer,
+    )?;
+
+    let request = {
+        let manifest_guard = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: manifest_guard.handle.orchestration_session_id.clone(),
+            participant_id: manifest_guard.handle.participant_id.clone(),
+            orchestrator_participant_id: manifest_guard
+                .handle
+                .orchestrator_participant_id
+                .clone()
+                .ok_or_else(|| {
+                    anyhow!(
+                        "substrate: error: retained world-scoped member is missing orchestrator_participant_id"
+                    )
+                })?,
+            backend_id: runtime.descriptor.backend_id.clone(),
+            run_id: run_id.clone(),
+            world_id: manifest_guard.handle.world_id.clone().ok_or_else(|| {
+                anyhow!("substrate: error: retained world-scoped member is missing world_id")
+            })?,
+            world_generation: manifest_guard.handle.world_generation.ok_or_else(|| {
+                anyhow!(
+                    "substrate: error: retained world-scoped member is missing world_generation"
+                )
+            })?,
+            prompt: prompt.to_string(),
+        }
+    };
+
+    let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;
+    let response = client
+        .submit_member_turn_stream(request)
+        .await
+        .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
+
+    let mut body = std::pin::pin!(response.into_body());
+    let mut buffer = Vec::new();
+    let mut observed_exit: Option<i32> = None;
+    while let Some(frame) = body.as_mut().frame().await {
+        let frame = frame.map_err(|err| anyhow!("substrate: error: {err:#}"))?;
+        let Some(data) = frame.data_ref() else {
+            continue;
+        };
+        buffer.extend_from_slice(data);
+
+        while let Some(pos) = buffer.iter().position(|&byte| byte == b'\n') {
+            let line: Vec<u8> = buffer.drain(..=pos).collect();
+            if line.len() <= 1 {
+                continue;
+            }
+            let payload = &line[..line.len() - 1];
+            if payload.is_empty() {
+                continue;
+            }
+            let frame = serde_json::from_slice::<ExecuteStreamFrame>(payload)
+                .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
+            match frame {
+                ExecuteStreamFrame::Start { .. } => {}
+                ExecuteStreamFrame::Event { event } => {
+                    handle_agent_event(event, telemetry, agent_printer);
+                }
+                ExecuteStreamFrame::Stdout { chunk_b64 }
+                | ExecuteStreamFrame::Stderr { chunk_b64 } => {
+                    let decoded = BASE64
+                        .decode(chunk_b64.as_bytes())
+                        .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
+                    agent_printer.print(String::from_utf8_lossy(&decoded).to_string());
+                }
+                ExecuteStreamFrame::Exit { exit, .. } => {
+                    observed_exit = Some(exit);
+                }
+                ExecuteStreamFrame::Error { message } => {
+                    return Err(anyhow!("substrate: error: {message}"));
+                }
+            }
+        }
+    }
+
+    let exit_code = observed_exit.unwrap_or(0);
+    report_nonzero_status(&exit_status_from_code(exit_code));
+    note_submitted_turn_completed(
+        runtime,
+        &run_id,
+        if exit_code == 0 {
+            format!(
+                "targeted follow-up turn completed for {}",
+                runtime.descriptor.backend_id
+            )
+        } else {
+            format!(
+                "targeted follow-up turn exited with status {} for {}",
+                exit_code, runtime.descriptor.backend_id
+            )
+        },
+        telemetry,
+        agent_printer,
+    )?;
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn submit_world_targeted_turn(
+    _runtime: &mut AsyncReplAgentRuntime,
+    _prompt: &str,
+    _agent_printer: &ReplPrinter,
+    _telemetry: &mut ReplSessionTelemetry,
+) -> Result<()> {
+    Err(anyhow!(
+        "substrate: error: world-targeted follow-up turns are supported on Linux only"
     ))
 }
 
@@ -3977,6 +4520,20 @@ fn report_nonzero_status(status: &ExitStatus) {
         "Command failed with status: {}",
         status.code().unwrap_or(-1)
     ));
+}
+
+fn parse_targeted_turn(input: &str) -> Option<TargetedTurn<'_>> {
+    if has_embedded_newlines(input) {
+        return None;
+    }
+
+    let rest = input.strip_prefix("::")?;
+    let (backend_id, prompt) = rest.split_once(' ')?;
+    if backend_id.is_empty() || prompt.is_empty() {
+        return None;
+    }
+
+    Some(TargetedTurn { backend_id, prompt })
 }
 
 fn parse_demo_burst(input: &str) -> Option<(usize, usize, u64)> {

@@ -33,6 +33,12 @@ pub(crate) struct MemberSelectionError {
     pub reason: String,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ExactBackendSelectionError {
+    pub exit_code: i32,
+    pub reason: String,
+}
+
 pub(crate) fn validate_orchestrator_selection<'a>(
     effective_config: &SubstrateConfig,
     inventory: &'a BTreeMap<String, AgentInventoryEntryV1>,
@@ -237,11 +243,104 @@ pub(crate) fn validate_member_selection(
     }
 }
 
+pub(crate) fn validate_exact_backend_selection(
+    effective_config: &SubstrateConfig,
+    inventory: &BTreeMap<String, AgentInventoryEntryV1>,
+    scope: AgentExecutionScope,
+    backend_id: &str,
+) -> std::result::Result<Option<RuntimeSelectionDescriptor>, ExactBackendSelectionError> {
+    let mut matches = inventory
+        .values()
+        .filter(|entry| {
+            entry.file.config.enabled
+                && entry.effective_scope(effective_config) == scope
+                && entry.derived_backend_id() == backend_id
+        })
+        .collect::<Vec<_>>();
+
+    match matches.len() {
+        0 => Ok(None),
+        1 => {
+            let entry = matches.pop().expect("single exact backend match");
+            validate_exact_backend_entry(entry, effective_config, scope, backend_id)
+        }
+        _ => {
+            let agent_ids = matches
+                .iter()
+                .map(|entry| entry.file.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            Err(ExactBackendSelectionError {
+                exit_code: 2,
+                reason: format!(
+                    "ambiguous exact backend selection: multiple {} runtime entries advertise backend '{}' ({agent_ids})",
+                    runtime_scope_label(scope),
+                    backend_id,
+                ),
+            })
+        }
+    }
+}
+
+fn validate_exact_backend_entry(
+    entry: &AgentInventoryEntryV1,
+    effective_config: &SubstrateConfig,
+    scope: AgentExecutionScope,
+    backend_id: &str,
+) -> std::result::Result<Option<RuntimeSelectionDescriptor>, ExactBackendSelectionError> {
+    if entry.file.config.protocol.as_deref() != Some(PURE_AGENT_PROTOCOL) {
+        return Err(ExactBackendSelectionError {
+            exit_code: 2,
+            reason: format!(
+                "selected {} runtime '{}' for backend '{}' does not advertise protocol '{}'",
+                runtime_scope_label(scope),
+                entry.file.id,
+                backend_id,
+                PURE_AGENT_PROTOCOL,
+            ),
+        });
+    }
+
+    if let Some(capability) =
+        missing_required_orchestrator_capability(&entry.file.config.capabilities)
+    {
+        return Err(ExactBackendSelectionError {
+            exit_code: 2,
+            reason: format!(
+                "selected {} runtime '{}' for backend '{}' is missing required capability '{}'",
+                runtime_scope_label(scope),
+                entry.file.id,
+                backend_id,
+                capability,
+            ),
+        });
+    }
+
+    let descriptor = validate_runtime_realizability(entry, effective_config).map_err(|err| {
+        ExactBackendSelectionError {
+            exit_code: err.exit_code,
+            reason: err.reason,
+        }
+    })?;
+    Ok(Some(descriptor))
+}
+
+fn runtime_scope_label(scope: AgentExecutionScope) -> &'static str {
+    match scope {
+        AgentExecutionScope::Host => "host-scoped",
+        AgentExecutionScope::World => "world-scoped",
+    }
+}
+
 pub(crate) fn runtime_realizability_error_exit_code(error: &RuntimeRealizabilityError) -> i32 {
     error.exit_code
 }
 
 pub(crate) fn member_selection_error_exit_code(error: &MemberSelectionError) -> i32 {
+    error.exit_code
+}
+
+pub(crate) fn exact_backend_selection_error_exit_code(error: &ExactBackendSelectionError) -> i32 {
     error.exit_code
 }
 
@@ -251,8 +350,10 @@ fn _assert_result_type(_: Result<RuntimeSelectionDescriptor>) {}
 #[cfg(test)]
 mod tests {
     use super::{
+        exact_backend_selection_error_exit_code, validate_exact_backend_selection,
         validate_member_selection, validate_runtime_realizability, AgentRuntimeBackendKind,
-        MemberSelectionError, RuntimeSelectionDescriptor, PURE_AGENT_PROTOCOL,
+        ExactBackendSelectionError, MemberSelectionError, RuntimeSelectionDescriptor,
+        PURE_AGENT_PROTOCOL,
     };
     use crate::execution::agent_inventory::{
         AgentCapabilitiesV1, AgentCliConfigV1, AgentConfigKind, AgentConfigV1,
@@ -306,6 +407,14 @@ mod tests {
 
     fn assert_selected_descriptor(
         result: std::result::Result<Option<RuntimeSelectionDescriptor>, MemberSelectionError>,
+    ) -> RuntimeSelectionDescriptor {
+        result
+            .expect("selection should succeed")
+            .expect("descriptor")
+    }
+
+    fn assert_exact_selected_descriptor(
+        result: std::result::Result<Option<RuntimeSelectionDescriptor>, ExactBackendSelectionError>,
     ) -> RuntimeSelectionDescriptor {
         result
             .expect("selection should succeed")
@@ -414,6 +523,98 @@ mod tests {
             error
                 .reason
                 .contains("does not advertise protocol 'uaa.agent.session'"),
+            "unexpected reason: {}",
+            error.reason
+        );
+    }
+
+    #[test]
+    fn validate_exact_backend_selection_returns_none_when_backend_is_missing() {
+        let config = SubstrateConfig::default();
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry(
+                "codex",
+                AgentExecutionScope::World,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                required_capabilities(),
+            ),
+        );
+
+        let selected = validate_exact_backend_selection(
+            &config,
+            &inventory,
+            AgentExecutionScope::World,
+            "cli:claude-code",
+        )
+        .expect("selection should not fail");
+        assert!(selected.is_none());
+    }
+
+    #[test]
+    fn validate_exact_backend_selection_bypasses_world_ambiguity_when_backend_matches_exactly() {
+        let config = SubstrateConfig::default();
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry(
+                "codex",
+                AgentExecutionScope::World,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                required_capabilities(),
+            ),
+        );
+        inventory.insert(
+            "claude_code".to_string(),
+            make_entry(
+                "claude_code",
+                AgentExecutionScope::World,
+                Some(PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                required_capabilities(),
+            ),
+        );
+
+        let descriptor = assert_exact_selected_descriptor(validate_exact_backend_selection(
+            &config,
+            &inventory,
+            AgentExecutionScope::World,
+            "cli:codex",
+        ));
+        assert_eq!(descriptor.agent_id, "codex");
+        assert_eq!(descriptor.backend_id, "cli:codex");
+    }
+
+    #[test]
+    fn validate_exact_backend_selection_reports_scope_specific_protocol_error() {
+        let config = SubstrateConfig::default();
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "claude_code".to_string(),
+            make_entry(
+                "claude_code",
+                AgentExecutionScope::Host,
+                Some("other.protocol"),
+                AgentCliMode::Persistent,
+                required_capabilities(),
+            ),
+        );
+
+        let error = validate_exact_backend_selection(
+            &config,
+            &inventory,
+            AgentExecutionScope::Host,
+            "cli:claude_code",
+        )
+        .expect_err("must fail closed");
+        assert_eq!(exact_backend_selection_error_exit_code(&error), 2);
+        assert!(
+            error
+                .reason
+                .contains("selected host-scoped runtime 'claude_code' for backend 'cli:claude_code' does not advertise protocol 'uaa.agent.session'"),
             "unexpected reason: {}",
             error.reason
         );
