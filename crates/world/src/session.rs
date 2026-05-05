@@ -419,7 +419,11 @@ impl SessionWorld {
         }
         match Self::ownership_from_metadata(&metadata)? {
             SessionWorldOwnership::Generic => {
-                Ok(Some(Self::from_metadata(root_dir, spec, metadata, None)))
+                let world = Self::from_metadata(root_dir, spec, metadata, None);
+                world.ensure_cgroup_attach_target().with_context(|| {
+                    format!("failed to prepare cgroup attach target for {}", world.id)
+                })?;
+                Ok(Some(world))
             }
             SessionWorldOwnership::Shared(_) => Ok(None),
         }
@@ -443,12 +447,11 @@ impl SessionWorld {
             SessionWorldOwnership::Shared(binding)
                 if binding.orchestration_session_id == owner_spec.orchestration_session_id =>
             {
-                Ok(Some(Self::from_metadata(
-                    root_dir,
-                    spec,
-                    metadata,
-                    Some(binding),
-                )))
+                let world = Self::from_metadata(root_dir, spec, metadata, Some(binding));
+                world.ensure_cgroup_attach_target().with_context(|| {
+                    format!("failed to prepare cgroup attach target for {}", world.id)
+                })?;
+                Ok(Some(world))
             }
             SessionWorldOwnership::Shared(_) => Ok(None),
         }
@@ -756,6 +759,7 @@ impl SessionWorld {
                 std::fs::create_dir_all(&fallback)
                     .context("Failed to create fallback cgroup directory")?;
                 self.cgroup_path = fallback;
+                self.ensure_cgroup_attach_target()?;
                 return Ok(());
             }
             tracing::error!(
@@ -765,6 +769,28 @@ impl SessionWorld {
             );
             return Err(e).context("Failed to create cgroup directory");
         }
+        self.ensure_cgroup_attach_target()?;
+        Ok(())
+    }
+
+    fn ensure_cgroup_attach_target(&self) -> Result<()> {
+        if self.cgroup_path.starts_with(Path::new("/sys/fs/cgroup")) {
+            return Ok(());
+        }
+
+        let cgroup_procs = self.cgroup_path.join("cgroup.procs");
+        if cgroup_procs.exists() {
+            return Ok(());
+        }
+
+        // Unprivileged fallback directories are ordinary host paths rather than kernel cgroups,
+        // so materialize a writable surrogate that the launchers can use for placement proofing.
+        fs::File::options()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&cgroup_procs)
+            .with_context(|| format!("failed to create {}", cgroup_procs.display()))?;
         Ok(())
     }
 
@@ -1256,6 +1282,74 @@ mod tests {
             overlay: None,
             overlay_mode: None,
         }
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn create_directories_materializes_surrogate_cgroup_procs_for_fallback_paths() {
+        let temp = tempdir().unwrap();
+        let fallback_cgroup_path = temp.path().join("fallback-cgroup").join("wld_test");
+        let mut world = test_world(&temp, false);
+        world.cgroup_path = fallback_cgroup_path.clone();
+
+        world.create_directories().unwrap();
+
+        assert!(fallback_cgroup_path.is_dir());
+        assert!(
+            fallback_cgroup_path.join("cgroup.procs").is_file(),
+            "expected fallback cgroup paths to materialize a writable cgroup.procs surrogate"
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn recovered_fallback_world_materializes_surrogate_cgroup_procs() {
+        let temp = tempdir().unwrap();
+        let root_dir = temp.path().join("world-root");
+        let project_dir = temp.path().join("project");
+        let cgroup_path = temp.path().join("fallback-cgroup").join("wld_recovered");
+        std::fs::create_dir_all(&root_dir).unwrap();
+        std::fs::create_dir_all(&project_dir).unwrap();
+        std::fs::create_dir_all(&cgroup_path).unwrap();
+
+        let spec = WorldSpec {
+            reuse_session: true,
+            isolate_network: false,
+            project_dir: project_dir.clone(),
+            fs_mode: WorldFsMode::Writable,
+            ..WorldSpec::default()
+        };
+        let world = SessionWorld {
+            id: "wld_recovered".into(),
+            root_dir: root_dir.clone(),
+            project_dir: project_dir.clone(),
+            cgroup_path: cgroup_path.clone(),
+            net_namespace: None,
+            spec: spec.clone(),
+            started_at: UNIX_EPOCH + Duration::from_millis(1_234),
+            network_filter: None,
+            fs_by_span: HashMap::new(),
+            shared_binding: None,
+            policy_snapshot_hash: None,
+            last_restart_reason: None,
+            overlay: None,
+            overlay_mode: None,
+        };
+
+        world.persist_metadata().unwrap();
+        assert!(
+            !cgroup_path.join("cgroup.procs").exists(),
+            "test precondition should reflect pre-patch recovered fallback worlds"
+        );
+
+        let recovered = SessionWorld::recover_compatible_from_root(&root_dir, &spec)
+            .unwrap()
+            .expect("metadata should recover");
+        assert_eq!(recovered.cgroup_path, cgroup_path);
+        assert!(
+            recovered.cgroup_path.join("cgroup.procs").is_file(),
+            "expected recovered fallback worlds to self-heal their cgroup attach target"
+        );
     }
 
     #[test]
