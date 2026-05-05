@@ -3,10 +3,11 @@
 use crate::service::WorldAgentService;
 use agent_api_types::{
     ApiError, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
-    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, PendingDiffClearRequestV1,
-    PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
-    PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1,
-    WorldDoctorReportV1, WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
+    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, MemberTurnSubmitRequestV1,
+    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
+    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1,
+    WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1, WorldDoctorReportV1,
+    WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
     WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1, WorldFsReadRequestV1,
     WorldFsReadResponseV1,
 };
@@ -341,6 +342,24 @@ pub async fn execute_stream(
     let req: ExecuteRequest = serde_json::from_value(payload)
         .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
     service.execute_stream(req).await.map_err(|e| {
+        if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
+            ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
+        } else {
+            ApiErrorResponse(ApiError::Internal(e.to_string()))
+        }
+    })
+}
+
+/// Submit a follow-up turn to a retained world member and stream the response.
+pub async fn member_turn_stream(
+    State(service): State<WorldAgentService>,
+    body: Bytes,
+) -> Result<Response, ApiErrorResponse> {
+    let payload: Value = serde_json::from_slice(&body)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    let req: MemberTurnSubmitRequestV1 = serde_json::from_value(payload)
+        .map_err(|e| ApiErrorResponse(ApiError::BadRequest(format!("Invalid JSON: {e}"))))?;
+    service.submit_member_turn_stream(req).await.map_err(|e| {
         if let Some(bad) = e.downcast_ref::<crate::service::BadRequestError>() {
             ApiErrorResponse(ApiError::BadRequest(bad.message().to_string()))
         } else {

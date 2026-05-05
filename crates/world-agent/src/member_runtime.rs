@@ -8,7 +8,8 @@ use agent_api::{
     AgentWrapperRunRequest,
 };
 use agent_api_types::{
-    ExecuteStreamFrame, MemberDispatchRequestV1, MemberRuntimeBackendKindV1, ProcessTelemetry,
+    ExecuteStreamFrame, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
+    MemberTurnSubmitRequestV1, ProcessTelemetry,
 };
 use anyhow::{anyhow, Result};
 use axum::{
@@ -34,16 +35,57 @@ use crate::gateway_runtime::{prepare_linux_world_entry_launcher, LinuxWorldPlace
 const MEMBER_ROLE: &str = "member";
 const SESSION_HANDLE_SCHEMA_V1: &str = "agent_api.session.handle.v1";
 const CANCELLED_MESSAGE: &str = "cancelled";
+const SESSION_RESUME_EXTENSION_V1: &str = "agent_api.session.resume.v1";
 
 #[derive(Clone, Default)]
 pub(crate) struct MemberRuntimeManager {
-    active: Arc<RwLock<HashMap<String, Arc<ActiveMemberRuntime>>>>,
+    active_members_by_participant_id: Arc<RwLock<HashMap<String, Arc<ActiveMemberRuntime>>>>,
+    active_turns_by_span_id: Arc<RwLock<HashMap<String, Arc<ActiveSubmittedTurn>>>>,
 }
 
 struct ActiveMemberRuntime {
+    agent_id: String,
+    participant_id: String,
+    orchestration_session_id: String,
+    orchestrator_participant_id: String,
+    parent_participant_id: Option<String>,
+    resumed_from_participant_id: Option<String>,
+    backend_id: String,
+    backend_kind: MemberRuntimeBackendKindV1,
+    binary_path: std::path::PathBuf,
+    working_dir: std::path::PathBuf,
+    env: BTreeMap<String, String>,
+    binding: SharedWorldBindingSnapshot,
+    protocol: serde_json::Value,
+    bootstrap_span_id: String,
+    bootstrap_cancel: AgentWrapperCancelHandle,
+    bootstrap_last_signal: Mutex<Option<String>>,
+    active_turn_span_id: Mutex<Option<String>>,
+    uaa_session_id: Mutex<Option<String>>,
+    launcher_dir: Option<std::path::PathBuf>,
+}
+
+struct ActiveSubmittedTurn {
+    participant_id: String,
     cancel: AgentWrapperCancelHandle,
     last_signal: Mutex<Option<String>>,
-    launcher_dir: Option<std::path::PathBuf>,
+}
+
+#[derive(Clone)]
+struct MemberStreamContext {
+    orchestration_session_id: String,
+    run_id: String,
+    participant_id: String,
+    parent_participant_id: Option<String>,
+    resumed_from_participant_id: Option<String>,
+    backend_id: String,
+    protocol: serde_json::Value,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MemberStreamMode {
+    Bootstrap,
+    SubmittedTurn,
 }
 
 impl MemberRuntimeManager {
@@ -62,9 +104,15 @@ impl MemberRuntimeManager {
     ) -> Result<Response> {
         let actual_binary = validate_member_runtime_binary(&dispatch)?;
         let prepared_launcher = prepare_member_runtime_launcher(&actual_binary, &placement)?;
+        let runtime_env = env
+            .into_iter()
+            .chain(prepared_launcher.env.iter().cloned())
+            .collect::<BTreeMap<_, _>>();
 
-        let (gateway, agent_kind) =
-            build_gateway_for_dispatch(&dispatch, prepared_launcher.launcher_path.clone())?;
+        let (gateway, agent_kind) = build_gateway_for_backend(
+            &dispatch.resolved_runtime.backend_kind,
+            prepared_launcher.launcher_path.clone(),
+        )?;
         let AgentWrapperRunControl { handle, cancel } = match gateway
             .run_control(
                 &agent_kind,
@@ -72,10 +120,7 @@ impl MemberRuntimeManager {
                     prompt: runtime_bootstrap_prompt().to_string(),
                     working_dir: Some(placement.working_dir.clone()),
                     timeout: None,
-                    env: env
-                        .into_iter()
-                        .chain(prepared_launcher.env.iter().cloned())
-                        .collect::<BTreeMap<_, _>>(),
+                    env: runtime_env.clone(),
                     extensions: BTreeMap::new(),
                 },
             )
@@ -89,11 +134,33 @@ impl MemberRuntimeManager {
         };
 
         let active = Arc::new(ActiveMemberRuntime {
-            cancel,
-            last_signal: Mutex::new(None),
+            agent_id,
+            participant_id: dispatch.participant_id.clone(),
+            orchestration_session_id: dispatch.orchestration_session_id.clone(),
+            orchestrator_participant_id: dispatch.orchestrator_participant_id.clone(),
+            parent_participant_id: dispatch.parent_participant_id.clone(),
+            resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
+            backend_id: dispatch.backend_id.clone(),
+            backend_kind: dispatch.resolved_runtime.backend_kind.clone(),
+            binary_path: actual_binary,
+            working_dir: placement.working_dir.clone(),
+            env: runtime_env,
+            binding: binding.clone(),
+            protocol: json!(dispatch.protocol),
+            bootstrap_span_id: span_id.clone(),
+            bootstrap_cancel: cancel,
+            bootstrap_last_signal: Mutex::new(None),
+            active_turn_span_id: Mutex::new(None),
+            uaa_session_id: Mutex::new(None),
             launcher_dir: Some(prepared_launcher.launcher_dir),
         });
-        self.register(span_id.clone(), active);
+        if let Err(err) = self.register_member(active.clone()) {
+            active.bootstrap_cancel.cancel();
+            if let Some(launcher_dir) = active.launcher_dir.as_ref() {
+                let _ = fs::remove_dir_all(launcher_dir);
+            }
+            return Err(err);
+        }
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
         let _ = tx.send(ExecuteStreamFrame::Start {
@@ -101,37 +168,184 @@ impl MemberRuntimeManager {
         });
 
         let manager = self.clone();
+        let participant_id = dispatch.participant_id.clone();
+        let context = MemberStreamContext {
+            orchestration_session_id: dispatch.orchestration_session_id.clone(),
+            run_id: dispatch.run_id.clone(),
+            participant_id: dispatch.participant_id.clone(),
+            parent_participant_id: dispatch.parent_participant_id.clone(),
+            resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
+            backend_id: dispatch.backend_id.clone(),
+            protocol: json!(dispatch.protocol),
+        };
         tokio::spawn(async move {
             let mut events = handle.events;
             let completion = handle.completion;
             let mut emitted_registered = false;
 
             while let Some(wrapper_event) = events.next().await {
+                if let Some(session_id) =
+                    surfaced_uaa_session_id_from_data(wrapper_event.data.as_ref())
+                {
+                    manager.remember_uaa_session_id(&participant_id, session_id);
+                }
                 if let Some(frame) = frame_from_wrapper_event(
-                    &agent_id,
-                    &dispatch,
+                    &context,
                     &binding,
                     &span_id,
                     wrapper_event,
                     &mut emitted_registered,
+                    MemberStreamMode::Bootstrap,
+                    active.agent_id.as_str(),
                 ) {
                     let _ = tx.send(frame);
                 }
             }
 
-            if let Some(frame) = frame_from_completion(
-                &agent_id,
-                &dispatch,
+            let completion = completion.await;
+            if let Ok(ref completion) = completion {
+                if let Some(session_id) =
+                    surfaced_uaa_session_id_from_data(completion.data.as_ref())
+                {
+                    manager.remember_uaa_session_id(&participant_id, session_id);
+                }
+            }
+            for frame in frames_from_completion(
+                &context,
                 &binding,
                 &span_id,
-                completion.await,
-                manager.last_signal_for(&span_id),
+                completion,
+                active.bootstrap_last_signal(),
                 &mut emitted_registered,
+                MemberStreamMode::Bootstrap,
+                active.agent_id.as_str(),
             ) {
                 let _ = tx.send(frame);
             }
 
-            manager.unregister(&span_id);
+            manager.unregister_member(&participant_id);
+        });
+
+        stream_response(rx)
+    }
+
+    pub(crate) async fn submit_turn(&self, req: MemberTurnSubmitRequestV1) -> Result<Response> {
+        let active = self
+            .active_members_by_participant_id
+            .read()
+            .expect("member runtime registry lock poisoned")
+            .get(&req.participant_id)
+            .cloned()
+            .ok_or_else(|| {
+                crate::service::BadRequestError::new(format!(
+                    "member_turn_submit.participant_id {} is not retained",
+                    req.participant_id
+                ))
+            })?;
+
+        validate_submit_turn_request(&req, RetainedMemberIdentity::from_active(active.as_ref()))?;
+        let uaa_session_id = active.uaa_session_id().ok_or_else(|| {
+            crate::service::BadRequestError::new(format!(
+                "member_turn_submit.participant_id {} has no surfaced uaa_session_id",
+                req.participant_id
+            ))
+        })?;
+
+        let span_id = format!("spn_{}", uuid::Uuid::now_v7());
+        self.reserve_turn_slot(&active, &span_id)?;
+
+        let (gateway, agent_kind) =
+            build_gateway_for_backend(&active.backend_kind, active.binary_path.clone())?;
+        let mut extensions = BTreeMap::new();
+        extensions.insert(
+            SESSION_RESUME_EXTENSION_V1.to_string(),
+            json!({
+                "selector": "id",
+                "id": uaa_session_id,
+            }),
+        );
+
+        let AgentWrapperRunControl { handle, cancel } = match gateway
+            .run_control(
+                &agent_kind,
+                AgentWrapperRunRequest {
+                    prompt: req.prompt.clone(),
+                    working_dir: Some(active.working_dir.clone()),
+                    timeout: None,
+                    env: active.env.clone(),
+                    extensions,
+                },
+            )
+            .await
+        {
+            Ok(control) => control,
+            Err(err) => {
+                self.clear_reserved_turn_slot(&active, &span_id);
+                return Err(map_wrapper_error(err));
+            }
+        };
+
+        let turn = Arc::new(ActiveSubmittedTurn {
+            participant_id: active.participant_id.clone(),
+            cancel,
+            last_signal: Mutex::new(None),
+        });
+        self.register_turn(span_id.clone(), turn.clone());
+
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<ExecuteStreamFrame>();
+        let _ = tx.send(ExecuteStreamFrame::Start {
+            span_id: span_id.clone(),
+        });
+
+        let manager = self.clone();
+        let context = active.submit_context(req.run_id.clone());
+        let binding = active.binding.clone();
+        tokio::spawn(async move {
+            let mut events = handle.events;
+            let completion = handle.completion;
+            let mut emitted_registered = false;
+
+            while let Some(wrapper_event) = events.next().await {
+                if let Some(session_id) =
+                    surfaced_uaa_session_id_from_data(wrapper_event.data.as_ref())
+                {
+                    manager.remember_uaa_session_id(&turn.participant_id, session_id);
+                }
+                if let Some(frame) = frame_from_wrapper_event(
+                    &context,
+                    &binding,
+                    &span_id,
+                    wrapper_event,
+                    &mut emitted_registered,
+                    MemberStreamMode::SubmittedTurn,
+                    active.agent_id.as_str(),
+                ) {
+                    let _ = tx.send(frame);
+                }
+            }
+
+            let completion = completion.await;
+            if let Ok(ref completion) = completion {
+                if let Some(session_id) =
+                    surfaced_uaa_session_id_from_data(completion.data.as_ref())
+                {
+                    manager.remember_uaa_session_id(&turn.participant_id, session_id);
+                }
+            }
+            for frame in frames_from_completion(
+                &context,
+                &binding,
+                &span_id,
+                completion,
+                turn.last_signal(),
+                &mut emitted_registered,
+                MemberStreamMode::SubmittedTurn,
+                active.agent_id.as_str(),
+            ) {
+                let _ = tx.send(frame);
+            }
+
+            manager.unregister_turn(&span_id);
         });
 
         stream_response(rx)
@@ -140,33 +354,57 @@ impl MemberRuntimeManager {
     pub(crate) fn cancel(&self, span_id: &str, sig: &str) -> Result<bool> {
         validate_cancel_signal(sig)?;
 
-        let active = self
-            .active
+        let submitted_turn = self
+            .active_turns_by_span_id
             .read()
             .expect("member runtime registry lock poisoned")
             .get(span_id)
             .cloned();
-        let Some(active) = active else {
+        if let Some(submitted_turn) = submitted_turn {
+            if let Ok(mut guard) = submitted_turn.last_signal.lock() {
+                *guard = Some(sig.trim().to_ascii_uppercase());
+            }
+            submitted_turn.cancel.cancel();
+            return Ok(true);
+        }
+
+        let bootstrap = self
+            .active_members_by_participant_id
+            .read()
+            .expect("member runtime registry lock poisoned")
+            .values()
+            .find(|active| active.bootstrap_span_id == span_id)
+            .cloned();
+        let Some(bootstrap) = bootstrap else {
             return Ok(false);
         };
 
-        if let Ok(mut guard) = active.last_signal.lock() {
+        if let Ok(mut guard) = bootstrap.bootstrap_last_signal.lock() {
             *guard = Some(sig.trim().to_ascii_uppercase());
         }
-        active.cancel.cancel();
+        bootstrap.bootstrap_cancel.cancel();
         Ok(true)
     }
 
-    fn register(&self, span_id: String, active: Arc<ActiveMemberRuntime>) {
-        self.active
+    fn register_member(&self, active: Arc<ActiveMemberRuntime>) -> Result<()> {
+        let mut guard = self
+            .active_members_by_participant_id
             .write()
-            .expect("member runtime registry lock poisoned")
-            .insert(span_id, active);
+            .expect("member runtime registry lock poisoned");
+        if !guard.is_empty() {
+            let retained = guard.keys().cloned().collect::<Vec<_>>().join(", ");
+            return Err(crate::service::BadRequestError::new(format!(
+                "a retained world member is already active ({retained}); only one participant may be retained at a time"
+            ))
+            .into());
+        }
+        guard.insert(active.participant_id.clone(), active);
+        Ok(())
     }
 
-    fn unregister(&self, span_id: &str) {
-        if let Ok(mut guard) = self.active.write() {
-            if let Some(active) = guard.remove(span_id) {
+    fn unregister_member(&self, participant_id: &str) {
+        if let Ok(mut guard) = self.active_members_by_participant_id.write() {
+            if let Some(active) = guard.remove(participant_id) {
                 if let Some(launcher_dir) = active.launcher_dir.as_ref() {
                     let _ = fs::remove_dir_all(launcher_dir);
                 }
@@ -174,18 +412,61 @@ impl MemberRuntimeManager {
         }
     }
 
-    fn last_signal_for(&self, span_id: &str) -> Option<String> {
-        self.active
+    fn register_turn(&self, span_id: String, turn: Arc<ActiveSubmittedTurn>) {
+        self.active_turns_by_span_id
+            .write()
+            .expect("member runtime registry lock poisoned")
+            .insert(span_id, turn);
+    }
+
+    fn unregister_turn(&self, span_id: &str) {
+        if let Ok(mut guard) = self.active_turns_by_span_id.write() {
+            if let Some(turn) = guard.remove(span_id) {
+                if let Some(active) = self
+                    .active_members_by_participant_id
+                    .read()
+                    .ok()
+                    .and_then(|active| active.get(&turn.participant_id).cloned())
+                {
+                    self.clear_reserved_turn_slot(&active, span_id);
+                }
+            }
+        }
+    }
+
+    fn reserve_turn_slot(&self, active: &Arc<ActiveMemberRuntime>, span_id: &str) -> Result<()> {
+        let mut guard = active
+            .active_turn_span_id
+            .lock()
+            .map_err(|_| anyhow!("member runtime turn slot lock poisoned"))?;
+        if let Some(existing) = guard.as_ref() {
+            return Err(crate::service::BadRequestError::new(format!(
+                "member_turn_submit.participant_id {} already has an active submitted turn ({existing})",
+                active.participant_id
+            ))
+            .into());
+        }
+        *guard = Some(span_id.to_string());
+        Ok(())
+    }
+
+    fn clear_reserved_turn_slot(&self, active: &Arc<ActiveMemberRuntime>, span_id: &str) {
+        if let Ok(mut guard) = active.active_turn_span_id.lock() {
+            if guard.as_deref() == Some(span_id) {
+                *guard = None;
+            }
+        }
+    }
+
+    fn remember_uaa_session_id(&self, participant_id: &str, session_id: String) {
+        if let Some(active) = self
+            .active_members_by_participant_id
             .read()
             .ok()
-            .and_then(|guard| guard.get(span_id).cloned())
-            .and_then(|active| {
-                active
-                    .last_signal
-                    .lock()
-                    .ok()
-                    .and_then(|guard| guard.clone())
-            })
+            .and_then(|guard| guard.get(participant_id).cloned())
+        {
+            active.remember_uaa_session_id(session_id);
+        }
     }
 }
 
@@ -206,14 +487,14 @@ fn validate_member_runtime_binary(
     Ok(path.to_path_buf())
 }
 
-fn build_gateway_for_dispatch(
-    dispatch: &MemberDispatchRequestV1,
+fn build_gateway_for_backend(
+    backend_kind: &MemberRuntimeBackendKindV1,
     binary_path: std::path::PathBuf,
 ) -> Result<(AgentWrapperGateway, AgentWrapperKind)> {
     let mut gateway = AgentWrapperGateway::new();
     let binary_path = Some(binary_path);
 
-    let agent_kind = match dispatch.resolved_runtime.backend_kind {
+    let agent_kind = match backend_kind {
         MemberRuntimeBackendKindV1::Codex => {
             gateway
                 .register(Arc::new(CodexBackend::new(CodexBackendConfig {
@@ -262,96 +543,104 @@ fn prepare_member_runtime_launcher(
 }
 
 fn frame_from_wrapper_event(
-    agent_id: &str,
-    dispatch: &MemberDispatchRequestV1,
+    context: &MemberStreamContext,
     binding: &SharedWorldBindingSnapshot,
     span_id: &str,
     wrapper_event: AgentWrapperEvent,
     emitted_registered: &mut bool,
+    mode: MemberStreamMode,
+    agent_id: &str,
 ) -> Option<ExecuteStreamFrame> {
     Some(ExecuteStreamFrame::Event {
         event: agent_event_from_wrapper_event(
-            agent_id,
-            dispatch,
+            context,
             binding,
             span_id,
             wrapper_event,
             emitted_registered,
+            mode,
+            agent_id,
         )?,
     })
 }
 
-fn frame_from_completion(
-    agent_id: &str,
-    dispatch: &MemberDispatchRequestV1,
+fn frames_from_completion(
+    context: &MemberStreamContext,
     binding: &SharedWorldBindingSnapshot,
     span_id: &str,
     completion: std::result::Result<AgentWrapperCompletion, AgentWrapperError>,
     cancel_signal: Option<String>,
     emitted_registered: &mut bool,
-) -> Option<ExecuteStreamFrame> {
+    mode: MemberStreamMode,
+    agent_id: &str,
+) -> Vec<ExecuteStreamFrame> {
     match completion {
         Ok(completion) => {
-            if !*emitted_registered {
+            let mut frames = Vec::new();
+            if mode == MemberStreamMode::Bootstrap && !*emitted_registered {
                 if let Some(event) = registered_event_from_data(
-                    agent_id,
-                    dispatch,
+                    context,
                     binding,
                     span_id,
                     completion.data.as_ref(),
+                    agent_id,
                 ) {
                     *emitted_registered = true;
-                    return Some(ExecuteStreamFrame::Event { event });
+                    frames.push(ExecuteStreamFrame::Event { event });
                 }
             }
 
-            Some(ExecuteStreamFrame::Exit {
+            frames.push(ExecuteStreamFrame::Exit {
                 exit: exit_code_from_status(&completion.status),
                 span_id: span_id.to_string(),
                 scopes_used: Vec::new(),
                 fs_diff: None,
                 process_telemetry: ProcessTelemetry::default(),
-            })
+            });
+            frames
         }
         Err(AgentWrapperError::Backend { message }) if message == CANCELLED_MESSAGE => {
-            Some(ExecuteStreamFrame::Exit {
+            vec![ExecuteStreamFrame::Exit {
                 exit: cancel_exit_code(cancel_signal.as_deref()),
                 span_id: span_id.to_string(),
                 scopes_used: Vec::new(),
                 fs_diff: None,
                 process_telemetry: ProcessTelemetry::default(),
-            })
+            }]
         }
-        Err(err) => Some(ExecuteStreamFrame::Error {
+        Err(err) => vec![ExecuteStreamFrame::Error {
             message: format!("member runtime failed: {err}"),
-        }),
+        }],
     }
 }
 
 fn agent_event_from_wrapper_event(
-    agent_id: &str,
-    dispatch: &MemberDispatchRequestV1,
+    context: &MemberStreamContext,
     binding: &SharedWorldBindingSnapshot,
     span_id: &str,
     wrapper_event: AgentWrapperEvent,
     emitted_registered: &mut bool,
+    mode: MemberStreamMode,
+    agent_id: &str,
 ) -> Option<AgentEvent> {
-    if let Some(event) = registered_event_from_data(
-        agent_id,
-        dispatch,
-        binding,
-        span_id,
-        wrapper_event.data.as_ref(),
-    ) {
-        *emitted_registered = true;
-        return Some(event);
+    if mode == MemberStreamMode::Bootstrap {
+        if let Some(event) = registered_event_from_data(
+            context,
+            binding,
+            span_id,
+            wrapper_event.data.as_ref(),
+            agent_id,
+        ) {
+            *emitted_registered = true;
+            return Some(event);
+        }
     }
 
     let mut event = match wrapper_event.kind {
         AgentWrapperEventKind::Status => AgentEvent::message(
             agent_id,
-            dispatch.orchestration_session_id.clone(),
-            dispatch.run_id.clone(),
+            context.orchestration_session_id.clone(),
+            context.run_id.clone(),
             MessageEventKind::Status,
             wrapper_event
                 .message
@@ -360,8 +649,8 @@ fn agent_event_from_wrapper_event(
         ),
         AgentWrapperEventKind::TextOutput => AgentEvent::message(
             agent_id,
-            dispatch.orchestration_session_id.clone(),
-            dispatch.run_id.clone(),
+            context.orchestration_session_id.clone(),
+            context.run_id.clone(),
             MessageEventKind::TaskProgress,
             wrapper_event
                 .text
@@ -370,8 +659,8 @@ fn agent_event_from_wrapper_event(
         ),
         AgentWrapperEventKind::ToolCall | AgentWrapperEventKind::ToolResult => AgentEvent::message(
             agent_id,
-            dispatch.orchestration_session_id.clone(),
-            dispatch.run_id.clone(),
+            context.orchestration_session_id.clone(),
+            context.run_id.clone(),
             MessageEventKind::TaskProgress,
             wrapper_event
                 .message
@@ -380,8 +669,8 @@ fn agent_event_from_wrapper_event(
         ),
         AgentWrapperEventKind::Error => AgentEvent::alert(
             agent_id,
-            dispatch.orchestration_session_id.clone(),
-            dispatch.run_id.clone(),
+            context.orchestration_session_id.clone(),
+            context.run_id.clone(),
             "agent_wrapper_error",
             wrapper_event
                 .message
@@ -390,8 +679,8 @@ fn agent_event_from_wrapper_event(
         ),
         AgentWrapperEventKind::Unknown => AgentEvent::message(
             agent_id,
-            dispatch.orchestration_session_id.clone(),
-            dispatch.run_id.clone(),
+            context.orchestration_session_id.clone(),
+            context.run_id.clone(),
             MessageEventKind::TaskProgress,
             "member runtime emitted an unknown event".to_string(),
         ),
@@ -400,7 +689,7 @@ fn agent_event_from_wrapper_event(
     stamp_event_identity(
         &mut event,
         agent_id,
-        dispatch,
+        context,
         binding,
         span_id,
         wrapper_event.channel,
@@ -409,7 +698,7 @@ fn agent_event_from_wrapper_event(
     if let Some(data) = wrapper_event.data {
         if let Some(obj) = event.data.as_object_mut() {
             obj.insert("uaa_event".to_string(), data);
-            obj.insert("protocol".to_string(), json!(dispatch.protocol));
+            obj.insert("protocol".to_string(), context.protocol.clone());
         }
     }
 
@@ -417,11 +706,11 @@ fn agent_event_from_wrapper_event(
 }
 
 fn registered_event_from_data(
-    agent_id: &str,
-    dispatch: &MemberDispatchRequestV1,
+    context: &MemberStreamContext,
     binding: &SharedWorldBindingSnapshot,
     span_id: &str,
     data: Option<&serde_json::Value>,
+    agent_id: &str,
 ) -> Option<AgentEvent> {
     let data = data?;
     if data.get("schema").and_then(serde_json::Value::as_str) != Some(SESSION_HANDLE_SCHEMA_V1) {
@@ -433,13 +722,13 @@ fn registered_event_from_data(
         kind: AgentEventKind::Registered,
         data: data.clone(),
         agent_id: agent_id.to_string(),
-        orchestration_session_id: dispatch.orchestration_session_id.clone(),
-        run_id: dispatch.run_id.clone(),
+        orchestration_session_id: context.orchestration_session_id.clone(),
+        run_id: context.run_id.clone(),
         parent_run_id: None,
-        participant_id: Some(dispatch.participant_id.clone()),
-        parent_participant_id: dispatch.parent_participant_id.clone(),
-        resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
-        backend_id: Some(dispatch.backend_id.clone()),
+        participant_id: Some(context.participant_id.clone()),
+        parent_participant_id: context.parent_participant_id.clone(),
+        resumed_from_participant_id: context.resumed_from_participant_id.clone(),
+        backend_id: Some(context.backend_id.clone()),
         thread_id: None,
         role: Some(MEMBER_ROLE.to_string()),
         world_id: Some(binding.world_id.clone()),
@@ -458,21 +747,97 @@ fn registered_event_from_data(
 fn stamp_event_identity(
     event: &mut AgentEvent,
     agent_id: &str,
-    dispatch: &MemberDispatchRequestV1,
+    context: &MemberStreamContext,
     binding: &SharedWorldBindingSnapshot,
     span_id: &str,
     channel: Option<String>,
 ) {
     event.role = Some(MEMBER_ROLE.to_string());
-    event.backend_id = Some(dispatch.backend_id.clone());
-    event.participant_id = Some(dispatch.participant_id.clone());
-    event.parent_participant_id = dispatch.parent_participant_id.clone();
-    event.resumed_from_participant_id = dispatch.resumed_from_participant_id.clone();
+    event.backend_id = Some(context.backend_id.clone());
+    event.participant_id = Some(context.participant_id.clone());
+    event.parent_participant_id = context.parent_participant_id.clone();
+    event.resumed_from_participant_id = context.resumed_from_participant_id.clone();
     event.world_id = Some(binding.world_id.clone());
     event.world_generation = Some(binding.world_generation);
     event.span_id = Some(span_id.to_string());
     event.set_channel(channel);
     event.set_pure_agent_telemetry_identity(agent_id.to_string());
+}
+
+fn surfaced_uaa_session_id_from_data(data: Option<&serde_json::Value>) -> Option<String> {
+    let data = data?;
+    for pointer in ["/internal/uaa_session_id", "/session/id"] {
+        if let Some(session_id) = data.pointer(pointer).and_then(serde_json::Value::as_str) {
+            let trimmed = session_id.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+#[derive(Clone, Copy)]
+struct RetainedMemberIdentity<'a> {
+    orchestration_session_id: &'a str,
+    orchestrator_participant_id: &'a str,
+    backend_id: &'a str,
+    world_id: &'a str,
+    world_generation: u64,
+}
+
+impl<'a> RetainedMemberIdentity<'a> {
+    fn from_active(active: &'a ActiveMemberRuntime) -> Self {
+        Self {
+            orchestration_session_id: &active.orchestration_session_id,
+            orchestrator_participant_id: &active.orchestrator_participant_id,
+            backend_id: &active.backend_id,
+            world_id: &active.binding.world_id,
+            world_generation: active.binding.world_generation,
+        }
+    }
+}
+
+fn validate_submit_turn_request(
+    req: &MemberTurnSubmitRequestV1,
+    retained: RetainedMemberIdentity<'_>,
+) -> Result<()> {
+    if retained.orchestration_session_id != req.orchestration_session_id {
+        return Err(crate::service::BadRequestError::new(format!(
+            "member_turn_submit.orchestration_session_id mismatch (expected {}, got {})",
+            retained.orchestration_session_id, req.orchestration_session_id
+        ))
+        .into());
+    }
+    if retained.orchestrator_participant_id != req.orchestrator_participant_id {
+        return Err(crate::service::BadRequestError::new(format!(
+            "member_turn_submit.orchestrator_participant_id mismatch (expected {}, got {})",
+            retained.orchestrator_participant_id, req.orchestrator_participant_id
+        ))
+        .into());
+    }
+    if retained.backend_id != req.backend_id {
+        return Err(crate::service::BadRequestError::new(format!(
+            "member_turn_submit.backend_id mismatch (expected {}, got {})",
+            retained.backend_id, req.backend_id
+        ))
+        .into());
+    }
+    if retained.world_id != req.world_id {
+        return Err(crate::service::BadRequestError::new(format!(
+            "member_turn_submit.world_id mismatch (expected {}, got {})",
+            retained.world_id, req.world_id
+        ))
+        .into());
+    }
+    if retained.world_generation != req.world_generation {
+        return Err(crate::service::BadRequestError::new(format!(
+            "member_turn_submit.world_generation mismatch (expected {}, got {})",
+            retained.world_generation, req.world_generation
+        ))
+        .into());
+    }
+    Ok(())
 }
 
 fn stream_response(
@@ -535,5 +900,109 @@ fn map_wrapper_error(err: AgentWrapperError) -> anyhow::Error {
         AgentWrapperError::InvalidAgentKind { message }
         | AgentWrapperError::InvalidRequest { message }
         | AgentWrapperError::Backend { message } => anyhow!(message),
+    }
+}
+
+impl ActiveMemberRuntime {
+    fn remember_uaa_session_id(&self, session_id: String) {
+        if let Ok(mut guard) = self.uaa_session_id.lock() {
+            *guard = Some(session_id);
+        }
+    }
+
+    fn uaa_session_id(&self) -> Option<String> {
+        self.uaa_session_id
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone())
+    }
+
+    fn bootstrap_last_signal(&self) -> Option<String> {
+        self.bootstrap_last_signal
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone())
+    }
+
+    fn submit_context(&self, run_id: String) -> MemberStreamContext {
+        MemberStreamContext {
+            orchestration_session_id: self.orchestration_session_id.clone(),
+            run_id,
+            participant_id: self.participant_id.clone(),
+            parent_participant_id: self.parent_participant_id.clone(),
+            resumed_from_participant_id: self.resumed_from_participant_id.clone(),
+            backend_id: self.backend_id.clone(),
+            protocol: self.protocol.clone(),
+        }
+    }
+}
+
+impl ActiveSubmittedTurn {
+    fn last_signal(&self) -> Option<String> {
+        self.last_signal.lock().ok().and_then(|guard| guard.clone())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_retained_identity() -> RetainedMemberIdentity<'static> {
+        RetainedMemberIdentity {
+            orchestration_session_id: "orch_123",
+            orchestrator_participant_id: "ash_orchestrator",
+            backend_id: "cli:codex",
+            world_id: "world_123",
+            world_generation: 7,
+        }
+    }
+
+    #[test]
+    fn surfaced_uaa_session_id_prefers_internal_then_session_id() {
+        let payload = json!({
+            "internal": {
+                "uaa_session_id": "uaa_internal"
+            },
+            "session": {
+                "id": "uaa_session"
+            }
+        });
+        assert_eq!(
+            surfaced_uaa_session_id_from_data(Some(&payload)).as_deref(),
+            Some("uaa_internal")
+        );
+
+        let payload = json!({
+            "session": {
+                "id": "uaa_session"
+            }
+        });
+        assert_eq!(
+            surfaced_uaa_session_id_from_data(Some(&payload)).as_deref(),
+            Some("uaa_session")
+        );
+    }
+
+    #[test]
+    fn validate_submit_turn_request_rejects_identity_drift() {
+        let req = MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "orch_123".to_string(),
+            participant_id: "ash_member".to_string(),
+            orchestrator_participant_id: "ash_orchestrator".to_string(),
+            backend_id: "cli:anthropic".to_string(),
+            run_id: "run_turn".to_string(),
+            world_id: "world_123".to_string(),
+            world_generation: 7,
+            prompt: "continue".to_string(),
+        };
+
+        let err = validate_submit_turn_request(&req, sample_retained_identity())
+            .expect_err("backend drift should be rejected");
+        assert!(
+            err.to_string()
+                .contains("member_turn_submit.backend_id mismatch"),
+            "unexpected error: {err}"
+        );
     }
 }

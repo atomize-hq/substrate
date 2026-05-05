@@ -10,10 +10,10 @@ use agent_api_types::PendingDiffBucketV1;
 use agent_api_types::WorldFsEntryTypeV1;
 use agent_api_types::{
     Budget, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
-    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, PendingDiffClearRequestV1,
-    PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
-    PendingDiffRecordV1, PendingDiffRequestV1, ProcessTelemetry, WorldFsReadRequestV1,
-    WorldFsReadResponseV1, WorldNetworkRoutingV1,
+    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, MemberTurnSubmitRequestV1,
+    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
+    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, ProcessTelemetry,
+    WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
 };
 #[cfg(target_os = "linux")]
 use anyhow::Context;
@@ -167,6 +167,13 @@ fn resolve_landlock_helper_src() -> Option<String> {
             if let Some(path) = accept_candidate(&candidate) {
                 return Some(path.display().to_string());
             }
+        }
+    }
+
+    #[cfg(test)]
+    if let Some(exe) = exe.as_ref() {
+        if exe.is_file() {
+            return Some(exe.display().to_string());
         }
     }
 
@@ -1459,6 +1466,23 @@ impl WorldAgentService {
     #[cfg(not(target_os = "linux"))]
     pub async fn execute_stream(&self, _req: ExecuteRequest) -> Result<Response> {
         anyhow::bail!("World agent streaming is only supported on Linux");
+    }
+
+    #[cfg(target_os = "linux")]
+    pub async fn submit_member_turn_stream(
+        &self,
+        req: MemberTurnSubmitRequestV1,
+    ) -> Result<Response> {
+        req.validate().map_err(BadRequestError::new)?;
+        self.member_runtime.submit_turn(req).await
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub async fn submit_member_turn_stream(
+        &self,
+        _req: MemberTurnSubmitRequestV1,
+    ) -> Result<Response> {
+        anyhow::bail!("World member turn submission is only supported on Linux");
     }
 
     #[cfg(target_os = "linux")]
