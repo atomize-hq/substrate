@@ -26,6 +26,7 @@ pub(crate) struct AgentRuntimeSessionRecord {
     #[allow(dead_code)]
     pub warnings: Vec<String>,
     has_authoritative_parent: bool,
+    #[allow(dead_code)]
     complete: bool,
 }
 
@@ -34,6 +35,7 @@ impl AgentRuntimeSessionRecord {
         &self.session.orchestration_session_id
     }
 
+    #[allow(dead_code)]
     pub(crate) fn is_complete(&self) -> bool {
         self.complete
     }
@@ -422,13 +424,61 @@ impl AgentRuntimeStateStore {
         &self,
         orchestrator_agent_id: &str,
     ) -> Result<Vec<AgentRuntimeSessionRecord>> {
-        Ok(self
-            .list_sessions()?
-            .into_iter()
-            .filter(|record| record.session.orchestrator_agent_id == orchestrator_agent_id)
-            .collect())
+        let participants = self.list_participants_across_sources()?;
+        let mut participants_by_session = BTreeMap::new();
+        for participant in participants {
+            participants_by_session
+                .entry(participant.handle.orchestration_session_id.clone())
+                .or_insert_with(Vec::new)
+                .push(participant);
+        }
+
+        let mut session_ids = BTreeSet::new();
+        for session_id in self.canonical_session_root_ids()? {
+            if self
+                .load_authoritative_session(&session_id)?
+                .is_some_and(|session| session.orchestrator_agent_id == orchestrator_agent_id)
+            {
+                session_ids.insert(session_id);
+            }
+        }
+        for session_id in self.flat_session_ids()? {
+            if self
+                .load_authoritative_session(&session_id)?
+                .is_some_and(|session| session.orchestrator_agent_id == orchestrator_agent_id)
+            {
+                session_ids.insert(session_id);
+            }
+        }
+        for (session_id, session_participants) in &participants_by_session {
+            if session_participants.iter().any(|participant| {
+                participant.handle.agent_id == orchestrator_agent_id
+                    && participant.handle.role == ORCHESTRATOR_ROLE
+                    && participant.handle.execution.scope == AgentExecutionScope::Host
+            }) {
+                session_ids.insert(session_id.clone());
+            }
+        }
+
+        let mut sessions = Vec::new();
+        for session_id in session_ids {
+            let session = self.load_authoritative_session(&session_id)?;
+            let participants = participants_by_session
+                .remove(&session_id)
+                .unwrap_or_default();
+            sessions.push(self.build_session_record(&session_id, session, participants));
+        }
+
+        sessions.sort_by(|left, right| {
+            left.last_updated_at().cmp(&right.last_updated_at()).then(
+                left.orchestration_session_id()
+                    .cmp(right.orchestration_session_id()),
+            )
+        });
+        Ok(sessions)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn list_live_sessions(&self) -> Result<Vec<AgentRuntimeSessionRecord>> {
         Ok(self
             .list_sessions()?
@@ -1964,6 +2014,48 @@ mod tests {
                 .expect_err("stale active handle references must fail closed");
             assert!(err.to_string().contains(
                 "active orchestration session sess_live references missing participant ash_missing"
+            ));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn list_status_sessions_for_agent_includes_participant_visible_torn_roots_without_relaxing_strict_resolution(
+    ) {
+        with_store(|store| {
+            let selected = live_orchestrator("codex", "sess_torn_visible", "ash_selected");
+            let mut drifted_parent = active_parent(&selected);
+            drifted_parent.orchestrator_agent_id = "claude_code".to_string();
+
+            store
+                .persist_orchestration_session(&drifted_parent)
+                .expect("persist drifted parent");
+            store
+                .persist_participant(&selected)
+                .expect("persist selected participant");
+
+            let status_sessions = store
+                .list_status_sessions_for_agent("codex")
+                .expect("list status sessions");
+            let torn = status_sessions
+                .into_iter()
+                .find(|record| record.orchestration_session_id() == "sess_torn_visible")
+                .expect("status seam should retain participant-visible torn root");
+
+            assert!(
+                !torn.is_complete(),
+                "status seam must degrade torn roots instead of authorizing control"
+            );
+            assert!(
+                !torn.warnings.is_empty(),
+                "status seam must preserve degraded warnings from build_session_record"
+            );
+
+            let err = store
+                .resolve_single_live_session_for_agent("codex")
+                .expect_err("strict selector must remain fail closed");
+            assert!(err.to_string().contains(
+                "live host-scoped orchestrator participant exists for agent codex without an active parent session"
             ));
         });
     }

@@ -22,6 +22,7 @@ impl OrchestrationSessionState {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct OrchestrationSessionRecord {
+    // This is the public/operator-facing selector for the parent orchestration row.
     pub orchestration_session_id: String,
     pub shell_trace_session_id: String,
     pub workspace_root: String,
@@ -32,6 +33,7 @@ pub(crate) struct OrchestrationSessionRecord {
     pub orchestrator_agent_id: String,
     pub orchestrator_backend_id: String,
     pub orchestrator_protocol: String,
+    // Compatibility storage name retained; the value is the active orchestrator participant_id.
     pub active_session_handle_id: Option<String>,
     pub latest_run_id: Option<String>,
     pub world_id: Option<String>,
@@ -81,8 +83,8 @@ impl OrchestrationSessionRecord {
         self.last_active_at = Utc::now();
     }
 
-    pub(crate) fn bind_active_session_handle(&mut self, session_handle_id: impl Into<String>) {
-        self.active_session_handle_id = Some(session_handle_id.into());
+    pub(crate) fn bind_active_session_handle(&mut self, participant_id: impl Into<String>) {
+        self.active_session_handle_id = Some(participant_id.into());
         self.touch_active();
     }
 

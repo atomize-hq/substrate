@@ -331,6 +331,7 @@ struct StatusSessionJson {
     #[serde(skip_serializing_if = "Option::is_none")]
     participant_id: Option<String>,
     agent_id: String,
+    source_kind: &'static str,
     backend_id: String,
     client: String,
     router: String,
@@ -370,6 +371,7 @@ struct StatusReportJson<'a> {
     scope_filter: &'a str,
     role_filter: Option<&'a str>,
     orchestrator_agent_id: String,
+    warnings: Vec<String>,
     sessions: Vec<StatusSessionJson>,
     nested_llm_records: Vec<NestedLlmRecordJson>,
 }
@@ -383,9 +385,7 @@ struct SessionProjection {
 
 #[derive(Clone)]
 struct SessionProjectionSource {
-    orchestration_session_id: String,
-    participant_id: Option<String>,
-    agent_id: String,
+    identity: StatusIdentityKey,
     run_id: Option<String>,
     ts: DateTime<Utc>,
     is_world_scoped: bool,
@@ -397,6 +397,25 @@ struct SessionProjectionSource {
 struct SelectedParentRun {
     participant_id: Option<String>,
     run_id: String,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct StatusIdentityKey {
+    orchestration_session_id: String,
+    agent_id: String,
+    execution_scope: &'static str,
+    participant_id: Option<String>,
+}
+
+impl StatusIdentityKey {
+    fn coarse(&self) -> Self {
+        Self {
+            orchestration_session_id: self.orchestration_session_id.clone(),
+            agent_id: self.agent_id.clone(),
+            execution_scope: self.execution_scope,
+            participant_id: None,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -412,10 +431,10 @@ struct NestedProjection {
 
 #[derive(Clone)]
 struct NestedProjectionSource {
-    orchestration_session_id: String,
-    agent_id: String,
+    parent_identity: StatusIdentityKey,
     run_id: String,
     parent_run_id: Option<String>,
+    parent_participant_id: Option<String>,
 }
 
 fn build_status_report<'a>(
@@ -436,6 +455,7 @@ fn build_status_report<'a>(
             scope_filter: args.scope.as_str(),
             role_filter,
             orchestrator_agent_id,
+            warnings: Vec::new(),
             sessions: Vec::new(),
             nested_llm_records: Vec::new(),
         });
@@ -443,13 +463,15 @@ fn build_status_report<'a>(
 
     let events = read_trace_agent_events()?;
     let state_store = AgentRuntimeStateStore::new()?;
-    state_store
-        .resolve_single_live_session_for_agent(&orchestrator_agent_id)
-        .map_err(|err| config_model::user_error(err.to_string()))?;
-    let live_sessions = state_store.list_live_sessions()?;
-    let mut sessions = BTreeMap::<(String, String), SessionProjection>::new();
+    let status_sessions = state_store.list_status_sessions_for_agent(&orchestrator_agent_id)?;
+    let mut warnings = status_sessions
+        .iter()
+        .flat_map(|session| session.warnings.iter().cloned())
+        .collect::<BTreeSet<_>>();
+    let mut sessions = BTreeMap::<StatusIdentityKey, SessionProjection>::new();
     let mut nested = BTreeMap::<(String, String, String), NestedProjection>::new();
-    let mut historical_parent_runs = BTreeMap::<(String, String), BTreeSet<String>>::new();
+    let mut historical_parent_runs_exact = BTreeMap::<StatusIdentityKey, BTreeSet<String>>::new();
+    let mut historical_parent_runs_coarse = BTreeMap::<StatusIdentityKey, BTreeSet<String>>::new();
 
     for event in events {
         let Some(entry) = context.inventory.get(&event.agent_id) else {
@@ -470,21 +492,25 @@ fn build_status_report<'a>(
             &context.effective_config,
         );
 
-        if let Some(session_key) = pure_session_key(&event) {
-            historical_parent_runs
-                .entry(session_key.clone())
+        if let Some(identity) = pure_session_key(&event, scope) {
+            historical_parent_runs_exact
+                .entry(identity.clone())
                 .or_default()
                 .insert(event.run_id.clone());
-            let orchestration_session_id = session_key.0.clone();
+            historical_parent_runs_coarse
+                .entry(identity.coarse())
+                .or_default()
+                .insert(event.run_id.clone());
             let world_id = event.world_id.clone();
             let world_generation = event.world_generation;
 
             let projection = SessionProjection {
                 last_event_ts: event.ts,
                 session: StatusSessionJson {
-                    orchestration_session_id: orchestration_session_id.clone(),
-                    participant_id: None,
+                    orchestration_session_id: identity.orchestration_session_id.clone(),
+                    participant_id: identity.participant_id.clone(),
                     agent_id: entry.file.id.clone(),
+                    source_kind: "trace_fallback",
                     backend_id: entry.derived_backend_id(),
                     client: entry.file.id.clone(),
                     router: PURE_AGENT_ROUTER.to_string(),
@@ -506,9 +532,7 @@ fn build_status_report<'a>(
                     },
                 },
                 source: SessionProjectionSource {
-                    orchestration_session_id,
-                    participant_id: None,
-                    agent_id: entry.file.id.clone(),
+                    identity: identity.clone(),
                     run_id: Some(event.run_id.clone()),
                     ts: event.ts,
                     is_world_scoped: scope == AgentExecutionScope::World,
@@ -517,16 +541,16 @@ fn build_status_report<'a>(
                 },
             };
 
-            let should_replace = match sessions.get(&session_key) {
+            let should_replace = match sessions.get(&identity) {
                 Some(existing) => projection.last_event_ts >= existing.last_event_ts,
                 None => true,
             };
             if should_replace {
-                sessions.insert(session_key, projection);
+                sessions.insert(identity, projection);
             }
         }
 
-        if let Some(projection) = nested_projection(&event, entry) {
+        if let Some(projection) = nested_projection(&event, entry, scope) {
             nested.insert(projection.sort_key.clone(), projection);
         }
     }
@@ -547,8 +571,8 @@ fn build_status_report<'a>(
         {
             return Err(config_model::user_error(format!(
                 "malformed world identity on newest selected world-scoped pure-agent status event: agent_id={} orchestration_session_id={} run_id={} ts={} requires top-level world_id and world_generation",
-                projection.source.agent_id,
-                projection.source.orchestration_session_id,
+                projection.source.identity.agent_id,
+                projection.source.identity.orchestration_session_id,
                 projection.source.run_id.as_deref().unwrap_or("<missing>"),
                 projection.source.ts.to_rfc3339(),
             )));
@@ -558,8 +582,8 @@ fn build_status_report<'a>(
     }
 
     let mut selected_session_projections = Vec::new();
-    for live_session in live_sessions {
-        for projection in live_session_status_projections(&live_session) {
+    for status_session in &status_sessions {
+        for projection in live_session_status_projections(status_session) {
             if !matches_scope(
                 scope_from_label(projection.session.execution.scope),
                 args.scope,
@@ -571,11 +595,15 @@ fn build_status_report<'a>(
         }
     }
 
-    let live_fallback_suppression_keys = selected_session_projections
+    let live_fallback_suppression_exact = selected_session_projections
         .iter()
         .map(session_fallback_suppression_key)
         .collect::<BTreeSet<_>>();
-    let invalidated_fallback_suppression_keys = state_store
+    let live_fallback_suppression_coarse = live_fallback_suppression_exact
+        .iter()
+        .map(StatusIdentityKey::coarse)
+        .collect::<BTreeSet<_>>();
+    let invalidated_fallback_suppression_exact = state_store
         .list_invalidated_participants_across_sources()?
         .into_iter()
         .filter(|participant| {
@@ -584,40 +612,89 @@ fn build_status_report<'a>(
         })
         .map(participant_fallback_suppression_key)
         .collect::<BTreeSet<_>>();
+    let invalidated_fallback_suppression_coarse = invalidated_fallback_suppression_exact
+        .iter()
+        .map(StatusIdentityKey::coarse)
+        .collect::<BTreeSet<_>>();
+    let coarse_trace_identities = filtered_session_projections
+        .iter()
+        .filter(|projection| projection.source.identity.participant_id.is_none())
+        .map(|projection| projection.source.identity.coarse())
+        .collect::<BTreeSet<_>>();
+    for coarse_identity in coarse_trace_identities {
+        let participant_scoped_count = filtered_session_projections
+            .iter()
+            .filter(|projection| projection.source.identity.coarse() == coarse_identity)
+            .filter(|projection| projection.source.identity.participant_id.is_some())
+            .count();
+        if participant_scoped_count > 0 {
+            warnings.insert(format!(
+                "Status fallback for agent {} in orchestration session {} includes participant-less trace rows, so fallback selection remains coarse until participant-scoped records are available.",
+                coarse_identity.agent_id,
+                coarse_identity.orchestration_session_id,
+            ));
+        }
+    }
     selected_session_projections.extend(filtered_session_projections.into_iter().filter(
         |projection| {
             let suppression_key = session_fallback_suppression_key(projection);
-            !live_fallback_suppression_keys.contains(&suppression_key)
-                && !invalidated_fallback_suppression_keys.contains(&suppression_key)
+            if suppression_key.participant_id.is_some() {
+                !live_fallback_suppression_exact.contains(&suppression_key)
+                    && !invalidated_fallback_suppression_exact.contains(&suppression_key)
+            } else {
+                let coarse_key = suppression_key.coarse();
+                !live_fallback_suppression_coarse.contains(&coarse_key)
+                    && !invalidated_fallback_suppression_coarse.contains(&coarse_key)
+            }
         },
     ));
 
-    let mut selected_parent_runs = BTreeMap::<(String, String), Vec<SelectedParentRun>>::new();
+    let mut selected_parent_runs_exact =
+        BTreeMap::<StatusIdentityKey, Vec<SelectedParentRun>>::new();
+    let mut selected_parent_runs_coarse =
+        BTreeMap::<StatusIdentityKey, Vec<SelectedParentRun>>::new();
     for projection in &selected_session_projections {
         let Some(run_id) = projection.source.run_id.as_ref() else {
             continue;
         };
-        selected_parent_runs
-            .entry((
-                projection.source.orchestration_session_id.clone(),
-                projection.source.agent_id.clone(),
-            ))
+        let selected_parent_run = SelectedParentRun {
+            participant_id: projection.source.identity.participant_id.clone(),
+            run_id: run_id.clone(),
+        };
+        selected_parent_runs_exact
+            .entry(projection.source.identity.clone())
             .or_default()
-            .push(SelectedParentRun {
-                participant_id: projection.source.participant_id.clone(),
-                run_id: run_id.clone(),
-            });
+            .push(selected_parent_run.clone());
+        selected_parent_runs_coarse
+            .entry(projection.source.identity.coarse())
+            .or_default()
+            .push(selected_parent_run);
     }
 
     let mut filtered_nested = Vec::new();
     for projection in nested.into_values() {
-        let parent_key = (
-            projection.source.orchestration_session_id.clone(),
-            projection.source.agent_id.clone(),
+        let selected_parent_runs = selected_parent_run_candidates(
+            &projection,
+            &selected_parent_runs_exact,
+            &selected_parent_runs_coarse,
         );
-        let Some(selected_parent_runs) = selected_parent_runs.get(&parent_key) else {
+        if selected_parent_runs.is_empty() {
             continue;
-        };
+        }
+        if projection.source.parent_participant_id.is_none()
+            && selected_parent_runs
+                .iter()
+                .filter_map(|candidate| candidate.participant_id.as_deref())
+                .collect::<BTreeSet<_>>()
+                .len()
+                > 1
+        {
+            warnings.insert(format!(
+                "Nested status correlation for agent {} in orchestration session {} is using coarse parent matching because parent_participant_id is absent.",
+                projection.source.parent_identity.agent_id,
+                projection.source.parent_identity.orchestration_session_id,
+            ));
+        }
         let parent_run_id = projection.source.parent_run_id.as_deref();
         if let Some(selected_parent_run) = selected_parent_runs
             .iter()
@@ -627,8 +704,8 @@ fn build_status_report<'a>(
             if !missing_fields.is_empty() {
                 return Err(config_model::user_error(format!(
                     "malformed nested tuple on selected status surface: agent_id={} orchestration_session_id={} run_id={} missing_fields={} requires provider and auth_authority on selected nested substrate_gateway status rows",
-                    projection.source.agent_id,
-                    projection.source.orchestration_session_id,
+                    projection.source.parent_identity.agent_id,
+                    projection.source.parent_identity.orchestration_session_id,
                     projection.source.run_id,
                     missing_fields.join(","),
                 )));
@@ -636,9 +713,13 @@ fn build_status_report<'a>(
 
             filtered_nested.push(NestedLlmRecordJson {
                 parent: NestedParentJson {
-                    orchestration_session_id: projection.source.orchestration_session_id.clone(),
+                    orchestration_session_id: projection
+                        .source
+                        .parent_identity
+                        .orchestration_session_id
+                        .clone(),
                     participant_id: selected_parent_run.participant_id.clone(),
-                    agent_id: projection.source.agent_id.clone(),
+                    agent_id: projection.source.parent_identity.agent_id.clone(),
                 },
                 run_id: projection.source.run_id.clone(),
                 backend_id: projection.backend_id,
@@ -656,19 +737,20 @@ fn build_status_report<'a>(
         }
 
         let invalid_parent_run_id = format_invalid_parent_run_id(parent_run_id);
-        let historical_match = parent_run_id.is_some_and(|candidate| {
-            historical_parent_runs
-                .get(&parent_key)
-                .is_some_and(|runs| runs.contains(candidate))
-        });
+        let historical_match = historical_parent_run_matches(
+            &projection.source.parent_identity,
+            parent_run_id,
+            &historical_parent_runs_exact,
+            &historical_parent_runs_coarse,
+        );
         if historical_match {
             continue;
         }
 
         return Err(config_model::user_error(format!(
             "malformed nested parent correlation on selected status surface: agent_id={} orchestration_session_id={} run_id={} parent_run_id={} requires parent_run_id to match the winning selected pure-agent run or a known historical pure-agent run for the same session",
-            projection.source.agent_id,
-            projection.source.orchestration_session_id,
+            projection.source.parent_identity.agent_id,
+            projection.source.parent_identity.orchestration_session_id,
             projection.source.run_id,
             invalid_parent_run_id,
         )));
@@ -688,6 +770,7 @@ fn build_status_report<'a>(
                     .cmp(right.participant_id.as_deref().unwrap_or("")),
             )
             .then(left.agent_id.cmp(&right.agent_id))
+            .then(left.source_kind.cmp(right.source_kind))
     });
 
     Ok(StatusReportJson {
@@ -695,6 +778,7 @@ fn build_status_report<'a>(
         scope_filter: args.scope.as_str(),
         role_filter,
         orchestrator_agent_id,
+        warnings: warnings.into_iter().collect(),
         sessions: filtered_sessions,
         nested_llm_records: filtered_nested,
     })
@@ -711,6 +795,12 @@ fn render_status_report(report: &StatusReportJson<'_>, json_mode: bool) -> Resul
     println!("scope_filter: {}", report.scope_filter);
     if let Some(role_filter) = report.role_filter {
         println!("role_filter: {role_filter}");
+    }
+    if !report.warnings.is_empty() {
+        println!("warnings:");
+        for warning in &report.warnings {
+            println!("  - {warning}");
+        }
     }
 
     println!();
@@ -730,6 +820,7 @@ fn render_status_report(report: &StatusReportJson<'_>, json_mode: bool) -> Resul
                 session.participant_id.as_deref().unwrap_or("")
             ),
             format!("agent_id={}", session.agent_id),
+            format!("source_kind={}", session.source_kind),
             format!("backend_id={}", session.backend_id),
             format!("client={}", session.client),
             format!("router={}", session.router),
@@ -1146,6 +1237,7 @@ fn live_participant_status_projection(
             orchestration_session_id: participant.handle.orchestration_session_id.clone(),
             participant_id: Some(participant.handle.participant_id.clone()),
             agent_id: participant.handle.agent_id.clone(),
+            source_kind: "live_runtime",
             backend_id: participant.handle.backend_id.clone(),
             client: participant.handle.agent_id.clone(),
             router: PURE_AGENT_ROUTER.to_string(),
@@ -1162,9 +1254,12 @@ fn live_participant_status_projection(
             world_generation: participant.handle.world_generation,
         },
         source: SessionProjectionSource {
-            orchestration_session_id: participant.handle.orchestration_session_id.clone(),
-            participant_id: Some(participant.handle.participant_id.clone()),
-            agent_id: participant.handle.agent_id.clone(),
+            identity: StatusIdentityKey {
+                orchestration_session_id: participant.handle.orchestration_session_id.clone(),
+                agent_id: participant.handle.agent_id.clone(),
+                execution_scope: execution_scope_label(participant.handle.execution.scope),
+                participant_id: Some(participant.handle.participant_id.clone()),
+            },
             run_id: participant.internal.latest_run_id.clone(),
             ts: participant.last_status_at(),
             is_world_scoped: participant.handle.execution.scope == AgentExecutionScope::World,
@@ -1182,25 +1277,19 @@ fn live_session_status_projections(session: &AgentRuntimeSessionRecord) -> Vec<S
         .collect()
 }
 
-fn session_fallback_suppression_key(projection: &SessionProjection) -> (String, String, String) {
-    (
-        projection.session.orchestration_session_id.clone(),
-        projection.session.agent_id.clone(),
-        projection.session.execution.scope.to_string(),
-    )
+fn session_fallback_suppression_key(projection: &SessionProjection) -> StatusIdentityKey {
+    projection.source.identity.clone()
 }
 
 fn participant_fallback_suppression_key(
     participant: AgentRuntimeParticipantRecord,
-) -> (String, String, String) {
-    (
-        participant.handle.orchestration_session_id,
-        participant.handle.agent_id,
-        match participant.handle.execution.scope {
-            AgentExecutionScope::Host => "host".to_string(),
-            AgentExecutionScope::World => "world".to_string(),
-        },
-    )
+) -> StatusIdentityKey {
+    StatusIdentityKey {
+        orchestration_session_id: participant.handle.orchestration_session_id,
+        agent_id: participant.handle.agent_id,
+        execution_scope: execution_scope_label(participant.handle.execution.scope),
+        participant_id: Some(participant.handle.participant_id),
+    }
 }
 
 fn read_trace_agent_events() -> Result<Vec<AgentEvent>> {
@@ -1249,20 +1338,23 @@ fn trace_log_path() -> Result<PathBuf> {
     Ok(substrate_paths::substrate_home()?.join("trace.jsonl"))
 }
 
-fn pure_session_key(event: &AgentEvent) -> Option<(String, String)> {
+fn pure_session_key(event: &AgentEvent, scope: AgentExecutionScope) -> Option<StatusIdentityKey> {
     let tuple = event.identity_tuple.as_ref()?;
     if tuple.router != PURE_AGENT_ROUTER || tuple.protocol != PURE_AGENT_PROTOCOL {
         return None;
     }
-    Some((
-        event.orchestration_session_id.clone(),
-        event.agent_id.clone(),
-    ))
+    Some(StatusIdentityKey {
+        orchestration_session_id: event.orchestration_session_id.clone(),
+        agent_id: event.agent_id.clone(),
+        execution_scope: execution_scope_label(scope),
+        participant_id: event.participant_id.clone(),
+    })
 }
 
 fn nested_projection(
     event: &AgentEvent,
     entry: &AgentInventoryEntryV1,
+    scope: AgentExecutionScope,
 ) -> Option<NestedProjection> {
     let tuple = event.identity_tuple.as_ref()?;
     if tuple.router != NESTED_ROUTER {
@@ -1277,10 +1369,15 @@ fn nested_projection(
     Some(NestedProjection {
         sort_key,
         source: NestedProjectionSource {
-            orchestration_session_id: event.orchestration_session_id.clone(),
-            agent_id: event.agent_id.clone(),
+            parent_identity: StatusIdentityKey {
+                orchestration_session_id: event.orchestration_session_id.clone(),
+                agent_id: event.agent_id.clone(),
+                execution_scope: execution_scope_label(scope),
+                participant_id: event.parent_participant_id.clone(),
+            },
             run_id: event.run_id.clone(),
             parent_run_id: event.parent_run_id.clone(),
+            parent_participant_id: event.parent_participant_id.clone(),
         },
         backend_id: entry.derived_backend_id(),
         client: event.agent_id.clone(),
@@ -1306,6 +1403,44 @@ fn format_invalid_parent_run_id(parent_run_id: Option<&str>) -> String {
         Some("") => "<empty>".to_string(),
         Some(value) => value.to_string(),
         None => "<missing>".to_string(),
+    }
+}
+
+fn selected_parent_run_candidates<'a>(
+    projection: &NestedProjection,
+    exact: &'a BTreeMap<StatusIdentityKey, Vec<SelectedParentRun>>,
+    coarse: &'a BTreeMap<StatusIdentityKey, Vec<SelectedParentRun>>,
+) -> Vec<&'a SelectedParentRun> {
+    if let Some(selected) = exact.get(&projection.source.parent_identity) {
+        return selected.iter().collect();
+    }
+
+    coarse
+        .get(&projection.source.parent_identity.coarse())
+        .map(|selected| selected.iter().collect())
+        .unwrap_or_default()
+}
+
+fn historical_parent_run_matches(
+    parent_identity: &StatusIdentityKey,
+    parent_run_id: Option<&str>,
+    exact: &BTreeMap<StatusIdentityKey, BTreeSet<String>>,
+    coarse: &BTreeMap<StatusIdentityKey, BTreeSet<String>>,
+) -> bool {
+    parent_run_id.is_some_and(|candidate| {
+        exact
+            .get(parent_identity)
+            .is_some_and(|runs| runs.contains(candidate))
+            || coarse
+                .get(&parent_identity.coarse())
+                .is_some_and(|runs| runs.contains(candidate))
+    })
+}
+
+fn execution_scope_label(scope: AgentExecutionScope) -> &'static str {
+    match scope {
+        AgentExecutionScope::Host => "host",
+        AgentExecutionScope::World => "world",
     }
 }
 

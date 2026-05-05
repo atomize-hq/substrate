@@ -43,7 +43,10 @@ pub(crate) enum AgentRuntimeOwnershipMode {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub(crate) struct AgentRuntimeParticipantHandle {
+    // Canonical runtime lineage identifier for this participant row.
     pub participant_id: String,
+    // Legacy compatibility alias kept in-memory for existing callers; do not use as canonical
+    // public terminology in new code.
     #[serde(skip)]
     pub session_handle_id: String,
     pub orchestration_session_id: String,
@@ -59,6 +62,8 @@ pub(crate) struct AgentRuntimeParticipantHandle {
     pub world_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub world_generation: Option<u64>,
+    // Lineage links use participant_id canonically. The *_session_handle_id fields remain as
+    // compatibility mirrors for legacy reads only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_participant_id: Option<String>,
     #[serde(skip)]
@@ -77,6 +82,7 @@ pub(crate) struct AgentRuntimeSessionInternal {
     pub resolved_binary_path: String,
     pub shell_owner_pid: u32,
     pub lease_token: String,
+    // Backend-native upstream runtime handle. Internal only; never the default operator target.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uaa_session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -441,8 +447,8 @@ impl AgentRuntimeParticipantRecord {
         self.internal.last_event_at = Some(ts);
     }
 
-    pub(crate) fn set_uaa_session_id(&mut self, session_id: impl Into<String>) {
-        self.internal.uaa_session_id = Some(session_id.into());
+    pub(crate) fn set_uaa_session_id(&mut self, backend_session_id: impl Into<String>) {
+        self.internal.uaa_session_id = Some(backend_session_id.into());
         self.refresh_ownership_validity();
     }
 
@@ -527,6 +533,7 @@ struct AgentRuntimeParticipantRecordWire {
 
 #[derive(Deserialize)]
 struct AgentRuntimeParticipantHandleWire {
+    // Legacy alias reads remain supported for compatibility; participant_id is canonical.
     #[serde(alias = "session_handle_id")]
     participant_id: String,
     orchestration_session_id: String,
