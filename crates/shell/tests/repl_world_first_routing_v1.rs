@@ -1930,7 +1930,10 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         .expect("member turn submit request");
     assert_eq!(submit.orchestration_session_id, orchestration_session_id);
     assert_eq!(submit.participant_id, member_participant_id);
-    assert_eq!(submit.orchestrator_participant_id, orchestrator_participant_id);
+    assert_eq!(
+        submit.orchestrator_participant_id,
+        orchestrator_participant_id
+    );
     assert_eq!(submit.backend_id, "cli:codex");
     assert_eq!(submit.world_id, world_id);
     assert_eq!(submit.world_generation, world_generation);

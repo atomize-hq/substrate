@@ -141,7 +141,7 @@ impl MemberRuntimeManager {
             parent_participant_id: dispatch.parent_participant_id.clone(),
             resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
             backend_id: dispatch.backend_id.clone(),
-            backend_kind: dispatch.resolved_runtime.backend_kind.clone(),
+            backend_kind: dispatch.resolved_runtime.backend_kind,
             binary_path: actual_binary,
             working_dir: placement.working_dir.clone(),
             env: runtime_env,
@@ -564,6 +564,7 @@ fn frame_from_wrapper_event(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn frames_from_completion(
     context: &MemberStreamContext,
     binding: &SharedWorldBindingSnapshot,

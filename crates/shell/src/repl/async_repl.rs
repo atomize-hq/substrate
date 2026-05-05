@@ -722,44 +722,41 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 .await;
                                 if let Err(err) = drift_check {
                                     Err(err)
+                                } else if let Err(err) = reconcile_member_runtime_generation(
+                                    world_session.as_ref(),
+                                    &mut member_runtime,
+                                    &mut pending_member_replacement,
+                                    &agent_printer,
+                                    &mut telemetry,
+                                )
+                                .await
+                                {
+                                    Err(err)
+                                } else if let Err(err) = ensure_member_runtime_ready_for_descriptor(
+                                    startup_context.as_ref(),
+                                    world_session.as_ref(),
+                                    &descriptor,
+                                    &mut member_runtime,
+                                    &mut pending_member_replacement,
+                                    &agent_printer,
+                                    &mut telemetry,
+                                )
+                                .await
+                                {
+                                    Err(err)
                                 } else {
-                                    if let Err(err) = reconcile_member_runtime_generation(
-                                        world_session.as_ref(),
-                                        &mut member_runtime,
-                                        &mut pending_member_replacement,
+                                    let runtime = member_runtime.as_mut().ok_or_else(|| {
+                                        anyhow!(
+                                            "substrate: error: world-scoped member runtime is unavailable for targeted follow-up turns"
+                                        )
+                                    })?;
+                                    submit_world_targeted_turn(
+                                        runtime,
+                                        targeted_turn.prompt,
                                         &agent_printer,
                                         &mut telemetry,
                                     )
                                     .await
-                                    {
-                                        Err(err)
-                                    } else if let Err(err) =
-                                        ensure_member_runtime_ready_for_descriptor(
-                                            startup_context.as_ref(),
-                                            world_session.as_ref(),
-                                            &descriptor,
-                                            &mut member_runtime,
-                                            &mut pending_member_replacement,
-                                            &agent_printer,
-                                            &mut telemetry,
-                                        )
-                                        .await
-                                    {
-                                        Err(err)
-                                    } else {
-                                        let runtime = member_runtime.as_mut().ok_or_else(|| {
-                                            anyhow!(
-                                                "substrate: error: world-scoped member runtime is unavailable for targeted follow-up turns"
-                                            )
-                                        })?;
-                                        submit_world_targeted_turn(
-                                            runtime,
-                                            targeted_turn.prompt,
-                                            &agent_printer,
-                                            &mut telemetry,
-                                        )
-                                        .await
-                                    }
                                 }
                             }
                         };
