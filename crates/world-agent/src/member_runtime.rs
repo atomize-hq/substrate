@@ -39,8 +39,14 @@ const SESSION_RESUME_EXTENSION_V1: &str = "agent_api.session.resume.v1";
 
 #[derive(Clone, Default)]
 pub(crate) struct MemberRuntimeManager {
-    active_members_by_participant_id: Arc<RwLock<HashMap<String, Arc<ActiveMemberRuntime>>>>,
+    active_members: Arc<RwLock<ActiveMemberRegistry>>,
     active_turns_by_span_id: Arc<RwLock<HashMap<String, Arc<ActiveSubmittedTurn>>>>,
+}
+
+#[derive(Default)]
+struct ActiveMemberRegistry {
+    by_participant_id: HashMap<String, Arc<ActiveMemberRuntime>>,
+    by_retained_key: HashMap<RetainedMemberKey, String>,
 }
 
 struct ActiveMemberRuntime {
@@ -86,6 +92,13 @@ struct MemberStreamContext {
 enum MemberStreamMode {
     Bootstrap,
     SubmittedTurn,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct RetainedMemberKey {
+    orchestration_session_id: String,
+    world_generation: u64,
+    backend_id: String,
 }
 
 impl MemberRuntimeManager {
@@ -230,20 +243,9 @@ impl MemberRuntimeManager {
     }
 
     pub(crate) async fn submit_turn(&self, req: MemberTurnSubmitRequestV1) -> Result<Response> {
-        let active = self
-            .active_members_by_participant_id
-            .read()
-            .expect("member runtime registry lock poisoned")
-            .get(&req.participant_id)
-            .cloned()
-            .ok_or_else(|| {
-                crate::service::BadRequestError::new(format!(
-                    "member_turn_submit.participant_id {} is not retained",
-                    req.participant_id
-                ))
-            })?;
-
+        let active = self.find_submit_target(&req)?;
         validate_submit_turn_request(&req, RetainedMemberIdentity::from_active(active.as_ref()))?;
+        self.validate_submit_target_slot(&req)?;
         let uaa_session_id = active.uaa_session_id().ok_or_else(|| {
             crate::service::BadRequestError::new(format!(
                 "member_turn_submit.participant_id {} has no surfaced uaa_session_id",
@@ -369,9 +371,10 @@ impl MemberRuntimeManager {
         }
 
         let bootstrap = self
-            .active_members_by_participant_id
+            .active_members
             .read()
             .expect("member runtime registry lock poisoned")
+            .by_participant_id
             .values()
             .find(|active| active.bootstrap_span_id == span_id)
             .cloned();
@@ -387,24 +390,38 @@ impl MemberRuntimeManager {
     }
 
     fn register_member(&self, active: Arc<ActiveMemberRuntime>) -> Result<()> {
+        let retained_key = RetainedMemberKey::from_active(active.as_ref());
         let mut guard = self
-            .active_members_by_participant_id
+            .active_members
             .write()
             .expect("member runtime registry lock poisoned");
-        if !guard.is_empty() {
-            let retained = guard.keys().cloned().collect::<Vec<_>>().join(", ");
+        if guard.by_participant_id.contains_key(&active.participant_id) {
             return Err(crate::service::BadRequestError::new(format!(
-                "a retained world member is already active ({retained}); only one participant may be retained at a time"
+                "member_dispatch.participant_id {} is already retained",
+                active.participant_id
             ))
             .into());
         }
-        guard.insert(active.participant_id.clone(), active);
+        if let Some(existing_participant_id) = guard.by_retained_key.get(&retained_key) {
+            return Err(
+                duplicate_retained_member_error(&retained_key, existing_participant_id).into(),
+            );
+        }
+
+        guard
+            .by_retained_key
+            .insert(retained_key, active.participant_id.clone());
+        guard
+            .by_participant_id
+            .insert(active.participant_id.clone(), active);
         Ok(())
     }
 
     fn unregister_member(&self, participant_id: &str) {
-        if let Ok(mut guard) = self.active_members_by_participant_id.write() {
-            if let Some(active) = guard.remove(participant_id) {
+        if let Ok(mut guard) = self.active_members.write() {
+            if let Some(active) = guard.by_participant_id.remove(participant_id) {
+                let retained_key = RetainedMemberKey::from_active(active.as_ref());
+                guard.by_retained_key.remove(&retained_key);
                 if let Some(launcher_dir) = active.launcher_dir.as_ref() {
                     let _ = fs::remove_dir_all(launcher_dir);
                 }
@@ -422,11 +439,10 @@ impl MemberRuntimeManager {
     fn unregister_turn(&self, span_id: &str) {
         if let Ok(mut guard) = self.active_turns_by_span_id.write() {
             if let Some(turn) = guard.remove(span_id) {
-                if let Some(active) = self
-                    .active_members_by_participant_id
-                    .read()
-                    .ok()
-                    .and_then(|active| active.get(&turn.participant_id).cloned())
+                if let Some(active) =
+                    self.active_members.read().ok().and_then(|active| {
+                        active.by_participant_id.get(&turn.participant_id).cloned()
+                    })
                 {
                     self.clear_reserved_turn_slot(&active, span_id);
                 }
@@ -460,12 +476,59 @@ impl MemberRuntimeManager {
 
     fn remember_uaa_session_id(&self, participant_id: &str, session_id: String) {
         if let Some(active) = self
-            .active_members_by_participant_id
+            .active_members
             .read()
             .ok()
-            .and_then(|guard| guard.get(participant_id).cloned())
+            .and_then(|guard| guard.by_participant_id.get(participant_id).cloned())
         {
             active.remember_uaa_session_id(session_id);
+        }
+    }
+
+    fn find_submit_target(
+        &self,
+        req: &MemberTurnSubmitRequestV1,
+    ) -> Result<Arc<ActiveMemberRuntime>> {
+        let retained_key = RetainedMemberKey::from_submit(req);
+        let guard = self
+            .active_members
+            .read()
+            .expect("member runtime registry lock poisoned");
+        if let Some(active) = guard.by_participant_id.get(&req.participant_id).cloned() {
+            return Ok(active);
+        }
+
+        if let Some(existing_participant_id) = guard.by_retained_key.get(&retained_key) {
+            return Err(retained_slot_owner_mismatch_error(
+                &retained_key,
+                existing_participant_id,
+                &req.participant_id,
+            )
+            .into());
+        }
+
+        Err(crate::service::BadRequestError::new(format!(
+            "member_turn_submit.participant_id {} is not retained",
+            req.participant_id
+        ))
+        .into())
+    }
+
+    fn validate_submit_target_slot(&self, req: &MemberTurnSubmitRequestV1) -> Result<()> {
+        let retained_key = RetainedMemberKey::from_submit(req);
+        let guard = self
+            .active_members
+            .read()
+            .expect("member runtime registry lock poisoned");
+        match guard.by_retained_key.get(&retained_key) {
+            Some(participant_id) if participant_id == &req.participant_id => Ok(()),
+            Some(participant_id) => Err(retained_slot_owner_mismatch_error(
+                &retained_key,
+                participant_id,
+                &req.participant_id,
+            )
+            .into()),
+            None => Err(missing_retained_slot_error(&retained_key).into()),
         }
     }
 }
@@ -944,6 +1007,63 @@ impl ActiveSubmittedTurn {
     }
 }
 
+impl RetainedMemberKey {
+    fn from_active(active: &ActiveMemberRuntime) -> Self {
+        Self {
+            orchestration_session_id: active.orchestration_session_id.clone(),
+            world_generation: active.binding.world_generation,
+            backend_id: active.backend_id.clone(),
+        }
+    }
+
+    fn from_submit(req: &MemberTurnSubmitRequestV1) -> Self {
+        Self {
+            orchestration_session_id: req.orchestration_session_id.clone(),
+            world_generation: req.world_generation,
+            backend_id: req.backend_id.clone(),
+        }
+    }
+}
+
+fn duplicate_retained_member_error(
+    retained_key: &RetainedMemberKey,
+    existing_participant_id: &str,
+) -> crate::service::BadRequestError {
+    crate::service::BadRequestError::new(format!(
+        "a retained world member is already active for orchestration_session_id {} world_generation {} backend_id {} (participant_id {})",
+        retained_key.orchestration_session_id,
+        retained_key.world_generation,
+        retained_key.backend_id,
+        existing_participant_id,
+    ))
+}
+
+fn retained_slot_owner_mismatch_error(
+    retained_key: &RetainedMemberKey,
+    expected_participant_id: &str,
+    actual_participant_id: &str,
+) -> crate::service::BadRequestError {
+    crate::service::BadRequestError::new(format!(
+        "member_turn_submit.participant_id mismatch for retained member orchestration_session_id {} world_generation {} backend_id {} (expected {}, got {})",
+        retained_key.orchestration_session_id,
+        retained_key.world_generation,
+        retained_key.backend_id,
+        expected_participant_id,
+        actual_participant_id,
+    ))
+}
+
+fn missing_retained_slot_error(
+    retained_key: &RetainedMemberKey,
+) -> crate::service::BadRequestError {
+    crate::service::BadRequestError::new(format!(
+        "member_turn_submit retained member is not active for orchestration_session_id {} world_generation {} backend_id {}",
+        retained_key.orchestration_session_id,
+        retained_key.world_generation,
+        retained_key.backend_id,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1003,6 +1123,76 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("member_turn_submit.backend_id mismatch"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn retained_member_key_uses_session_generation_and_backend_id() {
+        let req = MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "orch_123".to_string(),
+            participant_id: "ash_member".to_string(),
+            orchestrator_participant_id: "ash_orchestrator".to_string(),
+            backend_id: "cli:codex".to_string(),
+            run_id: "run_turn".to_string(),
+            world_id: "world_123".to_string(),
+            world_generation: 7,
+            prompt: "continue".to_string(),
+        };
+
+        assert_eq!(
+            RetainedMemberKey::from_submit(&req),
+            RetainedMemberKey {
+                orchestration_session_id: "orch_123".to_string(),
+                world_generation: 7,
+                backend_id: "cli:codex".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn duplicate_retained_member_error_mentions_backend_slot_identity() {
+        let err = duplicate_retained_member_error(
+            &RetainedMemberKey {
+                orchestration_session_id: "orch_123".to_string(),
+                world_generation: 7,
+                backend_id: "cli:codex".to_string(),
+            },
+            "ash_member_existing",
+        );
+
+        assert!(
+            err.to_string().contains("backend_id cli:codex"),
+            "unexpected error: {err}"
+        );
+        assert!(
+            err.to_string()
+                .contains("participant_id ash_member_existing"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn retained_slot_owner_mismatch_error_mentions_expected_participant() {
+        let err = retained_slot_owner_mismatch_error(
+            &RetainedMemberKey {
+                orchestration_session_id: "orch_123".to_string(),
+                world_generation: 7,
+                backend_id: "cli:codex".to_string(),
+            },
+            "ash_member_existing",
+            "ash_member_other",
+        );
+
+        assert!(
+            err.to_string()
+                .contains("member_turn_submit.participant_id mismatch"),
+            "unexpected error: {err}"
+        );
+        assert!(
+            err.to_string()
+                .contains("expected ash_member_existing, got ash_member_other"),
             "unexpected error: {err}"
         );
     }

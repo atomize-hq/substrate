@@ -550,8 +550,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                 return Ok(failure.exit_code);
             }
         };
-        let mut member_runtime: Option<AsyncReplAgentRuntime> = None;
-        let mut pending_member_replacement: Option<AgentRuntimeParticipantRecord> = None;
+        let mut member_runtimes = RetainedMemberRuntimeMap::new();
+        let mut pending_member_replacements = PendingMemberReplacementMap::new();
 
         let mut should_exit = false;
         let mut termination_cause = ReplTerminationCause::NormalExit;
@@ -729,8 +729,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     Err(err)
                                 } else if let Err(err) = reconcile_member_runtime_generation(
                                     world_session.as_ref(),
-                                    &mut member_runtime,
-                                    &mut pending_member_replacement,
+                                    &mut member_runtimes,
+                                    &mut pending_member_replacements,
                                     &agent_printer,
                                     &mut telemetry,
                                 )
@@ -741,8 +741,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                     startup_context.as_ref(),
                                     world_session.as_ref(),
                                     &descriptor,
-                                    &mut member_runtime,
-                                    &mut pending_member_replacement,
+                                    &mut member_runtimes,
+                                    &mut pending_member_replacements,
                                     &agent_printer,
                                     &mut telemetry,
                                 )
@@ -750,9 +750,12 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 {
                                     Err(err)
                                 } else {
-                                    let runtime = member_runtime.as_mut().ok_or_else(|| {
+                                    let runtime = member_runtimes
+                                        .get_mut(targeted_turn.backend_id)
+                                        .ok_or_else(|| {
                                         anyhow!(
-                                            "substrate: error: world-scoped member runtime is unavailable for targeted follow-up turns"
+                                            "substrate: error: world-scoped member runtime is unavailable for targeted follow-up turns for backend '{}'",
+                                            targeted_turn.backend_id
                                         )
                                     })?;
                                     submit_world_targeted_turn(
@@ -860,8 +863,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 }
                                 if let Err(err) = reconcile_member_runtime_generation(
                                     world_session.as_ref(),
-                                    &mut member_runtime,
-                                    &mut pending_member_replacement,
+                                    &mut member_runtimes,
+                                    &mut pending_member_replacements,
                                     &agent_printer,
                                     &mut telemetry,
                                 )
@@ -874,8 +877,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 if let Err(err) = ensure_member_runtime_ready(
                                     startup_context.as_ref(),
                                     world_session.as_ref(),
-                                    &mut member_runtime,
-                                    &mut pending_member_replacement,
+                                    &mut member_runtimes,
+                                    &mut pending_member_replacements,
                                     &agent_printer,
                                     &mut telemetry,
                                 )
@@ -929,8 +932,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                                 }
                                 if let Err(err) = reconcile_member_runtime_generation(
                                     world_session.as_ref(),
-                                    &mut member_runtime,
-                                    &mut pending_member_replacement,
+                                    &mut member_runtimes,
+                                    &mut pending_member_replacements,
                                     &agent_printer,
                                     &mut telemetry,
                                 )
@@ -968,8 +971,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         }
                         if let Err(err) = reconcile_member_runtime_generation(
                             world_session.as_ref(),
-                            &mut member_runtime,
-                            &mut pending_member_replacement,
+                            &mut member_runtimes,
+                            &mut pending_member_replacements,
                             &agent_printer,
                             &mut telemetry,
                         )
@@ -982,8 +985,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         if let Err(err) = ensure_member_runtime_ready(
                             startup_context.as_ref(),
                             world_session.as_ref(),
-                            &mut member_runtime,
-                            &mut pending_member_replacement,
+                            &mut member_runtimes,
+                            &mut pending_member_replacements,
                             &agent_printer,
                             &mut telemetry,
                         )
@@ -1050,8 +1053,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         }
                         if let Err(err) = reconcile_member_runtime_generation(
                             world_session.as_ref(),
-                            &mut member_runtime,
-                            &mut pending_member_replacement,
+                            &mut member_runtimes,
+                            &mut pending_member_replacements,
                             &agent_printer,
                             &mut telemetry,
                         )
@@ -1267,9 +1270,7 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         };
 
-        if let Some(runtime) = member_runtime.take() {
-            shutdown_host_orchestrator_runtime(runtime, &agent_printer, &mut telemetry).await;
-        }
+        shutdown_all_member_runtimes(&mut member_runtimes, &agent_printer, &mut telemetry).await;
         if let Some(runtime) = agent_runtime.take() {
             shutdown_host_orchestrator_runtime(runtime, &agent_printer, &mut telemetry).await;
         }
@@ -1720,6 +1721,9 @@ struct AsyncReplAgentRuntime {
     heartbeat_stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
     heartbeat_task: Option<tokio::task::JoinHandle<()>>,
 }
+
+type RetainedMemberRuntimeMap = BTreeMap<String, AsyncReplAgentRuntime>;
+type PendingMemberReplacementMap = BTreeMap<String, AgentRuntimeParticipantRecord>;
 
 fn runtime_controls_parent_session(role: &str) -> bool {
     role == ORCHESTRATOR_ROLE
@@ -2638,6 +2642,16 @@ fn runtime_manifest_snapshot(runtime: &AsyncReplAgentRuntime) -> AgentRuntimePar
         .clone()
 }
 
+fn runtime_backend_id(runtime: &AsyncReplAgentRuntime) -> String {
+    runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .handle
+        .backend_id
+        .clone()
+}
+
 #[cfg(any(test, target_os = "linux"))]
 fn select_member_runtime_descriptor(
     startup_context: &RuntimeOrchestrationContext,
@@ -2692,13 +2706,7 @@ fn select_host_runtime_descriptor_for_backend(
 }
 
 fn active_orchestrator_backend_id(runtime: &AsyncReplAgentRuntime) -> String {
-    runtime
-        .manifest
-        .lock()
-        .expect("runtime manifest mutex poisoned")
-        .handle
-        .backend_id
-        .clone()
+    runtime_backend_id(runtime)
 }
 
 fn resolve_targeted_turn_route(
@@ -2852,7 +2860,7 @@ fn live_member_for_generation(
         .into_iter()
         .filter(|participant| {
             participant.handle.role == MEMBER_ROLE
-                && participant.handle.agent_id == descriptor.agent_id
+                && participant.handle.backend_id == descriptor.backend_id
                 && participant.handle.execution.scope
                     == crate::execution::config_model::AgentExecutionScope::World
                 && participant.handle.world_generation == Some(world_generation)
@@ -2864,8 +2872,8 @@ fn live_member_for_generation(
         _ => Err(RuntimeBootstrapFailure {
             exit_code: 1,
             message: format!(
-                "member launch found multiple live '{}' participants for world generation {} in the current orchestration session",
-                descriptor.agent_id, world_generation
+                "member launch found multiple live world-scoped member participants for backend '{}' in world generation {} within the current orchestration session",
+                descriptor.backend_id, world_generation
             ),
         }),
     }
@@ -2892,8 +2900,8 @@ fn prepare_member_runtime_startup_for_descriptor(
         return Err(RuntimeBootstrapFailure {
             exit_code: 1,
             message: format!(
-                "member launch found an existing authoritative-live '{}' participant for world generation {} without a retained runtime handle in the current REPL",
-                descriptor.agent_id, authoritative_world.world_generation
+                "member launch found an existing authoritative-live world-scoped member participant for backend '{}' in world generation {} without a retained runtime handle in the current REPL",
+                descriptor.backend_id, authoritative_world.world_generation
             ),
         });
     }
@@ -3526,50 +3534,58 @@ async fn start_remote_member_runtime_with_prepared(
 
 async fn reconcile_member_runtime_generation(
     world_session: Option<&WorldSession>,
-    member_runtime: &mut Option<AsyncReplAgentRuntime>,
-    pending_member_replacement: &mut Option<AgentRuntimeParticipantRecord>,
+    member_runtimes: &mut RetainedMemberRuntimeMap,
+    pending_member_replacements: &mut PendingMemberReplacementMap,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
     let Some(world_session) = world_session else {
         return Ok(());
     };
-    let Some(runtime) = member_runtime.as_ref() else {
-        return Ok(());
-    };
-    let manifest_snapshot = runtime_manifest_snapshot(runtime);
-    if manifest_snapshot.handle.role != MEMBER_ROLE
-        || manifest_snapshot.handle.world_generation == Some(world_session.world_generation)
-    {
-        return Ok(());
-    }
+    let stale_backends = member_runtimes
+        .iter()
+        .filter_map(|(backend_id, runtime)| {
+            let manifest_snapshot = runtime_manifest_snapshot(runtime);
+            (manifest_snapshot.handle.role == MEMBER_ROLE
+                && manifest_snapshot.handle.world_generation
+                    != Some(world_session.world_generation))
+            .then_some(backend_id.clone())
+        })
+        .collect::<Vec<_>>();
 
-    let Some(runtime) = member_runtime.take() else {
-        return Ok(());
-    };
-    let (orchestration_snapshot, invalidated_manifest) = {
-        let mut manifest_guard = runtime
-            .manifest
-            .lock()
-            .expect("runtime manifest mutex poisoned");
-        if manifest_guard.handle.state != AgentRuntimeSessionState::Invalidated {
-            let _ = manifest_guard.invalidate_for_world_generation_rollover();
-        }
-        let orchestration_snapshot = runtime
-            .orchestration_session
-            .lock()
-            .expect("orchestration session mutex poisoned")
-            .clone();
-        (orchestration_snapshot, manifest_guard.clone())
-    };
-    persist_runtime_snapshots(
-        &runtime.store,
-        &orchestration_snapshot,
-        &invalidated_manifest,
-    )
-    .context("persist invalidated stale member runtime state after world generation rollover")?;
-    *pending_member_replacement = Some(invalidated_manifest.clone());
-    shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
+    for backend_id in stale_backends {
+        let Some(runtime) = member_runtimes.remove(&backend_id) else {
+            continue;
+        };
+        let (orchestration_snapshot, invalidated_manifest) = {
+            let mut manifest_guard = runtime
+                .manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned");
+            if manifest_guard.handle.state != AgentRuntimeSessionState::Invalidated {
+                let _ = manifest_guard.invalidate_for_world_generation_rollover();
+            }
+            let orchestration_snapshot = runtime
+                .orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned")
+                .clone();
+            (orchestration_snapshot, manifest_guard.clone())
+        };
+        persist_runtime_snapshots(
+            &runtime.store,
+            &orchestration_snapshot,
+            &invalidated_manifest,
+        )
+        .with_context(|| {
+            format!(
+                "persist invalidated stale member runtime state after world generation rollover for backend '{}'",
+                backend_id
+            )
+        })?;
+        pending_member_replacements.insert(backend_id, invalidated_manifest.clone());
+        shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
+    }
     Ok(())
 }
 
@@ -3578,8 +3594,8 @@ async fn ensure_member_runtime_ready_for_descriptor(
     startup_context: Option<&RuntimeOrchestrationContext>,
     world_session: Option<&WorldSession>,
     descriptor: &RuntimeSelectionDescriptor,
-    member_runtime: &mut Option<AsyncReplAgentRuntime>,
-    pending_member_replacement: &mut Option<AgentRuntimeParticipantRecord>,
+    member_runtimes: &mut RetainedMemberRuntimeMap,
+    pending_member_replacements: &mut PendingMemberReplacementMap,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
@@ -3592,24 +3608,37 @@ async fn ensure_member_runtime_ready_for_descriptor(
     ensure_member_backend_allowed(startup_context, descriptor)
         .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
 
-    if let Some(runtime) = member_runtime.as_ref() {
+    let exact_live_member =
+        live_member_for_generation(startup_context, descriptor, world_session.world_generation)
+            .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
+
+    if let Some(runtime) = member_runtimes.get(&descriptor.backend_id) {
         let manifest_snapshot = runtime_manifest_snapshot(runtime);
         if manifest_snapshot.handle.role == MEMBER_ROLE
-            && manifest_snapshot.handle.agent_id == descriptor.agent_id
+            && manifest_snapshot.handle.orchestration_session_id
+                == startup_context.orchestration_session_id()
+            && manifest_snapshot.handle.backend_id == descriptor.backend_id
             && manifest_snapshot.handle.world_generation == Some(world_session.world_generation)
             && manifest_snapshot.is_authoritative_live()
+            && exact_live_member.as_ref().is_some_and(|participant| {
+                participant.handle.participant_id == manifest_snapshot.handle.participant_id
+            })
         {
             return Ok(());
         }
     }
 
-    if let Some(runtime) = member_runtime.take() {
+    if let Some(runtime) = member_runtimes.remove(&descriptor.backend_id) {
         shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
     }
 
-    let resumed_from = pending_member_replacement
-        .as_ref()
-        .filter(|participant| participant.handle.agent_id == descriptor.agent_id);
+    let resumed_from = pending_member_replacements
+        .get(&descriptor.backend_id)
+        .filter(|participant| {
+            participant.handle.orchestration_session_id
+                == startup_context.orchestration_session_id()
+                && participant.handle.backend_id == descriptor.backend_id
+        });
     let prepared = prepare_member_runtime_startup_for_descriptor(
         startup_context,
         descriptor.clone(),
@@ -3628,10 +3657,10 @@ async fn ensure_member_runtime_ready_for_descriptor(
             Ok(runtime) => runtime,
             Err(failure) => return Err(anyhow!("substrate: error: {}", failure.message)),
         };
-    if runtime.is_some() {
-        pending_member_replacement.take();
+    if let Some(runtime) = runtime {
+        pending_member_replacements.remove(&descriptor.backend_id);
+        member_runtimes.insert(runtime_backend_id(&runtime), runtime);
     }
-    *member_runtime = runtime;
     Ok(())
 }
 
@@ -3640,8 +3669,8 @@ async fn ensure_member_runtime_ready_for_descriptor(
     startup_context: Option<&RuntimeOrchestrationContext>,
     world_session: Option<&WorldSession>,
     _descriptor: &RuntimeSelectionDescriptor,
-    _member_runtime: &mut Option<AsyncReplAgentRuntime>,
-    _pending_member_replacement: &mut Option<AgentRuntimeParticipantRecord>,
+    _member_runtimes: &mut RetainedMemberRuntimeMap,
+    _pending_member_replacements: &mut PendingMemberReplacementMap,
     _agent_printer: &ReplPrinter,
     _telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
@@ -3661,8 +3690,8 @@ async fn ensure_member_runtime_ready_for_descriptor(
 async fn ensure_member_runtime_ready(
     startup_context: Option<&RuntimeOrchestrationContext>,
     world_session: Option<&WorldSession>,
-    member_runtime: &mut Option<AsyncReplAgentRuntime>,
-    pending_member_replacement: &mut Option<AgentRuntimeParticipantRecord>,
+    member_runtimes: &mut RetainedMemberRuntimeMap,
+    pending_member_replacements: &mut PendingMemberReplacementMap,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
@@ -3679,8 +3708,8 @@ async fn ensure_member_runtime_ready(
         Some(startup_context),
         world_session,
         &descriptor,
-        member_runtime,
-        pending_member_replacement,
+        member_runtimes,
+        pending_member_replacements,
         agent_printer,
         telemetry,
     )
@@ -3691,8 +3720,8 @@ async fn ensure_member_runtime_ready(
 async fn ensure_member_runtime_ready(
     startup_context: Option<&RuntimeOrchestrationContext>,
     world_session: Option<&WorldSession>,
-    _member_runtime: &mut Option<AsyncReplAgentRuntime>,
-    _pending_member_replacement: &mut Option<AgentRuntimeParticipantRecord>,
+    _member_runtimes: &mut RetainedMemberRuntimeMap,
+    _pending_member_replacements: &mut PendingMemberReplacementMap,
     _agent_printer: &ReplPrinter,
     _telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
@@ -3706,6 +3735,16 @@ async fn ensure_member_runtime_ready(
     Err(anyhow!(
         "substrate: error: world-scoped member runtime dispatch is supported on Linux only"
     ))
+}
+
+async fn shutdown_all_member_runtimes(
+    member_runtimes: &mut RetainedMemberRuntimeMap,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) {
+    while let Some((_, runtime)) = member_runtimes.pop_first() {
+        shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
+    }
 }
 
 fn build_session_resume_extension(session_id: &str) -> serde_json::Value {
