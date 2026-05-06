@@ -1,0 +1,1032 @@
+#![cfg(any(target_os = "linux", target_os = "macos"))]
+
+mod common;
+
+use common::{binary_path, ensure_substrate_built, substrate_shell_driver};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use serde_json::{json, Value};
+use serial_test::serial;
+use std::fs;
+use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::process::Output;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use tempfile::TempDir;
+
+const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
+
+#[cfg(unix)]
+fn set_fd_nonblocking(fd: i32) {
+    unsafe {
+        let flags = libc::fcntl(fd, libc::F_GETFL);
+        if flags < 0 {
+            return;
+        }
+        let _ = libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+    }
+}
+
+fn manager_manifest_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/manager_hooks.yaml")
+}
+
+struct AgentControlFixture {
+    _temp: TempDir,
+    home: PathBuf,
+    substrate_home: PathBuf,
+    workspace_root: PathBuf,
+    fake_codex: PathBuf,
+}
+
+impl AgentControlFixture {
+    fn new() -> Self {
+        let temp = tempfile::Builder::new()
+            .prefix("sac-")
+            .tempdir_in("/tmp")
+            .expect("allocate short temp dir");
+        let home = temp.path().join("h");
+        let substrate_home = temp.path().join("s");
+        let workspace_root = temp.path().join("w");
+        fs::create_dir_all(&home).expect("create HOME");
+        fs::create_dir_all(&substrate_home).expect("create SUBSTRATE_HOME");
+        fs::create_dir_all(substrate_home.join("shims")).expect("create shims dir");
+        fs::create_dir_all(&workspace_root).expect("create workspace root");
+        fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
+        let fake_codex = write_fake_codex_script(temp.path());
+        Self {
+            _temp: temp,
+            home,
+            substrate_home,
+            workspace_root,
+            fake_codex,
+        }
+    }
+
+    fn command(&self) -> assert_cmd::Command {
+        let mut cmd = substrate_shell_driver();
+        cmd.env("HOME", &self.home)
+            .env("USERPROFILE", &self.home)
+            .env("SUBSTRATE_HOME", &self.substrate_home)
+            .env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path())
+            .env("SHIM_TRACE_LOG", self.trace_path());
+        cmd
+    }
+
+    fn init_workspace(&self) {
+        let output = self
+            .command()
+            .arg("workspace")
+            .arg("init")
+            .arg(&self.workspace_root)
+            .arg("--force")
+            .output()
+            .expect("run workspace init");
+        assert!(
+            output.status.success(),
+            "workspace init should succeed: {output:?}"
+        );
+    }
+
+    fn write_runtime_inventory(&self, include_world_backend: bool) {
+        fs::create_dir_all(self.substrate_home.join("agents")).expect("create agents dir");
+        let allowed_backends = if include_world_backend {
+            "    - cli:codex\n    - cli:claude_code\n"
+        } else {
+            "    - cli:codex\n"
+        };
+        fs::write(
+            self.substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n  toolbox:\n    enabled: true\n    bind:\n      transport: uds\n",
+        )
+        .expect("write config.yaml");
+        fs::write(
+            self.substrate_home.join("policy.yaml"),
+            format!(
+                "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {{}}\nagents:\n  allowed_backends:\n{allowed_backends}",
+            ),
+        )
+        .expect("write policy.yaml");
+        fs::write(
+            self.workspace_root.join(".substrate-profile"),
+            "id: test-policy\nname: Test Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\n",
+        )
+        .expect("write .substrate-profile");
+        fs::write(
+            self.substrate_home.join("agents/codex.yaml"),
+            cli_agent_file("codex", "host", &self.fake_codex),
+        )
+        .expect("write codex agent file");
+        if include_world_backend {
+            fs::write(
+                self.substrate_home.join("agents/claude_code.yaml"),
+                cli_agent_file("claude_code", "world", &self.fake_codex),
+            )
+            .expect("write claude_code agent file");
+        }
+    }
+
+    fn run(&self, args: &[&str]) -> Output {
+        self.command()
+            .current_dir(&self.workspace_root)
+            .args(args)
+            .output()
+            .expect("run substrate command")
+    }
+
+    fn trace_path(&self) -> PathBuf {
+        self.substrate_home.join("trace.jsonl")
+    }
+
+    fn load_orchestration_session(&self, orchestration_session_id: &str) -> Value {
+        read_json_file(&canonical_orchestration_session_path(
+            &self.substrate_home,
+            orchestration_session_id,
+        ))
+    }
+
+    fn load_participant(&self, orchestration_session_id: &str, participant_id: &str) -> Value {
+        read_json_file(&canonical_participant_manifest_path(
+            &self.substrate_home,
+            orchestration_session_id,
+            participant_id,
+        ))
+    }
+}
+
+fn cli_agent_file(agent_id: &str, scope: &str, binary: &Path) -> String {
+    format!(
+        "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: {scope}\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+        binary.display()
+    )
+}
+
+fn write_fake_codex_script(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex.sh");
+    let body = "#!/bin/sh\ntrap 'exit 0' INT TERM\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}\\r\\n'\nwhile :; do sleep 1; done\n";
+    fs::write(&path, body).expect("write fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake codex permissions");
+    path
+}
+
+fn parse_json_output(output: &Output) -> Value {
+    serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON")
+}
+
+fn stderr_text(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stderr).to_string()
+}
+
+fn assert_empty_warnings(json: &Value) {
+    assert_eq!(
+        json.get("warnings").and_then(Value::as_array).map(Vec::len),
+        Some(0),
+        "control success output must keep warnings empty: {json}"
+    );
+}
+
+fn canonical_orchestration_session_path(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> PathBuf {
+    substrate_home
+        .join("run/agent-hub/sessions")
+        .join(orchestration_session_id)
+        .join("session.json")
+}
+
+fn canonical_participant_manifest_path(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    substrate_home
+        .join("run/agent-hub/sessions")
+        .join(orchestration_session_id)
+        .join("participants")
+        .join(format!("{participant_id}.json"))
+}
+
+fn read_json_file(path: &Path) -> Value {
+    serde_json::from_str(
+        &fs::read_to_string(path)
+            .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display())),
+    )
+    .unwrap_or_else(|err| panic!("failed to parse {}: {err}", path.display()))
+}
+
+fn compact_stop_transport_fragment(id: &str) -> String {
+    let normalized = id
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .collect::<String>();
+    if normalized.len() <= 20 {
+        return normalized;
+    }
+    format!(
+        "{}{}",
+        &normalized[..10],
+        &normalized[normalized.len() - 10..]
+    )
+}
+
+fn stop_transport_path(
+    fixture: &AgentControlFixture,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    fixture
+        .substrate_home
+        .join("run/agent-hub/handles/stop")
+        .join(format!(
+            "{}-{}.sock",
+            compact_stop_transport_fragment(orchestration_session_id),
+            compact_stop_transport_fragment(participant_id)
+        ))
+}
+
+fn wait_for_path(path: &Path, timeout: Duration) -> bool {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        if path.exists() {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    false
+}
+
+#[cfg(unix)]
+fn pid_is_alive(pid: u32) -> bool {
+    let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+    rc == 0
+        || matches!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EPERM)
+        )
+}
+
+#[cfg(unix)]
+fn terminate_pid(pid: u32) {
+    let pid = pid as libc::pid_t;
+    unsafe {
+        let _ = libc::kill(pid, libc::SIGTERM);
+    }
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(2) {
+        if !pid_is_alive(pid as u32) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    unsafe {
+        let _ = libc::kill(pid, libc::SIGKILL);
+    }
+}
+
+fn wait_for_single_active_session(
+    fixture: &AgentControlFixture,
+    timeout: Duration,
+) -> (String, String) {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        let sessions_dir = fixture.substrate_home.join("run/agent-hub/sessions");
+        if let Ok(entries) = fs::read_dir(&sessions_dir) {
+            let mut dirs = entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| path.is_dir())
+                .collect::<Vec<_>>();
+            dirs.sort();
+            if let Some(dir) = dirs.into_iter().next() {
+                let session = read_json_file(&dir.join("session.json"));
+                if session.get("state").and_then(Value::as_str) == Some("active") {
+                    if let Some(participant_id) = session
+                        .get("active_session_handle_id")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                    {
+                        if read_json_file(
+                            &dir.join("participants")
+                                .join(format!("{participant_id}.json")),
+                        )
+                        .get("state")
+                        .and_then(Value::as_str)
+                        .is_some_and(|state| matches!(state, "ready" | "running"))
+                        {
+                            return (
+                                session["orchestration_session_id"]
+                                    .as_str()
+                                    .expect("session id")
+                                    .to_string(),
+                                participant_id,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    panic!("timed out waiting for a single active orchestration session");
+}
+
+fn write_json_file(path: &Path, value: &Value) {
+    let parent = path.parent().expect("fixture json path should have parent");
+    fs::create_dir_all(parent)
+        .unwrap_or_else(|err| panic!("failed to create {}: {err}", parent.display()));
+    fs::write(
+        path,
+        serde_json::to_vec_pretty(value).expect("serialize fixture json"),
+    )
+    .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
+}
+
+fn write_active_orchestration_session(
+    fixture: &AgentControlFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: &str,
+    ts: &str,
+) {
+    write_json_file(
+        &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
+        &json!({
+            "orchestration_session_id": orchestration_session_id,
+            "shell_trace_session_id": "ses_agent_control",
+            "workspace_root": fixture.workspace_root.display().to_string(),
+            "shell_owner_pid": std::process::id(),
+            "state": "active",
+            "opened_at": ts,
+            "last_active_at": ts,
+            "orchestrator_agent_id": agent_id,
+            "orchestrator_backend_id": format!("cli:{agent_id}"),
+            "orchestrator_protocol": PURE_AGENT_PROTOCOL,
+            "active_session_handle_id": active_session_handle_id,
+            "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
+            "world_id": Value::Null,
+            "world_generation": Value::Null,
+            "invalidation_reason": Value::Null,
+            "closed_at": Value::Null
+        }),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_runtime_participant(
+    fixture: &AgentControlFixture,
+    participant_id: &str,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    state: &str,
+    ownership_valid: bool,
+    uaa_session_id: Option<&str>,
+    resumed_from_participant_id: Option<&str>,
+    ts: &str,
+) {
+    write_json_file(
+        &canonical_participant_manifest_path(
+            &fixture.substrate_home,
+            orchestration_session_id,
+            participant_id,
+        ),
+        &json!({
+            "participant_id": participant_id,
+            "orchestration_session_id": orchestration_session_id,
+            "agent_id": agent_id,
+            "backend_id": format!("cli:{agent_id}"),
+            "role": "orchestrator",
+            "protocol": PURE_AGENT_PROTOCOL,
+            "execution": { "scope": "host" },
+            "state": state,
+            "opened_at": ts,
+            "last_transition_at": ts,
+            "resumed_from_participant_id": resumed_from_participant_id,
+            "internal": {
+                "resolved_agent_kind": agent_id,
+                "resolved_binary_path": fixture.fake_codex.display().to_string(),
+                "shell_owner_pid": std::process::id(),
+                "lease_token": format!("lease-{participant_id}"),
+                "uaa_session_id": uaa_session_id,
+                "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
+                "cancel_supported": true,
+                "control_owner_retained": ownership_valid,
+                "event_stream_active": ownership_valid,
+                "completion_observer_retained": ownership_valid,
+                "ownership_mode": "attached_control",
+                "ownership_valid": ownership_valid,
+                "ownership_verified_at": ts,
+                "last_heartbeat_at": ts,
+                "last_event_at": ts,
+                "terminal_observed_at": Value::Null,
+                "termination_reason": Value::Null,
+                "last_error_bucket": Value::Null,
+                "last_error_message": Value::Null
+            }
+        }),
+    );
+}
+
+struct PtyRepl {
+    child: Box<dyn portable_pty::Child + Send>,
+    master: Option<Box<dyn portable_pty::MasterPty + Send>>,
+    waited: Option<portable_pty::ExitStatus>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    output: Arc<Mutex<Vec<u8>>>,
+    reader_handle: Option<std::thread::JoinHandle<()>>,
+    stop_reader: Arc<AtomicBool>,
+}
+
+impl Drop for PtyRepl {
+    fn drop(&mut self) {
+        self.stop_reader.store(true, Ordering::Relaxed);
+        self.master.take();
+        if self.waited.is_none() {
+            let _ = self.child.kill();
+            let _ = self.child.try_wait().ok().flatten().map(|status| {
+                self.waited = Some(status);
+            });
+        }
+        if let Some(handle) = self.reader_handle.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl PtyRepl {
+    fn spawn(fixture: &AgentControlFixture) -> Self {
+        ensure_substrate_built();
+
+        let pty_system = native_pty_system();
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("openpty");
+        let master = pair.master;
+
+        #[cfg(unix)]
+        let master_fd = master.as_raw_fd();
+        #[cfg(unix)]
+        if let Some(fd) = master_fd {
+            set_fd_nonblocking(fd);
+        }
+
+        let mut cmd = CommandBuilder::new(binary_path());
+        cmd.cwd(&fixture.workspace_root);
+        cmd.env("HOME", &fixture.home);
+        cmd.env("USERPROFILE", &fixture.home);
+        cmd.env("SUBSTRATE_HOME", &fixture.substrate_home);
+        cmd.env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path());
+        cmd.env("SHIM_TRACE_LOG", fixture.trace_path());
+        cmd.env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+        cmd.env_remove("SHIM_ORIGINAL_PATH");
+        cmd.env_remove("SUBSTRATE_WORLD");
+        cmd.env_remove("SUBSTRATE_WORLD_ENABLED");
+        cmd.env_remove("SUBSTRATE_WORLD_ID");
+        cmd.env("SHELL", "/bin/bash");
+        cmd.arg("--async-repl");
+        cmd.arg("--shim-skip");
+
+        let child = pair.slave.spawn_command(cmd).expect("spawn substrate repl");
+        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+            Arc::new(Mutex::new(master.take_writer().expect("take writer")));
+        let output = Arc::new(Mutex::new(Vec::new()));
+        let stop_reader = Arc::new(AtomicBool::new(false));
+        let output_for_thread = output.clone();
+        let stop_for_thread = stop_reader.clone();
+        let writer_for_thread = Arc::downgrade(&writer);
+        let reader_handle = std::thread::spawn(move || {
+            let mut buf = [0u8; 4096];
+            loop {
+                if stop_for_thread.load(Ordering::Relaxed) {
+                    break;
+                }
+
+                #[cfg(unix)]
+                if let Some(fd) = master_fd {
+                    let rc = unsafe { libc::read(fd, buf.as_mut_ptr().cast(), buf.len()) };
+                    if rc == 0 {
+                        break;
+                    }
+                    if rc < 0 {
+                        let err = std::io::Error::last_os_error();
+                        if err.kind() == std::io::ErrorKind::WouldBlock {
+                            std::thread::sleep(Duration::from_millis(25));
+                            continue;
+                        }
+                        break;
+                    }
+
+                    let n = rc as usize;
+                    let chunk = &buf[..n];
+                    if chunk.windows(4).any(|window| window == b"\x1b[6n") {
+                        if let Some(writer) = writer_for_thread.upgrade() {
+                            if let Ok(mut handle) = writer.lock() {
+                                let _ = handle.write_all(b"\x1b[1;1R");
+                                let _ = handle.flush();
+                            }
+                        }
+                    }
+                    if chunk.windows(5).any(|window| window == b"\x1b[18t") {
+                        if let Some(writer) = writer_for_thread.upgrade() {
+                            if let Ok(mut handle) = writer.lock() {
+                                let _ = handle.write_all(b"\x1b[8;24;80t");
+                                let _ = handle.flush();
+                            }
+                        }
+                    }
+
+                    if let Ok(mut guard) = output_for_thread.lock() {
+                        guard.extend_from_slice(chunk);
+                    }
+                    continue;
+                }
+
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        });
+
+        Self {
+            child,
+            master: Some(master),
+            waited: None,
+            writer,
+            output,
+            reader_handle: Some(reader_handle),
+            stop_reader,
+        }
+    }
+
+    fn send_line(&mut self, line: &str) {
+        let mut writer = self.writer.lock().expect("pty writer");
+        writer.write_all(line.as_bytes()).expect("write line");
+        writer.write_all(b"\n").expect("write newline");
+        writer.flush().expect("flush line");
+    }
+
+    fn wait_for_output(&self, needle: &str, timeout: Duration) -> Option<usize> {
+        let start = Instant::now();
+        while start.elapsed() < timeout {
+            let output = self.output.lock().expect("output lock");
+            if let Ok(text) = std::str::from_utf8(&output) {
+                if let Some(pos) = text.find(needle) {
+                    return Some(pos);
+                }
+            }
+            drop(output);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        None
+    }
+
+    fn shutdown_graceful(mut self, timeout: Duration) -> (i32, Vec<u8>) {
+        let start = Instant::now();
+        while start.elapsed() < timeout {
+            if let Ok(Some(status)) = self.child.try_wait() {
+                self.waited = Some(status);
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        if self.waited.is_none() {
+            let _ = self.child.kill();
+            if let Ok(Some(status)) = self.child.try_wait() {
+                self.waited = Some(status);
+            }
+        }
+
+        self.stop_reader.store(true, Ordering::Relaxed);
+        self.master.take();
+        if let Some(handle) = self.reader_handle.take() {
+            let _ = handle.join();
+        }
+
+        let code = self
+            .waited
+            .as_ref()
+            .map(|status| status.exit_code() as i32)
+            .unwrap_or(-1);
+        let output = self.output.lock().expect("output lock").clone();
+        (code, output)
+    }
+}
+
+#[test]
+#[serial]
+fn public_start_and_stop_emit_stable_json_and_authoritative_state() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let start_output = fixture.run(&["agent", "start", "--backend", "cli:codex", "--json"]);
+    assert!(
+        start_output.status.success(),
+        "public start should succeed: {start_output:?}"
+    );
+    let start_json = parse_json_output(&start_output);
+    assert_eq!(
+        start_json.get("action").and_then(Value::as_str),
+        Some("start")
+    );
+    assert_eq!(
+        start_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        start_json.get("scope").and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        start_json.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert!(
+        start_json.get("source_orchestration_session_id").is_none(),
+        "start must not surface source_orchestration_session_id: {start_json}"
+    );
+    assert_empty_warnings(&start_json);
+
+    let orchestration_session_id = start_json["orchestration_session_id"]
+        .as_str()
+        .expect("start session id")
+        .to_string();
+    let participant_id = start_json["participant_id"]
+        .as_str()
+        .expect("start participant id")
+        .to_string();
+    let persisted_session = fixture.load_orchestration_session(&orchestration_session_id);
+    assert_eq!(
+        persisted_session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str),
+        Some(participant_id.as_str()),
+        "public start must not report readiness before the state store points at the active participant"
+    );
+    let owner_pid = persisted_session["shell_owner_pid"]
+        .as_u64()
+        .expect("shell owner pid") as u32;
+    assert!(
+        pid_is_alive(owner_pid),
+        "public start must leave the hidden owner-helper process alive"
+    );
+    assert!(
+        wait_for_path(
+            &stop_transport_path(&fixture, &orchestration_session_id, &participant_id),
+            Duration::from_secs(5),
+        ),
+        "public start must materialize a per-session private stop transport"
+    );
+
+    let stop_output = fixture.run(&[
+        "agent",
+        "stop",
+        "--session",
+        &orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        stop_output.status.success(),
+        "public stop should succeed: {stop_output:?}"
+    );
+    let stop_json = parse_json_output(&stop_output);
+    assert_eq!(
+        stop_json.get("action").and_then(Value::as_str),
+        Some("stop")
+    );
+    assert_eq!(
+        stop_json
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id.as_str())
+    );
+    assert_eq!(
+        stop_json.get("participant_id").and_then(Value::as_str),
+        Some(participant_id.as_str())
+    );
+    assert_eq!(
+        stop_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert!(
+        matches!(
+            stop_json.get("state").and_then(Value::as_str),
+            Some("stopped") | Some("invalidated")
+        ),
+        "public stop must wait for a terminal parent state: {stop_json}"
+    );
+    assert_empty_warnings(&stop_json);
+
+    let final_session = fixture.load_orchestration_session(&orchestration_session_id);
+    assert_eq!(
+        final_session.get("state").and_then(Value::as_str),
+        Some("stopped"),
+        "host-scoped public stop should persist a stopped parent session on clean shutdown"
+    );
+}
+
+#[test]
+#[serial]
+fn public_resume_and_fork_preserve_exact_session_and_lineage_contracts() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    write_active_orchestration_session(&fixture, "codex", "sess_resume_source", "ash_source", ts);
+    write_runtime_participant(
+        &fixture,
+        "ash_source",
+        "codex",
+        "sess_resume_source",
+        "running",
+        false,
+        Some("uaa-detached-1"),
+        None,
+        ts,
+    );
+
+    let resume_output = fixture.run(&[
+        "agent",
+        "resume",
+        "--session",
+        "sess_resume_source",
+        "--json",
+    ]);
+    assert!(
+        resume_output.status.success(),
+        "public resume should succeed for an orphaned authoritative session: {resume_output:?}"
+    );
+    let resume_json = parse_json_output(&resume_output);
+    assert_eq!(
+        resume_json.get("action").and_then(Value::as_str),
+        Some("resume")
+    );
+    assert_eq!(
+        resume_json
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("sess_resume_source")
+    );
+    assert_eq!(
+        resume_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        resume_json.get("scope").and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        resume_json.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert!(
+        resume_json.get("source_orchestration_session_id").is_none(),
+        "resume must stay inside the source orchestration session: {resume_json}"
+    );
+    assert_empty_warnings(&resume_json);
+
+    let resumed_participant_id = resume_json["participant_id"]
+        .as_str()
+        .expect("resume participant id")
+        .to_string();
+    assert_ne!(
+        resumed_participant_id, "ash_source",
+        "resume must allocate a successor participant"
+    );
+    let resumed_participant =
+        fixture.load_participant("sess_resume_source", &resumed_participant_id);
+    assert_eq!(
+        resumed_participant
+            .get("resumed_from_participant_id")
+            .and_then(Value::as_str),
+        Some("ash_source"),
+        "resume successor persistence must retain resumed_from_participant_id lineage"
+    );
+    let resumed_owner_pid = fixture.load_orchestration_session("sess_resume_source")
+        ["shell_owner_pid"]
+        .as_u64()
+        .expect("resume owner pid") as u32;
+    assert!(
+        pid_is_alive(resumed_owner_pid),
+        "resume must leave a live owner loop"
+    );
+
+    let fork_output = fixture.run(&["agent", "fork", "--session", "sess_resume_source", "--json"]);
+    assert!(
+        fork_output.status.success(),
+        "public fork should succeed from the active resumed session: {fork_output:?}"
+    );
+    let fork_json = parse_json_output(&fork_output);
+    assert_eq!(
+        fork_json.get("action").and_then(Value::as_str),
+        Some("fork")
+    );
+    assert_eq!(
+        fork_json
+            .get("source_orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("sess_resume_source")
+    );
+    assert_eq!(
+        fork_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(fork_json.get("scope").and_then(Value::as_str), Some("host"));
+    assert_eq!(
+        fork_json.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_empty_warnings(&fork_json);
+
+    let fork_session_id = fork_json["orchestration_session_id"]
+        .as_str()
+        .expect("fork session id")
+        .to_string();
+    assert_ne!(
+        fork_session_id, "sess_resume_source",
+        "fork must allocate a new orchestration session id"
+    );
+    let fork_participant_id = fork_json["participant_id"]
+        .as_str()
+        .expect("fork participant id")
+        .to_string();
+    let fork_participant = fixture.load_participant(&fork_session_id, &fork_participant_id);
+    assert_eq!(
+        fork_participant
+            .get("resumed_from_participant_id")
+            .and_then(Value::as_str),
+        Some(resumed_participant_id.as_str()),
+        "fork successor persistence must point lineage at the exact live source participant"
+    );
+    let fork_owner_pid = fixture.load_orchestration_session(&fork_session_id)["shell_owner_pid"]
+        .as_u64()
+        .expect("fork owner pid") as u32;
+    assert!(
+        pid_is_alive(fork_owner_pid),
+        "fork must leave a live owner loop"
+    );
+
+    terminate_pid(resumed_owner_pid);
+    terminate_pid(fork_owner_pid);
+}
+
+#[test]
+#[serial]
+fn public_control_rejects_non_orchestration_session_selectors() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    write_active_orchestration_session(&fixture, "codex", "sess_selector", "ash_live", ts);
+    write_runtime_participant(
+        &fixture,
+        "ash_live",
+        "codex",
+        "sess_selector",
+        "running",
+        false,
+        Some("uaa-live-1"),
+        None,
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_previous",
+        "codex",
+        "sess_selector",
+        "invalidated",
+        false,
+        Some("uaa-old-1"),
+        Some("ash_older"),
+        ts,
+    );
+
+    let active_handle_output = fixture.run(&["agent", "resume", "--session", "ash_live", "--json"]);
+    assert_eq!(
+        active_handle_output.status.code(),
+        Some(2),
+        "active participant selectors must fail closed: {active_handle_output:?}"
+    );
+    assert!(
+        stderr_text(&active_handle_output).contains("matched active_session_handle_id"),
+        "public control must explain active_session_handle_id rejection: {active_handle_output:?}"
+    );
+
+    let participant_output =
+        fixture.run(&["agent", "resume", "--session", "ash_previous", "--json"]);
+    assert_eq!(
+        participant_output.status.code(),
+        Some(2),
+        "non-canonical participant selectors must fail closed: {participant_output:?}"
+    );
+    assert!(
+        stderr_text(&participant_output).contains("matched participant_id/session_handle_id"),
+        "public control must explain participant/session-handle rejection: {participant_output:?}"
+    );
+
+    let internal_output = fixture.run(&["agent", "resume", "--session", "uaa-live-1", "--json"]);
+    assert_eq!(
+        internal_output.status.code(),
+        Some(2),
+        "internal uaa session ids must fail closed as public selectors: {internal_output:?}"
+    );
+    assert!(
+        stderr_text(&internal_output).contains("matched internal.uaa_session_id"),
+        "public control must explain internal.uaa_session_id rejection: {internal_output:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_root_start_rejects_world_scoped_backends_in_v1() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(true);
+
+    let output = fixture.run(&["agent", "start", "--backend", "cli:claude_code", "--json"]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "world-scoped root start must fail closed: {output:?}"
+    );
+    let stderr = stderr_text(&output);
+    assert!(
+        stderr.contains("unsupported_platform_or_posture"),
+        "world-scoped root start must classify the posture failure exactly: {stderr}"
+    );
+    assert!(
+        stderr.contains("public root start is host-only in v1"),
+        "world-scoped root start failure must explain the Linux-first host-only contract: {stderr}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_stop_reaches_repl_owned_sessions_through_the_same_private_owner_plane() {
+    let fixture = AgentControlFixture::new();
+    fixture.write_runtime_inventory(false);
+
+    let mut repl = PtyRepl::spawn(&fixture);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("repl banner");
+    let (orchestration_session_id, participant_id) =
+        wait_for_single_active_session(&fixture, Duration::from_secs(5));
+    assert!(
+        wait_for_path(
+            &stop_transport_path(&fixture, &orchestration_session_id, &participant_id),
+            Duration::from_secs(5),
+        ),
+        "repl-owned sessions must publish the same per-session private stop transport"
+    );
+    let stop_output = fixture.run(&[
+        "agent",
+        "stop",
+        "--session",
+        &orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        stop_output.status.success(),
+        "public stop should succeed against a REPL-owned owner plane: {stop_output:?}"
+    );
+    let stop_json = parse_json_output(&stop_output);
+    assert_eq!(
+        stop_json.get("action").and_then(Value::as_str),
+        Some("stop")
+    );
+    assert_eq!(
+        stop_json
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id.as_str())
+    );
+    assert_eq!(
+        fixture
+            .load_orchestration_session(&orchestration_session_id)
+            .get("state")
+            .and_then(Value::as_str),
+        Some("stopped"),
+        "REPL-owned public stop must drive the same authoritative terminal session state"
+    );
+
+    repl.send_line("exit");
+    let (code, output) = repl.shutdown_graceful(Duration::from_secs(5));
+    assert_eq!(
+        code,
+        0,
+        "repl should still exit cleanly after public stop:\n{}",
+        String::from_utf8_lossy(&output)
+    );
+}

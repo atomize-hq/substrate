@@ -673,9 +673,7 @@ async fn handle_private_stop_connection(
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
     let bytes_read = reader.read_line(&mut line).await?;
-    let outcome = if bytes_read == 0 {
-        PrivateStopOutcome::ProtocolError
-    } else if parse_private_stop_request(line.trim()).is_err() {
+    let outcome = if bytes_read == 0 || parse_private_stop_request(line.trim()).is_err() {
         PrivateStopOutcome::ProtocolError
     } else {
         let (response_tx, response_rx) = oneshot::channel();

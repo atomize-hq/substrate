@@ -56,6 +56,15 @@ This directory contains the reviewed statement-of-work packet for the prerequisi
 - The packet assumes the existing shell-owned host orchestrator runtime remains the starting point.
 - The packet is ordered so that session identity and participant modeling land before world ownership, invalidation, and store reshaping rely on them.
 
+## Follow-On Plans
+
+The original packet stops before public control-plane productization. The follow-on planning documents for that work are:
+
+- [PLAN-19.md](./PLAN-19.md)
+  - Publicize `substrate agent start|resume|fork|stop` with exact session selectors and a Linux-first fail-closed posture.
+- [ORCH_PLAN-19.md](./ORCH_PLAN-19.md)
+  - Parent-frozen execution controller for the `PLAN-19` rollout on `feat/session-centric-state-store`.
+
 ## Non-Goals in This Packet
 
 - Full `agent start/resume/fork/stop` CLI productization
