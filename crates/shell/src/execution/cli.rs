@@ -447,6 +447,28 @@ pub struct AgentDoctorArgs {
 }
 
 #[derive(Args, Debug)]
+pub struct AgentOwnerHelperArgs {
+    #[arg(long = "plan-file", value_name = "PATH")]
+    pub plan_file: PathBuf,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentStartArgs {
+    #[arg(long = "backend", value_name = "BACKEND_ID")]
+    pub backend: String,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentSessionControlArgs {
+    #[arg(long = "session", value_name = "ORCHESTRATION_SESSION_ID")]
+    pub session: String,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug)]
 pub struct AgentToolboxCmd {
     #[command(subcommand)]
     pub action: AgentToolboxAction,
@@ -475,6 +497,16 @@ pub enum AgentAction {
     Status(AgentViewArgs),
     /// Validate deterministic startability of the agent control plane
     Doctor(AgentDoctorArgs),
+    /// Start a new host-scoped orchestration session from an exact backend id
+    Start(AgentStartArgs),
+    /// Reattach a retained owner loop to the exact orchestration session
+    Resume(AgentSessionControlArgs),
+    /// Fork a new orchestration session from the exact orchestration session
+    Fork(AgentSessionControlArgs),
+    /// Stop the exact orchestration session through the private owner transport
+    Stop(AgentSessionControlArgs),
+    #[command(name = "__owner-helper", hide = true)]
+    OwnerHelper(AgentOwnerHelperArgs),
     /// Inspect the internal orchestration toolbox surface
     Toolbox(AgentToolboxCmd),
 }

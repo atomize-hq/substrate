@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
@@ -34,6 +35,16 @@ use crate::execution::agent_events::{
 };
 use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInventoryEntryV1};
 #[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::control::spawn_remote_private_stop_owner;
+use crate::execution::agent_runtime::control::{
+    build_session_resume_extension, invalidate_stale_world_members_after_binding,
+    mark_orchestration_session_failed, mark_runtime_startup_failed, persist_runtime_snapshots,
+    persist_world_binding_authority, private_stop_request_channel, register_private_stop_transport,
+    runtime_controls_parent_session, runtime_stop_transport_ids, spawn_local_private_stop_owner,
+    HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding, PrivateStopTransport,
+    ResolvedRuntimeDescriptor, AGENT_API_SESSION_RESUME_V1,
+};
+#[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 #[cfg(any(test, target_os = "linux"))]
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
@@ -47,21 +58,11 @@ use crate::execution::agent_runtime::validator::{
 };
 #[cfg(any(test, target_os = "linux"))]
 use crate::execution::agent_runtime::AgentRuntimeParticipantWorldBinding;
-use crate::execution::agent_runtime::control::{
-    build_session_resume_extension, invalidate_stale_world_members_after_binding,
-    mark_orchestration_session_failed, mark_runtime_startup_failed,
-    persist_runtime_snapshots, persist_world_binding_authority, private_stop_request_channel,
-    register_private_stop_transport, runtime_controls_parent_session,
-    runtime_stop_transport_ids, spawn_local_private_stop_owner, PersistedWorldBinding,
-    PrivateStopTransport, AGENT_API_SESSION_RESUME_V1,
-};
-#[cfg(target_os = "linux")]
-use crate::execution::agent_runtime::control::spawn_remote_private_stop_owner;
 use crate::execution::agent_runtime::{
     backend_allowed, build_gateway_for_descriptor, runtime_realizability_error_exit_code,
-    validate_orchestrator_selection, validate_runtime_realizability,
-    AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest, AgentRuntimeSessionState,
-    AgentRuntimeStateStore, OrchestrationSessionRecord, OrchestrationSessionState, MEMBER_ROLE,
+    validate_orchestrator_selection, validate_runtime_realizability, AgentRuntimeParticipantRecord,
+    AgentRuntimeSessionManifest, AgentRuntimeSessionState, AgentRuntimeStateStore,
+    OrchestrationSessionRecord, OrchestrationSessionState, MEMBER_ROLE, ORCHESTRATOR_ROLE,
     PURE_AGENT_PROTOCOL, SESSION_HANDLE_SCHEMA_V1,
 };
 #[cfg(unix)]
@@ -84,6 +85,8 @@ use crate::repl::editor;
 use substrate_broker::Policy;
 use substrate_broker::{detect_profile, world_fs_policy};
 use substrate_common::agent_events::{AgentEvent, MessageEventKind};
+use substrate_common::paths as substrate_paths;
+use substrate_common::WorldRootMode;
 
 #[derive(Clone)]
 enum ReplPrinter {
@@ -1639,6 +1642,19 @@ struct PreparedAgentRuntime {
     startup_context: RuntimeOrchestrationContext,
     manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
     run_id: String,
+    startup_extensions: BTreeMap<String, serde_json::Value>,
+}
+
+struct ResolvedHostOrchestratorBootstrap {
+    cwd: PathBuf,
+    descriptor: RuntimeSelectionDescriptor,
+    gateway: agent_api::AgentWrapperGateway,
+    agent_kind: agent_api::AgentWrapperKind,
+    state_store: AgentRuntimeStateStore,
+    effective_config: crate::execution::config_model::SubstrateConfig,
+    #[cfg(any(test, target_os = "linux"))]
+    base_policy: Policy,
+    inventory: BTreeMap<String, AgentInventoryEntryV1>,
 }
 
 enum RuntimeStartupSignal {
@@ -1811,6 +1827,70 @@ async fn start_host_orchestrator_runtime(
 fn prepare_host_orchestrator_runtime_startup(
     config: &Arc<ShellConfig>,
 ) -> std::result::Result<Option<PreparedAgentRuntime>, RuntimeBootstrapFailure> {
+    let Some(resolved) = resolve_host_orchestrator_bootstrap(config)? else {
+        return Ok(None);
+    };
+    let ResolvedHostOrchestratorBootstrap {
+        cwd,
+        descriptor,
+        gateway,
+        agent_kind,
+        state_store,
+        effective_config,
+        #[cfg(any(test, target_os = "linux"))]
+        base_policy,
+        inventory,
+    } = resolved;
+
+    let participant_id = format!("ash_{}", Uuid::now_v7());
+    let lease_token = Uuid::now_v7().to_string();
+    let run_id = Uuid::now_v7().to_string();
+    let orchestration_session_id = Uuid::now_v7().to_string();
+    let mut manifest = AgentRuntimeSessionManifest::new(
+        &descriptor,
+        orchestration_session_id.clone(),
+        participant_id,
+        lease_token,
+    );
+    manifest.internal.latest_run_id = Some(run_id.clone());
+    let orchestration_session = Arc::new(Mutex::new(OrchestrationSessionRecord::new(
+        orchestration_session_id,
+        config.session_id.clone(),
+        cwd.display().to_string(),
+        &manifest,
+    )));
+    state_store
+        .persist_orchestration_session(
+            &orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned"),
+        )
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to persist orchestration session record: {err:#}"),
+        })?;
+
+    Ok(Some(PreparedAgentRuntime {
+        descriptor,
+        gateway,
+        agent_kind,
+        startup_context: RuntimeOrchestrationContext {
+            store: state_store,
+            orchestration_session,
+            effective_config,
+            #[cfg(any(test, target_os = "linux"))]
+            base_policy,
+            inventory,
+        },
+        manifest: Arc::new(Mutex::new(manifest)),
+        run_id,
+        startup_extensions: BTreeMap::new(),
+    }))
+}
+
+fn resolve_host_orchestrator_bootstrap(
+    config: &Arc<ShellConfig>,
+) -> std::result::Result<Option<ResolvedHostOrchestratorBootstrap>, RuntimeBootstrapFailure> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let effective_config = crate::execution::config_model::resolve_effective_config(
         &cwd,
@@ -1882,35 +1962,226 @@ fn prepare_host_orchestrator_runtime_startup(
             message: format!("failed to resolve runtime backend kind: {err}"),
         })?;
 
-    let participant_id = format!("ash_{}", Uuid::now_v7());
-    let lease_token = Uuid::now_v7().to_string();
-    let run_id = Uuid::now_v7().to_string();
-    let orchestration_session_id = Uuid::now_v7().to_string();
-    let mut manifest = AgentRuntimeSessionManifest::new(
-        &descriptor,
-        orchestration_session_id.clone(),
-        participant_id,
-        lease_token,
+    Ok(Some(ResolvedHostOrchestratorBootstrap {
+        cwd,
+        descriptor,
+        gateway,
+        agent_kind,
+        state_store,
+        effective_config,
+        #[cfg(any(test, target_os = "linux"))]
+        base_policy,
+        inventory,
+    }))
+}
+
+fn owner_helper_shell_config(plan: &HiddenOwnerHelperLaunchPlan) -> Result<ShellConfig> {
+    let cwd =
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from(&plan.session.workspace_root));
+    let substrate_home = substrate_paths::substrate_home()?;
+    let trace_log_file = env::var("SHIM_TRACE_LOG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| substrate_home.join("trace.jsonl"));
+
+    Ok(ShellConfig {
+        mode: crate::execution::ShellMode::Interactive { use_pty: false },
+        session_id: plan.session.shell_trace_session_id.clone(),
+        trace_log_file,
+        original_path: env::var("PATH").unwrap_or_default(),
+        shim_dir: substrate_home.join("shim-bin"),
+        shell_path: env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()),
+        ci_mode: false,
+        no_exit_on_error: false,
+        skip_shims: true,
+        no_world: false,
+        cli_world: false,
+        cli_no_world: false,
+        cli_anchor_mode: None,
+        cli_anchor_path: None,
+        cli_caged: Some(true),
+        world_root: WorldRootSettings {
+            mode: WorldRootMode::Project,
+            path: cwd,
+            caged: true,
+        },
+        async_repl: false,
+        repl_host_escape: false,
+        env_vars: HashMap::new(),
+        manager_init_path: substrate_home.join("manager_init.sh"),
+        manager_env_path: substrate_home.join("manager_env.sh"),
+        shimmed_path: None,
+        host_bash_env: None,
+        bash_preexec_path: substrate_home.join(".substrate_preexec"),
+        preexec_available: false,
+    })
+}
+
+fn owner_helper_runtime_descriptor(
+    descriptor: &ResolvedRuntimeDescriptor,
+) -> std::result::Result<RuntimeSelectionDescriptor, RuntimeBootstrapFailure> {
+    descriptor
+        .try_into()
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to decode hidden owner-helper runtime descriptor: {err:#}"),
+        })
+}
+
+fn owner_helper_startup_extensions(
+    plan: &HiddenOwnerHelperLaunchPlan,
+) -> std::result::Result<BTreeMap<String, serde_json::Value>, RuntimeBootstrapFailure> {
+    match plan.mode {
+        OwnerHelperMode::Start => Ok(BTreeMap::new()),
+        OwnerHelperMode::Resume | OwnerHelperMode::Fork => {
+            let session_id = plan
+                .participant
+                .internal_uaa_session_id
+                .as_deref()
+                .ok_or_else(|| RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!(
+                        "hidden owner-helper {} requires internal.uaa_session_id",
+                        plan.mode.as_str()
+                    ),
+                })?;
+            Ok(BTreeMap::from([(
+                AGENT_API_SESSION_RESUME_V1.to_string(),
+                build_session_resume_extension(session_id),
+            )]))
+        }
+    }
+}
+
+fn owner_helper_manifest(
+    descriptor: &RuntimeSelectionDescriptor,
+    plan: &HiddenOwnerHelperLaunchPlan,
+) -> std::result::Result<AgentRuntimeSessionManifest, RuntimeBootstrapFailure> {
+    let participant_id = plan.participant.participant_id.clone();
+    let lease_token = plan.participant.lease_token.clone();
+    let manifest = match plan.mode {
+        OwnerHelperMode::Start => AgentRuntimeSessionManifest::new_orchestrator_participant(
+            descriptor,
+            plan.session.orchestration_session_id.clone(),
+            participant_id,
+            lease_token,
+        ),
+        OwnerHelperMode::Resume | OwnerHelperMode::Fork => {
+            let resumed_from_participant_id = plan
+                .participant
+                .resumed_from_participant_id
+                .clone()
+                .ok_or_else(|| RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!(
+                        "hidden owner-helper {} requires resumed_from_participant_id",
+                        plan.mode.as_str()
+                    ),
+                })?;
+            AgentRuntimeSessionManifest::new_replacement_participant(
+                descriptor,
+                AgentRuntimeReplacementParticipantInit {
+                    orchestration_session_id: plan.session.orchestration_session_id.clone(),
+                    participant_id,
+                    role: ORCHESTRATOR_ROLE.to_string(),
+                    orchestrator_participant_id: None,
+                    parent_participant_id: None,
+                    resumed_from_participant_id,
+                    world: None,
+                    lease_token,
+                },
+            )
+        }
+    }
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: 1,
+        message: format!("failed to construct hidden owner-helper manifest: {err:#}"),
+    })?;
+
+    let mut manifest = manifest;
+    manifest.internal.latest_run_id = Some(plan.participant.run_id.clone());
+    Ok(manifest)
+}
+
+fn owner_helper_orchestration_session(
+    plan: &HiddenOwnerHelperLaunchPlan,
+    manifest: &AgentRuntimeSessionManifest,
+) -> OrchestrationSessionRecord {
+    let mut session = OrchestrationSessionRecord::new(
+        plan.session.orchestration_session_id.clone(),
+        plan.session.shell_trace_session_id.clone(),
+        plan.session.workspace_root.clone(),
+        manifest,
     );
-    manifest.internal.latest_run_id = Some(run_id.clone());
-    let orchestration_session = Arc::new(Mutex::new(OrchestrationSessionRecord::new(
-        orchestration_session_id,
-        config.session_id.clone(),
-        cwd.display().to_string(),
-        &manifest,
+    session.latest_run_id = Some(plan.participant.run_id.clone());
+    session.active_session_handle_id = None;
+    session.shell_owner_pid = std::process::id();
+    if let (Some(world_id), Some(world_generation)) =
+        (&plan.session.world_id, plan.session.world_generation)
+    {
+        session.world_id = Some(world_id.clone());
+        session.world_generation = Some(world_generation);
+    }
+    session
+}
+
+fn prepare_hidden_owner_helper_runtime(
+    config: &Arc<ShellConfig>,
+    plan: &HiddenOwnerHelperLaunchPlan,
+) -> std::result::Result<PreparedAgentRuntime, RuntimeBootstrapFailure> {
+    let Some(resolved) = resolve_host_orchestrator_bootstrap(config)? else {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 2,
+            message: "hidden owner-helper requires agents.enabled=true".to_string(),
+        });
+    };
+    let ResolvedHostOrchestratorBootstrap {
+        cwd: _cwd,
+        descriptor: validated_descriptor,
+        gateway: _validated_gateway,
+        agent_kind: _validated_agent_kind,
+        state_store,
+        effective_config,
+        #[cfg(any(test, target_os = "linux"))]
+        base_policy,
+        inventory,
+    } = resolved;
+    let descriptor = owner_helper_runtime_descriptor(&plan.descriptor)?;
+    if validated_descriptor.backend_id != descriptor.backend_id {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 2,
+            message: format!(
+                "hidden owner-helper descriptor mismatch: validated backend '{}' does not match resolved backend '{}'",
+                validated_descriptor.backend_id, descriptor.backend_id
+            ),
+        });
+    }
+
+    let manifest = owner_helper_manifest(&descriptor, plan)?;
+    let orchestration_session = Arc::new(Mutex::new(owner_helper_orchestration_session(
+        plan, &manifest,
     )));
     state_store
         .persist_orchestration_session(
             &orchestration_session
                 .lock()
-                .expect("orchestration session mutex poisoned"),
+                .expect("hidden owner-helper orchestration session mutex poisoned"),
         )
         .map_err(|err| RuntimeBootstrapFailure {
             exit_code: 1,
-            message: format!("failed to persist orchestration session record: {err:#}"),
+            message: format!("failed to persist hidden owner-helper session record: {err:#}"),
         })?;
 
-    Ok(Some(PreparedAgentRuntime {
+    let gateway =
+        build_gateway_for_descriptor(&descriptor).map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to build hidden owner-helper gateway: {err:#}"),
+        })?;
+    let agent_kind = agent_api::AgentWrapperKind::new(descriptor.backend_kind.as_agent_kind_str())
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 2,
+            message: format!("failed to resolve hidden owner-helper backend kind: {err}"),
+        })?;
+    Ok(PreparedAgentRuntime {
         descriptor,
         gateway,
         agent_kind,
@@ -1923,8 +2194,85 @@ fn prepare_host_orchestrator_runtime_startup(
             inventory,
         },
         manifest: Arc::new(Mutex::new(manifest)),
-        run_id,
-    }))
+        run_id: plan.participant.run_id.clone(),
+        startup_extensions: owner_helper_startup_extensions(plan)?,
+    })
+}
+
+async fn wait_for_hidden_owner_helper_completion(
+    mut runtime: AsyncReplAgentRuntime,
+) -> Result<i32> {
+    let mut join_failed = false;
+    match &mut runtime.retained_control {
+        RetainedRunControl::Local(retained_control) => {
+            if let Some(task) = retained_control.completion_task.take() {
+                join_failed |= task.await.is_err();
+            }
+            if let Some(task) = retained_control.event_task.take() {
+                let _ = task.await;
+            }
+        }
+        #[cfg(target_os = "linux")]
+        RetainedRunControl::Remote(retained_control) => {
+            if let Some(task) = retained_control.observe_task.take() {
+                join_failed |= task.await.is_err();
+            }
+        }
+    }
+
+    if let Some(mut stop_transport) = runtime.stop_transport.take() {
+        stop_transport.close().await;
+    }
+    if let Some(task) = runtime.stop_owner_task.take() {
+        let _ = task.await;
+    }
+    if let Some(stop_tx) = runtime.heartbeat_stop_tx.take() {
+        let _ = stop_tx.send(());
+    }
+    if let Some(task) = runtime.heartbeat_task.take() {
+        let _ = task.await;
+    }
+
+    let manifest = runtime
+        .manifest
+        .lock()
+        .expect("hidden owner-helper manifest mutex poisoned")
+        .clone();
+    Ok(
+        if join_failed || manifest.handle.state == AgentRuntimeSessionState::Failed {
+            1
+        } else {
+            0
+        },
+    )
+}
+
+pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Result<i32> {
+    let config = Arc::new(owner_helper_shell_config(&plan)?);
+    let running_child_pid = Arc::new(AtomicI32::new(0));
+    setup_signal_handlers(running_child_pid)?;
+    let rt = TokioRuntimeBuilder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to initialize hidden owner-helper runtime")?;
+
+    rt.block_on(async move {
+        let mut telemetry = ReplSessionTelemetry::new(config.clone(), "agent_owner_helper");
+        let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
+            .map_err(|failure| anyhow!(failure.message))?;
+        let runtime = start_host_orchestrator_runtime_with_prepared(
+            Some(prepared),
+            None,
+            &ReplPrinter::Stdout,
+            &mut telemetry,
+        )
+        .await
+        .map_err(|failure| anyhow!(failure.message))?;
+        let Some(runtime) = runtime else {
+            return Ok(0);
+        };
+        wait_for_hidden_owner_helper_completion(runtime).await
+    })
 }
 
 async fn start_host_orchestrator_runtime_with_prepared(
@@ -1943,6 +2291,7 @@ async fn start_host_orchestrator_runtime_with_prepared(
         startup_context,
         manifest,
         run_id,
+        startup_extensions,
     } = prepared;
     let runtime_role = {
         manifest
@@ -2020,7 +2369,7 @@ async fn start_host_orchestrator_runtime_with_prepared(
         working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
         timeout: None,
         env: BTreeMap::new(),
-        extensions: BTreeMap::new(),
+        extensions: startup_extensions,
     };
     let control = match gateway.run_control(&agent_kind, request).await {
         Ok(control) => control,
@@ -2581,7 +2930,8 @@ async fn start_host_orchestrator_runtime_with_prepared(
         }
     };
     let (stop_tx, stop_rx) = private_stop_request_channel();
-    let (stop_orchestration_session_id, stop_participant_id) = runtime_stop_transport_ids(&manifest);
+    let (stop_orchestration_session_id, stop_participant_id) =
+        runtime_stop_transport_ids(&manifest);
     let stop_transport = match register_private_stop_transport(
         &startup_context.store,
         &stop_orchestration_session_id,
@@ -3031,6 +3381,7 @@ fn prepare_member_runtime_startup_for_descriptor(
         startup_context: startup_context.clone(),
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
+        startup_extensions: BTreeMap::new(),
     })
 }
 
@@ -3147,6 +3498,7 @@ async fn start_remote_member_runtime_with_prepared(
         startup_context,
         manifest,
         run_id,
+        startup_extensions: _startup_extensions,
     } = prepared;
 
     let runtime_role = {
@@ -3587,7 +3939,8 @@ async fn start_remote_member_runtime_with_prepared(
                 .to_string(),
         })?;
     let (stop_tx, stop_rx) = private_stop_request_channel();
-    let (stop_orchestration_session_id, stop_participant_id) = runtime_stop_transport_ids(&manifest);
+    let (stop_orchestration_session_id, stop_participant_id) =
+        runtime_stop_transport_ids(&manifest);
     let stop_transport = match register_private_stop_transport(
         &startup_context.store,
         &stop_orchestration_session_id,
@@ -6530,7 +6883,7 @@ mod tests {
             &startup_context.orchestration_session,
             Some(world_binding),
         )
-            .expect("persist parent world binding");
+        .expect("persist parent world binding");
         let (orchestration_snapshot, manifest_snapshot) = {
             let mut orchestration_guard = startup_context
                 .orchestration_session
@@ -7185,7 +7538,7 @@ mod tests {
                 &startup_context.orchestration_session,
                 Some(&replacement_binding),
             )
-                .expect("persist replacement binding");
+            .expect("persist replacement binding");
             startup_context
                 .store
                 .invalidate_stale_world_members_for_session(

@@ -17,7 +17,9 @@ pub(crate) use session::{
     AgentRuntimeOwnershipMode, AgentRuntimeParticipantRecord, AgentRuntimeParticipantWorldBinding,
     AgentRuntimeSessionManifest, AgentRuntimeSessionState,
 };
-pub(crate) use state_store::{AgentRuntimeSessionRecord, AgentRuntimeStateStore};
+pub(crate) use state_store::{
+    AgentRuntimeSessionRecord, AgentRuntimeStateStore, PublicControlAction,
+};
 pub(crate) use validator::{
     backend_allowed, runtime_realizability_error_exit_code, validate_orchestrator_selection,
     validate_runtime_realizability,

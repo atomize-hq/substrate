@@ -680,6 +680,42 @@ impl AgentRuntimeStateStore {
         })
     }
 
+    pub(crate) fn hidden_owner_helper_launch_ready(
+        &self,
+        orchestration_session_id: &str,
+        participant_id: &str,
+        require_internal_session_id: bool,
+    ) -> Result<bool> {
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            return Ok(false);
+        };
+        if record.session.state != OrchestrationSessionState::Active {
+            return Ok(false);
+        }
+        if record.session.active_participant_id() != Some(participant_id) {
+            return Ok(false);
+        }
+
+        let Some(participant) = record
+            .participants
+            .iter()
+            .find(|participant| participant.participant_id() == participant_id)
+        else {
+            return Ok(false);
+        };
+        if !participant.matches_public_parent_linkage(&record.session) {
+            return Ok(false);
+        }
+        if !participant.is_authoritative_live() || !owner_process_is_alive(participant) {
+            return Ok(false);
+        }
+        if require_internal_session_id && participant.internal_uaa_session_id().is_none() {
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
+
     pub(crate) fn resolve_live_orchestrator_participant(
         &self,
         orchestrator_agent_id: &str,
@@ -980,9 +1016,9 @@ impl AgentRuntimeStateStore {
         if self
             .list_participants_across_sources()
             .map(|participants| {
-                participants.into_iter().any(|participant| {
-                    participant.internal_uaa_session_id() == Some(selector)
-                })
+                participants
+                    .into_iter()
+                    .any(|participant| participant.internal_uaa_session_id() == Some(selector))
             })
             .unwrap_or(false)
         {
@@ -1416,9 +1452,7 @@ fn synthesize_session_record(
     session
 }
 
-fn session_requires_linux_first_public_control_posture(
-    record: &AgentRuntimeSessionRecord,
-) -> bool {
+fn session_requires_linux_first_public_control_posture(record: &AgentRuntimeSessionRecord) -> bool {
     record.session.has_world_binding()
         || record.participants.iter().any(|participant| {
             participant.handle.role == MEMBER_ROLE
@@ -2221,7 +2255,8 @@ mod tests {
     #[serial_test::serial]
     fn resolve_public_control_target_requires_internal_session_id_for_resume_and_fork() {
         with_store(|store| {
-            let participant = detached_orchestrator("codex", "sess_missing_internal", "ash_detached");
+            let participant =
+                detached_orchestrator("codex", "sess_missing_internal", "ash_detached");
             let parent = active_parent(&participant);
             store
                 .persist_orchestration_session(&parent)
@@ -2231,24 +2266,16 @@ mod tests {
                 .expect("persist participant");
 
             let resume_err = store
-                .resolve_public_control_target(
-                    "sess_missing_internal",
-                    PublicControlAction::Resume,
-                )
+                .resolve_public_control_target("sess_missing_internal", PublicControlAction::Resume)
                 .expect_err("resume must require internal.uaa_session_id");
             assert!(resume_err
                 .to_string()
                 .contains("missing_internal_session_id"));
 
             let fork_err = store
-                .resolve_public_control_target(
-                    "sess_missing_internal",
-                    PublicControlAction::Fork,
-                )
+                .resolve_public_control_target("sess_missing_internal", PublicControlAction::Fork)
                 .expect_err("fork must require internal.uaa_session_id");
-            assert!(fork_err
-                .to_string()
-                .contains("missing_internal_session_id"));
+            assert!(fork_err.to_string().contains("missing_internal_session_id"));
         });
     }
 
@@ -2256,7 +2283,8 @@ mod tests {
     #[serial_test::serial]
     fn resolve_public_control_target_stop_requires_live_owner() {
         with_store(|store| {
-            let mut participant = detached_orchestrator("codex", "sess_stop_detached", "ash_selected");
+            let mut participant =
+                detached_orchestrator("codex", "sess_stop_detached", "ash_selected");
             participant.set_uaa_session_id("uaa_session");
             let parent = active_parent(&participant);
             store
@@ -2267,10 +2295,7 @@ mod tests {
                 .expect("persist participant");
 
             let err = store
-                .resolve_public_control_target(
-                    "sess_stop_detached",
-                    PublicControlAction::Stop,
-                )
+                .resolve_public_control_target("sess_stop_detached", PublicControlAction::Stop)
                 .expect_err("stop must fail closed without a live retained owner");
             assert!(err.to_string().contains("owner_unreachable"));
         });
@@ -2291,10 +2316,7 @@ mod tests {
                 .expect("persist participant");
 
             let err = store
-                .resolve_public_control_target(
-                    "sess_stale_linkage",
-                    PublicControlAction::Stop,
-                )
+                .resolve_public_control_target("sess_stale_linkage", PublicControlAction::Stop)
                 .expect_err("mismatched active parent linkage must fail closed");
             assert!(err.to_string().contains("stale_linkage"));
         });
@@ -2305,12 +2327,7 @@ mod tests {
     fn resolve_public_control_target_enforces_linux_first_world_posture() {
         with_store(|store| {
             let orchestrator = live_orchestrator("codex", "sess_world_posture", "ash_selected");
-            let member = live_member(
-                "codex",
-                "sess_world_posture",
-                "ash_member",
-                "ash_selected",
-            );
+            let member = live_member("codex", "sess_world_posture", "ash_member", "ash_selected");
             let mut parent = active_parent(&orchestrator);
             parent.set_world_binding("world-17", 2);
             store
@@ -2319,14 +2336,10 @@ mod tests {
             store
                 .persist_participant(&orchestrator)
                 .expect("persist orchestrator");
-            store
-                .persist_participant(&member)
-                .expect("persist member");
+            store.persist_participant(&member).expect("persist member");
 
-            let result = store.resolve_public_control_target(
-                "sess_world_posture",
-                PublicControlAction::Stop,
-            );
+            let result = store
+                .resolve_public_control_target("sess_world_posture", PublicControlAction::Stop);
 
             #[cfg(target_os = "linux")]
             {
@@ -2342,9 +2355,7 @@ mod tests {
                 let err = result.expect_err(
                     "non-linux platforms must fail closed for world-sensitive control posture",
                 );
-                assert!(err
-                    .to_string()
-                    .contains("unsupported_platform_or_posture"));
+                assert!(err.to_string().contains("unsupported_platform_or_posture"));
             }
         });
     }

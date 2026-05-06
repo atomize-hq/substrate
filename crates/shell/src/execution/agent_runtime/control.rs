@@ -4,6 +4,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
 
 #[cfg(target_os = "linux")]
@@ -18,15 +19,22 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, oneshot};
 
+use crate::execution::config_model::AgentExecutionScope;
+
 use super::{
-    session::AgentRuntimeSessionManifest, AgentRuntimeSessionState, AgentRuntimeStateStore,
+    mapping::AgentRuntimeBackendKind, session::AgentRuntimeSessionManifest,
+    validator::RuntimeSelectionDescriptor, AgentRuntimeSessionState, AgentRuntimeStateStore,
     OrchestrationSessionRecord, OrchestrationSessionState, ORCHESTRATOR_ROLE,
 };
 
 pub(crate) const AGENT_API_SESSION_RESUME_V1: &str = "agent_api.session.resume.v1";
+pub(crate) const HIDDEN_OWNER_HELPER_SUBCOMMAND: &str = "__owner-helper";
+const OWNER_HELPER_READY_TIMEOUT: Duration = Duration::from_secs(10);
+const OWNER_HELPER_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum OwnerHelperMode {
     Start,
     Resume,
@@ -48,6 +56,118 @@ impl OwnerHelperMode {
 pub(crate) struct PersistedWorldBinding {
     pub world_id: String,
     pub world_generation: u64,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ResolvedRuntimeBackendKind {
+    Codex,
+    ClaudeCode,
+}
+
+impl From<AgentRuntimeBackendKind> for ResolvedRuntimeBackendKind {
+    fn from(value: AgentRuntimeBackendKind) -> Self {
+        match value {
+            AgentRuntimeBackendKind::Codex => Self::Codex,
+            AgentRuntimeBackendKind::ClaudeCode => Self::ClaudeCode,
+        }
+    }
+}
+
+impl TryFrom<ResolvedRuntimeBackendKind> for AgentRuntimeBackendKind {
+    type Error = anyhow::Error;
+
+    fn try_from(value: ResolvedRuntimeBackendKind) -> Result<Self> {
+        Ok(match value {
+            ResolvedRuntimeBackendKind::Codex => AgentRuntimeBackendKind::Codex,
+            ResolvedRuntimeBackendKind::ClaudeCode => AgentRuntimeBackendKind::ClaudeCode,
+        })
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct ResolvedRuntimeDescriptor {
+    pub agent_id: String,
+    pub backend_id: String,
+    pub backend_kind: ResolvedRuntimeBackendKind,
+    pub protocol: String,
+    pub execution_scope: AgentExecutionScope,
+    pub binary_path: String,
+}
+
+impl From<&RuntimeSelectionDescriptor> for ResolvedRuntimeDescriptor {
+    fn from(value: &RuntimeSelectionDescriptor) -> Self {
+        Self {
+            agent_id: value.agent_id.clone(),
+            backend_id: value.backend_id.clone(),
+            backend_kind: value.backend_kind.into(),
+            protocol: value.protocol.clone(),
+            execution_scope: value.execution_scope,
+            binary_path: value.binary_path.display().to_string(),
+        }
+    }
+}
+
+impl TryFrom<&ResolvedRuntimeDescriptor> for RuntimeSelectionDescriptor {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &ResolvedRuntimeDescriptor) -> Result<Self> {
+        Ok(Self {
+            agent_id: value.agent_id.clone(),
+            backend_id: value.backend_id.clone(),
+            backend_kind: value.backend_kind.try_into()?,
+            protocol: value.protocol.clone(),
+            execution_scope: value.execution_scope,
+            binary_path: PathBuf::from(&value.binary_path),
+        })
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct HiddenOwnerHelperSessionPlan {
+    pub orchestration_session_id: String,
+    pub shell_trace_session_id: String,
+    pub workspace_root: String,
+    pub world_id: Option<String>,
+    pub world_generation: Option<u64>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct HiddenOwnerHelperParticipantPlan {
+    pub participant_id: String,
+    pub lease_token: String,
+    pub run_id: String,
+    pub resumed_from_participant_id: Option<String>,
+    pub internal_uaa_session_id: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct HiddenOwnerHelperLaunchPlan {
+    pub mode: OwnerHelperMode,
+    pub descriptor: ResolvedRuntimeDescriptor,
+    pub session: HiddenOwnerHelperSessionPlan,
+    pub participant: HiddenOwnerHelperParticipantPlan,
+    pub source_orchestration_session_id: Option<String>,
+}
+
+#[allow(dead_code)]
+impl HiddenOwnerHelperLaunchPlan {
+    pub(crate) fn orchestration_session_id(&self) -> &str {
+        &self.session.orchestration_session_id
+    }
+
+    pub(crate) fn participant_id(&self) -> &str {
+        &self.participant.participant_id
+    }
+
+    pub(crate) fn requires_internal_session_id(&self) -> bool {
+        matches!(self.mode, OwnerHelperMode::Resume | OwnerHelperMode::Fork)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -101,8 +221,104 @@ pub(crate) fn build_session_resume_extension(session_id: &str) -> serde_json::Va
     })
 }
 
-pub(crate) fn private_stop_request_channel() -> (PrivateStopRequestSender, PrivateStopRequestReceiver)
-{
+#[allow(dead_code)]
+pub(crate) fn hidden_owner_helper_plan_path(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
+    let participant_fragment = compact_stop_transport_fragment(participant_id);
+    store
+        .handles_dir()
+        .join("owner-helper")
+        .join(format!("{session_fragment}-{participant_fragment}.json"))
+}
+
+#[allow(dead_code)]
+pub(crate) fn persist_hidden_owner_helper_launch_plan(
+    store: &AgentRuntimeStateStore,
+    plan: &HiddenOwnerHelperLaunchPlan,
+) -> Result<PathBuf> {
+    let path = hidden_owner_helper_plan_path(
+        store,
+        plan.orchestration_session_id(),
+        plan.participant_id(),
+    );
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "hidden owner-helper launch plan path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    fs::write(&path, serde_json::to_vec_pretty(plan)?).with_context(|| {
+        format!(
+            "failed to write hidden owner-helper launch plan {}",
+            path.display()
+        )
+    })?;
+    Ok(path)
+}
+
+#[allow(dead_code)]
+pub(crate) fn load_hidden_owner_helper_launch_plan(
+    path: &Path,
+) -> Result<HiddenOwnerHelperLaunchPlan> {
+    let bytes = fs::read(path).with_context(|| {
+        format!(
+            "failed to read hidden owner-helper launch plan {}",
+            path.display()
+        )
+    })?;
+    serde_json::from_slice(&bytes).with_context(|| {
+        format!(
+            "failed to decode hidden owner-helper launch plan {}",
+            path.display()
+        )
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn remove_hidden_owner_helper_launch_plan(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err).with_context(|| {
+            format!(
+                "failed to remove hidden owner-helper launch plan {}",
+                path.display()
+            )
+        }),
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) fn wait_for_hidden_owner_helper_readiness(
+    store: &AgentRuntimeStateStore,
+    plan: &HiddenOwnerHelperLaunchPlan,
+) -> Result<()> {
+    let started_at = std::time::Instant::now();
+    loop {
+        if store.hidden_owner_helper_launch_ready(
+            plan.orchestration_session_id(),
+            plan.participant_id(),
+            plan.requires_internal_session_id(),
+        )? {
+            return Ok(());
+        }
+        if started_at.elapsed() >= OWNER_HELPER_READY_TIMEOUT {
+            anyhow::bail!(
+                "timed out waiting for authoritative owner-helper readiness for orchestration session {}",
+                plan.orchestration_session_id()
+            );
+        }
+        thread::sleep(OWNER_HELPER_READY_POLL_INTERVAL);
+    }
+}
+
+pub(crate) fn private_stop_request_channel(
+) -> (PrivateStopRequestSender, PrivateStopRequestReceiver) {
     mpsc::unbounded_channel()
 }
 
@@ -257,9 +473,10 @@ pub(crate) fn private_stop_transport_path(
 ) -> PathBuf {
     let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
     let participant_fragment = compact_stop_transport_fragment(participant_id);
-    store.handles_dir().join("stop").join(format!(
-        "{session_fragment}-{participant_fragment}.sock"
-    ))
+    store
+        .handles_dir()
+        .join("stop")
+        .join(format!("{session_fragment}-{participant_fragment}.sock"))
 }
 
 fn compact_stop_transport_fragment(id: &str) -> String {
@@ -292,8 +509,7 @@ pub(crate) async fn register_private_stop_transport(
             path.display()
         )
     })?;
-    fs::create_dir_all(parent)
-        .with_context(|| format!("failed to create {}", parent.display()))?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
     remove_existing_stop_transport_path(&path)?;
     let listener = UnixListener::bind(&path)
         .with_context(|| format!("failed to bind private stop transport {}", path.display()))?;
@@ -402,9 +618,12 @@ pub(crate) fn spawn_remote_private_stop_owner(
 #[cfg(unix)]
 #[allow(dead_code)]
 pub(crate) async fn request_private_stop(path: &Path) -> Result<PrivateStopOutcome> {
-    let mut stream = UnixStream::connect(path)
-        .await
-        .with_context(|| format!("failed to connect to private stop transport {}", path.display()))?;
+    let mut stream = UnixStream::connect(path).await.with_context(|| {
+        format!(
+            "failed to connect to private stop transport {}",
+            path.display()
+        )
+    })?;
     let request = serde_json::json!({
         "version": 1,
         "action": "stop",
@@ -430,8 +649,12 @@ pub(crate) async fn request_private_stop(path: &Path) -> Result<PrivateStopOutco
 #[cfg(unix)]
 fn remove_existing_stop_transport_path(path: &Path) -> Result<()> {
     match fs::symlink_metadata(path) {
-        Ok(_) => fs::remove_file(path)
-            .with_context(|| format!("failed to remove stale private stop transport {}", path.display())),
+        Ok(_) => fs::remove_file(path).with_context(|| {
+            format!(
+                "failed to remove stale private stop transport {}",
+                path.display()
+            )
+        }),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err).with_context(|| {
             format!(
