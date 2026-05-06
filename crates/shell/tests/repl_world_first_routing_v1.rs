@@ -220,6 +220,7 @@ fn wait_for_min_records(
     );
 }
 
+#[cfg(target_os = "linux")]
 fn wait_for_min_member_dispatch_requests(
     records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
     min_requests: usize,
@@ -242,6 +243,7 @@ fn wait_for_min_member_dispatch_requests(
     );
 }
 
+#[cfg(target_os = "linux")]
 fn wait_for_min_member_turn_submit_requests(
     records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
     min_requests: usize,

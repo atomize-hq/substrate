@@ -46,7 +46,6 @@ use crate::execution::agent_runtime::control::{
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
-#[cfg(any(test, target_os = "linux"))]
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
