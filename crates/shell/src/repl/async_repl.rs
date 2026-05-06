@@ -4929,13 +4929,21 @@ fn emit_runtime_event(
 
 fn extract_session_handle_id(data: Option<&serde_json::Value>) -> Option<&str> {
     let value = data?;
-    if value.get("schema").and_then(serde_json::Value::as_str) != Some(SESSION_HANDLE_SCHEMA_V1) {
-        return None;
+    if value.get("schema").and_then(serde_json::Value::as_str) == Some(SESSION_HANDLE_SCHEMA_V1) {
+        return value
+            .get("session")
+            .and_then(serde_json::Value::as_object)
+            .and_then(|session| session.get("id"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|id| !id.trim().is_empty());
     }
+
     value
-        .get("session")
-        .and_then(serde_json::Value::as_object)
-        .and_then(|session| session.get("id"))
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .filter(|event_type| matches!(*event_type, "thread.started" | "turn.started"))?;
+    value
+        .get("thread_id")
         .and_then(serde_json::Value::as_str)
         .filter(|id| !id.trim().is_empty())
 }

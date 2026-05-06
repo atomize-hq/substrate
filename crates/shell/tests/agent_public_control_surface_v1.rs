@@ -18,6 +18,8 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
+#[cfg(unix)]
+const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
 
 #[cfg(unix)]
 fn set_fd_nonblocking(fd: i32) {
@@ -227,13 +229,13 @@ fn compact_stop_transport_fragment(id: &str) -> String {
         .chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
         .collect::<String>();
-    if normalized.len() <= 20 {
+    if normalized.len() <= 12 {
         return normalized;
     }
     format!(
         "{}{}",
-        &normalized[..10],
-        &normalized[normalized.len() - 10..]
+        &normalized[..6],
+        &normalized[normalized.len() - 6..]
     )
 }
 
@@ -242,14 +244,21 @@ fn stop_transport_path(
     orchestration_session_id: &str,
     participant_id: &str,
 ) -> PathBuf {
-    fixture
+    let socket_name = format!(
+        "{}-{}.sock",
+        compact_stop_transport_fragment(orchestration_session_id),
+        compact_stop_transport_fragment(participant_id)
+    );
+    let preferred = fixture
         .substrate_home
         .join("run/agent-hub/handles/stop")
-        .join(format!(
-            "{}-{}.sock",
-            compact_stop_transport_fragment(orchestration_session_id),
-            compact_stop_transport_fragment(participant_id)
-        ))
+        .join(&socket_name);
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return PathBuf::from("/tmp")
+            .join("substrate-agent-hub-stop")
+            .join(socket_name);
+    }
+    preferred
 }
 
 fn wait_for_path(path: &Path, timeout: Duration) -> bool {

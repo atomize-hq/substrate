@@ -186,6 +186,19 @@ fn read_trace_events(trace_path: &Path) -> Vec<Value> {
         .collect()
 }
 
+fn wait_for_trace_output(trace_path: &Path, needle: &str, timeout: Duration) -> Option<usize> {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if let Ok(contents) = fs::read_to_string(trace_path) {
+            if let Some(index) = contents.find(needle) {
+                return Some(index);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    None
+}
+
 fn sessions_dir(substrate_home: &Path) -> PathBuf {
     substrate_home.join("run/agent-hub/sessions")
 }
@@ -366,6 +379,7 @@ impl PtyRepl {
         let writer_for_thread = Arc::downgrade(&writer);
         let reader_handle = std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
+            let mut carry = Vec::<u8>::new();
             loop {
                 if stop_for_thread.load(Ordering::Relaxed) {
                     break;
@@ -388,7 +402,10 @@ impl PtyRepl {
 
                     let n: usize = rc as usize;
                     let chunk = &buf[..n];
-                    if chunk.windows(4).any(|w| w == b"\x1b[6n") {
+                    let mut probe = carry.clone();
+                    probe.extend_from_slice(chunk);
+
+                    if probe.windows(4).any(|w| w == b"\x1b[6n") {
                         if let Some(writer) = writer_for_thread.upgrade() {
                             if let Ok(mut w) = writer.lock() {
                                 let _ = w.write_all(b"\x1b[1;1R");
@@ -396,13 +413,21 @@ impl PtyRepl {
                             }
                         }
                     }
-                    if chunk.windows(5).any(|w| w == b"\x1b[18t") {
+                    if probe.windows(5).any(|w| w == b"\x1b[18t") {
                         if let Some(writer) = writer_for_thread.upgrade() {
                             if let Ok(mut w) = writer.lock() {
                                 let _ = w.write_all(b"\x1b[8;24;80t");
                                 let _ = w.flush();
                             }
                         }
+                    }
+
+                    carry.clear();
+                    let keep = 8usize;
+                    if probe.len() > keep {
+                        carry.extend_from_slice(&probe[probe.len() - keep..]);
+                    } else {
+                        carry.extend_from_slice(&probe);
                     }
 
                     if let Ok(mut guard) = output_for_thread.lock() {
@@ -433,16 +458,18 @@ impl PtyRepl {
         writer.flush().expect("flush");
     }
 
+    fn output_string(&self) -> String {
+        let out = self.output.lock().expect("output lock");
+        String::from_utf8_lossy(&out).into_owned()
+    }
+
     fn wait_for_output(&self, needle: &str, timeout: Duration) -> Option<usize> {
         let start = Instant::now();
         while start.elapsed() < timeout {
-            let out = self.output.lock().expect("output lock");
-            if let Ok(text) = std::str::from_utf8(&out) {
-                if let Some(pos) = text.find(needle) {
-                    return Some(pos);
-                }
+            let text = self.output_string();
+            if let Some(pos) = text.find(needle) {
+                return Some(pos);
             }
-            drop(out);
             std::thread::sleep(Duration::from_millis(10));
         }
         None
@@ -599,11 +626,23 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
+    let runtime_ready = repl.wait_for_output(
         "shell-owned orchestrator session is ready via retained attached control ownership",
         Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    );
+    if runtime_ready.is_none() {
+        let trace_ready = wait_for_trace_output(
+            &trace_path,
+            "shell-owned orchestrator session is ready via retained attached control ownership",
+            Duration::from_secs(5),
+        );
+        assert!(
+            trace_ready.is_some(),
+            "runtime ready trace event; output:\n{}\ntrace:\n{}",
+            repl.output_string(),
+            fs::read_to_string(&trace_path).unwrap_or_default()
+        );
+    }
 
     repl.send_line("exit");
     let (code, out) = repl.shutdown_graceful(Duration::from_secs(5));

@@ -31,6 +31,8 @@ pub(crate) const AGENT_API_SESSION_RESUME_V1: &str = "agent_api.session.resume.v
 pub(crate) const HIDDEN_OWNER_HELPER_SUBCOMMAND: &str = "__owner-helper";
 const OWNER_HELPER_READY_TIMEOUT: Duration = Duration::from_secs(10);
 const OWNER_HELPER_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
+#[cfg(unix)]
+const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -473,10 +475,15 @@ pub(crate) fn private_stop_transport_path(
 ) -> PathBuf {
     let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
     let participant_fragment = compact_stop_transport_fragment(participant_id);
-    store
-        .handles_dir()
-        .join("stop")
-        .join(format!("{session_fragment}-{participant_fragment}.sock"))
+    let socket_name = format!("{session_fragment}-{participant_fragment}.sock");
+    let preferred = store.handles_dir().join("stop").join(&socket_name);
+    #[cfg(unix)]
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return PathBuf::from("/tmp")
+            .join("substrate-agent-hub-stop")
+            .join(socket_name);
+    }
+    preferred
 }
 
 fn compact_stop_transport_fragment(id: &str) -> String {
@@ -484,14 +491,14 @@ fn compact_stop_transport_fragment(id: &str) -> String {
         .chars()
         .filter(|ch| ch.is_ascii_alphanumeric())
         .collect::<String>();
-    if normalized.len() <= 20 {
+    if normalized.len() <= 12 {
         return normalized;
     }
 
     format!(
         "{}{}",
-        &normalized[..10],
-        &normalized[normalized.len() - 10..]
+        &normalized[..6],
+        &normalized[normalized.len() - 6..]
     )
 }
 
