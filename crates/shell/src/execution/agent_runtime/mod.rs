@@ -1,3 +1,4 @@
+pub(crate) mod control;
 pub(crate) mod mapping;
 pub(crate) mod orchestration_session;
 pub(crate) mod registry;

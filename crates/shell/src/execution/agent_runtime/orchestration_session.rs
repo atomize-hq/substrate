@@ -83,6 +83,14 @@ impl OrchestrationSessionRecord {
         self.last_active_at = Utc::now();
     }
 
+    pub(crate) fn active_participant_id(&self) -> Option<&str> {
+        self.active_session_handle_id.as_deref()
+    }
+
+    pub(crate) fn has_world_binding(&self) -> bool {
+        self.world_id.is_some() && self.world_generation.is_some()
+    }
+
     pub(crate) fn bind_active_session_handle(&mut self, participant_id: impl Into<String>) {
         self.active_session_handle_id = Some(participant_id.into());
         self.touch_active();

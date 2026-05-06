@@ -51,14 +51,10 @@ impl AgentRuntimeSessionRecord {
     }
 
     pub(crate) fn live_orchestrator(&self) -> Option<AgentRuntimeParticipantRecord> {
-        let active_participant_id = self.session.active_session_handle_id.as_deref()?;
+        let active_participant_id = self.session.active_participant_id()?;
         self.live_participants().into_iter().find(|participant| {
-            participant.handle.participant_id == active_participant_id
-                && participant.handle.agent_id == self.session.orchestrator_agent_id
-                && participant.handle.orchestration_session_id
-                    == self.session.orchestration_session_id
-                && participant.handle.role == ORCHESTRATOR_ROLE
-                && participant.handle.execution.scope == AgentExecutionScope::Host
+            participant.participant_id() == active_participant_id
+                && participant.matches_public_parent_linkage(&self.session)
         })
     }
 
@@ -102,6 +98,41 @@ impl AgentRuntimeSessionRecord {
 
     fn has_authoritative_parent(&self) -> bool {
         self.has_authoritative_parent
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PublicControlAction {
+    Resume,
+    Fork,
+    Stop,
+}
+
+impl PublicControlAction {
+    fn requires_internal_session_id(self) -> bool {
+        matches!(self, Self::Resume | Self::Fork)
+    }
+
+    fn requires_live_owner(self) -> bool {
+        matches!(self, Self::Stop)
+    }
+
+    fn rejects_live_owner(self) -> bool {
+        matches!(self, Self::Resume)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedPublicControlTarget {
+    pub session: OrchestrationSessionRecord,
+    #[allow(dead_code)]
+    pub active_participant: AgentRuntimeParticipantRecord,
+}
+
+impl ResolvedPublicControlTarget {
+    #[allow(dead_code)]
+    pub(crate) fn orchestration_session_id(&self) -> &str {
+        &self.session.orchestration_session_id
     }
 }
 
@@ -555,6 +586,100 @@ impl AgentRuntimeStateStore {
         Ok(Some(record))
     }
 
+    pub(crate) fn resolve_public_control_target(
+        &self,
+        orchestration_session_id: &str,
+        action: PublicControlAction,
+    ) -> Result<ResolvedPublicControlTarget> {
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            return Err(self.public_session_selector_error(orchestration_session_id));
+        };
+
+        if !record.has_authoritative_parent() {
+            anyhow::bail!(
+                "missing_active_parent: orchestration session {} is missing authoritative parent metadata",
+                orchestration_session_id
+            );
+        }
+        if record.session.state != OrchestrationSessionState::Active {
+            anyhow::bail!(
+                "missing_active_parent: orchestration session {} is not active",
+                orchestration_session_id
+            );
+        }
+
+        let active_participant_id = record.session.active_participant_id().ok_or_else(|| {
+            anyhow::anyhow!(
+                "stale_linkage: orchestration session {} is missing active_session_handle_id",
+                orchestration_session_id
+            )
+        })?;
+        let participant = record
+            .participants
+            .iter()
+            .find(|participant| participant.participant_id() == active_participant_id)
+            .cloned()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "stale_linkage: orchestration session {} references missing participant {}",
+                    orchestration_session_id,
+                    active_participant_id
+                )
+            })?;
+
+        if !participant.handle.state.is_live() {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} references inactive participant {}",
+                orchestration_session_id,
+                active_participant_id
+            );
+        }
+        if !participant.matches_public_parent_linkage(&record.session) {
+            anyhow::bail!(
+                "stale_linkage: orchestration session {} active participant {} does not match exact orchestrator linkage",
+                orchestration_session_id,
+                active_participant_id
+            );
+        }
+
+        if session_requires_linux_first_public_control_posture(&record)
+            && !cfg!(target_os = "linux")
+        {
+            anyhow::bail!(
+                "unsupported_platform_or_posture: orchestration session {} requires Linux world-sensitive control posture",
+                orchestration_session_id
+            );
+        }
+
+        let owner_live =
+            participant.is_authoritative_live() && owner_process_is_alive(&participant);
+        if action.rejects_live_owner() && owner_live {
+            anyhow::bail!(
+                "session_already_owned: orchestration session {} already has a live retained owner",
+                orchestration_session_id
+            );
+        }
+        if action.requires_live_owner() && !owner_live {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} no longer has a reachable live owner",
+                orchestration_session_id
+            );
+        }
+        if action.requires_internal_session_id() && participant.internal_uaa_session_id().is_none()
+        {
+            anyhow::bail!(
+                "missing_internal_session_id: orchestration session {} active participant {} is missing internal.uaa_session_id",
+                orchestration_session_id,
+                active_participant_id
+            );
+        }
+
+        Ok(ResolvedPublicControlTarget {
+            session: record.session,
+            active_participant: participant,
+        })
+    }
+
     pub(crate) fn resolve_live_orchestrator_participant(
         &self,
         orchestrator_agent_id: &str,
@@ -812,6 +937,65 @@ impl AgentRuntimeStateStore {
         }
 
         read_regular_json_if_exists(&self.orchestration_session_path(orchestration_session_id))
+    }
+
+    fn public_session_selector_error(&self, selector: &str) -> anyhow::Error {
+        if selector.trim().is_empty() {
+            return anyhow::anyhow!(
+                "unknown_session: public control actions require --session <orchestration_session_id>"
+            );
+        }
+
+        if self
+            .list_orchestration_sessions()
+            .map(|sessions| {
+                sessions
+                    .into_iter()
+                    .any(|session| session.active_participant_id() == Some(selector))
+            })
+            .unwrap_or(false)
+        {
+            return anyhow::anyhow!(
+                "unknown_session: selector '{}' matched active_session_handle_id; public control actions accept only orchestration_session_id",
+                selector
+            );
+        }
+
+        if self
+            .list_participants_across_sources()
+            .map(|participants| {
+                participants.into_iter().any(|participant| {
+                    participant.participant_id() == selector
+                        || participant.handle.session_handle_id == selector
+                })
+            })
+            .unwrap_or(false)
+        {
+            return anyhow::anyhow!(
+                "unknown_session: selector '{}' matched participant_id/session_handle_id; public control actions accept only orchestration_session_id",
+                selector
+            );
+        }
+
+        if self
+            .list_participants_across_sources()
+            .map(|participants| {
+                participants.into_iter().any(|participant| {
+                    participant.internal_uaa_session_id() == Some(selector)
+                })
+            })
+            .unwrap_or(false)
+        {
+            return anyhow::anyhow!(
+                "unknown_session: selector '{}' matched internal.uaa_session_id; public control actions accept only orchestration_session_id",
+                selector
+            );
+        }
+
+        anyhow::anyhow!(
+            "unknown_session: no orchestration session found for '{}'",
+            selector
+        )
     }
 
     fn canonical_session_root_ids(&self) -> Result<Vec<String>> {
@@ -1232,6 +1416,17 @@ fn synthesize_session_record(
     session
 }
 
+fn session_requires_linux_first_public_control_posture(
+    record: &AgentRuntimeSessionRecord,
+) -> bool {
+    record.session.has_world_binding()
+        || record.participants.iter().any(|participant| {
+            participant.handle.role == MEMBER_ROLE
+                && participant.handle.execution.scope == AgentExecutionScope::World
+                && participant.handle.state.is_live()
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -1275,6 +1470,22 @@ mod tests {
         )
         .expect("orchestrator participant");
         set_live(&mut participant);
+        participant
+    }
+
+    fn detached_orchestrator(
+        agent_id: &str,
+        orchestration_session_id: &str,
+        participant_id: &str,
+    ) -> AgentRuntimeParticipantRecord {
+        let mut participant = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+            &descriptor(agent_id, AgentExecutionScope::Host),
+            orchestration_session_id.to_string(),
+            participant_id.to_string(),
+            format!("lease_{participant_id}"),
+        )
+        .expect("orchestrator participant");
+        participant.transition_state(AgentRuntimeSessionState::Ready);
         participant
     }
 
@@ -1941,6 +2152,200 @@ mod tests {
             assert!(err.to_string().contains(
                 "multiple active orchestration session candidates found for agent codex"
             ));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_rejects_active_session_handle_selector() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex", "sess_public", "ash_selected");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_control_target("ash_selected", PublicControlAction::Stop)
+                .expect_err("non-canonical active_session_handle_id selectors must be rejected");
+            assert!(err.to_string().contains("unknown_session"));
+            assert!(err.to_string().contains("active_session_handle_id"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_rejects_internal_uaa_selector() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex", "sess_public", "ash_selected");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_control_target("uaa_session", PublicControlAction::Fork)
+                .expect_err("internal uaa session selectors must be rejected");
+            assert!(err.to_string().contains("unknown_session"));
+            assert!(err.to_string().contains("internal.uaa_session_id"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_resume_rejects_already_owned_sessions() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex", "sess_resume_live", "ash_selected");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_control_target("sess_resume_live", PublicControlAction::Resume)
+                .expect_err("live retained ownership must reject public resume");
+            assert!(err.to_string().contains("session_already_owned"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_requires_internal_session_id_for_resume_and_fork() {
+        with_store(|store| {
+            let participant = detached_orchestrator("codex", "sess_missing_internal", "ash_detached");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let resume_err = store
+                .resolve_public_control_target(
+                    "sess_missing_internal",
+                    PublicControlAction::Resume,
+                )
+                .expect_err("resume must require internal.uaa_session_id");
+            assert!(resume_err
+                .to_string()
+                .contains("missing_internal_session_id"));
+
+            let fork_err = store
+                .resolve_public_control_target(
+                    "sess_missing_internal",
+                    PublicControlAction::Fork,
+                )
+                .expect_err("fork must require internal.uaa_session_id");
+            assert!(fork_err
+                .to_string()
+                .contains("missing_internal_session_id"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_stop_requires_live_owner() {
+        with_store(|store| {
+            let mut participant = detached_orchestrator("codex", "sess_stop_detached", "ash_selected");
+            participant.set_uaa_session_id("uaa_session");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_control_target(
+                    "sess_stop_detached",
+                    PublicControlAction::Stop,
+                )
+                .expect_err("stop must fail closed without a live retained owner");
+            assert!(err.to_string().contains("owner_unreachable"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_requires_exact_parent_linkage() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex", "sess_stale_linkage", "ash_selected");
+            let mut parent = active_parent(&participant);
+            parent.orchestrator_agent_id = "claude_code".to_string();
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_control_target(
+                    "sess_stale_linkage",
+                    PublicControlAction::Stop,
+                )
+                .expect_err("mismatched active parent linkage must fail closed");
+            assert!(err.to_string().contains("stale_linkage"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_enforces_linux_first_world_posture() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_world_posture", "ash_selected");
+            let member = live_member(
+                "codex",
+                "sess_world_posture",
+                "ash_member",
+                "ash_selected",
+            );
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store
+                .persist_participant(&member)
+                .expect("persist member");
+
+            let result = store.resolve_public_control_target(
+                "sess_world_posture",
+                PublicControlAction::Stop,
+            );
+
+            #[cfg(target_os = "linux")]
+            {
+                let resolved = result.expect("linux should accept world-sensitive control posture");
+                assert_eq!(
+                    resolved.session.orchestration_session_id,
+                    "sess_world_posture"
+                );
+            }
+
+            #[cfg(not(target_os = "linux"))]
+            {
+                let err = result.expect_err(
+                    "non-linux platforms must fail closed for world-sensitive control posture",
+                );
+                assert!(err
+                    .to_string()
+                    .contains("unsupported_platform_or_posture"));
+            }
         });
     }
 

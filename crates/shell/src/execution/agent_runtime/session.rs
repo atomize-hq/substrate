@@ -4,6 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use crate::execution::config_model::AgentExecutionScope;
 
 use super::mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE};
+use super::orchestration_session::OrchestrationSessionRecord;
 use super::validator::RuntimeSelectionDescriptor;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -445,6 +446,28 @@ impl AgentRuntimeParticipantRecord {
 
     pub(crate) fn touch_event(&mut self, ts: DateTime<Utc>) {
         self.internal.last_event_at = Some(ts);
+    }
+
+    pub(crate) fn participant_id(&self) -> &str {
+        &self.handle.participant_id
+    }
+
+    pub(crate) fn internal_uaa_session_id(&self) -> Option<&str> {
+        self.internal.uaa_session_id.as_deref()
+    }
+
+    pub(crate) fn is_host_orchestrator(&self) -> bool {
+        self.handle.role == ORCHESTRATOR_ROLE
+            && self.handle.execution.scope == AgentExecutionScope::Host
+    }
+
+    pub(crate) fn matches_public_parent_linkage(
+        &self,
+        session: &OrchestrationSessionRecord,
+    ) -> bool {
+        self.handle.orchestration_session_id == session.orchestration_session_id
+            && self.handle.agent_id == session.orchestrator_agent_id
+            && self.is_host_orchestrator()
     }
 
     pub(crate) fn set_uaa_session_id(&mut self, backend_session_id: impl Into<String>) {
