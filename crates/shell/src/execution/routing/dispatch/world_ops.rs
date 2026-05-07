@@ -211,6 +211,7 @@ pub(crate) struct MemberDispatchTransportRequest {
     pub run_id: String,
     pub world_id: String,
     pub world_generation: u64,
+    pub initial_prompt: Option<String>,
     pub backend_kind: MemberRuntimeBackendKindV1,
     pub binary_path: String,
 }
@@ -260,6 +261,7 @@ fn build_member_dispatch_payload(
         run_id: request.run_id.clone(),
         world_id: request.world_id.clone(),
         world_generation: request.world_generation,
+        initial_prompt: request.initial_prompt.clone(),
         resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
             backend_kind: request.backend_kind,
             binary_path: request.binary_path.clone(),

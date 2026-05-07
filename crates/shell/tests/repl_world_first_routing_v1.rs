@@ -472,6 +472,26 @@ fn write_fake_codex_script(temp: &Path) -> PathBuf {
 }
 
 #[cfg(target_os = "linux")]
+fn write_fake_codex_script_with_invocation_log_and_output(
+    temp: &Path,
+) -> (PathBuf, PathBuf) {
+    let path = temp.join("fake-codex-with-log.sh");
+    let count_path = temp.join("fake-codex-with-log.count");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\ntrap 'exit 0' INT TERM\nprintf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\nwhile :; do sleep 1; done\n",
+        count_path.display()
+    );
+    fs::write(&path, body).expect("write fake codex script with invocation log");
+    let mut perms = fs::metadata(&path)
+        .expect("fake codex metadata")
+        .permissions();
+    use std::os::unix::fs::PermissionsExt;
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake codex permissions");
+    (path, count_path)
+}
+
+#[cfg(target_os = "linux")]
 fn write_fake_claude_script(temp: &Path) -> PathBuf {
     let path = temp.join("fake-claude.sh");
     let body = "#!/bin/sh\ntrap 'exit 0' INT TERM\nprintf '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"session-test\"}\\r\\n'\nwhile :; do sleep 1; done\n";
@@ -533,6 +553,14 @@ fn write_fake_codex_script_without_session_handle(temp: &Path) -> PathBuf {
     perms.set_mode(0o755);
     fs::set_permissions(&path, perms).expect("set fake codex permissions");
     path
+}
+
+#[cfg(target_os = "linux")]
+fn read_invocation_count(path: &Path) -> usize {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or(0)
 }
 
 #[cfg(target_os = "linux")]
@@ -1030,62 +1058,6 @@ fn assert_start_sessions_have_no_shared_world_context(
     );
 }
 
-#[cfg(target_os = "linux")]
-fn assert_shared_world_attach_or_create(
-    start: &support::PersistentStartSessionRecord,
-    orchestration_session_id: &str,
-) {
-    let shared_world = start
-        .shared_world
-        .as_ref()
-        .expect("expected shared_world request on start_session");
-    assert_eq!(
-        shared_world.orchestration_session_id, orchestration_session_id,
-        "unexpected shared_world orchestration_session_id"
-    );
-    assert!(
-        matches!(
-            shared_world.action,
-            agent_api_types::SharedWorldOwnerAction::AttachOrCreate
-        ),
-        "expected AttachOrCreate shared_world action, got {:?}",
-        shared_world.action
-    );
-}
-
-#[cfg(target_os = "linux")]
-fn assert_shared_world_replace_expected_generation(
-    start: &support::PersistentStartSessionRecord,
-    orchestration_session_id: &str,
-    expected_generation: u64,
-    expected_reason_fragment: &str,
-) {
-    let shared_world = start
-        .shared_world
-        .as_ref()
-        .expect("expected shared_world request on start_session");
-    assert_eq!(
-        shared_world.orchestration_session_id, orchestration_session_id,
-        "unexpected shared_world orchestration_session_id"
-    );
-    match &shared_world.action {
-        agent_api_types::SharedWorldOwnerAction::ReplaceExpectedGeneration {
-            expected_generation: actual_generation,
-            reason,
-        } => {
-            assert_eq!(
-                *actual_generation, expected_generation,
-                "unexpected ReplaceExpectedGeneration expected_generation"
-            );
-            assert!(
-                reason.contains(expected_reason_fragment),
-                "expected restart reason to contain `{expected_reason_fragment}`, got `{reason}`"
-            );
-        }
-        other => panic!("expected ReplaceExpectedGeneration shared_world action, got {other:?}"),
-    }
-}
-
 fn assert_world_network_payload(
     start: &support::PersistentStartSessionRecord,
     expected_isolate_network: bool,
@@ -1449,6 +1421,20 @@ impl PtyRepl {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn launch_host_runtime_via_targeted_turn(repl: &mut PtyRepl, backend_id: &str) {
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt before targeted host launch");
+    repl.send_line(&format!("::{backend_id} start retained host runtime"));
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt after targeted host launch");
+}
+
 #[test]
 #[serial]
 fn c3_host_directive_is_gated_disabled_by_default() {
@@ -1693,23 +1679,155 @@ fn c3_first_start_shared_world_attach_create_is_owner_bound() {
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
-    wait_for_min_start_sessions_with_output(&repl, &records, 1, Duration::from_secs(3));
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
     repl.send_line("exit");
 
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(2));
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
 
     let guard = records.lock().expect("lock records");
-    let start = guard
-        .persistent_start_sessions
+    assert_eq!(
+        guard.persistent_start_sessions.len(),
+        1,
+        "lazy host launch must reuse the existing REPL-owned world session instead of creating a second shared-world start: {guard:#?}"
+    );
+    let session = read_orchestration_session(&orchestration_session_path(
+        &substrate_home,
+        &orchestration_session_id,
+    ));
+    assert_eq!(
+        session
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id.as_str())
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_host_orchestrator_remains_dormant_until_first_targeted_turn() {
+    let temp = temp_dir("substrate-c3-host-dormant-until-target-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let (fake_codex, invocation_count_path) =
+        write_fake_codex_script_with_invocation_log_and_output(temp.path());
+    write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "auto_restart");
+
+    let sock_temp = short_socket_dir("sub-c3ws-host-dormant-target-");
+    let sock = sock_temp.path().join("world.sock");
+    let _server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--no-world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    std::thread::sleep(Duration::from_millis(150));
+
+    let out_before_target = repl.output_string();
+    assert_eq!(
+        read_invocation_count(&invocation_count_path),
+        0,
+        "orchestrator backend must not be invoked before the first explicit targeted turn; output:\n{out_before_target}"
+    );
+
+    repl.send_line("::cli:codex launch on demand");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(3),
+    )
+    .expect("runtime ready after explicit targeted turn");
+    assert_eq!(
+        read_invocation_count(&invocation_count_path),
+        1,
+        "first explicit targeted turn should launch the retained host runtime exactly once"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch() {
+    let temp = temp_dir("substrate-c3-targeted-world-initial-prompt-");
+    let home = temp.path().join("home");
+    let project = temp.path().join("project");
+    let substrate_home = home.join(".substrate");
+    fs::create_dir_all(&home).expect("create home");
+    fs::create_dir_all(&project).expect("create project");
+    fs::create_dir_all(&substrate_home).expect("create substrate home");
+    fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
+    write_profile(&project);
+    let fake_orchestrator = write_fake_claude_script(temp.path());
+    let fake_member = write_fake_codex_script(temp.path());
+    write_orchestrator_and_world_member_runtime_world_config(
+        &substrate_home,
+        &fake_orchestrator,
+        &fake_member,
+        "auto_restart",
+    );
+
+    let sock_temp = short_socket_dir("sub-c3ws-targeted-world-initial-prompt-");
+    let sock = sock_temp.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &sock,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-targeted-world-first-turn".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+
+    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
+    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+        .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+
+    repl.send_line("::cli:claude_code start host runtime");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(3),
+    )
+    .expect("host runtime ready");
+
+    repl.send_line("::cli:codex member targeted first turn");
+    wait_for_min_member_dispatch_requests(&records, 1, Duration::from_secs(3));
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt after first targeted world turn");
+    std::thread::sleep(Duration::from_millis(100));
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.member_turn_submit_requests.len(),
+        0,
+        "first targeted world turn must ride launch-time initial_prompt instead of the typed submit route: {guard:#?}"
+    );
+    let dispatch = guard
+        .member_dispatch_requests
         .first()
-        .expect("persistent start session");
-    assert_shared_world_attach_or_create(start, &orchestration_session_id);
+        .and_then(|request| request.member_dispatch.as_ref())
+        .expect("captured member dispatch request");
+    assert_eq!(
+        dispatch.initial_prompt.as_deref(),
+        Some("member targeted first turn")
+    );
+    drop(guard);
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 }
 
 #[cfg(target_os = "linux")]
@@ -1749,11 +1867,9 @@ fn c3_first_world_backed_command_lazily_launches_member_runtime() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let initial_session = read_orchestration_session(&orchestration_session_path(
@@ -1848,11 +1964,8 @@ fn c3_targeted_turn_requires_exact_double_colon_grammar_before_shell_fallback() 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
 
     repl.send_line("::cli:codex");
     repl.wait_for_output(
@@ -1920,11 +2033,9 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
 
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
 
@@ -2136,12 +2247,9 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
-
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
@@ -2179,9 +2287,8 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
         Duration::from_secs(15),
     );
     wait_for_min_member_dispatch_requests(&records, 2, Duration::from_secs(3));
-    wait_for_min_member_turn_submit_requests(&records, 1, Duration::from_secs(3));
-    repl.wait_for_output("__MEMBER_TURN_SUBMIT_STUB__ second", Duration::from_secs(3))
-        .expect("replacement typed submit output");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("prompt after replacement launch turn");
 
     let replacement_live_members = wait_for_live_world_member_count(
         &substrate_home,
@@ -2233,28 +2340,21 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
     assert_eq!(
         guard.member_dispatch_requests.len(),
         2,
-        "targeted world follow-up after restart must relaunch the exact backend slot before submit: {guard:#?}"
+        "targeted world follow-up after restart must relaunch the exact backend slot once: {guard:#?}"
     );
-    let submit = guard
-        .member_turn_submit_requests
-        .first()
-        .expect("member turn submit request");
-    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
-    assert_eq!(submit.participant_id, replacement_id);
+    assert!(
+        guard.member_turn_submit_requests.is_empty(),
+        "replacement targeted turn should ride launch-time initial_prompt instead of a second typed submit: {guard:#?}"
+    );
+    let replacement_dispatch = guard
+        .member_dispatch_requests
+        .get(1)
+        .and_then(|request| request.member_dispatch.as_ref())
+        .expect("replacement member dispatch request");
     assert_eq!(
-        submit.orchestrator_participant_id,
-        orchestrator_participant_id
+        replacement_dispatch.initial_prompt.as_deref(),
+        Some("second")
     );
-    assert_eq!(submit.backend_id, "cli:codex");
-    assert_eq!(
-        submit.world_id,
-        replacement
-            .get("world_id")
-            .and_then(Value::as_str)
-            .expect("replacement world_id")
-    );
-    assert_eq!(submit.world_generation, 1);
-    assert_eq!(submit.prompt, "second");
     drop(guard);
 
     let stale = read_participant_manifest(&substrate_home, &first_member_id);
@@ -2300,11 +2400,9 @@ fn c3_targeted_host_turn_resumes_active_orchestrator_backend() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
 
     repl.send_line("::cli:claude_code resume active host");
     repl.wait_for_output(
@@ -2365,11 +2463,9 @@ fn c3_targeted_host_turn_rejects_non_active_orchestrator_backend() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
 
     repl.send_line("::cli:codex should fail");
     repl.wait_for_output(
@@ -2440,12 +2536,9 @@ fn c3_same_generation_world_command_reuses_live_member_runtime() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
-
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
@@ -2529,27 +2622,20 @@ fn c3_startup_drift_before_first_command_retains_persisted_startup_context() {
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
     wait_for_min_start_sessions_with_output(&repl, &records, 2, Duration::from_secs(3));
     repl.send_line("exit");
 
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
-    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
-
     let guard = records.lock().expect("lock records");
-    let first = &guard.persistent_start_sessions[0];
-    let second = &guard.persistent_start_sessions[1];
-    assert_shared_world_attach_or_create(first, &orchestration_session_id);
-    assert_shared_world_replace_expected_generation(
-        second,
-        &orchestration_session_id,
-        0,
-        "workspace root drift",
+    assert_eq!(
+        guard.persistent_start_sessions.len(),
+        2,
+        "startup drift before the first command should only restart the REPL-owned world session once: {guard:#?}"
     );
+    assert_start_sessions_have_no_shared_world_context(&guard, "workspace root drift");
 }
 
 #[cfg(target_os = "linux")]
@@ -2578,17 +2664,15 @@ fn c3_parent_binding_persists_before_world_restarted_publishes() {
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
-    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
-    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
     write_policy(&substrate_home, false);
     std::thread::sleep(Duration::from_millis(25));
@@ -2673,17 +2757,15 @@ fn c3_fail_closed_drift_repersists_binding_before_world_restart_required_publish
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
         .expect("first command output");
-    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
-    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
     write_policy(&substrate_home, false);
     std::thread::sleep(Duration::from_millis(25));
@@ -2758,11 +2840,9 @@ fn c3_world_restart_invalidates_stale_member_generation_before_publish() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
@@ -2886,12 +2966,9 @@ fn c3_world_restart_launches_live_member_replacement_on_new_generation() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
-
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
@@ -3028,12 +3105,9 @@ fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
-
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:claude_code");
     let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
     let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
@@ -3149,11 +3223,9 @@ fn c3_world_restart_missing_member_replacement_leaves_absence() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
@@ -3234,11 +3306,9 @@ fn c3_world_restart_replacement_generation_becomes_only_live_generation() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
@@ -3342,11 +3412,9 @@ fn c3_world_restart_keeps_same_agent_members_in_other_sessions_isolated() {
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output(
-        "shell-owned orchestrator session is ready via retained attached control ownership",
-        Duration::from_secs(5),
-    )
-    .expect("runtime ready event");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    launch_host_runtime_via_targeted_turn(&mut repl, "cli:codex");
     repl.send_line("echo first");
     wait_for_min_records(&records, 1, 1, Duration::from_secs(3));
     repl.wait_for_output("first", Duration::from_secs(3))
@@ -3463,9 +3531,10 @@ fn c3_bootstrap_failure_after_attach_cleans_up_world_and_parent_session_state() 
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
+    repl.wait_for_prompt(Duration::from_secs(2))
+        .expect("initial prompt");
+    repl.send_line("::cli:codex bootstrap should fail");
     wait_for_min_start_sessions_with_output(&repl, &records, 1, Duration::from_secs(3));
-    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
-    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
 
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(3) {
@@ -3477,8 +3546,8 @@ fn c3_bootstrap_failure_after_attach_cleans_up_world_and_parent_session_state() 
 
     let (code, out) = repl.shutdown();
     assert_eq!(
-        code, 4,
-        "expected post-attach orchestrator bootstrap failure exit code 4, got output:\n{out}"
+        code, 1,
+        "expected targeted orchestrator bootstrap failure exit code 1, got output:\n{out}"
     );
     assert!(
         out.contains("attached control turn ended before ownership could be established")
@@ -3486,6 +3555,17 @@ fn c3_bootstrap_failure_after_attach_cleans_up_world_and_parent_session_state() 
         "expected bootstrap failure output after world attach; output:\n{out}"
     );
 
+    let session_count = fs::read_dir(sessions_dir(&substrate_home))
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .count();
+    if session_count == 0 {
+        return;
+    }
+
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let session_path = orchestration_session_path(&substrate_home, &orchestration_session_id);
     let persisted = read_orchestration_session(&session_path);
     assert_session_world_binding(&persisted, None, None);
 }

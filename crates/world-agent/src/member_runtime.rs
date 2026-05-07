@@ -126,11 +126,15 @@ impl MemberRuntimeManager {
             &dispatch.resolved_runtime.backend_kind,
             prepared_launcher.launcher_path.clone(),
         )?;
+        let initial_prompt = dispatch
+            .initial_prompt
+            .clone()
+            .unwrap_or_else(|| runtime_bootstrap_prompt().to_string());
         let AgentWrapperRunControl { handle, cancel } = match gateway
             .run_control(
                 &agent_kind,
                 AgentWrapperRunRequest {
-                    prompt: runtime_bootstrap_prompt().to_string(),
+                    prompt: initial_prompt,
                     working_dir: Some(placement.working_dir.clone()),
                     timeout: None,
                     env: runtime_env.clone(),

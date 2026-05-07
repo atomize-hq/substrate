@@ -479,8 +479,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
         let prompt_active = Arc::new(AtomicBool::new(false));
         let stdout_cb = make_world_stdout_callback(prompt_active.clone(), stdout_printer);
-        let prepared_runtime = match prepare_host_orchestrator_runtime_startup(&shared_config) {
-            Ok(prepared) => prepared,
+        let resolved_host_bootstrap = match resolve_host_orchestrator_bootstrap(&shared_config) {
+            Ok(resolved) => resolved,
             Err(failure) => {
                 agent_printer.print(failure.message.clone());
                 write_best_effort_stderr_line(&failure.message);
@@ -488,7 +488,23 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                 return Ok(failure.exit_code);
             }
         };
-        let startup_context = prepared_runtime
+        let (prepared_runtime, mut dormant_host_bootstrap) = match resolved_host_bootstrap {
+            Some(resolved) if should_eager_bootstrap_host_orchestrator(&resolved) => {
+                let prepared = match prepare_host_orchestrator_runtime_from_resolved(resolved) {
+                    Ok(prepared) => prepared,
+                    Err(failure) => {
+                        agent_printer.print(failure.message.clone());
+                        write_best_effort_stderr_line(&failure.message);
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        return Ok(failure.exit_code);
+                    }
+                };
+                (Some(prepared), None)
+            }
+            Some(resolved) => (None, Some(resolved)),
+            None => (None, None),
+        };
+        let mut startup_context = prepared_runtime
             .as_ref()
             .map(|prepared| prepared.startup_context.clone());
 
@@ -702,7 +718,8 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
                         let result = match dispatch_targeted_follow_up_turn(
                             targeted_turn,
                             TargetedTurnDispatchContext {
-                                startup_context: startup_context.as_ref(),
+                                startup_context: &mut startup_context,
+                                dormant_host_bootstrap: &mut dormant_host_bootstrap,
                                 agent_runtime: &mut agent_runtime,
                                 world_session: &mut world_session,
                                 member_runtimes: &mut member_runtimes,
@@ -1598,7 +1615,8 @@ enum TargetedTurnDispatchStatus {
 }
 
 struct TargetedTurnDispatchContext<'a> {
-    startup_context: Option<&'a RuntimeOrchestrationContext>,
+    startup_context: &'a mut Option<RuntimeOrchestrationContext>,
+    dormant_host_bootstrap: &'a mut Option<ResolvedHostOrchestratorBootstrap>,
     agent_runtime: &'a mut Option<AsyncReplAgentRuntime>,
     world_session: &'a mut Option<WorldSession>,
     member_runtimes: &'a mut RetainedMemberRuntimeMap,
@@ -1646,6 +1664,7 @@ struct PreparedAgentRuntime {
 
 struct ResolvedHostOrchestratorBootstrap {
     cwd: PathBuf,
+    shell_session_id: String,
     descriptor: RuntimeSelectionDescriptor,
     gateway: agent_api::AgentWrapperGateway,
     agent_kind: agent_api::AgentWrapperKind,
@@ -1659,6 +1678,28 @@ struct ResolvedHostOrchestratorBootstrap {
 enum RuntimeStartupSignal {
     Running,
     Failed(String),
+}
+
+const AGENT_API_NO_TURN_SESSION_START_V1: &str = "agent_api.session.start.no_turn.v1";
+
+fn runtime_supports_no_turn_session_start(
+    gateway: &agent_api::AgentWrapperGateway,
+    agent_kind: &agent_api::AgentWrapperKind,
+) -> bool {
+    gateway
+        .backend(agent_kind)
+        .map(|backend| {
+            backend
+                .capabilities()
+                .contains(AGENT_API_NO_TURN_SESSION_START_V1)
+        })
+        .unwrap_or(false)
+}
+
+fn should_eager_bootstrap_host_orchestrator(
+    resolved: &ResolvedHostOrchestratorBootstrap,
+) -> bool {
+    runtime_supports_no_turn_session_start(&resolved.gateway, &resolved.agent_kind)
 }
 
 // The REPL retains live UAA runtime ownership via the cancel handle plus the two
@@ -1829,8 +1870,15 @@ fn prepare_host_orchestrator_runtime_startup(
     let Some(resolved) = resolve_host_orchestrator_bootstrap(config)? else {
         return Ok(None);
     };
+    Ok(Some(prepare_host_orchestrator_runtime_from_resolved(resolved)?))
+}
+
+fn prepare_host_orchestrator_runtime_from_resolved(
+    resolved: ResolvedHostOrchestratorBootstrap,
+) -> std::result::Result<PreparedAgentRuntime, RuntimeBootstrapFailure> {
     let ResolvedHostOrchestratorBootstrap {
         cwd,
+        shell_session_id,
         descriptor,
         gateway,
         agent_kind,
@@ -1854,7 +1902,7 @@ fn prepare_host_orchestrator_runtime_startup(
     manifest.internal.latest_run_id = Some(run_id.clone());
     let orchestration_session = Arc::new(Mutex::new(OrchestrationSessionRecord::new(
         orchestration_session_id,
-        config.session_id.clone(),
+        shell_session_id,
         cwd.display().to_string(),
         &manifest,
     )));
@@ -1869,7 +1917,7 @@ fn prepare_host_orchestrator_runtime_startup(
             message: format!("failed to persist orchestration session record: {err:#}"),
         })?;
 
-    Ok(Some(PreparedAgentRuntime {
+    Ok(PreparedAgentRuntime {
         descriptor,
         gateway,
         agent_kind,
@@ -1884,7 +1932,7 @@ fn prepare_host_orchestrator_runtime_startup(
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
         startup_extensions: BTreeMap::new(),
-    }))
+    })
 }
 
 fn resolve_host_orchestrator_bootstrap(
@@ -1963,6 +2011,7 @@ fn resolve_host_orchestrator_bootstrap(
 
     Ok(Some(ResolvedHostOrchestratorBootstrap {
         cwd,
+        shell_session_id: config.session_id.clone(),
         descriptor,
         gateway,
         agent_kind,
@@ -2135,6 +2184,7 @@ fn prepare_hidden_owner_helper_runtime(
     };
     let ResolvedHostOrchestratorBootstrap {
         cwd: _cwd,
+        shell_session_id: _shell_session_id,
         descriptor: validated_descriptor,
         gateway: _validated_gateway,
         agent_kind: _validated_agent_kind,
@@ -2280,6 +2330,23 @@ async fn start_host_orchestrator_runtime_with_prepared(
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
+    start_host_orchestrator_runtime_with_prepared_prompt(
+        prepared,
+        initial_world_binding,
+        None,
+        agent_printer,
+        telemetry,
+    )
+    .await
+}
+
+async fn start_host_orchestrator_runtime_with_prepared_prompt(
+    prepared: Option<PreparedAgentRuntime>,
+    initial_world_binding: Option<&PersistedWorldBinding>,
+    initial_prompt: Option<String>,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
     let Some(prepared) = prepared else {
         return Ok(None);
     };
@@ -2364,7 +2431,8 @@ async fn start_host_orchestrator_runtime_with_prepared(
     );
 
     let request = agent_api::AgentWrapperRunRequest {
-        prompt: runtime_bootstrap_prompt(&runtime_role).to_string(),
+        prompt: initial_prompt
+            .unwrap_or_else(|| runtime_bootstrap_prompt(&runtime_role).to_string()),
         working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
         timeout: None,
         env: BTreeMap::new(),
@@ -3062,6 +3130,7 @@ fn active_orchestrator_backend_id(runtime: &AsyncReplAgentRuntime) -> String {
 
 fn resolve_targeted_turn_route(
     startup_context: Option<&RuntimeOrchestrationContext>,
+    dormant_host_bootstrap: Option<&ResolvedHostOrchestratorBootstrap>,
     agent_runtime: Option<&AsyncReplAgentRuntime>,
     backend_id: &str,
 ) -> std::result::Result<TargetedTurnRoute, RuntimeBootstrapFailure> {
@@ -3072,10 +3141,19 @@ fn resolve_targeted_turn_route(
         }
     }
 
+    if let Some(dormant_host_bootstrap) = dormant_host_bootstrap {
+        if dormant_host_bootstrap.descriptor.backend_id == backend_id {
+            return Ok(TargetedTurnRoute::Host);
+        }
+    }
+
     if let Some(startup_context) = startup_context {
         if select_host_runtime_descriptor_for_backend(startup_context, backend_id)?.is_some() {
             let expected = agent_runtime
                 .map(active_orchestrator_backend_id)
+                .or_else(|| {
+                    dormant_host_bootstrap.map(|bootstrap| bootstrap.descriptor.backend_id.clone())
+                })
                 .unwrap_or_else(|| "<none>".to_string());
             return Err(RuntimeBootstrapFailure {
                 exit_code: 2,
@@ -3105,6 +3183,7 @@ async fn dispatch_targeted_follow_up_turn(
 ) -> std::result::Result<TargetedTurnDispatchStatus, anyhow::Error> {
     let TargetedTurnDispatchContext {
         startup_context,
+        dormant_host_bootstrap,
         agent_runtime,
         world_session,
         member_runtimes,
@@ -3114,7 +3193,8 @@ async fn dispatch_targeted_follow_up_turn(
     } = context;
 
     let route = match resolve_targeted_turn_route(
-        startup_context,
+        startup_context.as_ref(),
+        dormant_host_bootstrap.as_ref(),
         agent_runtime.as_ref(),
         targeted_turn.backend_id,
     ) {
@@ -3124,16 +3204,60 @@ async fn dispatch_targeted_follow_up_turn(
 
     match route {
         TargetedTurnRoute::Host => {
-            let runtime = agent_runtime.as_mut().ok_or_else(|| {
-                anyhow!(
-                    "substrate: error: no active orchestrator runtime is available for targeted follow-up turns"
+            if agent_runtime.is_none() {
+                let resolved = dormant_host_bootstrap.take().ok_or_else(|| {
+                    anyhow!(
+                        "substrate: error: no active or dormant orchestrator runtime is available for targeted follow-up turns"
+                    )
+                })?;
+                let prepared = prepare_host_orchestrator_runtime_from_resolved(resolved)
+                    .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
+                let prepared_startup_context = prepared.startup_context.clone();
+                let initial_world_binding = world_session
+                    .as_ref()
+                    .map(|session| PersistedWorldBinding {
+                        world_id: session.world_id.clone(),
+                        world_generation: session.world_generation,
+                    });
+                let runtime = match start_host_orchestrator_runtime_with_prepared_prompt(
+                    Some(prepared),
+                    initial_world_binding.as_ref(),
+                    Some(targeted_turn.prompt.to_string()),
+                    agent_printer,
+                    telemetry,
                 )
-            })?;
-            submit_host_targeted_turn(runtime, targeted_turn.prompt, agent_printer, telemetry)
-                .await?;
+                .await
+                {
+                    Ok(Some(runtime)) => runtime,
+                    Ok(None) => {
+                        return Err(anyhow!(
+                            "substrate: error: targeted orchestrator launch did not produce a runtime"
+                        ));
+                    }
+                    Err(failure) => {
+                        finalize_runtime_startup_failure(
+                            Some(&prepared_startup_context),
+                            world_session,
+                            &failure.message,
+                        )
+                        .await;
+                        return Err(anyhow!("substrate: error: {}", failure.message));
+                    }
+                };
+                *startup_context = Some(prepared_startup_context);
+                *agent_runtime = Some(runtime);
+            } else {
+                let runtime = agent_runtime.as_mut().ok_or_else(|| {
+                    anyhow!(
+                        "substrate: error: no active orchestrator runtime is available for targeted follow-up turns"
+                    )
+                })?;
+                submit_host_targeted_turn(runtime, targeted_turn.prompt, agent_printer, telemetry)
+                    .await?;
+            }
         }
         TargetedTurnRoute::World(descriptor) => {
-            ensure_no_policy_drift(world_session, startup_context, agent_printer, telemetry)
+            ensure_no_policy_drift(world_session, startup_context.as_ref(), agent_printer, telemetry)
                 .await?;
             reconcile_member_runtime_generation(
                 world_session.as_ref(),
@@ -3143,16 +3267,20 @@ async fn dispatch_targeted_follow_up_turn(
                 telemetry,
             )
             .await?;
-            ensure_member_runtime_ready_for_descriptor(
-                startup_context,
+            let launched_from_targeted_prompt = ensure_member_runtime_ready_for_descriptor(
+                startup_context.as_ref(),
                 world_session.as_ref(),
                 &descriptor,
+                Some(targeted_turn.prompt),
                 member_runtimes,
                 pending_member_replacements,
                 agent_printer,
                 telemetry,
             )
             .await?;
+            if launched_from_targeted_prompt {
+                return Ok(TargetedTurnDispatchStatus::Submitted);
+            }
             let runtime = member_runtimes
                 .get_mut(targeted_turn.backend_id)
                 .ok_or_else(|| {
@@ -3406,6 +3534,7 @@ fn member_runtime_backend_kind(
 #[cfg(target_os = "linux")]
 fn build_member_dispatch_transport_request(
     prepared: &PreparedAgentRuntime,
+    initial_prompt: Option<String>,
 ) -> std::result::Result<MemberDispatchTransportRequest, RuntimeBootstrapFailure> {
     let manifest = prepared
         .manifest
@@ -3448,6 +3577,7 @@ fn build_member_dispatch_transport_request(
         run_id: prepared.run_id.clone(),
         world_id,
         world_generation,
+        initial_prompt,
         backend_kind: member_runtime_backend_kind(&prepared.descriptor),
         binary_path: prepared.descriptor.binary_path.display().to_string(),
     })
@@ -3481,6 +3611,7 @@ async fn abort_remote_member_bootstrap_runtime(
 #[cfg(target_os = "linux")]
 async fn start_remote_member_runtime_with_prepared(
     prepared: Option<PreparedAgentRuntime>,
+    initial_prompt: Option<String>,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
@@ -3489,7 +3620,7 @@ async fn start_remote_member_runtime_with_prepared(
     let Some(prepared) = prepared else {
         return Ok(None);
     };
-    let transport_request = build_member_dispatch_transport_request(&prepared)?;
+    let transport_request = build_member_dispatch_transport_request(&prepared, initial_prompt)?;
     let PreparedAgentRuntime {
         descriptor,
         gateway: _gateway,
@@ -4062,16 +4193,17 @@ async fn ensure_member_runtime_ready_for_descriptor(
     startup_context: Option<&RuntimeOrchestrationContext>,
     world_session: Option<&WorldSession>,
     descriptor: &RuntimeSelectionDescriptor,
+    initial_prompt: Option<&str>,
     member_runtimes: &mut RetainedMemberRuntimeMap,
     pending_member_replacements: &mut PendingMemberReplacementMap,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
-) -> Result<()> {
+) -> Result<bool> {
     let Some(startup_context) = startup_context else {
-        return Ok(());
+        return Ok(false);
     };
     let Some(world_session) = world_session else {
-        return Ok(());
+        return Ok(false);
     };
     ensure_member_backend_allowed(startup_context, descriptor)
         .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
@@ -4092,7 +4224,7 @@ async fn ensure_member_runtime_ready_for_descriptor(
                 participant.handle.participant_id == manifest_snapshot.handle.participant_id
             })
         {
-            return Ok(());
+            return Ok(false);
         }
     }
 
@@ -4118,18 +4250,23 @@ async fn ensure_member_runtime_ready_for_descriptor(
     )
     .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
 
-    let runtime =
-        match start_remote_member_runtime_with_prepared(Some(prepared), agent_printer, telemetry)
-            .await
-        {
-            Ok(runtime) => runtime,
-            Err(failure) => return Err(anyhow!("substrate: error: {}", failure.message)),
-        };
+    let runtime = match start_remote_member_runtime_with_prepared(
+        Some(prepared),
+        initial_prompt.map(str::to_string),
+        agent_printer,
+        telemetry,
+    )
+    .await
+    {
+        Ok(runtime) => runtime,
+        Err(failure) => return Err(anyhow!("substrate: error: {}", failure.message)),
+    };
     if let Some(runtime) = runtime {
         pending_member_replacements.remove(&descriptor.backend_id);
         member_runtimes.insert(runtime_backend_id(&runtime), runtime);
+        return Ok(true);
     }
-    Ok(())
+    Ok(false)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -4137,16 +4274,17 @@ async fn ensure_member_runtime_ready_for_descriptor(
     startup_context: Option<&RuntimeOrchestrationContext>,
     world_session: Option<&WorldSession>,
     _descriptor: &RuntimeSelectionDescriptor,
+    _initial_prompt: Option<&str>,
     _member_runtimes: &mut RetainedMemberRuntimeMap,
     _pending_member_replacements: &mut PendingMemberReplacementMap,
     _agent_printer: &ReplPrinter,
     _telemetry: &mut ReplSessionTelemetry,
-) -> Result<()> {
+) -> Result<bool> {
     let Some(_startup_context) = startup_context else {
-        return Ok(());
+        return Ok(false);
     };
     let Some(_world_session) = world_session else {
-        return Ok(());
+        return Ok(false);
     };
 
     Err(anyhow!(
@@ -4176,12 +4314,14 @@ async fn ensure_member_runtime_ready(
         Some(startup_context),
         world_session,
         &descriptor,
+        None,
         member_runtimes,
         pending_member_replacements,
         agent_printer,
         telemetry,
     )
     .await
+    .map(|_| ())
 }
 
 #[cfg(not(target_os = "linux"))]

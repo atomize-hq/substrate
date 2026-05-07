@@ -27,3 +27,4 @@ docs/project_management/packs/**/logs/
 .mcp.json
 .DS_Store
 **/.DS_Store
+.gitnexus

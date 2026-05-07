@@ -50,7 +50,7 @@ substrate-broker = { path = "../broker" }
 # Platform-specific world backends
 [target.'cfg(target_os = "linux")'.dependencies]
 world = { path = "../world" }
-agent_api = { package = "unified-agent-api", version = "=0.2.3", default-features = false, features = ["codex", "claude_code"] }
+agent_api = { package = "unified-agent-api", version = "=0.3.5", default-features = false, features = ["codex", "claude_code"] }
 
 [target.'cfg(all(target_os = "linux", not(target_env = "musl")))'.dependencies]
 libseccomp = "0.3"

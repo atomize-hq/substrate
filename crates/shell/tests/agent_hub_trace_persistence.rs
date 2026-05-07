@@ -626,6 +626,9 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
+    repl.wait_for_output("substrate>", Duration::from_secs(2))
+        .expect("initial prompt");
+    repl.send_line("::cli:codex trace owned runtime");
     let runtime_ready = repl.wait_for_output(
         "shell-owned orchestrator session is ready via retained attached control ownership",
         Duration::from_secs(5),

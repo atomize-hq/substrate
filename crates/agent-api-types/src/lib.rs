@@ -724,6 +724,8 @@ pub struct MemberDispatchRequestV1 {
     pub run_id: String,
     pub world_id: String,
     pub world_generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_prompt: Option<String>,
     pub resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
 }
 
@@ -744,6 +746,8 @@ struct MemberDispatchRequestDef {
     run_id: String,
     world_id: String,
     world_generation: u64,
+    #[serde(default)]
+    initial_prompt: Option<String>,
     resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
 }
 
@@ -781,6 +785,10 @@ impl MemberDispatchRequestV1 {
         validate_non_empty_request_field("member_dispatch.protocol", &self.protocol)?;
         validate_non_empty_request_field("member_dispatch.run_id", &self.run_id)?;
         validate_non_empty_request_field("member_dispatch.world_id", &self.world_id)?;
+        validate_optional_non_empty_request_field(
+            "member_dispatch.initial_prompt",
+            self.initial_prompt.as_deref(),
+        )?;
         self.resolved_runtime.validate()?;
 
         if self.orchestrator_participant_id == self.participant_id {
@@ -824,6 +832,7 @@ impl TryFrom<MemberDispatchRequestDef> for MemberDispatchRequestV1 {
             run_id: value.run_id,
             world_id: value.world_id,
             world_generation: value.world_generation,
+            initial_prompt: value.initial_prompt,
             resolved_runtime: value.resolved_runtime,
         };
         request.validate()?;
@@ -2536,6 +2545,7 @@ mod tests {
                 run_id: "run_123".into(),
                 world_id: "world_123".into(),
                 world_generation: 7,
+                initial_prompt: Some("first turn".into()),
                 resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
                     backend_kind: MemberRuntimeBackendKindV1::Codex,
                     binary_path: "/usr/bin/codex".into(),
@@ -2562,6 +2572,7 @@ mod tests {
                 run_id: "run_123".into(),
                 world_id: "world_123".into(),
                 world_generation: 7,
+                initial_prompt: Some("first turn".into()),
                 resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
                     backend_kind: MemberRuntimeBackendKindV1::Codex,
                     binary_path: "/usr/bin/codex".into(),
