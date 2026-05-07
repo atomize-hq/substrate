@@ -2355,6 +2355,7 @@ mod tests {
             run_id: "run_123".to_string(),
             world_id: "world_123".to_string(),
             world_generation: 9,
+            initial_prompt: Some("first turn".to_string()),
             backend_kind: MemberRuntimeBackendKindV1::Codex,
             binary_path: "/usr/bin/codex".to_string(),
         });
@@ -2376,6 +2377,7 @@ mod tests {
         assert_eq!(payload.run_id, "run_123");
         assert_eq!(payload.world_id, "world_123");
         assert_eq!(payload.world_generation, 9);
+        assert_eq!(payload.initial_prompt.as_deref(), Some("first turn"));
         assert_eq!(
             payload.resolved_runtime,
             ResolvedMemberRuntimeDescriptorV1 {
@@ -2427,6 +2429,7 @@ mod tests {
                     run_id: "run_123".to_string(),
                     world_id: "world_123".to_string(),
                     world_generation: 9,
+                    initial_prompt: None,
                     backend_kind: MemberRuntimeBackendKindV1::Codex,
                     binary_path: "/usr/bin/codex".to_string(),
                 },

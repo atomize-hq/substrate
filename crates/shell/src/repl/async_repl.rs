@@ -1696,9 +1696,7 @@ fn runtime_supports_no_turn_session_start(
         .unwrap_or(false)
 }
 
-fn should_eager_bootstrap_host_orchestrator(
-    resolved: &ResolvedHostOrchestratorBootstrap,
-) -> bool {
+fn should_eager_bootstrap_host_orchestrator(resolved: &ResolvedHostOrchestratorBootstrap) -> bool {
     runtime_supports_no_turn_session_start(&resolved.gateway, &resolved.agent_kind)
 }
 
@@ -1870,7 +1868,9 @@ fn prepare_host_orchestrator_runtime_startup(
     let Some(resolved) = resolve_host_orchestrator_bootstrap(config)? else {
         return Ok(None);
     };
-    Ok(Some(prepare_host_orchestrator_runtime_from_resolved(resolved)?))
+    Ok(Some(prepare_host_orchestrator_runtime_from_resolved(
+        resolved,
+    )?))
 }
 
 fn prepare_host_orchestrator_runtime_from_resolved(
@@ -3213,9 +3213,8 @@ async fn dispatch_targeted_follow_up_turn(
                 let prepared = prepare_host_orchestrator_runtime_from_resolved(resolved)
                     .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
                 let prepared_startup_context = prepared.startup_context.clone();
-                let initial_world_binding = world_session
-                    .as_ref()
-                    .map(|session| PersistedWorldBinding {
+                let initial_world_binding =
+                    world_session.as_ref().map(|session| PersistedWorldBinding {
                         world_id: session.world_id.clone(),
                         world_generation: session.world_generation,
                     });
@@ -3257,8 +3256,13 @@ async fn dispatch_targeted_follow_up_turn(
             }
         }
         TargetedTurnRoute::World(descriptor) => {
-            ensure_no_policy_drift(world_session, startup_context.as_ref(), agent_printer, telemetry)
-                .await?;
+            ensure_no_policy_drift(
+                world_session,
+                startup_context.as_ref(),
+                agent_printer,
+                telemetry,
+            )
+            .await?;
             reconcile_member_runtime_generation(
                 world_session.as_ref(),
                 member_runtimes,
@@ -3268,14 +3272,16 @@ async fn dispatch_targeted_follow_up_turn(
             )
             .await?;
             let launched_from_targeted_prompt = ensure_member_runtime_ready_for_descriptor(
-                startup_context.as_ref(),
-                world_session.as_ref(),
+                EnsureMemberRuntimeReadyContext {
+                    startup_context: startup_context.as_ref(),
+                    world_session: world_session.as_ref(),
+                    agent_printer,
+                    telemetry,
+                },
                 &descriptor,
                 Some(targeted_turn.prompt),
                 member_runtimes,
                 pending_member_replacements,
-                agent_printer,
-                telemetry,
             )
             .await?;
             if launched_from_targeted_prompt {
@@ -4189,16 +4195,27 @@ async fn reconcile_member_runtime_generation(
 }
 
 #[cfg(target_os = "linux")]
+struct EnsureMemberRuntimeReadyContext<'a> {
+    startup_context: Option<&'a RuntimeOrchestrationContext>,
+    world_session: Option<&'a WorldSession>,
+    agent_printer: &'a ReplPrinter,
+    telemetry: &'a mut ReplSessionTelemetry,
+}
+
+#[cfg(target_os = "linux")]
 async fn ensure_member_runtime_ready_for_descriptor(
-    startup_context: Option<&RuntimeOrchestrationContext>,
-    world_session: Option<&WorldSession>,
+    context: EnsureMemberRuntimeReadyContext<'_>,
     descriptor: &RuntimeSelectionDescriptor,
     initial_prompt: Option<&str>,
     member_runtimes: &mut RetainedMemberRuntimeMap,
     pending_member_replacements: &mut PendingMemberReplacementMap,
-    agent_printer: &ReplPrinter,
-    telemetry: &mut ReplSessionTelemetry,
 ) -> Result<bool> {
+    let EnsureMemberRuntimeReadyContext {
+        startup_context,
+        world_session,
+        agent_printer,
+        telemetry,
+    } = context;
     let Some(startup_context) = startup_context else {
         return Ok(false);
     };
@@ -4270,16 +4287,27 @@ async fn ensure_member_runtime_ready_for_descriptor(
 }
 
 #[cfg(not(target_os = "linux"))]
+struct EnsureMemberRuntimeReadyContext<'a> {
+    startup_context: Option<&'a RuntimeOrchestrationContext>,
+    world_session: Option<&'a WorldSession>,
+    agent_printer: &'a ReplPrinter,
+    telemetry: &'a mut ReplSessionTelemetry,
+}
+
+#[cfg(not(target_os = "linux"))]
 async fn ensure_member_runtime_ready_for_descriptor(
-    startup_context: Option<&RuntimeOrchestrationContext>,
-    world_session: Option<&WorldSession>,
+    context: EnsureMemberRuntimeReadyContext<'_>,
     _descriptor: &RuntimeSelectionDescriptor,
     _initial_prompt: Option<&str>,
     _member_runtimes: &mut RetainedMemberRuntimeMap,
     _pending_member_replacements: &mut PendingMemberReplacementMap,
-    _agent_printer: &ReplPrinter,
-    _telemetry: &mut ReplSessionTelemetry,
 ) -> Result<bool> {
+    let EnsureMemberRuntimeReadyContext {
+        startup_context,
+        world_session,
+        agent_printer: _agent_printer,
+        telemetry: _telemetry,
+    } = context;
     let Some(_startup_context) = startup_context else {
         return Ok(false);
     };
@@ -4311,14 +4339,16 @@ async fn ensure_member_runtime_ready(
     };
 
     ensure_member_runtime_ready_for_descriptor(
-        Some(startup_context),
-        world_session,
+        EnsureMemberRuntimeReadyContext {
+            startup_context: Some(startup_context),
+            world_session,
+            agent_printer,
+            telemetry,
+        },
         &descriptor,
         None,
         member_runtimes,
         pending_member_replacements,
-        agent_printer,
-        telemetry,
     )
     .await
     .map(|_| ())

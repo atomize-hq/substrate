@@ -990,6 +990,14 @@ fn public_stop_reaches_repl_owned_sessions_through_the_same_private_owner_plane(
     let mut repl = PtyRepl::spawn(&fixture);
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("repl banner");
+    repl.wait_for_output("substrate>", Duration::from_secs(2))
+        .expect("initial prompt");
+    repl.send_line("::cli:codex start retained host runtime");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("runtime ready");
     let (orchestration_session_id, participant_id) =
         wait_for_single_active_session(&fixture, Duration::from_secs(5));
     assert!(

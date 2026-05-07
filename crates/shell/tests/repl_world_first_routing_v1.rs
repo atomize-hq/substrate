@@ -472,9 +472,7 @@ fn write_fake_codex_script(temp: &Path) -> PathBuf {
 }
 
 #[cfg(target_os = "linux")]
-fn write_fake_codex_script_with_invocation_log_and_output(
-    temp: &Path,
-) -> (PathBuf, PathBuf) {
+fn write_fake_codex_script_with_invocation_log_and_output(temp: &Path) -> (PathBuf, PathBuf) {
     let path = temp.join("fake-codex-with-log.sh");
     let count_path = temp.join("fake-codex-with-log.count");
     let body = format!(
@@ -1726,7 +1724,14 @@ fn c3_host_orchestrator_remains_dormant_until_first_targeted_turn() {
     let sock = sock_temp.path().join("world.sock");
     let _server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
 
-    let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--no-world"]);
+    let mut repl = PtyRepl::spawn(
+        &project,
+        &home,
+        &substrate_home,
+        &sock,
+        &[],
+        &["--no-world"],
+    );
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
