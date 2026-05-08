@@ -54,6 +54,72 @@ impl OwnerHelperMode {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PublicPromptAction {
+    Start,
+    Turn,
+}
+
+impl PublicPromptAction {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Start => "start",
+            Self::Turn => "turn",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PublicSessionPosture {
+    Active,
+    DetachedReattachable,
+    Terminal,
+}
+
+impl PublicSessionPosture {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Active => "active",
+            Self::DetachedReattachable => "detached_reattachable",
+            Self::Terminal => "terminal",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct PublicPromptInput {
+    pub prompt: Option<String>,
+    pub prompt_file: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct LoadedPublicPrompt {
+    pub prompt_text: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PublicPromptCommandRequest {
+    pub action: PublicPromptAction,
+    pub orchestration_session_id: Option<String>,
+    pub backend_id: String,
+    pub prompt: LoadedPublicPrompt,
+    pub json: bool,
+}
+
+pub(crate) fn load_public_prompt_source(_input: &PublicPromptInput) -> Result<LoadedPublicPrompt> {
+    anyhow::bail!("PLAN-20 public prompt source loading not implemented")
+}
+
+pub(crate) fn run_public_prompt_command(
+    _request: PublicPromptCommandRequest,
+    _cli_world: bool,
+    _cli_no_world: bool,
+) -> Result<()> {
+    anyhow::bail!("PLAN-20 public prompt command not implemented")
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PersistedWorldBinding {
     pub world_id: String,

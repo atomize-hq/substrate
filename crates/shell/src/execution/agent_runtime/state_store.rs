@@ -14,6 +14,7 @@ use substrate_common::paths as substrate_paths;
 use crate::execution::config_model::AgentExecutionScope;
 
 use super::{
+    control::PublicSessionPosture,
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     orchestration_session::{OrchestrationSessionRecord, OrchestrationSessionState},
     session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest},
@@ -130,6 +131,36 @@ pub(crate) struct ResolvedPublicControlTarget {
 }
 
 impl ResolvedPublicControlTarget {
+    #[allow(dead_code)]
+    pub(crate) fn orchestration_session_id(&self) -> &str {
+        &self.session.orchestration_session_id
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PublicTurnTargetKind {
+    Host,
+    World,
+}
+
+impl PublicTurnTargetKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::World => "world",
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedPublicTurnTarget {
+    pub session: OrchestrationSessionRecord,
+    pub participant: AgentRuntimeParticipantRecord,
+    pub target_kind: PublicTurnTargetKind,
+    pub session_posture: PublicSessionPosture,
+}
+
+impl ResolvedPublicTurnTarget {
     #[allow(dead_code)]
     pub(crate) fn orchestration_session_id(&self) -> &str {
         &self.session.orchestration_session_id
@@ -678,6 +709,14 @@ impl AgentRuntimeStateStore {
             session: record.session,
             active_participant: participant,
         })
+    }
+
+    pub(crate) fn resolve_public_turn_target(
+        &self,
+        _orchestration_session_id: &str,
+        _backend_id: &str,
+    ) -> Result<ResolvedPublicTurnTarget> {
+        anyhow::bail!("PLAN-20 public turn target resolution not implemented")
     }
 
     pub(crate) fn hidden_owner_helper_launch_ready(
