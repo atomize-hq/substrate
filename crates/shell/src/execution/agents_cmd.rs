@@ -24,7 +24,8 @@ use crate::execution::agent_runtime::{
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDoctorArgs, AgentOwnerHelperArgs, AgentScopeArg,
     AgentSessionControlArgs, AgentStartArgs, AgentToolboxAction, AgentToolboxCmd,
-    AgentToolboxViewArgs, AgentViewArgs, AgentsAction, AgentsCmd, Cli,
+    AgentToolboxViewArgs, AgentTurnArgs, AgentViewArgs, AgentsAction, AgentsCmd, Cli,
+    PublicPromptArgs,
 };
 use crate::execution::config_model::{
     self, AgentExecutionScope, AgentToolboxBindTransport, CliConfigOverrides, SubstrateConfig,
@@ -35,7 +36,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
@@ -93,7 +94,18 @@ pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
                 1
             }
         },
-        AgentAction::Resume(args) => match run_resume(args, cli) {
+        AgentAction::Turn(args) => match run_turn(args, cli) {
+            Ok(()) => 0,
+            Err(err) if config_model::is_user_error(&err) => {
+                eprintln!("{err}");
+                2
+            }
+            Err(err) => {
+                eprintln!("{err:#}");
+                1
+            }
+        },
+        AgentAction::Reattach(args) => match run_reattach(args, cli) {
             Ok(()) => 0,
             Err(err) if config_model::is_user_error(&err) => {
                 eprintln!("{err}");
@@ -289,13 +301,20 @@ struct AgentControlResultJson<'a> {
 }
 
 fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
-    let context = resolve_command_context(cli)?;
-    let plan = build_start_launch_plan(args, &context)?;
+    run_public_prompt_command(PublicPromptCommand::Start(args), cli)
+}
+
+fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
+    run_public_prompt_command(PublicPromptCommand::Turn(args), cli)
+}
+
+fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
+    let plan = build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Resume)?;
     let receipt = launch_hidden_owner_helper(&plan, cli)?;
     render_agent_control_result(
         args.json,
         &AgentControlResultJson {
-            action: "start",
+            action: "reattach",
             orchestration_session_id: &receipt.orchestration_session_id,
             backend_id: &receipt.backend_id,
             scope: "host",
@@ -307,22 +326,91 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     )
 }
 
-fn run_resume(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
+enum PublicPromptCommand<'a> {
+    Start(&'a AgentStartArgs),
+    Turn(&'a AgentTurnArgs),
+}
+
+fn run_public_prompt_command(command: PublicPromptCommand<'_>, cli: &Cli) -> Result<()> {
+    // The frozen public prompt grammar lands here first; deeper prompt execution plumbing remains
+    // scaffolded outside this worker's ownership lane.
+    let _prompt = match &command {
+        PublicPromptCommand::Start(args) => load_public_prompt_source(&args.prompt_source)?,
+        PublicPromptCommand::Turn(args) => load_public_prompt_source(&args.prompt_source)?,
+    };
+
+    match command {
+        PublicPromptCommand::Start(args) => {
+            let context = resolve_command_context(cli)?;
+            let plan = build_start_launch_plan(args, &context)?;
+            let receipt = launch_hidden_owner_helper(&plan, cli)?;
+            render_agent_control_result(
+                args.json,
+                &AgentControlResultJson {
+                    action: "start",
+                    orchestration_session_id: &receipt.orchestration_session_id,
+                    backend_id: &receipt.backend_id,
+                    scope: "host",
+                    state: "active",
+                    warnings: Vec::new(),
+                    participant_id: Some(&receipt.participant_id),
+                    source_orchestration_session_id: None,
+                },
+            )
+        }
+        PublicPromptCommand::Turn(args) => {
+            let plan = build_turn_launch_plan(cli, args)?;
+            let receipt = launch_hidden_owner_helper(&plan, cli)?;
+            render_agent_control_result(
+                args.json,
+                &AgentControlResultJson {
+                    action: "turn",
+                    orchestration_session_id: &receipt.orchestration_session_id,
+                    backend_id: &receipt.backend_id,
+                    scope: "host",
+                    state: "active",
+                    warnings: Vec::new(),
+                    participant_id: Some(&receipt.participant_id),
+                    source_orchestration_session_id: None,
+                },
+            )
+        }
+    }
+}
+
+fn load_public_prompt_source(args: &PublicPromptArgs) -> Result<String> {
+    match (&args.prompt, &args.prompt_file) {
+        (Some(prompt), None) => Ok(prompt.clone()),
+        (None, Some(path)) if path.as_os_str() == "-" => {
+            let mut prompt = String::new();
+            io::stdin()
+                .read_to_string(&mut prompt)
+                .context("failed to read public prompt from stdin")?;
+            Ok(prompt)
+        }
+        (None, Some(path)) => std::fs::read_to_string(path)
+            .with_context(|| format!("failed to read public prompt file {}", path.display())),
+        (Some(_), Some(_)) | (None, None) => anyhow::bail!(config_model::user_error(
+            "public_prompt_source: exactly one of --prompt or --prompt-file is required"
+        )),
+    }
+}
+
+fn build_turn_launch_plan(cli: &Cli, args: &AgentTurnArgs) -> Result<HiddenOwnerHelperLaunchPlan> {
     let plan = build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Resume)?;
-    let receipt = launch_hidden_owner_helper(&plan, cli)?;
-    render_agent_control_result(
-        args.json,
-        &AgentControlResultJson {
-            action: "resume",
-            orchestration_session_id: &receipt.orchestration_session_id,
-            backend_id: &receipt.backend_id,
-            scope: "host",
-            state: "active",
-            warnings: Vec::new(),
-            participant_id: Some(&receipt.participant_id),
-            source_orchestration_session_id: None,
-        },
-    )
+    let requested_backend_id = args.backend.trim();
+    if requested_backend_id.is_empty() {
+        anyhow::bail!(config_model::user_error(
+            "unknown_backend: public turn requires --backend <backend_id>"
+        ));
+    }
+    if plan.descriptor.backend_id != requested_backend_id {
+        anyhow::bail!(config_model::user_error(format!(
+            "unknown_backend: orchestration session '{}' does not have an exact active backend match for '{}'",
+            args.session, requested_backend_id
+        )));
+    }
+    Ok(plan)
 }
 
 fn run_fork(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
