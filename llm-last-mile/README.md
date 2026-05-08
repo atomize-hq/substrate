@@ -64,9 +64,13 @@ The original packet stops before public control-plane productization. The follow
   - Publicize `substrate agent start|resume|fork|stop` with exact session selectors and a Linux-first fail-closed posture.
 - [ORCH_PLAN-19.md](./ORCH_PLAN-19.md)
   - Parent-frozen execution controller for the `PLAN-19` rollout on `feat/session-centric-state-store`.
+- [PLAN-20.md](./PLAN-20.md)
+  - Add the public prompt-taking caller surface with exact `start` / `turn` verbs, canonical `reattach`, backend-aware turn resolution, and helper-owned streaming.
+- [ORCH_PLAN-20.md](./ORCH_PLAN-20.md)
+  - Parent-frozen execution controller for the `PLAN-20` rollout on `feat/session-centric-state-store`.
 
 ## Non-Goals in This Packet
 
-- Full `agent start/resume/fork/stop` CLI productization
+- Full agent caller-surface parity beyond the landed narrow `start|turn|reattach|fork|stop` contract
 - macOS and Windows shared-world parity
 - Renaming the local `agent-api-*` crates

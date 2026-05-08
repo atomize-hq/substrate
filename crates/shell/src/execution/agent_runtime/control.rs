@@ -1,7 +1,7 @@
 use std::fs;
-#[cfg(unix)]
-use std::io;
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::ExitStatus;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -10,22 +10,33 @@ use std::time::Duration;
 #[cfg(target_os = "linux")]
 use agent_api_client::AgentClient;
 #[cfg(target_os = "linux")]
-use agent_api_types::ExecuteCancelRequestV1;
+use agent_api_types::{ExecuteCancelRequestV1, ExecuteStreamFrame, MemberTurnSubmitRequestV1};
 use anyhow::{Context, Result};
+#[cfg(target_os = "linux")]
+use base64::engine::general_purpose::STANDARD as BASE64;
+#[cfg(target_os = "linux")]
+use base64::Engine;
+use chrono::Utc;
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 #[cfg(unix)]
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, oneshot};
+use uuid::Uuid;
 
+use crate::execution::agent_events::format_event_line;
+#[cfg(target_os = "linux")]
+use crate::execution::build_agent_client_and_pending_diff_request;
 use crate::execution::config_model::AgentExecutionScope;
 
 use super::{
     mapping::AgentRuntimeBackendKind, session::AgentRuntimeSessionManifest,
     validator::RuntimeSelectionDescriptor, AgentRuntimeSessionState, AgentRuntimeStateStore,
-    OrchestrationSessionRecord, OrchestrationSessionState, ORCHESTRATOR_ROLE,
+    OrchestrationSessionRecord, OrchestrationSessionState, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL,
 };
+use substrate_common::agent_events::{AgentEvent, MessageEventKind};
 
 pub(crate) const AGENT_API_SESSION_RESUME_V1: &str = "agent_api.session.resume.v1";
 pub(crate) const HIDDEN_OWNER_HELPER_SUBCOMMAND: &str = "__owner-helper";
@@ -33,6 +44,8 @@ const OWNER_HELPER_READY_TIMEOUT: Duration = Duration::from_secs(10);
 const OWNER_HELPER_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 #[cfg(unix)]
 const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
+const PRIVATE_PROMPT_READY_TIMEOUT: Duration = Duration::from_secs(10);
+const PRIVATE_PROMPT_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -108,22 +121,32 @@ pub(crate) struct PublicPromptCommandRequest {
     pub json: bool,
 }
 
-pub(crate) fn load_public_prompt_source(_input: &PublicPromptInput) -> Result<LoadedPublicPrompt> {
-    anyhow::bail!("PLAN-20 public prompt source loading not implemented")
-}
-
-pub(crate) fn run_public_prompt_command(
-    _request: PublicPromptCommandRequest,
-    _cli_world: bool,
-    _cli_no_world: bool,
-) -> Result<()> {
-    anyhow::bail!("PLAN-20 public prompt command not implemented")
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PersistedWorldBinding {
     pub world_id: String,
     pub world_generation: u64,
+}
+
+#[derive(Clone)]
+pub(crate) struct PromptSubmitRuntime {
+    pub descriptor: RuntimeSelectionDescriptor,
+    pub orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
+    pub manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
+    pub store: AgentRuntimeStateStore,
+    pub uaa_session_handle_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum SubmittedPromptStreamEvent {
+    Agent(Box<AgentEvent>),
+    Stdout(String),
+    Stderr(String),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct SubmittedPromptCompletion {
+    pub exit_code: i32,
+    pub warning: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -260,6 +283,85 @@ pub(crate) struct PrivateStopTransport {
     shutdown_tx: Option<oneshot::Sender<()>>,
     task: Option<tokio::task::JoinHandle<()>>,
     path: PathBuf,
+}
+
+#[derive(Debug)]
+pub(crate) struct PrivatePromptRequest {
+    pub action: PublicPromptAction,
+    pub prompt: String,
+    pub envelope_tx: mpsc::UnboundedSender<PublicPromptEnvelope>,
+}
+
+pub(crate) type PrivatePromptRequestReceiver = mpsc::UnboundedReceiver<PrivatePromptRequest>;
+pub(crate) type PrivatePromptRequestSender = mpsc::UnboundedSender<PrivatePromptRequest>;
+
+#[derive(Debug)]
+pub(crate) struct PrivatePromptTransport {
+    shutdown_tx: Option<oneshot::Sender<()>>,
+    task: Option<tokio::task::JoinHandle<()>>,
+    path: PathBuf,
+}
+
+impl PrivatePromptTransport {
+    #[allow(dead_code)]
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub(crate) async fn close(&mut self) {
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            let _ = shutdown_tx.send(());
+        }
+        if let Some(task) = self.task.take() {
+            let _ = task.await;
+        }
+        #[cfg(unix)]
+        {
+            let _ = tokio::fs::remove_file(&self.path).await;
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub(crate) enum PublicPromptEnvelope {
+    Accepted {
+        version: u8,
+        action: PublicPromptAction,
+        orchestration_session_id: String,
+        backend_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        participant_id: Option<String>,
+        scope: String,
+    },
+    Event {
+        version: u8,
+        event_kind: String,
+        data: serde_json::Value,
+    },
+    Warning {
+        version: u8,
+        message: String,
+    },
+    Completed {
+        version: u8,
+        action: PublicPromptAction,
+        orchestration_session_id: String,
+        backend_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        participant_id: Option<String>,
+        turn_outcome: String,
+        session_posture: PublicSessionPosture,
+        state: String,
+        warnings: Vec<String>,
+    },
+    Failed {
+        version: u8,
+        terminal: bool,
+        stage: String,
+        error_code: String,
+        message: String,
+    },
 }
 
 impl PrivateStopTransport {
@@ -688,6 +790,411 @@ pub(crate) fn spawn_remote_private_stop_owner(
     })
 }
 
+pub(crate) fn private_prompt_request_channel(
+) -> (PrivatePromptRequestSender, PrivatePromptRequestReceiver) {
+    mpsc::unbounded_channel()
+}
+
+pub(crate) fn private_prompt_transport_path(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
+    let participant_fragment = compact_stop_transport_fragment(participant_id);
+    let socket_name = format!("{session_fragment}-{participant_fragment}.prompt.sock");
+    let preferred = store.handles_dir().join("prompt").join(&socket_name);
+    #[cfg(unix)]
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return PathBuf::from("/tmp")
+            .join("substrate-agent-hub-prompt")
+            .join(socket_name);
+    }
+    preferred
+}
+
+pub(crate) fn prompt_runtime_from_parts(
+    descriptor: RuntimeSelectionDescriptor,
+    orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
+    manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
+    store: AgentRuntimeStateStore,
+    uaa_session_handle_id: String,
+) -> PromptSubmitRuntime {
+    PromptSubmitRuntime {
+        descriptor,
+        orchestration_session,
+        manifest,
+        store,
+        uaa_session_handle_id,
+    }
+}
+
+pub(crate) async fn submit_host_prompt_turn<F>(
+    runtime: &PromptSubmitRuntime,
+    run_id: &str,
+    prompt: &str,
+    mut on_event: F,
+) -> Result<SubmittedPromptCompletion>
+where
+    F: FnMut(SubmittedPromptStreamEvent),
+{
+    let gateway = super::build_gateway_for_descriptor(&runtime.descriptor)
+        .context("build host targeted-turn gateway")?;
+    let agent_kind =
+        agent_api::AgentWrapperKind::new(runtime.descriptor.backend_kind.as_agent_kind_str())
+            .map_err(|err| anyhow::anyhow!("substrate: error: {err}"))?;
+
+    let request = agent_api::AgentWrapperRunRequest {
+        prompt: prompt.to_string(),
+        working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
+        timeout: None,
+        env: std::collections::BTreeMap::new(),
+        extensions: std::collections::BTreeMap::from([(
+            AGENT_API_SESSION_RESUME_V1.to_string(),
+            build_session_resume_extension(&runtime.uaa_session_handle_id),
+        )]),
+    };
+    let control = gateway
+        .run_control(&agent_kind, request)
+        .await
+        .map_err(|err| anyhow::anyhow!("substrate: error: {}", err))?;
+    let agent_api::AgentWrapperRunControl { handle, cancel: _ } = control;
+    let agent_api::AgentWrapperRunHandle {
+        mut events,
+        completion,
+    } = handle;
+
+    while let Some(wrapper_event) = events.next().await {
+        let (orchestration_snapshot, manifest_snapshot, event) = {
+            let mut orchestration_guard = runtime
+                .orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned");
+            let mut manifest_guard = runtime
+                .manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned");
+            if let Some(session_id) = extract_session_handle_id(wrapper_event.data.as_ref()) {
+                if manifest_guard.internal.uaa_session_id.as_deref() != Some(session_id) {
+                    manifest_guard.set_uaa_session_id(session_id.to_string());
+                }
+            }
+            manifest_guard.touch_event(Utc::now());
+            orchestration_guard.touch_active();
+            let event = translate_prompt_wrapper_event(
+                &manifest_guard,
+                &orchestration_guard,
+                run_id,
+                wrapper_event,
+            );
+            (orchestration_guard.clone(), manifest_guard.clone(), event)
+        };
+        persist_runtime_snapshots(&runtime.store, &orchestration_snapshot, &manifest_snapshot)?;
+        on_event(SubmittedPromptStreamEvent::Agent(Box::new(event)));
+    }
+
+    let completion = completion
+        .await
+        .map_err(|err| anyhow::anyhow!("substrate: error: {}", err))?;
+    if let Some(session_id) = extract_session_handle_id(completion.data.as_ref()) {
+        let mut manifest_guard = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        if manifest_guard.internal.uaa_session_id.as_deref() != Some(session_id) {
+            manifest_guard.set_uaa_session_id(session_id.to_string());
+        }
+    }
+    Ok(SubmittedPromptCompletion {
+        exit_code: completion.status.code().unwrap_or(-1),
+        warning: warning_for_exit_status(&completion.status),
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) async fn submit_world_prompt_turn<F>(
+    runtime: &PromptSubmitRuntime,
+    run_id: &str,
+    prompt: &str,
+    mut on_event: F,
+) -> Result<SubmittedPromptCompletion>
+where
+    F: FnMut(SubmittedPromptStreamEvent),
+{
+    use http_body_util::BodyExt as _;
+
+    let request = {
+        let manifest_guard = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: manifest_guard.handle.orchestration_session_id.clone(),
+            participant_id: manifest_guard.handle.participant_id.clone(),
+            orchestrator_participant_id: manifest_guard
+                .handle
+                .orchestrator_participant_id
+                .clone()
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "substrate: error: retained world-scoped member is missing orchestrator_participant_id"
+                    )
+                })?,
+            backend_id: runtime.descriptor.backend_id.clone(),
+            run_id: run_id.to_string(),
+            world_id: manifest_guard.handle.world_id.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "substrate: error: retained world-scoped member is missing world_id"
+                )
+            })?,
+            world_generation: manifest_guard.handle.world_generation.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "substrate: error: retained world-scoped member is missing world_generation"
+                )
+            })?,
+            prompt: prompt.to_string(),
+        }
+    };
+
+    let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;
+    let response = client
+        .submit_member_turn_stream(request)
+        .await
+        .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
+
+    let mut body = std::pin::pin!(response.into_body());
+    let mut buffer = Vec::new();
+    let mut observed_exit: Option<i32> = None;
+    while let Some(frame) = body.as_mut().frame().await {
+        let frame = frame.map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
+        let Some(data) = frame.data_ref() else {
+            continue;
+        };
+        buffer.extend_from_slice(data);
+
+        while let Some(pos) = buffer.iter().position(|&byte| byte == b'\n') {
+            let line: Vec<u8> = buffer.drain(..=pos).collect();
+            if line.len() <= 1 {
+                continue;
+            }
+            let payload = &line[..line.len() - 1];
+            if payload.is_empty() {
+                continue;
+            }
+            let frame = serde_json::from_slice::<ExecuteStreamFrame>(payload)
+                .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
+            match frame {
+                ExecuteStreamFrame::Start { .. } => {}
+                ExecuteStreamFrame::Event { event } => {
+                    on_event(SubmittedPromptStreamEvent::Agent(Box::new(event)));
+                }
+                ExecuteStreamFrame::Stdout { chunk_b64 } => {
+                    let decoded = BASE64
+                        .decode(chunk_b64.as_bytes())
+                        .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
+                    on_event(SubmittedPromptStreamEvent::Stdout(
+                        String::from_utf8_lossy(&decoded).to_string(),
+                    ));
+                }
+                ExecuteStreamFrame::Stderr { chunk_b64 } => {
+                    let decoded = BASE64
+                        .decode(chunk_b64.as_bytes())
+                        .map_err(|err| anyhow::anyhow!("substrate: error: {err:#}"))?;
+                    on_event(SubmittedPromptStreamEvent::Stderr(
+                        String::from_utf8_lossy(&decoded).to_string(),
+                    ));
+                }
+                ExecuteStreamFrame::Exit { exit, .. } => {
+                    observed_exit = Some(exit);
+                }
+                ExecuteStreamFrame::Error { message } => {
+                    return Err(anyhow::anyhow!("substrate: error: {message}"));
+                }
+            }
+        }
+    }
+
+    let exit_code = observed_exit.unwrap_or(0);
+    Ok(SubmittedPromptCompletion {
+        exit_code,
+        warning: warning_for_exit_code(exit_code),
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) async fn submit_world_prompt_turn<F>(
+    _runtime: &PromptSubmitRuntime,
+    _run_id: &str,
+    _prompt: &str,
+    _on_event: F,
+) -> Result<SubmittedPromptCompletion>
+where
+    F: FnMut(SubmittedPromptStreamEvent),
+{
+    Err(anyhow::anyhow!(
+        "substrate: error: world-targeted follow-up turns are supported on Linux only"
+    ))
+}
+
+pub(crate) fn spawn_local_private_prompt_owner(
+    runtime: PromptSubmitRuntime,
+    mut prompt_rx: PrivatePromptRequestReceiver,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(request) = prompt_rx.recv().await {
+            let _ = stream_private_prompt_request(&runtime, request, false).await;
+        }
+    })
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn spawn_remote_private_prompt_owner(
+    runtime: PromptSubmitRuntime,
+    mut prompt_rx: PrivatePromptRequestReceiver,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(request) = prompt_rx.recv().await {
+            let _ = stream_private_prompt_request(&runtime, request, true).await;
+        }
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn spawn_remote_private_prompt_owner(
+    _runtime: PromptSubmitRuntime,
+    mut prompt_rx: PrivatePromptRequestReceiver,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move { while prompt_rx.recv().await.is_some() {} })
+}
+
+#[allow(dead_code)]
+pub(crate) fn load_public_prompt_source(input: &PublicPromptInput) -> Result<LoadedPublicPrompt> {
+    let raw = match (&input.prompt, &input.prompt_file) {
+        (Some(_), Some(_)) => anyhow::bail!(
+            "malformed_prompt_source: provide exactly one of --prompt or --prompt-file"
+        ),
+        (Some(prompt), None) => prompt.clone(),
+        (None, Some(path)) if path == Path::new("-") => {
+            let mut buffer = String::new();
+            io::stdin()
+                .read_to_string(&mut buffer)
+                .context("malformed_prompt_source: failed to read prompt from stdin")?;
+            buffer
+        }
+        (None, Some(path)) => fs::read_to_string(path)
+            .with_context(|| format!("malformed_prompt_source: failed to read {}", path.display()))?,
+        (None, None) => anyhow::bail!(
+            "missing_prompt_source: provide --prompt or --prompt-file (use --prompt-file - for stdin)"
+        ),
+    };
+
+    let normalized = raw.trim_end_matches(['\r', '\n']).to_string();
+    if normalized.trim().is_empty() {
+        anyhow::bail!("empty_prompt: prompt input was empty");
+    }
+    Ok(LoadedPublicPrompt {
+        prompt_text: normalized,
+    })
+}
+
+#[allow(dead_code)]
+pub(crate) fn run_public_prompt_command(
+    request: PublicPromptCommandRequest,
+    _cli_world: bool,
+    _cli_no_world: bool,
+) -> Result<()> {
+    let store = AgentRuntimeStateStore::new()?;
+    let orchestration_session_id = request.orchestration_session_id.clone().ok_or_else(|| {
+        anyhow::anyhow!(
+            "unknown_session: public prompt actions require an orchestration session id"
+        )
+    })?;
+    let participant_id = match request.action {
+        PublicPromptAction::Start => resolve_public_start_prompt_target(
+            &store,
+            &orchestration_session_id,
+            &request.backend_id,
+        )?,
+        PublicPromptAction::Turn => {
+            let resolved =
+                store.resolve_public_turn_target(&orchestration_session_id, &request.backend_id)?;
+            if resolved.session_posture != PublicSessionPosture::Active {
+                anyhow::bail!(
+                    "owner_unreachable: orchestration session {} backend {} is not currently attached to a live retained turn target",
+                    orchestration_session_id,
+                    request.backend_id
+                );
+            }
+            resolved.participant.handle.participant_id.clone()
+        }
+    };
+
+    #[cfg(not(unix))]
+    {
+        let _ = participant_id;
+        anyhow::bail!(
+            "unsupported_platform_or_posture: public prompt submission requires a Unix private owner transport"
+        );
+    }
+
+    #[cfg(unix)]
+    {
+        let transport_path = private_prompt_transport_path(
+            &store,
+            &orchestration_session_id,
+            participant_id.as_str(),
+        );
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .context("failed to initialize prompt transport runtime")?;
+        let mut renderer = PublicPromptRenderer::new(request.json);
+        let mut stream_started = false;
+        let mut saw_terminal = false;
+        let result = rt.block_on(async {
+            wait_for_private_prompt_transport(&transport_path).await?;
+            request_private_prompt_stream(
+                &transport_path,
+                request.action,
+                &request.prompt.prompt_text,
+                |envelope| {
+                    stream_started = true;
+                    if matches!(
+                        envelope,
+                        PublicPromptEnvelope::Completed { .. }
+                            | PublicPromptEnvelope::Failed { .. }
+                    ) {
+                        saw_terminal = true;
+                    }
+                    renderer.render(envelope)
+                },
+            )
+            .await
+        });
+
+        match result {
+            Ok(0) => Ok(()),
+            Ok(code) => Err(anyhow::Error::new(PublicPromptRenderedExit {
+                exit_code: code,
+            })),
+            Err(err) if stream_started => {
+                if !saw_terminal {
+                    renderer.render(&failed_prompt_envelope(
+                        "bridge",
+                        "owner_unreachable",
+                        err.to_string(),
+                    ))?;
+                }
+                Err(anyhow::Error::new(PublicPromptRenderedExit {
+                    exit_code: 1,
+                }))
+            }
+            Err(err) => Err(err),
+        }
+    }
+}
+
 #[cfg(unix)]
 #[allow(dead_code)]
 pub(crate) async fn request_private_stop(path: &Path) -> Result<PrivateStopOutcome> {
@@ -717,6 +1224,64 @@ pub(crate) async fn request_private_stop(path: &Path) -> Result<PrivateStopOutco
         )
     })?;
     Ok(response.outcome)
+}
+
+#[cfg(unix)]
+pub(crate) async fn register_private_prompt_transport(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+    prompt_tx: PrivatePromptRequestSender,
+) -> Result<PrivatePromptTransport> {
+    let path = private_prompt_transport_path(store, orchestration_session_id, participant_id);
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "private prompt transport path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    remove_existing_stop_transport_path(&path)?;
+    let listener = UnixListener::bind(&path)
+        .with_context(|| format!("failed to bind private prompt transport {}", path.display()))?;
+    let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
+    let path_for_task = path.clone();
+    let task = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = &mut shutdown_rx => break,
+                accept = listener.accept() => {
+                    let Ok((stream, _)) = accept else {
+                        break;
+                    };
+                    let prompt_tx = prompt_tx.clone();
+                    tokio::spawn(async move {
+                        let _ = handle_private_prompt_connection(stream, prompt_tx).await;
+                    });
+                }
+            }
+        }
+        let _ = tokio::fs::remove_file(&path_for_task).await;
+    });
+    Ok(PrivatePromptTransport {
+        shutdown_tx: Some(shutdown_tx),
+        task: Some(task),
+        path,
+    })
+}
+
+#[cfg(not(unix))]
+pub(crate) async fn register_private_prompt_transport(
+    _store: &AgentRuntimeStateStore,
+    _orchestration_session_id: &str,
+    _participant_id: &str,
+    _prompt_tx: PrivatePromptRequestSender,
+) -> Result<PrivatePromptTransport> {
+    Ok(PrivatePromptTransport {
+        shutdown_tx: None,
+        task: None,
+        path: PathBuf::new(),
+    })
 }
 
 #[cfg(unix)]
@@ -796,6 +1361,631 @@ struct PrivateStopRequestV1 {
 struct PrivateStopResponse {
     version: u8,
     outcome: PrivateStopOutcome,
+}
+
+#[cfg(unix)]
+#[derive(Debug, Deserialize, Serialize)]
+struct PrivatePromptRequestV1 {
+    version: u8,
+    action: PublicPromptAction,
+    prompt: String,
+}
+
+#[cfg(unix)]
+async fn request_private_prompt_stream<F>(
+    path: &Path,
+    action: PublicPromptAction,
+    prompt: &str,
+    mut on_envelope: F,
+) -> Result<i32>
+where
+    F: FnMut(&PublicPromptEnvelope) -> Result<()>,
+{
+    let mut stream = UnixStream::connect(path).await.with_context(|| {
+        format!(
+            "failed to connect to private prompt transport {}",
+            path.display()
+        )
+    })?;
+    let request = PrivatePromptRequestV1 {
+        version: 1,
+        action,
+        prompt: prompt.to_string(),
+    };
+    stream
+        .write_all(serde_json::to_string(&request)?.as_bytes())
+        .await?;
+    stream.write_all(b"\n").await?;
+    stream.flush().await?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    let mut saw_accept = false;
+    loop {
+        line.clear();
+        let bytes_read = reader.read_line(&mut line).await?;
+        if bytes_read == 0 {
+            break;
+        }
+        let envelope: PublicPromptEnvelope =
+            serde_json::from_str(line.trim()).with_context(|| {
+                format!(
+                    "failed to decode private prompt transport response from {}",
+                    path.display()
+                )
+            })?;
+        if matches!(envelope, PublicPromptEnvelope::Accepted { .. }) {
+            saw_accept = true;
+        }
+        on_envelope(&envelope)?;
+        match envelope {
+            PublicPromptEnvelope::Completed { turn_outcome, .. } => {
+                return Ok(completed_exit_code(turn_outcome.as_str()));
+            }
+            PublicPromptEnvelope::Failed { message, .. } => return Err(anyhow::anyhow!(message)),
+            _ => {}
+        }
+    }
+
+    if saw_accept {
+        anyhow::bail!("owner_unreachable: prompt stream ended before terminal envelope");
+    }
+    anyhow::bail!("owner_unreachable: prompt owner closed the stream before accepting the request");
+}
+
+#[cfg(unix)]
+async fn handle_private_prompt_connection(
+    stream: UnixStream,
+    prompt_tx: PrivatePromptRequestSender,
+) -> Result<()> {
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    let bytes_read = reader.read_line(&mut line).await?;
+    let request = if bytes_read == 0 {
+        None
+    } else {
+        Some(parse_private_prompt_request(line.trim())?)
+    };
+
+    let mut stream = reader.into_inner();
+    let Some(request) = request else {
+        let failed = failed_prompt_envelope(
+            "bridge",
+            "malformed_prompt_source",
+            "empty private prompt request",
+        );
+        stream
+            .write_all(serde_json::to_string(&failed)?.as_bytes())
+            .await?;
+        stream.write_all(b"\n").await?;
+        stream.flush().await?;
+        return Ok(());
+    };
+
+    let (envelope_tx, mut envelope_rx) = mpsc::unbounded_channel();
+    if prompt_tx
+        .send(PrivatePromptRequest {
+            action: request.action,
+            prompt: request.prompt,
+            envelope_tx,
+        })
+        .is_err()
+    {
+        let failed = failed_prompt_envelope(
+            "bridge",
+            "owner_unreachable",
+            "private prompt owner is no longer available",
+        );
+        stream
+            .write_all(serde_json::to_string(&failed)?.as_bytes())
+            .await?;
+        stream.write_all(b"\n").await?;
+        stream.flush().await?;
+        return Ok(());
+    }
+
+    while let Some(envelope) = envelope_rx.recv().await {
+        stream
+            .write_all(serde_json::to_string(&envelope)?.as_bytes())
+            .await?;
+        stream.write_all(b"\n").await?;
+        stream.flush().await?;
+        if matches!(
+            envelope,
+            PublicPromptEnvelope::Completed { .. } | PublicPromptEnvelope::Failed { .. }
+        ) {
+            break;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn parse_private_prompt_request(payload: &str) -> Result<PrivatePromptRequestV1> {
+    let request: PrivatePromptRequestV1 =
+        serde_json::from_str(payload).context("failed to decode private prompt request")?;
+    if request.version != 1 {
+        anyhow::bail!("unsupported private prompt request");
+    }
+    if request.prompt.trim().is_empty() {
+        anyhow::bail!("private prompt request requires a non-empty prompt");
+    }
+    Ok(request)
+}
+
+async fn stream_private_prompt_request(
+    runtime: &PromptSubmitRuntime,
+    request: PrivatePromptRequest,
+    world_scoped: bool,
+) -> Result<()> {
+    if runtime_is_terminal(&runtime.manifest) {
+        let _ = request.envelope_tx.send(failed_prompt_envelope(
+            "runtime",
+            "owner_unreachable",
+            "runtime is no longer authoritative-live",
+        ));
+        return Ok(());
+    }
+
+    let manifest_snapshot = runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .clone();
+    let run_id = Uuid::now_v7().to_string();
+    let accepted = PublicPromptEnvelope::Accepted {
+        version: 1,
+        action: request.action,
+        orchestration_session_id: manifest_snapshot.handle.orchestration_session_id.clone(),
+        backend_id: runtime.descriptor.backend_id.clone(),
+        participant_id: Some(manifest_snapshot.handle.participant_id.clone()),
+        scope: scope_label(runtime.descriptor.execution_scope).to_string(),
+    };
+    if request.envelope_tx.send(accepted).is_err() {
+        return Ok(());
+    }
+
+    let submit_result = if world_scoped {
+        submit_world_prompt_turn(runtime, &run_id, &request.prompt, |event| {
+            let _ = request
+                .envelope_tx
+                .send(event_to_public_prompt_envelope(event));
+        })
+        .await
+    } else {
+        submit_host_prompt_turn(runtime, &run_id, &request.prompt, |event| {
+            let _ = request
+                .envelope_tx
+                .send(event_to_public_prompt_envelope(event));
+        })
+        .await
+    };
+
+    match submit_result {
+        Ok(completion) => {
+            let mut warnings = Vec::new();
+            if let Some(message) = completion.warning {
+                warnings.push(message.clone());
+                let _ = request.envelope_tx.send(PublicPromptEnvelope::Warning {
+                    version: 1,
+                    message,
+                });
+            }
+            let (session_posture, state) = prompt_completion_session_state(runtime);
+            let _ = request.envelope_tx.send(PublicPromptEnvelope::Completed {
+                version: 1,
+                action: request.action,
+                orchestration_session_id: manifest_snapshot.handle.orchestration_session_id,
+                backend_id: runtime.descriptor.backend_id.clone(),
+                participant_id: Some(manifest_snapshot.handle.participant_id),
+                turn_outcome: turn_outcome_label(completion.exit_code).to_string(),
+                session_posture,
+                state,
+                warnings,
+            });
+        }
+        Err(err) => {
+            let _ = request.envelope_tx.send(failed_prompt_envelope(
+                "runtime",
+                "owner_unreachable",
+                err.to_string(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn event_to_public_prompt_envelope(event: SubmittedPromptStreamEvent) -> PublicPromptEnvelope {
+    let (event_kind, data) = match event {
+        SubmittedPromptStreamEvent::Agent(event) => (
+            "message".to_string(),
+            serde_json::to_value(event).unwrap_or_default(),
+        ),
+        SubmittedPromptStreamEvent::Stdout(text) => {
+            ("message".to_string(), serde_json::json!({ "text": text }))
+        }
+        SubmittedPromptStreamEvent::Stderr(text) => {
+            ("stderr".to_string(), serde_json::json!({ "text": text }))
+        }
+    };
+    PublicPromptEnvelope::Event {
+        version: 1,
+        event_kind,
+        data,
+    }
+}
+
+fn scope_label(scope: AgentExecutionScope) -> &'static str {
+    match scope {
+        AgentExecutionScope::Host => "host",
+        AgentExecutionScope::World => "world",
+    }
+}
+
+fn warning_for_exit_code(exit_code: i32) -> Option<String> {
+    (exit_code != 0).then(|| format!("Command failed with status: {exit_code}"))
+}
+
+fn turn_outcome_label(exit_code: i32) -> &'static str {
+    match exit_code {
+        0 => "success",
+        130 => "cancelled",
+        _ => "nonzero_exit",
+    }
+}
+
+fn completed_exit_code(turn_outcome: &str) -> i32 {
+    match turn_outcome {
+        "success" => 0,
+        "cancelled" => 130,
+        _ => 1,
+    }
+}
+
+fn prompt_completion_session_state(
+    runtime: &PromptSubmitRuntime,
+) -> (PublicSessionPosture, String) {
+    let session = runtime
+        .orchestration_session
+        .lock()
+        .expect("orchestration session mutex poisoned")
+        .clone();
+    let manifest = runtime
+        .manifest
+        .lock()
+        .expect("runtime manifest mutex poisoned")
+        .clone();
+
+    let posture =
+        if !manifest.handle.state.is_live() || session.state != OrchestrationSessionState::Active {
+            PublicSessionPosture::Terminal
+        } else {
+            PublicSessionPosture::Active
+        };
+    (
+        posture,
+        runtime_state_label(&manifest.handle.state).to_string(),
+    )
+}
+
+fn runtime_state_label(state: &AgentRuntimeSessionState) -> &'static str {
+    match state {
+        AgentRuntimeSessionState::Allocating
+        | AgentRuntimeSessionState::Ready
+        | AgentRuntimeSessionState::Running
+        | AgentRuntimeSessionState::Restarting
+        | AgentRuntimeSessionState::Stopping => "active",
+        AgentRuntimeSessionState::Stopped => "stopped",
+        AgentRuntimeSessionState::Invalidated => "invalidated",
+        AgentRuntimeSessionState::Failed => "failed",
+    }
+}
+
+fn failed_prompt_envelope(
+    stage: impl Into<String>,
+    error_code: impl Into<String>,
+    message: impl Into<String>,
+) -> PublicPromptEnvelope {
+    PublicPromptEnvelope::Failed {
+        version: 1,
+        terminal: true,
+        stage: stage.into(),
+        error_code: error_code.into(),
+        message: message.into(),
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct PublicPromptRenderedExit {
+    exit_code: i32,
+}
+
+impl std::fmt::Display for PublicPromptRenderedExit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "public prompt command already rendered terminal output")
+    }
+}
+
+impl std::error::Error for PublicPromptRenderedExit {}
+
+pub(crate) fn public_prompt_rendered_exit_code(err: &anyhow::Error) -> Option<i32> {
+    err.downcast_ref::<PublicPromptRenderedExit>()
+        .map(|exit| exit.exit_code)
+}
+
+fn resolve_public_start_prompt_target(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    backend_id: &str,
+) -> Result<String> {
+    let Some(record) = store.load_orchestration_session(orchestration_session_id)? else {
+        anyhow::bail!(
+            "unknown_session: no orchestration session found for '{}'",
+            orchestration_session_id
+        );
+    };
+    if record.state != OrchestrationSessionState::Active {
+        anyhow::bail!(
+            "runtime_start_failed: orchestration session {} is not active",
+            orchestration_session_id
+        );
+    }
+    let active_participant_id = record.active_participant_id().ok_or_else(|| {
+        anyhow::anyhow!(
+            "runtime_start_failed: orchestration session {} is missing an active participant",
+            orchestration_session_id
+        )
+    })?;
+    let active_participant = store
+        .load_participant(active_participant_id)?
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "runtime_start_failed: orchestration session {} lost its active participant {}",
+                orchestration_session_id,
+                active_participant_id
+            )
+        })?;
+    if active_participant.handle.backend_id != backend_id {
+        anyhow::bail!(
+            "runtime_start_failed: orchestration session {} active backend {} did not match requested backend {}",
+            orchestration_session_id,
+            active_participant.handle.backend_id,
+            backend_id
+        );
+    }
+    Ok(active_participant.handle.participant_id.clone())
+}
+
+#[cfg(unix)]
+async fn wait_for_private_prompt_transport(path: &Path) -> Result<()> {
+    let started_at = std::time::Instant::now();
+    loop {
+        match tokio::fs::metadata(path).await {
+            Ok(_) => return Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+                if started_at.elapsed() >= PRIVATE_PROMPT_READY_TIMEOUT {
+                    anyhow::bail!(
+                        "stream_bridge_failed: timed out waiting for private prompt transport {}",
+                        path.display()
+                    );
+                }
+                tokio::time::sleep(PRIVATE_PROMPT_READY_POLL_INTERVAL).await;
+            }
+            Err(err) => {
+                return Err(err).with_context(|| {
+                    format!(
+                        "stream_bridge_failed: failed to inspect private prompt transport {}",
+                        path.display()
+                    )
+                });
+            }
+        }
+    }
+}
+
+fn warning_for_exit_status(status: &ExitStatus) -> Option<String> {
+    if status.success() {
+        return None;
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(sig) = status.signal() {
+            return Some(format!("Command terminated by signal {sig}"));
+        }
+    }
+
+    Some(format!(
+        "Command failed with status: {}",
+        status.code().unwrap_or(-1)
+    ))
+}
+
+fn extract_session_handle_id(data: Option<&serde_json::Value>) -> Option<&str> {
+    let value = data?;
+    if value.get("schema").and_then(serde_json::Value::as_str)
+        == Some(super::SESSION_HANDLE_SCHEMA_V1)
+    {
+        return value
+            .get("session")
+            .and_then(serde_json::Value::as_object)
+            .and_then(|session| session.get("id"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|id| !id.trim().is_empty());
+    }
+
+    value
+        .get("type")
+        .and_then(serde_json::Value::as_str)
+        .filter(|event_type| matches!(*event_type, "thread.started" | "turn.started"))?;
+    value
+        .get("thread_id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|id| !id.trim().is_empty())
+}
+
+fn translate_prompt_wrapper_event(
+    manifest: &AgentRuntimeSessionManifest,
+    orchestration_session: &OrchestrationSessionRecord,
+    run_id: &str,
+    wrapper_event: agent_api::AgentWrapperEvent,
+) -> AgentEvent {
+    let mut event = match wrapper_event.kind {
+        agent_api::AgentWrapperEventKind::Status => AgentEvent::message(
+            manifest.handle.agent_id.clone(),
+            manifest.handle.orchestration_session_id.clone(),
+            run_id.to_string(),
+            MessageEventKind::Status,
+            wrapper_event
+                .message
+                .clone()
+                .unwrap_or_else(|| "agent runtime status".to_string()),
+        ),
+        agent_api::AgentWrapperEventKind::TextOutput => AgentEvent::message(
+            manifest.handle.agent_id.clone(),
+            manifest.handle.orchestration_session_id.clone(),
+            run_id.to_string(),
+            MessageEventKind::TaskProgress,
+            wrapper_event
+                .text
+                .clone()
+                .unwrap_or_else(|| "agent runtime output".to_string()),
+        ),
+        agent_api::AgentWrapperEventKind::ToolCall
+        | agent_api::AgentWrapperEventKind::ToolResult => AgentEvent::message(
+            manifest.handle.agent_id.clone(),
+            manifest.handle.orchestration_session_id.clone(),
+            run_id.to_string(),
+            MessageEventKind::TaskProgress,
+            wrapper_event
+                .message
+                .clone()
+                .unwrap_or_else(|| "agent runtime tool activity".to_string()),
+        ),
+        agent_api::AgentWrapperEventKind::Error => AgentEvent::alert(
+            manifest.handle.agent_id.clone(),
+            manifest.handle.orchestration_session_id.clone(),
+            run_id.to_string(),
+            "agent_wrapper_error",
+            wrapper_event
+                .message
+                .clone()
+                .unwrap_or_else(|| "agent runtime error".to_string()),
+        ),
+        agent_api::AgentWrapperEventKind::Unknown => AgentEvent::message(
+            manifest.handle.agent_id.clone(),
+            manifest.handle.orchestration_session_id.clone(),
+            run_id.to_string(),
+            MessageEventKind::TaskProgress,
+            "agent runtime emitted an unknown event".to_string(),
+        ),
+    };
+
+    event.role = Some(manifest.handle.role.clone());
+    event.backend_id = Some(manifest.handle.backend_id.clone());
+    event.set_pure_agent_telemetry_identity(manifest.handle.agent_id.clone());
+    event.set_channel(wrapper_event.channel.clone());
+    event.world_id = orchestration_session.world_id.clone();
+    event.world_generation = orchestration_session.world_generation;
+    event.participant_id = Some(manifest.handle.participant_id.clone());
+    event.parent_participant_id = manifest.handle.parent_participant_id.clone();
+    event.resumed_from_participant_id = manifest.handle.resumed_from_participant_id.clone();
+
+    if let Some(data) = wrapper_event.data {
+        if let Some(obj) = event.data.as_object_mut() {
+            obj.insert("uaa_event".to_string(), data);
+            obj.insert(
+                "protocol".to_string(),
+                serde_json::json!(PURE_AGENT_PROTOCOL),
+            );
+        }
+    }
+
+    event
+}
+
+struct PublicPromptRenderer {
+    json: bool,
+}
+
+impl PublicPromptRenderer {
+    fn new(json: bool) -> Self {
+        Self { json }
+    }
+
+    fn render(&mut self, envelope: &PublicPromptEnvelope) -> Result<()> {
+        if self.json {
+            let stdout = io::stdout();
+            let mut lock = stdout.lock();
+            writeln!(lock, "{}", serde_json::to_string(envelope)?)
+                .context("failed to render prompt envelope")?;
+            let _ = lock.flush();
+            return Ok(());
+        }
+
+        match envelope {
+            PublicPromptEnvelope::Accepted { .. } => {}
+            PublicPromptEnvelope::Completed {
+                action,
+                orchestration_session_id,
+                backend_id,
+                participant_id,
+                turn_outcome,
+                session_posture,
+                ..
+            } => {
+                let stdout = io::stdout();
+                let mut lock = stdout.lock();
+                let _ = writeln!(
+                    lock,
+                    "action={} orchestration_session_id={} backend_id={} participant_id={} turn_outcome={} session_posture={}",
+                    action.as_str(),
+                    orchestration_session_id,
+                    backend_id,
+                    participant_id.as_deref().unwrap_or("-"),
+                    turn_outcome,
+                    session_posture.as_str()
+                );
+                let _ = lock.flush();
+            }
+            PublicPromptEnvelope::Warning { message, .. }
+            | PublicPromptEnvelope::Failed { message, .. } => {
+                let stderr = io::stderr();
+                let mut lock = stderr.lock();
+                let _ = writeln!(lock, "{message}");
+                let _ = lock.flush();
+            }
+            PublicPromptEnvelope::Event {
+                event_kind, data, ..
+            } => {
+                if event_kind == "stderr" {
+                    let stderr = io::stderr();
+                    let mut lock = stderr.lock();
+                    let _ = lock.write_all(prompt_event_text(data).as_bytes());
+                    let _ = lock.flush();
+                } else if let Ok(event) = serde_json::from_value::<AgentEvent>(data.clone()) {
+                    let stdout = io::stdout();
+                    let mut lock = stdout.lock();
+                    let _ = writeln!(lock, "{}", format_event_line(&event));
+                    let _ = lock.flush();
+                } else {
+                    let stdout = io::stdout();
+                    let mut lock = stdout.lock();
+                    let _ = lock.write_all(prompt_event_text(data).as_bytes());
+                    let _ = lock.flush();
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn prompt_event_text(data: &serde_json::Value) -> String {
+    data.get("text")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_string()
 }
 
 #[cfg(test)]

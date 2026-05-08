@@ -28,3 +28,5 @@ docs/project_management/packs/**/logs/
 .DS_Store
 **/.DS_Store
 .gitnexus
+.orchestrator-*
+.substrate

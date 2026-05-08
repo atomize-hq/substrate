@@ -11,16 +11,8 @@ use std::time::Duration;
 #[cfg(target_os = "linux")]
 use agent_api_client::AgentClient;
 #[cfg(target_os = "linux")]
-use agent_api_types::{
-    ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1,
-    MemberTurnSubmitRequestV1,
-};
+use agent_api_types::{ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1};
 use anyhow::{anyhow, Context, Result};
-#[cfg(target_os = "linux")]
-use base64::engine::general_purpose::STANDARD as BASE64;
-#[cfg(target_os = "linux")]
-use base64::Engine;
-use chrono::Utc;
 use futures::{pin_mut, FutureExt, StreamExt};
 use reedline::{ExternalPrinter, Prompt, Reedline, Signal};
 use tokio::runtime::Builder as TokioRuntimeBuilder;
@@ -34,15 +26,20 @@ use crate::execution::agent_events::{
     ShellCommandEventContext, ShellEventEmissionContext,
 };
 use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInventoryEntryV1};
-#[cfg(target_os = "linux")]
-use crate::execution::agent_runtime::control::spawn_remote_private_stop_owner;
 use crate::execution::agent_runtime::control::{
     build_session_resume_extension, invalidate_stale_world_members_after_binding,
     mark_orchestration_session_failed, mark_runtime_startup_failed, persist_runtime_snapshots,
-    persist_world_binding_authority, private_stop_request_channel, register_private_stop_transport,
-    runtime_controls_parent_session, runtime_stop_transport_ids, spawn_local_private_stop_owner,
-    HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding, PrivateStopTransport,
-    ResolvedRuntimeDescriptor, AGENT_API_SESSION_RESUME_V1,
+    persist_world_binding_authority, private_prompt_request_channel, private_stop_request_channel,
+    prompt_runtime_from_parts, register_private_prompt_transport, register_private_stop_transport,
+    runtime_controls_parent_session, runtime_stop_transport_ids, spawn_local_private_prompt_owner,
+    spawn_local_private_stop_owner, submit_host_prompt_turn, submit_world_prompt_turn,
+    HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding, PrivatePromptTransport,
+    PrivateStopTransport, ResolvedRuntimeDescriptor, SubmittedPromptStreamEvent,
+    AGENT_API_SESSION_RESUME_V1,
+};
+#[cfg(target_os = "linux")]
+use crate::execution::agent_runtime::control::{
+    spawn_remote_private_prompt_owner, spawn_remote_private_stop_owner,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
@@ -70,8 +67,7 @@ use crate::execution::ReplSessionTelemetry;
 use crate::execution::WorldRootSettings;
 #[cfg(target_os = "linux")]
 use crate::execution::{
-    build_agent_client_and_member_dispatch_request, build_agent_client_and_pending_diff_request,
-    MemberDispatchTransportRequest,
+    build_agent_client_and_member_dispatch_request, MemberDispatchTransportRequest,
 };
 use crate::execution::{
     canonicalize_or, enforce_caged_destination, execute_command, find_workspace_root,
@@ -1732,6 +1728,8 @@ struct AsyncReplAgentRuntime {
     shutdown_requested: Arc<AtomicBool>,
     stop_transport: Option<PrivateStopTransport>,
     stop_owner_task: Option<tokio::task::JoinHandle<()>>,
+    prompt_transport: Option<PrivatePromptTransport>,
+    prompt_owner_task: Option<tokio::task::JoinHandle<()>>,
     heartbeat_stop_tx: Option<tokio::sync::oneshot::Sender<()>>,
     heartbeat_task: Option<tokio::task::JoinHandle<()>>,
 }
@@ -3037,6 +3035,47 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         retained_control.cancel.clone(),
         stop_rx,
     );
+    let (prompt_tx, prompt_rx) = private_prompt_request_channel();
+    let prompt_transport = match register_private_prompt_transport(
+        &startup_context.store,
+        &stop_orchestration_session_id,
+        &stop_participant_id,
+        prompt_tx,
+    )
+    .await
+    {
+        Ok(prompt_transport) => prompt_transport,
+        Err(err) => {
+            abort_bootstrap_runtime(
+                &shutdown_requested,
+                &mut retained_control,
+                &mut heartbeat_stop_tx,
+                &mut heartbeat_task,
+            )
+            .await;
+            let message = format!("failed to register private prompt transport: {err:#}");
+            mark_runtime_startup_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                &manifest,
+                &message,
+            );
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message,
+            });
+        }
+    };
+    let prompt_owner_task = spawn_local_private_prompt_owner(
+        prompt_runtime_from_parts(
+            descriptor.clone(),
+            Arc::clone(&startup_context.orchestration_session),
+            Arc::clone(&manifest),
+            startup_context.store.clone(),
+            uaa_session_handle_id.clone(),
+        ),
+        prompt_rx,
+    );
 
     Ok(Some(AsyncReplAgentRuntime {
         descriptor,
@@ -3048,6 +3087,8 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         shutdown_requested,
         stop_transport: Some(stop_transport),
         stop_owner_task: Some(stop_owner_task),
+        prompt_transport: Some(prompt_transport),
+        prompt_owner_task: Some(prompt_owner_task),
         heartbeat_stop_tx,
         heartbeat_task,
     }))
@@ -3069,6 +3110,18 @@ fn runtime_backend_id(runtime: &AsyncReplAgentRuntime) -> String {
         .handle
         .backend_id
         .clone()
+}
+
+fn runtime_prompt_submit_runtime(
+    runtime: &AsyncReplAgentRuntime,
+) -> crate::execution::agent_runtime::control::PromptSubmitRuntime {
+    prompt_runtime_from_parts(
+        runtime.descriptor.clone(),
+        Arc::clone(&runtime.orchestration_session),
+        Arc::clone(&runtime.manifest),
+        runtime.store.clone(),
+        runtime.uaa_session_handle_id.clone(),
+    )
 }
 
 #[cfg(any(test, target_os = "linux"))]
@@ -4117,6 +4170,47 @@ async fn start_remote_member_runtime_with_prepared(
         resolved_span_id.clone(),
         stop_rx,
     );
+    let (prompt_tx, prompt_rx) = private_prompt_request_channel();
+    let prompt_transport = match register_private_prompt_transport(
+        &startup_context.store,
+        &stop_orchestration_session_id,
+        &stop_participant_id,
+        prompt_tx,
+    )
+    .await
+    {
+        Ok(prompt_transport) => prompt_transport,
+        Err(err) => {
+            abort_remote_member_bootstrap_runtime(
+                &shutdown_requested,
+                &client,
+                &span_id,
+                &mut observe_task,
+            )
+            .await;
+            let message = format!("failed to register private prompt transport: {err:#}");
+            mark_runtime_startup_failed(
+                &startup_context.store,
+                &startup_context.orchestration_session,
+                &manifest,
+                &message,
+            );
+            return Err(RuntimeBootstrapFailure {
+                exit_code: 1,
+                message,
+            });
+        }
+    };
+    let prompt_owner_task = spawn_remote_private_prompt_owner(
+        prompt_runtime_from_parts(
+            descriptor.clone(),
+            Arc::clone(&startup_context.orchestration_session),
+            Arc::clone(&manifest),
+            startup_context.store.clone(),
+            uaa_session_handle_id.clone(),
+        ),
+        prompt_rx,
+    );
 
     Ok(Some(AsyncReplAgentRuntime {
         descriptor,
@@ -4132,6 +4226,8 @@ async fn start_remote_member_runtime_with_prepared(
         shutdown_requested,
         stop_transport: Some(stop_transport),
         stop_owner_task: Some(stop_owner_task),
+        prompt_transport: Some(prompt_transport),
+        prompt_owner_task: Some(prompt_owner_task),
         heartbeat_stop_tx: None,
         heartbeat_task: None,
     }))
@@ -4454,11 +4550,6 @@ async fn submit_host_targeted_turn(
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
-    let gateway = build_gateway_for_descriptor(&runtime.descriptor)
-        .context("build host targeted-turn gateway")?;
-    let agent_kind =
-        agent_api::AgentWrapperKind::new(runtime.descriptor.backend_kind.as_agent_kind_str())
-            .map_err(|err| anyhow!("substrate: error: {err}"))?;
     let run_id = Uuid::now_v7().to_string();
     note_submitted_turn_started(
         runtime,
@@ -4471,74 +4562,27 @@ async fn submit_host_targeted_turn(
         telemetry,
         agent_printer,
     )?;
-
-    let request = agent_api::AgentWrapperRunRequest {
-        prompt: prompt.to_string(),
-        working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
-        timeout: None,
-        env: BTreeMap::new(),
-        extensions: BTreeMap::from([(
-            AGENT_API_SESSION_RESUME_V1.to_string(),
-            build_session_resume_extension(&runtime.uaa_session_handle_id),
-        )]),
-    };
-    let control = gateway
-        .run_control(&agent_kind, request)
-        .await
-        .map_err(|err| anyhow!("substrate: error: {}", err))?;
-    let agent_api::AgentWrapperRunControl { handle, cancel: _ } = control;
-    let agent_api::AgentWrapperRunHandle {
-        mut events,
-        completion,
-    } = handle;
-
-    while let Some(wrapper_event) = events.next().await {
-        let (orchestration_snapshot, manifest_snapshot, event) = {
-            let mut orchestration_guard = runtime
-                .orchestration_session
-                .lock()
-                .expect("orchestration session mutex poisoned");
-            let mut manifest_guard = runtime
-                .manifest
-                .lock()
-                .expect("runtime manifest mutex poisoned");
-            if let Some(session_id) = extract_session_handle_id(wrapper_event.data.as_ref()) {
-                if manifest_guard.internal.uaa_session_id.as_deref() != Some(session_id) {
-                    manifest_guard.set_uaa_session_id(session_id.to_string());
-                }
+    let completion = submit_host_prompt_turn(
+        &runtime_prompt_submit_runtime(runtime),
+        &run_id,
+        prompt,
+        |event| match event {
+            SubmittedPromptStreamEvent::Agent(event) => {
+                emit_runtime_event(*event, telemetry, agent_printer);
             }
-            manifest_guard.touch_event(Utc::now());
-            orchestration_guard.touch_active();
-            let event = translate_wrapper_event(
-                &manifest_guard,
-                &orchestration_guard,
-                &run_id,
-                wrapper_event,
-            );
-            (orchestration_guard.clone(), manifest_guard.clone(), event)
-        };
-        persist_runtime_snapshots(&runtime.store, &orchestration_snapshot, &manifest_snapshot)?;
-        emit_runtime_event(event, telemetry, agent_printer);
+            SubmittedPromptStreamEvent::Stdout(text) | SubmittedPromptStreamEvent::Stderr(text) => {
+                agent_printer.print(text);
+            }
+        },
+    )
+    .await?;
+    if let Some(message) = completion.warning.as_deref() {
+        write_best_effort_stderr_line(message);
     }
-
-    let completion = completion
-        .await
-        .map_err(|err| anyhow!("substrate: error: {}", err))?;
-    if let Some(session_id) = extract_session_handle_id(completion.data.as_ref()) {
-        let mut manifest_guard = runtime
-            .manifest
-            .lock()
-            .expect("runtime manifest mutex poisoned");
-        if manifest_guard.internal.uaa_session_id.as_deref() != Some(session_id) {
-            manifest_guard.set_uaa_session_id(session_id.to_string());
-        }
-    }
-    let exit_code = completion.status.code().unwrap_or(-1);
-    report_nonzero_status(&completion.status);
     note_submitted_turn_completed(
         runtime,
         &run_id,
-        if completion.status.success() {
+        if completion.exit_code == 0 {
             format!(
                 "targeted follow-up turn completed for {}",
                 runtime.descriptor.backend_id
@@ -4546,7 +4590,7 @@ async fn submit_host_targeted_turn(
         } else {
             format!(
                 "targeted follow-up turn exited with status {} for {}",
-                exit_code, runtime.descriptor.backend_id
+                completion.exit_code, runtime.descriptor.backend_id
             )
         },
         telemetry,
@@ -4562,8 +4606,6 @@ async fn submit_world_targeted_turn(
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
-    use http_body_util::BodyExt as _;
-
     let run_id = Uuid::now_v7().to_string();
     note_submitted_turn_started(
         runtime,
@@ -4576,94 +4618,27 @@ async fn submit_world_targeted_turn(
         telemetry,
         agent_printer,
     )?;
-
-    let request = {
-        let manifest_guard = runtime
-            .manifest
-            .lock()
-            .expect("runtime manifest mutex poisoned");
-        MemberTurnSubmitRequestV1 {
-            schema_version: 1,
-            orchestration_session_id: manifest_guard.handle.orchestration_session_id.clone(),
-            participant_id: manifest_guard.handle.participant_id.clone(),
-            orchestrator_participant_id: manifest_guard
-                .handle
-                .orchestrator_participant_id
-                .clone()
-                .ok_or_else(|| {
-                    anyhow!(
-                        "substrate: error: retained world-scoped member is missing orchestrator_participant_id"
-                    )
-                })?,
-            backend_id: runtime.descriptor.backend_id.clone(),
-            run_id: run_id.clone(),
-            world_id: manifest_guard.handle.world_id.clone().ok_or_else(|| {
-                anyhow!("substrate: error: retained world-scoped member is missing world_id")
-            })?,
-            world_generation: manifest_guard.handle.world_generation.ok_or_else(|| {
-                anyhow!(
-                    "substrate: error: retained world-scoped member is missing world_generation"
-                )
-            })?,
-            prompt: prompt.to_string(),
-        }
-    };
-
-    let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;
-    let response = client
-        .submit_member_turn_stream(request)
-        .await
-        .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
-
-    let mut body = std::pin::pin!(response.into_body());
-    let mut buffer = Vec::new();
-    let mut observed_exit: Option<i32> = None;
-    while let Some(frame) = body.as_mut().frame().await {
-        let frame = frame.map_err(|err| anyhow!("substrate: error: {err:#}"))?;
-        let Some(data) = frame.data_ref() else {
-            continue;
-        };
-        buffer.extend_from_slice(data);
-
-        while let Some(pos) = buffer.iter().position(|&byte| byte == b'\n') {
-            let line: Vec<u8> = buffer.drain(..=pos).collect();
-            if line.len() <= 1 {
-                continue;
+    let completion = submit_world_prompt_turn(
+        &runtime_prompt_submit_runtime(runtime),
+        &run_id,
+        prompt,
+        |event| match event {
+            SubmittedPromptStreamEvent::Agent(event) => {
+                handle_agent_event(*event, telemetry, agent_printer);
             }
-            let payload = &line[..line.len() - 1];
-            if payload.is_empty() {
-                continue;
+            SubmittedPromptStreamEvent::Stdout(text) | SubmittedPromptStreamEvent::Stderr(text) => {
+                agent_printer.print(text);
             }
-            let frame = serde_json::from_slice::<ExecuteStreamFrame>(payload)
-                .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
-            match frame {
-                ExecuteStreamFrame::Start { .. } => {}
-                ExecuteStreamFrame::Event { event } => {
-                    handle_agent_event(event, telemetry, agent_printer);
-                }
-                ExecuteStreamFrame::Stdout { chunk_b64 }
-                | ExecuteStreamFrame::Stderr { chunk_b64 } => {
-                    let decoded = BASE64
-                        .decode(chunk_b64.as_bytes())
-                        .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
-                    agent_printer.print(String::from_utf8_lossy(&decoded).to_string());
-                }
-                ExecuteStreamFrame::Exit { exit, .. } => {
-                    observed_exit = Some(exit);
-                }
-                ExecuteStreamFrame::Error { message } => {
-                    return Err(anyhow!("substrate: error: {message}"));
-                }
-            }
-        }
+        },
+    )
+    .await?;
+    if let Some(message) = completion.warning.as_deref() {
+        write_best_effort_stderr_line(message);
     }
-
-    let exit_code = observed_exit.unwrap_or(0);
-    report_nonzero_status(&exit_status_from_code(exit_code));
     note_submitted_turn_completed(
         runtime,
         &run_id,
-        if exit_code == 0 {
+        if completion.exit_code == 0 {
             format!(
                 "targeted follow-up turn completed for {}",
                 runtime.descriptor.backend_id
@@ -4671,7 +4646,7 @@ async fn submit_world_targeted_turn(
         } else {
             format!(
                 "targeted follow-up turn exited with status {} for {}",
-                exit_code, runtime.descriptor.backend_id
+                completion.exit_code, runtime.descriptor.backend_id
             )
         },
         telemetry,
@@ -4752,6 +4727,12 @@ async fn shutdown_host_orchestrator_runtime(
         stop_transport.close().await;
     }
     if let Some(task) = runtime.stop_owner_task.take() {
+        let _ = task.await;
+    }
+    if let Some(mut prompt_transport) = runtime.prompt_transport.take() {
+        prompt_transport.close().await;
+    }
+    if let Some(task) = runtime.prompt_owner_task.take() {
         let _ = task.await;
     }
     runtime.shutdown_requested.store(true, Ordering::SeqCst);

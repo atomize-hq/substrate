@@ -137,21 +137,14 @@ impl ResolvedPublicControlTarget {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PublicTurnTargetKind {
     Host,
     World,
 }
 
-impl PublicTurnTargetKind {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Host => "host",
-            Self::World => "world",
-        }
-    }
-}
-
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedPublicTurnTarget {
     pub session: OrchestrationSessionRecord,
@@ -711,12 +704,81 @@ impl AgentRuntimeStateStore {
         })
     }
 
+    // Public turn routing stays exact:
+    // (orchestration_session_id, backend_id) selects one authoritative retained slot,
+    // or it fails closed without falling back to fuzzy inventory guesses.
+    #[allow(dead_code)]
     pub(crate) fn resolve_public_turn_target(
         &self,
-        _orchestration_session_id: &str,
-        _backend_id: &str,
+        orchestration_session_id: &str,
+        backend_id: &str,
     ) -> Result<ResolvedPublicTurnTarget> {
-        anyhow::bail!("PLAN-20 public turn target resolution not implemented")
+        if backend_id.trim().is_empty() {
+            anyhow::bail!("missing_backend: public turn actions require --backend <backend_id>");
+        }
+
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            return Err(self.public_turn_session_selector_error(orchestration_session_id));
+        };
+
+        if !record.has_authoritative_parent() {
+            anyhow::bail!(
+                "missing_active_parent: orchestration session {} is missing authoritative parent metadata",
+                orchestration_session_id
+            );
+        }
+        if record.session.state != OrchestrationSessionState::Active {
+            anyhow::bail!(
+                "missing_active_parent: orchestration session {} is not active",
+                orchestration_session_id
+            );
+        }
+
+        let slot_present = public_turn_session_mentions_backend(&record, backend_id);
+        let mut candidates = public_turn_authoritative_candidates(&record, backend_id);
+        if candidates.is_empty() {
+            if slot_present {
+                anyhow::bail!(
+                    "stale_linkage: orchestration session {} backend {} no longer has an authoritative retained turn target",
+                    orchestration_session_id,
+                    backend_id
+                );
+            }
+            anyhow::bail!(
+                "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
+                orchestration_session_id,
+                backend_id
+            );
+        }
+        if candidates.len() > 1 {
+            let participant_ids = candidates
+                .iter()
+                .map(|candidate| candidate.participant.handle.participant_id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            anyhow::bail!(
+                "ambiguous_backend_slot: orchestration session {} has multiple authoritative retained turn targets for backend {} ({participant_ids})",
+                orchestration_session_id,
+                backend_id
+            );
+        }
+
+        let candidate = candidates.pop().expect("candidate count checked above");
+        if candidate.kind == PublicTurnTargetKind::World && !cfg!(target_os = "linux") {
+            anyhow::bail!(
+                "unsupported_platform_or_posture: orchestration session {} backend {} requires Linux world-sensitive follow-up posture",
+                orchestration_session_id,
+                backend_id
+            );
+        }
+
+        let session_posture = classify_public_session_posture(&candidate.participant);
+        Ok(ResolvedPublicTurnTarget {
+            session: record.session,
+            participant: candidate.participant,
+            target_kind: candidate.kind,
+            session_posture,
+        })
     }
 
     pub(crate) fn hidden_owner_helper_launch_ready(
@@ -1063,6 +1125,66 @@ impl AgentRuntimeStateStore {
         {
             return anyhow::anyhow!(
                 "unknown_session: selector '{}' matched internal.uaa_session_id; public control actions accept only orchestration_session_id",
+                selector
+            );
+        }
+
+        anyhow::anyhow!(
+            "unknown_session: no orchestration session found for '{}'",
+            selector
+        )
+    }
+
+    #[allow(dead_code)]
+    fn public_turn_session_selector_error(&self, selector: &str) -> anyhow::Error {
+        if selector.trim().is_empty() {
+            return anyhow::anyhow!(
+                "unknown_session: public turn actions require --session <orchestration_session_id>"
+            );
+        }
+
+        if self
+            .list_orchestration_sessions()
+            .map(|sessions| {
+                sessions
+                    .into_iter()
+                    .any(|session| session.active_participant_id() == Some(selector))
+            })
+            .unwrap_or(false)
+        {
+            return anyhow::anyhow!(
+                "noncanonical_session_selector: selector '{}' matched active_session_handle_id; public turn actions accept only orchestration_session_id",
+                selector
+            );
+        }
+
+        if self
+            .list_participants_across_sources()
+            .map(|participants| {
+                participants.into_iter().any(|participant| {
+                    participant.participant_id() == selector
+                        || participant.handle.session_handle_id == selector
+                })
+            })
+            .unwrap_or(false)
+        {
+            return anyhow::anyhow!(
+                "noncanonical_session_selector: selector '{}' matched participant_id/session_handle_id; public turn actions accept only orchestration_session_id",
+                selector
+            );
+        }
+
+        if self
+            .list_participants_across_sources()
+            .map(|participants| {
+                participants
+                    .into_iter()
+                    .any(|participant| participant.internal_uaa_session_id() == Some(selector))
+            })
+            .unwrap_or(false)
+        {
+            return anyhow::anyhow!(
+                "noncanonical_session_selector: selector '{}' matched internal.uaa_session_id; public turn actions accept only orchestration_session_id",
                 selector
             );
         }
@@ -1498,6 +1620,92 @@ fn session_requires_linux_first_public_control_posture(record: &AgentRuntimeSess
                 && participant.handle.execution.scope == AgentExecutionScope::World
                 && participant.handle.state.is_live()
         })
+}
+
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+struct PublicTurnTargetCandidate {
+    participant: AgentRuntimeParticipantRecord,
+    kind: PublicTurnTargetKind,
+}
+
+#[allow(dead_code)]
+fn public_turn_session_mentions_backend(
+    record: &AgentRuntimeSessionRecord,
+    backend_id: &str,
+) -> bool {
+    record.session.orchestrator_backend_id == backend_id
+        || record
+            .participants
+            .iter()
+            .any(|participant| participant.handle.backend_id == backend_id)
+}
+
+#[allow(dead_code)]
+fn public_turn_authoritative_candidates(
+    record: &AgentRuntimeSessionRecord,
+    backend_id: &str,
+) -> Vec<PublicTurnTargetCandidate> {
+    let mut candidates = Vec::new();
+
+    if let Some(active_participant_id) = record.session.active_participant_id() {
+        if let Some(participant) = record
+            .participants
+            .iter()
+            .find(|participant| participant.participant_id() == active_participant_id)
+            .filter(|participant| {
+                participant.handle.backend_id == backend_id
+                    && participant.matches_public_parent_linkage(&record.session)
+            })
+        {
+            candidates.push(PublicTurnTargetCandidate {
+                participant: participant.clone(),
+                kind: PublicTurnTargetKind::Host,
+            });
+        }
+    }
+
+    let Some(world_id) = record.session.world_id.as_deref() else {
+        return candidates;
+    };
+    let Some(world_generation) = record.session.world_generation else {
+        return candidates;
+    };
+
+    candidates.extend(
+        record
+            .participants
+            .iter()
+            .filter(|participant| {
+                participant.handle.backend_id == backend_id
+                    && participant.handle.orchestration_session_id
+                        == record.session.orchestration_session_id
+                    && participant.handle.role == MEMBER_ROLE
+                    && participant.handle.execution.scope == AgentExecutionScope::World
+                    && participant.handle.world_id.as_deref() == Some(world_id)
+                    && participant.handle.world_generation == Some(world_generation)
+            })
+            .cloned()
+            .map(|participant| PublicTurnTargetCandidate {
+                participant,
+                kind: PublicTurnTargetKind::World,
+            }),
+    );
+
+    candidates
+}
+
+#[allow(dead_code)]
+fn classify_public_session_posture(
+    participant: &AgentRuntimeParticipantRecord,
+) -> PublicSessionPosture {
+    if participant.is_authoritative_live() && owner_process_is_alive(participant) {
+        return PublicSessionPosture::Active;
+    }
+    if participant.handle.state.is_live() && participant.internal_uaa_session_id().is_some() {
+        return PublicSessionPosture::DetachedReattachable;
+    }
+    PublicSessionPosture::Terminal
 }
 
 #[cfg(test)]

@@ -157,6 +157,15 @@ impl AgentControlFixture {
             participant_id,
         ))
     }
+
+    fn reset_fake_codex_state(&self) {
+        let state_path = self
+            .fake_codex
+            .parent()
+            .expect("fake codex parent")
+            .join("fake-codex.count");
+        let _ = fs::remove_file(state_path);
+    }
 }
 
 fn cli_agent_file(agent_id: &str, scope: &str, binary: &Path) -> String {
@@ -168,7 +177,11 @@ fn cli_agent_file(agent_id: &str, scope: &str, binary: &Path) -> String {
 
 fn write_fake_codex_script(dir: &Path) -> PathBuf {
     let path = dir.join("fake-codex.sh");
-    let body = "#!/bin/sh\ntrap 'exit 0' INT TERM\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}\\r\\n'\nwhile :; do sleep 1; done\n";
+    let count_path = dir.join("fake-codex.count");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nprintf 'follow-up invocation %s\\n' \"$count\"\n",
+        count_path.display()
+    );
     fs::write(&path, body).expect("write fake codex script");
     let mut perms = fs::metadata(&path)
         .expect("fake codex metadata")
@@ -180,6 +193,21 @@ fn write_fake_codex_script(dir: &Path) -> PathBuf {
 
 fn parse_json_output(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON")
+}
+
+fn parse_ndjson_output(output: &Output) -> Vec<Value> {
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("stdout should be valid NDJSON"))
+        .collect()
+}
+
+fn find_ndjson_record<'a>(records: &'a [Value], kind: &str) -> &'a Value {
+    records
+        .iter()
+        .find(|record| record.get("kind").and_then(Value::as_str) == Some(kind))
+        .unwrap_or_else(|| panic!("missing NDJSON record kind={kind}: {records:?}"))
 }
 
 fn stderr_text(output: &Output) -> String {
@@ -633,17 +661,35 @@ impl PtyRepl {
 
 #[test]
 #[serial]
-fn public_start_and_stop_emit_stable_json_and_authoritative_state() {
+fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory(false);
 
-    let start_output = fixture.run(&["agent", "start", "--backend", "cli:codex", "--json"]);
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from start",
+        "--json",
+    ]);
     assert!(
         start_output.status.success(),
         "public start should succeed: {start_output:?}"
     );
-    let start_json = parse_json_output(&start_output);
+    let start_records = parse_ndjson_output(&start_output);
+    let start_accepted = find_ndjson_record(&start_records, "accepted");
+    assert_eq!(
+        start_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "public start must stream acceptance before terminal completion: {start_records:?}"
+    );
+    let start_json = find_ndjson_record(&start_records, "completed");
     assert_eq!(
         start_json.get("action").and_then(Value::as_str),
         Some("start")
@@ -653,8 +699,16 @@ fn public_start_and_stop_emit_stable_json_and_authoritative_state() {
         Some("cli:codex")
     );
     assert_eq!(
-        start_json.get("scope").and_then(Value::as_str),
+        start_accepted.get("scope").and_then(Value::as_str),
         Some("host")
+    );
+    assert_eq!(
+        start_json.get("turn_outcome").and_then(Value::as_str),
+        Some("success")
+    );
+    assert_eq!(
+        start_json.get("session_posture").and_then(Value::as_str),
+        Some("active")
     );
     assert_eq!(
         start_json.get("state").and_then(Value::as_str),
@@ -664,7 +718,7 @@ fn public_start_and_stop_emit_stable_json_and_authoritative_state() {
         start_json.get("source_orchestration_session_id").is_none(),
         "start must not surface source_orchestration_session_id: {start_json}"
     );
-    assert_empty_warnings(&start_json);
+    assert_empty_warnings(start_json);
 
     let orchestration_session_id = start_json["orchestration_session_id"]
         .as_str()
@@ -696,6 +750,64 @@ fn public_start_and_stop_emit_stable_json_and_authoritative_state() {
         ),
         "public start must materialize a per-session private stop transport"
     );
+
+    let turn_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        &orchestration_session_id,
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from turn",
+        "--json",
+    ]);
+    assert!(
+        turn_output.status.success(),
+        "public turn should succeed: {turn_output:?}"
+    );
+    let turn_records = parse_ndjson_output(&turn_output);
+    let turn_accepted = find_ndjson_record(&turn_records, "accepted");
+    assert_eq!(
+        turn_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "public turn must stream acceptance before terminal completion: {turn_records:?}"
+    );
+    let turn_json = find_ndjson_record(&turn_records, "completed");
+    assert_eq!(
+        turn_json.get("action").and_then(Value::as_str),
+        Some("turn")
+    );
+    assert_eq!(
+        turn_json
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id.as_str())
+    );
+    assert_eq!(
+        turn_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        turn_accepted.get("scope").and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        turn_json.get("turn_outcome").and_then(Value::as_str),
+        Some("success")
+    );
+    assert_eq!(
+        turn_json.get("session_posture").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_eq!(
+        turn_json.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_empty_warnings(turn_json);
 
     let stop_output = fixture.run(&[
         "agent",
@@ -746,7 +858,7 @@ fn public_start_and_stop_emit_stable_json_and_authoritative_state() {
 
 #[test]
 #[serial]
-fn public_resume_and_fork_preserve_exact_session_and_lineage_contracts() {
+fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory(false);
@@ -765,21 +877,21 @@ fn public_resume_and_fork_preserve_exact_session_and_lineage_contracts() {
         ts,
     );
 
-    let resume_output = fixture.run(&[
+    let reattach_output = fixture.run(&[
         "agent",
-        "resume",
+        "reattach",
         "--session",
         "sess_resume_source",
         "--json",
     ]);
     assert!(
-        resume_output.status.success(),
-        "public resume should succeed for an orphaned authoritative session: {resume_output:?}"
+        reattach_output.status.success(),
+        "public reattach should succeed for an orphaned authoritative session: {reattach_output:?}"
     );
-    let resume_json = parse_json_output(&resume_output);
+    let resume_json = parse_json_output(&reattach_output);
     assert_eq!(
         resume_json.get("action").and_then(Value::as_str),
-        Some("resume")
+        Some("reattach")
     );
     assert_eq!(
         resume_json
@@ -801,7 +913,7 @@ fn public_resume_and_fork_preserve_exact_session_and_lineage_contracts() {
     );
     assert!(
         resume_json.get("source_orchestration_session_id").is_none(),
-        "resume must stay inside the source orchestration session: {resume_json}"
+        "reattach must stay inside the source orchestration session: {resume_json}"
     );
     assert_empty_warnings(&resume_json);
 
@@ -811,7 +923,7 @@ fn public_resume_and_fork_preserve_exact_session_and_lineage_contracts() {
         .to_string();
     assert_ne!(
         resumed_participant_id, "ash_source",
-        "resume must allocate a successor participant"
+        "reattach must allocate a successor participant"
     );
     let resumed_participant =
         fixture.load_participant("sess_resume_source", &resumed_participant_id);
@@ -820,7 +932,7 @@ fn public_resume_and_fork_preserve_exact_session_and_lineage_contracts() {
             .get("resumed_from_participant_id")
             .and_then(Value::as_str),
         Some("ash_source"),
-        "resume successor persistence must retain resumed_from_participant_id lineage"
+        "reattach successor persistence must retain resumed_from_participant_id lineage"
     );
     let resumed_owner_pid = fixture.load_orchestration_session("sess_resume_source")
         ["shell_owner_pid"]
@@ -828,9 +940,10 @@ fn public_resume_and_fork_preserve_exact_session_and_lineage_contracts() {
         .expect("resume owner pid") as u32;
     assert!(
         pid_is_alive(resumed_owner_pid),
-        "resume must leave a live owner loop"
+        "reattach must leave a live owner loop"
     );
 
+    fixture.reset_fake_codex_state();
     let fork_output = fixture.run(&["agent", "fork", "--session", "sess_resume_source", "--json"]);
     assert!(
         fork_output.status.success(),
@@ -922,7 +1035,8 @@ fn public_control_rejects_non_orchestration_session_selectors() {
         ts,
     );
 
-    let active_handle_output = fixture.run(&["agent", "resume", "--session", "ash_live", "--json"]);
+    let active_handle_output =
+        fixture.run(&["agent", "reattach", "--session", "ash_live", "--json"]);
     assert_eq!(
         active_handle_output.status.code(),
         Some(2),
@@ -934,7 +1048,7 @@ fn public_control_rejects_non_orchestration_session_selectors() {
     );
 
     let participant_output =
-        fixture.run(&["agent", "resume", "--session", "ash_previous", "--json"]);
+        fixture.run(&["agent", "reattach", "--session", "ash_previous", "--json"]);
     assert_eq!(
         participant_output.status.code(),
         Some(2),
@@ -945,7 +1059,7 @@ fn public_control_rejects_non_orchestration_session_selectors() {
         "public control must explain participant/session-handle rejection: {participant_output:?}"
     );
 
-    let internal_output = fixture.run(&["agent", "resume", "--session", "uaa-live-1", "--json"]);
+    let internal_output = fixture.run(&["agent", "reattach", "--session", "uaa-live-1", "--json"]);
     assert_eq!(
         internal_output.status.code(),
         Some(2),
@@ -954,6 +1068,27 @@ fn public_control_rejects_non_orchestration_session_selectors() {
     assert!(
         stderr_text(&internal_output).contains("matched internal.uaa_session_id"),
         "public control must explain internal.uaa_session_id rejection: {internal_output:?}"
+    );
+
+    let turn_selector_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "ash_live",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        turn_selector_output.status.code(),
+        Some(2),
+        "public turn must reject non-canonical active handle selectors: {turn_selector_output:?}"
+    );
+    assert!(
+        stderr_text(&turn_selector_output).contains("matched active_session_handle_id"),
+        "public turn must explain active_session_handle_id rejection: {turn_selector_output:?}"
     );
 }
 
@@ -964,7 +1099,15 @@ fn public_root_start_rejects_world_scoped_backends_in_v1() {
     fixture.init_workspace();
     fixture.write_runtime_inventory(true);
 
-    let output = fixture.run(&["agent", "start", "--backend", "cli:claude_code", "--json"]);
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "hello",
+        "--json",
+    ]);
     assert_eq!(
         output.status.code(),
         Some(2),
@@ -978,6 +1121,25 @@ fn public_root_start_rejects_world_scoped_backends_in_v1() {
     assert!(
         stderr.contains("public root start is host-only in v1"),
         "world-scoped root start failure must explain the Linux-first host-only contract: {stderr}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_command_mode_remains_shell_wrap_not_agent_prompt() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let output = fixture.run(&["-c", "printf shell-wrap"]);
+    assert!(
+        output.status.success(),
+        "substrate -c must remain ordinary shell wrap mode: {output:?}"
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "shell-wrap");
+    assert!(
+        !stderr_text(&output).contains("missing_prompt_source"),
+        "substrate -c must not be reinterpreted as an agent prompt surface: {output:?}"
     );
 }
 
