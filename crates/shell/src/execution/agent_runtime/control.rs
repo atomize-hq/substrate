@@ -8,9 +8,7 @@ use std::thread;
 use std::time::Duration;
 
 #[cfg(target_os = "linux")]
-use agent_api_client::AgentClient;
-#[cfg(target_os = "linux")]
-use agent_api_types::{ExecuteCancelRequestV1, ExecuteStreamFrame, MemberTurnSubmitRequestV1};
+use agent_api_types::{ExecuteStreamFrame, MemberTurnSubmitRequestV1};
 use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -746,45 +744,6 @@ pub(crate) fn spawn_local_private_stop_owner(
                 let _ = note_runtime_stop_requested(&store, &orchestration_session, &manifest);
                 cancel.cancel();
                 PrivateStopOutcome::Accepted
-            };
-            let _ = request.response_tx.send(outcome);
-        }
-    })
-}
-
-#[cfg(target_os = "linux")]
-pub(crate) fn spawn_remote_private_stop_owner(
-    store: AgentRuntimeStateStore,
-    orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
-    manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
-    shutdown_requested: Arc<AtomicBool>,
-    client: Arc<AgentClient>,
-    span_id: String,
-    mut stop_rx: PrivateStopRequestReceiver,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        while let Some(request) = stop_rx.recv().await {
-            let outcome = if runtime_is_terminal(&manifest) {
-                PrivateStopOutcome::AlreadyTerminal
-            } else {
-                shutdown_requested.store(true, Ordering::SeqCst);
-                match client
-                    .cancel_execute(ExecuteCancelRequestV1 {
-                        span_id: span_id.clone(),
-                        sig: "INT".to_string(),
-                    })
-                    .await
-                {
-                    Ok(_) => {
-                        let _ =
-                            note_runtime_stop_requested(&store, &orchestration_session, &manifest);
-                        PrivateStopOutcome::Accepted
-                    }
-                    Err(_) => {
-                        shutdown_requested.store(false, Ordering::SeqCst);
-                        PrivateStopOutcome::ProtocolError
-                    }
-                }
             };
             let _ = request.response_tx.send(outcome);
         }
