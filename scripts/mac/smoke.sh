@@ -15,11 +15,13 @@ LOG_DIR=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/mac/smoke.sh [--netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
+Usage: scripts/mac/smoke.sh [--orchestration-conformance | --netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
 
 Options:
   --world-disabled-diagnostics
                            Run the world-disabled-diagnostics conformance smoke instead of the generic smoke
+  --orchestration-conformance
+                           Run the macOS/Lima orchestration conformance smoke
   --netfilter-conformance  Run the posture-aware Lima netfilter smoke instead of the generic smoke
   --bedpm-installer-conformance
                            Run the BEDPM Linux installer smoke through the Lima-backed guest path
@@ -36,6 +38,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --world-disabled-diagnostics)
       MODE="world-disabled-diagnostics"
+      shift
+      ;;
+    --orchestration-conformance)
+      MODE="orchestration-conformance"
       shift
       ;;
     --bedpm-installer-conformance)
@@ -644,6 +650,11 @@ run_bedpm_installer_conformance() {
   "${SUBSTRATE_BIN}" -c "${smoke_cmd}"
 }
 
+run_orchestration_conformance() {
+  log "Running macOS/Lima orchestration conformance smoke"
+  "${SCRIPTS_ROOT}/orchestration-smoke.sh"
+}
+
 run_netfilter_conformance() {
   local log_dir="$1"
   local fixture_home="${log_dir}/home"
@@ -676,6 +687,9 @@ ensure_substrate_binary
 
 if [[ "${MODE}" == "world-disabled-diagnostics" ]]; then
   run_world_disabled_diagnostics
+elif [[ "${MODE}" == "orchestration-conformance" ]]; then
+  ensure_host_prereqs
+  run_orchestration_conformance
 elif [[ "${MODE}" == "netfilter-conformance" ]]; then
   ensure_host_prereqs
   if [[ -z "${LOG_DIR}" ]]; then

@@ -4,6 +4,7 @@ set -euo pipefail
 VM_NAME="${LIMA_VM_NAME:-substrate}"
 PROFILE="${LIMA_PROFILE_PATH:-scripts/mac/lima/substrate.yaml}"
 PROJECT_PATH=""
+PROJECT_PATH_EXPLICIT=0
 CHECK_ONLY=0
 BUILD_PROFILE="${LIMA_BUILD_PROFILE:-release}"
 LAYOUT_SENTINEL="/etc/substrate-lima-layout"
@@ -50,6 +51,7 @@ while [[ $# -gt 0 ]]; do
         *)
             if [[ -z "${PROJECT_PATH}" ]]; then
                 PROJECT_PATH="$1"
+                PROJECT_PATH_EXPLICIT=1
             else
                 fatal "Unexpected argument: $1"
             fi
@@ -62,6 +64,30 @@ if [[ -z "${PROJECT_PATH}" ]]; then
     PROJECT_PATH="$(pwd)"
 fi
 PROJECT_PATH="$(cd "${PROJECT_PATH}" && pwd)"
+
+resolve_default_worktree_path() {
+    if [[ "${PROJECT_PATH_EXPLICIT}" -eq 1 ]]; then
+        return
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+        return
+    fi
+
+    local git_dir common_dir primary_worktree
+    git_dir="$(git -C "${PROJECT_PATH}" rev-parse --git-dir 2>/dev/null || true)"
+    common_dir="$(git -C "${PROJECT_PATH}" rev-parse --git-common-dir 2>/dev/null || true)"
+    if [[ -z "${git_dir}" || -z "${common_dir}" || "${git_dir}" == "${common_dir}" ]]; then
+        return
+    fi
+
+    primary_worktree="$(git -C "${PROJECT_PATH}" worktree list --porcelain 2>/dev/null | awk '/^worktree / { print substr($0, 10); exit }')"
+    if [[ -n "${primary_worktree}" && -d "${primary_worktree}" && "${primary_worktree}" != "${PROJECT_PATH}" ]]; then
+        log "Detected linked worktree; defaulting Lima mount path to primary checkout ${primary_worktree}"
+        PROJECT_PATH="${primary_worktree}"
+    fi
+}
+
+resolve_default_worktree_path
 
 require_cmd() {
     local name="$1"
@@ -797,3 +823,4 @@ ensure_vm_ready
 configure_guest
 
 log "Lima world backend '${VM_NAME}' is ready. Verify with: limactl shell ${VM_NAME} sudo systemctl status substrate-world-agent.socket"
+log "Optional orchestration parity proof: scripts/mac/orchestration-smoke.sh"

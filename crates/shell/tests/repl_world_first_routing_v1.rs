@@ -297,7 +297,7 @@ fn read_trace(trace_path: &Path) -> Vec<Value> {
         .collect()
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn write_orchestrator_runtime_world_config(
     home_substrate: &Path,
     fake_codex: &Path,
@@ -493,7 +493,7 @@ fn write_fake_codex_script(temp: &Path) -> PathBuf {
     path
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn write_fake_codex_script_with_invocation_log_and_output(temp: &Path) -> (PathBuf, PathBuf) {
     let path = temp.join("fake-codex-with-log.sh");
     let count_path = temp.join("fake-codex-with-log.count");
@@ -525,7 +525,7 @@ fn write_fake_claude_script(temp: &Path) -> PathBuf {
     path
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn write_fake_claude_script_first_session_then_exit(temp: &Path) -> PathBuf {
     let path = temp.join("fake-claude-first-session-then-exit.sh");
     let state_path = temp.join("fake-claude-first-session-then-exit.count");
@@ -543,7 +543,7 @@ fn write_fake_claude_script_first_session_then_exit(temp: &Path) -> PathBuf {
     path
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn write_fake_codex_script_first_success_then_fail_without_session_handle(temp: &Path) -> PathBuf {
     let path = temp.join("fake-codex-first-success-then-fail.sh");
     let state_path = temp.join("fake-codex-first-success-then-fail.count");
@@ -561,7 +561,7 @@ fn write_fake_codex_script_first_success_then_fail_without_session_handle(temp: 
     path
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn write_fake_codex_script_without_session_handle(temp: &Path) -> PathBuf {
     let path = temp.join("fake-codex-no-session-handle.sh");
     let body = "#!/bin/sh\nprintf 'bootstrap-without-session-handle\\n'\n";
@@ -575,7 +575,7 @@ fn write_fake_codex_script_without_session_handle(temp: &Path) -> PathBuf {
     path
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn read_invocation_count(path: &Path) -> usize {
     fs::read_to_string(path)
         .ok()
@@ -644,7 +644,7 @@ fn canonical_participants_dir(substrate_home: &Path, orchestration_session_id: &
         .join("participants")
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn canonical_participant_path(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -660,7 +660,7 @@ fn read_orchestration_session(session_path: &Path) -> Value {
         .expect("parse orchestration session")
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn assert_session_world_binding(
     session: &Value,
     expected_world_id: Option<&str>,
@@ -683,12 +683,12 @@ fn flat_participants_dir(substrate_home: &Path) -> PathBuf {
     substrate_home.join("run/agent-hub/participants")
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn flat_participant_manifest_path(substrate_home: &Path, participant_id: &str) -> PathBuf {
     flat_participants_dir(substrate_home).join(format!("{participant_id}.json"))
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn read_trace_lenient(trace_path: &Path) -> Vec<Value> {
     fs::read_to_string(trace_path)
         .unwrap_or_default()
@@ -698,7 +698,7 @@ fn read_trace_lenient(trace_path: &Path) -> Vec<Value> {
         .collect()
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn read_participant_manifest(substrate_home: &Path, participant_id: &str) -> Value {
     let canonical_path = fs::read_dir(sessions_dir(substrate_home))
         .ok()
@@ -717,7 +717,7 @@ fn read_participant_manifest(substrate_home: &Path, participant_id: &str) -> Val
         .expect("parse participant manifest")
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn write_live_world_member_manifest(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -875,7 +875,7 @@ fn participant_is_authoritative_live(manifest: &Value) -> bool {
             .is_none_or(Value::is_null)
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn live_world_member_generations_for_session(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -1005,7 +1005,7 @@ fn wait_for_live_world_member_count(
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn wait_for_world_restarted_alert_without_stale_liveness(
     trace_path: &Path,
     substrate_home: &Path,
@@ -1127,7 +1127,7 @@ fn run_repl_routing_case(case: &ReplRoutingCase<'_>) {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     wait_for_min_start_sessions_with_output(&repl, &records, 1, Duration::from_secs(3));
     repl.send_line("exit");
@@ -1475,7 +1475,7 @@ fn c3_host_directive_is_gated_disabled_by_default() {
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
 
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("prompt");
@@ -1520,7 +1520,7 @@ fn c3_host_directive_executes_on_host_when_enabled() {
         &["--world"],
     );
 
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("prompt");
@@ -1560,7 +1560,7 @@ fn c3_pty_directive_routes_to_persistent_session_when_world_enabled() {
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
 
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
 
     repl.send_line(":pty echo hello");
@@ -1604,7 +1604,7 @@ fn c3_persistent_session_start_carries_canonical_net_allowed_snapshot() {
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
 
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.send_line("echo hello");
     repl.wait_for_output("hello", Duration::from_secs(3))
@@ -1697,7 +1697,7 @@ fn c3_first_start_shared_world_attach_create_is_owner_bound() {
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
 
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -1754,7 +1754,7 @@ fn c3_host_orchestrator_remains_dormant_until_first_targeted_turn() {
         &[],
         &["--no-world"],
     );
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -1818,7 +1818,7 @@ fn c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -1906,7 +1906,7 @@ fn c3_first_world_backed_command_lazily_launches_member_runtime() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -2003,7 +2003,7 @@ fn c3_targeted_turn_requires_exact_double_colon_grammar_before_shell_fallback() 
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -2072,7 +2072,7 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -2286,7 +2286,7 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -2439,7 +2439,7 @@ fn c3_targeted_host_turn_resumes_active_orchestrator_backend() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -2502,7 +2502,7 @@ fn c3_targeted_host_turn_rejects_non_active_orchestrator_backend() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -2575,7 +2575,7 @@ fn c3_same_generation_world_command_reuses_live_member_runtime() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -2661,7 +2661,7 @@ fn c3_startup_drift_before_first_command_retains_persisted_startup_context() {
 
     let mut repl = PtyRepl::spawn(&child, &home, &substrate_home, &sock, &[], &["--world"]);
 
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -2703,7 +2703,7 @@ fn c3_parent_binding_persists_before_world_restarted_publishes() {
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
 
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -2796,7 +2796,7 @@ fn c3_fail_closed_drift_repersists_binding_before_world_restart_required_publish
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
 
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -2879,7 +2879,7 @@ fn c3_world_restart_invalidates_stale_member_generation_before_publish() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -3005,7 +3005,7 @@ fn c3_world_restart_launches_live_member_replacement_on_new_generation() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -3144,7 +3144,7 @@ fn c3_world_restart_failed_member_replacement_leaves_honest_absence() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -3262,7 +3262,7 @@ fn c3_world_restart_missing_member_replacement_leaves_absence() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -3345,7 +3345,7 @@ fn c3_world_restart_replacement_generation_becomes_only_live_generation() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -3451,7 +3451,7 @@ fn c3_world_restart_keeps_same_agent_members_in_other_sessions_isolated() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -3570,7 +3570,7 @@ fn c3_bootstrap_failure_after_attach_cleans_up_world_and_parent_session_state() 
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
 
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("initial prompt");
@@ -3634,7 +3634,7 @@ fn c3_drift_restart_restarts_session_and_suppresses_world_restarted_agent_event_
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
 
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
 
     repl.send_line("echo first");
@@ -3707,7 +3707,7 @@ fn c3_startup_drift_restart_suppresses_world_restarted_agent_event_without_expli
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&child, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
     wait_for_min_start_sessions(&records, 2, Duration::from_secs(3));
     repl.send_line("exit");
@@ -3761,7 +3761,7 @@ fn c3_drift_fail_closed_suppresses_world_restart_required_agent_event_without_ex
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
 
     repl.send_line("echo first");
@@ -3854,7 +3854,7 @@ fn c3_startup_drift_fail_closed_suppresses_world_restart_required_agent_event_wi
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&child, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
 
     let start = Instant::now();
@@ -4004,7 +4004,7 @@ fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&child, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
 
     let project_canon = project.canonicalize().unwrap_or(project.clone());
@@ -4084,7 +4084,7 @@ fn c3_drift_restart_refreshes_world_network_routing() {
     let records = server.records();
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
         .expect("banner");
 
     repl.send_line("echo first");

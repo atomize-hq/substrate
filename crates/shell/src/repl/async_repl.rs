@@ -43,11 +43,6 @@ use crate::execution::agent_runtime::control::{
     ResolvedRuntimeDescriptor, SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1,
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-#[cfg(target_os = "linux")]
-use crate::execution::agent_runtime::control::{
-    spawn_remote_private_stop_owner, submit_world_prompt_turn,
-};
-#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;

@@ -83,7 +83,7 @@ fn validate_shared_owner_request_support(
             );
         }
 
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]

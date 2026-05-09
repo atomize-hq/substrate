@@ -58,7 +58,7 @@ Always-on by default (unless disabled via `SUBSTRATE_WORLD=disabled`):
 
 Windows/WSL helper support is intentionally fail-closed in this slice. The older WSL bootstrap path is not documented here as a supported operator flow because its socket/group and `SUBSTRATE_HOME` placement do not yet match the Linux/macOS contract.
 
-### Shared-owner world reuse (Linux-first)
+### Shared-owner world reuse (Linux-source contract, macOS/Lima parity)
 
 Substrate now has two reuse modes in the shared `world-api` contract:
 
@@ -77,13 +77,15 @@ When explicit shared-owner reuse is active, the authoritative proof surface is `
 
 Current enforcement boundary:
 
-- Linux is the only platform that implements owner-bound shared-world reuse semantics, and those semantics live in `crates/world`.
+- Linux remains the source-of-truth implementation for owner-bound shared-world reuse semantics, and those semantics live in `crates/world`.
 - On Linux, the persisted authority is `SessionWorldMetadata` in `crates/world/src/session.rs`; there is no shell-owned co-authoritative binding store in this slice.
 - `set_shared_binding_state()` is the only shared-binding mutation path, and `persist_metadata()` writes `session.json` atomically.
 - Reuse requires both exact owner match and compatible world inputs; generic compatibility alone is not enough.
 - Same-owner Linux shared-world ensure/replace paths are serialized by a backend-local mutex in `crates/world` so attach/create and replace do not race each other inside one backend instance.
 - When a caller explicitly requests shared-owner reuse, the proof echoed back to request/PTY callers must describe the same `orchestration_session_id` and `world_id`, and the proof must be in `binding_state=active`. `active` remains the only binding proof downstream surfaces may expose or accept.
-- macOS and Windows do not implement independent shared-owner behavior in this slice. The shell rejects explicit shared-owner requests before non-Linux world bootstrap or fallback logic runs.
+- On macOS, the supported Lima-backed transport path now preserves the same explicit shared-owner proof contract: the shell forwards `SharedWorldOwnerSpec`, requires `ready.shared_world` / `WorldHandle.shared_binding` proof, and keeps replacement fail-closed on the forwarded guest path.
+- On macOS, explicit shared-owner requests still reject when callers bypass the Lima-backed path with `SUBSTRATE_WORLD_SOCKET`, because that override skips the authoritative forwarded transport.
+- Windows still rejects explicit shared-owner requests before bootstrap/fallback logic runs in this slice.
 
 Replacement and recovery guarantees on Linux:
 
@@ -194,6 +196,7 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
 
 - Validation
   - `scripts/mac/smoke.sh` exercises non‑PTY, PTY, and replay flows on macOS and asserts that the replay `fs_diff` contains project paths.
+  - `scripts/mac/orchestration-smoke.sh` warms Lima, runs the live `world-mac-lima` backend smoke example, and then runs the macOS-targeted orchestration regression tests that cover shared-owner attach/create, replacement, lazy member launch, targeted follow-up reuse, guest-owned cancel, and shared-world mismatch rejection.
   - `scripts/mac/smoke.sh --bedpm-installer-conformance` runs the BEDPM Linux smoke wrapper through the same Lima-backed guest path so hosted installer verification reuses the authoritative Linux harness instead of implying native macOS package-manager selection.
   - `scripts/linux/agent-hub-isolation-verify.sh` verifies `world_fs.mode=read_only` and `world_fs.isolation=full` enforcement (on macOS it drives the Lima-backed world). WSL-specific provisioning helpers are intentionally disabled in this slice.
 
@@ -283,7 +286,7 @@ Notes
 - Routing
   - Non‑PTY: POST to `/v1/execute` over UDS (Linux) or the forwarded socket/port (macOS).
   - PTY: use WS to `/v1/stream` over the active transport; host fallback only occurs when `world_fs.require_world=false`.
-  - Explicit shared-owner requests are Linux-first. On macOS and Windows, the shell rejects them before platform bootstrap/fallback rather than silently degrading to generic reuse.
+  - Explicit shared-owner requests keep Linux as the source contract, but the supported macOS/Lima path now forwards the same attach/create and replacement proof flow instead of rejecting before bootstrap. Windows still rejects explicit shared-owner requests before bootstrap/fallback rather than silently degrading to generic reuse.
 - Prompt safety
   - The REPL wraps PTY runs in `reedline::suspend_guard()` to avoid prompt corruption during external output.
 - Readiness & auto‑spawn
@@ -378,6 +381,7 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
 - macOS quick validation
   - `scripts/mac/lima-doctor.sh`
   - `PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh` (non‑PTY, PTY, replay + fs_diff assertion)
+  - `PATH="$(pwd)/target/debug:$PATH" scripts/mac/orchestration-smoke.sh` (Lima warm + live backend reachability + shared-owner/member-runtime orchestration contract regressions)
   - `substrate sudo journalctl -u substrate-world-agent -n 200` (or `limactl shell substrate sudo journalctl -u substrate-world-agent -n 200`) to review guest logs
 
 ---
