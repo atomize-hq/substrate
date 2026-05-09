@@ -32,14 +32,13 @@ use crate::execution::agent_runtime::control::{
     persist_world_binding_authority, private_prompt_request_channel, private_stop_request_channel,
     prompt_runtime_from_parts, register_private_prompt_transport, register_private_stop_transport,
     runtime_controls_parent_session, runtime_stop_transport_ids, spawn_local_private_prompt_owner,
-    spawn_local_private_stop_owner, submit_host_prompt_turn, submit_world_prompt_turn,
-    HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding, PrivatePromptTransport,
-    PrivateStopTransport, ResolvedRuntimeDescriptor, SubmittedPromptStreamEvent,
-    AGENT_API_SESSION_RESUME_V1,
+    spawn_local_private_stop_owner, submit_host_prompt_turn, HiddenOwnerHelperLaunchPlan,
+    OwnerHelperMode, PersistedWorldBinding, PrivatePromptTransport, PrivateStopTransport,
+    ResolvedRuntimeDescriptor, SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::{
-    spawn_remote_private_prompt_owner, spawn_remote_private_stop_owner,
+    spawn_remote_private_prompt_owner, spawn_remote_private_stop_owner, submit_world_prompt_turn,
 };
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
@@ -1324,13 +1323,16 @@ struct PromptWorker {
 
 impl PromptWorker {
     fn spawn(config: Arc<ShellConfig>) -> Result<Self> {
+        // Tests that intentionally exercise Reedline can force that path even when they also skip
+        // shims for bootstrap simplicity. We still require a real terminal below.
+        let force_reedline = std::env::var_os("SUBSTRATE_FORCE_REEDLINE").is_some();
         // CI runners often drive Substrate through PTY harnesses like `script` where Reedline's
         // cursor position query can consume the piped input stream. Prefer a plain stdin-backed
         // prompt in CI to keep smoke runs deterministic. Do the same when shims are explicitly
         // skipped, since that mode is primarily used by tests and diagnostic harnesses that
         // emulate a TTY but do not always satisfy Reedline's terminal capability probes in time.
         if config.ci_mode
-            || config.skip_shims
+            || (config.skip_shims && !force_reedline)
             || std::env::var_os("CI").is_some()
             || std::env::var_os("GITHUB_ACTIONS").is_some()
         {

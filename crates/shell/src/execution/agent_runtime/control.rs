@@ -136,6 +136,7 @@ pub(crate) struct PromptSubmitRuntime {
     pub uaa_session_handle_id: String,
 }
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum SubmittedPromptStreamEvent {
     Agent(Box<AgentEvent>),
@@ -1061,6 +1062,7 @@ pub(crate) fn spawn_remote_private_prompt_owner(
 }
 
 #[cfg(not(target_os = "linux"))]
+#[allow(dead_code)]
 pub(crate) fn spawn_remote_private_prompt_owner(
     _runtime: PromptSubmitRuntime,
     mut prompt_rx: PrivatePromptRequestReceiver,
@@ -1622,6 +1624,7 @@ fn scope_label(scope: AgentExecutionScope) -> &'static str {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn warning_for_exit_code(exit_code: i32) -> Option<String> {
     (exit_code != 0).then(|| format!("Command failed with status: {exit_code}"))
 }
