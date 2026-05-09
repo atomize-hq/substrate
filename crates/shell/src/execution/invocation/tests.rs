@@ -23,6 +23,24 @@ fn restore_env(key: &str, previous: Option<String>) {
     }
 }
 
+struct CurrentDirGuard {
+    previous: PathBuf,
+}
+
+impl CurrentDirGuard {
+    fn change_to(path: &std::path::Path) -> Self {
+        let previous = std::env::current_dir().expect("capture cwd");
+        std::env::set_current_dir(path).expect("set cwd");
+        Self { previous }
+    }
+}
+
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        let _ = std::env::set_current_dir(&self.previous);
+    }
+}
+
 #[test]
 #[serial]
 fn wrap_mode_uses_cli_shell_and_shimmed_path() {
@@ -32,6 +50,7 @@ fn wrap_mode_uses_cli_shell_and_shimmed_path() {
     let home = temp.path().join("home");
     let substrate_home = home.join(".substrate");
     fs::create_dir_all(substrate_home.join("shims")).unwrap();
+    let _cwd_guard = CurrentDirGuard::change_to(temp.path());
 
     let home_str = home.display().to_string();
     let substrate_home_str = substrate_home.display().to_string();
@@ -92,6 +111,7 @@ fn skip_shims_and_no_world_disable_shimmed_path() {
     let home = temp.path().join("home");
     let substrate_home = home.join(".substrate");
     fs::create_dir_all(substrate_home.join("shims")).unwrap();
+    let _cwd_guard = CurrentDirGuard::change_to(temp.path());
 
     let home_str = home.display().to_string();
     let substrate_home_str = substrate_home.display().to_string();

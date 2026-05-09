@@ -1129,7 +1129,22 @@ fn public_root_start_rejects_world_scoped_backends_in_v1() {
 fn public_command_mode_remains_shell_wrap_not_agent_prompt() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
+    fs::write(
+        fixture.workspace_root.join(".substrate/workspace.yaml"),
+        "world:\n  enabled: false\n",
+    )
+    .expect("disable world in workspace config");
     fixture.write_runtime_inventory(false);
+    fs::write(
+        fixture.workspace_root.join(".substrate-profile"),
+        "id: test-policy\nname: Test Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: false\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\n",
+    )
+    .expect("write host-only profile");
+    fs::write(
+        fixture.substrate_home.join("policy.yaml"),
+        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: false\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex\n",
+    )
+    .expect("write host-only policy");
 
     let output = fixture.run(&["-c", "printf shell-wrap"]);
     assert!(

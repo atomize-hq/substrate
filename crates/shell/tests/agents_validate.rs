@@ -3,10 +3,10 @@
 mod common;
 
 use assert_cmd::Command;
-use common::{substrate_shell_driver, temp_dir};
+use common::substrate_shell_driver;
 use std::fs;
 use std::path::PathBuf;
-use tempfile::TempDir;
+use tempfile::{Builder, TempDir};
 
 struct AgentsValidateFixture {
     _temp: TempDir,
@@ -17,7 +17,10 @@ struct AgentsValidateFixture {
 
 impl AgentsValidateFixture {
     fn new() -> Self {
-        let temp = temp_dir("substrate-agents-validate-");
+        let temp = Builder::new()
+            .prefix("substrate-agents-validate-")
+            .tempdir_in("/tmp")
+            .expect("failed to allocate integration test temp dir");
         let home = temp.path().join("home");
         fs::create_dir_all(&home).expect("failed to create HOME fixture");
         let substrate_home = temp.path().join("substrate-home");

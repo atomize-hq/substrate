@@ -3944,7 +3944,10 @@ fn c3_startup_surfaces_fatal_persistent_session_error_before_ready() {
 #[test]
 #[serial]
 fn c3_drift_restart_refreshes_anchor_env_for_new_cwd() {
-    let temp = temp_dir("substrate-c3-anchor-drift-");
+    let temp = tempfile::Builder::new()
+        .prefix("substrate-c3-anchor-drift-")
+        .tempdir_in("/tmp")
+        .expect("create anchor drift tempdir in /tmp");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     let child = project.join("child");

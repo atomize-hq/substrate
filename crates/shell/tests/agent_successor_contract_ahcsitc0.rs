@@ -2,12 +2,12 @@
 
 mod common;
 
-use common::{substrate_shell_driver, temp_dir};
+use common::substrate_shell_driver;
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Output;
-use tempfile::TempDir;
+use tempfile::{Builder, TempDir};
 
 const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
 
@@ -45,7 +45,10 @@ struct AgentSuccessorFixture {
 
 impl AgentSuccessorFixture {
     fn new() -> Self {
-        let temp = temp_dir("substrate-agent-successor-");
+        let temp = Builder::new()
+            .prefix("substrate-agent-successor-")
+            .tempdir_in("/tmp")
+            .expect("failed to allocate integration test temp dir");
         let home = temp.path().join("home");
         fs::create_dir_all(&home).expect("failed to create HOME fixture");
         let substrate_home = temp.path().join("substrate-home");

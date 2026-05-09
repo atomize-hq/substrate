@@ -6,7 +6,7 @@ use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use support::{substrate_shell_driver, temp_dir, AgentSocket, PendingDiffAckState, SocketResponse};
+use support::{substrate_shell_driver, AgentSocket, PendingDiffAckState, SocketResponse};
 use tempfile::{Builder, TempDir};
 
 struct WorkspaceAutoSyncFixture {
@@ -18,7 +18,10 @@ struct WorkspaceAutoSyncFixture {
 
 impl WorkspaceAutoSyncFixture {
     fn new() -> Self {
-        let temp = temp_dir("substrate-workspace-auto-sync-ws3-");
+        let temp = Builder::new()
+            .prefix("substrate-workspace-auto-sync-ws3-")
+            .tempdir_in("/tmp")
+            .expect("failed to allocate ws3 temp dir");
         let home = temp.path().join("home");
         fs::create_dir_all(&home).expect("failed to create HOME fixture");
         let substrate_home = temp.path().join("substrate-home");

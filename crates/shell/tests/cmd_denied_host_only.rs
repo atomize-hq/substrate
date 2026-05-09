@@ -26,6 +26,8 @@ impl CmdDeniedHostOnlyFixture {
         let socket_path = socket_dir.path().join("substrate.sock");
         let project_dir = shell.home().join("project");
         fs::create_dir_all(&project_dir).expect("failed to create project dir");
+        fs::create_dir_all(project_dir.join(".substrate"))
+            .expect("failed to create workspace .substrate");
         Self {
             shell,
             _socket_dir: socket_dir,
@@ -36,6 +38,10 @@ impl CmdDeniedHostOnlyFixture {
 
     fn substrate_home(&self) -> PathBuf {
         self.shell.home().join(".substrate")
+    }
+
+    fn workspace_config_path(&self) -> PathBuf {
+        self.project_dir.join(".substrate").join("workspace.yaml")
     }
 
     fn socket_path(&self) -> &Path {
@@ -50,6 +56,8 @@ impl CmdDeniedHostOnlyFixture {
             "world:\n  enabled: true\n  anchor_mode: follow-cwd\n  anchor_path: \"\"\n  caged: false\n\npolicy:\n  mode: enforce\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n",
         )
         .expect("failed to write config.yaml");
+        fs::write(self.workspace_config_path(), "world:\n  enabled: true\n")
+            .expect("failed to write workspace.yaml");
     }
 
     fn write_global_policy_patch_cmd_denied(&self) {

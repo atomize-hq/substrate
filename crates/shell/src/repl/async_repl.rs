@@ -1326,8 +1326,11 @@ impl PromptWorker {
     fn spawn(config: Arc<ShellConfig>) -> Result<Self> {
         // CI runners often drive Substrate through PTY harnesses like `script` where Reedline's
         // cursor position query can consume the piped input stream. Prefer a plain stdin-backed
-        // prompt in CI to keep smoke runs deterministic.
+        // prompt in CI to keep smoke runs deterministic. Do the same when shims are explicitly
+        // skipped, since that mode is primarily used by tests and diagnostic harnesses that
+        // emulate a TTY but do not always satisfy Reedline's terminal capability probes in time.
         if config.ci_mode
+            || config.skip_shims
             || std::env::var_os("CI").is_some()
             || std::env::var_os("GITHUB_ACTIONS").is_some()
         {
