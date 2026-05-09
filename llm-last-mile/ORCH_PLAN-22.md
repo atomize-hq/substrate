@@ -1,8 +1,8 @@
 # ORCH_PLAN-22: Execute PLAN-22 Through A Parent-Frozen Public Turn Hardening Contract, Linux World-Member Follow-Up Proof, And Explicit Fail-Closed Coverage
 
-Live workspace branch: `feat/macos-lima-shared-owner-member-runtime-parity`  
+Live workspace branch: `feat/broaden-caller-surfaces-from-repl`  
 Recorded branch in [PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-22.md): `feat/broaden-caller-surfaces-from-repl`  
-Authoritative execution branch for this run: `feat/macos-lima-shared-owner-member-runtime-parity`  
+Authoritative execution branch for this run: `feat/broaden-caller-surfaces-from-repl`  
 Plan source: [PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-22.md)  
 Source SOW: [22-broaden-caller-surfaces-from-repl-first-to-public-session-member-turns.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/22-broaden-caller-surfaces-from-repl-first-to-public-session-member-turns.md)  
 Style references: [ORCH_PLAN-20.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/ORCH_PLAN-20.md), [ORCH_PLAN-21.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/ORCH_PLAN-21.md)  
@@ -18,7 +18,7 @@ Max concurrent code workers before integration: `2`
 
 This document is the execution controller for `PLAN-22`, not a restatement of it.
 
-The branch recorded inside `PLAN-22.md` is stale relative to the live workspace. The current checkout on `feat/macos-lima-shared-owner-member-runtime-parity` already contains later merged truth from the prompt-taking public surface and the macOS/Lima parity follow-on. Rewinding execution to `feat/broaden-caller-surfaces-from-repl` would force speculative backporting and would no longer represent repo truth. This run therefore treats the current live checkout as authoritative and records the `PLAN-22` branch as historical planning context only.
+The branch recorded inside `PLAN-22.md` matches the intended live workspace branch for this run. This orchestration now executes directly on `feat/broaden-caller-surfaces-from-repl`, so there is no separate branch-mismatch ruling to preserve from prior drafts.
 
 The slice is honest only if it lands all of these on the same merged tree:
 
@@ -56,8 +56,8 @@ Frozen run shape:
 
 These are run-stopping invariants, not preferences.
 
-1. The authoritative integration checkout remains `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/macos-lima-shared-owner-member-runtime-parity`.
-2. The branch recorded in [PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-22.md) is preserved only as historical plan metadata. No worker may switch the run back to `feat/broaden-caller-surfaces-from-repl`.
+1. The authoritative integration checkout remains `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/broaden-caller-surfaces-from-repl`.
+2. The branch recorded in [PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-22.md) and the live workspace branch are the same. No worker may switch the run away from `feat/broaden-caller-surfaces-from-repl` without an explicit contract revision.
 3. The parent agent is the only integrator, the only approval authority, and the only writer of `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-22/**`.
 4. `substrate agent start` remains the canonical public root prompt-taking surface.
 5. `substrate agent turn` remains the canonical public follow-up prompt-taking surface.
@@ -87,7 +87,7 @@ These are run-stopping invariants, not preferences.
 
 Stop the run, write `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-22/blocked.json`, and do not advance if any of these occur:
 
-1. A lane requires execution on the older `feat/broaden-caller-surfaces-from-repl` branch instead of the live authoritative checkout.
+1. A lane requires execution on a branch other than the authoritative `feat/broaden-caller-surfaces-from-repl` checkout.
 2. A lane requires a new public selector surface beyond exact `(orchestration_session_id, backend_id)`.
 3. A lane requires changing away from `MemberTurnSubmitRequestV1` or `/v1/member_turn/stream`.
 4. A lane requires detached-world follow-up success without `reattach`.
@@ -134,9 +134,9 @@ Worker worktrees:
 
 Worker branches:
 
-- `codex/feat-macos-lima-shared-owner-member-runtime-parity-m22-shell-public-turn-contract-hardening`
-- `codex/feat-macos-lima-shared-owner-member-runtime-parity-m22-world-agent-retained-member-proof`
-- `codex/feat-macos-lima-shared-owner-member-runtime-parity-m22-public-surface-tests-docs-closeout`
+- `codex/feat-broaden-caller-surfaces-from-repl-m22-shell-public-turn-contract-hardening`
+- `codex/feat-broaden-caller-surfaces-from-repl-m22-world-agent-retained-member-proof`
+- `codex/feat-broaden-caller-surfaces-from-repl-m22-public-surface-tests-docs-closeout`
 
 Exact setup commands:
 
@@ -144,16 +144,16 @@ Exact setup commands:
 mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-22
 
 git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-22/shell-public-turn-contract-hardening \
-  -b codex/feat-macos-lima-shared-owner-member-runtime-parity-m22-shell-public-turn-contract-hardening \
-  feat/macos-lima-shared-owner-member-runtime-parity
+  -b codex/feat-broaden-caller-surfaces-from-repl-m22-shell-public-turn-contract-hardening \
+  feat/broaden-caller-surfaces-from-repl
 
 git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-22/world-agent-retained-member-proof \
-  -b codex/feat-macos-lima-shared-owner-member-runtime-parity-m22-world-agent-retained-member-proof \
-  feat/macos-lima-shared-owner-member-runtime-parity
+  -b codex/feat-broaden-caller-surfaces-from-repl-m22-world-agent-retained-member-proof \
+  feat/broaden-caller-surfaces-from-repl
 
 git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-22/public-surface-tests-docs-closeout \
-  -b codex/feat-macos-lima-shared-owner-member-runtime-parity-m22-public-surface-tests-docs-closeout \
-  feat/macos-lima-shared-owner-member-runtime-parity
+  -b codex/feat-broaden-caller-surfaces-from-repl-m22-public-surface-tests-docs-closeout \
+  feat/broaden-caller-surfaces-from-repl
 ```
 
 No separate parent integration worktree is introduced. The parent integrates only on `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`.
@@ -220,7 +220,7 @@ Required sentinels:
 
 `merge-order.json` is frozen during `p1` and must record:
 
-- `authoritative_branch: "feat/macos-lima-shared-owner-member-runtime-parity"`
+- `authoritative_branch: "feat/broaden-caller-surfaces-from-repl"`
 - `recorded_plan_branch: "feat/broaden-caller-surfaces-from-repl"`
 - `integration_order: ["task/m22-l1-shell-public-turn-contract-hardening", "task/m22-l2-world-agent-retained-member-proof", "task/m22-l3-public-surface-tests-docs-closeout"]`
 - `l2_acceptance_basis: "accepted_l1_tree_if_replay_needed_otherwise_original_post_p1_tree"`
@@ -316,7 +316,7 @@ The parent initializes the run in this exact order:
 3. Create `gate-checklist.md` and `gate-result.json` in every gate task directory.
 4. Create placeholder `worker-report.md`, `worker-output.patch`, and `evidence-manifest.json` in every worker task directory.
 5. Write `tasks.json` as the canonical launch queue and execution ledger.
-6. Write `run-state.json` with `current_phase: "kickoff"`, `worker_cap: 2`, `authoritative_branch: "feat/macos-lima-shared-owner-member-runtime-parity"`, `recorded_plan_branch: "feat/broaden-caller-surfaces-from-repl"`, every task in `pending`, and empty accepted, rejected, quarantined, and blocked arrays.
+6. Write `run-state.json` with `current_phase: "kickoff"`, `worker_cap: 2`, `authoritative_branch: "feat/broaden-caller-surfaces-from-repl"`, `recorded_plan_branch: "feat/broaden-caller-surfaces-from-repl"`, every task in `pending`, and empty accepted, rejected, quarantined, and blocked arrays.
 7. Write `contract-freeze.json`, `lane-ownership.json`, `merge-order.json`, and `validation-wall.md`.
 8. Freeze the exact public-turn failure taxonomy and the exact detached-host versus detached-world posture rules in `contract-freeze.json`.
 9. Freeze the exact docs truth ceiling in `contract-freeze.json`:
@@ -395,7 +395,7 @@ Acceptance:
 
 Owner:
 
-- single worker on `codex/feat-macos-lima-shared-owner-member-runtime-parity-m22-shell-public-turn-contract-hardening`
+- single worker on `codex/feat-broaden-caller-surfaces-from-repl-m22-shell-public-turn-contract-hardening`
 
 Packet fields:
 
@@ -444,7 +444,7 @@ cargo test -p shell --test repl_world_first_routing_v1 --no-run
 
 Owner:
 
-- single worker on `codex/feat-macos-lima-shared-owner-member-runtime-parity-m22-world-agent-retained-member-proof`
+- single worker on `codex/feat-broaden-caller-surfaces-from-repl-m22-world-agent-retained-member-proof`
 
 Packet fields:
 
@@ -495,7 +495,7 @@ Checks:
 2. Every touched file is inside the lane’s ownership boundary.
 3. `L1` preserved exact selector rules, detached-host recovery, detached-world rejection, Linux world follow-up, classifier stability, and REPL-first non-regression assumptions.
 4. `L2` stayed inside world-agent boundary proof and did not widen the host/world contract.
-5. If either lane assumed the old `feat/broaden-caller-surfaces-from-repl` branch instead of the authoritative current branch, quarantine that lane immediately.
+5. If either lane assumed a branch other than `feat/broaden-caller-surfaces-from-repl`, quarantine that lane immediately.
 6. `L2` is replayed only if it accidentally consumed shell-local assumptions from an unaccepted `L1` tree.
 
 Quarantine and retry behavior:
@@ -565,7 +565,7 @@ Acceptance:
 
 Owner:
 
-- single worker on `codex/feat-macos-lima-shared-owner-member-runtime-parity-m22-public-surface-tests-docs-closeout`
+- single worker on `codex/feat-broaden-caller-surfaces-from-repl-m22-public-surface-tests-docs-closeout`
 
 Packet fields:
 
@@ -599,7 +599,7 @@ Packet fields:
   5. Keep `substrate -c` non-regression explicit.
   6. Update `docs/USAGE.md`, `AGENT_ORCHESTRATION_GAP_MATRIX.md`, and `llm-last-mile/README.md` only to the level proven by the merged tree.
   7. Produce the usual eng-review test-plan artifact at:
-     - `~/.gstack/projects/<slug>/<user>-feat-macos-lima-shared-owner-member-runtime-parity-eng-review-test-plan-<timestamp>.md`
+     - `~/.gstack/projects/<slug>/<user>-feat-broaden-caller-surfaces-from-repl-eng-review-test-plan-<timestamp>.md`
 - Exact required commands:
 
 ```bash
