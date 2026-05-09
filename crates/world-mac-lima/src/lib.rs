@@ -6,16 +6,20 @@
 
 use agent_api_client::AgentClient;
 use agent_api_types::{
-    ExecuteRequest, ExecuteResponse, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
-    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
-    WorldFsMode,
+    ExecuteRequest, ExecuteResponse, MemberDispatchRequestV1,
+    MemberRuntimeBackendKindV1 as AgentMemberRuntimeBackendKindV1, PolicySnapshotV3,
+    PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
+    PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1, WorldFsMode,
 };
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::PathBuf;
 use substrate_common::FsDiff;
 use tokio::runtime::Runtime;
-use world_api::{ExecRequest, ExecResult, WorldBackend, WorldHandle, WorldSpec};
+use world_api::{
+    ExecRequest, ExecResult, SharedWorldBindingSnapshot, SharedWorldBindingState,
+    SharedWorldOwnerAction, WorldBackend, WorldHandle, WorldSpec,
+};
 
 pub mod forwarding;
 mod limactl;
@@ -307,10 +311,10 @@ impl MacLimaBackend {
             agent_id: "world-mac-lima".to_string(),
             budget: None,
             policy_snapshot,
-            shared_world: None,
+            shared_world: req.shared_world.clone(),
             world_network: None,
             world_fs_mode: Some(fs_mode),
-            member_dispatch: None,
+            member_dispatch: req.member_dispatch.as_ref().map(convert_member_dispatch),
         }
     }
 
@@ -416,8 +420,21 @@ impl WorldBackend for MacLimaBackend {
         let world_id = format!("vm:{}", self.vm_name);
 
         let handle = WorldHandle {
-            id: world_id,
-            shared_binding: None,
+            id: world_id.clone(),
+            shared_binding: spec.reuse_mode.shared_owner().map(|owner| {
+                SharedWorldBindingSnapshot {
+                    orchestration_session_id: owner.orchestration_session_id.clone(),
+                    world_id: world_id.clone(),
+                    world_generation: match &owner.action {
+                        SharedWorldOwnerAction::AttachOrCreate => 0,
+                        SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                            expected_generation,
+                            ..
+                        } => expected_generation + 1,
+                    },
+                    binding_state: SharedWorldBindingState::Active,
+                }
+            }),
         };
 
         if spec.reuse_session {
@@ -471,6 +488,42 @@ impl WorldBackend for MacLimaBackend {
         // For now, this is a no-op as mentioned in the plan
         tracing::debug!("Policy application not yet implemented for macOS backend");
         Ok(())
+    }
+}
+
+fn convert_member_dispatch(
+    dispatch: &world_api::MemberDispatchRequestV1,
+) -> MemberDispatchRequestV1 {
+    MemberDispatchRequestV1 {
+        schema_version: dispatch.schema_version,
+        orchestration_session_id: dispatch.orchestration_session_id.clone(),
+        participant_id: dispatch.participant_id.clone(),
+        orchestrator_participant_id: dispatch.orchestrator_participant_id.clone(),
+        parent_participant_id: dispatch.parent_participant_id.clone(),
+        resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
+        backend_id: dispatch.backend_id.clone(),
+        protocol: dispatch.protocol.clone(),
+        run_id: dispatch.run_id.clone(),
+        world_id: dispatch.world_id.clone(),
+        world_generation: dispatch.world_generation,
+        initial_prompt: dispatch.initial_prompt.clone(),
+        resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+            backend_kind: convert_member_runtime_backend_kind(
+                dispatch.resolved_runtime.backend_kind.clone(),
+            ),
+            binary_path: dispatch.resolved_runtime.binary_path.clone(),
+        },
+    }
+}
+
+fn convert_member_runtime_backend_kind(
+    backend_kind: world_api::MemberRuntimeBackendKindV1,
+) -> AgentMemberRuntimeBackendKindV1 {
+    match backend_kind {
+        world_api::MemberRuntimeBackendKindV1::Codex => AgentMemberRuntimeBackendKindV1::Codex,
+        world_api::MemberRuntimeBackendKindV1::ClaudeCode => {
+            AgentMemberRuntimeBackendKindV1::ClaudeCode
+        }
     }
 }
 
@@ -566,6 +619,28 @@ mod tests {
                 env: std::collections::HashMap::new(),
                 pty: false,
                 span_id: None,
+                shared_world: Some(world_api::SharedWorldOwnerSpec {
+                    orchestration_session_id: "orch_123".to_string(),
+                    action: world_api::SharedWorldOwnerAction::AttachOrCreate,
+                }),
+                member_dispatch: Some(world_api::MemberDispatchRequestV1 {
+                    schema_version: 1,
+                    orchestration_session_id: "orch_123".to_string(),
+                    participant_id: "participant_123".to_string(),
+                    orchestrator_participant_id: "participant_root".to_string(),
+                    parent_participant_id: None,
+                    resumed_from_participant_id: None,
+                    backend_id: "backend_123".to_string(),
+                    protocol: "stdio".to_string(),
+                    run_id: "run_123".to_string(),
+                    world_id: "wld_123".to_string(),
+                    world_generation: 0,
+                    initial_prompt: Some("prompt".to_string()),
+                    resolved_runtime: world_api::ResolvedMemberRuntimeDescriptorV1 {
+                        backend_kind: world_api::MemberRuntimeBackendKindV1::Codex,
+                        binary_path: "/usr/bin/env".to_string(),
+                    },
+                }),
             };
             let fs_mode = backend.effective_fs_mode().expect("fs_mode");
             let agent_req = backend.convert_exec_request(&req, fs_mode);
@@ -574,11 +649,56 @@ mod tests {
                 Some(WorldFsMode::ReadOnly),
                 "mac backend should pass through env-derived fs mode"
             );
+            assert_eq!(agent_req.shared_world, req.shared_world);
+            assert_eq!(
+                agent_req.member_dispatch.as_ref().map(|dispatch| (
+                    dispatch.orchestration_session_id.as_str(),
+                    dispatch.participant_id.as_str(),
+                    dispatch.orchestrator_participant_id.as_str(),
+                    dispatch.backend_id.as_str(),
+                    dispatch.world_id.as_str(),
+                    dispatch.world_generation,
+                )),
+                Some((
+                    "orch_123",
+                    "participant_123",
+                    "participant_root",
+                    "backend_123",
+                    "wld_123",
+                    0,
+                ))
+            );
         }
 
         match prev {
             Some(value) => std::env::set_var("SUBSTRATE_WORLD_FS_MODE", value),
             None => std::env::remove_var("SUBSTRATE_WORLD_FS_MODE"),
+        }
+    }
+
+    #[test]
+    fn ensure_session_owner_mode_sets_authoritative_shared_binding() {
+        let _env_guard = crate::test_util::lock_env();
+        if let Ok(backend) = MacLimaBackend::new() {
+            let spec = WorldSpec {
+                reuse_mode: world_api::WorldReuseMode::SharedOrchestration(
+                    world_api::SharedWorldOwnerSpec {
+                        orchestration_session_id: "orch_123".to_string(),
+                        action: world_api::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                            expected_generation: 4,
+                            reason: "restart".to_string(),
+                        },
+                    },
+                ),
+                ..WorldSpec::default()
+            };
+
+            let handle = backend.ensure_session(&spec).expect("session");
+            let binding = handle.shared_binding.expect("shared binding");
+            assert_eq!(binding.orchestration_session_id, "orch_123");
+            assert_eq!(binding.world_id, handle.id);
+            assert_eq!(binding.world_generation, 5);
+            assert_eq!(binding.binding_state, SharedWorldBindingState::Active);
         }
     }
 }

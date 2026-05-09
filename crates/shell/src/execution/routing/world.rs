@@ -131,8 +131,62 @@ mod tests {
     use agent_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
+    #[cfg(target_os = "macos")]
     #[test]
-    fn shared_owner_non_linux_rejects_before_bootstrap() {
+    fn shared_owner_macos_allows_lima_backed_bootstrap() {
+        let calls = AtomicUsize::new(0);
+        let _env_guard = crate::execution::world_env_guard();
+        let request = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch-test".to_string(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+
+        std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
+
+        bootstrap_platform_world("routing world bootstrap test", Some(&request), || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })
+        .expect("macOS shared-owner bootstrap should use the Lima-backed path");
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "bootstrap callback must run when macOS can use the Lima-backed path"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn shared_owner_macos_rejects_socket_override_before_bootstrap() {
+        let calls = AtomicUsize::new(0);
+        let _env_guard = crate::execution::world_env_guard();
+        let request = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch-test".to_string(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+
+        std::env::set_var("SUBSTRATE_WORLD_SOCKET", "/tmp/substrate-test.sock");
+        let err = bootstrap_platform_world("routing world bootstrap test", Some(&request), || {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })
+        .expect_err("explicit shared-owner bootstrap must reject socket overrides on macOS");
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "bootstrap callback must not run after macOS shared-owner override rejection"
+        );
+        assert!(
+            err.to_string().contains("Lima-backed transport"),
+            "error should explain that the override bypasses the forwarded path: {err:#}"
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn shared_owner_windows_rejects_before_bootstrap() {
         let calls = AtomicUsize::new(0);
         let request = SharedWorldOwnerSpec {
             orchestration_session_id: "orch-test".to_string(),
@@ -153,7 +207,7 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("explicit shared-owner world reuse"),
-            "error should explain early non-Linux rejection: {err:#}"
+            "error should explain early unsupported-platform rejection: {err:#}"
         );
     }
 }

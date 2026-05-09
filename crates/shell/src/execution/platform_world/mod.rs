@@ -58,19 +58,49 @@ pub struct PlatformWorldContext {
 
 static GLOBAL_CTX: OnceLock<Arc<PlatformWorldContext>> = OnceLock::new();
 
-pub(crate) fn reject_non_linux_shared_owner_request(
+fn validate_shared_owner_request_support(
     request: Option<&SharedWorldOwnerSpec>,
     operation: &str,
 ) -> Result<()> {
-    if let Some(request) = request {
+    let Some(request) = request else {
+        return Ok(());
+    };
+
+    #[cfg(target_os = "linux")]
+    {
+        let _ = operation;
+        let _ = request;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        if std::env::var_os("SUBSTRATE_WORLD_SOCKET").is_some() {
+            anyhow::bail!(
+                "{} rejects explicit shared-owner world reuse when SUBSTRATE_WORLD_SOCKET overrides the Lima-backed transport (orchestration_session_id={})",
+                operation,
+                request.orchestration_session_id
+            );
+        }
+
+        return Ok(());
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
         anyhow::bail!(
             "{} rejects explicit shared-owner world reuse on this platform (orchestration_session_id={})",
             operation,
             request.orchestration_session_id
         );
     }
+}
 
-    Ok(())
+pub(crate) fn reject_non_linux_shared_owner_request(
+    request: Option<&SharedWorldOwnerSpec>,
+    operation: &str,
+) -> Result<()> {
+    validate_shared_owner_request_support(request, operation)
 }
 
 pub(crate) fn with_supported_shared_world_request<T, F>(
@@ -81,7 +111,7 @@ pub(crate) fn with_supported_shared_world_request<T, F>(
 where
     F: FnOnce() -> Result<T>,
 {
-    reject_non_linux_shared_owner_request(request, operation)?;
+    validate_shared_owner_request_support(request, operation)?;
     on_supported()
 }
 

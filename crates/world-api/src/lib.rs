@@ -62,6 +62,39 @@ pub struct SharedWorldBindingSnapshot {
     pub binding_state: SharedWorldBindingState,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MemberRuntimeBackendKindV1 {
+    Codex,
+    ClaudeCode,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResolvedMemberRuntimeDescriptorV1 {
+    pub backend_kind: MemberRuntimeBackendKindV1,
+    pub binary_path: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MemberDispatchRequestV1 {
+    pub schema_version: u32,
+    pub orchestration_session_id: String,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_participant_id: Option<String>,
+    pub backend_id: String,
+    pub protocol: String,
+    pub run_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_prompt: Option<String>,
+    pub resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
+}
+
 /// Configuration for a world execution environment.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WorldSpec {
@@ -150,6 +183,12 @@ pub struct ExecRequest {
     /// Optional span identifier to correlate fs_diff and telemetry
     #[serde(skip_serializing_if = "Option::is_none")]
     pub span_id: Option<String>,
+    /// Optional shared-world ownership intent for orchestration-aware backends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_world: Option<SharedWorldOwnerSpec>,
+    /// Optional member dispatch payload for orchestration-aware backends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member_dispatch: Option<MemberDispatchRequestV1>,
 }
 
 /// Result of command execution.
@@ -320,6 +359,57 @@ mod tests {
                 .shared_binding
                 .expect("shared binding should deserialize"),
             binding
+        );
+
+        let exec_request = ExecRequest {
+            cmd: "echo hi".into(),
+            cwd: PathBuf::from("/tmp"),
+            env: HashMap::new(),
+            pty: false,
+            span_id: Some("spn_123".into()),
+            shared_world: Some(SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_123".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }),
+            member_dispatch: Some(MemberDispatchRequestV1 {
+                schema_version: 1,
+                orchestration_session_id: "orch_123".into(),
+                participant_id: "participant_123".into(),
+                orchestrator_participant_id: "participant_root".into(),
+                parent_participant_id: Some("participant_parent".into()),
+                resumed_from_participant_id: None,
+                backend_id: "backend_123".into(),
+                protocol: "stdio".into(),
+                run_id: "run_123".into(),
+                world_id: "wld_123".into(),
+                world_generation: 8,
+                initial_prompt: Some("Continue".into()),
+                resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                    backend_kind: MemberRuntimeBackendKindV1::Codex,
+                    binary_path: "/usr/bin/env".into(),
+                },
+            }),
+        };
+        let exec_back: ExecRequest = serde_json::from_str(
+            &serde_json::to_string(&exec_request).expect("serialize exec request"),
+        )
+        .expect("deserialize exec request");
+        assert_eq!(
+            exec_back
+                .shared_world
+                .expect("shared world should deserialize"),
+            SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_123".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }
+        );
+        assert_eq!(
+            exec_back
+                .member_dispatch
+                .expect("member dispatch should deserialize"),
+            exec_request
+                .member_dispatch
+                .expect("original member dispatch should exist")
         );
     }
 }

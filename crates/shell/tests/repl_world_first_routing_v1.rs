@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use support::MemberDispatchStreamScript;
 use support::{binary_path, ensure_substrate_built, temp_dir, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
@@ -220,7 +220,7 @@ fn wait_for_min_records(
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn wait_for_min_member_dispatch_requests(
     records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
     min_requests: usize,
@@ -243,7 +243,7 @@ fn wait_for_min_member_dispatch_requests(
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn wait_for_min_member_turn_submit_requests(
     records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
     min_requests: usize,
@@ -266,6 +266,28 @@ fn wait_for_min_member_turn_submit_requests(
     );
 }
 
+fn wait_for_min_execute_cancel_requests(
+    records: &Arc<Mutex<support::ReplWorldAgentRecords>>,
+    min_requests: usize,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let guard = records.lock().expect("lock records");
+        if guard.execute_cancel_requests.len() >= min_requests {
+            return;
+        }
+        drop(guard);
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    let guard = records.lock().expect("lock records");
+    panic!(
+        "timed out waiting for execute/cancel requests >= {min_requests}; got {}; records: {guard:#?}",
+        guard.execute_cancel_requests.len(),
+    );
+}
+
 fn read_trace(trace_path: &Path) -> Vec<Value> {
     fs::read_to_string(trace_path)
         .expect("read trace")
@@ -275,7 +297,7 @@ fn read_trace(trace_path: &Path) -> Vec<Value> {
         .collect()
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_orchestrator_runtime_world_config(
     home_substrate: &Path,
     fake_codex: &Path,
@@ -321,7 +343,7 @@ agents:
     .expect("write codex agent file");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_orchestrator_and_world_member_runtime_world_config(
     home_substrate: &Path,
     fake_orchestrator: &Path,
@@ -372,7 +394,7 @@ agents:
     .expect("write codex agent file");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_dual_host_runtime_world_config(
     home_substrate: &Path,
     fake_orchestrator: &Path,
@@ -423,7 +445,7 @@ agents:
     .expect("write codex agent file");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_member_runtime_policy(home_substrate: &Path, require_world: bool) {
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
     let require_world = if require_world { "true" } else { "false" };
@@ -457,7 +479,7 @@ agents:
     fs::write(home_substrate.join("policy.yaml"), policy).expect("write policy.yaml");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_fake_codex_script(temp: &Path) -> PathBuf {
     let path = temp.join("fake-codex.sh");
     let body = "#!/bin/sh\ntrap 'exit 0' INT TERM\nprintf '{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}\\r\\n'\nprintf '{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}\\r\\n'\nwhile :; do sleep 1; done\n";
@@ -471,7 +493,7 @@ fn write_fake_codex_script(temp: &Path) -> PathBuf {
     path
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_fake_codex_script_with_invocation_log_and_output(temp: &Path) -> (PathBuf, PathBuf) {
     let path = temp.join("fake-codex-with-log.sh");
     let count_path = temp.join("fake-codex-with-log.count");
@@ -489,7 +511,7 @@ fn write_fake_codex_script_with_invocation_log_and_output(temp: &Path) -> (PathB
     (path, count_path)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_fake_claude_script(temp: &Path) -> PathBuf {
     let path = temp.join("fake-claude.sh");
     let body = "#!/bin/sh\ntrap 'exit 0' INT TERM\nprintf '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"session-test\"}\\r\\n'\nwhile :; do sleep 1; done\n";
@@ -503,7 +525,7 @@ fn write_fake_claude_script(temp: &Path) -> PathBuf {
     path
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_fake_claude_script_first_session_then_exit(temp: &Path) -> PathBuf {
     let path = temp.join("fake-claude-first-session-then-exit.sh");
     let state_path = temp.join("fake-claude-first-session-then-exit.count");
@@ -521,7 +543,7 @@ fn write_fake_claude_script_first_session_then_exit(temp: &Path) -> PathBuf {
     path
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_fake_codex_script_first_success_then_fail_without_session_handle(temp: &Path) -> PathBuf {
     let path = temp.join("fake-codex-first-success-then-fail.sh");
     let state_path = temp.join("fake-codex-first-success-then-fail.count");
@@ -539,7 +561,7 @@ fn write_fake_codex_script_first_success_then_fail_without_session_handle(temp: 
     path
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_fake_codex_script_without_session_handle(temp: &Path) -> PathBuf {
     let path = temp.join("fake-codex-no-session-handle.sh");
     let body = "#!/bin/sh\nprintf 'bootstrap-without-session-handle\\n'\n";
@@ -553,7 +575,7 @@ fn write_fake_codex_script_without_session_handle(temp: &Path) -> PathBuf {
     path
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn read_invocation_count(path: &Path) -> usize {
     fs::read_to_string(path)
         .ok()
@@ -561,7 +583,7 @@ fn read_invocation_count(path: &Path) -> usize {
         .unwrap_or(0)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
     let sessions_dir = sessions_dir(substrate_home);
     let mut canonical_entries = fs::read_dir(&sessions_dir)
@@ -603,26 +625,26 @@ fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
         .to_string()
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn sessions_dir(substrate_home: &Path) -> PathBuf {
     substrate_home.join("run/agent-hub/sessions")
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn orchestration_session_path(substrate_home: &Path, orchestration_session_id: &str) -> PathBuf {
     sessions_dir(substrate_home)
         .join(orchestration_session_id)
         .join("session.json")
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn canonical_participants_dir(substrate_home: &Path, orchestration_session_id: &str) -> PathBuf {
     sessions_dir(substrate_home)
         .join(orchestration_session_id)
         .join("participants")
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn canonical_participant_path(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -632,13 +654,13 @@ fn canonical_participant_path(
         .join(format!("{participant_id}.json"))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn read_orchestration_session(session_path: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(session_path).expect("read orchestration session"))
         .expect("parse orchestration session")
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn assert_session_world_binding(
     session: &Value,
     expected_world_id: Option<&str>,
@@ -656,17 +678,17 @@ fn assert_session_world_binding(
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn flat_participants_dir(substrate_home: &Path) -> PathBuf {
     substrate_home.join("run/agent-hub/participants")
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn flat_participant_manifest_path(substrate_home: &Path, participant_id: &str) -> PathBuf {
     flat_participants_dir(substrate_home).join(format!("{participant_id}.json"))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn read_trace_lenient(trace_path: &Path) -> Vec<Value> {
     fs::read_to_string(trace_path)
         .unwrap_or_default()
@@ -676,7 +698,7 @@ fn read_trace_lenient(trace_path: &Path) -> Vec<Value> {
         .collect()
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn read_participant_manifest(substrate_home: &Path, participant_id: &str) -> Value {
     let canonical_path = fs::read_dir(sessions_dir(substrate_home))
         .ok()
@@ -695,7 +717,7 @@ fn read_participant_manifest(substrate_home: &Path, participant_id: &str) -> Val
         .expect("parse participant manifest")
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_live_world_member_manifest(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -755,7 +777,7 @@ fn write_live_world_member_manifest(
     .expect("write participant manifest");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn session_participant_manifests(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -818,7 +840,7 @@ fn session_participant_manifests(
     manifests.into_values().collect()
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn participant_is_authoritative_live(manifest: &Value) -> bool {
     let Some(state) = manifest.get("state").and_then(Value::as_str) else {
         return false;
@@ -853,7 +875,7 @@ fn participant_is_authoritative_live(manifest: &Value) -> bool {
             .is_none_or(Value::is_null)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn live_world_member_generations_for_session(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -876,7 +898,7 @@ fn live_world_member_generations_for_session(
     live
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn world_member_manifests_for_session(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -896,7 +918,7 @@ fn world_member_manifests_for_session(
     manifests
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn authoritative_live_participant_manifests_for_session(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -913,7 +935,7 @@ fn authoritative_live_participant_manifests_for_session(
     manifests
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn authoritative_live_participant_manifest_for_backend<'a>(
     manifests: &'a [Value],
     backend_id: &str,
@@ -924,7 +946,7 @@ fn authoritative_live_participant_manifest_for_backend<'a>(
         .unwrap_or_else(|| panic!("missing authoritative-live participant for {backend_id}"))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn authoritative_live_world_member_manifests_for_session(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -935,7 +957,7 @@ fn authoritative_live_world_member_manifests_for_session(
         .collect()
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn assert_world_member_absent_for_interval(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -955,7 +977,7 @@ fn assert_world_member_absent_for_interval(
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn wait_for_live_world_member_count(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -983,7 +1005,7 @@ fn wait_for_live_world_member_count(
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn wait_for_world_restarted_alert_without_stale_liveness(
     trace_path: &Path,
     substrate_home: &Path,
@@ -1419,7 +1441,7 @@ impl PtyRepl {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn launch_host_runtime_via_targeted_turn(repl: &mut PtyRepl, backend_id: &str) {
     repl.wait_for_prompt(Duration::from_secs(2))
         .expect("prompt before targeted host launch");
@@ -1761,7 +1783,7 @@ fn c3_host_orchestrator_remains_dormant_until_first_targeted_turn() {
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 #[serial]
 fn c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch() {
@@ -1833,9 +1855,23 @@ fn c3_first_targeted_world_turn_uses_initial_prompt_in_member_dispatch() {
 
     repl.send_line("exit");
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    wait_for_min_execute_cancel_requests(&records, 1, Duration::from_secs(3));
+
+    let guard = records.lock().expect("lock records");
+    assert_eq!(
+        guard.execute_cancel_requests.len(),
+        1,
+        "member launch shutdown must route retained member cancel through /v1/execute/cancel: {guard:#?}"
+    );
+    assert!(
+        guard.execute_cancel_requests[0]
+            .span_id
+            .starts_with("member-span-"),
+        "member shutdown cancel must target the guest member_dispatch span: {guard:#?}"
+    );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 #[serial]
 fn c3_first_world_backed_command_lazily_launches_member_runtime() {
@@ -2001,7 +2037,7 @@ fn c3_targeted_turn_requires_exact_double_colon_grammar_before_shell_fallback() 
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 #[serial]
 fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
@@ -2438,7 +2474,7 @@ fn c3_targeted_host_turn_resumes_active_orchestrator_backend() {
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 #[serial]
 fn c3_targeted_host_turn_rejects_non_active_orchestrator_backend() {

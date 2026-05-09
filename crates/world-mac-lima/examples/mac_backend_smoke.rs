@@ -29,6 +29,8 @@ fn main() -> Result<()> {
         env: std::env::vars().collect(),
         pty: false,
         span_id: None,
+        shared_world: None,
+        member_dispatch: None,
     };
 
     let res = backend.exec(&handle, req)?;

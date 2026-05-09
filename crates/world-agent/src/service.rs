@@ -52,6 +52,9 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 #[cfg(target_os = "linux")]
 use world::stream::{install_stream_sink, StreamKind, StreamSink};
 use world_api::{
+    MemberDispatchRequestV1 as BackendMemberDispatchRequestV1,
+    MemberRuntimeBackendKindV1 as BackendMemberRuntimeBackendKindV1,
+    ResolvedMemberRuntimeDescriptorV1 as BackendResolvedMemberRuntimeDescriptorV1,
     SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerSpec, WorldBackend,
     WorldHandle, WorldReuseMode, WorldSpec,
 };
@@ -579,6 +582,11 @@ impl WorldAgentService {
             env: env_map,
             pty: req.pty,
             span_id: None,
+            shared_world: req.shared_world.clone(),
+            member_dispatch: req
+                .member_dispatch
+                .as_ref()
+                .map(convert_member_dispatch_request),
         };
 
         // Execute command
@@ -1346,6 +1354,11 @@ impl WorldAgentService {
             },
             pty: false,
             span_id: None,
+            shared_world: shared_owner_spec.clone(),
+            member_dispatch: req
+                .member_dispatch
+                .as_ref()
+                .map(convert_member_dispatch_request),
         };
 
         let span_id = format!("spn_{}", uuid::Uuid::now_v7());
@@ -2559,6 +2572,44 @@ fn requested_shared_world_owner_spec(req: &ExecuteRequest) -> Option<SharedWorld
                 action: world_api::SharedWorldOwnerAction::AttachOrCreate,
             })
     })
+}
+
+fn convert_member_dispatch_request(
+    dispatch: &agent_api_types::MemberDispatchRequestV1,
+) -> BackendMemberDispatchRequestV1 {
+    BackendMemberDispatchRequestV1 {
+        schema_version: dispatch.schema_version,
+        orchestration_session_id: dispatch.orchestration_session_id.clone(),
+        participant_id: dispatch.participant_id.clone(),
+        orchestrator_participant_id: dispatch.orchestrator_participant_id.clone(),
+        parent_participant_id: dispatch.parent_participant_id.clone(),
+        resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
+        backend_id: dispatch.backend_id.clone(),
+        protocol: dispatch.protocol.clone(),
+        run_id: dispatch.run_id.clone(),
+        world_id: dispatch.world_id.clone(),
+        world_generation: dispatch.world_generation,
+        initial_prompt: dispatch.initial_prompt.clone(),
+        resolved_runtime: BackendResolvedMemberRuntimeDescriptorV1 {
+            backend_kind: convert_member_runtime_backend_kind(
+                dispatch.resolved_runtime.backend_kind,
+            ),
+            binary_path: dispatch.resolved_runtime.binary_path.clone(),
+        },
+    }
+}
+
+fn convert_member_runtime_backend_kind(
+    backend_kind: agent_api_types::MemberRuntimeBackendKindV1,
+) -> BackendMemberRuntimeBackendKindV1 {
+    match backend_kind {
+        agent_api_types::MemberRuntimeBackendKindV1::Codex => {
+            BackendMemberRuntimeBackendKindV1::Codex
+        }
+        agent_api_types::MemberRuntimeBackendKindV1::ClaudeCode => {
+            BackendMemberRuntimeBackendKindV1::ClaudeCode
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]

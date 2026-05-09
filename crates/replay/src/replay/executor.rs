@@ -348,6 +348,8 @@ async fn try_world_backend(
                     env: state.env.clone(),
                     pty: false,
                     span_id: Some(state.span_id.clone()),
+                    shared_world: None,
+                    member_dispatch: None,
                 };
                 match backend.exec(&handle, req) {
                     Ok(res) => {

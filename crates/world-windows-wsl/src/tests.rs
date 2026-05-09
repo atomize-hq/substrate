@@ -162,6 +162,8 @@ fn exec_routes_to_agent() {
         env: std::iter::once(("KEY".to_string(), "VALUE".to_string())).collect(),
         pty: false,
         span_id: Some("span-123".to_string()),
+        shared_world: None,
+        member_dispatch: None,
     };
 
     let result = backend.exec(&world, req.clone()).expect("exec result");

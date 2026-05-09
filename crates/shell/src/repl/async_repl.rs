@@ -8,10 +8,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use agent_api_client::AgentClient;
-#[cfg(target_os = "linux")]
-use agent_api_types::{ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use agent_api_types::{
+    ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1,
+    MemberTurnSubmitRequestV1,
+};
 use anyhow::{anyhow, Context, Result};
 use futures::{pin_mut, FutureExt, StreamExt};
 use reedline::{ExternalPrinter, Prompt, Reedline, Signal};
@@ -26,32 +29,36 @@ use crate::execution::agent_events::{
     ShellCommandEventContext, ShellEventEmissionContext,
 };
 use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInventoryEntryV1};
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use crate::execution::agent_runtime::control::spawn_remote_private_prompt_owner;
 use crate::execution::agent_runtime::control::{
     build_session_resume_extension, invalidate_stale_world_members_after_binding,
     mark_orchestration_session_failed, mark_runtime_startup_failed, persist_runtime_snapshots,
     persist_world_binding_authority, private_prompt_request_channel, private_stop_request_channel,
     prompt_runtime_from_parts, register_private_prompt_transport, register_private_stop_transport,
-    runtime_controls_parent_session, runtime_stop_transport_ids, spawn_local_private_prompt_owner,
-    spawn_local_private_stop_owner, submit_host_prompt_turn, HiddenOwnerHelperLaunchPlan,
-    OwnerHelperMode, PersistedWorldBinding, PrivatePromptTransport, PrivateStopTransport,
+    runtime_controls_parent_session, runtime_is_terminal, runtime_stop_transport_ids,
+    spawn_local_private_prompt_owner, spawn_local_private_stop_owner, submit_host_prompt_turn,
+    HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding, PrivatePromptTransport,
+    PrivateStopOutcome, PrivateStopRequestReceiver, PrivateStopTransport,
     ResolvedRuntimeDescriptor, SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1,
 };
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[cfg(target_os = "linux")]
 use crate::execution::agent_runtime::control::{
-    spawn_remote_private_prompt_owner, spawn_remote_private_stop_owner, submit_world_prompt_turn,
+    spawn_remote_private_stop_owner, submit_world_prompt_turn,
 };
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
     exact_backend_selection_error_exit_code, validate_exact_backend_selection,
 };
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::validator::{
     member_selection_error_exit_code, validate_member_selection,
 };
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::AgentRuntimeParticipantWorldBinding;
 use crate::execution::agent_runtime::{
     backend_allowed, build_gateway_for_descriptor, runtime_realizability_error_exit_code,
@@ -64,9 +71,10 @@ use crate::execution::agent_runtime::{
 use crate::execution::get_terminal_size;
 use crate::execution::ReplSessionTelemetry;
 use crate::execution::WorldRootSettings;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::{
-    build_agent_client_and_member_dispatch_request, MemberDispatchTransportRequest,
+    build_agent_client_and_member_dispatch_request, build_agent_client_and_pending_diff_request,
+    MemberDispatchTransportRequest,
 };
 use crate::execution::{
     canonicalize_or, enforce_caged_destination, execute_command, find_workspace_root,
@@ -75,7 +83,7 @@ use crate::execution::{
     ShellConfig, PTY_ACTIVE,
 };
 use crate::repl::editor;
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 use substrate_broker::Policy;
 use substrate_broker::{detect_profile, world_fs_policy};
 use substrate_common::agent_events::{AgentEvent, MessageEventKind};
@@ -1631,7 +1639,7 @@ struct RuntimeOrchestrationContext {
     store: AgentRuntimeStateStore,
     orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
     effective_config: crate::execution::config_model::SubstrateConfig,
-    #[cfg(any(test, target_os = "linux"))]
+    #[cfg(any(test, target_os = "linux", target_os = "macos"))]
     base_policy: Policy,
     inventory: BTreeMap<String, AgentInventoryEntryV1>,
 }
@@ -1671,7 +1679,7 @@ struct ResolvedHostOrchestratorBootstrap {
     agent_kind: agent_api::AgentWrapperKind,
     state_store: AgentRuntimeStateStore,
     effective_config: crate::execution::config_model::SubstrateConfig,
-    #[cfg(any(test, target_os = "linux"))]
+    #[cfg(any(test, target_os = "linux", target_os = "macos"))]
     base_policy: Policy,
     inventory: BTreeMap<String, AgentInventoryEntryV1>,
 }
@@ -1710,7 +1718,7 @@ struct LocalRetainedRunControl {
     completion_task: Option<tokio::task::JoinHandle<()>>,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 struct RemoteRetainedRunControl {
     client: Arc<AgentClient>,
     span_id: String,
@@ -1719,7 +1727,7 @@ struct RemoteRetainedRunControl {
 
 enum RetainedRunControl {
     Local(LocalRetainedRunControl),
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     Remote(RemoteRetainedRunControl),
 }
 
@@ -1887,7 +1895,7 @@ fn prepare_host_orchestrator_runtime_from_resolved(
         agent_kind,
         state_store,
         effective_config,
-        #[cfg(any(test, target_os = "linux"))]
+        #[cfg(any(test, target_os = "linux", target_os = "macos"))]
         base_policy,
         inventory,
     } = resolved;
@@ -1928,7 +1936,7 @@ fn prepare_host_orchestrator_runtime_from_resolved(
             store: state_store,
             orchestration_session,
             effective_config,
-            #[cfg(any(test, target_os = "linux"))]
+            #[cfg(any(test, target_os = "linux", target_os = "macos"))]
             base_policy,
             inventory,
         },
@@ -2020,7 +2028,7 @@ fn resolve_host_orchestrator_bootstrap(
         agent_kind,
         state_store,
         effective_config,
-        #[cfg(any(test, target_os = "linux"))]
+        #[cfg(any(test, target_os = "linux", target_os = "macos"))]
         base_policy,
         inventory,
     }))
@@ -2193,7 +2201,7 @@ fn prepare_hidden_owner_helper_runtime(
         agent_kind: _validated_agent_kind,
         state_store,
         effective_config,
-        #[cfg(any(test, target_os = "linux"))]
+        #[cfg(any(test, target_os = "linux", target_os = "macos"))]
         base_policy,
         inventory,
     } = resolved;
@@ -2241,7 +2249,7 @@ fn prepare_hidden_owner_helper_runtime(
             store: state_store,
             orchestration_session,
             effective_config,
-            #[cfg(any(test, target_os = "linux"))]
+            #[cfg(any(test, target_os = "linux", target_os = "macos"))]
             base_policy,
             inventory,
         },
@@ -2264,7 +2272,7 @@ async fn wait_for_hidden_owner_helper_completion(
                 let _ = task.await;
             }
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         RetainedRunControl::Remote(retained_control) => {
             if let Some(task) = retained_control.observe_task.take() {
                 join_failed |= task.await.is_err();
@@ -3129,7 +3137,7 @@ fn runtime_prompt_submit_runtime(
     )
 }
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 fn select_member_runtime_descriptor(
     startup_context: &RuntimeOrchestrationContext,
 ) -> std::result::Result<Option<RuntimeSelectionDescriptor>, RuntimeBootstrapFailure> {
@@ -3361,7 +3369,7 @@ async fn dispatch_targeted_follow_up_turn(
     Ok(TargetedTurnDispatchStatus::Submitted)
 }
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 fn ensure_member_backend_allowed(
     startup_context: &RuntimeOrchestrationContext,
     descriptor: &RuntimeSelectionDescriptor,
@@ -3379,7 +3387,7 @@ fn ensure_member_backend_allowed(
     }
 }
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 fn resolve_live_member_parent(
     startup_context: &RuntimeOrchestrationContext,
 ) -> std::result::Result<AgentRuntimeParticipantRecord, RuntimeBootstrapFailure> {
@@ -3412,7 +3420,7 @@ fn resolve_live_member_parent(
     Ok(parent_participant)
 }
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 fn authoritative_member_world_binding(
     startup_context: &RuntimeOrchestrationContext,
     world_binding: &PersistedWorldBinding,
@@ -3454,7 +3462,7 @@ fn authoritative_member_world_binding(
     })
 }
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 fn live_member_for_generation(
     startup_context: &RuntimeOrchestrationContext,
     descriptor: &RuntimeSelectionDescriptor,
@@ -3492,7 +3500,7 @@ fn live_member_for_generation(
     }
 }
 
-#[cfg(any(test, target_os = "linux"))]
+#[cfg(any(test, target_os = "linux", target_os = "macos"))]
 fn prepare_member_runtime_startup_for_descriptor(
     startup_context: &RuntimeOrchestrationContext,
     descriptor: RuntimeSelectionDescriptor,
@@ -3585,7 +3593,7 @@ async fn start_member_runtime_with_prepared(
     start_host_orchestrator_runtime_with_prepared(prepared, None, agent_printer, telemetry).await
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn member_runtime_backend_kind(
     descriptor: &RuntimeSelectionDescriptor,
 ) -> MemberRuntimeBackendKindV1 {
@@ -3595,7 +3603,7 @@ fn member_runtime_backend_kind(
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn build_member_dispatch_transport_request(
     prepared: &PreparedAgentRuntime,
     initial_prompt: Option<String>,
@@ -3647,7 +3655,7 @@ fn build_member_dispatch_transport_request(
     })
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn abort_remote_member_bootstrap_runtime(
     shutdown_requested: &Arc<AtomicBool>,
     client: &AgentClient,
@@ -3672,7 +3680,40 @@ async fn abort_remote_member_bootstrap_runtime(
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn spawn_remote_private_stop_owner(
+    manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
+    shutdown_requested: Arc<AtomicBool>,
+    client: Arc<AgentClient>,
+    span_id: String,
+    mut stop_rx: PrivateStopRequestReceiver,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(request) = stop_rx.recv().await {
+            let outcome = if runtime_is_terminal(&manifest) {
+                PrivateStopOutcome::AlreadyTerminal
+            } else {
+                shutdown_requested.store(true, Ordering::SeqCst);
+                match client
+                    .cancel_execute(ExecuteCancelRequestV1 {
+                        span_id: span_id.clone(),
+                        sig: "INT".to_string(),
+                    })
+                    .await
+                {
+                    Ok(_) => PrivateStopOutcome::Accepted,
+                    Err(_) => {
+                        shutdown_requested.store(false, Ordering::SeqCst);
+                        PrivateStopOutcome::ProtocolError
+                    }
+                }
+            };
+            let _ = request.response_tx.send(outcome);
+        }
+    })
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn start_remote_member_runtime_with_prepared(
     prepared: Option<PreparedAgentRuntime>,
     initial_prompt: Option<String>,
@@ -4167,8 +4208,6 @@ async fn start_remote_member_runtime_with_prepared(
     };
     let client = Arc::new(client);
     let stop_owner_task = spawn_remote_private_stop_owner(
-        startup_context.store.clone(),
-        Arc::clone(&startup_context.orchestration_session),
         Arc::clone(&manifest),
         Arc::clone(&shutdown_requested),
         Arc::clone(&client),
@@ -4295,7 +4334,7 @@ async fn reconcile_member_runtime_generation(
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 struct EnsureMemberRuntimeReadyContext<'a> {
     startup_context: Option<&'a RuntimeOrchestrationContext>,
     world_session: Option<&'a WorldSession>,
@@ -4303,7 +4342,7 @@ struct EnsureMemberRuntimeReadyContext<'a> {
     telemetry: &'a mut ReplSessionTelemetry,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn ensure_member_runtime_ready_for_descriptor(
     context: EnsureMemberRuntimeReadyContext<'_>,
     descriptor: &RuntimeSelectionDescriptor,
@@ -4387,7 +4426,7 @@ async fn ensure_member_runtime_ready_for_descriptor(
     Ok(false)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 struct EnsureMemberRuntimeReadyContext<'a> {
     startup_context: Option<&'a RuntimeOrchestrationContext>,
     world_session: Option<&'a WorldSession>,
@@ -4395,7 +4434,7 @@ struct EnsureMemberRuntimeReadyContext<'a> {
     telemetry: &'a mut ReplSessionTelemetry,
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 async fn ensure_member_runtime_ready_for_descriptor(
     context: EnsureMemberRuntimeReadyContext<'_>,
     _descriptor: &RuntimeSelectionDescriptor,
@@ -4421,7 +4460,7 @@ async fn ensure_member_runtime_ready_for_descriptor(
     ))
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn ensure_member_runtime_ready(
     startup_context: Option<&RuntimeOrchestrationContext>,
     world_session: Option<&WorldSession>,
@@ -4455,7 +4494,7 @@ async fn ensure_member_runtime_ready(
     .map(|_| ())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 async fn ensure_member_runtime_ready(
     startup_context: Option<&RuntimeOrchestrationContext>,
     world_session: Option<&WorldSession>,
@@ -4604,13 +4643,17 @@ async fn submit_host_targeted_turn(
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn submit_world_targeted_turn(
     runtime: &mut AsyncReplAgentRuntime,
     prompt: &str,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
+    use base64::engine::general_purpose::STANDARD as BASE64;
+    use base64::Engine;
+    use http_body_util::BodyExt as _;
+
     let run_id = Uuid::now_v7().to_string();
     note_submitted_turn_started(
         runtime,
@@ -4623,27 +4666,97 @@ async fn submit_world_targeted_turn(
         telemetry,
         agent_printer,
     )?;
-    let completion = submit_world_prompt_turn(
-        &runtime_prompt_submit_runtime(runtime),
-        &run_id,
-        prompt,
-        |event| match event {
-            SubmittedPromptStreamEvent::Agent(event) => {
-                handle_agent_event(*event, telemetry, agent_printer);
+    let request = {
+        let manifest_guard = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: manifest_guard.handle.orchestration_session_id.clone(),
+            participant_id: manifest_guard.handle.participant_id.clone(),
+            orchestrator_participant_id: manifest_guard
+                .handle
+                .orchestrator_participant_id
+                .clone()
+                .ok_or_else(|| {
+                    anyhow!(
+                        "substrate: error: retained world-scoped member is missing orchestrator_participant_id"
+                    )
+                })?,
+            backend_id: runtime.descriptor.backend_id.clone(),
+            run_id: run_id.clone(),
+            world_id: manifest_guard.handle.world_id.clone().ok_or_else(|| {
+                anyhow!("substrate: error: retained world-scoped member is missing world_id")
+            })?,
+            world_generation: manifest_guard.handle.world_generation.ok_or_else(|| {
+                anyhow!(
+                    "substrate: error: retained world-scoped member is missing world_generation"
+                )
+            })?,
+            prompt: prompt.to_string(),
+        }
+    };
+    let (client, _pending_diff_request, _agent_id) = build_agent_client_and_pending_diff_request()?;
+    let response = client
+        .submit_member_turn_stream(request)
+        .await
+        .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
+
+    let mut body = std::pin::pin!(response.into_body());
+    let mut buffer = Vec::new();
+    let mut exit_code = 0;
+    while let Some(frame) = body.as_mut().frame().await {
+        let frame = frame.map_err(|err| anyhow!("substrate: error: {err:#}"))?;
+        let Some(data) = frame.data_ref() else {
+            continue;
+        };
+        buffer.extend_from_slice(data);
+
+        while let Some(pos) = buffer.iter().position(|&byte| byte == b'\n') {
+            let line: Vec<u8> = buffer.drain(..=pos).collect();
+            if line.len() <= 1 {
+                continue;
             }
-            SubmittedPromptStreamEvent::Stdout(text) | SubmittedPromptStreamEvent::Stderr(text) => {
-                agent_printer.print(text);
+            let payload = &line[..line.len() - 1];
+            if payload.is_empty() {
+                continue;
             }
-        },
-    )
-    .await?;
-    if let Some(message) = completion.warning.as_deref() {
-        write_best_effort_stderr_line(message);
+            let frame = serde_json::from_slice::<ExecuteStreamFrame>(payload)
+                .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
+            match frame {
+                ExecuteStreamFrame::Start { .. } => {}
+                ExecuteStreamFrame::Event { event } => {
+                    handle_agent_event(event, telemetry, agent_printer);
+                }
+                ExecuteStreamFrame::Stdout { chunk_b64 } => {
+                    let decoded = BASE64
+                        .decode(chunk_b64.as_bytes())
+                        .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
+                    agent_printer.print(String::from_utf8_lossy(&decoded).to_string());
+                }
+                ExecuteStreamFrame::Stderr { chunk_b64 } => {
+                    let decoded = BASE64
+                        .decode(chunk_b64.as_bytes())
+                        .map_err(|err| anyhow!("substrate: error: {err:#}"))?;
+                    agent_printer.print(String::from_utf8_lossy(&decoded).to_string());
+                }
+                ExecuteStreamFrame::Exit { exit, .. } => {
+                    exit_code = exit;
+                }
+                ExecuteStreamFrame::Error { message } => {
+                    return Err(anyhow!("substrate: error: {message}"));
+                }
+            }
+        }
+    }
+    if exit_code != 0 {
+        write_best_effort_stderr_line(&format!("Command failed with status: {exit_code}"));
     }
     note_submitted_turn_completed(
         runtime,
         &run_id,
-        if completion.exit_code == 0 {
+        if exit_code == 0 {
             format!(
                 "targeted follow-up turn completed for {}",
                 runtime.descriptor.backend_id
@@ -4651,7 +4764,7 @@ async fn submit_world_targeted_turn(
         } else {
             format!(
                 "targeted follow-up turn exited with status {} for {}",
-                completion.exit_code, runtime.descriptor.backend_id
+                exit_code, runtime.descriptor.backend_id
             )
         },
         telemetry,
@@ -4660,7 +4773,7 @@ async fn submit_world_targeted_turn(
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 async fn submit_world_targeted_turn(
     _runtime: &mut AsyncReplAgentRuntime,
     _prompt: &str,
@@ -4668,7 +4781,7 @@ async fn submit_world_targeted_turn(
     _telemetry: &mut ReplSessionTelemetry,
 ) -> Result<()> {
     Err(anyhow!(
-        "substrate: error: world-targeted follow-up turns are supported on Linux only"
+        "substrate: error: world-targeted follow-up turns are supported on Linux and macOS only"
     ))
 }
 
@@ -4759,7 +4872,7 @@ async fn shutdown_host_orchestrator_runtime(
                 let _ = tokio::time::timeout(Duration::from_secs(5), task).await;
             }
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         RetainedRunControl::Remote(retained_control) => {
             if retained_control
                 .client
