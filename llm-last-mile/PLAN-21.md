@@ -3,7 +3,7 @@
 Source SOW: [21-macos-lima-shared-owner-and-member-runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/21-macos-lima-shared-owner-and-member-runtime-parity.md)  
 Gap matrix anchor: [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md:171)  
 Adjacent landed slices: [PLAN-15.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-15.md), [PLAN-17.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-17.md), [PLAN-19.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-19.md)  
-Branch: `feat/session-centric-state-store`  
+Branch: `feat/macos-lima-shared-owner-member-runtime-parity`  
 Base branch: `main`  
 Plan type: cross-platform orchestration parity, Linux contract extended across the Lima forwarded seam  
 Review posture: unified execution plan, tightened to `/autoplan` and `/plan-eng-review` rigor  

@@ -1,6 +1,6 @@
 # ORCH_PLAN-21: Execute PLAN-21 Through A Parent-Frozen Lima Parity Contract And One Honest Two-Lane Opening
 
-Branch: `feat/session-centric-state-store`  
+Branch: `feat/macos-lima-shared-owner-member-runtime-parity`  
 Plan source: [PLAN-21.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-21.md)  
 Style reference: [ORCH_PLAN-18.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/ORCH_PLAN-18.md)  
 Style reference: [ORCH_PLAN-19.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/ORCH_PLAN-19.md)  
@@ -12,7 +12,7 @@ Max concurrent code workers before integration: `2`
 
 ## Summary
 
-- Authoritative branch: `feat/session-centric-state-store` on `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`.
+- Authoritative branch: `feat/macos-lima-shared-owner-member-runtime-parity` on `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`.
 - Critical path stays local to the parent for contract freeze, launch gates, both integration windows, the validation wall, and final closeout.
 - Worktree root: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-21/`.
 - Worker branches:
@@ -28,7 +28,7 @@ Max concurrent code workers before integration: `2`
 ## Assumptions
 
 1. [PLAN-21.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-21.md) remains the authoritative dependency graph for this run.
-2. The authoritative integration checkout remains the current workspace checkout on `feat/session-centric-state-store`.
+2. The authoritative integration checkout remains the current workspace checkout on `feat/macos-lima-shared-owner-member-runtime-parity`.
 3. Linux already defines the correct shared-owner and retained member-runtime contract. macOS/Lima must converge to that contract rather than define a sibling contract.
 4. The supported macOS posture is specifically the Lima-forwarded guest path. Unsupported non-Lima postures may continue to reject explicitly.
 5. The exact identity tuple is frozen and must not change: `orchestration_session_id`, `orchestrator_participant_id`, `backend_id`, `world_id`, `world_generation`.
@@ -95,7 +95,7 @@ These are run-stopping invariants, not preferences:
 12. No worker may weaken validation by duplicating proof validators or relaxing guest-side binding rules.
 13. Docs and gap-matrix work are late-only. They may not start before merged code truth exists.
 14. The parent is the only integrator, the only approval authority, and the only writer of `.runs/plan-21/**`.
-15. The authoritative integration checkout remains `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/session-centric-state-store`.
+15. The authoritative integration checkout remains `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/macos-lima-shared-owner-member-runtime-parity`.
 
 Stop the run, write `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-21/blocked.json`, and do not advance if any of these occur:
 
@@ -154,10 +154,10 @@ Exact setup commands:
 
 ```bash
 mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-21
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-21/backend-contract-parity -b codex/feat-session-centric-state-store-m21-backend-contract-parity feat/session-centric-state-store
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-21/shared-owner-bootstrap-parity -b codex/feat-session-centric-state-store-m21-shared-owner-bootstrap-parity feat/session-centric-state-store
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-21/shell-member-runtime-parity -b codex/feat-session-centric-state-store-m21-shell-member-runtime-parity feat/session-centric-state-store
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-21/macos-validation-docs-closeout -b codex/feat-session-centric-state-store-m21-macos-validation-docs-closeout feat/session-centric-state-store
+git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-21/backend-contract-parity -b codex/feat-session-centric-state-store-m21-backend-contract-parity feat/macos-lima-shared-owner-member-runtime-parity
+git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-21/shared-owner-bootstrap-parity -b codex/feat-session-centric-state-store-m21-shared-owner-bootstrap-parity feat/macos-lima-shared-owner-member-runtime-parity
+git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-21/shell-member-runtime-parity -b codex/feat-session-centric-state-store-m21-shell-member-runtime-parity feat/macos-lima-shared-owner-member-runtime-parity
+git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-21/macos-validation-docs-closeout -b codex/feat-session-centric-state-store-m21-macos-validation-docs-closeout feat/macos-lima-shared-owner-member-runtime-parity
 ```
 
 No separate parent integration worktree is introduced. The parent integrates only on `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`.
