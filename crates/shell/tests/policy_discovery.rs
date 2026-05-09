@@ -3,12 +3,12 @@
 mod common;
 
 use assert_cmd::Command;
-use common::{substrate_shell_driver, temp_dir};
+use common::substrate_shell_driver;
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
 use std::fs;
 use std::path::PathBuf;
-use tempfile::TempDir;
+use tempfile::{Builder, TempDir};
 
 struct PolicyFixture {
     _temp: TempDir,
@@ -19,7 +19,10 @@ struct PolicyFixture {
 
 impl PolicyFixture {
     fn new() -> Self {
-        let temp = temp_dir("substrate-policy-");
+        let temp = Builder::new()
+            .prefix("substrate-policy-")
+            .tempdir_in("/tmp")
+            .expect("failed to allocate integration test temp dir");
         let home = temp.path().join("home");
         fs::create_dir_all(&home).expect("create HOME fixture");
         let substrate_home = temp.path().join("substrate-home");

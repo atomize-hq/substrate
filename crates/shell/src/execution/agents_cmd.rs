@@ -5,10 +5,12 @@ use crate::execution::agent_inventory::{
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::request_private_stop;
 use crate::execution::agent_runtime::control::{
-    load_hidden_owner_helper_launch_plan, persist_hidden_owner_helper_launch_plan,
-    private_stop_transport_path, remove_hidden_owner_helper_launch_plan,
-    wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
+    load_hidden_owner_helper_launch_plan, load_public_prompt_source,
+    persist_hidden_owner_helper_launch_plan, private_stop_transport_path,
+    public_prompt_rendered_exit_code, remove_hidden_owner_helper_launch_plan,
+    run_public_prompt_command, wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
     HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan, OwnerHelperMode,
+    PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
     ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor, HIDDEN_OWNER_HELPER_SUBCOMMAND,
 };
 use crate::execution::agent_runtime::validator::{
@@ -18,13 +20,13 @@ use crate::execution::agent_runtime::validator::{
 use crate::execution::agent_runtime::{
     runtime_realizability_error_exit_code, validate_orchestrator_selection,
     validate_runtime_realizability, AgentRuntimeParticipantRecord, AgentRuntimeSessionRecord,
-    AgentRuntimeStateStore, PublicControlAction, MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE,
-    PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
+    AgentRuntimeStateStore, PublicControlAction, PublicTurnTargetKind, MEMBER_ROLE, NESTED_ROUTER,
+    ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDoctorArgs, AgentOwnerHelperArgs, AgentScopeArg,
     AgentSessionControlArgs, AgentStartArgs, AgentToolboxAction, AgentToolboxCmd,
-    AgentToolboxViewArgs, AgentViewArgs, AgentsAction, AgentsCmd, Cli,
+    AgentToolboxViewArgs, AgentTurnArgs, AgentViewArgs, AgentsAction, AgentsCmd, Cli,
 };
 use crate::execution::config_model::{
     self, AgentExecutionScope, AgentToolboxBindTransport, CliConfigOverrides, SubstrateConfig,
@@ -82,18 +84,9 @@ pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
                 1
             }
         },
-        AgentAction::Start(args) => match run_start(args, cli) {
-            Ok(()) => 0,
-            Err(err) if config_model::is_user_error(&err) => {
-                eprintln!("{err}");
-                2
-            }
-            Err(err) => {
-                eprintln!("{err:#}");
-                1
-            }
-        },
-        AgentAction::Resume(args) => match run_resume(args, cli) {
+        AgentAction::Start(args) => render_public_prompt_command_result(run_start(args, cli)),
+        AgentAction::Turn(args) => render_public_prompt_command_result(run_turn(args, cli)),
+        AgentAction::Reattach(args) => match run_reattach(args, cli) {
             Ok(()) => 0,
             Err(err) if config_model::is_user_error(&err) => {
                 eprintln!("{err}");
@@ -138,6 +131,23 @@ pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
             }
         },
         AgentAction::Toolbox(cmd) => handle_agent_toolbox_command(cmd, cli),
+    }
+}
+
+fn render_public_prompt_command_result(result: Result<()>) -> i32 {
+    match result {
+        Ok(()) => 0,
+        Err(err) => {
+            if let Some(code) = public_prompt_rendered_exit_code(&err) {
+                return code;
+            }
+            if config_model::is_user_error(&err) {
+                eprintln!("{err}");
+                return 2;
+            }
+            eprintln!("{err:#}");
+            1
+        }
     }
 }
 
@@ -289,13 +299,93 @@ struct AgentControlResultJson<'a> {
 }
 
 fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
+    let prompt = load_public_prompt_source(&PublicPromptInput {
+        prompt: args.prompt_source.prompt.clone(),
+        prompt_file: args.prompt_source.prompt_file.clone(),
+    })
+    .map_err(normalize_public_prompt_error)?;
     let context = resolve_command_context(cli)?;
     let plan = build_start_launch_plan(args, &context)?;
+    let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+    run_public_prompt_command(
+        PublicPromptCommandRequest {
+            action: PublicPromptAction::Start,
+            orchestration_session_id: Some(receipt.orchestration_session_id),
+            backend_id: receipt.backend_id,
+            prompt,
+            json: args.json,
+        },
+        cli.world,
+        cli.no_world,
+    )
+    .map_err(normalize_public_prompt_error)
+}
+
+fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
+    let prompt = load_public_prompt_source(&PublicPromptInput {
+        prompt: args.prompt_source.prompt.clone(),
+        prompt_file: args.prompt_source.prompt_file.clone(),
+    })
+    .map_err(normalize_public_prompt_error)?;
+    let store = AgentRuntimeStateStore::new()?;
+    let target = store
+        .resolve_public_turn_target(&args.session, &args.backend)
+        .map_err(|err| config_model::user_error(err.to_string()))?;
+
+    match target.session_posture {
+        PublicSessionPosture::Active => {}
+        PublicSessionPosture::DetachedReattachable => match target.target_kind {
+            PublicTurnTargetKind::Host => {
+                let plan =
+                    build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Resume)?;
+                if plan.descriptor.backend_id != args.backend {
+                    anyhow::bail!(config_model::user_error(format!(
+                        "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
+                        args.session,
+                        args.backend
+                    )));
+                }
+                let _ = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+            }
+            PublicTurnTargetKind::World => {
+                anyhow::bail!(config_model::user_error(format!(
+                    "unsupported_platform_or_posture: orchestration session {} backend {} is detached and cannot be recovered through the retained world-member seam without an active host owner; run `substrate agent reattach --session {}` first",
+                    args.session,
+                    args.backend,
+                    args.session
+                )));
+            }
+        },
+        PublicSessionPosture::Terminal => {
+            anyhow::bail!(config_model::user_error(format!(
+                "owner_unreachable: orchestration session {} backend {} is terminal and cannot accept follow-up turns",
+                args.session,
+                args.backend
+            )));
+        }
+    }
+
+    run_public_prompt_command(
+        PublicPromptCommandRequest {
+            action: PublicPromptAction::Turn,
+            orchestration_session_id: Some(args.session.clone()),
+            backend_id: args.backend.clone(),
+            prompt,
+            json: args.json,
+        },
+        cli.world,
+        cli.no_world,
+    )
+    .map_err(normalize_public_prompt_error)
+}
+
+fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
+    let plan = build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Resume)?;
     let receipt = launch_hidden_owner_helper(&plan, cli)?;
     render_agent_control_result(
         args.json,
         &AgentControlResultJson {
-            action: "start",
+            action: "reattach",
             orchestration_session_id: &receipt.orchestration_session_id,
             backend_id: &receipt.backend_id,
             scope: "host",
@@ -307,22 +397,49 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     )
 }
 
-fn run_resume(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
-    let plan = build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Resume)?;
-    let receipt = launch_hidden_owner_helper(&plan, cli)?;
-    render_agent_control_result(
-        args.json,
-        &AgentControlResultJson {
-            action: "resume",
-            orchestration_session_id: &receipt.orchestration_session_id,
-            backend_id: &receipt.backend_id,
-            scope: "host",
-            state: "active",
-            warnings: Vec::new(),
-            participant_id: Some(&receipt.participant_id),
-            source_orchestration_session_id: None,
-        },
-    )
+fn normalize_public_prompt_error(err: anyhow::Error) -> anyhow::Error {
+    if config_model::is_user_error(&err) || public_prompt_rendered_exit_code(&err).is_some() {
+        return err;
+    }
+
+    let message = err.to_string();
+    const USER_PREFIXES: &[&str] = &[
+        "missing_backend:",
+        "unknown_backend:",
+        "ambiguous_backend:",
+        "missing_prompt_source:",
+        "malformed_prompt_source:",
+        "empty_prompt:",
+        "unknown_session:",
+        "noncanonical_session_selector:",
+        "backend_not_in_session:",
+        "ambiguous_backend_slot:",
+        "missing_active_parent:",
+        "stale_linkage:",
+        "missing_internal_session_id:",
+        "session_already_owned:",
+        "owner_unreachable:",
+        "unsupported_platform_or_posture:",
+        "policy_disallow:",
+        "stream_bridge_failed:",
+        "runtime_start_failed:",
+    ];
+
+    if USER_PREFIXES
+        .iter()
+        .any(|prefix| message.starts_with(prefix))
+    {
+        return config_model::user_error(message);
+    }
+
+    err
+}
+
+fn runtime_start_error(err: anyhow::Error) -> anyhow::Error {
+    if config_model::is_user_error(&err) {
+        return err;
+    }
+    config_model::user_error(format!("runtime_start_failed: {err}"))
 }
 
 fn run_fork(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {

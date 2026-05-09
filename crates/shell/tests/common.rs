@@ -38,11 +38,12 @@ pub fn shared_tmpdir() -> &'static Path {
     })
 }
 
-/// Allocate a temporary directory with a descriptive prefix under the shared root.
+/// Allocate a temporary directory with a descriptive prefix under `/tmp` so
+/// integration fixtures never become nested descendants of the repo workspace.
 pub fn temp_dir(prefix: &str) -> TempDir {
     Builder::new()
         .prefix(prefix)
-        .tempdir_in(shared_tmpdir())
+        .tempdir_in("/tmp")
         .expect("failed to allocate integration test temp dir")
 }
 

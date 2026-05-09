@@ -7,7 +7,7 @@ pub mod common;
 use assert_cmd::Command;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tempfile::TempDir;
+use tempfile::{Builder, TempDir};
 
 pub use common::{binary_path, ensure_substrate_built, substrate_shell_driver, temp_dir};
 pub use substrate_common::dedupe_path;
@@ -32,7 +32,10 @@ pub struct ShellEnvFixture {
 
 impl ShellEnvFixture {
     pub fn new() -> Self {
-        let temp = temp_dir("substrate-test-");
+        let temp = Builder::new()
+            .prefix("substrate-test-")
+            .tempdir_in("/tmp")
+            .expect("failed to allocate integration test temp dir");
         let home = temp.path().join("home");
         fs::create_dir_all(home.join(".substrate/shims"))
             .expect("failed to create shims directory");

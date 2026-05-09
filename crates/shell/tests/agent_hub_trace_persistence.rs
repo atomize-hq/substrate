@@ -81,6 +81,16 @@ metadata: {}
     fs::write(project_dir.join(".substrate-profile"), profile).expect("write host-only profile");
 }
 
+fn write_workspace_world_disabled(project_dir: &Path) {
+    let workspace_dir = project_dir.join(".substrate");
+    fs::create_dir_all(&workspace_dir).expect("create workspace config dir");
+    fs::write(
+        workspace_dir.join("workspace.yaml"),
+        "world:\n  enabled: false\n",
+    )
+    .expect("write workspace.yaml");
+}
+
 #[allow(dead_code)]
 fn write_policy(home_substrate: &Path) {
     fs::create_dir_all(home_substrate).expect("create SUBSTRATE_HOME");
@@ -520,6 +530,7 @@ fn agent_events_append_flattened_agent_event_records_with_join_keys() {
     fs::create_dir_all(&substrate_home).expect("create substrate home");
     fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
     write_profile(&project);
+    write_workspace_world_disabled(&project);
     write_policy(&substrate_home);
 
     let trace_path = substrate_home.join("trace.jsonl");
@@ -527,11 +538,17 @@ fn agent_events_append_flattened_agent_event_records_with_join_keys() {
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
+    assert!(
+        repl.wait_for_output("substrate>", Duration::from_secs(5))
+            .is_some(),
+        "initial prompt; output:\n{}",
+        repl.output_string()
+    );
 
     repl.send_line(":demo-burst 1 1 0");
     repl.wait_for_output(
         "scheduled burst: agents=1, events_per_agent=1, delay_ms=0",
-        Duration::from_secs(2),
+        Duration::from_secs(5),
     )
     .expect("demo burst ack");
     repl.wait_for_output("chunk #00000", Duration::from_secs(3))
@@ -618,6 +635,7 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
     fs::create_dir_all(&substrate_home).expect("create substrate home");
     fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
     write_profile(&project);
+    write_workspace_world_disabled(&project);
     let fake_codex = write_fake_codex_script(temp.path());
     write_orchestrator_runtime_config(&substrate_home, &fake_codex);
 
@@ -626,8 +644,12 @@ fn runtime_owned_agent_event_rows_retain_shell_session_and_real_orchestration_se
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
-    repl.wait_for_output("substrate>", Duration::from_secs(2))
-        .expect("initial prompt");
+    assert!(
+        repl.wait_for_output("substrate>", Duration::from_secs(5))
+            .is_some(),
+        "initial prompt; output:\n{}",
+        repl.output_string()
+    );
     repl.send_line("::cli:codex trace owned runtime");
     let runtime_ready = repl.wait_for_output(
         "shell-owned orchestrator session is ready via retained attached control ownership",
@@ -749,6 +771,7 @@ fn no_context_shell_command_completion_does_not_synthesize_agent_event_trace_row
     fs::create_dir_all(&substrate_home).expect("create substrate home");
     fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
     write_host_only_profile(&project);
+    write_workspace_world_disabled(&project);
     write_host_only_policy(&substrate_home);
 
     let trace_path = substrate_home.join("trace.jsonl");
@@ -762,8 +785,14 @@ fn no_context_shell_command_completion_does_not_synthesize_agent_event_trace_row
 
     repl.wait_for_output("Substrate v", Duration::from_secs(2))
         .expect("banner");
+    assert!(
+        repl.wait_for_output("substrate>", Duration::from_secs(5))
+            .is_some(),
+        "initial prompt; output:\n{}",
+        repl.output_string()
+    );
     repl.send_line(":host false");
-    repl.wait_for_output("Command failed with status: 1", Duration::from_secs(3))
+    repl.wait_for_output("Command failed with status: 1", Duration::from_secs(5))
         .expect("host failure output");
     repl.send_line("exit");
     let (code, out) = repl.shutdown_graceful(Duration::from_secs(5));

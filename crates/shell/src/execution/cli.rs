@@ -402,6 +402,19 @@ pub struct AgentCmd {
     pub action: AgentAction,
 }
 
+#[derive(Args, Debug, Default)]
+#[group(id = "public_prompt_source", required = true, multiple = false)]
+pub struct PublicPromptArgs {
+    #[arg(long, group = "public_prompt_source", value_name = "TEXT")]
+    pub prompt: Option<String>,
+    #[arg(
+        long = "prompt-file",
+        group = "public_prompt_source",
+        value_name = "PATH"
+    )]
+    pub prompt_file: Option<PathBuf>,
+}
+
 #[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
 #[value(rename_all = "snake_case")]
 pub enum AgentScopeArg {
@@ -456,6 +469,8 @@ pub struct AgentOwnerHelperArgs {
 pub struct AgentStartArgs {
     #[arg(long = "backend", value_name = "BACKEND_ID")]
     pub backend: String,
+    #[command(flatten)]
+    pub prompt_source: PublicPromptArgs,
     #[arg(long)]
     pub json: bool,
 }
@@ -464,6 +479,18 @@ pub struct AgentStartArgs {
 pub struct AgentSessionControlArgs {
     #[arg(long = "session", value_name = "ORCHESTRATION_SESSION_ID")]
     pub session: String,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentTurnArgs {
+    #[arg(long = "session", value_name = "ORCHESTRATION_SESSION_ID")]
+    pub session: String,
+    #[arg(long = "backend", value_name = "BACKEND_ID")]
+    pub backend: String,
+    #[command(flatten)]
+    pub prompt_source: PublicPromptArgs,
     #[arg(long)]
     pub json: bool,
 }
@@ -499,8 +526,11 @@ pub enum AgentAction {
     Doctor(AgentDoctorArgs),
     /// Start a new host-scoped orchestration session from an exact backend id
     Start(AgentStartArgs),
+    /// Submit a follow-up prompt to the exact backend in an orchestration session
+    Turn(AgentTurnArgs),
     /// Reattach a retained owner loop to the exact orchestration session
-    Resume(AgentSessionControlArgs),
+    #[command(name = "reattach", alias = "resume")]
+    Reattach(AgentSessionControlArgs),
     /// Fork a new orchestration session from the exact orchestration session
     Fork(AgentSessionControlArgs),
     /// Stop the exact orchestration session through the private owner transport

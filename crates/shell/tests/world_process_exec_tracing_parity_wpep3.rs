@@ -100,6 +100,7 @@ fn world_process_events_preserve_linux_capture_fields_and_redacted_argv() {
     get_substrate_binary()
         .env("HOME", &home)
         .env("USERPROFILE", &home)
+        .current_dir(temp.path())
         .env("SUBSTRATE_HOME", home.join(".substrate"))
         .env("SHIM_TRACE_LOG", &trace_path)
         .env("SUBSTRATE_OVERRIDE_WORLD", "enabled")

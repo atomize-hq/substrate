@@ -6,6 +6,13 @@ pub(crate) mod session;
 pub(crate) mod state_store;
 pub(crate) mod validator;
 
+#[allow(unused_imports)]
+pub(crate) use control::{
+    load_public_prompt_source, public_prompt_rendered_exit_code, run_public_prompt_command,
+    LoadedPublicPrompt, PromptSubmitRuntime, PublicPromptAction, PublicPromptCommandRequest,
+    PublicPromptInput, PublicPromptRenderedExit, PublicSessionPosture, SubmittedPromptCompletion,
+    SubmittedPromptStreamEvent,
+};
 pub(crate) use mapping::{
     MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
     SESSION_HANDLE_SCHEMA_V1,
@@ -17,8 +24,10 @@ pub(crate) use session::{
     AgentRuntimeOwnershipMode, AgentRuntimeParticipantRecord, AgentRuntimeParticipantWorldBinding,
     AgentRuntimeSessionManifest, AgentRuntimeSessionState,
 };
+#[allow(unused_imports)]
 pub(crate) use state_store::{
-    AgentRuntimeSessionRecord, AgentRuntimeStateStore, PublicControlAction,
+    AgentRuntimeSessionRecord, AgentRuntimeStateStore, PublicControlAction, PublicTurnTargetKind,
+    ResolvedPublicTurnTarget,
 };
 pub(crate) use validator::{
     backend_allowed, runtime_realizability_error_exit_code, validate_orchestrator_selection,
