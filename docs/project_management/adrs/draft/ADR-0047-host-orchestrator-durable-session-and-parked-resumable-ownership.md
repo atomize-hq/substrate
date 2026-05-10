@@ -140,6 +140,152 @@ ADR_BODY_SHA256: TBD
 - A live attached client may consume from that inbox in real time.
 - If no client is attached, Substrate must retain the event and expose the need for resume/reattach rather than losing or invalidating the orchestration session.
 
+## Internal Runtime-State Schema (Authoritative, internal)
+
+This section defines the minimum retained runtime-state schema required to implement the durable host-orchestration contract in this ADR.
+
+This is an internal persisted runtime-state contract. It is not a config/policy surface, does not add operator-settable keys, and does not change the file-family ownership defined by ADR-0027.
+
+### Canonical filesystem layout
+- Canonical live-state authority remains under:
+  - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/session.json`
+  - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/<participant_id>.json`
+  - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/leases/<participant_id>.lease`
+- This ADR adds a canonical durable inbox path under the same session root:
+  - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/inbox/<item_id>.json`
+- Flat compatibility files may remain during cutover:
+  - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>.json`
+  - `~/.substrate/run/agent-hub/participants/<participant_id>.json`
+  - `~/.substrate/run/agent-hub/handles/<participant_id>.lease`
+- Compatibility files are read/write shims only during migration. The session-root files above are the sole live-state authority.
+
+### Orchestration session record
+- Existing `session.json` fields remain authoritative:
+  - `orchestration_session_id`
+  - `shell_trace_session_id`
+  - `workspace_root`
+  - `shell_owner_pid`
+  - `state`
+  - `opened_at`
+  - `last_active_at`
+  - `orchestrator_agent_id`
+  - `orchestrator_backend_id`
+  - `orchestrator_protocol`
+  - `active_session_handle_id`
+  - `latest_run_id`
+  - `world_id`
+  - `world_generation`
+  - `invalidation_reason`
+  - `closed_at`
+- Required additive fields:
+  - `posture: active_attached|parked_resumable|awaiting_attention|terminal`
+  - `posture_changed_at: <timestamp>`
+  - `attached_participant_id: <participant_id>|null`
+  - `pending_inbox_count: <u64>`
+  - `last_parked_at: <timestamp>|null`
+  - `last_attention_at: <timestamp>|null`
+  - `parked_reason: <string>|null`
+- Required semantics:
+  - `state` remains the lifecycle state machine for allocation, active execution, stopping, failure, invalidation, and terminal completion.
+  - `posture` is the attachability and attention summary. It must not be inferred solely from `state`.
+  - `active_session_handle_id` retains its existing compatibility meaning: the authoritative orchestrator participant for the orchestration session. It is not proof that a host client is currently attached.
+  - `attached_participant_id` is the authoritative pointer to the currently attached host execution client. It must be `null` whenever `posture` is `parked_resumable`, `awaiting_attention`, or `terminal`.
+  - `pending_inbox_count` counts unresolved inbox items for the orchestration session.
+  - `posture=awaiting_attention` is required when the session remains non-terminal, `attached_participant_id=null`, and `pending_inbox_count>0`.
+  - `posture=parked_resumable` is required when the session remains non-terminal, `attached_participant_id=null`, and `pending_inbox_count=0`.
+  - `posture=terminal` must align with a non-routable session state such as `Invalidated`, `Stopped`, or `Failed`.
+
+### Participant record
+- Existing participant fields remain authoritative:
+  - handle fields such as `participant_id`, `orchestration_session_id`, `backend_id`, `role`, `protocol`, `state`, lineage links, `world_id`, and `world_generation`
+  - internal fields such as `uaa_session_id`, `latest_run_id`, `cancel_supported`, `ownership_mode`, `ownership_valid`, `last_heartbeat_at`, `last_event_at`, `terminal_observed_at`, `termination_reason`, `last_error_bucket`, and `last_error_message`
+- Required additive internal fields for host-orchestrator participants:
+  - `attached_client_present: <bool>`
+  - `last_attached_at: <timestamp>|null`
+  - `last_detached_at: <timestamp>|null`
+  - `detach_reason: <string>|null`
+  - `resume_eligible: <bool>`
+- Required semantics:
+  - `uaa_session_id` remaining populated after clean client exit is valid and expected for a parked-resumable host session.
+  - `resume_eligible=true` with `attached_client_present=false` and a non-terminal participant `state` is a valid parked host posture, not a failure condition.
+  - `control_owner_retained`, `event_stream_active`, and `completion_observer_retained` remain attachment diagnostics. They must no longer be treated as the sole proof that the orchestration session itself is valid.
+  - These new attachment fields are required for host-orchestrator participants. Member-runtime participants may leave them unset or at safe defaults when the semantics do not apply.
+
+### Durable inbox item
+- Each unresolved or retained orchestration event must be persisted as one file under:
+  - `sessions/<orchestration_session_id>/inbox/<item_id>.json`
+- Minimum item schema:
+  - `item_id: <string>`
+  - `orchestration_session_id: <string>`
+  - `source_participant_id: <participant_id>|null`
+  - `backend_id: <backend_id>|null`
+  - `world_id: <string>|null`
+  - `world_generation: <u64>|null`
+  - `kind: approval_required|completion_notice|follow_up_message|runtime_alert`
+  - `state: pending|acknowledged|dismissed`
+  - `created_at: <timestamp>`
+  - `resolved_at: <timestamp>|null`
+  - `payload_schema: <string>`
+  - `payload: <object>`
+- Required semantics:
+  - `state=pending` items contribute to `pending_inbox_count`.
+  - Lack of an attached host client must never delete, skip, or silently consume a pending item.
+  - A live attached host client may observe and acknowledge items in real time, but the persisted inbox item remains the durable source of truth until it is resolved.
+  - Resolved items may be compacted later, but only after they have transitioned out of `pending`.
+
+### Lease file
+- Existing lease payloads may remain minimal and additive.
+- If additive attachment fields are mirrored into lease files for fast-path checks, `session.json` and `participants/<participant_id>.json` remain authoritative.
+
+### Compatibility and migration rules
+- Migration must be additive.
+- Older session and participant records that do not yet contain the new fields must remain readable.
+- During cutover, posture may be inferred from existing fields only for migration/bootstrap:
+  - `active_attached` when the participant is authoritative-live and the owner process is alive
+  - `parked_resumable` when the participant remains non-terminal and `uaa_session_id` is still present but no live attached owner remains
+  - `terminal` otherwise
+- Once rewritten by the new runtime, the persisted fields in this section become authoritative and must stop being reconstructed heuristically from attachment flags alone.
+- No config schema change and no policy schema change is required by this runtime-state schema.
+
+## Resolved Design Decisions
+
+These decisions are no longer open in this ADR. They are pinned here so the durable-session contract stays canonical and retained.
+
+### `reattach` semantics are attached-owner recovery only
+- `substrate agent reattach --session <orchestration_session_id>` is the explicit attached-owner recovery verb.
+- `reattach` MUST restore a live attached owner loop for the selected host orchestration session when recovery metadata is intact.
+- `reattach` MUST NOT submit a prompt, consume inbox work implicitly, or act as a one-shot follow-up-turn shortcut.
+- One-shot prompt-taking resume stays on:
+  - `substrate agent turn --session <orchestration_session_id> --backend <backend_id> --prompt ...`
+- Rationale:
+  - this matches the already-landed public caller-surface contract,
+  - preserves the distinction between operational ownership recovery and foreground turn submission,
+  - and avoids reintroducing ambiguous `resume` semantics into the public lifecycle surface.
+
+### Resolved inbox items remain retained for audit, then compacted later
+- Resolving an inbox item MUST remove it from authoritative pending/live counts immediately.
+- Resolving an inbox item MUST NOT immediately delete the persisted inbox artifact.
+- Resolved inbox items SHOULD be retained until:
+  - the orchestration session has reached terminal state, and
+  - a bounded retention/compaction policy has had an opportunity to preserve the necessary audit/debug trail while keeping the store bounded.
+- Compaction is a maintenance step, not the acknowledgement primitive.
+- Rationale:
+  - the broader event-plane and trace contracts in this repo are append-only and audit-oriented,
+  - live-state authority and historical retention are intentionally distinct,
+  - and immediate deletion would make detached-host review and postmortem analysis weaker without providing a meaningful contract benefit.
+
+### Non-host attached-client generalization is out of scope for this ADR
+- The attached-client metadata pinned by this ADR is intentionally host-oriented.
+- No additional generalized attachment metadata is required in this ADR for hypothetical future non-host attached clients.
+- If Substrate later introduces a new attached-client class that is not host-rooted, that work MUST land as an additive follow-on contract that:
+  - states the new attached-client type explicitly,
+  - defines any new persisted metadata fields explicitly,
+  - and proves that the broader attachment model does not weaken the current host-rooted fail-closed posture.
+- Rationale:
+  - the current orchestration model is explicitly host-rooted,
+  - public root start remains host-only in v1,
+  - and broadening the attachment taxonomy now would speculate beyond the runtime model this ADR is actually standardizing.
+
 ## Architecture Shape
 - Components:
   - `crates/shell` runtime/session/state layers:
@@ -209,7 +355,7 @@ ADR_BODY_SHA256: TBD
     "migration_or_backfill": true,
     "unknowns_high": true
   },
-  "notes": "Primary lift is runtime ownership/state semantics and accepted-to-terminal delivery guarantees. A follow-on contract/spec is expected to define the durable inbox/task-ledger shape in more detail."
+  "notes": "Primary lift is runtime ownership/state semantics, retained internal session/participant/inbox schema updates, and accepted-to-terminal delivery guarantees. Config/policy schema is unchanged."
 }
 ```
 <!-- PM_LIFT_VECTOR:END -->
@@ -253,7 +399,5 @@ ADR_BODY_SHA256: TBD
 - Confirm no post-`Accepted` stream ends without `Completed` or `Failed`.
 
 ## Open Questions
-- What is the minimal persistent inbox/task-ledger surface that lets world agents deliver approval needs and completion messages without requiring a permanently running host client?
-- Should `awaiting_attention` be a first-class persisted posture or derived from `parked_resumable + pending_inbox_items`?
-- Which parts of the parked/resume contract live in shell state only, and which parts need an explicit persisted operator-visible schema?
-- Does `reattach` always create an attached long-running client, or can some follow-up flows remain one-shot resume operations over the same durable orchestration session?
+- What bounded retention window and compaction trigger should govern resolved inbox items once the orchestration session is terminal?
+- Do any future inbox item kinds beyond `approval_required|completion_notice|follow_up_message|runtime_alert` require additional canonical payload-envelope rules?

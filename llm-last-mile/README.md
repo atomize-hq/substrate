@@ -76,6 +76,8 @@ The original packet stops before public control-plane productization. The follow
   - Harden the public `turn` surface around the already-landed `start|turn|reattach|fork|stop` contract, prove Linux world-member follow-up through the typed submit boundary, and pin explicit fail-closed coverage.
 - [ORCH_PLAN-22.md](./ORCH_PLAN-22.md)
   - Parent-frozen execution controller for the `PLAN-22` rollout on the authoritative shared-owner/member-runtime parity branch.
+- [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](./23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)
+  - Correct the host lifecycle model so durable orchestration sessions survive clean attached-client exit, retain pending world-originated work, and resume through explicit parked/reattach semantics.
 
 ## Non-Goals in This Packet
 
