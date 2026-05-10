@@ -1,709 +1,763 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/substrate/feat-session-centric-state-store-autoplan-restore-20260501-100941.md -->
-# PLAN: Linux Shared-World Replacement Ordering, Rollback, and Atomic Metadata Writes
+# PLAN: Host Orchestrator Durable Session And Parked-Resumable Ownership
 
-Source brief: user SOW dated `2026-05-01`  
-Branch: `feat/session-centric-state-store`  
-Plan type: Linux backend hardening slice, no UI scope  
-Review posture: fresh plan written against current repo truth with `/autoplan` completeness and `/plan-eng-review` depth  
-Status: execution-ready once approved
+Source SOW: [llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
+ADR anchor: [ADR-0047 — Host Orchestrator Durable Session and Parked-Resumable Ownership](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
+Adjacent landed slices: [llm-last-mile/PLAN-20.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-20.md), [llm-last-mile/PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-22.md)  
+Branch: `feat/macos-lima-shared-owner-member-runtime-parity`  
+Base branch: `main`  
+Plan type: shell runtime-state and lifecycle hardening, no UI scope  
+Review posture: unified execution plan, tightened to `/autoplan` completeness and `/plan-eng-review` rigor  
+Status: execution-ready planning pass on 2026-05-10
 
 ## Objective
 
-The bug is not "replacement sometimes fails." The bug is that Linux shared-world replacement currently commits the old world out of service before the new one is durably real.
+Make host orchestration durable across clean prompt-owner exits without changing the public verb contract.
 
-Right now:
+This slice is done only when all of the following are true:
 
-- [`LinuxLocalBackend::replace_shared_owner_session()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/lib.rs:195) marks the old world `Replaced` before creating the replacement.
-- [`SessionWorld::mark_shared_binding_replaced()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:176) is one-way and also leaves `last_restart_reason` behind as if the restart succeeded.
-- [`SessionWorld::persist_metadata()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:477) uses raw `fs::write`, so `session.json` can tear or truncate on crash.
-- Shared-owner recovery in [`recover_shared_active_from_root()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:207) only accepts `Active`, deletes malformed metadata, and does not reconcile a replace window.
-- Downstream consumers in [`crates/world-agent/src/service.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs:2328) and [`crates/shell/src/execution/repl_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/repl_persistent_session.rs:308) correctly fail closed unless the echoed proof is `binding_state=Active`.
+1. `substrate agent start|turn|reattach|stop` keep their current public grammar and exact-selector rules.
+2. The Substrate-owned orchestration session, not the lifetime of one attached Codex process, is the durable authority.
+3. Canonical runtime state persists explicit host posture: `active_attached`, `parked_resumable`, `awaiting_attention`, or `terminal`.
+4. World-originated approvals, completion notices, follow-up messages, and runtime alerts survive detached-host periods in a session-local durable inbox.
+5. `turn` and `reattach` resume valid parked host sessions cleanly and fail closed everywhere else.
+6. Once a public prompt request emits `Accepted`, the bridge always emits `Completed` or `Failed`. Silent EOF is a bug.
 
-That combination can strand an orchestration session without a reusable world, silently reset generation, or destroy the only durable owner proof. The fix is a Linux-only two-phase replace transaction plus atomic metadata writes. Nothing more. Nothing fancier.
+## Executive Decision
 
-## Execution Summary
+The public control surface is already right. The missing work is lifecycle truth.
 
-This slice ships in one narrow vertical path:
+This plan does not introduce a new control plane, queue product, or routing model. It hardens the existing shell runtime so the persisted session record, participant record, and session-local inbox become the only authority for whether a host orchestration session is live, resumable, attention-needed, or terminal.
 
-1. harden the shared-binding state machine and `session.json` durability in [`crates/world/src/session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:16),
-2. rewrite Linux replacement ordering and same-owner serialization in [`crates/world/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/lib.rs:148),
-3. prove the unchanged `Active`-only contract through targeted world-agent and shell regressions,
-4. correct the stale authority docs so the code and docs describe the same seam.
+The implementation is one cohesive slice with six ordered workstreams:
 
-If any step tries to widen scope beyond those four items, it is out of plan.
+1. freeze the persisted contract for session posture and host attachment truth,
+2. add a durable inbox with authoritative pending counts,
+3. rewrite clean-detach lifecycle handling so valid host sessions park instead of invalidate,
+4. harden `turn`, `reattach`, and the public prompt bridge around that durable truth,
+5. pin behavior with tests first,
+6. close docs only after the behavior is proven.
 
-## Scope Lock
-
-### Repo truth this plan must follow
-
-This plan is locked to current repository behavior, not stale intent docs:
-
-1. Linux shared-owner reuse is already authoritative in `crates/world` through `WorldReuseMode::SharedOrchestration`, `SharedWorldBindingSnapshot`, and `session.json` owner metadata. There is no missing schema problem in [`crates/world-api/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-api/src/lib.rs:9).
-2. The replace bug is ordering, not model shape. The current bug is at [`crates/world/src/lib.rs:195`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/lib.rs:195).
-3. The persistence bug is write durability, not serialization shape. The current bug is at [`crates/world/src/session.rs:477`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:477).
-4. `binding_state=Active` is already the only acceptable proof state on both world-agent and shell validation paths. The plan must preserve that contract exactly.
-5. [`llm-last-mile/03-shared-world-ownership-linux-first.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/03-shared-world-ownership-linux-first.md:112) is stale where it still proposes a shell-authoritative binding store. Current repo truth is Linux metadata authority in `crates/world`.
-6. This slice is Linux only. macOS and Windows must keep compiling with additive compatibility only. No behavior redesign there.
+## Locked Starting State
 
 ### What already exists
 
-| Sub-problem | Existing code | Plan |
+| Sub-problem | Existing code | Decision |
 | --- | --- | --- |
-| Shared owner request model | [crates/world-api/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-api/src/lib.rs:9) | Reuse as-is |
-| Shared owner allocation entrypoint | [crates/world/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/lib.rs:172) | Refactor ordering only |
-| Shared binding metadata model | [crates/world/src/session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:16) | Reuse schema, improve durability and reconciliation |
-| Active-only proof validation | [crates/world-agent/src/service.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs:2328), [crates/shell/src/execution/repl_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/repl_persistent_session.rs:308) | Reuse unchanged |
-| Atomic JSON write precedent | [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:912) | Copy the pattern into `crates/world` |
-| Shared-world shell stub harness | [crates/shell/tests/support/repl_world_agent.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/support/repl_world_agent.rs:393) | Extend for replace rollback cases |
+| Public start/turn/reattach/stop verbs | [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:301) | Reuse. No new verbs. |
+| Exact public follow-up routing | [`resolve_public_turn_target(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:711) | Reuse as the only public selector seam. |
+| Public prompt envelope types | [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs:327) | Reuse. Tighten terminal guarantees. |
+| Canonical session-root live state | [`AGENT_ORCHESTRATION_GAP_MATRIX.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md:78) | Reuse. Extend the existing session root. |
+| Atomic JSON write precedent | [`write_atomic_json(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:912) | Reuse for inbox and session mutations. |
+| Detached-world fail-closed behavior | [`run_turn(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:354) | Reuse exactly. Do not loosen it. |
+| Public control integration harness | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1) | Reuse and extend. |
+| Existing reattach lineage proof | [`public_reattach_and_fork_preserve_exact_session_and_lineage_contracts()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1083) | Reuse. Add parked-session semantics on top. |
+| Existing clean-exit invalidation regression | [`start_host_orchestrator_runtime_invalidates_when_attached_control_exits()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:7335) | Replace with parked-resumable behavior. |
+
+### Exact remaining gap
+
+1. [`OrchestrationSessionRecord`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs:24) does not yet model parked versus attached versus attention-needed truth.
+2. [`AgentRuntimeSessionInternal`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs:81) still leans on `control_owner_retained`, `event_stream_active`, and `completion_observer_retained` as near-authoritative liveness signals.
+3. The REPL regression [`start_host_orchestrator_runtime_invalidates_when_attached_control_exits()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:7335) documents the current bug directly.
+4. There is no first-class inbox under `sessions/<orchestration_session_id>/inbox/`.
+5. The public prompt bridge can still degrade into late stream disappearance instead of a guaranteed terminal envelope after `Accepted`.
+
+## Scope Lock
+
+### In scope
+
+1. Add explicit host posture fields to canonical session state.
+2. Add additive host attachment and resume-eligibility fields to canonical participant state.
+3. Introduce `sessions/<orchestration_session_id>/inbox/<item_id>.json` as a canonical durable inbox.
+4. Change clean attached-host exit from invalidation to `parked_resumable` or `awaiting_attention` when the session remains valid.
+5. Make `turn` and `reattach` resume parked host sessions without fuzzy routing.
+6. Tighten the `Accepted -> Completed|Failed` runtime invariant.
+7. Add or replace targeted tests and focused docs.
 
 ### NOT in scope
 
-- any new wire schema in `crates/world-api` or `crates/agent-api-types`
-- shell-side authoritative shared-world binding files
-- runtime manifest redesign or status-store redesign
-- platform behavior changes for macOS or Windows
-- new cache/index files under `/tmp/substrate-worlds`
-- optimistic cleanup daemons or background reconciliation services
-- rollout of a generic reusable atomic write utility crate
+1. New public verbs, fuzzy selectors, default routing, or public member selectors.
+2. Redesigning Linux world-member follow-up away from `MemberTurnSubmitRequestV1`.
+3. Making detached-world follow-up self-sustaining without a valid host owner.
+4. A new daemon, background reconciler, or second state authority.
+5. Config-schema or policy-schema changes.
+6. Windows/WSL parity expansion or a redesign of macOS/Lima beyond additive compile-safe compatibility.
+7. Rich operator inbox product surfaces such as `substrate agent inbox list`.
+8. Time-based inbox compaction policy. This slice defines compaction eligibility only.
 
 ### Chosen approach
 
 | Approach | Summary | Effort | Risk | Decision |
 | --- | --- | --- | --- | --- |
-| A. Two-phase replace in `crates/world` + atomic `session.json` writes | Keep old world committed until new `Active` world is durable, then finalize old | Medium | Low | **Accepted** |
-| B. Mark old `Replaced` first and try to recreate on failure | Current behavior | Small | High | Rejected |
-| C. Add shell-owned binding store and reconcile to Linux metadata | Second authority, more drift, wrong seam | High | High | Rejected |
-| D. Introduce per-owner persistent lock files | More moving parts than needed for the first hardening fix | Medium | Medium | Rejected |
-
-The accepted path is the smallest correct slice. It fixes the real failure window without spending an innovation token on a new authority model.
+| A. Extend canonical session and participant state, add session-local inbox, rewrite lifecycle around parked ownership | Boring, explicit, minimal new surface | Medium | Low | **Accepted** |
+| B. Keep legacy fields authoritative and infer posture heuristically | Smaller diff, wrong model, brittle | Small | High | Rejected |
+| C. Add a second ownership registry or external queue | More moving parts, split authority | High | High | Rejected |
+| D. Treat clean exit as terminal and rely on reattach-only recovery hacks | Preserves the current bug in prettier words | Small | High | Rejected |
 
 ## Step 0: Scope Challenge
 
-### Minimum change set
+### 0A. What already solves part of this problem
 
-The minimum complete fix is:
+1. Exact selector and fail-closed routing already exist in [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:711).
+2. Private owner transport and prompt streaming already exist in [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs:1063).
+3. Resume-helper launch already exists in [`run_turn(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:324) and [`run_reattach(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:384).
+4. Canonical session-root persistence already exists and already uses atomic-write helpers in the state store.
 
-1. add an internal shared-binding state transition helper in `crates/world/src/session.rs`,
-2. make replacement in `crates/world/src/lib.rs` explicit: pre-commit, commit, rollback, finalize,
-3. make `session.json` writes atomic in `crates/world/src/session.rs`,
-4. teach shared-owner recovery to reconcile `Active` plus `Replacing` worlds deterministically,
-5. serialize shared-owner `ensure_session()` paths so concurrent `AttachOrCreate` cannot observe a half-transition,
-6. add targeted tests in `world`, `world-agent`, and `shell`,
-7. update the stale plan/doc surfaces that still describe the wrong authority seam.
+The repo does not need a new routing model. It needs the existing model to stop lying about ownership.
 
-### Complexity check
+### 0B. Minimum honest diff
 
-This slice is a little wider than the ideal 5-file bug fix, but still boring:
+The minimum complete fix spans these primary modules:
 
-- production files: `crates/world/src/lib.rs`, `crates/world/src/session.rs`
-- validation-only or docs: `crates/world-agent/src/service.rs`, `crates/world-agent/src/pty.rs`, `crates/shell/src/execution/repl_persistent_session.rs`, related tests, `docs/WORLD.md`, `llm-last-mile/03-shared-world-ownership-linux-first.md`
+1. [`crates/shell/src/execution/agent_runtime/orchestration_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs)
+2. [`crates/shell/src/execution/agent_runtime/session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs)
+3. [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+4. [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
+5. [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+6. [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+7. targeted tests and focused docs listed later in this plan
 
-No new service. No new storage authority. No new public model. That is the whole game.
+Anything smaller leaves lifecycle truth, inbox durability, or operator-visible terminal delivery ambiguous.
 
-### File touch budget
+### 0C. Complexity check
 
-Expected production edits are intentionally constrained:
+This slice crosses more than eight files. That is a smell. It is still the right scope because the bug is inherently cross-seam:
 
-- required production files: [`crates/world/src/session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:16), [`crates/world/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/lib.rs:148)
-- validation seams that may change only if a regression test proves they must: [`crates/world-agent/src/service.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs:2328), [`crates/world-agent/src/pty.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/pty.rs:211), [`crates/shell/src/execution/repl_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/repl_persistent_session.rs:308)
-- required tests and docs: targeted files listed later in this plan
+1. storage truth,
+2. lifecycle transitions,
+3. public control semantics,
+4. regression coverage,
+5. docs truth.
 
-No new crate, no new public API surface, no new persisted schema, no new background worker.
+The plan stays engineered enough by holding these lines:
 
-### Completeness check
+1. no new crate,
+2. no new public API family,
+3. no background daemon,
+4. no second source of truth,
+5. no speculative generic queue framework.
 
-Shortcut versions of this fix are not acceptable:
+### 0D. Search and reuse check
 
-- "just mark `Replacing` instead of `Replaced`" is incomplete without recovery logic,
-- "just add retries" is incomplete without rollback semantics,
-- "just stop deleting malformed metadata" is incomplete without atomic writes,
-- "just add tests" is incomplete if the transaction ordering stays wrong.
+1. **[Layer 1]** Reuse the exact session-root layout already documented in the gap matrix and earlier session-store slices.
+2. **[Layer 1]** Reuse the existing atomic JSON write pattern in the state store for all inbox and session mutations.
+3. **[Layer 1]** Reuse the current `start|turn|reattach|stop` surface and exact detached-world fail-closed guidance.
+4. **[EUREKA]** The missing abstraction is not a new abstraction. The missing abstraction is that `state` and `posture` are different concepts and must both be persisted explicitly.
 
-This plan chooses the complete version because the extra cost is minutes, not weeks.
+### 0E. TODOS cross-reference
 
-### Distribution check
+There is no root `TODOS.md` today. This review therefore records deferments in `NOT in scope` and `Deferred follow-ups` below instead of inventing a new repo convention mid-slice.
 
-No new artifact type is introduced. No CI/CD changes are required beyond normal test coverage.
+### 0F. Completeness check
 
-## Architecture Contract
+Shortcut versions are not acceptable:
 
-### Hard invariants
+1. adding posture fields without changing clean-exit lifecycle is incomplete,
+2. changing clean-exit lifecycle without a durable inbox is incomplete,
+3. adding an inbox without authoritative pending counts is incomplete,
+4. changing behavior without replacing the invalidation regression and public control tests is incomplete.
 
-1. At most one committed `Active` world exists per `orchestration_session_id` after recovery.
-2. `binding_state=Active` remains the only proof state surfaced to world-agent or shell callers.
-3. `world_generation` increments exactly once, only at the commit point when the new world becomes durable.
-4. A failed replace before commit preserves the original `world_id`, `world_generation`, and `binding_state=Active`.
-5. Cleanup failure for a partially created replacement must never block rollback of the old world.
-6. Shared-owner recovery must never silently reset generation to `0` when a prior owner chain exists.
-7. Malformed owner-bearing metadata must be warned on and treated as non-reusable or ambiguous. It must not be silently deleted during shared-owner recovery.
-8. Generic compatible reuse remains unchanged for non-owner flows.
-9. Same-owner allocation and replacement must be serialized inside the Linux backend so concurrent requests cannot create duplicate generation `0` worlds.
+Boil the lake inside this blast radius. The extra cost is explicit fields and more tests, not a quarter of work.
 
-### Architecture dependency graph
+## Frozen Runtime Contract
+
+If implementation wants to violate any rule in this section, revise the plan first.
+
+### Public command contract
+
+| Command | Allowed behavior | Forbidden behavior |
+| --- | --- | --- |
+| `substrate agent start --backend <backend_id> --prompt ...` | Host-only root prompt-taking entrypoint | New selector forms, world-only root start |
+| `substrate agent turn --session <id> --backend <backend_id> --prompt ...` | Exact follow-up turn against an existing orchestration session | Fuzzy routing, latest-session fallback, prompt-less recovery |
+| `substrate agent reattach --session <id>` | Restore attached owner control only | Submit a prompt, consume inbox implicitly |
+| `substrate agent stop --session <id>` | Explicit terminal shutdown | Soft-detach aliasing |
+
+### State versus posture
+
+1. `state` remains the orchestration lifecycle machine.
+2. `posture` becomes the attached/resumable/attention summary.
+3. `state` and `posture` are related but not interchangeable.
+4. Routing decisions that care about resumability or attention must consult persisted posture and participant resume truth, not attachment diagnostics alone.
+
+### Session invariants
+
+1. `attached_participant_id != null` if and only if `posture == active_attached`.
+2. `attached_participant_id == null` is required for `parked_resumable`, `awaiting_attention`, and `terminal`.
+3. `pending_inbox_count > 0` requires `posture == awaiting_attention` whenever the session is non-terminal and no host client is attached.
+4. `pending_inbox_count == 0` plus at least one authoritative host participant with `resume_eligible == true` requires `posture == parked_resumable` whenever the session is non-terminal and detached.
+5. `terminal` posture must align with non-routable lifecycle state such as `Invalidated`, `Stopped`, or `Failed`.
+6. `active_session_handle_id` keeps its compatibility meaning as the authoritative orchestrator participant. It is not proof of current attachment.
+
+### Participant invariants
+
+1. `control_owner_retained`, `event_stream_active`, and `completion_observer_retained` remain diagnostics only.
+2. `uaa_session_id` is a correlation identifier, not proof of attachment or resumability.
+3. A host participant may be `resume_eligible == true` while `attached_client_present == false`.
+4. Member-runtime participants may leave host-only attachment fields unset or at safe defaults.
+
+### Durable inbox invariants
+
+1. Every unresolved world-originated orchestration event is persisted as one file under `sessions/<session>/inbox/<item_id>.json`.
+2. `state == pending` contributes to `pending_inbox_count`.
+3. Resolving an item must update live pending counts immediately.
+4. Resolving an item must not immediately delete the file artifact.
+5. Missing attached host owner must never silently drop or consume a pending item.
+
+### Prompt bridge invariant
+
+Once a public prompt request emits `Accepted`, the bridge may terminate only with:
+
+1. `Completed`, or
+2. `Failed`.
+
+Anything else is a runtime bug and must be rendered as `Failed`.
+
+## Authoritative Runtime-State Shape
+
+### Canonical filesystem layout
 
 ```text
-SHARED-OWNER REPLACE DEPENDENCY GRAPH
-=====================================
-LinuxLocalBackend::ensure_session()
-    |
-    +--> shared-owner action gate
-          |
-          +--> AttachOrCreate
-          |     |
-          |     +--> recover_shared_active_from_root()
-          |     \--> create_shared_owner_session()
-          |
-          \--> ReplaceExpectedGeneration
-                |
-                \--> replace_shared_owner_session()
-                      |
-                      +--> SessionWorld::set_shared_binding_state(Active -> Replacing)
-                      +--> SessionWorld::persist_metadata() [atomic]
-                      +--> create_shared_owner_session(generation + 1)
-                      +--> SessionWorld::set_shared_binding_state(Replacing -> Replaced)
-                      \--> rollback on failure: SessionWorld::set_shared_binding_state(Replacing -> Active)
+~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/
+├── session.json
+├── participants/
+│   └── <participant_id>.json
+├── leases/
+│   └── <participant_id>.lease
+└── inbox/
+    └── <item_id>.json
 ```
 
-All state transitions funnel through `SessionWorld`. All request serialization lives in `LinuxLocalBackend`. Downstream proof readers stay read-only and fail closed.
+Compatibility snapshots may still exist elsewhere for read-side compatibility, but this session root remains authoritative.
 
-### Current unsafe flow
+### Required additive session fields
+
+1. `posture: active_attached|parked_resumable|awaiting_attention|terminal`
+2. `posture_changed_at: <timestamp>`
+3. `attached_participant_id: <participant_id>|null`
+4. `pending_inbox_count: <u64>`
+5. `last_parked_at: <timestamp>|null`
+6. `last_attention_at: <timestamp>|null`
+7. `parked_reason: <string>|null`
+
+### Required additive participant fields
+
+1. `attached_client_present: <bool>`
+2. `last_attached_at: <timestamp>|null`
+3. `last_detached_at: <timestamp>|null`
+4. `detach_reason: <string>|null`
+5. `resume_eligible: <bool>`
+
+### Durable inbox minimum schema
+
+1. `schema_version`
+2. `item_id`
+3. `orchestration_session_id`
+4. `kind: approval_required|completion_notice|follow_up_message|runtime_alert`
+5. `state: pending|acknowledged|dismissed`
+6. `created_at`
+7. `resolved_at`
+8. `correlation`
+9. `payload_schema`
+10. `payload`
+
+The correlation envelope remains additive and nullable. It is a join surface, not an authority surface.
+
+## Architecture Review
+
+### Architecture thesis
+
+Persist the truth you want to route on.
+
+Right now the runtime knows too much about whether one control-owner task is still retained and not enough about whether the session itself is still valid. The fix is to make the session row authoritative for host posture, then make lifecycle code update that row intentionally.
+
+### Current broken lifecycle
 
 ```text
-CURRENT REPLACE FLOW
-====================
-old Active(g=N)
+CURRENT HOST OWNERSHIP MODEL
+============================
+host owner attached
     |
-    | mark old Replaced + persist
+    | clean backend exit
     v
-old Replaced(g=N)
+attachment diagnostics go false
     |
-    | create replacement world
-    +--> success -> new Active(g=N+1)
-    |
-    +--> failure -> NO ACTIVE WORLD
+    +--> session often treated as invalidated
+    +--> no durable parked posture
+    +--> no canonical inbox for detached-host follow-up
+    \--> public durability contract is weaker than the CLI suggests
 ```
 
-That "failure -> NO ACTIVE WORLD" branch is the bug.
-
-### Target transaction flow
+### Target lifecycle
 
 ```text
-TARGET REPLACE FLOW
-===================
-old Active(g=N)
+TARGET HOST OWNERSHIP MODEL
+===========================
+active_attached
     |
-    | pre-commit: set old Replacing(g=N), atomic persist
+    | clean backend exit, runtime still valid
     v
-old Replacing(g=N)
+parked_resumable
     |
-    | create replacement root + persist new Active(g=N+1)
-    +--> failure before commit
-    |       |
-    |       | rollback old to Active(g=N), then attempt cleanup of the new root
-    |       v
-    |   old Active(g=N)
+    +--> inbox empty
+    |       -> stay parked_resumable
     |
-    +--> success at commit point
-            |
-            | finalize old to Replaced(g=N), atomic persist
-            v
-        new Active(g=N+1) + old Replaced(g=N)
+    +--> inbox item arrives while detached
+    |       -> awaiting_attention
+    |
+    +--> operator runs `agent turn`
+    |       -> helper resumes, prompt submitted, posture returns active_attached
+    |
+    +--> operator runs `agent reattach`
+    |       -> helper resumes, no prompt submitted, posture returns active_attached
+    |
+    \--> explicit stop / fatal invalidation / unrecoverable failure
+            -> terminal
 ```
 
-### Recovery reconciliation contract
+### Transition matrix
+
+| Event | Precondition | State effect | Posture effect |
+| --- | --- | --- | --- |
+| successful host start | session established | lifecycle becomes active | `active_attached` |
+| clean host exit, session still valid, no pending inbox | active host participant exists | lifecycle stays non-terminal | `parked_resumable` |
+| clean host exit, session still valid, pending inbox exists | pending inbox count > 0 | lifecycle stays non-terminal | `awaiting_attention` |
+| detached world event arrives | session non-terminal, no host attached | no lifecycle promotion | `awaiting_attention`, count increments |
+| `turn` resumes parked host | exact `(session, backend)` target resolves and participant is resume-eligible | lifecycle remains active | `active_attached` |
+| `reattach` resumes parked host | session non-terminal and recovery metadata intact | lifecycle remains active | `active_attached` |
+| explicit `stop` | operator requests shutdown | lifecycle becomes stopping/stopped | `terminal` |
+| fatal runtime failure | ownership cannot be recovered safely | lifecycle becomes failed/invalidated | `terminal` |
+
+### Component dependency graph
 
 ```text
-RECOVERY DECISION TREE
-======================
-scan owner-matching session.json files
+DURABLE SESSION OWNERSHIP GRAPH
+===============================
+agents_cmd.rs
     |
-    +--> exactly 1 Active, 0 Replacing
-    |       -> return Active
+    +--> state_store.rs
+    |     |
+    |     +--> orchestration_session.rs
+    |     +--> session.rs
+    |     \--> inbox persistence helpers
     |
-    +--> 0 Active, 1 Replacing
-    |       -> restore Replacing -> Active, persist, return it
+    +--> control.rs
+    |     |
+    |     +--> private prompt bridge
+    |     \--> terminal envelope invariant
     |
-    +--> 1 Active(g=N+1), 1 Replacing(g=N)
-    |       -> return newer Active
-    |       -> do not reuse older Replacing
-    |
-    +--> 2+ Active
-    |       -> fail closed, do not guess
-    |
-    +--> malformed owner-bearing metadata
-            -> warn, ignore for reuse, do not delete automatically
+    \--> async_repl.rs
+          |
+          +--> owner lifecycle transitions
+          \--> parked vs invalidated behavior
 ```
 
-### Serialization strategy
+The plan stays boring by keeping all ownership truth inside existing shell runtime modules.
 
-Use one coarse backend-local mutex around shared-owner `ensure_session()` paths in [`LinuxLocalBackend::ensure_session()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/lib.rs:329).
+### Production failure scenarios
 
-Why this choice:
-
-- it is explicit,
-- it is a minimal diff,
-- it avoids duplicate generation `0` creation during concurrent `AttachOrCreate`,
-- it keeps generic execution paths untouched,
-- it is easy to replace later with a narrower per-owner lock if profiling ever justifies it.
-
-Do not build a lock-file protocol. Not for this fix.
+| Codepath | Real failure | Planned handling |
+| --- | --- | --- |
+| attached host exits cleanly | valid session is marked invalid and follow-up dies | convert to `parked_resumable`, preserve resumability metadata |
+| detached session receives approval request | work is lost because no client is attached | persist inbox item and increment pending count |
+| prompt bridge emits `Accepted` then helper disappears | operator sees a hung or truncated turn | force explicit `Failed` path and test it |
+| stale participant diagnostics say not live | session is still valid but routing rejects it | route on explicit posture and resume eligibility, not transient booleans |
+| two recovery paths race | duplicate attached owners or bad successor lineage | serialize resume-sensitive state updates through the existing state-store authority |
+| resolved inbox item is deleted immediately | no audit trail, no postmortem correlation | keep resolved artifacts until later compaction eligibility |
 
 ## Detailed Execution Plan
 
-### 1. `crates/world/src/session.rs`
+### Workstream 1: Freeze the persisted posture contract
 
-#### 1.1 Replace one-way mutation with a single internal transition helper
+Files:
 
-Replace [`mark_shared_binding_replaced()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:176) with this helper:
+1. [`crates/shell/src/execution/agent_runtime/orchestration_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs)
+2. [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
 
-```rust
-fn set_shared_binding_state(
-    &mut self,
-    binding_state: SharedWorldBindingState,
-    last_restart_reason: Option<String>,
-) -> Result<()>
-```
+Implement:
 
-Rules:
+1. add an explicit posture enum with `active_attached`, `parked_resumable`, `awaiting_attention`, and `terminal`,
+2. add the session fields listed in `Authoritative Runtime-State Shape`,
+3. centralize session-level invariant validation so impossible `(state, posture, attached_participant_id, pending_inbox_count)` combinations fail fast in one place,
+4. add helpers that recompute posture from authoritative session + participant + inbox truth instead of command-specific heuristics.
 
-- allow transitions `Active -> Replacing`, `Replacing -> Active`, `Replacing -> Replaced`
-- reject every other transition with an error that names the current and requested state
-- keep `world_id` and `world_generation` unchanged during pre-commit and rollback
-- set `last_restart_reason=Some(reason)` only when entering `Replacing` or finalizing `Replaced` after a committed replacement
-- clear `last_restart_reason` on rollback to `Active`
-- persist via the new atomic metadata writer every time
-- no other function in `session.rs` may write `binding_state` or `last_restart_reason` directly for shared-owner worlds
+Acceptance criteria:
 
-Done when:
+1. session rows can represent every state in the transition matrix without ambiguity,
+2. no caller can produce `active_attached` with `attached_participant_id == null`,
+3. no caller can produce `parked_resumable` or `awaiting_attention` with `attached_participant_id != null`,
+4. a non-terminal detached session with pending inbox items always normalizes to `awaiting_attention`.
 
-- `mark_shared_binding_replaced()` is gone,
-- the helper is the only shared-binding state mutation path,
-- tests cover all three allowed transitions and at least one rejected transition.
+Do not do:
 
-#### 1.2 Add an atomic metadata writer
+1. do not create a second persisted manifest,
+2. do not overload `active_session_handle_id`,
+3. do not spread posture recomputation across `agents_cmd.rs`, `control.rs`, and `async_repl.rs`.
 
-Replace raw [`fs::write()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:484) with the same-directory temp-file pattern already used by [`write_atomic_json()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:912):
+### Workstream 2: Add host attachment and resume truth to participant state
 
-1. `create_dir_all(parent)`
-2. `NamedTempFile::new_in(parent)`
-3. `serde_json::to_writer_pretty(temp)`
-4. `temp.sync_all()`
-5. `persist()` into `session.json`
-6. on Linux, attempt a parent-directory `sync_all()` after rename; warn on unsupported directory sync, but do not undo a successful rename
+Files:
 
-Durability contract on successful return:
+1. [`crates/shell/src/execution/agent_runtime/session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs)
+2. any participant validation helpers read from [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- readers see old full JSON or new full JSON,
-- never torn bytes,
-- parent directory metadata is flushed when supported.
+Implement:
 
-Done when:
+1. add `attached_client_present`, `last_attached_at`, `last_detached_at`, `detach_reason`, and `resume_eligible`,
+2. keep `control_owner_retained`, `event_stream_active`, and `completion_observer_retained` as diagnostics only,
+3. add host-only validation so parked host participants remain valid when detached and resume-eligible,
+4. keep member-runtime participants safe by default when host-only fields do not apply.
 
-- `persist_metadata()` still owns the public write contract,
-- the implementation no longer calls `fs::write()` for `session.json`,
-- a forced write failure test proves the prior readable metadata remains intact.
+Acceptance criteria:
 
-#### 1.3 Reconcile shared-owner recovery
+1. clean host detachment preserves participant resumability instead of looking terminal,
+2. a participant can be detached and still be explicitly recoverable,
+3. code that currently infers liveness from diagnostic booleans is either removed or demoted behind new helpers.
 
-Refactor [`recover_shared_active_from_root()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/session.rs:207) so it:
+Do not do:
 
-- collects all owner-matching `Shared` candidates,
-- distinguishes `Active`, `Replacing`, `Replaced`, `Abandoned`,
-- restores a lone `Replacing` world to `Active`,
-- prefers the newer committed `Active` when both `Active` and older `Replacing` exist,
-- fails closed on ambiguous multi-`Active` cases,
-- never auto-deletes malformed owner-bearing metadata during shared-owner scan.
+1. do not reinterpret `uaa_session_id` as proof of current attachment,
+2. do not require member-runtime participants to mimic host-only attachment semantics.
 
-Generic recovery may keep its current cleanup behavior for purely generic metadata. Shared-owner recovery cannot.
+### Workstream 3: Add the canonical durable inbox
 
-Deterministic resolution order:
+Files:
 
-1. parse all owner-matching shared candidates,
-2. separate malformed owner-bearing metadata from valid candidates,
-3. partition valid candidates by `binding_state`,
-4. resolve exactly one of the cases in the recovery decision tree,
-5. if no valid reusable candidate exists, return `Ok(None)`,
-6. if the valid set is ambiguous, return an error and leave files on disk for inspection.
+1. [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+2. supporting runtime plumbing as needed in [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) or [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
 
-Done when:
+Implement:
 
-- shared-owner recovery never deletes malformed owner-bearing metadata,
-- ambiguous multi-`Active` ownership fails closed,
-- lone `Replacing` rollback recovery and `Active + Replacing` reconciliation both have regression tests.
+1. add `sessions/<orchestration_session_id>/inbox/<item_id>.json`,
+2. define one canonical envelope for `approval_required`, `completion_notice`, `follow_up_message`, and `runtime_alert`,
+3. persist pending items atomically with authoritative `pending_inbox_count` updates,
+4. support `pending`, `acknowledged`, and `dismissed`,
+5. keep correlation metadata additive and nullable,
+6. make resolved items non-pending immediately but still inspectable until later compaction.
 
-### 2. `crates/world/src/lib.rs`
+Acceptance criteria:
 
-#### 2.1 Rewrite replace as an explicit transaction
+1. detached host does not lose world-originated work,
+2. live pending count is O(1) to read,
+3. a resolved item disappears from pending posture calculations without deleting the audit artifact.
 
-Refactor [`replace_shared_owner_session()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/lib.rs:195) into four phases:
+Do not do:
 
-1. **Load and validate current active world**
-   - find authoritative active proof
-   - reject generation mismatch
-2. **Pre-commit**
-   - set old world `Active -> Replacing`
-   - atomically persist old metadata
-3. **Commit**
-   - create replacement world with `world_generation = expected_generation + 1`
-   - replacement world persists immediately as `Active`
-4. **Finalize**
-   - set old world `Replacing -> Replaced`
-   - atomically persist old metadata
+1. do not build a generic job system,
+2. do not make steady-state reads rescan the whole inbox directory,
+3. do not delete resolved items synchronously as part of normal command execution.
 
-Rollback path:
+### Workstream 4: Rewrite clean-detach and resume semantics
 
-- if replacement creation fails before the commit point, restore old world `Replacing -> Active`,
-- clear stale restart reason on rollback,
-- attempt cleanup of any partially created replacement root after the old world is back to `Active`,
-- return an error that preserves the original creation failure and also mentions rollback or cleanup failure if either secondary step fails.
+Files:
 
-Additional implementation rules:
+1. [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+2. [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+3. [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
+4. any read-side helpers in [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
 
-- do not call `create_shared_owner_session()` until pre-commit metadata persistence succeeds,
-- do not finalize the old world until the new world is created, persisted, and inserted into the backend cache,
-- `world_generation` increments only on the new committed world,
-- the old world keeps generation `N` in both `Replacing` and `Replaced`,
-- the rollback path must execute in the same request before returning an error.
+Implement:
 
-Done when:
+1. clean prompt-owner exit after successful session establishment transitions to `parked_resumable`, not automatic invalidation,
+2. detached session plus pending inbox work transitions to `awaiting_attention`,
+3. `turn` against a parked host session may restore a helper and submit the prompt,
+4. `reattach` against a parked host session may restore the helper without submitting a prompt,
+5. detached world follow-up stays fail closed and still instructs the operator to reattach first,
+6. explicit `stop`, invalidation, and unrecoverable runtime failure still end in `terminal`.
 
-- a successful replace leaves exactly one committed `Active` world at generation `N+1`,
-- a failed replace leaves the original world committed as `Active` at generation `N`,
-- no code path returns with zero recoverable world for the owner.
+Acceptance criteria:
 
-#### 2.2 Serialize same-owner shared-world ensure paths
+1. the old clean-exit invalidation regression is replaced with parked-session behavior,
+2. parked host `turn` and parked host `reattach` both stay inside the same orchestration session,
+3. exact `(session, backend)` resolution remains the only public routing contract,
+4. no valid recovery path depends on reviving diagnostic booleans alone.
 
-Guard the shared-owner branch in [`ensure_session()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world/src/lib.rs:329) with a backend-local mutex. Apply it to both:
+Do not do:
 
-- `AttachOrCreate`
-- `ReplaceExpectedGeneration`
+1. do not make `reattach` a prompt shortcut,
+2. do not add fuzzy backend recovery,
+3. do not let detached-world routing piggyback on parked-host semantics.
 
-That closes the window where:
+### Workstream 5: Harden the terminal envelope contract
 
-1. request A marks old `Replacing`,
-2. request B scans and sees no `Active`,
-3. request B creates a second generation `0` world.
+Files:
 
-That race is unacceptable.
+1. [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
+2. integration tests in [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
 
-Implementation requirement:
+Implement:
 
-- use one backend-local mutex guarding only the shared-owner branch,
-- hold it across lookup, pre-commit, create, rollback, and finalize,
-- do not widen the lock to generic reuse flows.
+1. any path that already emitted `Accepted` must end in an explicit terminal envelope,
+2. post-`Accepted` EOF becomes a hard failed path with a rendered `Failed` envelope,
+3. parking or detachment may exist as runtime-state changes around the stream, but never as a missing terminal envelope.
 
-Done when:
+Acceptance criteria:
 
-- concurrent same-owner attach and replace tests cannot create duplicate generation `0` worlds,
-- generic non-owner flows still execute without taking the shared-owner lock.
+1. operator-facing public commands never hang in a silent post-`Accepted` steady state,
+2. transport disappearance after `Accepted` is rendered deterministically as failure,
+3. tests prove both success and late-failure paths.
 
-### 3. Downstream proof seams
+Do not do:
 
-Production behavior stays unchanged in:
+1. do not treat EOF as a soft operator-visible outcome,
+2. do not let attachment-state transitions bypass terminal envelope emission.
 
-- [`resolve_shared_world_binding()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs:2328)
-- [`PersistentServerMessage::Ready.shared_world`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/pty.rs:211)
-- [`validate_shared_world_echo()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/repl_persistent_session.rs:308)
+### Workstream 6: Docs closeout after behavior is real
 
-This plan deliberately preserves their fail-closed contract:
+Likely docs:
 
-- world-agent must only surface committed `Active` proofs,
-- shell must reject missing, mismatched, stale-generation, or non-`Active` echoes.
+1. [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
+2. [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md)
+3. [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md), only if it describes runtime ownership or session roots
+4. this slice's SOW or ADR, only if implementation reveals wording drift
 
-The work here is test coverage, not production redesign.
+Acceptance criteria:
 
-### 4. Docs and drift correction
+1. docs describe the same authority model as the code,
+2. operator-facing docs explain parked host versus detached world clearly,
+3. stale diagrams near touched code are updated in the same change.
 
-Update:
+Do not do:
 
-- [`llm-last-mile/PLAN-03.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-03.md) only where it still describes replace ordering that no longer matches implementation
-- [`llm-last-mile/03-shared-world-ownership-linux-first.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/03-shared-world-ownership-linux-first.md) to mark the shell-authoritative binding-store proposal as stale
-- [`docs/WORLD.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md) to document the two-phase replace window and recovery guarantees for Linux metadata authority
+1. do not lead the change with docs,
+2. do not freeze wording for behavior that has not been proven by tests.
 
-Doc update contract:
+## Code Quality Review
 
-- `PLAN-03` must match the final replacement ordering,
-- `03-shared-world-ownership-linux-first.md` must explicitly say Linux metadata is authoritative now and the shell-side binding-store idea is historical only,
-- `docs/WORLD.md` must document the `Replacing` crash window and the recovery rules from this plan.
+### DRY and explicitness rules
 
-## Implementation Sequence
+1. Centralize posture recomputation in one place. Do not duplicate "detached plus pending count means awaiting attention" across command, lifecycle, and store code.
+2. Centralize inbox counter maintenance. Do not let every caller increment and decrement pending counts ad hoc.
+3. Prefer additive helpers inside existing modules over a new abstraction layer.
+4. Keep attachment diagnostics as diagnostics. Do not silently promote them back into authority through helper call sites.
 
-Execute the work in this order. No later step starts before the prior step satisfies its done-when checks.
+### Minimal-diff rules
 
-1. **State machine and persistence core**
-   - implement `set_shared_binding_state()`
-   - switch `persist_metadata()` to atomic writes
-   - make shared-owner recovery deterministic
-2. **Backend transaction and serialization**
-   - rewrite `replace_shared_owner_session()`
-   - add the shared-owner mutex in `ensure_session()`
-3. **Proof seam regressions**
-   - extend `world`, `world-agent`, and `shell` coverage to prove only committed `Active` proof escapes
-4. **Docs and drift correction**
-   - update `PLAN-03`, `03-shared-world-ownership-linux-first.md`, and `docs/WORLD.md`
-5. **Validation**
-   - run the exact command set in `Validation commands`
+1. Extend existing session and participant structs instead of introducing parallel persisted models.
+2. Reuse the state store for path construction, validation, and atomic writes.
+3. Extend existing test suites before creating a new giant one-off durability target.
 
-The only allowed parallelism is the one described later in `Worktree Parallelization Strategy`.
+### Inline diagram candidates
 
-## State Machine
+If implementation adds non-obvious transition logic, add or update nearby ASCII comments in:
 
-```text
-SHARED BINDING STATES
-=====================
-Active
-  |
-  | replace requested, pre-commit persisted
-  v
-Replacing
-  | \
-  |  \ rollback before commit
-  |   \
-  |    -> Active
-  |
-  | new Active(g+1) durably committed
-  v
-Replaced
-
-Abandoned
-  reserved, not required for this slice
-```
-
-Rules:
-
-- `AttachOrCreate` reuses only `Active`
-- `ReplaceExpectedGeneration` starts only from `Active`
-- recovery may promote a lone `Replacing` back to `Active`
-- callers never receive `Replacing`, `Replaced`, or `Abandoned`
-
-## Failure Modes Registry
-
-| Failure mode | Where it happens | Planned handling | Test required | User-visible risk if unhandled |
-| --- | --- | --- | --- | --- |
-| replacement create fails before commit | `create_shared_owner_session()` | rollback old to `Active`, preserve generation and world_id | yes | owner loses reusable world |
-| crash after old marked `Replacing`, before new commit | `replace_shared_owner_session()` window | recovery restores lone `Replacing` -> `Active` | yes | restart resets generation or strands owner |
-| crash after new commit, before old finalize | finalize window | recovery prefers newer `Active`, ignores/finalizes older `Replacing` | yes | duplicate active interpretation |
-| torn `session.json` write | `persist_metadata()` | atomic temp-file write + rename + sync | yes | metadata unreadable, proof lost |
-| malformed owner-bearing metadata | shared-owner recovery scan | warn, ignore for reuse, do not delete silently | yes | durable proof erased |
-| concurrent `AttachOrCreate` races | `ensure_session()` | serialize shared-owner path with mutex | yes | duplicate generation `0` worlds |
-| stale echoed proof from server | PTY/non-PTY response validation | existing fail-closed validators reject it | already covered, extend | shell adopts wrong world |
-
-Any row that would otherwise produce "no test + no error handling + silent failure" is a critical gap. This plan closes all of them.
+1. [`orchestration_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs) for the `state` versus `posture` relationship,
+2. [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) for owner-exit transition flow,
+3. [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) for the public prompt envelope lifecycle.
 
 ## Test Review
+
+### Test framework
+
+This is a Rust workspace. Primary test surfaces already exist in:
+
+1. module tests in [`orchestration_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs), [`session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs:595), [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1715), and [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs:1980),
+2. integration coverage in [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs),
+3. REPL/runtime coverage in [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs).
 
 ### Code path coverage
 
 ```text
 CODE PATH COVERAGE
 ==================
-[+] crates/world/src/lib.rs
+[+] orchestration_session.rs
     |
-    ├── replace_shared_owner_session()
-    │   ├── [GAP] successful replace: old Active -> Replacing, new Active(g+1), old Replaced
-    │   ├── [GAP] generation mismatch rejected before mutation
-    │   ├── [GAP] create failure before commit rolls old back to Active
-    │   └── [GAP] same-owner concurrent ensure path serializes correctly
-    |
-    └── ensure_session() shared-owner branch
-        ├── [EXISTS] AttachOrCreate request plumbing
-        └── [GAP] serialized replace/attach race regression
+    ├── [GAP] posture enum + transition helpers
+    ├── [GAP] illegal `(state, posture)` combination guards
+    └── [GAP] `pending_inbox_count` and `attached_participant_id` invariants
 
-[+] crates/world/src/session.rs
+[+] session.rs
     |
-    ├── set_shared_binding_state()
-    │   ├── [GAP] Active -> Replacing persists atomically
-    │   ├── [GAP] Replacing -> Active clears restart reason on rollback
-    │   └── [GAP] Replacing -> Replaced preserves generation/world_id
-    |
-    ├── persist_metadata()
-    │   ├── [GAP] atomic write keeps prior file on failure
-    │   └── [GAP] round-trip still succeeds for shared metadata
-    |
-    └── recover_shared_active_from_root()
-        ├── [GAP] lone Replacing restored to Active
-        ├── [GAP] Active(g=N+1)+Replacing(g=N) reconciles to newer Active
-        ├── [GAP] malformed owner-bearing metadata is ignored, not deleted
-        └── [EXISTS] ownerless legacy metadata rejected for shared-owner reuse
+    ├── [GAP] participant attached/detached/resume-eligible fields
+    ├── [GAP] host-only validation rules
+    └── [GAP] member-safe defaults
 
-[+] world-agent / shell proof seams
+[+] state_store.rs
     |
-    ├── [GAP] non-PTY replace response never exposes non-Active proof
-    ├── [EXISTS] PTY missing shared_world proof fails closed
-    ├── [EXISTS] stale generation echo fails closed
-    └── [GAP] stubbed restart rollback path still only echoes committed Active proof
+    ├── [GAP] inbox path creation + atomic persistence
+    ├── [GAP] pending count recomputation/update rules
+    ├── [GAP] parked/attention posture reads are authoritative
+    └── [GAP] exact public turn routing against parked host sessions
 
-─────────────────────────────────
-COVERAGE: existing baseline is good on proof validation, weak on transaction windows
-PRIORITY: replacement ordering + recovery + atomic persistence
-─────────────────────────────────
+[+] async_repl.rs
+    |
+    ├── [REGRESSION TEST REQUIRED] clean owner exit parks instead of invalidates
+    ├── [GAP] detached + pending item transitions to awaiting_attention
+    └── [GAP] terminal causes still invalidate/stop/fail correctly
+
+[+] control.rs
+    |
+    ├── [GAP] `Accepted` always ends with `Completed` or `Failed`
+    ├── [GAP] post-`Accepted` stream EOF renders `Failed`
+    └── [GAP] parked ownership does not masquerade as silent transport loss
+
+[+] agents_cmd.rs / public surface
+    |
+    ├── [GAP] `turn` resumes valid parked host session
+    ├── [★★ TESTED, KEEP] detached world follow-up still fails closed
+    └── [GAP] `reattach` restores ownership without submitting a prompt
+```
+
+### Operator flow coverage
+
+```text
+USER FLOW COVERAGE
+==================
+[+] Operator runs `substrate agent start --backend cli:codex --prompt "hello" --json`
+    ├── [GAP] clean owner exit after successful establishment parks, not invalidates
+    └── [GAP] follow-up recovery stays inside same orchestration session
+
+[+] Operator runs `substrate agent turn --session <id> --backend cli:codex --prompt "next" --json`
+    ├── [GAP] parked host resumes and accepts prompt
+    ├── [★★ TESTED, KEEP] detached world follow-up rejected with reattach guidance
+    └── [GAP] terminal host session rejected as terminal, not stale or ambiguous
+
+[+] Operator runs `substrate agent reattach --session <id> --json`
+    ├── [★★ TESTED, KEEP] lineage and exact-session preservation
+    └── [GAP] no prompt submission side effect
+
+[+] World-originated event arrives while host detached
+    ├── [GAP] inbox item persisted
+    ├── [GAP] pending count increments
+    └── [GAP] posture becomes awaiting_attention
+
+[+] Prompt bridge after `Accepted`
+    ├── [GAP] helper transport EOF returns explicit `Failed`
+    └── [GAP] no silent stream termination path remains
 ```
 
 ### Required test additions
 
-#### `crates/world/src/lib.rs`
+1. Replace the current invalidation regression in [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:7335) with a parked-resumable regression.
+2. Add unit tests in [`orchestration_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs) for legal posture/state combinations and impossible-combination rejection.
+3. Add unit tests in [`session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs:595) for host participant attachment/resume invariants.
+4. Add unit tests in [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1715) for inbox persistence, pending-count updates, and authoritative parked/attention reads.
+5. Add control-path tests in [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs:1980) for `Accepted -> Failed` on bridge EOF.
+6. Extend [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) to prove parked-host `turn`, parked-host `reattach`, detached-world non-regression, and explicit terminal-envelope behavior.
+7. Keep world-first routing non-regression from `PLAN-22` green if any public follow-up behavior shares the same retained lineage assumptions.
 
-Add or extend backend tests for:
+### Test plan artifact requirement
 
-1. successful replace commits new `Active(g+1)` and finalizes old `Replaced(g)`
-2. generation conflict rejects before any metadata mutation
-3. replacement create failure rolls old world back to original `Active`
-4. concurrent same-owner `AttachOrCreate` or replace paths do not create duplicate generation `0` worlds
+Implementation should also write a human-readable eng-review test plan artifact under `~/.gstack/projects/<slug>/...` if the normal gstack flow is used, but the required content is already captured here:
 
-These tests are the regression floor. The implementation is not done if only the happy path passes.
+1. parked host recovery,
+2. detached-host inbox durability,
+3. post-`Accepted` late-failure rendering,
+4. detached-world fail-closed non-regression,
+5. exact-session and exact-backend recovery.
 
-#### `crates/world/src/session.rs`
-
-Extend shared metadata tests for:
-
-1. lone `Replacing` recovery promotes back to `Active`
-2. `Active + Replacing` reconciliation selects the committed newer `Active`
-3. malformed owner-bearing metadata is warned on and retained, not deleted
-4. atomic write failure preserves prior readable metadata file
-5. rollback clears `last_restart_reason`
-
-#### `crates/world-agent/src/service.rs`
-
-Extend unit coverage around [`resolve_shared_world_binding()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/service.rs:2328) so replace flows still surface only committed `Active` proof snapshots.
-
-#### `crates/shell/src/execution/routing/dispatch/tests/repl_persistent_session_client_fail_closed.rs`
-
-Keep current fail-closed cases and add coverage that replace responses remain invalid unless the echoed proof is:
-
-- `binding_state=Active`
-- `world_generation > expected_generation`
-
-#### `crates/shell/tests/repl_world_first_routing_v1.rs` and stub harness
-
-Extend the stub in [`crates/shell/tests/support/repl_world_agent.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/support/repl_world_agent.rs:393) so an end-to-end rollback case can prove:
-
-- replace failure does not strand the orchestration session,
-- subsequent attach or retry still observes a valid committed `Active` proof.
-
-### Validation evidence required in the implementation PR
-
-The implementation PR description must include:
-
-1. the exact `cargo` commands run from the list below,
-2. a short note confirming whether any proof-seam production files changed,
-3. the observed result for the rollback regression, the lone-`Replacing` recovery regression, and the concurrent same-owner race regression.
-
-### Validation commands
+### Required validation commands
 
 Run at minimum:
 
 ```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test -p world -- --nocapture
-cargo test -p world-agent -- --nocapture
-cargo test -p shell repl_persistent_session_client_fail_closed -- --nocapture
-cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
+cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
+cargo test -p shell -- --nocapture
+cargo test --workspace -- --nocapture
 ```
 
-## Operator and DX Notes
+If docs or runtime-state schema wording changes surface broader coupling, also run:
 
-This repo is a developer tool, so DX still matters even with no dedicated UI review:
+```bash
+substrate agent status --json
+substrate agent doctor --json
+```
 
-- error text for shared-owner ambiguity must stay explicit and owner-scoped,
-- recovery must prefer "preserve prior usable world" over "fail with no state",
-- docs must explain why only committed `Active` proofs are surfaced,
-- stale-doc cleanup is part of the fix because bad authority docs cause real future bugs.
+## Performance Review
+
+There is no obvious throughput problem here, but there are two real footguns:
+
+1. recomputing inbox state by scanning the inbox directory on every public `turn` or `status` call,
+2. turning every detached-host transition into a broad participant/session directory rescan.
+
+Performance rules:
+
+1. persist `pending_inbox_count` and keep it authoritative so read paths stay O(1) for posture summaries,
+2. use directory scans for recovery and validation, not as the steady-state codepath for every command,
+3. keep inbox writes one-file-per-item and atomic, but avoid unnecessary full-session rewrites when only an inbox item changes.
+
+## Failure Modes Registry
+
+| Failure mode | Test required | Error handling required | User-visible outcome |
+| --- | --- | --- | --- |
+| clean host exit invalidates live session | yes | yes | session stays resumable, not dead |
+| detached host receives world approval | yes | yes | pending inbox item, awaiting-attention posture |
+| post-`Accepted` bridge EOF | yes | yes | explicit `Failed`, never silent hang |
+| parked host `turn` resumes wrong backend | yes | yes | exact backend failure, no fuzzy recovery |
+| detached world follow-up slips through | yes | yes | explicit fail-closed rejection with reattach guidance |
+| resolved inbox item deleted immediately | yes | yes | retained artifact remains inspectable |
+
+**Critical gaps this plan must close:** 3
+
+1. clean-exit invalidation,
+2. no canonical durable inbox,
+3. post-`Accepted` silent disappearance.
 
 ## Worktree Parallelization Strategy
+
+This slice has one real parallel window, but only after the schema contract is frozen.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| A. state machine and atomic persistence | `crates/world/src/` | — |
-| B. backend transaction and serialization | `crates/world/src/` | A |
-| C. proof seam regression tests | `crates/world-agent/src/`, `crates/shell/src/execution/`, `crates/shell/tests/` | B |
-| D. docs drift correction | `docs/`, `llm-last-mile/` | B |
+| 1. Posture and participant contract freeze | `crates/shell/src/execution/agent_runtime/` | — |
+| 2. Durable inbox persistence | `crates/shell/src/execution/agent_runtime/` | 1 |
+| 3. Lifecycle and public resume semantics | `crates/shell/src/repl/`, `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/execution/agent_runtime/control.rs` | 1 |
+| 4. Validation wall | `crates/shell/tests/`, unit-test modules in touched runtime files | 2, 3 |
+| 5. Docs closeout | `docs/`, `AGENT_ORCHESTRATION_GAP_MATRIX.md`, `llm-last-mile/` | 4 |
 
 ### Parallel lanes
 
-- Lane A: Step A -> Step B. Sequential, both touch `crates/world/src/`.
-- Lane B: Step C after Step B. Independent from docs once the core proof contract is frozen.
-- Lane C: Step D after Step B. Independent from tests once the state machine wording is final.
+Lane A: step 1 -> step 2  
+Reason: shared ownership of canonical persisted truth inside `agent_runtime/`.
+
+Lane B: step 1 -> step 3  
+Reason: after the posture contract is frozen, lifecycle and public control changes can proceed mostly in `async_repl.rs`, `agents_cmd.rs`, and `control.rs`.
+
+Lane C: step 4 -> step 5  
+Reason: closeout lane only after A and B merge. Tests and docs should validate merged behavior, not guess at it.
 
 ### Execution order
 
-1. Launch Lane A first and finish both core steps.
-2. After Lane A lands locally, launch Lane B and Lane C in parallel worktrees.
-3. Merge Lane B and Lane C back into the main worktree.
-4. Run the full validation stack in the merged tree.
+1. Land or freeze step 1 first. This is the shared contract that keeps everything else from drifting.
+2. Launch Lane A and Lane B in parallel worktrees only after step 1 is stable.
+3. Merge A and B.
+4. Run Lane C on the merged tree for the validation wall and late docs closeout.
 
 ### Conflict flags
 
-- `crates/world/src/lib.rs` and `crates/world/src/session.rs` are a single-lane choke point.
-- no parallel work starts before the `crates/world/src/` contract is frozen,
-- proof tests and docs can run in parallel only because they touch different module directories.
+1. `crates/shell/src/execution/agent_runtime/session.rs` is a conflict hotspot. If Lane B needs to edit participant helpers directly, assign that file to Lane A or run sequentially.
+2. `crates/shell/tests/agent_public_control_surface_v1.rs` is a closeout-only file. Do not let both parallel lanes edit it heavily at the same time.
+3. If inbox persistence helpers end up living inside `control.rs` instead of the state store, the A/B split is no longer clean. In that case, collapse to sequential execution.
 
-## Deferred and TODO Disposition
+## Implementation Checklist
 
-No new `TODOS.md` file is created in this slice.
+1. Add explicit posture fields to `OrchestrationSessionRecord`.
+2. Add additive attachment and resume metadata to host participant records.
+3. Add durable inbox path helpers and canonical inbox envelope persistence.
+4. Update lifecycle code so clean owner exit parks rather than invalidates when the session remains valid.
+5. Update public `turn` and `reattach` to operate against explicit parked ownership truth.
+6. Pin the prompt-bridge terminal invariant after `Accepted`.
+7. Replace the existing clean-exit invalidation regression with parked-resumable assertions.
+8. Extend public control integration tests for parked-host resume and detached-host inbox semantics.
+9. Update focused docs after the merged tree proves the behavior.
 
-Reason:
+## Deferred Follow-Ups
 
-- every real deferral is already captured in `NOT in scope`,
-- none of those deferred items blocks the hardening fix,
-- adding vague TODOs here would preserve less context than the explicit deferred list already does.
+These are real ideas, not part of this PR:
 
-If follow-on work is needed later, the candidates are:
-
-1. extract a shared atomic JSON writer once both `state_store` and `crates/world` prove stable on the pattern
-2. narrow the coarse shared-owner mutex to a per-owner lock only if real contention appears
-3. add operator-facing diagnostics for ignored malformed owner-bearing metadata if support needs that visibility
-
-## Acceptance Criteria
-
-This slice is complete only when all of these are true:
-
-1. replacement create failure never leaves the owner with zero recoverable world
-2. a pre-commit failure preserves old `world_id`, `world_generation`, and `binding_state=Active`
-3. a successful replace returns only the new committed `Active` proof with `world_generation = expected_generation + 1`
-4. `session.json` writes are atomic and never expose torn bytes on successful return
-5. recovery from every replace crash window is deterministic and generation-safe
-6. world-agent and shell proof validators still reject non-`Active` proof states
-7. concurrent same-owner attach or replace requests cannot create duplicate generation `0` worlds
-8. malformed owner-bearing metadata is never silently deleted by shared-owner recovery
-9. stale authority docs are corrected so future work does not reintroduce the wrong seam
-
-## Decision Audit Trail
-
-| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | CEO | Treat the supplied SOW as the source-of-truth design input | mechanical | bias toward action | The SOW is already more concrete than a missing branch design doc | blocking on `/office-hours` |
-| 2 | CEO | Keep Linux `session.json` as the only authority seam for this fix | mechanical | DRY | A shell-side binding store would create dual truth | shell binding file authority |
-| 3 | Eng | Use a coarse shared-owner mutex instead of a new per-owner lock system | taste, resolved | explicit over clever | Minimal diff, low risk, closes the race now | lock files, distributed owner registry |
-| 4 | Eng | Preserve world-agent and shell proof contracts unchanged | mechanical | systems over heroes | Active-only fail-closed validation is already correct | widening proof acceptance |
-| 5 | Eng | Require full rollback and recovery coverage, not partial ordering fixes | mechanical | boil the lake | Cheap enough to do right now, expensive to debug later | mark-`Replacing` only |
+1. Numeric inbox retention duration and background compaction policy.
+2. Broader operator-facing inbox inspection commands.
+3. Windows/WSL and broader macOS parity improvements for the same durability model.
 
 ## Completion Summary
 
-- Step 0: Scope Challenge, scope accepted as-is with stale-authority correction
-- Architecture Review: 4 issues found, all resolved in-plan
-- Code Quality Review: 3 issues found, all resolved in-plan
-- Test Review: diagram produced, 11 concrete gaps identified
-- Performance Review: 1 issue found, resolved via shared-owner serialization
-- NOT in scope: written
-- What already exists: written
-- TODOS.md updates: 0 items proposed, explicit no-TODO disposition recorded
-- Failure modes: 0 unresolved critical gaps after planned fixes
-- Outside voice: skipped, Claude CLI auth unavailable
-- Parallelization: 3 lanes total, 1 core sequential lane then 2 late parallel lanes
-- Lake Score: 5/5 decisions chose the complete option
-
-## GSTACK REVIEW REPORT
-
-| Review | Trigger | Why | Runs | Status | Findings |
-| --- | --- | --- | --- | --- | --- |
-| CEO Review | `/autoplan` | Scope and authority seam | 1 | CLEAR | accepted Linux metadata authority, rejected stale shell-binding-store design |
-| Codex Review | `n/a` | Independent 2nd opinion | 0 | — | outside voice unavailable, Claude CLI has no auth configured |
-| Eng Review | `/plan-eng-review` | Architecture and tests | 1 | CLEAR | transaction ordering, recovery windows, and atomic writes fully specified |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | skipped | no UI scope |
-
-**CROSS-MODEL:** not run, outside voice degraded because local Claude auth is missing.  
-**UNRESOLVED:** 0  
-**VERDICT:** CEO + ENG CLEARED, ready to implement.
+- Step 0: Scope Challenge, scope accepted as-is, with a strict no-new-control-plane rule.
+- Architecture Review: one architectural direction, explicit session-owned durability over process-owned liveness.
+- Code Quality Review: centralize posture and inbox logic, no second authority.
+- Test Review: coverage diagram produced, concrete gaps identified across state, lifecycle, routing, and terminal delivery, 3 critical.
+- Performance Review: no throughput rewrite needed, but avoid steady-state directory rescans.
+- NOT in scope: written.
+- What already exists: written.
+- Failure modes: 3 critical gaps flagged.
+- Parallelization: 3 lanes total, 1 real parallel window after contract freeze.
+- Lake Score: 10/10 recommendations choose the complete option over the shortcut.
