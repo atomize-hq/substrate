@@ -28,6 +28,10 @@ This ADR is a lifecycle correction for host orchestration. It does not replace t
   - `crates/shell/src/execution/agent_runtime/session.rs`
   - `crates/shell/src/execution/agent_runtime/state_store.rs`
   - `crates/shell/src/repl/async_repl.rs`
+- Future-compatible workflow/router correlation context:
+  - `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+  - `docs/project_management/adrs/draft/ADR-0021-substrate-workflow-engine.md`
+  - `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 - Existing proof surfaces:
   - `crates/shell/tests/agent_public_control_surface_v1.rs`
   - `crates/shell/tests/repl_world_first_routing_v1.rs`
@@ -153,11 +157,7 @@ This is an internal persisted runtime-state contract. It is not a config/policy 
   - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/leases/<participant_id>.lease`
 - This ADR adds a canonical durable inbox path under the same session root:
   - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/inbox/<item_id>.json`
-- Flat compatibility files may remain during cutover:
-  - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>.json`
-  - `~/.substrate/run/agent-hub/participants/<participant_id>.json`
-  - `~/.substrate/run/agent-hub/handles/<participant_id>.lease`
-- Compatibility files are read/write shims only during migration. The session-root files above are the sole live-state authority.
+- The session-root files above are the sole live-state authority from first write.
 
 ### Orchestration session record
 - Existing `session.json` fields remain authoritative:
@@ -192,8 +192,9 @@ This is an internal persisted runtime-state contract. It is not a config/policy 
   - `attached_participant_id` is the authoritative pointer to the currently attached host execution client. It must be `null` whenever `posture` is `parked_resumable`, `awaiting_attention`, or `terminal`.
   - `pending_inbox_count` counts unresolved inbox items for the orchestration session.
   - `posture=awaiting_attention` is required when the session remains non-terminal, `attached_participant_id=null`, and `pending_inbox_count>0`.
-  - `posture=parked_resumable` is required when the session remains non-terminal, `attached_participant_id=null`, and `pending_inbox_count=0`.
+  - `posture=parked_resumable` is required when the session remains non-terminal, `attached_participant_id=null`, `pending_inbox_count=0`, and at least one authoritative host participant remains `resume_eligible=true`.
   - `posture=terminal` must align with a non-routable session state such as `Invalidated`, `Stopped`, or `Failed`.
+  - `posture` is explicit persisted truth and must not be reconstructed heuristically from attachment diagnostics or legacy attachment flags.
 
 ### Participant record
 - Existing participant fields remain authoritative:
@@ -210,41 +211,55 @@ This is an internal persisted runtime-state contract. It is not a config/policy 
   - `resume_eligible=true` with `attached_client_present=false` and a non-terminal participant `state` is a valid parked host posture, not a failure condition.
   - `control_owner_retained`, `event_stream_active`, and `completion_observer_retained` remain attachment diagnostics. They must no longer be treated as the sole proof that the orchestration session itself is valid.
   - These new attachment fields are required for host-orchestrator participants. Member-runtime participants may leave them unset or at safe defaults when the semantics do not apply.
+  - `uaa_session_id` is an identifier and correlation field, not proof of attachment, liveness, or resumability on its own.
 
 ### Durable inbox item
 - Each unresolved or retained orchestration event must be persisted as one file under:
   - `sessions/<orchestration_session_id>/inbox/<item_id>.json`
 - Minimum item schema:
+  - `schema_version: <u32>`
   - `item_id: <string>`
   - `orchestration_session_id: <string>`
-  - `source_participant_id: <participant_id>|null`
-  - `backend_id: <backend_id>|null`
-  - `world_id: <string>|null`
-  - `world_generation: <u64>|null`
   - `kind: approval_required|completion_notice|follow_up_message|runtime_alert`
   - `state: pending|acknowledged|dismissed`
   - `created_at: <timestamp>`
   - `resolved_at: <timestamp>|null`
+  - `correlation: <object>`
   - `payload_schema: <string>`
   - `payload: <object>`
+- Minimum correlation envelope:
+  - `source_event_type: <string>|null`
+  - `source_span_id: <string>|null`
+  - `source_cmd_id: <string>|null`
+  - `source_trace_session_id: <string>|null`
+  - `origin_participant_id: <participant_id>|null`
+  - `origin_backend_id: <backend_id>|null`
+  - `origin_run_id: <string>|null`
+  - `caused_by_turn_id: <string>|null`
+  - `workflow_id: <string>|null`
+  - `workflow_run_id: <string>|null`
+  - `workflow_node_id: <string>|null`
+  - `request_id: <string>|null`
+  - `idempotency_key: <string>|null`
 - Required semantics:
   - `state=pending` items contribute to `pending_inbox_count`.
   - Lack of an attached host client must never delete, skip, or silently consume a pending item.
   - A live attached host client may observe and acknowledge items in real time, but the persisted inbox item remains the durable source of truth until it is resolved.
   - Resolved items may be compacted later, but only after they have transitioned out of `pending`.
+  - `item_id` is the session-local durable inbox record identifier. It is not a router `request_id`, workflow run identifier, or trace span identifier.
+  - The correlation envelope is additive and nullable by design; fields may be unset when the source family does not define them.
+  - Correlation fields are join keys for trace, router, workflow, and orchestration analysis. They do not, by themselves, grant delivery, liveness, or resumability semantics.
+  - The canonical required/optional classification and naming of cross-cutting correlation fields remain owned by ADR-0028 and the Phase 8 registry. This ADR only requires that session-local inbox items carry an explicit, compatible correlation envelope and must not rely on heuristic joins.
 
 ### Lease file
 - Existing lease payloads may remain minimal and additive.
 - If additive attachment fields are mirrored into lease files for fast-path checks, `session.json` and `participants/<participant_id>.json` remain authoritative.
 
-### Compatibility and migration rules
-- Migration must be additive.
-- Older session and participant records that do not yet contain the new fields must remain readable.
-- During cutover, posture may be inferred from existing fields only for migration/bootstrap:
-  - `active_attached` when the participant is authoritative-live and the owner process is alive
-  - `parked_resumable` when the participant remains non-terminal and `uaa_session_id` is still present but no live attached owner remains
-  - `terminal` otherwise
-- Once rewritten by the new runtime, the persisted fields in this section become authoritative and must stop being reconstructed heuristically from attachment flags alone.
+### Greenfield runtime-state adoption rules
+- This runtime-state schema is greenfield.
+- Older flat session, participant, or lease layouts are not part of the contract.
+- New runtime-state writers MUST write the session-root layout and required posture/attachment fields from first write.
+- Readers MUST treat the persisted fields in this section as authoritative rather than reconstructing posture from attachment heuristics.
 - No config schema change and no policy schema change is required by this runtime-state schema.
 
 ## Resolved Design Decisions
@@ -266,13 +281,38 @@ These decisions are no longer open in this ADR. They are pinned here so the dura
 - Resolving an inbox item MUST remove it from authoritative pending/live counts immediately.
 - Resolving an inbox item MUST NOT immediately delete the persisted inbox artifact.
 - Resolved inbox items SHOULD be retained until:
-  - the orchestration session has reached terminal state, and
-  - a bounded retention/compaction policy has had an opportunity to preserve the necessary audit/debug trail while keeping the store bounded.
+  - the orchestration session has reached terminal state,
+  - the item is no longer `pending`,
+  - the item has aged past a bounded retention floor, and
+  - no unresolved item still depends on it for causation/debug correlation.
 - Compaction is a maintenance step, not the acknowledgement primitive.
+- This ADR intentionally fixes compaction eligibility rules but does not fix a numeric retention duration.
+- The exact numeric retention floor is an implementation/operations follow-on and should be aligned later with adjacent router/workflow retention policy rather than guessed here.
 - Rationale:
   - the broader event-plane and trace contracts in this repo are append-only and audit-oriented,
   - live-state authority and historical retention are intentionally distinct,
   - and immediate deletion would make detached-host review and postmortem analysis weaker without providing a meaningful contract benefit.
+
+### Future inbox kinds remain additive within one canonical envelope
+- The durable inbox outer envelope pinned by this ADR is canonical:
+  - `schema_version`
+  - `item_id`
+  - `orchestration_session_id`
+  - `kind`
+  - `state`
+  - `created_at`
+  - `resolved_at`
+  - `correlation`
+  - `payload_schema`
+  - `payload`
+- Future inbox item kinds are allowed only as additive expansions of the `kind` enum.
+- Future kinds MUST NOT introduce new ad hoc top-level envelope fields as their primary shape.
+- Kind-specific structure MUST live under the versioned `payload_schema` plus `payload` contract.
+- Any future cross-cutting join/correlation additions MUST remain additive and defer to ADR-0028 / Phase 8 for canonical naming and required/optional classification rather than creating inbox-only correlation dialects.
+- Rationale:
+  - this preserves one durable session-local inbox envelope across approvals, completions, follow-up work, and later workflow-aware attention items,
+  - keeps inbox growth compatible with ADR-0029 router records and ADR-0021 workflow correlation,
+  - and avoids top-level envelope drift as future kinds are introduced.
 
 ### Non-host attached-client generalization is out of scope for this ADR
 - The attached-client metadata pinned by this ADR is intentionally host-oriented.
@@ -397,7 +437,3 @@ These decisions are no longer open in this ADR. They are pinned here so the dura
   - `substrate agent reattach --session <orchestration_session_id> --json`
 - Confirm the host session parks cleanly when the prompt-driven client exits and can later resume.
 - Confirm no post-`Accepted` stream ends without `Completed` or `Failed`.
-
-## Open Questions
-- What bounded retention window and compaction trigger should govern resolved inbox items once the orchestration session is terminal?
-- Do any future inbox item kinds beyond `approval_required|completion_notice|follow_up_message|runtime_alert` require additional canonical payload-envelope rules?
