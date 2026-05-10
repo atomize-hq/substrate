@@ -1,8 +1,8 @@
 # ORCH_PLAN: Host Orchestrator Durable Session And Parked-Resumable Ownership
 
-Live workspace branch: `feat/macos-lima-shared-owner-member-runtime-parity`  
-Recorded branch in [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md): `feat/macos-lima-shared-owner-member-runtime-parity`  
-Authoritative execution branch for this run: `feat/macos-lima-shared-owner-member-runtime-parity`  
+Live workspace branch: `feat/host-orchestrator-durable-session`  
+Recorded branch in [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md): `feat/host-orchestrator-durable-session`  
+Authoritative execution branch for this run: `feat/host-orchestrator-durable-session`  
 Plan source: [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)  
 Source SOW: [llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
 ADR anchor: [docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
@@ -53,7 +53,7 @@ Frozen run shape:
 
 These are run-stopping invariants.
 
-1. The authoritative integration checkout remains `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/macos-lima-shared-owner-member-runtime-parity`.
+1. The authoritative integration checkout remains `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/host-orchestrator-durable-session`.
 2. The parent agent is the only integrator, the only approval authority, and the only writer of `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/host-orch-durable-session/**`.
 3. `substrate agent start|turn|reattach|stop` keep their current grammar and exact-selector rules.
 4. `state` remains the orchestration lifecycle machine. `posture` is a separate persisted attachability and attention summary.
@@ -103,7 +103,7 @@ git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/sub
 
 Parent integration surface:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/macos-lima-shared-owner-member-runtime-parity`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/host-orchestrator-durable-session`
 - no separate parent integration worktree is introduced
 - the parent integrates in the main checkout only
 
@@ -218,19 +218,19 @@ The parent freezes the required additive session, participant, and inbox shapes 
 
 | Task ID | Owner | Depends on | Worktree / branch | Deliverable |
 | --- | --- | --- | --- | --- |
-| `task/m23-p0-parent-run-init-and-gitnexus-preflight` | parent | — | main checkout / `feat/macos-lima-shared-owner-member-runtime-parity` | run scaffold, symbol inventory, GitNexus preflight impact capture |
-| `task/m23-p1-parent-contract-freeze-and-seam-prep` | parent | `p0` | main checkout / `feat/macos-lima-shared-owner-member-runtime-parity` | frozen posture/participant/store seam, lane ownership freeze, accepted post-freeze tree |
-| `task/m23-g1-parent-lane-launch-gate` | parent | `p1` | main checkout / `feat/macos-lima-shared-owner-member-runtime-parity` | launch decision for Window A and worktree creation |
+| `task/m23-p0-parent-run-init-and-gitnexus-preflight` | parent | — | main checkout / `feat/host-orchestrator-durable-session` | run scaffold, symbol inventory, GitNexus preflight impact capture |
+| `task/m23-p1-parent-contract-freeze-and-seam-prep` | parent | `p0` | main checkout / `feat/host-orchestrator-durable-session` | frozen posture/participant/store seam, lane ownership freeze, accepted post-freeze tree |
+| `task/m23-g1-parent-lane-launch-gate` | parent | `p1` | main checkout / `feat/host-orchestrator-durable-session` | launch decision for Window A and worktree creation |
 | `task/m23-a1-worker-durable-inbox-implementation` | worker A | `g1` | durable-inbox / `codex/feat-macos-lima-shared-owner-member-runtime-parity-m23-durable-inbox` | inbox persistence, pending-count maintenance, store-local tests |
 | `task/m23-a2-worker-durable-inbox-validation-and-handoff` | worker A | `a1` | durable-inbox / same branch | validated worker report, patch, evidence manifest, impact artifact |
 | `task/m23-b1-worker-lifecycle-resume-and-terminal-envelope` | worker B | `g1` | lifecycle-resume-terminal-envelope / `codex/feat-macos-lima-shared-owner-member-runtime-parity-m23-lifecycle-resume-terminal-envelope` | clean-detach parking, parked `turn`/`reattach`, explicit terminal envelope handling |
 | `task/m23-b2-worker-lifecycle-validation-and-handoff` | worker B | `b1` | lifecycle-resume-terminal-envelope / same branch | validated worker report, patch, evidence manifest, impact artifact |
-| `task/m23-g2-parent-integration-gate` | parent | `a2`, `b2` | main checkout / `feat/macos-lima-shared-owner-member-runtime-parity` | accept or quarantine decision for both lanes |
-| `task/m23-p2-parent-integration-and-cross-lane-test-finishing` | parent | `g2` | main checkout / `feat/macos-lima-shared-owner-member-runtime-parity` | merged runtime truth, parent-owned integration tests, cross-lane fixes |
-| `task/m23-g3-parent-docs-launch-gate` | parent | `p2` | main checkout / `feat/macos-lima-shared-owner-member-runtime-parity` | decision that behavior is proven enough for docs |
-| `task/m23-p3-parent-docs-closeout` | parent | `g3` | main checkout / `feat/macos-lima-shared-owner-member-runtime-parity` | late docs truth updates only |
-| `task/m23-g4-parent-validation-wall-gate` | parent | `p3` | main checkout / `feat/macos-lima-shared-owner-member-runtime-parity` | permission to run final wall |
-| `task/m23-p4-parent-final-validation-and-closeout` | parent | `g4` | main checkout / `feat/macos-lima-shared-owner-member-runtime-parity` | final validation wall, detect_changes, closeout artifacts |
+| `task/m23-g2-parent-integration-gate` | parent | `a2`, `b2` | main checkout / `feat/host-orchestrator-durable-session` | accept or quarantine decision for both lanes |
+| `task/m23-p2-parent-integration-and-cross-lane-test-finishing` | parent | `g2` | main checkout / `feat/host-orchestrator-durable-session` | merged runtime truth, parent-owned integration tests, cross-lane fixes |
+| `task/m23-g3-parent-docs-launch-gate` | parent | `p2` | main checkout / `feat/host-orchestrator-durable-session` | decision that behavior is proven enough for docs |
+| `task/m23-p3-parent-docs-closeout` | parent | `g3` | main checkout / `feat/host-orchestrator-durable-session` | late docs truth updates only |
+| `task/m23-g4-parent-validation-wall-gate` | parent | `p3` | main checkout / `feat/host-orchestrator-durable-session` | permission to run final wall |
+| `task/m23-p4-parent-final-validation-and-closeout` | parent | `g4` | main checkout / `feat/host-orchestrator-durable-session` | final validation wall, detect_changes, closeout artifacts |
 
 ## Frozen Ownership Boundaries
 

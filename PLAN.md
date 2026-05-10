@@ -3,7 +3,7 @@
 Source SOW: [llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
 ADR anchor: [ADR-0047 — Host Orchestrator Durable Session and Parked-Resumable Ownership](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
 Adjacent landed slices: [llm-last-mile/PLAN-20.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-20.md), [llm-last-mile/PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-22.md)  
-Branch: `feat/macos-lima-shared-owner-member-runtime-parity`  
+Branch: `feat/host-orchestrator-durable-session`  
 Base branch: `main`  
 Plan type: shell runtime-state and lifecycle hardening, no UI scope  
 Review posture: unified execution plan, tightened to `/autoplan` completeness and `/plan-eng-review` rigor  
