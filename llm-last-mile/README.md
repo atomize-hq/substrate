@@ -68,6 +68,14 @@ The original packet stops before public control-plane productization. The follow
   - Add the public prompt-taking caller surface with exact `start` / `turn` verbs, canonical `reattach`, backend-aware turn resolution, and helper-owned streaming.
 - [ORCH_PLAN-20.md](./ORCH_PLAN-20.md)
   - Parent-frozen execution controller for the `PLAN-20` rollout on `feat/session-centric-state-store`.
+- [PLAN-21.md](./PLAN-21.md)
+  - Extend the shared-owner/member-runtime contract onto the supported macOS/Lima forwarded path without changing the Linux source-of-truth placement model.
+- [ORCH_PLAN-21.md](./ORCH_PLAN-21.md)
+  - Parent-frozen execution controller for the `PLAN-21` rollout on the shared-owner/member-runtime parity branch.
+- [PLAN-22.md](./PLAN-22.md)
+  - Harden the public `turn` surface around the already-landed `start|turn|reattach|fork|stop` contract, prove Linux world-member follow-up through the typed submit boundary, and pin explicit fail-closed coverage.
+- [ORCH_PLAN-22.md](./ORCH_PLAN-22.md)
+  - Parent-frozen execution controller for the `PLAN-22` rollout on the authoritative shared-owner/member-runtime parity branch.
 
 ## Non-Goals in This Packet
 

@@ -331,6 +331,8 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
     let target = store
         .resolve_public_turn_target(&args.session, &args.backend)
         .map_err(|err| config_model::user_error(err.to_string()))?;
+    let orchestration_session_id = target.session.orchestration_session_id.clone();
+    let backend_id = target.participant.handle.backend_id.clone();
 
     match target.session_posture {
         PublicSessionPosture::Active => {}
@@ -338,7 +340,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
             PublicTurnTargetKind::Host => {
                 let plan =
                     build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Resume)?;
-                if plan.descriptor.backend_id != args.backend {
+                if plan.descriptor.backend_id != backend_id {
                     anyhow::bail!(config_model::user_error(format!(
                         "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
                         args.session,
@@ -368,8 +370,8 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
     run_public_prompt_command(
         PublicPromptCommandRequest {
             action: PublicPromptAction::Turn,
-            orchestration_session_id: Some(args.session.clone()),
-            backend_id: args.backend.clone(),
+            orchestration_session_id: Some(orchestration_session_id),
+            backend_id,
             prompt,
             json: args.json,
         },

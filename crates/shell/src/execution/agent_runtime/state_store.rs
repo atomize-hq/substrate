@@ -1647,8 +1647,9 @@ fn public_turn_authoritative_candidates(
     backend_id: &str,
 ) -> Vec<PublicTurnTargetCandidate> {
     let mut candidates = Vec::new();
+    let active_participant_id = record.session.active_participant_id();
 
-    if let Some(active_participant_id) = record.session.active_participant_id() {
+    if let Some(active_participant_id) = active_participant_id {
         if let Some(participant) = record
             .participants
             .iter()
@@ -1682,6 +1683,8 @@ fn public_turn_authoritative_candidates(
                         == record.session.orchestration_session_id
                     && participant.handle.role == MEMBER_ROLE
                     && participant.handle.execution.scope == AgentExecutionScope::World
+                    && participant.handle.orchestrator_participant_id.as_deref()
+                        == active_participant_id
                     && participant.handle.world_id.as_deref() == Some(world_id)
                     && participant.handle.world_generation == Some(world_generation)
             })
@@ -2523,6 +2526,78 @@ mod tests {
                 .resolve_public_control_target("sess_missing_internal", PublicControlAction::Fork)
                 .expect_err("fork must require internal.uaa_session_id");
             assert!(fork_err.to_string().contains("missing_internal_session_id"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_rejects_active_session_handle_selector() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex", "sess_public_turn", "ash_selected");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_turn_target("ash_selected", "cli:codex")
+                .expect_err("non-canonical active_session_handle_id selectors must be rejected");
+            assert!(err.to_string().contains("noncanonical_session_selector"));
+            assert!(err.to_string().contains("active_session_handle_id"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_rejects_internal_uaa_selector() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex", "sess_public_turn", "ash_selected");
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_turn_target("uaa_session", "cli:codex")
+                .expect_err("internal uaa session selectors must be rejected");
+            assert!(err.to_string().contains("noncanonical_session_selector"));
+            assert!(err.to_string().contains("internal.uaa_session_id"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_requires_exact_world_member_linkage() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("codex", "sess_world_turn_stale", "ash_selected");
+            let mut member = live_member(
+                "codex",
+                "sess_world_turn_stale",
+                "ash_member",
+                "ash_stale_owner",
+            );
+            member.handle.backend_id = "cli:world-member".to_string();
+            let mut parent = active_parent(&orchestrator);
+            parent.set_world_binding("world-17", 2);
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store.persist_participant(&member).expect("persist member");
+
+            let err = store
+                .resolve_public_turn_target("sess_world_turn_stale", "cli:world-member")
+                .expect_err("stale world-member linkage must fail closed");
+            assert!(err.to_string().contains("stale_linkage"));
         });
     }
 

@@ -1072,6 +1072,20 @@ fn missing_retained_slot_error(
 mod tests {
     use super::*;
 
+    fn sample_submit_turn_request() -> MemberTurnSubmitRequestV1 {
+        MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "orch_123".to_string(),
+            participant_id: "ash_member".to_string(),
+            orchestrator_participant_id: "ash_orchestrator".to_string(),
+            backend_id: "cli:codex".to_string(),
+            run_id: "run_turn".to_string(),
+            world_id: "world_123".to_string(),
+            world_generation: 7,
+            prompt: "continue".to_string(),
+        }
+    }
+
     fn sample_retained_identity() -> RetainedMemberIdentity<'static> {
         RetainedMemberIdentity {
             orchestration_session_id: "orch_123",
@@ -1109,41 +1123,65 @@ mod tests {
     }
 
     #[test]
-    fn validate_submit_turn_request_rejects_identity_drift() {
-        let req = MemberTurnSubmitRequestV1 {
-            schema_version: 1,
-            orchestration_session_id: "orch_123".to_string(),
-            participant_id: "ash_member".to_string(),
-            orchestrator_participant_id: "ash_orchestrator".to_string(),
-            backend_id: "cli:anthropic".to_string(),
-            run_id: "run_turn".to_string(),
-            world_id: "world_123".to_string(),
-            world_generation: 7,
-            prompt: "continue".to_string(),
-        };
+    fn validate_submit_turn_request_accepts_matching_retained_identity() {
+        validate_submit_turn_request(&sample_submit_turn_request(), sample_retained_identity())
+            .expect("matching retained member identity should validate");
+    }
 
-        let err = validate_submit_turn_request(&req, sample_retained_identity())
-            .expect_err("backend drift should be rejected");
-        assert!(
-            err.to_string()
-                .contains("member_turn_submit.backend_id mismatch"),
-            "unexpected error: {err}"
-        );
+    type SubmitTurnDriftCase = (
+        &'static str,
+        fn(&mut MemberTurnSubmitRequestV1),
+        &'static str,
+    );
+
+    #[test]
+    fn validate_submit_turn_request_rejects_retained_identity_drift() {
+        let cases: [SubmitTurnDriftCase; 5] = [
+            (
+                "orchestration_session_id",
+                |req| req.orchestration_session_id = "orch_999".to_string(),
+                "member_turn_submit.orchestration_session_id mismatch",
+            ),
+            (
+                "orchestrator_participant_id",
+                |req| req.orchestrator_participant_id = "ash_orchestrator_other".to_string(),
+                "member_turn_submit.orchestrator_participant_id mismatch",
+            ),
+            (
+                "backend_id",
+                |req| req.backend_id = "cli:anthropic".to_string(),
+                "member_turn_submit.backend_id mismatch",
+            ),
+            (
+                "world_id",
+                |req| req.world_id = "world_999".to_string(),
+                "member_turn_submit.world_id mismatch",
+            ),
+            (
+                "world_generation",
+                |req| req.world_generation = 9,
+                "member_turn_submit.world_generation mismatch",
+            ),
+        ];
+
+        for (field, mutate, expected) in cases {
+            let mut req = sample_submit_turn_request();
+            mutate(&mut req);
+
+            let err = match validate_submit_turn_request(&req, sample_retained_identity()) {
+                Ok(()) => panic!("expected {field} drift to be rejected"),
+                Err(err) => err,
+            };
+            assert!(
+                err.to_string().contains(expected),
+                "expected {field} drift to mention {expected}, got: {err}"
+            );
+        }
     }
 
     #[test]
     fn retained_member_key_uses_session_generation_and_backend_id() {
-        let req = MemberTurnSubmitRequestV1 {
-            schema_version: 1,
-            orchestration_session_id: "orch_123".to_string(),
-            participant_id: "ash_member".to_string(),
-            orchestrator_participant_id: "ash_orchestrator".to_string(),
-            backend_id: "cli:codex".to_string(),
-            run_id: "run_turn".to_string(),
-            world_id: "world_123".to_string(),
-            world_generation: 7,
-            prompt: "continue".to_string(),
-        };
+        let req = sample_submit_turn_request();
 
         assert_eq!(
             RetainedMemberKey::from_submit(&req),
@@ -1189,6 +1227,40 @@ mod tests {
             "ash_member_other",
         );
 
+        assert!(
+            err.to_string()
+                .contains("member_turn_submit.participant_id mismatch"),
+            "unexpected error: {err}"
+        );
+        assert!(
+            err.to_string()
+                .contains("expected ash_member_existing, got ash_member_other"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn find_submit_target_rejects_participant_id_drift_for_retained_slot() {
+        let manager = MemberRuntimeManager::new();
+        let retained_key = RetainedMemberKey {
+            orchestration_session_id: "orch_123".to_string(),
+            world_generation: 7,
+            backend_id: "cli:codex".to_string(),
+        };
+        manager
+            .active_members
+            .write()
+            .expect("member runtime registry lock poisoned")
+            .by_retained_key
+            .insert(retained_key, "ash_member_existing".to_string());
+
+        let mut req = sample_submit_turn_request();
+        req.participant_id = "ash_member_other".to_string();
+
+        let err = match manager.find_submit_target(&req) {
+            Ok(_) => panic!("participant drift should be rejected"),
+            Err(err) => err,
+        };
         assert!(
             err.to_string()
                 .contains("member_turn_submit.participant_id mismatch"),

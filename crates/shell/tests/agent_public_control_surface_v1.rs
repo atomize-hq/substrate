@@ -1,8 +1,8 @@
 #![cfg(any(target_os = "linux", target_os = "macos"))]
 
-mod common;
+#[path = "support/mod.rs"]
+mod support;
 
-use common::{binary_path, ensure_substrate_built, substrate_shell_driver};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde_json::{json, Value};
 use serial_test::serial;
@@ -15,6 +15,9 @@ use std::process::Output;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use support::{binary_path, ensure_substrate_built, substrate_shell_driver};
+#[cfg(target_os = "linux")]
+use support::{MemberDispatchStreamScript, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
 
 const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
@@ -244,6 +247,13 @@ fn canonical_participant_manifest_path(
         .join(format!("{participant_id}.json"))
 }
 
+fn canonical_participants_dir(substrate_home: &Path, orchestration_session_id: &str) -> PathBuf {
+    substrate_home
+        .join("run/agent-hub/sessions")
+        .join(orchestration_session_id)
+        .join("participants")
+}
+
 fn read_json_file(path: &Path) -> Value {
     serde_json::from_str(
         &fs::read_to_string(path)
@@ -375,6 +385,105 @@ fn wait_for_single_active_session(
     panic!("timed out waiting for a single active orchestration session");
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn session_participant_manifests(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> Vec<Value> {
+    let participants_dir = canonical_participants_dir(substrate_home, orchestration_session_id);
+    let Ok(entries) = fs::read_dir(participants_dir) else {
+        return Vec::new();
+    };
+    let mut manifests = entries
+        .filter_map(Result::ok)
+        .map(|entry| read_json_file(&entry.path()))
+        .collect::<Vec<_>>();
+    manifests.sort_by(|left, right| {
+        left.get("participant_id")
+            .and_then(Value::as_str)
+            .cmp(&right.get("participant_id").and_then(Value::as_str))
+    });
+    manifests
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn participant_is_authoritative_live(manifest: &Value) -> bool {
+    let Some(state) = manifest.get("state").and_then(Value::as_str) else {
+        return false;
+    };
+    let live_state = matches!(
+        state,
+        "allocating" | "ready" | "running" | "restarting" | "stopping"
+    );
+    live_state
+        && manifest
+            .pointer("/internal/uaa_session_id")
+            .and_then(Value::as_str)
+            .is_some()
+        && manifest
+            .pointer("/internal/control_owner_retained")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && manifest
+            .pointer("/internal/event_stream_active")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && manifest
+            .pointer("/internal/completion_observer_retained")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && manifest
+            .pointer("/internal/ownership_valid")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && manifest
+            .pointer("/internal/terminal_observed_at")
+            .is_none_or(Value::is_null)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn authoritative_live_world_member_manifests_for_session(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+) -> Vec<Value> {
+    session_participant_manifests(substrate_home, orchestration_session_id)
+        .into_iter()
+        .filter(|manifest| manifest.get("role").and_then(Value::as_str) == Some("member"))
+        .filter(|manifest| {
+            manifest.pointer("/execution/scope").and_then(Value::as_str) == Some("world")
+        })
+        .filter(participant_is_authoritative_live)
+        .collect()
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn wait_for_live_world_member_count(
+    fixture: &AgentControlFixture,
+    orchestration_session_id: &str,
+    expected_count: usize,
+    timeout: Duration,
+) -> Vec<Value> {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        let members = authoritative_live_world_member_manifests_for_session(
+            &fixture.substrate_home,
+            orchestration_session_id,
+        );
+        if members.len() == expected_count {
+            return members;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+
+    panic!(
+        "timed out waiting for authoritative live world member count == {expected_count}; got {:?}",
+        authoritative_live_world_member_manifests_for_session(
+            &fixture.substrate_home,
+            orchestration_session_id
+        ),
+    );
+}
+
 fn write_json_file(path: &Path, value: &Value) {
     let parent = path.parent().expect("fixture json path should have parent");
     fs::create_dir_all(parent)
@@ -410,6 +519,40 @@ fn write_active_orchestration_session(
             "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
             "world_id": Value::Null,
             "world_generation": Value::Null,
+            "invalidation_reason": Value::Null,
+            "closed_at": Value::Null
+        }),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_orchestration_session(
+    fixture: &AgentControlFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: Option<&str>,
+    state: &str,
+    world_id: Option<&str>,
+    world_generation: Option<u64>,
+    ts: &str,
+) {
+    write_json_file(
+        &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
+        &json!({
+            "orchestration_session_id": orchestration_session_id,
+            "shell_trace_session_id": "ses_agent_control",
+            "workspace_root": fixture.workspace_root.display().to_string(),
+            "shell_owner_pid": std::process::id(),
+            "state": state,
+            "opened_at": ts,
+            "last_active_at": ts,
+            "orchestrator_agent_id": agent_id,
+            "orchestrator_backend_id": format!("cli:{agent_id}"),
+            "orchestrator_protocol": PURE_AGENT_PROTOCOL,
+            "active_session_handle_id": active_session_handle_id,
+            "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
+            "world_id": world_id,
+            "world_generation": world_generation,
             "invalidation_reason": Value::Null,
             "closed_at": Value::Null
         }),
@@ -471,6 +614,67 @@ fn write_runtime_participant(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
+fn write_world_member_participant(
+    fixture: &AgentControlFixture,
+    participant_id: &str,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    orchestrator_participant_id: &str,
+    world_id: &str,
+    world_generation: u64,
+    state: &str,
+    ownership_valid: bool,
+    uaa_session_id: Option<&str>,
+    ts: &str,
+) {
+    write_json_file(
+        &canonical_participant_manifest_path(
+            &fixture.substrate_home,
+            orchestration_session_id,
+            participant_id,
+        ),
+        &json!({
+            "participant_id": participant_id,
+            "orchestration_session_id": orchestration_session_id,
+            "agent_id": agent_id,
+            "backend_id": format!("cli:{agent_id}"),
+            "role": "member",
+            "protocol": PURE_AGENT_PROTOCOL,
+            "execution": { "scope": "world" },
+            "state": state,
+            "opened_at": ts,
+            "last_transition_at": ts,
+            "parent_session_handle_id": Value::Null,
+            "resumed_from_session_handle_id": Value::Null,
+            "world_id": world_id,
+            "world_generation": world_generation,
+            "orchestrator_participant_id": orchestrator_participant_id,
+            "internal": {
+                "resolved_agent_kind": agent_id,
+                "resolved_binary_path": fixture.fake_codex.display().to_string(),
+                "shell_owner_pid": std::process::id(),
+                "lease_token": format!("lease-{participant_id}"),
+                "uaa_session_id": uaa_session_id,
+                "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
+                "cancel_supported": true,
+                "control_owner_retained": ownership_valid,
+                "event_stream_active": ownership_valid,
+                "completion_observer_retained": ownership_valid,
+                "ownership_mode": "member_runtime",
+                "ownership_valid": ownership_valid,
+                "ownership_verified_at": ts,
+                "last_heartbeat_at": ts,
+                "last_event_at": ts,
+                "terminal_observed_at": Value::Null,
+                "termination_reason": Value::Null,
+                "last_error_bucket": Value::Null,
+                "last_error_message": Value::Null
+            }
+        }),
+    );
+}
+
 struct PtyRepl {
     child: Box<dyn portable_pty::Child + Send>,
     master: Option<Box<dyn portable_pty::MasterPty + Send>>,
@@ -499,6 +703,15 @@ impl Drop for PtyRepl {
 
 impl PtyRepl {
     fn spawn(fixture: &AgentControlFixture) -> Self {
+        Self::spawn_with_options(fixture, None)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn spawn_with_world_socket(fixture: &AgentControlFixture, socket_path: &Path) -> Self {
+        Self::spawn_with_options(fixture, Some(socket_path))
+    }
+
+    fn spawn_with_options(fixture: &AgentControlFixture, socket_path: Option<&Path>) -> Self {
         ensure_substrate_built();
 
         let pty_system = native_pty_system();
@@ -526,11 +739,20 @@ impl PtyRepl {
         cmd.env("SUBSTRATE_HOME", &fixture.substrate_home);
         cmd.env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path());
         cmd.env("SHIM_TRACE_LOG", fixture.trace_path());
-        cmd.env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
         cmd.env_remove("SHIM_ORIGINAL_PATH");
         cmd.env_remove("SUBSTRATE_WORLD");
         cmd.env_remove("SUBSTRATE_WORLD_ENABLED");
         cmd.env_remove("SUBSTRATE_WORLD_ID");
+        match socket_path {
+            Some(socket_path) => {
+                cmd.env("SUBSTRATE_WORLD_SOCKET", socket_path);
+                cmd.env("SUBSTRATE_OVERRIDE_WORLD", "enabled");
+                cmd.arg("--world");
+            }
+            None => {
+                cmd.env("SUBSTRATE_OVERRIDE_WORLD", "disabled");
+            }
+        }
         cmd.env("SHELL", "/bin/bash");
         cmd.arg("--async-repl");
         cmd.arg("--shim-skip");
@@ -1090,6 +1312,522 @@ fn public_control_rejects_non_orchestration_session_selectors() {
         stderr_text(&turn_selector_output).contains("matched active_session_handle_id"),
         "public turn must explain active_session_handle_id rejection: {turn_selector_output:?}"
     );
+
+    let turn_participant_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "ash_previous",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        turn_participant_output.status.code(),
+        Some(2),
+        "public turn must reject participant/session-handle selectors: {turn_participant_output:?}"
+    );
+    assert!(
+        stderr_text(&turn_participant_output).contains("matched participant_id/session_handle_id"),
+        "public turn must explain participant/session-handle rejection: {turn_participant_output:?}"
+    );
+
+    let turn_internal_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "uaa-live-1",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        turn_internal_output.status.code(),
+        Some(2),
+        "public turn must reject internal uaa session selectors: {turn_internal_output:?}"
+    );
+    assert!(
+        stderr_text(&turn_internal_output).contains("matched internal.uaa_session_id"),
+        "public turn must explain internal uaa selector rejection: {turn_internal_output:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_turn_fail_closed_taxonomy_is_explicit_for_missing_backend_unknown_session_and_parent_slot_errors(
+) {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(true);
+
+    let ts = "2026-05-05T00:00:00Z";
+    write_active_orchestration_session(&fixture, "codex", "sess_host_only", "ash_live", ts);
+    write_runtime_participant(
+        &fixture,
+        "ash_live",
+        "codex",
+        "sess_host_only",
+        "running",
+        true,
+        Some("uaa-live-1"),
+        None,
+        ts,
+    );
+
+    let missing_backend_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_host_only",
+        "--backend",
+        "",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        missing_backend_output.status.code(),
+        Some(2),
+        "public turn must fail closed when --backend is missing: {missing_backend_output:?}"
+    );
+    assert!(
+        stderr_text(&missing_backend_output).contains("missing_backend"),
+        "missing backend must stay classified explicitly: {missing_backend_output:?}"
+    );
+
+    let unknown_session_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_missing",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        unknown_session_output.status.code(),
+        Some(2),
+        "unknown orchestration sessions must fail closed: {unknown_session_output:?}"
+    );
+    assert!(
+        stderr_text(&unknown_session_output).contains("unknown_session"),
+        "unknown orchestration sessions must keep the frozen classifier: {unknown_session_output:?}"
+    );
+
+    write_orchestration_session(
+        &fixture,
+        "codex",
+        "sess_stopped",
+        Some("ash_stopped"),
+        "stopped",
+        None,
+        None,
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_stopped",
+        "codex",
+        "sess_stopped",
+        "running",
+        true,
+        Some("uaa-live-stopped"),
+        None,
+        ts,
+    );
+    let missing_parent_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_stopped",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        missing_parent_output.status.code(),
+        Some(2),
+        "inactive parents must fail closed for follow-up turns: {missing_parent_output:?}"
+    );
+    assert!(
+        stderr_text(&missing_parent_output).contains("missing_active_parent"),
+        "inactive parents must keep the missing_active_parent classifier: {missing_parent_output:?}"
+    );
+
+    let backend_not_in_session_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_host_only",
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        backend_not_in_session_output.status.code(),
+        Some(2),
+        "public turn must fail closed when the backend is not present in the orchestration session: {backend_not_in_session_output:?}"
+    );
+    assert!(
+        stderr_text(&backend_not_in_session_output).contains("backend_not_in_session"),
+        "backend-not-in-session must keep the frozen classifier: {backend_not_in_session_output:?}"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_detached_rejection()
+{
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(true);
+
+    let ts = "2026-05-05T00:00:00Z";
+
+    write_orchestration_session(
+        &fixture,
+        "codex",
+        "sess_world_stale",
+        Some("ash_owner"),
+        "active",
+        Some("world-17"),
+        Some(2),
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_owner",
+        "codex",
+        "sess_world_stale",
+        "running",
+        true,
+        Some("uaa-owner-1"),
+        None,
+        ts,
+    );
+    write_world_member_participant(
+        &fixture,
+        "ash_member_stale",
+        "claude_code",
+        "sess_world_stale",
+        "ash_stale_owner",
+        "world-17",
+        2,
+        "ready",
+        true,
+        Some("uaa-member-stale"),
+        ts,
+    );
+
+    let stale_linkage_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_world_stale",
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        stale_linkage_output.status.code(),
+        Some(2),
+        "world follow-up must fail closed when retained linkage drifts: {stale_linkage_output:?}"
+    );
+    assert!(
+        stderr_text(&stale_linkage_output).contains("stale_linkage"),
+        "world linkage drift must keep the stale_linkage classifier: {stale_linkage_output:?}"
+    );
+
+    write_orchestration_session(
+        &fixture,
+        "codex",
+        "sess_world_ambiguous",
+        Some("ash_owner"),
+        "active",
+        Some("world-18"),
+        Some(3),
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_owner",
+        "codex",
+        "sess_world_ambiguous",
+        "running",
+        true,
+        Some("uaa-owner-2"),
+        None,
+        ts,
+    );
+    write_world_member_participant(
+        &fixture,
+        "ash_member_a",
+        "claude_code",
+        "sess_world_ambiguous",
+        "ash_owner",
+        "world-18",
+        3,
+        "ready",
+        true,
+        Some("uaa-member-a"),
+        ts,
+    );
+    write_world_member_participant(
+        &fixture,
+        "ash_member_b",
+        "claude_code",
+        "sess_world_ambiguous",
+        "ash_owner",
+        "world-18",
+        3,
+        "ready",
+        true,
+        Some("uaa-member-b"),
+        ts,
+    );
+
+    let ambiguous_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_world_ambiguous",
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        ambiguous_output.status.code(),
+        Some(2),
+        "world follow-up must fail closed when multiple authoritative slots match the same backend: {ambiguous_output:?}"
+    );
+    assert!(
+        stderr_text(&ambiguous_output).contains("ambiguous_backend_slot"),
+        "ambiguous world member slots must keep the frozen classifier: {ambiguous_output:?}"
+    );
+
+    write_orchestration_session(
+        &fixture,
+        "codex",
+        "sess_world_detached",
+        Some("ash_owner"),
+        "active",
+        Some("world-19"),
+        Some(4),
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_owner",
+        "codex",
+        "sess_world_detached",
+        "running",
+        true,
+        Some("uaa-owner-3"),
+        None,
+        ts,
+    );
+    write_world_member_participant(
+        &fixture,
+        "ash_member_detached",
+        "claude_code",
+        "sess_world_detached",
+        "ash_owner",
+        "world-19",
+        4,
+        "ready",
+        false,
+        Some("uaa-member-detached"),
+        ts,
+    );
+
+    let detached_world_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_world_detached",
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "next",
+        "--json",
+    ]);
+    assert_eq!(
+        detached_world_output.status.code(),
+        Some(2),
+        "detached world follow-up must fail closed until the parent owner is reattached: {detached_world_output:?}"
+    );
+    let detached_world_stderr = stderr_text(&detached_world_output);
+    assert!(
+        detached_world_stderr.contains("unsupported_platform_or_posture"),
+        "detached world follow-up must keep the detached-world posture classifier: {detached_world_output:?}"
+    );
+    assert!(
+        detached_world_stderr.contains("substrate agent reattach --session sess_world_detached"),
+        "detached world rejection must direct callers through reattach before world follow-up resumes: {detached_world_output:?}"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+#[serial]
+fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(true);
+
+    let socket_home = tempfile::Builder::new()
+        .prefix("sac-world-submit-")
+        .tempdir_in("/tmp")
+        .expect("socket tempdir");
+    let socket_path = socket_home.path().join("world.sock");
+    let server = ReplWorldAgentStub::start_with_member_dispatch_scripts(
+        &socket_path,
+        StreamBehavior::Normal,
+        vec![MemberDispatchStreamScript::ReadyAndHoldUntilCancel {
+            session_handle_id: "session-public-world-turn".to_string(),
+            exit_code_on_cancel: 130,
+        }],
+    );
+    let records = server.records();
+    let mut repl = PtyRepl::spawn_with_world_socket(&fixture, &socket_path);
+    repl.wait_for_output("Substrate v", Duration::from_secs(6))
+        .expect("banner");
+    repl.wait_for_output("substrate>", Duration::from_secs(2))
+        .expect("prompt");
+
+    repl.send_line("::cli:codex start retained host runtime");
+    repl.wait_for_output(
+        "shell-owned orchestrator session is ready via retained attached control ownership",
+        Duration::from_secs(5),
+    )
+    .expect("host runtime ready");
+
+    repl.send_line("::cli:claude_code member targeted first turn");
+    repl.wait_for_output("substrate>", Duration::from_secs(5))
+        .expect("prompt after initial world turn");
+
+    let (orchestration_session_id, owner_participant_id) =
+        wait_for_single_active_session(&fixture, Duration::from_secs(5));
+    let owner_pid = fixture.load_orchestration_session(&orchestration_session_id)["shell_owner_pid"]
+        .as_u64()
+        .expect("owner pid") as u32;
+    let live_members = wait_for_live_world_member_count(
+        &fixture,
+        &orchestration_session_id,
+        1,
+        Duration::from_secs(5),
+    );
+    let member = &live_members[0];
+    let member_participant_id = member
+        .get("participant_id")
+        .and_then(Value::as_str)
+        .expect("member participant_id")
+        .to_string();
+    let member_orchestrator_participant_id = member
+        .get("orchestrator_participant_id")
+        .and_then(Value::as_str)
+        .expect("member orchestrator_participant_id")
+        .to_string();
+    assert_eq!(
+        member_orchestrator_participant_id, owner_participant_id,
+        "the retained world member must stay linked to the exact authoritative owner participant"
+    );
+    let world_id = member
+        .get("world_id")
+        .and_then(Value::as_str)
+        .expect("member world_id")
+        .to_string();
+    let world_generation = member
+        .get("world_generation")
+        .and_then(Value::as_u64)
+        .expect("member world_generation");
+
+    let turn_output = fixture
+        .command()
+        .current_dir(&fixture.workspace_root)
+        .env("SUBSTRATE_WORLD_SOCKET", &socket_path)
+        .args([
+            "agent",
+            "turn",
+            "--session",
+            &orchestration_session_id,
+            "--backend",
+            "cli:claude_code",
+            "--prompt",
+            "continue in world",
+            "--json",
+        ])
+        .output()
+        .expect("run public world turn");
+    assert!(
+        turn_output.status.success(),
+        "public world turn should succeed on Linux: {turn_output:?}"
+    );
+    let turn_records = parse_ndjson_output(&turn_output);
+    let turn_json = find_ndjson_record(&turn_records, "completed");
+    assert_eq!(
+        turn_json.get("action").and_then(Value::as_str),
+        Some("turn")
+    );
+    assert_eq!(
+        turn_json
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id.as_str())
+    );
+    assert_eq!(
+        turn_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:claude_code")
+    );
+    assert_eq!(
+        turn_json.get("turn_outcome").and_then(Value::as_str),
+        Some("success")
+    );
+    assert_eq!(
+        turn_json.get("session_posture").and_then(Value::as_str),
+        Some("active")
+    );
+
+    let guard = records.lock().expect("lock world-agent records");
+    assert_eq!(
+        guard.member_turn_submit_requests.len(),
+        1,
+        "public world follow-up must submit exactly one typed member turn request: {guard:#?}"
+    );
+    let submit = &guard.member_turn_submit_requests[0];
+    assert_eq!(submit.orchestration_session_id, orchestration_session_id);
+    assert_eq!(submit.participant_id, member_participant_id);
+    assert_eq!(submit.orchestrator_participant_id, owner_participant_id);
+    assert_eq!(submit.backend_id, "cli:claude_code");
+    assert_eq!(submit.world_id, world_id);
+    assert_eq!(submit.world_generation, world_generation);
+    assert_eq!(submit.prompt, "continue in world");
+    drop(guard);
+
+    assert!(
+        String::from_utf8_lossy(&turn_output.stdout)
+            .contains("__MEMBER_TURN_SUBMIT_STUB__ continue in world"),
+        "public world follow-up must surface typed submit output: {turn_output:?}"
+    );
+
+    repl.send_line("exit");
+    let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
+    terminate_pid(owner_pid);
 }
 
 #[test]

@@ -98,6 +98,27 @@ When the async REPL owns a shell-scoped orchestrator session, live session disco
 
 Trace is historical fallback only for `substrate agent status` gaps after live-state filtering. Trace never authorizes current-session toolbox state or `substrate agent toolbox env`.
 
+### Public Session Control
+
+The public prompt-taking and control surface is intentionally narrow:
+
+```bash
+substrate agent start --backend <backend_id> --prompt "hello" --json
+substrate agent turn --session <orchestration_session_id> --backend <backend_id> --prompt "next" --json
+substrate agent reattach --session <orchestration_session_id> --json
+substrate agent fork --session <orchestration_session_id> --json
+substrate agent stop --session <orchestration_session_id> --json
+```
+
+- `substrate agent start` is the canonical public root prompt-taking surface and remains host-only in v1.
+- `substrate agent turn` is the canonical public follow-up surface and requires the exact pair `(--session <orchestration_session_id>, --backend <backend_id>)`.
+- Public follow-up never falls back to `participant_id`, legacy `session_handle_id`, `active_session_handle_id`, or `internal.uaa_session_id`; those selector shapes fail closed.
+- There is still no default-agent routing and there is still no public world-root `start`.
+- On Linux, exact world-member follow-up reuses the retained member slot and submits through the typed `/v1/member_turn/stream` path.
+- Detached host recovery stays on `substrate agent reattach --session <orchestration_session_id>`.
+- Detached world follow-up fails closed until `reattach` restores an active host owner.
+- `substrate -c`, `--command`, and piped stdin remain shell execution surfaces rather than agent-prompt aliases.
+
 ## PTY Support
 
 Substrate automatically uses PTY for interactive commands:

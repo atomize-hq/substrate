@@ -1066,25 +1066,19 @@ pub(crate) fn run_public_prompt_command(
     _cli_no_world: bool,
 ) -> Result<()> {
     let store = AgentRuntimeStateStore::new()?;
-    let orchestration_session_id = request.orchestration_session_id.clone().ok_or_else(|| {
-        anyhow::anyhow!(
-            "unknown_session: public prompt actions require an orchestration session id"
-        )
-    })?;
+    let (orchestration_session_id, backend_id) = validate_public_prompt_command_request(&request)?;
     let participant_id = match request.action {
-        PublicPromptAction::Start => resolve_public_start_prompt_target(
-            &store,
-            &orchestration_session_id,
-            &request.backend_id,
-        )?,
+        PublicPromptAction::Start => {
+            resolve_public_start_prompt_target(&store, orchestration_session_id, backend_id)?
+        }
         PublicPromptAction::Turn => {
             let resolved =
-                store.resolve_public_turn_target(&orchestration_session_id, &request.backend_id)?;
+                store.resolve_public_turn_target(orchestration_session_id, backend_id)?;
             if resolved.session_posture != PublicSessionPosture::Active {
                 anyhow::bail!(
                     "owner_unreachable: orchestration session {} backend {} is not currently attached to a live retained turn target",
                     orchestration_session_id,
-                    request.backend_id
+                    backend_id
                 );
             }
             resolved.participant.handle.participant_id.clone()
@@ -1103,7 +1097,7 @@ pub(crate) fn run_public_prompt_command(
     {
         let transport_path = private_prompt_transport_path(
             &store,
-            &orchestration_session_id,
+            orchestration_session_id,
             participant_id.as_str(),
         );
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -1154,6 +1148,38 @@ pub(crate) fn run_public_prompt_command(
             Err(err) => Err(err),
         }
     }
+}
+
+fn validate_public_prompt_command_request(
+    request: &PublicPromptCommandRequest,
+) -> Result<(&str, &str)> {
+    let session_error = match request.action {
+        PublicPromptAction::Start => {
+            "runtime_start_failed: public start actions require an orchestration session id"
+        }
+        PublicPromptAction::Turn => {
+            "unknown_session: public turn actions require --session <orchestration_session_id>"
+        }
+    };
+    let backend_error = match request.action {
+        PublicPromptAction::Start => {
+            "runtime_start_failed: public start actions require an exact backend id"
+        }
+        PublicPromptAction::Turn => {
+            "missing_backend: public turn actions require --backend <backend_id>"
+        }
+    };
+
+    let orchestration_session_id = request
+        .orchestration_session_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!(session_error))?;
+    let backend_id = (!request.backend_id.trim().is_empty())
+        .then_some(request.backend_id.as_str())
+        .ok_or_else(|| anyhow::anyhow!(backend_error))?;
+
+    Ok((orchestration_session_id, backend_id))
 }
 
 #[cfg(unix)]
@@ -1952,7 +1978,10 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{OwnerHelperMode, PrivateStopOutcome};
+    use super::{
+        validate_public_prompt_command_request, LoadedPublicPrompt, OwnerHelperMode,
+        PrivateStopOutcome, PublicPromptAction, PublicPromptCommandRequest,
+    };
 
     #[test]
     fn owner_helper_modes_remain_internal_and_exact() {
@@ -1970,5 +1999,38 @@ mod tests {
             PrivateStopOutcome::ProtocolError,
         ];
         assert_eq!(outcomes.len(), 4);
+    }
+
+    #[test]
+    fn public_turn_prompt_requests_require_exact_session_and_backend_contract() {
+        let prompt = LoadedPublicPrompt {
+            prompt_text: "hello".to_string(),
+        };
+        let missing_session = PublicPromptCommandRequest {
+            action: PublicPromptAction::Turn,
+            orchestration_session_id: None,
+            backend_id: "cli:codex".to_string(),
+            prompt: prompt.clone(),
+            json: false,
+        };
+        let missing_backend = PublicPromptCommandRequest {
+            action: PublicPromptAction::Turn,
+            orchestration_session_id: Some("sess_public".to_string()),
+            backend_id: "   ".to_string(),
+            prompt,
+            json: false,
+        };
+
+        let session_err = validate_public_prompt_command_request(&missing_session)
+            .expect_err("turn requests must require an orchestration session id");
+        assert!(session_err
+            .to_string()
+            .contains("public turn actions require --session <orchestration_session_id>"));
+
+        let backend_err = validate_public_prompt_command_request(&missing_backend)
+            .expect_err("turn requests must require an exact backend id");
+        assert!(backend_err
+            .to_string()
+            .contains("missing_backend: public turn actions require --backend <backend_id>"));
     }
 }
