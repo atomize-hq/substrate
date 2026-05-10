@@ -38,7 +38,7 @@ This ADR is a lifecycle correction for host orchestration. It does not replace t
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: TBD
+ADR_BODY_SHA256: ebae56fd591e1cffea1d3e8262ed660fcf9123ef5d1574b7a3a98783525154cc
 
 ### Changes (operator-facing)
 - Clarify that a host orchestration session is durable even when the current Codex wrapper process is not

@@ -226,8 +226,6 @@ Anything else is a runtime bug and must be rendered as `Failed`.
     └── <item_id>.json
 ```
 
-Compatibility snapshots may still exist elsewhere for read-side compatibility, but this session root remains authoritative.
-
 ### Required additive session fields
 
 1. `posture: active_attached|parked_resumable|awaiting_attention|terminal`

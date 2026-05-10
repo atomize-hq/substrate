@@ -84,8 +84,8 @@ Worker worktrees:
 
 Worker branches:
 
-- `codex/feat-macos-lima-shared-owner-member-runtime-parity-m23-durable-inbox`
-- `codex/feat-macos-lima-shared-owner-member-runtime-parity-m23-lifecycle-resume-terminal-envelope`
+- `codex/feat-host-orchestrator-durable-session-m23-durable-inbox`
+- `codex/feat-host-orchestrator-durable-session-m23-lifecycle-resume-terminal-envelope`
 
 Exact setup commands, run only after `task/m23-p1-parent-contract-freeze-and-seam-prep` is accepted and the main checkout `HEAD` equals the accepted post-freeze tree:
 
@@ -93,11 +93,11 @@ Exact setup commands, run only after `task/m23-p1-parent-contract-freeze-and-sea
 mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-host-orch-durable-session
 
 git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-host-orch-durable-session/durable-inbox \
-  -b codex/feat-macos-lima-shared-owner-member-runtime-parity-m23-durable-inbox \
+  -b codex/feat-host-orchestrator-durable-session-m23-durable-inbox \
   HEAD
 
 git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-host-orch-durable-session/lifecycle-resume-terminal-envelope \
-  -b codex/feat-macos-lima-shared-owner-member-runtime-parity-m23-lifecycle-resume-terminal-envelope \
+  -b codex/feat-host-orchestrator-durable-session-m23-lifecycle-resume-terminal-envelope \
   HEAD
 ```
 
@@ -221,9 +221,9 @@ The parent freezes the required additive session, participant, and inbox shapes 
 | `task/m23-p0-parent-run-init-and-gitnexus-preflight` | parent | — | main checkout / `feat/host-orchestrator-durable-session` | run scaffold, symbol inventory, GitNexus preflight impact capture |
 | `task/m23-p1-parent-contract-freeze-and-seam-prep` | parent | `p0` | main checkout / `feat/host-orchestrator-durable-session` | frozen posture/participant/store seam, lane ownership freeze, accepted post-freeze tree |
 | `task/m23-g1-parent-lane-launch-gate` | parent | `p1` | main checkout / `feat/host-orchestrator-durable-session` | launch decision for Window A and worktree creation |
-| `task/m23-a1-worker-durable-inbox-implementation` | worker A | `g1` | durable-inbox / `codex/feat-macos-lima-shared-owner-member-runtime-parity-m23-durable-inbox` | inbox persistence, pending-count maintenance, store-local tests |
+| `task/m23-a1-worker-durable-inbox-implementation` | worker A | `g1` | durable-inbox / `codex/feat-host-orchestrator-durable-session-m23-durable-inbox` | inbox persistence, pending-count maintenance, store-local tests |
 | `task/m23-a2-worker-durable-inbox-validation-and-handoff` | worker A | `a1` | durable-inbox / same branch | validated worker report, patch, evidence manifest, impact artifact |
-| `task/m23-b1-worker-lifecycle-resume-and-terminal-envelope` | worker B | `g1` | lifecycle-resume-terminal-envelope / `codex/feat-macos-lima-shared-owner-member-runtime-parity-m23-lifecycle-resume-terminal-envelope` | clean-detach parking, parked `turn`/`reattach`, explicit terminal envelope handling |
+| `task/m23-b1-worker-lifecycle-resume-and-terminal-envelope` | worker B | `g1` | lifecycle-resume-terminal-envelope / `codex/feat-host-orchestrator-durable-session-m23-lifecycle-resume-terminal-envelope` | clean-detach parking, parked `turn`/`reattach`, explicit terminal envelope handling |
 | `task/m23-b2-worker-lifecycle-validation-and-handoff` | worker B | `b1` | lifecycle-resume-terminal-envelope / same branch | validated worker report, patch, evidence manifest, impact artifact |
 | `task/m23-g2-parent-integration-gate` | parent | `a2`, `b2` | main checkout / `feat/host-orchestrator-durable-session` | accept or quarantine decision for both lanes |
 | `task/m23-p2-parent-integration-and-cross-lane-test-finishing` | parent | `g2` | main checkout / `feat/host-orchestrator-durable-session` | merged runtime truth, parent-owned integration tests, cross-lane fixes |
