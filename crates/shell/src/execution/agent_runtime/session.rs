@@ -112,6 +112,16 @@ pub(crate) struct AgentRuntimeSessionInternal {
     pub terminal_observed_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub termination_reason: Option<String>,
+    #[serde(default)]
+    pub attached_client_present: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_attached_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_detached_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detach_reason: Option<String>,
+    #[serde(default)]
+    pub resume_eligible: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_error_bucket: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -302,6 +312,8 @@ impl AgentRuntimeParticipantRecord {
         let now = Utc::now();
         let world_id = init.world.as_ref().map(|binding| binding.world_id.clone());
         let world_generation = init.world.map(|binding| binding.world_generation);
+        let host_attachment_contract = init.role == ORCHESTRATOR_ROLE
+            && descriptor.execution_scope == AgentExecutionScope::Host;
         let record = Self {
             handle: AgentRuntimeParticipantHandle {
                 session_handle_id: init.participant_id.clone(),
@@ -343,6 +355,11 @@ impl AgentRuntimeParticipantRecord {
                 last_event_at: None,
                 terminal_observed_at: None,
                 termination_reason: None,
+                attached_client_present: host_attachment_contract,
+                last_attached_at: host_attachment_contract.then_some(now),
+                last_detached_at: None,
+                detach_reason: None,
+                resume_eligible: host_attachment_contract,
                 last_error_bucket: None,
                 last_error_message: None,
             },
@@ -412,6 +429,34 @@ impl AgentRuntimeParticipantRecord {
             other => anyhow::bail!("unsupported participant role '{other}'"),
         }
 
+        let uses_host_attachment_contract = self.is_host_orchestrator();
+        let host_attachment_fields_set = self.internal.attached_client_present
+            || self.internal.last_attached_at.is_some()
+            || self.internal.last_detached_at.is_some()
+            || self.internal.detach_reason.is_some()
+            || self.internal.resume_eligible;
+        if !uses_host_attachment_contract && host_attachment_fields_set {
+            anyhow::bail!(
+                "non-host participants must not set attached_client_present, resume_eligible, or detach timestamps"
+            );
+        }
+        if uses_host_attachment_contract {
+            if self.internal.attached_client_present && self.internal.last_attached_at.is_none() {
+                anyhow::bail!("attached host participants must include internal.last_attached_at");
+            }
+            if self.internal.attached_client_present && !self.internal.resume_eligible {
+                anyhow::bail!("attached host participants must remain resume_eligible");
+            }
+            if self.internal.resume_eligible && self.internal.last_attached_at.is_none() {
+                anyhow::bail!(
+                    "resume-eligible host participants must record internal.last_attached_at"
+                );
+            }
+            if self.internal.terminal_observed_at.is_some() && self.internal.resume_eligible {
+                anyhow::bail!("terminal host participants must clear resume_eligible");
+            }
+        }
+
         if self.handle.parent_participant_id.as_deref() == Some(self.handle.participant_id.as_str())
         {
             anyhow::bail!("parent_participant_id must not point to the participant itself");
@@ -472,6 +517,10 @@ impl AgentRuntimeParticipantRecord {
 
     pub(crate) fn set_uaa_session_id(&mut self, backend_session_id: impl Into<String>) {
         self.internal.uaa_session_id = Some(backend_session_id.into());
+        if self.is_host_orchestrator() && self.handle.state.is_live() {
+            self.internal.resume_eligible = true;
+            self.internal.last_attached_at.get_or_insert_with(Utc::now);
+        }
         self.refresh_ownership_validity();
     }
 
@@ -505,6 +554,7 @@ impl AgentRuntimeParticipantRecord {
         self.internal.control_owner_retained = true;
         self.internal.event_stream_active = true;
         self.internal.completion_observer_retained = true;
+        self.mark_client_attached();
         self.refresh_ownership_validity();
     }
 
@@ -516,10 +566,17 @@ impl AgentRuntimeParticipantRecord {
     }
 
     pub(crate) fn mark_terminal_state(&mut self, reason: impl Into<String>) {
+        let reason = reason.into();
         let now = Utc::now();
         self.release_runtime_ownership();
-        self.internal.terminal_observed_at = Some(Utc::now());
-        self.internal.termination_reason = Some(reason.into());
+        self.internal.terminal_observed_at = Some(now);
+        self.internal.termination_reason = Some(reason.clone());
+        if self.is_host_orchestrator() {
+            self.internal.attached_client_present = false;
+            self.internal.resume_eligible = false;
+            self.internal.last_detached_at = Some(now);
+            self.internal.detach_reason = Some(reason);
+        }
         if self.internal.ownership_verified_at.is_none() {
             self.internal.ownership_verified_at = Some(now);
         }
@@ -533,11 +590,45 @@ impl AgentRuntimeParticipantRecord {
         self.handle.state.is_live() && self.has_valid_ownership()
     }
 
+    pub(crate) fn attached_client_present(&self) -> bool {
+        self.internal.attached_client_present
+    }
+
+    pub(crate) fn is_resume_eligible(&self) -> bool {
+        self.internal.resume_eligible
+            && self.is_host_orchestrator()
+            && self.handle.state.is_live()
+            && self.internal.terminal_observed_at.is_none()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn mark_client_detached(&mut self, reason: impl Into<String>) {
+        if !self.is_host_orchestrator() {
+            return;
+        }
+        self.internal.attached_client_present = false;
+        self.internal.last_detached_at = Some(Utc::now());
+        self.internal.detach_reason = Some(reason.into());
+        self.internal.resume_eligible = self.handle.state.is_live()
+            && self.internal.terminal_observed_at.is_none()
+            && self.internal.uaa_session_id.is_some();
+    }
+
     pub(crate) fn last_status_at(&self) -> DateTime<Utc> {
         self.internal
             .last_event_at
             .or(self.internal.last_heartbeat_at)
             .unwrap_or(self.handle.last_transition_at)
+    }
+
+    fn mark_client_attached(&mut self) {
+        if !self.is_host_orchestrator() {
+            return;
+        }
+        self.internal.attached_client_present = true;
+        self.internal.resume_eligible = true;
+        self.internal.last_attached_at = Some(Utc::now());
+        self.internal.detach_reason = None;
     }
 }
 
@@ -772,6 +863,46 @@ mod tests {
             participant.internal.terminal_observed_at,
             first_terminal_observed_at
         );
+    }
+
+    #[test]
+    fn host_participant_constructor_tracks_attachment_fields() {
+        let participant = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+            &descriptor(AgentExecutionScope::Host),
+            "sess_001".to_string(),
+            "ash_001".to_string(),
+            "lease_001".to_string(),
+        )
+        .expect("host participant");
+
+        assert!(participant.attached_client_present());
+        assert!(participant.is_resume_eligible());
+        assert!(participant.internal.last_attached_at.is_some());
+    }
+
+    #[test]
+    fn member_participant_rejects_host_attachment_fields() {
+        let mut participant = AgentRuntimeParticipantRecord::new_member_participant(
+            &descriptor(AgentExecutionScope::World),
+            "sess_001".to_string(),
+            "member_001".to_string(),
+            "ash_001".to_string(),
+            None,
+            Some(AgentRuntimeParticipantWorldBinding {
+                world_id: "world-17".to_string(),
+                world_generation: 2,
+            }),
+            "lease_001".to_string(),
+        )
+        .expect("member participant");
+
+        participant.internal.resume_eligible = true;
+        let err = participant
+            .validate()
+            .expect_err("attachment contract error");
+        assert!(err
+            .to_string()
+            .contains("non-host participants must not set attached_client_present"));
     }
 
     #[test]

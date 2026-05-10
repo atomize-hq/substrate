@@ -510,15 +510,98 @@ fn write_active_orchestration_session(
             "workspace_root": fixture.workspace_root.display().to_string(),
             "shell_owner_pid": std::process::id(),
             "state": "active",
+            "posture": "active_attached",
+            "posture_changed_at": ts,
             "opened_at": ts,
             "last_active_at": ts,
             "orchestrator_agent_id": agent_id,
             "orchestrator_backend_id": format!("cli:{agent_id}"),
             "orchestrator_protocol": PURE_AGENT_PROTOCOL,
             "active_session_handle_id": active_session_handle_id,
+            "attached_participant_id": active_session_handle_id,
+            "pending_inbox_count": 0,
+            "last_parked_at": Value::Null,
+            "last_attention_at": Value::Null,
+            "parked_reason": Value::Null,
             "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
             "world_id": Value::Null,
             "world_generation": Value::Null,
+            "invalidation_reason": Value::Null,
+            "closed_at": Value::Null
+        }),
+    );
+}
+
+fn write_parked_orchestration_session(
+    fixture: &AgentControlFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: &str,
+    ts: &str,
+) {
+    write_json_file(
+        &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
+        &json!({
+            "orchestration_session_id": orchestration_session_id,
+            "shell_trace_session_id": "ses_agent_control",
+            "workspace_root": fixture.workspace_root.display().to_string(),
+            "shell_owner_pid": std::process::id(),
+            "state": "active",
+            "posture": "parked_resumable",
+            "posture_changed_at": ts,
+            "opened_at": ts,
+            "last_active_at": ts,
+            "orchestrator_agent_id": agent_id,
+            "orchestrator_backend_id": format!("cli:{agent_id}"),
+            "orchestrator_protocol": PURE_AGENT_PROTOCOL,
+            "active_session_handle_id": active_session_handle_id,
+            "attached_participant_id": Value::Null,
+            "pending_inbox_count": 0,
+            "last_parked_at": ts,
+            "last_attention_at": Value::Null,
+            "parked_reason": "owner detached cleanly",
+            "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
+            "world_id": Value::Null,
+            "world_generation": Value::Null,
+            "invalidation_reason": Value::Null,
+            "closed_at": Value::Null
+        }),
+    );
+}
+
+fn write_parked_world_orchestration_session(
+    fixture: &AgentControlFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: &str,
+    world_id: &str,
+    world_generation: u64,
+    ts: &str,
+) {
+    write_json_file(
+        &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
+        &json!({
+            "orchestration_session_id": orchestration_session_id,
+            "shell_trace_session_id": "ses_agent_control",
+            "workspace_root": fixture.workspace_root.display().to_string(),
+            "shell_owner_pid": std::process::id(),
+            "state": "active",
+            "posture": "parked_resumable",
+            "posture_changed_at": ts,
+            "opened_at": ts,
+            "last_active_at": ts,
+            "orchestrator_agent_id": agent_id,
+            "orchestrator_backend_id": format!("cli:{agent_id}"),
+            "orchestrator_protocol": PURE_AGENT_PROTOCOL,
+            "active_session_handle_id": active_session_handle_id,
+            "attached_participant_id": Value::Null,
+            "pending_inbox_count": 0,
+            "last_parked_at": ts,
+            "last_attention_at": Value::Null,
+            "parked_reason": "owner detached cleanly",
+            "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
+            "world_id": world_id,
+            "world_generation": world_generation,
             "invalidation_reason": Value::Null,
             "closed_at": Value::Null
         }),
@@ -536,6 +619,33 @@ fn write_orchestration_session(
     world_generation: Option<u64>,
     ts: &str,
 ) {
+    let (posture, attached_participant_id, last_parked_at, parked_reason, closed_at) = match state {
+        "active" => (
+            "active_attached",
+            active_session_handle_id
+                .map(Value::from)
+                .unwrap_or(Value::Null),
+            Value::Null,
+            Value::Null,
+            Value::Null,
+        ),
+        "stopped" | "failed" | "invalidated" => (
+            "terminal",
+            Value::Null,
+            Value::Null,
+            Value::Null,
+            Value::String(ts.to_string()),
+        ),
+        _ => (
+            "active_attached",
+            active_session_handle_id
+                .map(Value::from)
+                .unwrap_or(Value::Null),
+            Value::Null,
+            Value::Null,
+            Value::Null,
+        ),
+    };
     write_json_file(
         &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
         &json!({
@@ -544,17 +654,24 @@ fn write_orchestration_session(
             "workspace_root": fixture.workspace_root.display().to_string(),
             "shell_owner_pid": std::process::id(),
             "state": state,
+            "posture": posture,
+            "posture_changed_at": ts,
             "opened_at": ts,
             "last_active_at": ts,
             "orchestrator_agent_id": agent_id,
             "orchestrator_backend_id": format!("cli:{agent_id}"),
             "orchestrator_protocol": PURE_AGENT_PROTOCOL,
             "active_session_handle_id": active_session_handle_id,
+            "attached_participant_id": attached_participant_id,
+            "pending_inbox_count": 0,
+            "last_parked_at": last_parked_at,
+            "last_attention_at": Value::Null,
+            "parked_reason": parked_reason,
             "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
             "world_id": world_id,
             "world_generation": world_generation,
             "invalidation_reason": Value::Null,
-            "closed_at": Value::Null
+            "closed_at": closed_at
         }),
     );
 }
@@ -571,6 +688,23 @@ fn write_runtime_participant(
     resumed_from_participant_id: Option<&str>,
     ts: &str,
 ) {
+    let attached_client_present = ownership_valid;
+    let resume_eligible = uaa_session_id.is_some() && state != "invalidated";
+    let last_attached_at = if resume_eligible {
+        Value::String(ts.to_string())
+    } else {
+        Value::Null
+    };
+    let last_detached_at = if !attached_client_present && resume_eligible {
+        Value::String(ts.to_string())
+    } else {
+        Value::Null
+    };
+    let detach_reason = if !attached_client_present && resume_eligible {
+        Value::String("owner detached cleanly".to_string())
+    } else {
+        Value::Null
+    };
     write_json_file(
         &canonical_participant_manifest_path(
             &fixture.substrate_home,
@@ -605,6 +739,11 @@ fn write_runtime_participant(
                 "ownership_verified_at": ts,
                 "last_heartbeat_at": ts,
                 "last_event_at": ts,
+                "attached_client_present": attached_client_present,
+                "last_attached_at": last_attached_at,
+                "last_detached_at": last_detached_at,
+                "detach_reason": detach_reason,
+                "resume_eligible": resume_eligible,
                 "terminal_observed_at": Value::Null,
                 "termination_reason": Value::Null,
                 "last_error_bucket": Value::Null,
@@ -1086,7 +1225,7 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
     fixture.write_runtime_inventory(false);
 
     let ts = "2026-05-05T00:00:00Z";
-    write_active_orchestration_session(&fixture, "codex", "sess_resume_source", "ash_source", ts);
+    write_parked_orchestration_session(&fixture, "codex", "sess_resume_source", "ash_source", ts);
     write_runtime_participant(
         &fixture,
         "ash_source",
@@ -1227,13 +1366,105 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
 
 #[test]
 #[serial]
+fn public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_contracts() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    write_parked_orchestration_session(&fixture, "codex", "sess_turn_parked", "ash_parked", ts);
+    write_runtime_participant(
+        &fixture,
+        "ash_parked",
+        "codex",
+        "sess_turn_parked",
+        "running",
+        false,
+        Some("uaa-detached-turn"),
+        None,
+        ts,
+    );
+
+    let turn_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_turn_parked",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "resume parked host turn",
+        "--json",
+    ]);
+    assert!(
+        turn_output.status.success(),
+        "public turn should resume a parked authoritative session: {turn_output:?}"
+    );
+    let turn_records = parse_ndjson_output(&turn_output);
+    let turn_accepted = find_ndjson_record(&turn_records, "accepted");
+    let turn_json = find_ndjson_record(&turn_records, "completed");
+    assert_eq!(
+        turn_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "parked host turn must still emit acceptance before terminal completion: {turn_records:?}"
+    );
+    assert_eq!(
+        turn_accepted.get("scope").and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        turn_json.get("action").and_then(Value::as_str),
+        Some("turn")
+    );
+    assert_eq!(
+        turn_json
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("sess_turn_parked")
+    );
+    assert_eq!(
+        turn_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        turn_json.get("session_posture").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_eq!(
+        turn_json.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert!(
+        turn_json.get("source_orchestration_session_id").is_none(),
+        "parked host turn must stay inside the selected orchestration session: {turn_json}"
+    );
+    assert_empty_warnings(turn_json);
+
+    let resumed_participant_id = turn_json["participant_id"]
+        .as_str()
+        .expect("resumed participant id")
+        .to_string();
+    let resumed_participant = fixture.load_participant("sess_turn_parked", &resumed_participant_id);
+    assert_eq!(
+        resumed_participant
+            .get("resumed_from_participant_id")
+            .and_then(Value::as_str),
+        Some("ash_parked")
+    );
+}
+
+#[test]
+#[serial]
 fn public_control_rejects_non_orchestration_session_selectors() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory(false);
 
     let ts = "2026-05-05T00:00:00Z";
-    write_active_orchestration_session(&fixture, "codex", "sess_selector", "ash_live", ts);
+    write_parked_orchestration_session(&fixture, "codex", "sess_selector", "ash_live", ts);
     write_runtime_participant(
         &fixture,
         "ash_live",
@@ -1499,7 +1730,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
         &fixture,
         "codex",
         "sess_world_stale",
-        Some("ash_owner"),
+        Some("ash_owner_stale"),
         "active",
         Some("world-17"),
         Some(2),
@@ -1507,7 +1738,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
     );
     write_runtime_participant(
         &fixture,
-        "ash_owner",
+        "ash_owner_stale",
         "codex",
         "sess_world_stale",
         "running",
@@ -1555,7 +1786,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
         &fixture,
         "codex",
         "sess_world_ambiguous",
-        Some("ash_owner"),
+        Some("ash_owner_ambiguous"),
         "active",
         Some("world-18"),
         Some(3),
@@ -1563,7 +1794,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
     );
     write_runtime_participant(
         &fixture,
-        "ash_owner",
+        "ash_owner_ambiguous",
         "codex",
         "sess_world_ambiguous",
         "running",
@@ -1577,7 +1808,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
         "ash_member_a",
         "claude_code",
         "sess_world_ambiguous",
-        "ash_owner",
+        "ash_owner_ambiguous",
         "world-18",
         3,
         "ready",
@@ -1590,7 +1821,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
         "ash_member_b",
         "claude_code",
         "sess_world_ambiguous",
-        "ash_owner",
+        "ash_owner_ambiguous",
         "world-18",
         3,
         "ready",
@@ -1620,23 +1851,22 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
         "ambiguous world member slots must keep the frozen classifier: {ambiguous_output:?}"
     );
 
-    write_orchestration_session(
+    write_parked_world_orchestration_session(
         &fixture,
         "codex",
         "sess_world_detached",
-        Some("ash_owner"),
-        "active",
-        Some("world-19"),
-        Some(4),
+        "ash_owner_detached",
+        "world-19",
+        4,
         ts,
     );
     write_runtime_participant(
         &fixture,
-        "ash_owner",
+        "ash_owner_detached",
         "codex",
         "sess_world_detached",
         "running",
-        true,
+        false,
         Some("uaa-owner-3"),
         None,
         ts,
@@ -1646,7 +1876,7 @@ fn public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_
         "ash_member_detached",
         "claude_code",
         "sess_world_detached",
-        "ash_owner",
+        "ash_owner_detached",
         "world-19",
         4,
         "ready",

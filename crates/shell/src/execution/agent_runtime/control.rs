@@ -1471,7 +1471,12 @@ async fn handle_private_prompt_connection(
         return Ok(());
     }
 
+    let mut saw_accept = false;
+    let mut saw_terminal = false;
     while let Some(envelope) = envelope_rx.recv().await {
+        if matches!(envelope, PublicPromptEnvelope::Accepted { .. }) {
+            saw_accept = true;
+        }
         stream
             .write_all(serde_json::to_string(&envelope)?.as_bytes())
             .await?;
@@ -1481,8 +1486,21 @@ async fn handle_private_prompt_connection(
             envelope,
             PublicPromptEnvelope::Completed { .. } | PublicPromptEnvelope::Failed { .. }
         ) {
+            saw_terminal = true;
             break;
         }
+    }
+    if saw_accept && !saw_terminal {
+        let failed = failed_prompt_envelope(
+            "bridge",
+            "owner_unreachable",
+            "private prompt owner closed after accepting the request",
+        );
+        stream
+            .write_all(serde_json::to_string(&failed)?.as_bytes())
+            .await?;
+        stream.write_all(b"\n").await?;
+        stream.flush().await?;
     }
     Ok(())
 }
@@ -1979,9 +1997,14 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
+        handle_private_prompt_connection, private_prompt_request_channel,
         validate_public_prompt_command_request, LoadedPublicPrompt, OwnerHelperMode,
-        PrivateStopOutcome, PublicPromptAction, PublicPromptCommandRequest,
+        PrivateStopOutcome, PublicPromptAction, PublicPromptCommandRequest, PublicPromptEnvelope,
     };
+    #[cfg(unix)]
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    #[cfg(unix)]
+    use tokio::net::UnixStream;
 
     #[test]
     fn owner_helper_modes_remain_internal_and_exact() {
@@ -2032,5 +2055,71 @@ mod tests {
         assert!(backend_err
             .to_string()
             .contains("missing_backend: public turn actions require --backend <backend_id>"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test(flavor = "current_thread")]
+    async fn private_prompt_bridge_emits_terminal_failed_after_accepted_owner_drop() {
+        let (client, server) = UnixStream::pair().expect("unix stream pair");
+        let (prompt_tx, mut prompt_rx) = private_prompt_request_channel();
+        let server_task = tokio::spawn(async move {
+            handle_private_prompt_connection(server, prompt_tx)
+                .await
+                .expect("private prompt bridge should complete");
+        });
+        let owner_task = tokio::spawn(async move {
+            let request = prompt_rx.recv().await.expect("prompt request");
+            request
+                .envelope_tx
+                .send(PublicPromptEnvelope::Accepted {
+                    version: 1,
+                    action: PublicPromptAction::Turn,
+                    orchestration_session_id: "orch-parked".to_string(),
+                    backend_id: "cli:codex".to_string(),
+                    participant_id: Some("ash_resumed".to_string()),
+                    scope: "host".to_string(),
+                })
+                .expect("accepted envelope should send");
+        });
+
+        let mut client = client;
+        client
+            .write_all(br#"{"version":1,"action":"turn","prompt":"resume"}"#)
+            .await
+            .expect("write request");
+        client.write_all(b"\n").await.expect("newline");
+        client.flush().await.expect("flush request");
+
+        let mut reader = BufReader::new(client);
+        let mut line = String::new();
+        let mut envelopes = Vec::new();
+        loop {
+            line.clear();
+            let bytes_read = reader.read_line(&mut line).await.expect("read envelope");
+            if bytes_read == 0 {
+                break;
+            }
+            envelopes.push(
+                serde_json::from_str::<PublicPromptEnvelope>(line.trim())
+                    .expect("decode prompt envelope"),
+            );
+        }
+
+        owner_task.await.expect("owner task");
+        server_task.await.expect("server task");
+
+        assert!(matches!(
+            envelopes.first(),
+            Some(PublicPromptEnvelope::Accepted { .. })
+        ));
+        assert!(matches!(
+            envelopes.get(1),
+            Some(PublicPromptEnvelope::Failed {
+                error_code,
+                message,
+                ..
+            }) if error_code == "owner_unreachable"
+                && message.contains("closed after accepting")
+        ));
     }
 }

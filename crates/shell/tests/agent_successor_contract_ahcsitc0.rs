@@ -459,6 +459,12 @@ fn runtime_participant_manifest(
     orchestration_session_id: &str,
     options: RuntimeParticipantOptions<'_>,
 ) -> Value {
+    let is_host_orchestrator = options.role == "orchestrator" && options.scope == "host";
+    let attached_client_present = is_host_orchestrator && options.ownership_valid;
+    let resume_eligible = is_host_orchestrator
+        && options.state != "invalidated"
+        && options.state != "stopped"
+        && options.state != "failed";
     let mut manifest = serde_json::Map::new();
     manifest.insert("participant_id".to_string(), json!(participant_id));
     manifest.insert(
@@ -502,7 +508,7 @@ fn runtime_participant_manifest(
             "resolved_binary_path": "sh",
             "shell_owner_pid": std::process::id(),
             "lease_token": format!("lease-{participant_id}"),
-            "uaa_session_id": if options.ownership_valid { Value::String("external-session-1".to_string()) } else { Value::Null },
+            "uaa_session_id": if options.ownership_valid || resume_eligible { Value::String("external-session-1".to_string()) } else { Value::Null },
             "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
             "cancel_supported": true,
             "control_owner_retained": options.ownership_valid,
@@ -513,8 +519,13 @@ fn runtime_participant_manifest(
             "ownership_verified_at": options.ts,
             "last_heartbeat_at": options.ts,
             "last_event_at": options.ts,
-            "terminal_observed_at": if options.ownership_valid { Value::Null } else { json!(options.ts) },
-            "termination_reason": if options.ownership_valid { Value::Null } else { json!("attached control exited") },
+            "terminal_observed_at": if options.state == "invalidated" || options.state == "stopped" || options.state == "failed" { json!(options.ts) } else { Value::Null },
+            "termination_reason": if options.state == "invalidated" || options.state == "stopped" || options.state == "failed" { json!("attached control exited") } else { Value::Null },
+            "attached_client_present": attached_client_present,
+            "last_attached_at": if is_host_orchestrator { json!(options.ts) } else { Value::Null },
+            "last_detached_at": if is_host_orchestrator && !attached_client_present && resume_eligible { json!(options.ts) } else { Value::Null },
+            "detach_reason": if is_host_orchestrator && !attached_client_present && resume_eligible { json!("owner detached cleanly") } else { Value::Null },
+            "resume_eligible": resume_eligible,
             "last_error_bucket": null,
             "last_error_message": null
         }),
@@ -747,23 +758,50 @@ fn orchestration_session_manifest(
         Some((world_id, world_generation)) => (json!(world_id), json!(world_generation)),
         None => (Value::Null, Value::Null),
     };
+    let (posture, attached_participant_id, closed_at) = match (state, active_session_handle_id) {
+        ("active", Some(active_session_handle_id)) => (
+            "active_attached",
+            Value::String(active_session_handle_id.to_string()),
+            Value::Null,
+        ),
+        ("active", None) => ("parked_resumable", Value::Null, Value::Null),
+        ("stopped", _) | ("failed", _) | ("invalidated", _) => ("terminal", Value::Null, json!(ts)),
+        _ => (
+            "active_attached",
+            active_session_handle_id
+                .map(Value::from)
+                .unwrap_or(Value::Null),
+            if state == "active" {
+                Value::Null
+            } else {
+                json!(ts)
+            },
+        ),
+    };
     json!({
         "orchestration_session_id": orchestration_session_id,
         "shell_trace_session_id": "ses_agent_hub",
         "workspace_root": fixture.workspace_root.display().to_string(),
         "shell_owner_pid": std::process::id(),
         "state": state,
+        "posture": posture,
+        "posture_changed_at": ts,
         "opened_at": ts,
         "last_active_at": ts,
         "orchestrator_agent_id": agent_id,
         "orchestrator_backend_id": format!("cli:{agent_id}"),
         "orchestrator_protocol": PURE_AGENT_PROTOCOL,
         "active_session_handle_id": active_session_handle_id,
+        "attached_participant_id": attached_participant_id,
+        "pending_inbox_count": 0,
+        "last_parked_at": Value::Null,
+        "last_attention_at": Value::Null,
+        "parked_reason": Value::Null,
         "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
         "world_id": world_id,
         "world_generation": world_generation,
         "invalidation_reason": if state == "active" { Value::Null } else { json!("fixture stopped parent") },
-        "closed_at": if state == "active" { Value::Null } else { json!(ts) }
+        "closed_at": closed_at
     })
 }
 
@@ -1617,7 +1655,7 @@ fn agent_status_degrades_but_toolbox_fails_closed_when_active_parent_omits_activ
     let status = fixture.run(&["agent", "status", "--json"]);
     let json = assert_status_succeeds_with_expected_warnings(
         &status,
-        &["is missing active_session_handle_id"],
+        &["is missing authoritative orchestrator participant linkage"],
     );
     let sessions = json["sessions"]
         .as_array()
@@ -1666,7 +1704,7 @@ fn agent_status_degrades_but_toolbox_fails_closed_when_active_parent_points_to_d
     let status = fixture.run(&["agent", "status", "--json"]);
     let json = assert_status_succeeds_with_expected_warnings(
         &status,
-        &["references missing participant ash_other_handle"],
+        &["authoritative participant ash_other_handle is missing from the session snapshot"],
     );
     let sessions = json["sessions"]
         .as_array()
@@ -1715,7 +1753,7 @@ fn agent_status_degrades_but_toolbox_fails_closed_when_active_parent_selects_ina
     let status = fixture.run(&["agent", "status", "--json"]);
     let json = assert_status_succeeds_with_expected_warnings(
         &status,
-        &["references incomplete live orchestrator participant ash_inactive_selected"],
+        &["active_attached session requires attached host participant truth"],
     );
     let sessions = json["sessions"]
         .as_array()

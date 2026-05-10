@@ -217,39 +217,21 @@ This is an internal persisted runtime-state contract. It is not a config/policy 
 - Each unresolved or retained orchestration event must be persisted as one file under:
   - `sessions/<orchestration_session_id>/inbox/<item_id>.json`
 - Minimum item schema:
-  - `schema_version: <u32>`
-  - `item_id: <string>`
   - `orchestration_session_id: <string>`
+  - `item_id: <string>`
   - `kind: approval_required|completion_notice|follow_up_message|runtime_alert`
   - `state: pending|acknowledged|dismissed`
   - `created_at: <timestamp>`
+  - `updated_at: <timestamp>`
   - `resolved_at: <timestamp>|null`
-  - `correlation: <object>`
-  - `payload_schema: <string>`
-  - `payload: <object>`
-- Minimum correlation envelope:
-  - `source_event_type: <string>|null`
-  - `source_span_id: <string>|null`
-  - `source_cmd_id: <string>|null`
-  - `source_trace_session_id: <string>|null`
-  - `origin_participant_id: <participant_id>|null`
-  - `origin_backend_id: <backend_id>|null`
-  - `origin_run_id: <string>|null`
-  - `caused_by_turn_id: <string>|null`
-  - `workflow_id: <string>|null`
-  - `workflow_run_id: <string>|null`
-  - `workflow_node_id: <string>|null`
-  - `request_id: <string>|null`
-  - `idempotency_key: <string>|null`
+  - `message: <string>|null`
 - Required semantics:
   - `state=pending` items contribute to `pending_inbox_count`.
   - Lack of an attached host client must never delete, skip, or silently consume a pending item.
   - A live attached host client may observe and acknowledge items in real time, but the persisted inbox item remains the durable source of truth until it is resolved.
   - Resolved items may be compacted later, but only after they have transitioned out of `pending`.
   - `item_id` is the session-local durable inbox record identifier. It is not a router `request_id`, workflow run identifier, or trace span identifier.
-  - The correlation envelope is additive and nullable by design; fields may be unset when the source family does not define them.
-  - Correlation fields are join keys for trace, router, workflow, and orchestration analysis. They do not, by themselves, grant delivery, liveness, or resumability semantics.
-  - The canonical required/optional classification and naming of cross-cutting correlation fields remain owned by ADR-0028 and the Phase 8 registry. This ADR only requires that session-local inbox items carry an explicit, compatible correlation envelope and must not rely on heuristic joins.
+  - The currently landed schema is intentionally minimal. Richer correlation or payload envelopes remain additive follow-on work rather than implied current-state truth.
 
 ### Lease file
 - Existing lease payloads may remain minimal and additive.

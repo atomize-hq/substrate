@@ -77,7 +77,7 @@ The original packet stops before public control-plane productization. The follow
 - [ORCH_PLAN-22.md](./ORCH_PLAN-22.md)
   - Parent-frozen execution controller for the `PLAN-22` rollout on the authoritative shared-owner/member-runtime parity branch.
 - [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](./23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)
-  - Correct the host lifecycle model so durable orchestration sessions survive clean attached-client exit, retain pending world-originated work, and resume through explicit parked/reattach semantics.
+  - Landed lifecycle correction: durable host orchestration sessions now survive clean attached-client exit, retain session-local inbox work under `sessions/<session>/inbox/`, and resume through explicit parked/reattach semantics with terminal delivery after `Accepted`.
 
 ## Non-Goals in This Packet
 

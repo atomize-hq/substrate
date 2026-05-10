@@ -7,6 +7,7 @@ use std::sync::{Mutex, OnceLock};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 
 use substrate_common::paths as substrate_paths;
@@ -16,7 +17,9 @@ use crate::execution::config_model::AgentExecutionScope;
 use super::{
     control::PublicSessionPosture,
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
-    orchestration_session::{OrchestrationSessionRecord, OrchestrationSessionState},
+    orchestration_session::{
+        OrchestrationSessionPosture, OrchestrationSessionRecord, OrchestrationSessionState,
+    },
     session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest},
 };
 
@@ -99,6 +102,97 @@ impl AgentRuntimeSessionRecord {
 
     fn has_authoritative_parent(&self) -> bool {
         self.has_authoritative_parent
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DurableInboxItemKind {
+    ApprovalRequired,
+    CompletionNotice,
+    FollowUpMessage,
+    RuntimeAlert,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DurableInboxItemState {
+    Pending,
+    Acknowledged,
+    Dismissed,
+}
+
+impl DurableInboxItemState {
+    fn is_pending(self) -> bool {
+        matches!(self, Self::Pending)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct DurableInboxItemRecord {
+    pub orchestration_session_id: String,
+    pub item_id: String,
+    pub kind: DurableInboxItemKind,
+    pub state: DurableInboxItemState,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+impl DurableInboxItemRecord {
+    #[allow(dead_code)]
+    pub(crate) fn new(
+        orchestration_session_id: impl Into<String>,
+        item_id: impl Into<String>,
+        kind: DurableInboxItemKind,
+        message: Option<String>,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            orchestration_session_id: orchestration_session_id.into(),
+            item_id: item_id.into(),
+            kind,
+            state: DurableInboxItemState::Pending,
+            created_at: now,
+            updated_at: now,
+            resolved_at: None,
+            message,
+        }
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.orchestration_session_id.trim().is_empty() {
+            anyhow::bail!("durable inbox item must include orchestration_session_id");
+        }
+        if self.item_id.trim().is_empty() {
+            anyhow::bail!("durable inbox item must include item_id");
+        }
+        if self.state.is_pending() && self.resolved_at.is_some() {
+            anyhow::bail!("pending durable inbox items must not include resolved_at");
+        }
+        if !self.state.is_pending() && self.resolved_at.is_none() {
+            anyhow::bail!("resolved durable inbox items must include resolved_at");
+        }
+
+        Ok(())
+    }
+
+    fn is_pending(&self) -> bool {
+        self.state.is_pending()
+    }
+
+    fn transition_state(&mut self, state: DurableInboxItemState) {
+        let now = Utc::now();
+        self.state = state;
+        self.updated_at = now;
+        if state.is_pending() {
+            self.resolved_at = None;
+        } else {
+            self.resolved_at = Some(now);
+        }
     }
 }
 
@@ -226,6 +320,22 @@ impl AgentRuntimeStateStore {
     fn canonical_leases_dir(&self, orchestration_session_id: &str) -> PathBuf {
         self.canonical_session_dir(orchestration_session_id)
             .join("leases")
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_inbox_dir(&self, orchestration_session_id: &str) -> PathBuf {
+        self.canonical_session_dir(orchestration_session_id)
+            .join("inbox")
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn canonical_inbox_item_path(
+        &self,
+        orchestration_session_id: &str,
+        item_id: &str,
+    ) -> PathBuf {
+        self.canonical_inbox_dir(orchestration_session_id)
+            .join(format!("{item_id}.json"))
     }
 
     fn canonical_lease_path(
@@ -632,9 +742,10 @@ impl AgentRuntimeStateStore {
             );
         }
 
-        let active_participant_id = record.session.active_participant_id().ok_or_else(|| {
+        let active_participant_id = session_authoritative_participant_id(&record.session)
+            .ok_or_else(|| {
             anyhow::anyhow!(
-                "stale_linkage: orchestration session {} is missing active_session_handle_id",
+                "stale_linkage: orchestration session {} is missing authoritative orchestrator participant linkage",
                 orchestration_session_id
             )
         })?;
@@ -675,8 +786,10 @@ impl AgentRuntimeStateStore {
             );
         }
 
-        let owner_live =
-            participant.is_authoritative_live() && owner_process_is_alive(&participant);
+        let owner_live = session_attached_to_participant(&record.session, &participant)
+            && participant.attached_client_present()
+            && participant.is_authoritative_live()
+            && owner_process_is_alive(&participant);
         if action.rejects_live_owner() && owner_live {
             anyhow::bail!(
                 "session_already_owned: orchestration session {} already has a live retained owner",
@@ -686,6 +799,12 @@ impl AgentRuntimeStateStore {
         if action.requires_live_owner() && !owner_live {
             anyhow::bail!(
                 "owner_unreachable: orchestration session {} no longer has a reachable live owner",
+                orchestration_session_id
+            );
+        }
+        if action.requires_internal_session_id() && !participant.is_resume_eligible() {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} no longer has a resume-eligible retained owner",
                 orchestration_session_id
             );
         }
@@ -734,6 +853,26 @@ impl AgentRuntimeStateStore {
             );
         }
 
+        let authoritative_orchestrator_id = session_authoritative_participant_id(&record.session)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "stale_linkage: orchestration session {} is missing authoritative orchestrator participant linkage",
+                    orchestration_session_id
+                )
+            })?;
+        let authoritative_orchestrator = record
+            .participants
+            .iter()
+            .find(|participant| participant.participant_id() == authoritative_orchestrator_id)
+            .cloned()
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "stale_linkage: orchestration session {} references missing participant {}",
+                    orchestration_session_id,
+                    authoritative_orchestrator_id
+                )
+            })?;
+
         let slot_present = public_turn_session_mentions_backend(&record, backend_id);
         let mut candidates = public_turn_authoritative_candidates(&record, backend_id);
         if candidates.is_empty() {
@@ -772,7 +911,8 @@ impl AgentRuntimeStateStore {
             );
         }
 
-        let session_posture = classify_public_session_posture(&candidate.participant);
+        let session_posture =
+            classify_public_session_posture(&record.session, &authoritative_orchestrator);
         Ok(ResolvedPublicTurnTarget {
             session: record.session,
             participant: candidate.participant,
@@ -837,6 +977,17 @@ impl AgentRuntimeStateStore {
         participant.validate()
     }
 
+    pub(crate) fn validate_session_record(
+        &self,
+        session: &OrchestrationSessionRecord,
+    ) -> Result<()> {
+        session.validate_persisted_invariants()
+    }
+
+    fn validate_inbox_item_record(&self, item: &DurableInboxItemRecord) -> Result<()> {
+        item.validate()
+    }
+
     pub(crate) fn persist_orchestration_session(
         &self,
         session: &OrchestrationSessionRecord,
@@ -844,6 +995,7 @@ impl AgentRuntimeStateStore {
         let _write_guard = snapshot_write_lock()
             .lock()
             .expect("snapshot write mutex poisoned");
+        self.validate_session_record(session)?;
         if let Some(existing) =
             self.load_authoritative_session(&session.orchestration_session_id)?
         {
@@ -852,6 +1004,142 @@ impl AgentRuntimeStateStore {
             }
         }
         self.persist_parent_session_snapshot(session)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn persist_inbox_item(&self, item: &DurableInboxItemRecord) -> Result<()> {
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+        self.validate_inbox_item_record(item)?;
+
+        let mut session = self
+            .load_authoritative_session(&item.orchestration_session_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "missing authoritative parent session {} for durable inbox item {}",
+                    item.orchestration_session_id,
+                    item.item_id
+                )
+            })?;
+        let existing = self.load_inbox_item(&item.orchestration_session_id, &item.item_id)?;
+        let next_pending_count = updated_pending_inbox_count(
+            session.pending_inbox_count,
+            existing
+                .as_ref()
+                .is_some_and(DurableInboxItemRecord::is_pending),
+            item.is_pending(),
+        )?;
+        apply_pending_inbox_count(&mut session, next_pending_count);
+
+        let item_path =
+            self.canonical_inbox_item_path(&item.orchestration_session_id, &item.item_id);
+        write_atomic_json(&item_path, item)?;
+        if let Err(err) = self.persist_parent_session_snapshot(&session) {
+            rollback_inbox_item_write(&item_path, existing.as_ref())?;
+            return Err(err);
+        }
+
+        Ok(())
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn acknowledge_inbox_item(
+        &self,
+        orchestration_session_id: &str,
+        item_id: &str,
+    ) -> Result<DurableInboxItemRecord> {
+        self.resolve_inbox_item(
+            orchestration_session_id,
+            item_id,
+            DurableInboxItemState::Acknowledged,
+        )
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn dismiss_inbox_item(
+        &self,
+        orchestration_session_id: &str,
+        item_id: &str,
+    ) -> Result<DurableInboxItemRecord> {
+        self.resolve_inbox_item(
+            orchestration_session_id,
+            item_id,
+            DurableInboxItemState::Dismissed,
+        )
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn load_inbox_item(
+        &self,
+        orchestration_session_id: &str,
+        item_id: &str,
+    ) -> Result<Option<DurableInboxItemRecord>> {
+        let path = self.canonical_inbox_item_path(orchestration_session_id, item_id);
+        let Some(item) = read_regular_json_if_exists::<DurableInboxItemRecord>(&path)? else {
+            return Ok(None);
+        };
+        self.validate_inbox_item_record(&item)
+            .with_context(|| format!("invalid durable inbox item in {}", path.display()))?;
+        if item.orchestration_session_id != orchestration_session_id {
+            anyhow::bail!(
+                "durable inbox item {} belongs to session {} not {}",
+                item_id,
+                item.orchestration_session_id,
+                orchestration_session_id
+            );
+        }
+        if item.item_id != item_id {
+            anyhow::bail!(
+                "durable inbox artifact {} stored mismatched item_id {}",
+                path.display(),
+                item.item_id
+            );
+        }
+
+        Ok(Some(item))
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn list_inbox_items(
+        &self,
+        orchestration_session_id: &str,
+    ) -> Result<Vec<DurableInboxItemRecord>> {
+        let inbox_dir = self.canonical_inbox_dir(orchestration_session_id);
+        let Some(entries) = safe_read_dir(&inbox_dir)? else {
+            return Ok(Vec::new());
+        };
+
+        let mut items = Vec::new();
+        for entry in entries {
+            let entry = entry.with_context(|| format!("failed to read {}", inbox_dir.display()))?;
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+
+            let Some(item) = read_regular_json_if_exists::<DurableInboxItemRecord>(&path)? else {
+                continue;
+            };
+            self.validate_inbox_item_record(&item)
+                .with_context(|| format!("invalid durable inbox item in {}", path.display()))?;
+            if item.orchestration_session_id != orchestration_session_id {
+                anyhow::bail!(
+                    "durable inbox item {} belongs to session {} not {}",
+                    item.item_id,
+                    item.orchestration_session_id,
+                    orchestration_session_id
+                );
+            }
+            items.push(item);
+        }
+
+        items.sort_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then(left.item_id.cmp(&right.item_id))
+        });
+        Ok(items)
     }
 
     pub(crate) fn set_orchestration_session_world_binding(
@@ -903,6 +1191,7 @@ impl AgentRuntimeStateStore {
     }
 
     fn persist_parent_session_snapshot(&self, session: &OrchestrationSessionRecord) -> Result<()> {
+        self.validate_session_record(session)?;
         self.ensure_sessions_dir()?;
         write_atomic_json(
             &self.orchestration_session_path(&session.orchestration_session_id),
@@ -1069,11 +1358,20 @@ impl AgentRuntimeStateStore {
             if let Some(session) =
                 read_regular_json_if_exists::<OrchestrationSessionRecord>(&canonical_path)?
             {
+                self.validate_session_record(&session).with_context(|| {
+                    format!("invalid session record in {}", canonical_path.display())
+                })?;
                 return Ok(Some(session));
             }
         }
 
-        read_regular_json_if_exists(&self.orchestration_session_path(orchestration_session_id))
+        let flat_path = self.orchestration_session_path(orchestration_session_id);
+        if let Some(session) = read_regular_json_if_exists(&flat_path)? {
+            self.validate_session_record(&session)
+                .with_context(|| format!("invalid session record in {}", flat_path.display()))?;
+            return Ok(Some(session));
+        }
+        Ok(None)
     }
 
     fn public_session_selector_error(&self, selector: &str) -> anyhow::Error {
@@ -1271,26 +1569,35 @@ impl AgentRuntimeStateStore {
         let session = session
             .unwrap_or_else(|| synthesize_session_record(orchestration_session_id, &participants));
 
-        let complete = if !has_authoritative_parent {
+        let contract_valid = match validate_runtime_contract(&session, &participants) {
+            Ok(()) => true,
+            Err(err) => {
+                warnings.push(format!(
+                    "orchestration session {} violates persisted runtime contract: {err}",
+                    session.orchestration_session_id
+                ));
+                false
+            }
+        };
+
+        let complete = if !has_authoritative_parent || !contract_valid {
             false
         } else if session.state != OrchestrationSessionState::Active {
             true
         } else {
-            match session.active_session_handle_id.as_deref() {
+            match session_authoritative_participant_id(&session) {
                 Some(active_participant_id) => match participants
                     .iter()
                     .find(|participant| participant.handle.participant_id == active_participant_id)
                 {
-                    Some(participant)
-                        if participant.is_authoritative_live()
-                            && owner_process_is_alive(participant)
-                            && participant.handle.agent_id == session.orchestrator_agent_id
-                            && participant.handle.orchestration_session_id
-                                == session.orchestration_session_id
-                            && participant.handle.role == ORCHESTRATOR_ROLE
-                            && participant.handle.execution.scope == AgentExecutionScope::Host =>
-                    {
-                        true
+                    Some(participant) if participant.matches_public_parent_linkage(&session) => {
+                        if session_attached_to_participant(&session, participant) {
+                            participant.is_authoritative_live()
+                                && owner_process_is_alive(participant)
+                        } else {
+                            participant.is_resume_eligible()
+                                && participant.internal_uaa_session_id().is_some()
+                        }
                     }
                     Some(participant) => {
                         warnings.push(format!(
@@ -1309,7 +1616,7 @@ impl AgentRuntimeStateStore {
                 },
                 None => {
                     warnings.push(format!(
-                        "active orchestration session {} is missing active_session_handle_id",
+                        "active orchestration session {} is missing authoritative orchestrator participant linkage",
                         session.orchestration_session_id
                     ));
                     false
@@ -1324,6 +1631,30 @@ impl AgentRuntimeStateStore {
             has_authoritative_parent,
             complete,
         }
+    }
+
+    fn resolve_inbox_item(
+        &self,
+        orchestration_session_id: &str,
+        item_id: &str,
+        state: DurableInboxItemState,
+    ) -> Result<DurableInboxItemRecord> {
+        if state.is_pending() {
+            anyhow::bail!("durable inbox resolution requires a terminal inbox state");
+        }
+
+        let mut item = self
+            .load_inbox_item(orchestration_session_id, item_id)?
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "durable inbox item {} not found in session {}",
+                    item_id,
+                    orchestration_session_id
+                )
+            })?;
+        item.transition_state(state);
+        self.persist_inbox_item(&item)?;
+        Ok(item)
     }
 }
 
@@ -1349,6 +1680,64 @@ fn write_atomic_json(path: &Path, value: &impl serde::Serialize) -> Result<()> {
 fn snapshot_write_lock() -> &'static Mutex<()> {
     static SNAPSHOT_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     SNAPSHOT_WRITE_LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn updated_pending_inbox_count(current: u64, was_pending: bool, is_pending: bool) -> Result<u64> {
+    match (was_pending, is_pending) {
+        (false, false) | (true, true) => Ok(current),
+        (false, true) => current
+            .checked_add(1)
+            .ok_or_else(|| anyhow::anyhow!("pending_inbox_count overflow")),
+        (true, false) => current
+            .checked_sub(1)
+            .ok_or_else(|| anyhow::anyhow!("pending_inbox_count underflow")),
+    }
+}
+
+fn apply_pending_inbox_count(session: &mut OrchestrationSessionRecord, pending_inbox_count: u64) {
+    let now = Utc::now();
+    session.pending_inbox_count = pending_inbox_count;
+    session.last_active_at = now;
+    if pending_inbox_count > 0 {
+        session.last_attention_at = Some(now);
+    }
+
+    if session.state.is_terminal() {
+        return;
+    }
+
+    if session.attached_participant_id().is_some() {
+        return;
+    }
+
+    let desired_posture = if pending_inbox_count > 0 {
+        OrchestrationSessionPosture::AwaitingAttention
+    } else {
+        OrchestrationSessionPosture::ParkedResumable
+    };
+    if session.posture != desired_posture {
+        session.posture = desired_posture;
+        session.posture_changed_at = now;
+    }
+    if desired_posture == OrchestrationSessionPosture::ParkedResumable {
+        session.last_parked_at = Some(now);
+    }
+}
+
+fn rollback_inbox_item_write(
+    item_path: &Path,
+    previous: Option<&DurableInboxItemRecord>,
+) -> Result<()> {
+    match previous {
+        Some(previous) => write_atomic_json(item_path, previous),
+        None => match fs::remove_file(item_path) {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(err) => {
+                Err(err).with_context(|| format!("failed to roll back {}", item_path.display()))
+            }
+        },
+    }
 }
 
 fn participant_snapshot_freshness(participant: &AgentRuntimeParticipantRecord) -> DateTime<Utc> {
@@ -1647,7 +2036,7 @@ fn public_turn_authoritative_candidates(
     backend_id: &str,
 ) -> Vec<PublicTurnTargetCandidate> {
     let mut candidates = Vec::new();
-    let active_participant_id = record.session.active_participant_id();
+    let active_participant_id = session_authoritative_participant_id(&record.session);
 
     if let Some(active_participant_id) = active_participant_id {
         if let Some(participant) = record
@@ -1700,15 +2089,91 @@ fn public_turn_authoritative_candidates(
 
 #[allow(dead_code)]
 fn classify_public_session_posture(
+    session: &OrchestrationSessionRecord,
     participant: &AgentRuntimeParticipantRecord,
 ) -> PublicSessionPosture {
-    if participant.is_authoritative_live() && owner_process_is_alive(participant) {
+    if session.posture == OrchestrationSessionPosture::Terminal || session.state.is_terminal() {
+        return PublicSessionPosture::Terminal;
+    }
+    if session_attached_to_participant(session, participant)
+        && participant.attached_client_present()
+        && participant.is_authoritative_live()
+        && owner_process_is_alive(participant)
+    {
         return PublicSessionPosture::Active;
     }
-    if participant.handle.state.is_live() && participant.internal_uaa_session_id().is_some() {
+    if participant.is_resume_eligible() && participant.internal_uaa_session_id().is_some() {
         return PublicSessionPosture::DetachedReattachable;
     }
     PublicSessionPosture::Terminal
+}
+
+fn session_authoritative_participant_id(session: &OrchestrationSessionRecord) -> Option<&str> {
+    session
+        .active_participant_id()
+        .or(session.attached_participant_id())
+}
+
+fn session_attached_to_participant(
+    session: &OrchestrationSessionRecord,
+    participant: &AgentRuntimeParticipantRecord,
+) -> bool {
+    session.attached_participant_id() == Some(participant.participant_id())
+}
+
+fn validate_runtime_contract(
+    session: &OrchestrationSessionRecord,
+    participants: &[AgentRuntimeParticipantRecord],
+) -> Result<()> {
+    session.validate_persisted_invariants()?;
+
+    let Some(authoritative_participant_id) = session_authoritative_participant_id(session) else {
+        if session.state == OrchestrationSessionState::Active
+            && session.posture == OrchestrationSessionPosture::ActiveAttached
+        {
+            anyhow::bail!("active_attached session is missing authoritative participant linkage");
+        }
+        return Ok(());
+    };
+
+    let participant = participants
+        .iter()
+        .find(|participant| participant.participant_id() == authoritative_participant_id)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "authoritative participant {} is missing from the session snapshot",
+                authoritative_participant_id
+            )
+        })?;
+    if !participant.matches_public_parent_linkage(session) {
+        anyhow::bail!(
+            "authoritative participant {} no longer matches the session linkage",
+            authoritative_participant_id
+        );
+    }
+
+    match session.posture {
+        OrchestrationSessionPosture::ActiveAttached => {
+            if !participant.attached_client_present() {
+                anyhow::bail!("active_attached session requires attached host participant truth");
+            }
+        }
+        OrchestrationSessionPosture::ParkedResumable => {
+            if !participant.is_resume_eligible() {
+                anyhow::bail!("parked_resumable session requires resume-eligible host participant");
+            }
+        }
+        OrchestrationSessionPosture::AwaitingAttention => {
+            if !participant.is_resume_eligible() {
+                anyhow::bail!(
+                    "awaiting_attention session requires resume-eligible host participant"
+                );
+            }
+        }
+        OrchestrationSessionPosture::Terminal => {}
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1770,6 +2235,8 @@ mod tests {
         )
         .expect("orchestrator participant");
         participant.transition_state(AgentRuntimeSessionState::Ready);
+        participant.set_uaa_session_id("uaa_session");
+        participant.mark_client_detached("owner detached cleanly");
         participant
     }
 
@@ -1806,6 +2273,25 @@ mod tests {
         parent.transition_state(OrchestrationSessionState::Active);
         parent.bind_active_session_handle(participant.handle.participant_id.clone());
         parent
+    }
+
+    fn parked_parent(participant: &AgentRuntimeParticipantRecord) -> OrchestrationSessionRecord {
+        let mut parent = active_parent(participant);
+        parent.mark_parked_resumable("owner detached cleanly");
+        parent
+    }
+
+    fn pending_inbox_item(
+        orchestration_session_id: &str,
+        item_id: &str,
+        kind: DurableInboxItemKind,
+    ) -> DurableInboxItemRecord {
+        DurableInboxItemRecord::new(
+            orchestration_session_id.to_string(),
+            item_id.to_string(),
+            kind,
+            Some(format!("message for {item_id}")),
+        )
     }
 
     fn write_legacy_handle_file(
@@ -2074,6 +2560,133 @@ mod tests {
             assert!(
                 store.lease_path("ash_dual_write").is_file(),
                 "flat compatibility lease must remain readable during cutover"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn persist_inbox_item_updates_detached_pending_count_and_writes_canonical_artifact() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_inbox_pending", "ash_inbox_pending");
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let item = pending_inbox_item(
+                "sess_inbox_pending",
+                "item_approval",
+                DurableInboxItemKind::ApprovalRequired,
+            );
+            store.persist_inbox_item(&item).expect("persist inbox item");
+
+            let loaded_session = store
+                .load_orchestration_session("sess_inbox_pending")
+                .expect("load orchestration session")
+                .expect("orchestration session exists");
+            assert_eq!(loaded_session.pending_inbox_count, 1);
+            assert_eq!(
+                loaded_session.posture,
+                OrchestrationSessionPosture::AwaitingAttention
+            );
+            assert!(
+                store
+                    .canonical_inbox_item_path("sess_inbox_pending", "item_approval")
+                    .is_file(),
+                "durable inbox artifacts must be stored canonically under sessions/<session>/inbox"
+            );
+
+            let loaded_item = store
+                .load_inbox_item("sess_inbox_pending", "item_approval")
+                .expect("load inbox item")
+                .expect("inbox item exists");
+            assert_eq!(loaded_item.kind, DurableInboxItemKind::ApprovalRequired);
+            assert_eq!(loaded_item.state, DurableInboxItemState::Pending);
+            assert!(loaded_item.resolved_at.is_none());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolving_inbox_item_updates_pending_count_without_deleting_artifact() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_inbox_resolve", "ash_inbox_resolve");
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            for (item_id, kind) in [
+                ("item_completion", DurableInboxItemKind::CompletionNotice),
+                ("item_follow_up", DurableInboxItemKind::FollowUpMessage),
+                ("item_runtime", DurableInboxItemKind::RuntimeAlert),
+            ] {
+                store
+                    .persist_inbox_item(&pending_inbox_item("sess_inbox_resolve", item_id, kind))
+                    .expect("persist inbox item");
+            }
+
+            let acknowledged = store
+                .acknowledge_inbox_item("sess_inbox_resolve", "item_completion")
+                .expect("acknowledge inbox item");
+            assert_eq!(acknowledged.state, DurableInboxItemState::Acknowledged);
+            assert!(acknowledged.resolved_at.is_some());
+
+            let dismissed = store
+                .dismiss_inbox_item("sess_inbox_resolve", "item_follow_up")
+                .expect("dismiss inbox item");
+            assert_eq!(dismissed.state, DurableInboxItemState::Dismissed);
+            assert!(dismissed.resolved_at.is_some());
+
+            let still_pending = store
+                .load_inbox_item("sess_inbox_resolve", "item_runtime")
+                .expect("load pending inbox item")
+                .expect("pending inbox item exists");
+            assert_eq!(still_pending.state, DurableInboxItemState::Pending);
+
+            let loaded_session = store
+                .load_orchestration_session("sess_inbox_resolve")
+                .expect("load orchestration session")
+                .expect("orchestration session exists");
+            assert_eq!(loaded_session.pending_inbox_count, 1);
+            assert_eq!(
+                loaded_session.posture,
+                OrchestrationSessionPosture::AwaitingAttention
+            );
+
+            store
+                .dismiss_inbox_item("sess_inbox_resolve", "item_runtime")
+                .expect("dismiss final inbox item");
+            let settled_session = store
+                .load_orchestration_session("sess_inbox_resolve")
+                .expect("load settled session")
+                .expect("settled session exists");
+            assert_eq!(settled_session.pending_inbox_count, 0);
+            assert_eq!(
+                settled_session.posture,
+                OrchestrationSessionPosture::ParkedResumable
+            );
+
+            let items = store
+                .list_inbox_items("sess_inbox_resolve")
+                .expect("list inbox items");
+            assert_eq!(items.len(), 3);
+            assert!(
+                items.iter().all(|item| {
+                    store
+                        .canonical_inbox_item_path("sess_inbox_resolve", &item.item_id)
+                        .is_file()
+                }),
+                "resolved inbox items must remain durable artifacts instead of being deleted"
             );
         });
     }
@@ -2503,10 +3116,37 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn resolve_public_control_target_allows_resume_for_parked_session() {
+        with_store(|store| {
+            let participant = detached_orchestrator("codex", "sess_resume_parked", "ash_detached");
+            let mut parent = active_parent(&participant);
+            parent.mark_parked_resumable("owner detached cleanly");
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let target = store
+                .resolve_public_control_target("sess_resume_parked", PublicControlAction::Resume)
+                .expect("parked session should remain resumable");
+            assert_eq!(
+                target.active_participant.handle.participant_id,
+                "ash_detached"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn resolve_public_control_target_requires_internal_session_id_for_resume_and_fork() {
         with_store(|store| {
             let participant =
                 detached_orchestrator("codex", "sess_missing_internal", "ash_detached");
+            let mut participant = participant;
+            participant.internal.uaa_session_id = None;
+            participant.internal.resume_eligible = false;
             let parent = active_parent(&participant);
             store
                 .persist_orchestration_session(&parent)
@@ -2518,14 +3158,36 @@ mod tests {
             let resume_err = store
                 .resolve_public_control_target("sess_missing_internal", PublicControlAction::Resume)
                 .expect_err("resume must require internal.uaa_session_id");
-            assert!(resume_err
-                .to_string()
-                .contains("missing_internal_session_id"));
+            assert!(resume_err.to_string().contains("owner_unreachable"));
 
             let fork_err = store
                 .resolve_public_control_target("sess_missing_internal", PublicControlAction::Fork)
                 .expect_err("fork must require internal.uaa_session_id");
-            assert!(fork_err.to_string().contains("missing_internal_session_id"));
+            assert!(fork_err.to_string().contains("owner_unreachable"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_reports_detached_posture_for_parked_host_session() {
+        with_store(|store| {
+            let participant = detached_orchestrator("codex", "sess_turn_parked", "ash_detached");
+            let mut parent = active_parent(&participant);
+            parent.mark_parked_resumable("owner detached cleanly");
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let target = store
+                .resolve_public_turn_target("sess_turn_parked", "cli:codex")
+                .expect("parked host target");
+            assert_eq!(
+                target.session_posture,
+                PublicSessionPosture::DetachedReattachable
+            );
         });
     }
 

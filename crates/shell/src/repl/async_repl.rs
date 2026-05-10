@@ -398,6 +398,12 @@ enum PromptWorkerErrorDisposition {
     GenericError,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostRuntimeShutdownMode {
+    Stop,
+    ParkIfResumable,
+}
+
 fn classify_prompt_worker_error(
     is_reedline: bool,
     err: &anyhow::Error,
@@ -1240,7 +1246,19 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
 
         shutdown_all_member_runtimes(&mut member_runtimes, &agent_printer, &mut telemetry).await;
         if let Some(runtime) = agent_runtime.take() {
-            shutdown_host_orchestrator_runtime(runtime, &agent_printer, &mut telemetry).await;
+            let shutdown_mode = if termination_cause == ReplTerminationCause::AbnormalTerminalLoss
+            {
+                HostRuntimeShutdownMode::ParkIfResumable
+            } else {
+                HostRuntimeShutdownMode::Stop
+            };
+            shutdown_host_orchestrator_runtime_with_mode(
+                runtime,
+                shutdown_mode,
+                &agent_printer,
+                &mut telemetry,
+            )
+            .await;
         }
         drain_pending_agent_events(&mut agent_rx, &mut telemetry, &agent_printer);
         prompt_worker.shutdown_with_disposition(shutdown_disposition_for_termination_cause(
@@ -1792,6 +1810,14 @@ fn runtime_stopped_message(role: &str) -> &'static str {
         "world-scoped member session stopped"
     } else {
         "shell-owned orchestrator session stopped"
+    }
+}
+
+fn runtime_detached_message(role: &str) -> &'static str {
+    if role == MEMBER_ROLE {
+        "world-scoped member session detached cleanly"
+    } else {
+        "shell-owned orchestrator detached cleanly; session parked for resume"
     }
 }
 
@@ -4781,7 +4807,22 @@ async fn submit_world_targeted_turn(
 }
 
 async fn shutdown_host_orchestrator_runtime(
+    runtime: AsyncReplAgentRuntime,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) {
+    shutdown_host_orchestrator_runtime_with_mode(
+        runtime,
+        HostRuntimeShutdownMode::Stop,
+        agent_printer,
+        telemetry,
+    )
+    .await;
+}
+
+async fn shutdown_host_orchestrator_runtime_with_mode(
     mut runtime: AsyncReplAgentRuntime,
+    mode: HostRuntimeShutdownMode,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) {
@@ -4801,6 +4842,20 @@ async fn shutdown_host_orchestrator_runtime(
         )
     };
     let controls_parent_session = runtime_controls_parent_session(&runtime_role);
+    if mode == HostRuntimeShutdownMode::ParkIfResumable
+        && park_host_orchestrator_runtime(
+            &mut runtime,
+            controls_parent_session,
+            &run_id,
+            &runtime_role,
+            agent_printer,
+            telemetry,
+        )
+        .await
+    {
+        return;
+    }
+
     if should_attempt_stop {
         let (orchestration_session, manifest) = {
             let mut orchestration_guard = runtime
@@ -4952,6 +5007,103 @@ async fn shutdown_host_orchestrator_runtime(
             agent_printer,
         );
     }
+}
+
+async fn park_host_orchestrator_runtime(
+    runtime: &mut AsyncReplAgentRuntime,
+    controls_parent_session: bool,
+    run_id: &str,
+    runtime_role: &str,
+    agent_printer: &ReplPrinter,
+    telemetry: &mut ReplSessionTelemetry,
+) -> bool {
+    let can_park = {
+        let manifest = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        controls_parent_session
+            && manifest.is_host_orchestrator()
+            && manifest.handle.state.is_live()
+            && manifest.internal.uaa_session_id.is_some()
+    };
+    if !can_park {
+        return false;
+    }
+
+    if let Some(mut stop_transport) = runtime.stop_transport.take() {
+        stop_transport.close().await;
+    }
+    if let Some(task) = runtime.stop_owner_task.take() {
+        task.abort();
+        let _ = task.await;
+    }
+    if let Some(mut prompt_transport) = runtime.prompt_transport.take() {
+        prompt_transport.close().await;
+    }
+    if let Some(task) = runtime.prompt_owner_task.take() {
+        task.abort();
+        let _ = task.await;
+    }
+    runtime.shutdown_requested.store(true, Ordering::SeqCst);
+    if let Some(stop_tx) = runtime.heartbeat_stop_tx.take() {
+        let _ = stop_tx.send(());
+    }
+    if let Some(task) = runtime.heartbeat_task.take() {
+        task.abort();
+        let _ = task.await;
+    }
+
+    match &mut runtime.retained_control {
+        RetainedRunControl::Local(retained_control) => {
+            if let Some(task) = retained_control.completion_task.take() {
+                task.abort();
+                let _ = task.await;
+            }
+            if let Some(task) = retained_control.event_task.take() {
+                task.abort();
+                let _ = task.await;
+            }
+        }
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        RetainedRunControl::Remote(retained_control) => {
+            if let Some(task) = retained_control.observe_task.take() {
+                task.abort();
+                let _ = task.await;
+            }
+        }
+    }
+
+    let reason = "owner detached cleanly".to_string();
+    let (orchestration_session, manifest) = {
+        let mut orchestration_guard = runtime
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned");
+        let mut manifest_guard = runtime
+            .manifest
+            .lock()
+            .expect("runtime manifest mutex poisoned");
+        manifest_guard.release_runtime_ownership();
+        manifest_guard.mark_client_detached(reason.clone());
+        manifest_guard.touch_heartbeat();
+        orchestration_guard.transition_state(OrchestrationSessionState::Active);
+        orchestration_guard.mark_parked_resumable(reason.clone());
+        (orchestration_guard.clone(), manifest_guard.clone())
+    };
+    let _ = persist_runtime_snapshots(&runtime.store, &orchestration_session, &manifest);
+    emit_runtime_event(
+        build_runtime_message_event(
+            &manifest,
+            &orchestration_session,
+            run_id.to_string(),
+            MessageEventKind::Status,
+            runtime_detached_message(runtime_role),
+        ),
+        telemetry,
+        agent_printer,
+    );
+    true
 }
 
 async fn abort_bootstrap_runtime(
@@ -6620,6 +6772,7 @@ mod tests {
     use crate::execution::agent_events::{
         acquire_event_test_guard, clear_agent_event_sender, init_event_channel,
     };
+    use crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture;
     use crate::execution::ShellMode;
     use crate::execution::WorldRootSettings;
     use std::cell::Cell;
@@ -6942,6 +7095,23 @@ mod tests {
             delay_seconds
         );
         fs::write(&path, body).expect("write fake codex shutdown delay script");
+        let mut perms = fs::metadata(&path)
+            .expect("fake codex metadata")
+            .permissions();
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).expect("set fake codex permissions");
+        path
+    }
+
+    #[cfg(unix)]
+    fn write_fake_codex_script_with_pid_file(temp: &TempDir, pid_file: &Path) -> PathBuf {
+        let path = temp.path().join("fake-codex-with-pid.sh");
+        let body = format!(
+            "#!/bin/sh\ntrap 'exit 0' INT TERM\nprintf '%s\\n' $$ > {}\nprintf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\nwhile :; do sleep 1; done\n",
+            pid_file.display()
+        );
+        fs::write(&path, body).expect("write fake codex pid script");
         let mut perms = fs::metadata(&path)
             .expect("fake codex metadata")
             .permissions();
@@ -7639,6 +7809,111 @@ mod tests {
                 Some("stopped")
             );
         });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn shutdown_host_orchestrator_runtime_parks_resumable_host_session_on_detach() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        let pid_file = temp.path().join("fake-codex.pid");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_codex = write_fake_codex_script_with_pid_file(&temp, &pid_file);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            format!(
+                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+                fake_codex.display()
+            ),
+        )
+        .expect("write codex agent file");
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            let runtime =
+                start_host_orchestrator_runtime(&config, &ReplPrinter::Stdout, &mut telemetry)
+                    .await
+                    .expect("bootstrap runtime should succeed")
+                    .expect("agents enabled should create a runtime");
+            let store = runtime.store.clone();
+            let session_id = runtime
+                .orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned")
+                .orchestration_session_id
+                .clone();
+
+            shutdown_host_orchestrator_runtime_with_mode(
+                runtime,
+                HostRuntimeShutdownMode::ParkIfResumable,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+
+            let target = store
+                .resolve_public_control_target(
+                    &session_id,
+                    crate::execution::agent_runtime::PublicControlAction::Resume,
+                )
+                .expect("parked session should stay resume-eligible");
+            assert_eq!(target.session.state, OrchestrationSessionState::Active);
+            assert_eq!(
+                target.session.posture,
+                OrchestrationSessionPosture::ParkedResumable
+            );
+            assert!(target.session.attached_participant_id.is_none());
+            assert_eq!(
+                target.session.active_session_handle_id.as_deref(),
+                Some(target.active_participant.handle.participant_id.as_str())
+            );
+            assert!(target.active_participant.handle.state.is_live());
+            assert!(!target.active_participant.attached_client_present());
+            assert!(target.active_participant.is_resume_eligible());
+            assert!(!target.active_participant.internal.control_owner_retained);
+            assert!(
+                !target
+                    .active_participant
+                    .internal
+                    .completion_observer_retained
+            );
+            assert!(!target.active_participant.internal.event_stream_active);
+            assert_eq!(
+                target.active_participant.internal.detach_reason.as_deref(),
+                Some("owner detached cleanly")
+            );
+        });
+
+        let pid = fs::read_to_string(&pid_file)
+            .expect("pid file")
+            .trim()
+            .parse::<i32>()
+            .expect("pid should parse");
+        unsafe {
+            libc::kill(pid, libc::SIGTERM);
+        }
         std::env::remove_var("SUBSTRATE_HOME");
     }
 
