@@ -477,6 +477,32 @@ fn wait_for_session_posture(
     );
 }
 
+fn wait_for_detached_resume_eligible_participant(
+    fixture: &AgentControlFixture,
+    orchestration_session_id: &str,
+    participant_id: &str,
+    timeout: Duration,
+) -> Value {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        let participant = fixture.load_participant(orchestration_session_id, participant_id);
+        let resume_eligible = participant
+            .pointer("/internal/resume_eligible")
+            .and_then(Value::as_bool);
+        let attached_client_present = participant
+            .pointer("/internal/attached_client_present")
+            .and_then(Value::as_bool);
+        if resume_eligible == Some(true) && attached_client_present == Some(false) {
+            return participant;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    panic!(
+        "timed out waiting for participant {} in session {} to become detached and resume-eligible",
+        participant_id, orchestration_session_id
+    );
+}
+
 fn wait_for_successor_owner_pid(
     fixture: &AgentControlFixture,
     orchestration_session_id: &str,
@@ -1669,8 +1695,12 @@ fn public_start_parks_clean_bootstrap_and_supports_exact_turn_and_reattach() {
         Some(original_participant_id.as_str()),
         "the parked session must retain the authoritative participant handle"
     );
-    let parked_participant =
-        fixture.load_participant(&orchestration_session_id, &original_participant_id);
+    let parked_participant = wait_for_detached_resume_eligible_participant(
+        &fixture,
+        &orchestration_session_id,
+        &original_participant_id,
+        Duration::from_secs(5),
+    );
     assert_eq!(
         parked_participant
             .pointer("/internal/resume_eligible")
@@ -1919,20 +1949,21 @@ fn public_start_detached_pending_inbox_normalizes_to_awaiting_attention() {
             .and_then(Value::as_u64),
         Some(1)
     );
+    let detached_participant = wait_for_detached_resume_eligible_participant(
+        &fixture,
+        &orchestration_session_id,
+        &original_participant_id,
+        Duration::from_secs(5),
+    );
     assert_eq!(
-        fixture
-            .load_participant(
-                &orchestration_session_id,
-                &original_participant_id,
-            )
+        detached_participant
             .pointer("/internal/resume_eligible")
             .and_then(Value::as_bool),
         Some(true),
         "detached awaiting-attention normalization must keep the authoritative host participant resumable"
     );
     assert_eq!(
-        fixture
-            .load_participant(&orchestration_session_id, &original_participant_id)
+        detached_participant
             .pointer("/internal/attached_client_present")
             .and_then(Value::as_bool),
         Some(false),
