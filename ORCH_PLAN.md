@@ -144,6 +144,7 @@ Required top-level artifacts:
 - `quarantine/`
 - `gates/`
 - `sentinels/`
+- `qa/`
 - `blocked.json` on blocked termination only
 - `closeout.md` on successful completion only
 
@@ -190,6 +191,10 @@ Validation artifact roots:
 - `.runs/plan-24-host-bootstrap-readiness/validation/final/shim-doctor.json`
 - `.runs/plan-24-host-bootstrap-readiness/validation/final/health.json`
 - `.runs/plan-24-host-bootstrap-readiness/validation/final/world-doctor.json` or `.runs/plan-24-host-bootstrap-readiness/validation/final/world-doctor-rationale.md`
+
+Required external QA artifact:
+
+- `~/.gstack/projects/<slug>/` test-plan artifact frozen from `PLAN.md`
 
 Required sentinels:
 
@@ -367,11 +372,14 @@ Required actions:
    - [docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)
    - [llm-last-mile/ORCH_PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/ORCH_PLAN-22.md)
 4. inventory the owned symbol surfaces for the future code run
-5. record GitNexus preflight requirements for later execution
+5. refresh GitNexus if the index is stale
+6. run parent-owned GitNexus impact analysis for the symbols the parent may edit during `p1`
+7. write the QA-facing test-plan artifact required by `PLAN.md` under `~/.gstack/projects/<slug>/`
 
 Deliverables:
 
 - `impact/preflight/`
+- `.runs/plan-24-host-bootstrap-readiness/qa/test-plan-artifact-path.txt`
 - source-lock entry in `session-log.md`
 - `01--task-m24-p0-parent-run-init-and-source-lock.ok`
 
@@ -388,19 +396,22 @@ Purpose:
 
 Required actions:
 
-1. write `contract-freeze.json` with the detached continuity contract, park-vs-fail contract, exact command wall, stop conditions, and a precise description of the compile-stable seam scaffold
-2. add the narrow compile-stable seam scaffold to the accepted main-tree launch base in the smallest honest touch surface needed for both workers to compile in parallel
-3. write `merge-order.json`
-4. record the exact touchpoints Worker A owns in `state_store.rs` and `control.rs` after launch
-5. record the exact touchpoints Worker B may consume but not edit
-6. record the parent-only late closeout surfaces
-7. record the accepted launch-base tree identifier in `run-state.json`
+1. confirm the parent-owned GitNexus impact record exists for every `p1` symbol edit before changing code
+2. write `contract-freeze.json` with the detached continuity contract, park-vs-fail contract, exact command wall, stop conditions, and a precise description of the compile-stable seam scaffold
+3. record the external QA artifact path from `p0` in the run ledger
+4. add the narrow compile-stable seam scaffold to the accepted main-tree launch base in the smallest honest touch surface needed for both workers to compile in parallel
+5. write `merge-order.json`
+6. record the exact touchpoints Worker A owns in `state_store.rs` and `control.rs` after launch
+7. record the exact touchpoints Worker B may consume but not edit
+8. record the parent-only late closeout surfaces
+9. record the accepted launch-base tree identifier in `run-state.json`
 
 Acceptance:
 
 - the compile-stable seam scaffold exists in code on the accepted launch base, not just in prose
 - the readiness seam is narrow enough that Worker B does not need to edit Worker A owned files
 - the public command and regression closeout surfaces are explicitly parent-owned
+- parent-owned GitNexus impact artifacts exist for the actual `p1` symbol edits
 - `02--task-m24-p1-parent-contract-freeze-and-readiness-seam.ok`
 
 ### `task/m24-g1-parent-window-a-launch-gate`
@@ -497,7 +508,7 @@ Minimum lane-B validation before return:
 cargo test -p shell async_repl -- --nocapture
 ```
 
-If the lane adds or changes targeted `agents_cmd.rs` tests, record the exact command used in `commands.txt`.
+If the lane touches `agents_cmd.rs`, the worker must also run the narrowest equivalent caller-surface command that exercises the changed `run_start(...)`, `run_turn(...)`, or `run_reattach(...)` behavior and record the exact command in `commands.txt`, even if no new `agents_cmd.rs`-local tests were added.
 
 Required handoff artifacts:
 
@@ -629,7 +640,8 @@ Acceptance:
 - `integration_order: ["task/m24-a1-worker-continuity-readiness-implementation", "task/m24-b1-worker-bootstrap-teardown-lifecycle-implementation", "task/m24-p2-parent-integration-and-public-command-closeout"]`
 - `public_command_closeout_owner: "parent"`
 - `docs_owner: "parent"`
-- `replay_required_before_acceptance: true`
+- `replay_required_before_acceptance: false`
+- `replay_not_required_rationale: "slice remains shell-runtime bootstrap/lifecycle only and does not change replay-owned surfaces"`
 - `quarantine_on_scope_drift: true`
 
 Quarantine rules:
@@ -651,6 +663,8 @@ Required before any code work:
 - required source inputs are read and locked
 - run-state artifacts exist
 - lane-ownership scaffolding exists
+- parent-owned GitNexus preflight and `p1` impact capture are recorded
+- the external QA test-plan artifact required by `PLAN.md` exists and its path is recorded
 
 ### Gate 1: Contract freeze
 
@@ -695,7 +709,9 @@ During `task/m24-p0-parent-run-init-and-source-lock`:
 
 1. collect the symbol inventory that the run expects to edit
 2. if the index is stale, run `npx gitnexus analyze`
-3. record the preflight requirement in `impact/preflight/`
+3. run `gitnexus_impact` for every symbol the parent may edit during `p1`
+4. record the preflight requirement and parent impact artifacts in `impact/preflight/`
+5. do not permit `p1` code edits until those parent impact artifacts exist
 
 Before Worker A edits owned symbols:
 
@@ -816,6 +832,16 @@ and record:
 
 That rationale must name the touched files and state that world-doctor evidence was not required because the merged diff stayed outside world backends.
 
+### Required external QA artifact
+
+The run must also preserve the QA-facing artifact required by `PLAN.md`:
+
+- `~/.gstack/projects/<slug>/` artifact covering `start`, `turn`, `reattach`, parked-empty versus attention-needed outcomes, broken bootstrap versus valid parked continuity, post-`Accepted` explicit failure delivery, and detached-world fail-closed protection
+
+The parent must record the resolved artifact path in:
+
+- `.runs/plan-24-host-bootstrap-readiness/qa/test-plan-artifact-path.txt`
+
 ### Lane-level minimum validation
 
 Worker A:
@@ -830,6 +856,8 @@ Worker B:
 ```bash
 cargo test -p shell async_repl -- --nocapture
 ```
+
+If Worker B touches `agents_cmd.rs`, it must also run and record the narrowest equivalent caller-surface command that covers the changed `run_start(...)`, `run_turn(...)`, or `run_reattach(...)` behavior.
 
 Parent integration-stage targeted validation, before the final wall if needed:
 
@@ -850,7 +878,8 @@ The run is complete only if all of these are true on the same merged tree:
 4. the final command wall is green and recorded
 5. the manual CLI wall is green and recorded
 6. `validation/final/shim-doctor.json` and `validation/final/health.json` exist, plus either `validation/final/world-doctor.json` or `validation/final/world-doctor-rationale.md`
-7. the merged tree proves:
+7. the external QA artifact required by `PLAN.md` exists and its path is recorded
+8. the merged tree proves:
    - readiness accepts valid detached continuity
    - clean bootstrap exit parks or attention-normalizes instead of invalidating
    - broken bootstrap still fails closed
@@ -858,9 +887,9 @@ The run is complete only if all of these are true on the same merged tree:
    - `reattach` succeeds on that same session without submitting a prompt
    - post-`Accepted` requests end with `Completed` or `Failed`
    - detached-world follow-up stays fail closed
-8. docs reflect the shipped contract, not the stale slice-23 posture
-9. `gitnexus_detect_changes()` is recorded and consistent with expected scope
-10. `closeout.md` exists and `run-state.json` marks the run complete
+9. docs reflect the shipped contract, not the stale slice-23 posture
+10. `gitnexus_detect_changes()` is recorded and consistent with expected scope
+11. `closeout.md` exists and `run-state.json` marks the run complete
 
 ## Blocked-Run Artifact Behavior
 
