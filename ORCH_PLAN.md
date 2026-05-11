@@ -1,21 +1,21 @@
 # ORCH_PLAN: Execute PLAN.md For Host Bootstrap Readiness And Clean-Detach Parking
 
 Live workspace branch: `feat/host-orchestrator-durable-session`  
-Recorded branch in [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md): `feat/host-orchestrator-durable-session`  
+Recorded branch in [PLAN.md](/home/spenser/__Active_code/substrate/PLAN.md): `feat/host-orchestrator-durable-session`  
 Authoritative execution branch for this run: `feat/host-orchestrator-durable-session`  
-Plan source: [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)  
-Source SOW: [llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)  
-ADR anchor: [docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
-Prior orchestration reference: [llm-last-mile/ORCH_PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/ORCH_PLAN-22.md)  
+Plan source: [PLAN.md](/home/spenser/__Active_code/substrate/PLAN.md)  
+Source SOW: [llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/home/spenser/__Active_code/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)  
+ADR anchor: [docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/home/spenser/__Active_code/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
+Prior orchestration reference: [llm-last-mile/ORCH_PLAN-22.md](/home/spenser/__Active_code/substrate/llm-last-mile/ORCH_PLAN-22.md)  
 Execution type: fresh orchestration controller for the slice that corrects host bootstrap readiness, clean-detach parking, and real bootstrap-path regression proof; parent-only gates, parent-only integration, parent-only final authority  
-Live workspace root: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`  
-Worktree root: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-24-host-bootstrap-readiness`  
+Live workspace root: `/home/spenser/__Active_code/substrate`  
+Worktree root: `/home/spenser/__Active_code/.worktrees/substrate-plan-24-host-bootstrap-readiness`  
 Worker model: `GPT-5.4` with `reasoning_effort=high`  
 Max concurrent code workers before integration: `2`
 
 ## Summary
 
-This document is the execution controller for the current [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md). It replaces the stale slice-23 orchestration plan and is authoritative for the host bootstrap readiness and clean-detach parking correction run.
+This document is the execution controller for the current [PLAN.md](/home/spenser/__Active_code/substrate/PLAN.md). It replaces the stale slice-23 orchestration plan and is authoritative for the host bootstrap readiness and clean-detach parking correction run.
 
 This run is complete only if the same merged tree proves all of the runtime truths frozen by `PLAN.md`:
 
@@ -28,9 +28,9 @@ This run is complete only if the same merged tree proves all of the runtime trut
 
 The honest concurrency cap is exactly `2`, and there is only one real parallel window. A third concurrent worker lane would be dishonest because the decisive hotspots collapse back into the same seams:
 
-- [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) and [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) must share one frozen readiness/continuity seam.
-- [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) and [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) must stay coordinated around the clean-detach lifecycle path.
-- [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) is the late closeout hotspot and stays parent-owned.
+- [`crates/shell/src/execution/agent_runtime/state_store.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) and [`crates/shell/src/execution/agent_runtime/control.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/control.rs) must share one frozen readiness/continuity seam.
+- [`crates/shell/src/repl/async_repl.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/repl/async_repl.rs) and [`crates/shell/src/execution/agents_cmd.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agents_cmd.rs) must stay coordinated around the clean-detach lifecycle path.
+- [`crates/shell/tests/agent_public_control_surface_v1.rs`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) is the late closeout hotspot and stays parent-owned.
 
 The two-worker window remains honest only because `task/m24-p1-parent-contract-freeze-and-readiness-seam` is not just a recording gate. It must leave behind a minimal compile-stable seam scaffold in the accepted main-tree launch base so Worker B can compile against a frozen interface without editing Worker A owned files.
 
@@ -56,8 +56,8 @@ Judgment call on lane shape:
 
 These are run-stopping invariants.
 
-1. The authoritative integration checkout remains `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/host-orchestrator-durable-session`.
-2. The parent is the only integrator, the only approval authority, and the only writer of `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-24-host-bootstrap-readiness/**`.
+1. The authoritative integration checkout remains `/home/spenser/__Active_code/substrate` on `feat/host-orchestrator-durable-session`.
+2. The parent is the only integrator, the only approval authority, and the only writer of `/home/spenser/__Active_code/substrate/.runs/plan-24-host-bootstrap-readiness/**`.
 3. `substrate agent start`, `substrate agent turn`, and `substrate agent reattach` keep their current public grammar. No new verbs, no selector broadening, no fuzzy routing, and no "latest session" fallback are allowed.
 4. The durable authority remains the persisted orchestration session plus participant truth. Bootstrap success must stop depending solely on attached-live process liveness.
 5. Valid detached host continuity is accepted only when all frozen `PLAN.md` contract points hold:
@@ -93,12 +93,12 @@ Stop the run immediately and write `blocked.json` if any of these occur:
 
 Fresh run worktree root:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-24-host-bootstrap-readiness`
+- `/home/spenser/__Active_code/.worktrees/substrate-plan-24-host-bootstrap-readiness`
 
 Worker worktrees:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-24-host-bootstrap-readiness/continuity-readiness`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-24-host-bootstrap-readiness/bootstrap-teardown-lifecycle`
+- `/home/spenser/__Active_code/.worktrees/substrate-plan-24-host-bootstrap-readiness/continuity-readiness`
+- `/home/spenser/__Active_code/.worktrees/substrate-plan-24-host-bootstrap-readiness/bootstrap-teardown-lifecycle`
 
 Worker branches:
 
@@ -108,20 +108,20 @@ Worker branches:
 Exact setup commands, to run only after `task/m24-p1-parent-contract-freeze-and-readiness-seam` is accepted and the main checkout `HEAD` is the frozen launch base:
 
 ```bash
-mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-24-host-bootstrap-readiness
+mkdir -p /home/spenser/__Active_code/.worktrees/substrate-plan-24-host-bootstrap-readiness
 
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-24-host-bootstrap-readiness/continuity-readiness \
+git worktree add /home/spenser/__Active_code/.worktrees/substrate-plan-24-host-bootstrap-readiness/continuity-readiness \
   -b codex/feat-host-orchestrator-durable-session-m24-continuity-readiness \
   HEAD
 
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-24-host-bootstrap-readiness/bootstrap-teardown-lifecycle \
+git worktree add /home/spenser/__Active_code/.worktrees/substrate-plan-24-host-bootstrap-readiness/bootstrap-teardown-lifecycle \
   -b codex/feat-host-orchestrator-durable-session-m24-bootstrap-teardown-lifecycle \
   HEAD
 ```
 
 Parent integration surface:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/host-orchestrator-durable-session`
+- `/home/spenser/__Active_code/substrate` on `feat/host-orchestrator-durable-session`
 - no separate parent integration worktree
 - parent integrates in the main checkout only
 
@@ -129,7 +129,7 @@ Parent integration surface:
 
 Canonical run path:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-24-host-bootstrap-readiness/`
+- `/home/spenser/__Active_code/substrate/.runs/plan-24-host-bootstrap-readiness/`
 
 Required top-level artifacts:
 
@@ -318,15 +318,15 @@ Why integration order is frozen as A then B then parent closeout:
 Parent-only in `p0`, `p1`, `g1`, `g2`, `p2`, `g3`, `p3`, `p4`:
 
 - `.runs/plan-24-host-bootstrap-readiness/**`
-- [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md) as read-only input
-- [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md) as the controller reference
-- [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
+- [PLAN.md](/home/spenser/__Active_code/substrate/PLAN.md) as read-only input
+- [ORCH_PLAN.md](/home/spenser/__Active_code/substrate/ORCH_PLAN.md) as the controller reference
+- [`crates/shell/tests/agent_public_control_surface_v1.rs`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
 - docs touched in late closeout only
 
 Parent-owned contract-freeze and compile-seam-prep surface during `p1`:
 
-- [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) for the narrow compile-stable seam scaffold and for recording the frozen helper/classifier touchpoints in `contract-freeze.json`
-- [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) for the narrow compile-stable seam scaffold and for recording the frozen readiness touchpoints in `contract-freeze.json`
+- [`crates/shell/src/execution/agent_runtime/state_store.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) for the narrow compile-stable seam scaffold and for recording the frozen helper/classifier touchpoints in `contract-freeze.json`
+- [`crates/shell/src/execution/agent_runtime/control.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/control.rs) for the narrow compile-stable seam scaffold and for recording the frozen readiness touchpoints in `contract-freeze.json`
 
 Meaning of `p1` ownership:
 
@@ -337,14 +337,14 @@ Meaning of `p1` ownership:
 
 Worker A owned after `g1`:
 
-- [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-- [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
+- [`crates/shell/src/execution/agent_runtime/state_store.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+- [`crates/shell/src/execution/agent_runtime/control.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/control.rs)
 - inline tests local to those files
 
 Worker B owned after `g1`:
 
-- [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
-- [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+- [`crates/shell/src/repl/async_repl.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/repl/async_repl.rs)
+- [`crates/shell/src/execution/agents_cmd.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agents_cmd.rs)
 - caller-only consumption of the compile-stable seam scaffold frozen in `p1`
 
 Explicit prohibitions:
@@ -365,12 +365,12 @@ Required actions:
 1. create `.runs/plan-24-host-bootstrap-readiness/` and all task roots
 2. write initial `run-state.json`, `task-ledger.json`, `lane-ownership.json`, and `validation/validation-wall.md`
 3. lock the required source inputs:
-   - [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)
-   - [AGENTS.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENTS.md)
-   - current [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md)
-   - [llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)
-   - [docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)
-   - [llm-last-mile/ORCH_PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/ORCH_PLAN-22.md)
+   - [PLAN.md](/home/spenser/__Active_code/substrate/PLAN.md)
+   - [AGENTS.md](/home/spenser/__Active_code/substrate/AGENTS.md)
+   - current [ORCH_PLAN.md](/home/spenser/__Active_code/substrate/ORCH_PLAN.md)
+   - [llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/home/spenser/__Active_code/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)
+   - [docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/home/spenser/__Active_code/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)
+   - [llm-last-mile/ORCH_PLAN-22.md](/home/spenser/__Active_code/substrate/llm-last-mile/ORCH_PLAN-22.md)
 4. inventory the owned symbol surfaces for the future code run
 5. refresh GitNexus if the index is stale
 6. run parent-owned GitNexus impact analysis for the symbols the parent may edit during `p1`
@@ -400,15 +400,17 @@ Required actions:
 2. write `contract-freeze.json` with the detached continuity contract, park-vs-fail contract, exact command wall, stop conditions, and a precise description of the compile-stable seam scaffold
 3. record the external QA artifact path from `p0` in the run ledger
 4. add the narrow compile-stable seam scaffold to the accepted main-tree launch base in the smallest honest touch surface needed for both workers to compile in parallel
-5. write `merge-order.json`
-6. record the exact touchpoints Worker A owns in `state_store.rs` and `control.rs` after launch
-7. record the exact touchpoints Worker B may consume but not edit
-8. record the parent-only late closeout surfaces
-9. record the accepted launch-base tree identifier in `run-state.json`
+5. run `cargo test -p shell --no-run` on the accepted `p1` launch base and record the result in the task artifacts as proof that the scaffolded base is actually compile-stable before worktree fan-out
+6. write `merge-order.json`
+7. record the exact touchpoints Worker A owns in `state_store.rs` and `control.rs` after launch
+8. record the exact touchpoints Worker B may consume but not edit
+9. record the parent-only late closeout surfaces
+10. record the accepted launch-base tree identifier in `run-state.json`
 
 Acceptance:
 
 - the compile-stable seam scaffold exists in code on the accepted launch base, not just in prose
+- the accepted `p1` launch base passes `cargo test -p shell --no-run` before any worker worktree is created
 - the readiness seam is narrow enough that Worker B does not need to edit Worker A owned files
 - the public command and regression closeout surfaces are explicitly parent-owned
 - parent-owned GitNexus impact artifacts exist for the actual `p1` symbol edits
@@ -427,9 +429,10 @@ Purpose:
 Gate must reject launch if:
 
 1. the accepted `p1` launch base does not actually contain the compile-stable seam scaffold described in `contract-freeze.json`
-2. Worker B still depends on non-frozen `state_store.rs` or `control.rs` edits
-3. lane boundaries are not narrow enough to prevent merge churn
-4. the parent would need to start integration tests before both lanes return
+2. the accepted `p1` launch base has not already passed `cargo test -p shell --no-run`
+3. Worker B still depends on non-frozen `state_store.rs` or `control.rs` edits
+4. lane boundaries are not narrow enough to prevent merge churn
+5. the parent would need to start integration tests before both lanes return
 
 Acceptance:
 
@@ -563,7 +566,7 @@ Required parent actions:
 2. integrate Worker B on top of the accepted Worker A tree
 3. finish any narrow glue required for the merged tree
 4. replace synthetic-only proof with the real bootstrap-path regression suite
-5. extend [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) for:
+5. extend [`agent_public_control_surface_v1.rs`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) for:
    - `start -> parked_resumable`
    - `start -> awaiting_attention`
    - `start -> parked -> turn`
@@ -600,9 +603,9 @@ Parent only.
 
 Late doc targets:
 
-- [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md), if it still reflects the old bootstrap model
-- [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md), if it still implies attached-live bootstrap truth
-- [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md), only if runtime ownership wording actually drifted
+- [AGENT_ORCHESTRATION_GAP_MATRIX.md](/home/spenser/__Active_code/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md), if it still reflects the old bootstrap model
+- [llm-last-mile/README.md](/home/spenser/__Active_code/substrate/llm-last-mile/README.md), if it still implies attached-live bootstrap truth
+- [docs/WORLD.md](/home/spenser/__Active_code/substrate/docs/WORLD.md), only if runtime ownership wording actually drifted
 - the SOW or ADR only if the final implementation materially changes their current wording needs
 
 This task also owns the required validation wall from `PLAN.md`.
@@ -736,7 +739,7 @@ During `task/m24-p4-parent-final-closeout`:
 
 Parent live context limit:
 
-1. [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)
+1. [PLAN.md](/home/spenser/__Active_code/substrate/PLAN.md)
 2. `run-state.json`
 3. `contract-freeze.json`
 4. the latest integrated diff summary
@@ -775,7 +778,7 @@ Additional context rules:
 
 ### Required command wall from `PLAN.md`
 
-These commands are mandatory for the final run. They are frozen from [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md):
+These commands are mandatory for the final run. They are frozen from [PLAN.md](/home/spenser/__Active_code/substrate/PLAN.md):
 
 ```bash
 cargo test -p shell async_repl -- --nocapture
@@ -923,7 +926,7 @@ Blocked-run rules:
 
 This orchestration controller has succeeded only when the parent can say all of the following are true without qualification:
 
-1. the current [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md) slice, not the old slice-23 plan, drove the run from start to finish
+1. the current [PLAN.md](/home/spenser/__Active_code/substrate/PLAN.md) slice, not the old slice-23 plan, drove the run from start to finish
 2. the authoritative branch stayed `feat/host-orchestrator-durable-session`
 3. the run used one honest two-worker window and no dishonest extra concurrency
 4. the parent remained the only integrator and the only gate authority
