@@ -795,13 +795,91 @@ If any command above needs a narrower or syntactically adjusted cargo filter in 
 
 ### Required manual CLI wall from `PLAN.md`
 
-The parent must also rerun the real CLI flow and record the exact output artifacts:
+The parent must also rerun the real CLI flow, inspect the persisted runtime state, and record artifacts for each required behavior:
+
+1. valid clean-exit bootstrap:
 
 ```bash
 substrate agent start --backend <host_backend_id> --prompt "hello" --json
+```
+
+Required evidence:
+
+- start succeeds using the real clean-exit host fixture for this slice
+- persisted `session.json` for that session shows:
+  - non-terminal lifecycle state
+  - `attached_participant_id == null`
+  - `pending_inbox_count == 0`
+  - `posture == parked_resumable`
+
+2. attention-needed normalization:
+
+- using the sanctioned fixture/setup for this slice, create one pending inbox item for that detached session
+
+Required evidence:
+
+- persisted `session.json` for that same session shows:
+  - `pending_inbox_count > 0`
+  - `posture == awaiting_attention`
+
+3. exact parked-session prompt resume:
+
+```bash
 substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json
+```
+
+Required evidence:
+
+- `turn` succeeds against the exact session created by the bootstrap path
+
+4. exact parked-session reattach:
+
+```bash
 substrate agent reattach --session <orchestration_session_id> --json
 ```
+
+Required evidence:
+
+- `reattach` succeeds against that same session without submitting a prompt
+
+5. broken bootstrap fail-closed:
+
+```bash
+substrate agent start --backend <broken_bootstrap_backend_id> --prompt "hello" --json
+```
+
+Required evidence:
+
+- the broken-bootstrap fixture fails as `runtime_start_failed`
+
+6. post-`Accepted` explicit late failure:
+
+- using the sanctioned late-drop fixture for this slice, run the prompt path that emits `Accepted` and then forces late owner loss
+
+Required evidence:
+
+- the bridge emits explicit `Failed` after `Accepted`
+- no silent EOF or truncated terminal behavior is accepted
+
+7. detached-world non-regression:
+
+- run the detached-world follow-up path on the final merged tree
+
+Required evidence:
+
+- detached-world follow-up still fails closed with reattach guidance
+
+These artifacts must be recorded under `.runs/plan-24-host-bootstrap-readiness/validation/final/`, including:
+
+- `manual-start.json`
+- `manual-session-after-start.json`
+- `manual-session-after-awaiting-attention.json`
+- `manual-turn.json`
+- `manual-reattach.json`
+- `manual-broken-bootstrap.json`
+- `manual-post-accepted-late-failure.json`
+- `manual-detached-world-fail-closed.json`
+- `manual-cli-summary.md`
 
 ### Required repo-level shell-runtime evidence
 
@@ -879,7 +957,14 @@ The run is complete only if all of these are true on the same merged tree:
 2. `blocked.json` does not exist
 3. no quarantined output remains unresolved
 4. the final command wall is green and recorded
-5. the manual CLI wall is green and recorded
+5. the manual CLI wall is green and recorded, including:
+   - clean-exit `start -> parked_resumable`
+   - detached pending-work `-> awaiting_attention`
+   - exact parked-session `turn`
+   - exact parked-session `reattach`
+   - broken bootstrap `runtime_start_failed`
+   - post-`Accepted` explicit `Failed`
+   - detached-world fail-closed with reattach guidance
 6. `validation/final/shim-doctor.json` and `validation/final/health.json` exist, plus either `validation/final/world-doctor.json` or `validation/final/world-doctor-rationale.md`
 7. the external QA artifact required by `PLAN.md` exists and its path is recorded
 8. the merged tree proves:

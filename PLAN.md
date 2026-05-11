@@ -542,13 +542,39 @@ cargo test -p shell agent_runtime::control -- --nocapture
 cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 ```
 
-Manual validation must also rerun the real CLI flow:
+Manual validation must also rerun the real CLI flow and prove the persisted runtime outcomes, not just command success:
 
 ```bash
 substrate agent start --backend <host_backend_id> --prompt "hello" --json
 substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json
 substrate agent reattach --session <orchestration_session_id> --json
 ```
+
+The manual wall is complete only when all of the following are checked on the same merged tree:
+
+1. valid clean-exit bootstrap:
+   - `substrate agent start --backend <host_backend_id> --prompt "hello" --json` succeeds using the real clean-exit host fixture for this slice
+   - the persisted `session.json` for that session shows:
+     - non-terminal lifecycle state
+     - `attached_participant_id == null`
+     - `pending_inbox_count == 0`
+     - `posture == parked_resumable`
+2. attention-needed normalization:
+   - using the sanctioned fixture/setup for this slice, one pending inbox item is created for the detached session
+   - the persisted `session.json` then shows:
+     - `pending_inbox_count > 0`
+     - `posture == awaiting_attention`
+3. exact parked-session follow-up:
+   - `substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json` succeeds against that same parked bootstrap session
+4. exact parked-session reattach:
+   - `substrate agent reattach --session <orchestration_session_id> --json` succeeds against that same parked bootstrap session without submitting a prompt
+5. broken bootstrap fail-closed:
+   - using the sanctioned broken-bootstrap fixture for this slice, `substrate agent start --backend <broken_bootstrap_backend_id> --prompt "hello" --json` fails as `runtime_start_failed`
+6. post-`Accepted` late failure:
+   - using the sanctioned late-drop fixture for this slice, the prompt bridge emits `Accepted` and then an explicit `Failed`
+   - no silent EOF or truncated terminal behavior is accepted
+7. detached-world non-regression:
+   - detached-world follow-up still fails closed with reattach guidance on the final merged tree
 
 ## Performance Review
 
