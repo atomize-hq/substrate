@@ -27,6 +27,7 @@ use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
 use crate::execution::agent_events::format_event_line;
+use crate::execution::agent_runtime::orchestration_session::StartupPromptStreamState;
 #[cfg(target_os = "linux")]
 use crate::execution::build_agent_client_and_pending_diff_request;
 use crate::execution::config_model::AgentExecutionScope;
@@ -652,12 +653,18 @@ pub(crate) fn wait_for_hidden_owner_helper_readiness(
             plan.participant_id(),
             plan.requires_internal_session_id(),
         )?;
-        if readiness == super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyAttached
-            || (plan.mode == OwnerHelperMode::Start
-                && matches!(
-                    readiness,
-                    super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
-                ))
+        let startup_prompt_ready = if plan.mode == OwnerHelperMode::Start {
+            start_launch_startup_prompt_is_terminal(store, plan)?
+        } else {
+            true
+        };
+        if startup_prompt_ready
+            && (readiness == super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyAttached
+                || (plan.mode == OwnerHelperMode::Start
+                    && matches!(
+                        readiness,
+                        super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
+                    )))
         {
             return Ok(());
         }
@@ -669,6 +676,28 @@ pub(crate) fn wait_for_hidden_owner_helper_readiness(
         }
         thread::sleep(OWNER_HELPER_READY_POLL_INTERVAL);
     }
+}
+
+fn start_launch_startup_prompt_is_terminal(
+    store: &AgentRuntimeStateStore,
+    plan: &HiddenOwnerHelperLaunchPlan,
+) -> Result<bool> {
+    if plan.startup_prompt.is_none() {
+        return Ok(true);
+    }
+
+    let Some(session) = store.load_orchestration_session(plan.orchestration_session_id())? else {
+        return Ok(false);
+    };
+    Ok(matches!(
+        session.startup_prompt.as_ref(),
+        Some(startup_prompt)
+            if startup_prompt.participant_id == plan.participant_id()
+                && matches!(
+                    startup_prompt.state,
+                    StartupPromptStreamState::Completed | StartupPromptStreamState::Failed
+                )
+    ))
 }
 
 pub(crate) fn private_stop_request_channel(
