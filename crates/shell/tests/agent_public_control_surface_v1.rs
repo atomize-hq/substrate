@@ -193,6 +193,33 @@ impl AgentControlFixture {
             .join("fake-codex.count");
         let _ = fs::remove_file(state_path);
     }
+
+    fn fake_codex_args_path(&self, invocation: u32) -> PathBuf {
+        self.fake_codex
+            .parent()
+            .expect("fake codex parent")
+            .join(format!("fake-codex-{invocation}.args"))
+    }
+
+    fn fake_codex_stdin_path(&self, invocation: u32) -> PathBuf {
+        self.fake_codex
+            .parent()
+            .expect("fake codex parent")
+            .join(format!("fake-codex-{invocation}.stdin"))
+    }
+
+    fn read_fake_codex_args(&self, invocation: u32) -> Vec<String> {
+        fs::read_to_string(self.fake_codex_args_path(invocation))
+            .unwrap_or_else(|err| panic!("read fake codex args {invocation}: {err}"))
+            .lines()
+            .map(|line| line.to_string())
+            .collect()
+    }
+
+    fn read_fake_codex_stdin(&self, invocation: u32) -> String {
+        fs::read_to_string(self.fake_codex_stdin_path(invocation))
+            .unwrap_or_else(|err| panic!("read fake codex stdin {invocation}: {err}"))
+    }
 }
 
 fn cli_agent_file(agent_id: &str, scope: &str, binary: &Path) -> String {
@@ -206,8 +233,10 @@ fn write_fake_codex_script(dir: &Path) -> PathBuf {
     let path = dir.join("fake-codex.sh");
     let count_path = dir.join("fake-codex.count");
     let body = format!(
-        "#!/bin/sh\nSTATE_FILE='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nprintf 'follow-up invocation %s\\n' \"$count\"\n",
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\",\"item_id\":\"msg-1\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"startup prompt success\"}}}}\\r\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nprintf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\nprintf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nexit 0\n",
         count_path.display()
+        ,
+        dir.display()
     );
     fs::write(&path, body).expect("write fake codex script");
     let mut perms = fs::metadata(&path)
@@ -1243,6 +1272,13 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         Some(participant_id.as_str()),
         "public start must not report readiness before the state store points at the active participant"
     );
+    assert_eq!(
+        persisted_session
+            .pointer("/startup_prompt/state")
+            .and_then(Value::as_str),
+        Some("completed"),
+        "public start must persist startup prompt completion for replay gating"
+    );
     let owner_pid = persisted_session["shell_owner_pid"]
         .as_u64()
         .expect("shell owner pid") as u32;
@@ -1256,6 +1292,45 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
             Duration::from_secs(5),
         ),
         "public start must materialize a per-session private stop transport"
+    );
+    let persisted_participant =
+        fixture.load_participant(&orchestration_session_id, &participant_id);
+    assert_eq!(
+        persisted_participant
+            .pointer("/internal/uaa_session_id")
+            .and_then(Value::as_str),
+        Some("thread-test"),
+        "public start must persist the retained internal.uaa_session_id from the single startup exec"
+    );
+    let start_args = fixture.read_fake_codex_args(1);
+    assert!(
+        start_args.iter().any(|arg| arg == "exec"),
+        "startup invocation must use codex exec: {start_args:?}"
+    );
+    assert!(
+        start_args.iter().any(|arg| arg == "--json"),
+        "startup invocation must use codex exec --json: {start_args:?}"
+    );
+    assert!(
+        !start_args.iter().any(|arg| arg == "resume"),
+        "start prompt must not use resume on the initial retained exec: {start_args:?}"
+    );
+    let start_stdin = fixture.read_fake_codex_stdin(1);
+    assert!(
+        start_stdin.contains("hello from start"),
+        "the first visible start prompt must ride the startup exec stdin payload: {start_stdin:?}"
+    );
+    assert!(
+        !start_stdin.contains("Enter persistent Substrate host orchestrator mode."),
+        "start prompt must not be wrapped in hidden host bootstrap instructions: {start_stdin:?}"
+    );
+    assert!(
+        !start_stdin.contains("First visible operator request:"),
+        "start prompt must not be rewritten into a bootstrap+visible composed payload: {start_stdin:?}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(2).exists(),
+        "agent start must cause exactly one Codex exec launch before any follow-up turn"
     );
 
     let turn_output = fixture.run(&[
@@ -1315,6 +1390,16 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         Some("active")
     );
     assert_empty_warnings(turn_json);
+    let turn_args = fixture.read_fake_codex_args(2);
+    assert!(
+        turn_args.iter().any(|arg| arg == "resume"),
+        "the first follow-up turn must be the first resume-backed invocation: {turn_args:?}"
+    );
+    let turn_stdin = fixture.read_fake_codex_stdin(2);
+    assert!(
+        turn_stdin.contains("hello from turn"),
+        "resume-backed follow-up turns must continue to send the prompt on stdin: {turn_stdin:?}"
+    );
 
     let stop_output = fixture.run(&[
         "agent",
@@ -1604,7 +1689,7 @@ fn public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_
 
 #[test]
 #[serial]
-fn public_start_parks_clean_bootstrap_and_supports_exact_turn_and_reattach() {
+fn public_start_rejects_bootstrap_only_split_prompt_flow() {
     let fixture = AgentControlFixture::new_with_fake_codex(
         write_fake_codex_script_clean_bootstrap_then_prompt_resume,
     );
@@ -1620,277 +1705,67 @@ fn public_start_parks_clean_bootstrap_and_supports_exact_turn_and_reattach() {
         "hello from clean bootstrap",
         "--json",
     ]);
-    assert!(
-        start_output.status.success(),
-        "public start should succeed when bootstrap establishes detached continuity: {start_output:?}"
+    assert_eq!(
+        start_output.status.code(),
+        Some(1),
+        "public start prompt must fail closed when the backend only performs bootstrap and defers the visible prompt to a later launch: {start_output:?}"
     );
     let start_records = parse_ndjson_output(&start_output);
     let start_accepted = find_ndjson_record(&start_records, "accepted");
-    let start_completed = find_ndjson_record(&start_records, "completed");
+    let start_failed = find_ndjson_record(&start_records, "failed");
     assert_eq!(
         start_records
             .first()
             .and_then(|record| record.get("kind"))
             .and_then(Value::as_str),
         Some("accepted"),
-        "clean bootstrap start must emit accepted before the terminal envelope: {start_records:?}"
-    );
-    assert_eq!(
-        start_completed.get("action").and_then(Value::as_str),
-        Some("start")
+        "split bootstrap start must still emit accepted before the terminal failure envelope: {start_records:?}"
     );
     assert_eq!(
         start_accepted.get("scope").and_then(Value::as_str),
         Some("host")
     );
     assert_eq!(
-        start_completed.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex")
-    );
-    assert_eq!(
-        start_completed.get("turn_outcome").and_then(Value::as_str),
-        Some("success")
-    );
-    assert_eq!(
-        start_completed.get("state").and_then(Value::as_str),
-        Some("active")
-    );
-    assert_empty_warnings(start_completed);
-
-    let orchestration_session_id = start_completed["orchestration_session_id"]
-        .as_str()
-        .expect("start session id")
-        .to_string();
-    let original_participant_id = start_completed["participant_id"]
-        .as_str()
-        .expect("start participant id")
-        .to_string();
-    let parked_session = wait_for_session_posture(
-        &fixture,
-        &orchestration_session_id,
-        "parked_resumable",
-        Duration::from_secs(5),
-    );
-    assert_eq!(
-        parked_session.get("state").and_then(Value::as_str),
-        Some("active")
-    );
-    assert_eq!(
-        parked_session.get("posture").and_then(Value::as_str),
-        Some("parked_resumable")
-    );
-    assert!(parked_session
-        .get("attached_participant_id")
-        .is_none_or(Value::is_null));
-    assert_eq!(
-        parked_session
-            .get("pending_inbox_count")
-            .and_then(Value::as_u64),
-        Some(0)
-    );
-    assert_eq!(
-        parked_session
-            .get("active_session_handle_id")
-            .and_then(Value::as_str),
-        Some(original_participant_id.as_str()),
-        "the parked session must retain the authoritative participant handle"
-    );
-    let parked_participant = wait_for_detached_resume_eligible_participant(
-        &fixture,
-        &orchestration_session_id,
-        &original_participant_id,
-        Duration::from_secs(5),
-    );
-    assert_eq!(
-        parked_participant
-            .pointer("/internal/resume_eligible")
-            .and_then(Value::as_bool),
-        Some(true)
-    );
-    assert_eq!(
-        parked_participant
-            .pointer("/internal/attached_client_present")
-            .and_then(Value::as_bool),
-        Some(false)
-    );
-
-    let turn_output = fixture.run(&[
-        "agent",
-        "turn",
-        "--session",
-        &orchestration_session_id,
-        "--backend",
-        "cli:codex",
-        "--prompt",
-        "resume the parked session",
-        "--json",
-    ]);
-    assert!(
-        turn_output.status.success(),
-        "public turn should succeed against the exact parked bootstrap session: {turn_output:?}"
-    );
-    let turn_records = parse_ndjson_output(&turn_output);
-    let turn_accepted = find_ndjson_record(&turn_records, "accepted");
-    let turn_completed = find_ndjson_record(&turn_records, "completed");
-    assert_eq!(
-        turn_records
-            .first()
-            .and_then(|record| record.get("kind"))
-            .and_then(Value::as_str),
-        Some("accepted"),
-        "parked host turn must keep the accepted -> terminal contract: {turn_records:?}"
-    );
-    assert_eq!(
-        turn_accepted.get("scope").and_then(Value::as_str),
-        Some("host")
-    );
-    assert_eq!(
-        turn_completed.get("action").and_then(Value::as_str),
-        Some("turn")
-    );
-    assert_eq!(
-        turn_completed
-            .get("orchestration_session_id")
-            .and_then(Value::as_str),
-        Some(orchestration_session_id.as_str())
-    );
-    assert_eq!(
-        turn_completed.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex")
-    );
-    assert_eq!(
-        turn_completed.get("turn_outcome").and_then(Value::as_str),
-        Some("success")
-    );
-    assert_eq!(
-        turn_completed.get("state").and_then(Value::as_str),
-        Some("active")
-    );
-    assert_empty_warnings(turn_completed);
-    let turn_participant_id = turn_completed["participant_id"]
-        .as_str()
-        .expect("turn participant id")
-        .to_string();
-    assert_ne!(
-        turn_participant_id, original_participant_id,
-        "the exact-session turn should allocate a successor participant for the resumed parked owner"
-    );
-
-    let parked_again = wait_for_session_posture(
-        &fixture,
-        &orchestration_session_id,
-        "parked_resumable",
-        Duration::from_secs(5),
-    );
-    assert_eq!(
-        parked_again.get("posture").and_then(Value::as_str),
-        Some("parked_resumable"),
-        "the same orchestration session must park again after the exact-session follow-up turn"
-    );
-    assert!(parked_again
-        .get("attached_participant_id")
-        .is_none_or(Value::is_null));
-
-    let reattach_output = fixture.run(&[
-        "agent",
-        "reattach",
-        "--session",
-        &orchestration_session_id,
-        "--json",
-    ]);
-    assert!(
-        reattach_output.status.success(),
-        "public reattach should succeed against the exact parked bootstrap session: {reattach_output:?}"
-    );
-    let reattach_json = parse_json_output(&reattach_output);
-    assert_eq!(
-        reattach_json.get("action").and_then(Value::as_str),
-        Some("reattach")
-    );
-    assert_eq!(
-        reattach_json
-            .get("orchestration_session_id")
-            .and_then(Value::as_str),
-        Some(orchestration_session_id.as_str())
-    );
-    assert_eq!(
-        reattach_json.get("backend_id").and_then(Value::as_str),
-        Some("cli:codex")
-    );
-    assert_eq!(
-        reattach_json.get("scope").and_then(Value::as_str),
-        Some("host")
-    );
-    assert_eq!(
-        reattach_json.get("state").and_then(Value::as_str),
-        Some("active")
+        start_failed.get("error_code").and_then(Value::as_str),
+        Some("owner_unreachable")
     );
     assert!(
-        reattach_json.get("source_orchestration_session_id").is_none(),
-        "reattach must stay inside the exact bootstrap-created orchestration session: {reattach_json}"
+        start_failed
+            .get("message")
+            .and_then(Value::as_str)
+            .is_some_and(|message| message.contains("startup prompt stream ended before terminal completion")),
+        "split bootstrap start should fail because the first visible prompt never completed on the single startup exec: {start_records:?}"
     );
-    assert_empty_warnings(&reattach_json);
-
-    let resumed_participant_id = reattach_json["participant_id"]
-        .as_str()
-        .expect("reattach participant id")
-        .to_string();
-    assert_ne!(
-        resumed_participant_id, original_participant_id,
-        "reattach must allocate a successor participant instead of mutating the parked source participant"
-    );
-    let resumed_participant =
-        fixture.load_participant(&orchestration_session_id, &resumed_participant_id);
-    assert_eq!(
-        resumed_participant
-            .get("resumed_from_participant_id")
-            .and_then(Value::as_str),
-        Some(turn_participant_id.as_str())
-    );
-    let resumed_owner_pid = fixture.load_orchestration_session(&orchestration_session_id)
-        ["shell_owner_pid"]
-        .as_u64()
-        .expect("reattach owner pid") as u32;
-    assert!(
-        pid_is_alive(resumed_owner_pid),
-        "reattach must leave the resumed owner live"
-    );
-
-    terminate_pid(resumed_owner_pid);
 }
 
 #[test]
 #[serial]
-fn public_start_detached_pending_inbox_normalizes_to_awaiting_attention() {
-    let fixture = AgentControlFixture::new_with_fake_codex(
-        write_fake_codex_script_clean_bootstrap_then_prompt_resume,
-    );
+fn detached_pending_inbox_normalizes_to_awaiting_attention() {
+    let fixture = AgentControlFixture::new();
     fixture.init_workspace();
     fixture.write_runtime_inventory(false);
 
-    let start_output = fixture.run(&[
-        "agent",
-        "start",
-        "--backend",
-        "cli:codex",
-        "--prompt",
-        "hello from clean bootstrap",
-        "--json",
-    ]);
-    assert!(
-        start_output.status.success(),
-        "public start should succeed before pending inbox normalization: {start_output:?}"
+    let ts = "2026-05-05T00:00:00Z";
+    let orchestration_session_id = "sess_attention".to_string();
+    let original_participant_id = "ash_attention".to_string();
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        &orchestration_session_id,
+        &original_participant_id,
+        ts,
     );
-    let start_records = parse_ndjson_output(&start_output);
-    let start_completed = find_ndjson_record(&start_records, "completed");
-    let orchestration_session_id = start_completed["orchestration_session_id"]
-        .as_str()
-        .expect("start session id")
-        .to_string();
-    let original_participant_id = start_completed["participant_id"]
-        .as_str()
-        .expect("start participant id")
-        .to_string();
+    write_runtime_participant(
+        &fixture,
+        &original_participant_id,
+        "codex",
+        &orchestration_session_id,
+        "running",
+        false,
+        Some("uaa-attention-1"),
+        None,
+        ts,
+    );
 
     let parked_session = wait_for_session_posture(
         &fixture,

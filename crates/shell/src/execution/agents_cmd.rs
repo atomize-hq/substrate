@@ -9,9 +9,15 @@ use crate::execution::agent_runtime::control::{
     persist_hidden_owner_helper_launch_plan, private_stop_transport_path,
     public_prompt_rendered_exit_code, remove_hidden_owner_helper_launch_plan,
     run_public_prompt_command, wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
-    HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan, OwnerHelperMode,
-    PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
+    HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
+    HiddenOwnerHelperStartupPromptPlan, OwnerHelperMode, PublicPromptAction,
+    PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
     ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor, HIDDEN_OWNER_HELPER_SUBCOMMAND,
+};
+#[cfg(unix)]
+use crate::execution::agent_runtime::control::{
+    register_hidden_owner_helper_startup_prompt_listener,
+    run_hidden_owner_helper_startup_prompt_stream,
 };
 use crate::execution::agent_runtime::validator::{
     exact_backend_selection_error_exit_code, member_selection_error_exit_code,
@@ -20,8 +26,8 @@ use crate::execution::agent_runtime::validator::{
 use crate::execution::agent_runtime::{
     runtime_realizability_error_exit_code, validate_orchestrator_selection,
     validate_runtime_realizability, AgentRuntimeParticipantRecord, AgentRuntimeSessionRecord,
-    AgentRuntimeStateStore, PublicControlAction, PublicTurnTargetKind, MEMBER_ROLE, NESTED_ROUTER,
-    ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
+    AgentRuntimeStateStore, PublicControlAction, PublicTurnTargetKind, StartupPromptReplayState,
+    MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDoctorArgs, AgentOwnerHelperArgs, AgentScopeArg,
@@ -305,44 +311,66 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     })
     .map_err(normalize_public_prompt_error)?;
     let context = resolve_command_context(cli)?;
-    let plan = build_start_launch_plan(args, &context)?;
-    let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
-    let request = PublicPromptCommandRequest {
-        action: PublicPromptAction::Start,
-        orchestration_session_id: Some(receipt.orchestration_session_id.clone()),
-        backend_id: receipt.backend_id.clone(),
-        prompt,
-        json: args.json,
-    };
-    match run_public_prompt_command(request.clone(), cli.world, cli.no_world) {
-        Ok(()) => Ok(()),
-        Err(err)
-            if recoverable_detached_start_retry(
-                &receipt.orchestration_session_id,
-                &receipt.backend_id,
-                &err,
-            )? =>
-        {
-            let plan = build_successor_launch_plan(
-                cli,
-                &receipt.orchestration_session_id,
-                OwnerHelperMode::Resume,
-            )
-            .map_err(runtime_start_error)?;
-            if plan.descriptor.backend_id != receipt.backend_id {
-                return Err(normalize_public_prompt_error(err));
+    let store = AgentRuntimeStateStore::new()?;
+    let mut plan = build_start_launch_plan(args, &context)?;
+
+    #[cfg(not(unix))]
+    {
+        let _ = store;
+        let _ = plan;
+        let _ = prompt;
+        anyhow::bail!(config_model::user_error(
+            "unsupported_platform_or_posture: public start prompt streaming requires a Unix launch-time backchannel"
+        ));
+    }
+
+    #[cfg(unix)]
+    {
+        let startup_listener = register_hidden_owner_helper_startup_prompt_listener(
+            &store,
+            plan.orchestration_session_id(),
+            plan.participant_id(),
+        )
+        .map_err(runtime_start_error)?;
+        plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
+            prompt_text: prompt.prompt_text.clone(),
+            stream_path: startup_listener.path().to_path_buf(),
+        });
+
+        let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+        match run_hidden_owner_helper_startup_prompt_stream(startup_listener, args.json) {
+            Ok(()) => Ok(()),
+            Err(err)
+                if recoverable_detached_start_retry(
+                    &receipt.orchestration_session_id,
+                    &receipt.participant_id,
+                    receipt.helper_pid,
+                    &err,
+                )? =>
+            {
+                let retry_listener = register_hidden_owner_helper_startup_prompt_listener(
+                    &store,
+                    plan.orchestration_session_id(),
+                    plan.participant_id(),
+                )
+                .map_err(runtime_start_error)?;
+                plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
+                    prompt_text: prompt.prompt_text,
+                    stream_path: retry_listener.path().to_path_buf(),
+                });
+                let _ = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+                run_hidden_owner_helper_startup_prompt_stream(retry_listener, args.json)
+                    .map_err(normalize_public_prompt_error)
             }
-            let _ = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
-            run_public_prompt_command(request, cli.world, cli.no_world)
-                .map_err(normalize_public_prompt_error)
+            Err(err) => Err(normalize_public_prompt_error(err)),
         }
-        Err(err) => Err(normalize_public_prompt_error(err)),
     }
 }
 
 fn recoverable_detached_start_retry(
     orchestration_session_id: &str,
-    backend_id: &str,
+    participant_id: &str,
+    helper_pid: u32,
     err: &anyhow::Error,
 ) -> Result<bool> {
     if public_prompt_rendered_exit_code(err).is_some() {
@@ -350,19 +378,37 @@ fn recoverable_detached_start_retry(
     }
 
     let message = err.to_string();
-    let prompt_transport_failed = message.contains("private prompt transport")
+    let prompt_transport_failed = message.contains("startup prompt stream")
         || message.starts_with("stream_bridge_failed:")
-        || message.contains("prompt owner closed the stream before accepting the request");
+        || message.contains("hidden owner-helper startup prompt stream ended");
     if !prompt_transport_failed {
         return Ok(false);
     }
 
     let store = AgentRuntimeStateStore::new()?;
-    let Ok(target) = store.resolve_public_turn_target(orchestration_session_id, backend_id) else {
+    let replay_state =
+        store.startup_prompt_replay_state(orchestration_session_id, participant_id)?;
+    if !replay_state.replay_safe() {
         return Ok(false);
-    };
-    Ok(target.target_kind == PublicTurnTargetKind::Host
-        && target.session_posture == PublicSessionPosture::DetachedReattachable)
+    }
+    #[cfg(unix)]
+    if pid_is_alive(helper_pid) {
+        return Ok(false);
+    }
+    Ok(matches!(
+        replay_state,
+        StartupPromptReplayState::NotTracked | StartupPromptReplayState::PendingAcceptance
+    ))
+}
+
+#[cfg(unix)]
+fn pid_is_alive(pid: u32) -> bool {
+    let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+    rc == 0
+        || matches!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EPERM)
+        )
 }
 
 fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
@@ -650,6 +696,7 @@ fn build_start_launch_plan(
             resumed_from_participant_id: None,
             internal_uaa_session_id: None,
         },
+        startup_prompt: None,
         source_orchestration_session_id: None,
     })
 }
@@ -702,6 +749,7 @@ fn build_successor_launch_plan(
                 .internal_uaa_session_id()
                 .map(ToOwned::to_owned),
         },
+        startup_prompt: None,
         source_orchestration_session_id: (mode == OwnerHelperMode::Fork)
             .then(|| target.session.orchestration_session_id.clone()),
     })

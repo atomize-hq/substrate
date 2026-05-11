@@ -26,6 +26,37 @@ impl OrchestrationSessionState {
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub(crate) enum StartupPromptStreamState {
+    #[default]
+    PendingAcceptance,
+    Accepted,
+    Completed,
+    Failed,
+}
+
+impl StartupPromptStreamState {
+    pub(crate) fn accepted(self) -> bool {
+        !matches!(self, Self::PendingAcceptance)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct StartupPromptRecord {
+    pub participant_id: String,
+    #[serde(default)]
+    pub state: StartupPromptStreamState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accepted_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_outcome: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum OrchestrationSessionPosture {
     ActiveAttached,
     #[default]
@@ -68,6 +99,8 @@ pub(crate) struct OrchestrationSessionRecord {
     pub last_attention_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parked_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub startup_prompt: Option<StartupPromptRecord>,
 }
 
 impl OrchestrationSessionRecord {
@@ -102,6 +135,7 @@ impl OrchestrationSessionRecord {
             last_parked_at: None,
             last_attention_at: None,
             parked_reason: None,
+            startup_prompt: None,
         }
     }
 
@@ -239,6 +273,72 @@ impl OrchestrationSessionRecord {
         self.attached_participant_id = None;
         self.parked_reason = Some(reason);
         self.apply_posture(OrchestrationSessionPosture::Terminal);
+    }
+
+    pub(crate) fn initialize_startup_prompt(&mut self, participant_id: impl Into<String>) {
+        self.startup_prompt = Some(StartupPromptRecord {
+            participant_id: participant_id.into(),
+            state: StartupPromptStreamState::PendingAcceptance,
+            accepted_at: None,
+            terminal_at: None,
+            turn_outcome: None,
+            error_message: None,
+        });
+        self.touch_active();
+    }
+
+    pub(crate) fn startup_prompt_state(&self) -> Option<StartupPromptStreamState> {
+        self.startup_prompt.as_ref().map(|record| record.state)
+    }
+
+    pub(crate) fn mark_startup_prompt_accepted(&mut self, participant_id: &str) {
+        let Some(record) = self.startup_prompt.as_mut() else {
+            return;
+        };
+        if record.participant_id != participant_id || record.state.accepted() {
+            return;
+        }
+        record.state = StartupPromptStreamState::Accepted;
+        record.accepted_at = Some(Utc::now());
+        record.error_message = None;
+        self.touch_active();
+    }
+
+    pub(crate) fn mark_startup_prompt_completed(
+        &mut self,
+        participant_id: &str,
+        turn_outcome: impl Into<String>,
+    ) {
+        let Some(record) = self.startup_prompt.as_mut() else {
+            return;
+        };
+        if record.participant_id != participant_id {
+            return;
+        }
+        record.state = StartupPromptStreamState::Completed;
+        record.accepted_at.get_or_insert_with(Utc::now);
+        record.terminal_at = Some(Utc::now());
+        record.turn_outcome = Some(turn_outcome.into());
+        record.error_message = None;
+        self.touch_active();
+    }
+
+    pub(crate) fn mark_startup_prompt_failed(
+        &mut self,
+        participant_id: &str,
+        error_message: impl Into<String>,
+    ) {
+        let Some(record) = self.startup_prompt.as_mut() else {
+            return;
+        };
+        if record.participant_id != participant_id {
+            return;
+        }
+        record.state = StartupPromptStreamState::Failed;
+        record.accepted_at.get_or_insert_with(Utc::now);
+        record.terminal_at = Some(Utc::now());
+        record.error_message = Some(error_message.into());
+        self.touch_active();
     }
 
     fn apply_posture(&mut self, posture: OrchestrationSessionPosture) {

@@ -19,6 +19,7 @@ use super::{
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     orchestration_session::{
         OrchestrationSessionPosture, OrchestrationSessionRecord, OrchestrationSessionState,
+        StartupPromptStreamState,
     },
     session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest},
 };
@@ -110,6 +111,19 @@ pub(crate) enum HiddenOwnerHelperLaunchReadiness {
     Pending,
     ReadyAttached,
     ReadyDetached(OrchestrationSessionPosture),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StartupPromptReplayState {
+    NotTracked,
+    PendingAcceptance,
+    AcceptedOrTerminal,
+}
+
+impl StartupPromptReplayState {
+    pub(crate) fn replay_safe(self) -> bool {
+        matches!(self, Self::NotTracked | Self::PendingAcceptance)
+    }
 }
 
 impl HiddenOwnerHelperLaunchReadiness {
@@ -981,6 +995,30 @@ impl AgentRuntimeStateStore {
         }
 
         Ok(HiddenOwnerHelperLaunchReadiness::Pending)
+    }
+
+    pub(crate) fn startup_prompt_replay_state(
+        &self,
+        orchestration_session_id: &str,
+        participant_id: &str,
+    ) -> Result<StartupPromptReplayState> {
+        let Some(session) = self.load_orchestration_session(orchestration_session_id)? else {
+            return Ok(StartupPromptReplayState::NotTracked);
+        };
+        let Some(startup_prompt) = session.startup_prompt.as_ref() else {
+            return Ok(StartupPromptReplayState::NotTracked);
+        };
+        if startup_prompt.participant_id != participant_id {
+            return Ok(StartupPromptReplayState::AcceptedOrTerminal);
+        }
+        Ok(match startup_prompt.state {
+            StartupPromptStreamState::PendingAcceptance => {
+                StartupPromptReplayState::PendingAcceptance
+            }
+            StartupPromptStreamState::Accepted
+            | StartupPromptStreamState::Completed
+            | StartupPromptStreamState::Failed => StartupPromptReplayState::AcceptedOrTerminal,
+        })
     }
 
     pub(crate) fn resolve_live_orchestrator_participant(
@@ -2131,6 +2169,9 @@ fn classify_public_session_posture(
     if valid_detached_host_continuity_posture(session, participant, true).is_some() {
         return PublicSessionPosture::DetachedReattachable;
     }
+    if recoverable_stale_host_attachment(session, participant, true) {
+        return PublicSessionPosture::DetachedReattachable;
+    }
     PublicSessionPosture::Terminal
 }
 
@@ -2168,6 +2209,34 @@ pub(crate) fn valid_detached_host_continuity_posture(
         }
         _ => None,
     }
+}
+
+fn recoverable_stale_host_attachment(
+    session: &OrchestrationSessionRecord,
+    participant: &AgentRuntimeParticipantRecord,
+    require_internal_session_id: bool,
+) -> bool {
+    if session.state.is_terminal() || !participant.handle.state.is_live() {
+        return false;
+    }
+    if session.posture != OrchestrationSessionPosture::ActiveAttached {
+        return false;
+    }
+    if session.active_participant_id() != Some(participant.participant_id()) {
+        return false;
+    }
+    if !participant.matches_public_parent_linkage(session) {
+        return false;
+    }
+    if !session_attached_to_participant(session, participant)
+        || !participant.attached_client_present()
+    {
+        return false;
+    }
+    if owner_process_is_alive(participant) || !participant.is_resume_eligible() {
+        return false;
+    }
+    !require_internal_session_id || participant.internal_uaa_session_id().is_some()
 }
 
 fn session_authoritative_participant_id(session: &OrchestrationSessionRecord) -> Option<&str> {
@@ -3249,6 +3318,65 @@ mod tests {
             assert_eq!(
                 target.session_posture,
                 PublicSessionPosture::DetachedReattachable
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_recovers_stale_attached_host_owner_as_detached() {
+        with_store(|store| {
+            let mut participant = live_orchestrator("codex", "sess_turn_stale", "ash_stale");
+            participant.internal.shell_owner_pid = 999_999_999;
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let target = store
+                .resolve_public_turn_target("sess_turn_stale", "cli:codex")
+                .expect("stale attached host target");
+            assert_eq!(
+                target.session_posture,
+                PublicSessionPosture::DetachedReattachable
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn startup_prompt_replay_state_allows_replay_only_before_acceptance() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex", "sess_startup_prompt", "ash_start");
+            let mut parent = active_parent(&participant);
+            parent.initialize_startup_prompt("ash_start");
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            assert_eq!(
+                store
+                    .startup_prompt_replay_state("sess_startup_prompt", "ash_start")
+                    .expect("pending replay state"),
+                StartupPromptReplayState::PendingAcceptance
+            );
+
+            let mut accepted_parent = parent.clone();
+            accepted_parent.mark_startup_prompt_accepted("ash_start");
+            store
+                .persist_orchestration_session(&accepted_parent)
+                .expect("persist accepted parent");
+            assert_eq!(
+                store
+                    .startup_prompt_replay_state("sess_startup_prompt", "ash_start")
+                    .expect("accepted replay state"),
+                StartupPromptReplayState::AcceptedOrTerminal
             );
         });
     }

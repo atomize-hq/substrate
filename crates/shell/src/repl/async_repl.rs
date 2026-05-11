@@ -18,6 +18,7 @@ use agent_api_types::{
 use anyhow::{anyhow, Context, Result};
 use futures::{pin_mut, FutureExt, StreamExt};
 use reedline::{ExternalPrinter, Prompt, Reedline, Signal};
+use serde::Deserialize;
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task;
@@ -39,12 +40,15 @@ use crate::execution::agent_runtime::control::{
     runtime_controls_parent_session, runtime_is_terminal, runtime_stop_transport_ids,
     spawn_local_private_prompt_owner, spawn_local_private_stop_owner, submit_host_prompt_turn,
     HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding, PrivatePromptTransport,
-    PrivateStopOutcome, PrivateStopRequestReceiver, PrivateStopTransport,
-    ResolvedRuntimeDescriptor, SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1,
+    PrivateStopOutcome, PrivateStopRequestReceiver, PrivateStopTransport, PublicPromptAction,
+    PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
+    SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1, AGENT_API_TURN_LIFECYCLE_V1,
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
-use crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture;
+use crate::execution::agent_runtime::orchestration_session::{
+    OrchestrationSessionPosture, StartupPromptStreamState,
+};
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::state_store::valid_detached_host_continuity_posture;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
@@ -1704,6 +1708,45 @@ enum RuntimeStartupSignal {
     Failed(String),
 }
 
+#[derive(Clone, Debug)]
+enum InitialExecPromptPlan {
+    Replace(String),
+    StartupPrompt {
+        prompt: String,
+        stream_path: PathBuf,
+    },
+}
+
+#[derive(Clone)]
+struct StartupPromptBackchannel {
+    envelope_tx: UnboundedSender<PublicPromptEnvelope>,
+    terminal_sent: Arc<AtomicBool>,
+}
+
+impl StartupPromptBackchannel {
+    fn send(&self, envelope: PublicPromptEnvelope) {
+        if self.terminal_sent.load(Ordering::SeqCst) {
+            return;
+        }
+        let terminal = matches!(
+            envelope,
+            PublicPromptEnvelope::Completed { .. } | PublicPromptEnvelope::Failed { .. }
+        );
+        if terminal {
+            self.terminal_sent.store(true, Ordering::SeqCst);
+        }
+        let _ = self.envelope_tx.send(envelope);
+    }
+
+    fn send_event(&self, event: &AgentEvent) {
+        self.send(PublicPromptEnvelope::Event {
+            version: 1,
+            event_kind: "message".to_string(),
+            data: serde_json::to_value(event).unwrap_or_default(),
+        });
+    }
+}
+
 const AGENT_API_NO_TURN_SESSION_START_V1: &str = "agent_api.session.start.no_turn.v1";
 
 fn runtime_supports_no_turn_session_start(
@@ -1794,6 +1837,172 @@ fn runtime_ready_message(role: &str) -> &'static str {
         "world-scoped member session is ready via retained attached control ownership"
     } else {
         "shell-owned orchestrator session is ready via retained attached control ownership"
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct TurnLifecycleEventV1 {
+    schema: String,
+    turn: TurnLifecyclePayloadV1,
+}
+
+#[derive(Debug, Deserialize)]
+struct TurnLifecyclePayloadV1 {
+    thread_id: String,
+    turn_id: String,
+    phase: String,
+}
+
+fn turn_lifecycle_phase(data: Option<&serde_json::Value>) -> Option<&str> {
+    let value = data?;
+    let parsed: TurnLifecycleEventV1 = serde_json::from_value(value.clone()).ok()?;
+    if parsed.schema != AGENT_API_TURN_LIFECYCLE_V1 {
+        return None;
+    }
+    let _ = (&parsed.turn.thread_id, &parsed.turn.turn_id);
+    Some(match parsed.turn.phase.as_str() {
+        "completed" => "completed",
+        "failed" => "failed",
+        _ => return None,
+    })
+}
+
+fn infer_startup_turn_phase_fallback(
+    event: &agent_api::AgentWrapperEvent,
+    saw_substantive_output: bool,
+) -> Option<&'static str> {
+    match event.kind {
+        agent_api::AgentWrapperEventKind::Status => {
+            match event
+                .message
+                .as_deref()
+                .map(str::trim)
+                .filter(|message| !message.is_empty())
+            {
+                Some("turn failed") => Some("failed"),
+                Some(_) => None,
+                None if event.data.is_none() && saw_substantive_output => Some("completed"),
+                None => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+#[cfg(unix)]
+async fn connect_startup_prompt_backchannel(
+    stream_path: &Path,
+) -> std::result::Result<StartupPromptBackchannel, RuntimeBootstrapFailure> {
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::UnixStream;
+
+    let stream = UnixStream::connect(stream_path)
+        .await
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 4,
+            message: format!(
+                "failed to connect hidden owner-helper startup prompt stream {}: {err}",
+                stream_path.display()
+            ),
+        })?;
+    let (envelope_tx, mut envelope_rx) = mpsc::unbounded_channel::<PublicPromptEnvelope>();
+    let terminal_sent = Arc::new(AtomicBool::new(false));
+    let terminal_sent_for_task = Arc::clone(&terminal_sent);
+    tokio::spawn(async move {
+        let mut stream = stream;
+        while let Some(envelope) = envelope_rx.recv().await {
+            if stream
+                .write_all(
+                    format!(
+                        "{}\n",
+                        serde_json::to_string(&envelope).unwrap_or_else(|_| "{}".to_string())
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .is_err()
+            {
+                break;
+            }
+            let _ = stream.flush().await;
+            if matches!(
+                envelope,
+                PublicPromptEnvelope::Completed { .. } | PublicPromptEnvelope::Failed { .. }
+            ) {
+                break;
+            }
+        }
+        terminal_sent_for_task.store(true, Ordering::SeqCst);
+    });
+
+    Ok(StartupPromptBackchannel {
+        envelope_tx,
+        terminal_sent,
+    })
+}
+
+#[cfg(not(unix))]
+async fn connect_startup_prompt_backchannel(
+    _stream_path: &Path,
+) -> std::result::Result<StartupPromptBackchannel, RuntimeBootstrapFailure> {
+    Err(RuntimeBootstrapFailure {
+        exit_code: 4,
+        message: "hidden owner-helper startup prompt streaming requires Unix transports"
+            .to_string(),
+    })
+}
+
+fn startup_prompt_state_label(state: &AgentRuntimeSessionState) -> &'static str {
+    match state {
+        AgentRuntimeSessionState::Allocating
+        | AgentRuntimeSessionState::Ready
+        | AgentRuntimeSessionState::Running
+        | AgentRuntimeSessionState::Restarting
+        | AgentRuntimeSessionState::Stopping => "active",
+        AgentRuntimeSessionState::Stopped => "stopped",
+        AgentRuntimeSessionState::Failed => "failed",
+        AgentRuntimeSessionState::Invalidated => "invalidated",
+    }
+}
+
+fn startup_prompt_posture(
+    session: &OrchestrationSessionRecord,
+    manifest: &AgentRuntimeSessionManifest,
+) -> PublicSessionPosture {
+    if session.state == OrchestrationSessionState::Active
+        && manifest.is_authoritative_live()
+        && session.attached_participant_id() == Some(manifest.handle.participant_id.as_str())
+    {
+        PublicSessionPosture::Active
+    } else {
+        PublicSessionPosture::Terminal
+    }
+}
+
+fn startup_prompt_completed_envelope(
+    session: &OrchestrationSessionRecord,
+    manifest: &AgentRuntimeSessionManifest,
+) -> PublicPromptEnvelope {
+    PublicPromptEnvelope::Completed {
+        version: 1,
+        action: PublicPromptAction::Start,
+        orchestration_session_id: session.orchestration_session_id.clone(),
+        backend_id: manifest.handle.backend_id.clone(),
+        participant_id: Some(manifest.handle.participant_id.clone()),
+        turn_outcome: "success".to_string(),
+        session_posture: startup_prompt_posture(session, manifest),
+        state: startup_prompt_state_label(&manifest.handle.state).to_string(),
+        warnings: Vec::new(),
+    }
+}
+
+fn startup_prompt_failed_envelope(message: impl Into<String>) -> PublicPromptEnvelope {
+    PublicPromptEnvelope::Failed {
+        version: 1,
+        terminal: true,
+        stage: "runtime".to_string(),
+        error_code: "owner_unreachable".to_string(),
+        message: message.into(),
     }
 }
 
@@ -2203,6 +2412,9 @@ fn owner_helper_orchestration_session(
         session.world_id = Some(world_id.clone());
         session.world_generation = Some(world_generation);
     }
+    if plan.startup_prompt.is_some() {
+        session.initialize_startup_prompt(manifest.handle.participant_id.clone());
+    }
     session
 }
 
@@ -2343,9 +2555,16 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
         let mut telemetry = ReplSessionTelemetry::new(config.clone(), "agent_owner_helper");
         let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
             .map_err(|failure| anyhow!(failure.message))?;
-        let runtime = start_host_orchestrator_runtime_with_prepared(
+        let initial_prompt = plan.startup_prompt.as_ref().map(|startup_prompt| {
+            InitialExecPromptPlan::StartupPrompt {
+                prompt: startup_prompt.prompt_text.clone(),
+                stream_path: startup_prompt.stream_path.clone(),
+            }
+        });
+        let runtime = start_host_orchestrator_runtime_with_prepared_prompt(
             Some(prepared),
             None,
+            initial_prompt,
             &ReplPrinter::Stdout,
             &mut telemetry,
         )
@@ -2377,7 +2596,7 @@ async fn start_host_orchestrator_runtime_with_prepared(
 async fn start_host_orchestrator_runtime_with_prepared_prompt(
     prepared: Option<PreparedAgentRuntime>,
     initial_world_binding: Option<&PersistedWorldBinding>,
-    initial_prompt: Option<String>,
+    initial_prompt: Option<InitialExecPromptPlan>,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
@@ -2465,17 +2684,75 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     );
 
     let request = agent_api::AgentWrapperRunRequest {
-        prompt: initial_prompt
-            .unwrap_or_else(|| runtime_bootstrap_prompt(&runtime_role).to_string()),
+        prompt: match initial_prompt.as_ref() {
+            Some(InitialExecPromptPlan::Replace(prompt)) => prompt.clone(),
+            Some(InitialExecPromptPlan::StartupPrompt { prompt, .. }) => prompt.clone(),
+            None => runtime_bootstrap_prompt(&runtime_role).to_string(),
+        },
         working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
         timeout: None,
         env: BTreeMap::new(),
         extensions: startup_extensions,
     };
+    let startup_backchannel = match initial_prompt.as_ref() {
+        Some(InitialExecPromptPlan::StartupPrompt { stream_path, .. }) => {
+            Some(connect_startup_prompt_backchannel(stream_path).await?)
+        }
+        _ => None,
+    };
+    if let Some(backchannel) = startup_backchannel.as_ref() {
+        let (orchestration_snapshot, manifest_snapshot) = {
+            let mut orchestration_guard = startup_context
+                .orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned");
+            let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+            orchestration_guard
+                .mark_startup_prompt_accepted(manifest_guard.handle.participant_id.as_str());
+            (orchestration_guard.clone(), manifest_guard.clone())
+        };
+        persist_runtime_snapshots(
+            &startup_context.store,
+            &orchestration_snapshot,
+            &manifest_snapshot,
+        )
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to persist startup prompt acceptance: {err:#}"),
+        })?;
+        backchannel.send(PublicPromptEnvelope::Accepted {
+            version: 1,
+            action: PublicPromptAction::Start,
+            orchestration_session_id: orchestration_snapshot.orchestration_session_id.clone(),
+            backend_id: manifest_snapshot.handle.backend_id.clone(),
+            participant_id: Some(manifest_snapshot.handle.participant_id.clone()),
+            scope: "host".to_string(),
+        });
+    }
     let control = match gateway.run_control(&agent_kind, request).await {
         Ok(control) => control,
         Err(err) => {
             let failure = runtime_bootstrap_failure_from_wrapper_error(err);
+            if let Some(backchannel) = startup_backchannel.as_ref() {
+                let (orchestration_snapshot, manifest_snapshot) = {
+                    let mut orchestration_guard = startup_context
+                        .orchestration_session
+                        .lock()
+                        .expect("orchestration session mutex poisoned");
+                    let manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+                    orchestration_guard.mark_startup_prompt_failed(
+                        manifest_guard.handle.participant_id.as_str(),
+                        failure.message.clone(),
+                    );
+                    (orchestration_guard.clone(), manifest_guard.clone())
+                };
+                let _ = persist_runtime_snapshots(
+                    &startup_context.store,
+                    &orchestration_snapshot,
+                    &manifest_snapshot,
+                );
+                backchannel.send(startup_prompt_failed_envelope(failure.message.clone()));
+            }
             mark_runtime_startup_failed(
                 &startup_context.store,
                 &startup_context.orchestration_session,
@@ -2503,12 +2780,33 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     let event_orchestration_session = Arc::clone(&startup_context.orchestration_session);
     let event_manifest = Arc::clone(&manifest);
     let startup_signal_for_events = Arc::clone(&startup_signal);
+    let startup_backchannel_for_events = startup_backchannel.clone();
     let shutdown_for_events = Arc::clone(&shutdown_requested);
     let runtime_role_for_events = runtime_role.clone();
     let mut events = events;
     let event_task = tokio::spawn(async move {
         let controls_parent_session = runtime_controls_parent_session(&runtime_role_for_events);
+        let mut startup_saw_substantive_output = false;
         while let Some(wrapper_event) = events.next().await {
+            let startup_turn_phase = turn_lifecycle_phase(wrapper_event.data.as_ref())
+                .map(ToOwned::to_owned)
+                .or_else(|| {
+                    infer_startup_turn_phase_fallback(
+                        &wrapper_event,
+                        startup_saw_substantive_output,
+                    )
+                    .map(ToOwned::to_owned)
+                });
+            let startup_failure_message = wrapper_event.message.clone();
+            if matches!(
+                wrapper_event.kind,
+                agent_api::AgentWrapperEventKind::TextOutput
+                    | agent_api::AgentWrapperEventKind::ToolCall
+                    | agent_api::AgentWrapperEventKind::ToolResult
+                    | agent_api::AgentWrapperEventKind::Error
+            ) {
+                startup_saw_substantive_output = true;
+            }
             let mut startup_became_live = false;
             let (orchestration_snapshot, manifest_snapshot, event) = {
                 let mut orchestration_guard = event_orchestration_session
@@ -2559,6 +2857,21 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                     manifest_guard.transition_state(AgentRuntimeSessionState::Running);
                     orchestration_guard.touch_active();
                 }
+                if let Some(phase) = startup_turn_phase.as_deref() {
+                    match phase {
+                        "completed" => orchestration_guard.mark_startup_prompt_completed(
+                            manifest_guard.handle.participant_id.as_str(),
+                            "success",
+                        ),
+                        "failed" => orchestration_guard.mark_startup_prompt_failed(
+                            manifest_guard.handle.participant_id.as_str(),
+                            startup_failure_message
+                                .clone()
+                                .unwrap_or_else(|| "startup prompt turn failed".to_string()),
+                        ),
+                        _ => {}
+                    }
+                }
                 (orchestration_guard.clone(), manifest_guard.clone(), event)
             };
             let _ = persist_runtime_snapshots(
@@ -2566,6 +2879,25 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                 &orchestration_snapshot,
                 &manifest_snapshot,
             );
+            if let Some(backchannel) = startup_backchannel_for_events.as_ref() {
+                backchannel.send_event(&event);
+                if let Some(phase) = startup_turn_phase.as_deref() {
+                    match phase {
+                        "completed" => {
+                            backchannel.send(startup_prompt_completed_envelope(
+                                &orchestration_snapshot,
+                                &manifest_snapshot,
+                            ));
+                        }
+                        "failed" => backchannel.send(startup_prompt_failed_envelope(
+                            startup_failure_message
+                                .clone()
+                                .unwrap_or_else(|| "startup prompt turn failed".to_string()),
+                        )),
+                        _ => {}
+                    }
+                }
+            }
             let _ = publish_agent_event(event);
 
             if startup_became_live {
@@ -2659,6 +2991,28 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         for event in publish_events {
             let _ = publish_agent_event(event);
         }
+        if let Some(backchannel) = startup_backchannel_for_events.as_ref() {
+            let startup_state = orchestration_snapshot.startup_prompt_state();
+            if matches!(
+                startup_state,
+                Some(StartupPromptStreamState::PendingAcceptance)
+            ) {
+                backchannel.send(startup_prompt_failed_envelope(
+                    startup_failure.clone().unwrap_or_else(|| {
+                        "startup prompt stream closed before acceptance".to_string()
+                    }),
+                ));
+            } else if !matches!(
+                startup_state,
+                Some(StartupPromptStreamState::Completed | StartupPromptStreamState::Failed)
+            ) {
+                backchannel.send(startup_prompt_failed_envelope(
+                    startup_failure.clone().unwrap_or_else(|| {
+                        "startup prompt stream ended before terminal completion".to_string()
+                    }),
+                ));
+            }
+        }
         if let Some(message) = startup_failure {
             signal_runtime_startup(
                 &startup_signal_for_events,
@@ -2671,6 +3025,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     let completion_orchestration_session = Arc::clone(&startup_context.orchestration_session);
     let completion_manifest = Arc::clone(&manifest);
     let startup_signal_for_completion = Arc::clone(&startup_signal);
+    let startup_backchannel_for_completion = startup_backchannel.clone();
     let shutdown_for_completion = Arc::clone(&shutdown_requested);
     let run_id_for_completion = run_id.clone();
     let runtime_role_for_completion = runtime_role.clone();
@@ -2909,6 +3264,20 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         );
         for event in publish_events {
             let _ = publish_agent_event(event);
+        }
+        if let Some(backchannel) = startup_backchannel_for_completion.as_ref() {
+            let startup_state = orchestration_snapshot.startup_prompt_state();
+            if !matches!(
+                startup_state,
+                Some(StartupPromptStreamState::Completed | StartupPromptStreamState::Failed)
+            ) {
+                backchannel.send(startup_prompt_failed_envelope(
+                    startup_failure.clone().unwrap_or_else(|| {
+                        "startup prompt completion did not reach a terminal turn outcome"
+                            .to_string()
+                    }),
+                ));
+            }
         }
         if let Some(message) = startup_failure {
             signal_runtime_startup(
@@ -3362,7 +3731,9 @@ async fn dispatch_targeted_follow_up_turn(
                 let runtime = match start_host_orchestrator_runtime_with_prepared_prompt(
                     Some(prepared),
                     initial_world_binding.as_ref(),
-                    Some(targeted_turn.prompt.to_string()),
+                    Some(InitialExecPromptPlan::Replace(
+                        targeted_turn.prompt.to_string(),
+                    )),
                     agent_printer,
                     telemetry,
                 )

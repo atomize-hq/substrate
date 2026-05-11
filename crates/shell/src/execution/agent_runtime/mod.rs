@@ -27,7 +27,7 @@ pub(crate) use session::{
 #[allow(unused_imports)]
 pub(crate) use state_store::{
     AgentRuntimeSessionRecord, AgentRuntimeStateStore, PublicControlAction, PublicTurnTargetKind,
-    ResolvedPublicTurnTarget,
+    ResolvedPublicTurnTarget, StartupPromptReplayState,
 };
 pub(crate) use validator::{
     backend_allowed, runtime_realizability_error_exit_code, validate_orchestrator_selection,

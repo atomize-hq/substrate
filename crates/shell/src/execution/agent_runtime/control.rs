@@ -1,5 +1,7 @@
 use std::fs;
 use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::os::unix::net::UnixListener as StdUnixListener;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -37,6 +39,7 @@ use super::{
 use substrate_common::agent_events::{AgentEvent, MessageEventKind};
 
 pub(crate) const AGENT_API_SESSION_RESUME_V1: &str = "agent_api.session.resume.v1";
+pub(crate) const AGENT_API_TURN_LIFECYCLE_V1: &str = "agent_api.turn.lifecycle.v1";
 pub(crate) const HIDDEN_OWNER_HELPER_SUBCOMMAND: &str = "__owner-helper";
 const OWNER_HELPER_READY_TIMEOUT: Duration = Duration::from_secs(10);
 const OWNER_HELPER_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
@@ -44,6 +47,8 @@ const OWNER_HELPER_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
 const PRIVATE_PROMPT_READY_TIMEOUT: Duration = Duration::from_secs(10);
 const PRIVATE_PROMPT_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
+#[cfg(unix)]
+const STARTUP_PROMPT_STREAM_ACCEPT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -237,11 +242,20 @@ pub(crate) struct HiddenOwnerHelperParticipantPlan {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct HiddenOwnerHelperStartupPromptPlan {
+    pub prompt_text: String,
+    pub stream_path: PathBuf,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct HiddenOwnerHelperLaunchPlan {
     pub mode: OwnerHelperMode,
     pub descriptor: ResolvedRuntimeDescriptor,
     pub session: HiddenOwnerHelperSessionPlan,
     pub participant: HiddenOwnerHelperParticipantPlan,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub startup_prompt: Option<HiddenOwnerHelperStartupPromptPlan>,
     pub source_orchestration_session_id: Option<String>,
 }
 
@@ -299,6 +313,23 @@ pub(crate) struct PrivatePromptTransport {
     shutdown_tx: Option<oneshot::Sender<()>>,
     task: Option<tokio::task::JoinHandle<()>>,
     path: PathBuf,
+}
+
+#[cfg(unix)]
+pub(crate) struct StartupPromptTransportListener {
+    listener: StdUnixListener,
+    path: PathBuf,
+}
+
+#[cfg(unix)]
+impl StartupPromptTransportListener {
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+
+    async fn remove_path(path: &Path) {
+        let _ = tokio::fs::remove_file(path).await;
+    }
 }
 
 impl PrivatePromptTransport {
@@ -402,6 +433,153 @@ pub(crate) fn hidden_owner_helper_plan_path(
         .handles_dir()
         .join("owner-helper")
         .join(format!("{session_fragment}-{participant_fragment}.json"))
+}
+
+#[cfg(unix)]
+pub(crate) fn hidden_owner_helper_startup_prompt_stream_path(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> PathBuf {
+    let session_fragment = compact_stop_transport_fragment(orchestration_session_id);
+    let participant_fragment = compact_stop_transport_fragment(participant_id);
+    let socket_name = format!("{session_fragment}-{participant_fragment}.startup.sock");
+    let preferred = store.handles_dir().join("startup").join(&socket_name);
+    if preferred.as_os_str().len() > PRIVATE_STOP_UNIX_PATH_MAX {
+        return PathBuf::from("/tmp")
+            .join("substrate-agent-hub-startup")
+            .join(socket_name);
+    }
+    preferred
+}
+
+#[cfg(unix)]
+pub(crate) fn register_hidden_owner_helper_startup_prompt_listener(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<StartupPromptTransportListener> {
+    let path = hidden_owner_helper_startup_prompt_stream_path(
+        store,
+        orchestration_session_id,
+        participant_id,
+    );
+    let parent = path.parent().ok_or_else(|| {
+        anyhow::anyhow!(
+            "startup prompt transport path '{}' is missing a parent directory",
+            path.display()
+        )
+    })?;
+    fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+    remove_existing_stop_transport_path(&path)?;
+    let listener = StdUnixListener::bind(&path)
+        .with_context(|| format!("failed to bind startup prompt transport {}", path.display()))?;
+    listener.set_nonblocking(true).with_context(|| {
+        format!(
+            "failed to configure startup prompt transport {}",
+            path.display()
+        )
+    })?;
+    Ok(StartupPromptTransportListener { listener, path })
+}
+
+#[cfg(unix)]
+pub(crate) async fn consume_hidden_owner_helper_startup_prompt_stream<F>(
+    listener: StartupPromptTransportListener,
+    mut on_envelope: F,
+) -> Result<i32>
+where
+    F: FnMut(&PublicPromptEnvelope) -> Result<()>,
+{
+    let StartupPromptTransportListener { listener, path } = listener;
+    let tokio_listener = tokio::net::UnixListener::from_std(listener).with_context(|| {
+        format!(
+            "failed to activate startup prompt transport {}",
+            path.display()
+        )
+    })?;
+    let accept =
+        tokio::time::timeout(STARTUP_PROMPT_STREAM_ACCEPT_TIMEOUT, tokio_listener.accept())
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "stream_bridge_failed: timed out waiting for hidden owner-helper startup prompt stream {}",
+                    path.display()
+                )
+            })?;
+    let (stream, _) = accept.with_context(|| {
+        format!(
+            "stream_bridge_failed: failed to accept hidden owner-helper startup prompt stream {}",
+            path.display()
+        )
+    })?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    let mut saw_accept = false;
+    loop {
+        line.clear();
+        let bytes_read = reader.read_line(&mut line).await?;
+        if bytes_read == 0 {
+            break;
+        }
+        let envelope: PublicPromptEnvelope =
+            serde_json::from_str(line.trim()).with_context(|| {
+                format!(
+                    "failed to decode hidden owner-helper startup prompt envelope from {}",
+                    path.display()
+                )
+            })?;
+        if matches!(envelope, PublicPromptEnvelope::Accepted { .. }) {
+            saw_accept = true;
+        }
+        on_envelope(&envelope)?;
+        match envelope {
+            PublicPromptEnvelope::Completed { turn_outcome, .. } => {
+                StartupPromptTransportListener::remove_path(&path).await;
+                return Ok(completed_exit_code(turn_outcome.as_str()));
+            }
+            PublicPromptEnvelope::Failed { message, .. } => {
+                StartupPromptTransportListener::remove_path(&path).await;
+                return Err(anyhow::anyhow!(message));
+            }
+            _ => {}
+        }
+    }
+    StartupPromptTransportListener::remove_path(&path).await;
+
+    if saw_accept {
+        anyhow::bail!("owner_unreachable: startup prompt stream ended after accepting the request");
+    }
+    anyhow::bail!(
+        "owner_unreachable: hidden owner-helper startup prompt stream ended before accepting the request"
+    );
+}
+
+#[cfg(unix)]
+pub(crate) fn run_hidden_owner_helper_startup_prompt_stream(
+    listener: StartupPromptTransportListener,
+    json: bool,
+) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to initialize startup prompt transport runtime")?;
+    let mut renderer = PublicPromptRenderer::new(json);
+    let result = rt.block_on(async {
+        consume_hidden_owner_helper_startup_prompt_stream(listener, |envelope| {
+            renderer.render(envelope)
+        })
+        .await
+    });
+
+    match result {
+        Ok(0) => Ok(()),
+        Ok(code) => Err(anyhow::Error::new(PublicPromptRenderedExit {
+            exit_code: code,
+        })),
+        Err(err) => Err(err),
+    }
 }
 
 #[allow(dead_code)]
