@@ -46,6 +46,7 @@ use crate::execution::agent_runtime::control::{
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture;
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
+use crate::execution::agent_runtime::state_store::valid_detached_host_continuity_posture;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
     exact_backend_selection_error_exit_code, validate_exact_backend_selection,
@@ -2608,11 +2609,12 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                 startup_failure = Some(reason);
             } else if !shutdown_for_events.load(Ordering::SeqCst) && was_live {
                 if can_park_host_runtime_after_detach(controls_parent_session, &manifest_guard) {
-                    park_host_runtime_in_place(
+                    apply_parked_host_runtime_snapshots(
                         &mut orchestration_guard,
                         &mut manifest_guard,
                         "owner detached cleanly",
-                    );
+                    )
+                    .expect("prevalidated host runtime parking should satisfy continuity");
                     publish_events.push(build_runtime_message_event(
                         &manifest_guard,
                         &orchestration_guard,
@@ -2756,11 +2758,12 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                         controls_parent_session,
                         &manifest_guard,
                     ) {
-                        park_host_runtime_in_place(
+                        apply_parked_host_runtime_snapshots(
                             &mut orchestration_guard,
                             &mut manifest_guard,
                             "owner detached cleanly",
-                        );
+                        )
+                        .expect("prevalidated host runtime parking should satisfy continuity");
                         publish_events.push(build_runtime_message_event(
                             &manifest_guard,
                             &orchestration_guard,
@@ -2856,11 +2859,12 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                         controls_parent_session,
                         &manifest_guard,
                     ) {
-                        park_host_runtime_in_place(
+                        apply_parked_host_runtime_snapshots(
                             &mut orchestration_guard,
                             &mut manifest_guard,
                             "owner detached cleanly",
-                        );
+                        )
+                        .expect("prevalidated host runtime parking should satisfy continuity");
                         publish_events.push(build_runtime_message_event(
                             &manifest_guard,
                             &orchestration_guard,
@@ -5125,7 +5129,7 @@ async fn park_host_orchestrator_runtime(
     }
 
     let reason = "owner detached cleanly".to_string();
-    let (orchestration_session, manifest) = {
+    let Some((orchestration_session, manifest)) = ({
         let mut orchestration_guard = runtime
             .orchestration_session
             .lock()
@@ -5134,8 +5138,9 @@ async fn park_host_orchestrator_runtime(
             .manifest
             .lock()
             .expect("runtime manifest mutex poisoned");
-        park_host_runtime_in_place(&mut orchestration_guard, &mut manifest_guard, &reason);
-        (orchestration_guard.clone(), manifest_guard.clone())
+        apply_parked_host_runtime_snapshots(&mut orchestration_guard, &mut manifest_guard, &reason)
+    }) else {
+        return false;
     };
     let _ = persist_runtime_snapshots(&runtime.store, &orchestration_session, &manifest);
     emit_runtime_event(
@@ -5162,34 +5167,47 @@ fn can_park_host_runtime_after_detach(
         && manifest.internal.uaa_session_id.is_some()
 }
 
-fn detached_host_posture(session: &OrchestrationSessionRecord) -> OrchestrationSessionPosture {
-    if session.pending_inbox_count > 0 {
+fn build_parked_host_runtime_snapshots(
+    orchestration_guard: &OrchestrationSessionRecord,
+    manifest_guard: &AgentRuntimeSessionManifest,
+    reason: &str,
+) -> Option<(OrchestrationSessionRecord, AgentRuntimeSessionManifest)> {
+    let mut parked_orchestration = orchestration_guard.clone();
+    let mut parked_manifest = manifest_guard.clone();
+    parked_manifest.release_runtime_ownership();
+    parked_manifest.mark_client_detached(reason.to_string());
+    parked_manifest.touch_heartbeat();
+    parked_orchestration.transition_state(OrchestrationSessionState::Active);
+    match if parked_orchestration.pending_inbox_count > 0 {
         OrchestrationSessionPosture::AwaitingAttention
     } else {
         OrchestrationSessionPosture::ParkedResumable
-    }
-}
-
-fn park_host_runtime_in_place(
-    orchestration_guard: &mut OrchestrationSessionRecord,
-    manifest_guard: &mut AgentRuntimeSessionManifest,
-    reason: &str,
-) {
-    manifest_guard.release_runtime_ownership();
-    manifest_guard.mark_client_detached(reason.to_string());
-    manifest_guard.touch_heartbeat();
-    orchestration_guard.transition_state(OrchestrationSessionState::Active);
-    match detached_host_posture(orchestration_guard) {
+    } {
         OrchestrationSessionPosture::ParkedResumable => {
-            orchestration_guard.mark_parked_resumable(reason.to_string());
+            parked_orchestration.mark_parked_resumable(reason.to_string());
         }
         OrchestrationSessionPosture::AwaitingAttention => {
-            orchestration_guard.mark_awaiting_attention();
+            parked_orchestration.mark_awaiting_attention();
         }
         OrchestrationSessionPosture::ActiveAttached | OrchestrationSessionPosture::Terminal => {
             unreachable!("detached host parking only normalizes to parked or attention posture")
         }
     }
+
+    valid_detached_host_continuity_posture(&parked_orchestration, &parked_manifest, true)?;
+    Some((parked_orchestration, parked_manifest))
+}
+
+fn apply_parked_host_runtime_snapshots(
+    orchestration_guard: &mut OrchestrationSessionRecord,
+    manifest_guard: &mut AgentRuntimeSessionManifest,
+    reason: &str,
+) -> Option<(OrchestrationSessionRecord, AgentRuntimeSessionManifest)> {
+    let (next_orchestration, next_manifest) =
+        build_parked_host_runtime_snapshots(orchestration_guard, manifest_guard, reason)?;
+    *orchestration_guard = next_orchestration.clone();
+    *manifest_guard = next_manifest.clone();
+    Some((next_orchestration, next_manifest))
 }
 
 async fn abort_bootstrap_runtime(
@@ -7967,6 +7985,102 @@ mod tests {
             assert_eq!(
                 target.active_participant.internal.detach_reason.as_deref(),
                 Some("owner detached cleanly")
+            );
+        });
+
+        let pid = fs::read_to_string(&pid_file)
+            .expect("pid file")
+            .trim()
+            .parse::<i32>()
+            .expect("pid should parse");
+        unsafe {
+            libc::kill(pid, libc::SIGTERM);
+        }
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn shutdown_host_orchestrator_runtime_fails_closed_when_detached_continuity_breaks() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        let pid_file = temp.path().join("fake-codex.pid");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_codex = write_fake_codex_script_with_pid_file(&temp, &pid_file);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            format!(
+                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+                fake_codex.display()
+            ),
+        )
+        .expect("write codex agent file");
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            let runtime =
+                start_host_orchestrator_runtime(&config, &ReplPrinter::Stdout, &mut telemetry)
+                    .await
+                    .expect("bootstrap runtime should succeed")
+                    .expect("agents enabled should create a runtime");
+            let store = runtime.store.clone();
+            let session_id = runtime
+                .orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned")
+                .orchestration_session_id
+                .clone();
+
+            runtime
+                .orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned")
+                .active_session_handle_id = Some("ash_wrong".to_string());
+
+            shutdown_host_orchestrator_runtime_with_mode(
+                runtime,
+                HostRuntimeShutdownMode::ParkIfResumable,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+
+            let session = store
+                .load_orchestration_session(&session_id)
+                .expect("load orchestration session")
+                .expect("terminal orchestration session should exist");
+            assert!(session.state.is_terminal());
+            assert_eq!(session.posture, OrchestrationSessionPosture::Terminal);
+            assert!(session.closed_at.is_some());
+            assert!(
+                store
+                    .resolve_public_control_target(
+                        &session_id,
+                        crate::execution::agent_runtime::PublicControlAction::Resume,
+                    )
+                    .is_err(),
+                "invalid detached continuity must fail closed instead of parking"
             );
         });
 

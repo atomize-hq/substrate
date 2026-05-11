@@ -1,3 +1,5 @@
+#[doc(hidden)]
+pub mod agent_dev_support;
 pub mod agent_events;
 pub(crate) mod agent_inventory;
 pub(crate) mod agent_runtime;

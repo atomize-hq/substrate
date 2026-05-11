@@ -5,6 +5,7 @@
 pub mod common;
 
 use assert_cmd::Command;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::{Builder, TempDir};
@@ -118,4 +119,25 @@ pub fn payload_lines(stdout: &[u8]) -> Vec<String> {
         PAYLOAD_MARKER, data
     );
     lines
+}
+
+pub fn persist_runtime_alert_for_substrate_home(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    item_id: &str,
+    message: Option<String>,
+) {
+    let previous_substrate_home = env::var_os("SUBSTRATE_HOME");
+    env::set_var("SUBSTRATE_HOME", substrate_home);
+    let result =
+        substrate_shell::execution::agent_dev_support::persist_runtime_alert_for_dev_support(
+            orchestration_session_id,
+            item_id,
+            message,
+        );
+    match previous_substrate_home {
+        Some(previous) => env::set_var("SUBSTRATE_HOME", previous),
+        None => env::remove_var("SUBSTRATE_HOME"),
+    }
+    result.expect("persist runtime alert through authoritative state store");
 }

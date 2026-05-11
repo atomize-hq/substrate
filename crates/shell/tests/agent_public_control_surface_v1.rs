@@ -15,7 +15,10 @@ use std::process::{Child, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use support::{binary_path, ensure_substrate_built, substrate_shell_driver};
+use support::{
+    binary_path, ensure_substrate_built, persist_runtime_alert_for_substrate_home,
+    substrate_shell_driver,
+};
 #[cfg(target_os = "linux")]
 use support::{MemberDispatchStreamScript, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
@@ -323,18 +326,6 @@ fn canonical_participants_dir(substrate_home: &Path, orchestration_session_id: &
         .join("participants")
 }
 
-fn canonical_inbox_item_path(
-    substrate_home: &Path,
-    orchestration_session_id: &str,
-    item_id: &str,
-) -> PathBuf {
-    substrate_home
-        .join("run/agent-hub/sessions")
-        .join(orchestration_session_id)
-        .join("inbox")
-        .join(format!("{item_id}.json"))
-}
-
 fn read_json_file(path: &Path) -> Value {
     serde_json::from_str(
         &fs::read_to_string(path)
@@ -622,44 +613,6 @@ fn write_json_file(path: &Path, value: &Value) {
         serde_json::to_vec_pretty(value).expect("serialize fixture json"),
     )
     .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
-}
-
-fn write_pending_inbox_item(
-    fixture: &AgentControlFixture,
-    orchestration_session_id: &str,
-    item_id: &str,
-    ts: &str,
-) {
-    write_json_file(
-        &canonical_inbox_item_path(&fixture.substrate_home, orchestration_session_id, item_id),
-        &json!({
-            "orchestration_session_id": orchestration_session_id,
-            "item_id": item_id,
-            "kind": "runtime_alert",
-            "state": "pending",
-            "created_at": ts,
-            "updated_at": ts,
-            "message": format!("attention needed for {item_id}")
-        }),
-    );
-}
-
-fn mark_session_awaiting_attention(
-    fixture: &AgentControlFixture,
-    orchestration_session_id: &str,
-    ts: &str,
-) -> Value {
-    let mut session = fixture.load_orchestration_session(orchestration_session_id);
-    session["posture"] = Value::String("awaiting_attention".to_string());
-    session["posture_changed_at"] = Value::String(ts.to_string());
-    session["attached_participant_id"] = Value::Null;
-    session["pending_inbox_count"] = Value::from(1u64);
-    session["last_attention_at"] = Value::String(ts.to_string());
-    write_json_file(
-        &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
-        &session,
-    );
-    fixture.load_orchestration_session(orchestration_session_id)
 }
 
 fn write_active_orchestration_session(
@@ -1700,12 +1653,9 @@ fn public_start_parks_clean_bootstrap_and_supports_exact_turn_and_reattach() {
         parked_session.get("posture").and_then(Value::as_str),
         Some("parked_resumable")
     );
-    assert_eq!(
-        parked_session
-            .get("attached_participant_id")
-            .is_none_or(Value::is_null),
-        true
-    );
+    assert!(parked_session
+        .get("attached_participant_id")
+        .is_none_or(Value::is_null));
     assert_eq!(
         parked_session
             .get("pending_inbox_count")
@@ -1807,12 +1757,9 @@ fn public_start_parks_clean_bootstrap_and_supports_exact_turn_and_reattach() {
         Some("parked_resumable"),
         "the same orchestration session must park again after the exact-session follow-up turn"
     );
-    assert_eq!(
-        parked_again
-            .get("attached_participant_id")
-            .is_none_or(Value::is_null),
-        true
-    );
+    assert!(parked_again
+        .get("attached_participant_id")
+        .is_none_or(Value::is_null));
 
     let reattach_output = fixture.run(&[
         "agent",
@@ -1908,11 +1855,47 @@ fn public_start_detached_pending_inbox_normalizes_to_awaiting_attention() {
     let start_completed = find_ndjson_record(&start_records, "completed");
     let orchestration_session_id = start_completed["orchestration_session_id"]
         .as_str()
-        .expect("start session id");
+        .expect("start session id")
+        .to_string();
+    let original_participant_id = start_completed["participant_id"]
+        .as_str()
+        .expect("start participant id")
+        .to_string();
 
-    let ts = "2026-05-11T02:00:00Z";
-    write_pending_inbox_item(&fixture, orchestration_session_id, "item_attention", ts);
-    let attention_session = mark_session_awaiting_attention(&fixture, orchestration_session_id, ts);
+    let parked_session = wait_for_session_posture(
+        &fixture,
+        &orchestration_session_id,
+        "parked_resumable",
+        Duration::from_secs(5),
+    );
+    let parked_handle_id = parked_session
+        .get("active_session_handle_id")
+        .and_then(Value::as_str)
+        .expect("parked authoritative handle id")
+        .to_string();
+    assert_eq!(parked_handle_id, original_participant_id);
+    assert!(parked_session
+        .get("attached_participant_id")
+        .is_none_or(Value::is_null));
+
+    persist_runtime_alert_for_substrate_home(
+        &fixture.substrate_home,
+        &orchestration_session_id,
+        "item_attention",
+        Some("attention needed for item_attention".to_string()),
+    );
+    let attention_session = wait_for_session_posture(
+        &fixture,
+        &orchestration_session_id,
+        "awaiting_attention",
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        attention_session
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id.as_str())
+    );
     assert_eq!(
         attention_session.get("state").and_then(Value::as_str),
         Some("active")
@@ -1921,9 +1904,14 @@ fn public_start_detached_pending_inbox_normalizes_to_awaiting_attention() {
         attention_session.get("posture").and_then(Value::as_str),
         Some("awaiting_attention")
     );
+    assert!(attention_session
+        .get("attached_participant_id")
+        .is_none_or(Value::is_null));
     assert_eq!(
-        attention_session.get("attached_participant_id"),
-        Some(&Value::Null)
+        attention_session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str),
+        Some(parked_handle_id.as_str())
     );
     assert_eq!(
         attention_session
@@ -1934,15 +1922,21 @@ fn public_start_detached_pending_inbox_normalizes_to_awaiting_attention() {
     assert_eq!(
         fixture
             .load_participant(
-                orchestration_session_id,
-                start_completed["participant_id"]
-                    .as_str()
-                    .expect("participant id"),
+                &orchestration_session_id,
+                &original_participant_id,
             )
             .pointer("/internal/resume_eligible")
             .and_then(Value::as_bool),
         Some(true),
         "detached awaiting-attention normalization must keep the authoritative host participant resumable"
+    );
+    assert_eq!(
+        fixture
+            .load_participant(&orchestration_session_id, &original_participant_id)
+            .pointer("/internal/attached_client_present")
+            .and_then(Value::as_bool),
+        Some(false),
+        "detached awaiting-attention normalization must keep the authoritative host participant detached"
     );
 }
 

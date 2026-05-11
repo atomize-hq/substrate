@@ -2135,7 +2135,7 @@ fn classify_public_session_posture(
 }
 
 // Detached continuity is valid only when persisted session truth and participant truth agree.
-fn valid_detached_host_continuity_posture(
+pub(crate) fn valid_detached_host_continuity_posture(
     session: &OrchestrationSessionRecord,
     participant: &AgentRuntimeParticipantRecord,
     require_internal_session_id: bool,
