@@ -650,11 +650,21 @@ cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 Manual validation on the merged tree must prove the public contract, not just internal unit behavior:
 
 ```bash
+# Flow A: parked-session visibility, inbox attention, turn, reattach, attached-stop
 substrate agent start --backend <host_backend_id> --prompt "hello" --json
+substrate agent status --json
+<inject one durable inbox item onto the same session and capture persisted session truth>
 substrate agent status --json
 substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json
 substrate agent reattach --session <orchestration_session_id> --json
+substrate agent status --json
 substrate agent stop --session <orchestration_session_id> --json
+substrate agent status --json
+
+# Flow B: parked-stop proof on a separate exact durable session
+substrate agent start --backend <host_backend_id> --prompt "hello again" --json
+substrate agent status --json
+substrate agent stop --session <second_orchestration_session_id> --json
 substrate agent status --json
 ```
 
@@ -665,10 +675,13 @@ Manual validation is complete only when all of the following are checked:
 3. one detached inbox item moves the same session to `awaiting_attention`,
 4. `turn` succeeds against that same exact session,
 5. `reattach` succeeds only when attached ownership is truly restored,
-6. `stop` succeeds against that same exact session while attached and while parked,
-7. broken bootstrap still fails as `runtime_start_failed`,
-8. post-`Accepted` helper loss still renders explicit `Failed`,
-9. detached-world follow-up still fails closed with reattach guidance.
+6. `status` shows that same session as `awaiting_attention`,
+7. persisted runtime truth after `reattach` is durably `active_attached` for that same exact session,
+8. attached-session `stop` succeeds against that same exact session while still attached,
+9. parked-session `stop` succeeds against a separate exact durable session with no attached owner,
+10. broken bootstrap still fails as `runtime_start_failed`,
+11. post-`Accepted` helper loss still renders explicit `Failed`,
+12. detached-world follow-up still fails closed with reattach guidance.
 
 ## Failure Modes Registry
 

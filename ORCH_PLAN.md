@@ -720,20 +720,34 @@ If any command needs a syntactic adjustment, the parent may substitute the narro
 The parent must rerun the real CLI flow and capture persisted runtime evidence:
 
 ```bash
+# Flow A: parked-session visibility, inbox attention, turn, reattach, attached-stop
 substrate agent start --backend <host_backend_id> --prompt "hello" --json
+substrate agent status --json
+<inject one durable inbox item onto the same session and capture persisted session truth>
 substrate agent status --json
 substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json
 substrate agent reattach --session <orchestration_session_id> --json
+substrate agent status --json
 substrate agent stop --session <orchestration_session_id> --json
+substrate agent status --json
+
+# Flow B: parked-stop proof on a separate exact durable session
+substrate agent start --backend <host_backend_id> --prompt "hello again" --json
+substrate agent status --json
+substrate agent stop --session <second_orchestration_session_id> --json
 substrate agent status --json
 ```
 
 The parent must also prove:
 
 1. one detached inbox item moves the same session to `awaiting_attention`
-2. broken bootstrap still fails as `runtime_start_failed`
-3. post-`Accepted` helper loss still yields explicit `Failed`
-4. detached-world follow-up still fails closed with reattach guidance
+2. `status` shows that same session as `awaiting_attention`
+3. persisted runtime truth after `reattach` is durably `active_attached` for that same exact session
+4. attached-session `stop` succeeds while the session is still attached
+5. parked-session `stop` succeeds on a separate exact durable session with no attached owner
+6. broken bootstrap still fails as `runtime_start_failed`
+7. post-`Accepted` helper loss still yields explicit `Failed`
+8. detached-world follow-up still fails closed with reattach guidance
 
 Required final artifacts:
 
@@ -741,10 +755,18 @@ Required final artifacts:
 - `manual-status-after-start.json`
 - `manual-session-after-start.json`
 - `manual-session-after-awaiting-attention.json`
+- `manual-status-after-awaiting-attention.json`
 - `manual-turn.json`
 - `manual-reattach.json`
-- `manual-stop.json`
+- `manual-session-after-reattach.json`
+- `manual-status-after-reattach.json`
+- `manual-stop-attached.json`
+- `manual-stop-parked.json`
+- `manual-stop-modes-summary.md`
 - `manual-final-status.json`
+- `manual-second-start.json`
+- `manual-status-before-parked-stop.json`
+- `manual-final-status-after-parked-stop.json`
 - `manual-broken-bootstrap.json`
 - `manual-post-accepted-late-failure.json`
 - `manual-detached-world-fail-closed.json`
