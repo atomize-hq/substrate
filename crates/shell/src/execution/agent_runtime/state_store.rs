@@ -63,6 +63,24 @@ impl AgentRuntimeSessionRecord {
         })
     }
 
+    pub(crate) fn status_visible_participants(&self) -> Vec<AgentRuntimeParticipantRecord> {
+        let mut participants = self.live_participants();
+        if let Ok(Some(detached_participant)) = detached_status_visible_participant(self) {
+            if participants.iter().all(|participant| {
+                participant.handle.participant_id != detached_participant.handle.participant_id
+            }) {
+                participants.push(detached_participant);
+            }
+        }
+        participants.sort_by(|left, right| {
+            left.handle
+                .last_transition_at
+                .cmp(&right.handle.last_transition_at)
+                .then(left.handle.participant_id.cmp(&right.handle.participant_id))
+        });
+        participants
+    }
+
     #[allow(dead_code)]
     pub(crate) fn live_participant_for_agent(
         &self,
@@ -123,12 +141,6 @@ pub(crate) enum StartupPromptReplayState {
 impl StartupPromptReplayState {
     pub(crate) fn replay_safe(self) -> bool {
         matches!(self, Self::NotTracked | Self::PendingAcceptance)
-    }
-}
-
-impl HiddenOwnerHelperLaunchReadiness {
-    pub(crate) fn allows_launch(self) -> bool {
-        matches!(self, Self::ReadyAttached | Self::ReadyDetached(_))
     }
 }
 
@@ -235,10 +247,6 @@ impl PublicControlAction {
         matches!(self, Self::Resume | Self::Fork)
     }
 
-    fn requires_live_owner(self) -> bool {
-        matches!(self, Self::Stop)
-    }
-
     fn rejects_live_owner(self) -> bool {
         matches!(self, Self::Resume)
     }
@@ -247,8 +255,8 @@ impl PublicControlAction {
 #[derive(Clone, Debug)]
 pub(crate) struct ResolvedPublicControlTarget {
     pub session: OrchestrationSessionRecord,
-    #[allow(dead_code)]
     pub active_participant: AgentRuntimeParticipantRecord,
+    pub session_posture: PublicSessionPosture,
 }
 
 impl ResolvedPublicControlTarget {
@@ -286,6 +294,13 @@ enum ParticipantRecordSource {
     Canonical,
     Flat,
     Legacy,
+}
+
+#[derive(Clone, Debug)]
+struct ResolvedAuthoritativeSessionControl {
+    session: OrchestrationSessionRecord,
+    participant: AgentRuntimeParticipantRecord,
+    session_posture: PublicSessionPosture,
 }
 
 #[derive(Clone, Debug)]
@@ -755,54 +770,7 @@ impl AgentRuntimeStateStore {
         let Some(record) = self.load_session(orchestration_session_id)? else {
             return Err(self.public_session_selector_error(orchestration_session_id));
         };
-
-        if !record.has_authoritative_parent() {
-            anyhow::bail!(
-                "missing_active_parent: orchestration session {} is missing authoritative parent metadata",
-                orchestration_session_id
-            );
-        }
-        if record.session.state != OrchestrationSessionState::Active {
-            anyhow::bail!(
-                "missing_active_parent: orchestration session {} is not active",
-                orchestration_session_id
-            );
-        }
-
-        let active_participant_id = session_authoritative_participant_id(&record.session)
-            .ok_or_else(|| {
-            anyhow::anyhow!(
-                "stale_linkage: orchestration session {} is missing authoritative orchestrator participant linkage",
-                orchestration_session_id
-            )
-        })?;
-        let participant = record
-            .participants
-            .iter()
-            .find(|participant| participant.participant_id() == active_participant_id)
-            .cloned()
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "stale_linkage: orchestration session {} references missing participant {}",
-                    orchestration_session_id,
-                    active_participant_id
-                )
-            })?;
-
-        if !participant.handle.state.is_live() {
-            anyhow::bail!(
-                "stale_linkage: orchestration session {} references inactive participant {}",
-                orchestration_session_id,
-                active_participant_id
-            );
-        }
-        if !participant.matches_public_parent_linkage(&record.session) {
-            anyhow::bail!(
-                "stale_linkage: orchestration session {} active participant {} does not match exact orchestrator linkage",
-                orchestration_session_id,
-                active_participant_id
-            );
-        }
+        let resolved = resolve_authoritative_session_control(&record, orchestration_session_id)?;
 
         if session_requires_linux_first_public_control_posture(&record)
             && !cfg!(target_os = "linux")
@@ -813,40 +781,56 @@ impl AgentRuntimeStateStore {
             );
         }
 
-        let owner_live = session_attached_to_participant(&record.session, &participant)
-            && participant.attached_client_present()
-            && participant.is_authoritative_live()
-            && owner_process_is_alive(&participant);
-        if action.rejects_live_owner() && owner_live {
+        if action.rejects_live_owner() && resolved.session_posture == PublicSessionPosture::Active {
             anyhow::bail!(
                 "session_already_owned: orchestration session {} already has a live retained owner",
                 orchestration_session_id
             );
         }
-        if action.requires_live_owner() && !owner_live {
+        if matches!(action, PublicControlAction::Stop)
+            && resolved.session_posture == PublicSessionPosture::Terminal
+        {
             anyhow::bail!(
-                "owner_unreachable: orchestration session {} no longer has a reachable live owner",
+                "owner_unreachable: orchestration session {} no longer has a reachable retained owner",
                 orchestration_session_id
             );
         }
-        if action.requires_internal_session_id() && !participant.is_resume_eligible() {
+        if (action.requires_internal_session_id()
+            || matches!(
+                (action, resolved.session_posture),
+                (
+                    PublicControlAction::Stop,
+                    PublicSessionPosture::DetachedReattachable
+                )
+            ))
+            && !resolved.participant.is_resume_eligible()
+        {
             anyhow::bail!(
                 "owner_unreachable: orchestration session {} no longer has a resume-eligible retained owner",
                 orchestration_session_id
             );
         }
-        if action.requires_internal_session_id() && participant.internal_uaa_session_id().is_none()
+        if (action.requires_internal_session_id()
+            || matches!(
+                (action, resolved.session_posture),
+                (
+                    PublicControlAction::Stop,
+                    PublicSessionPosture::DetachedReattachable
+                )
+            ))
+            && resolved.participant.internal_uaa_session_id().is_none()
         {
             anyhow::bail!(
                 "missing_internal_session_id: orchestration session {} active participant {} is missing internal.uaa_session_id",
                 orchestration_session_id,
-                active_participant_id
+                resolved.participant.handle.participant_id
             );
         }
 
         Ok(ResolvedPublicControlTarget {
-            session: record.session,
-            active_participant: participant,
+            session: resolved.session,
+            active_participant: resolved.participant,
+            session_posture: resolved.session_posture,
         })
     }
 
@@ -880,25 +864,8 @@ impl AgentRuntimeStateStore {
             );
         }
 
-        let authoritative_orchestrator_id = session_authoritative_participant_id(&record.session)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "stale_linkage: orchestration session {} is missing authoritative orchestrator participant linkage",
-                    orchestration_session_id
-                )
-            })?;
-        let authoritative_orchestrator = record
-            .participants
-            .iter()
-            .find(|participant| participant.participant_id() == authoritative_orchestrator_id)
-            .cloned()
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "stale_linkage: orchestration session {} references missing participant {}",
-                    orchestration_session_id,
-                    authoritative_orchestrator_id
-                )
-            })?;
+        let authoritative =
+            resolve_authoritative_session_control(&record, orchestration_session_id)?;
 
         let slot_present = public_turn_session_mentions_backend(&record, backend_id);
         let mut candidates = public_turn_authoritative_candidates(&record, backend_id);
@@ -938,13 +905,11 @@ impl AgentRuntimeStateStore {
             );
         }
 
-        let session_posture =
-            classify_public_session_posture(&record.session, &authoritative_orchestrator);
         Ok(ResolvedPublicTurnTarget {
-            session: record.session,
+            session: authoritative.session,
             participant: candidate.participant,
             target_kind: candidate.kind,
-            session_posture,
+            session_posture: authoritative.session_posture,
         })
     }
 
@@ -2149,6 +2114,77 @@ fn public_turn_authoritative_candidates(
     );
 
     candidates
+}
+
+fn resolve_authoritative_session_control(
+    record: &AgentRuntimeSessionRecord,
+    orchestration_session_id: &str,
+) -> Result<ResolvedAuthoritativeSessionControl> {
+    if !record.has_authoritative_parent() {
+        anyhow::bail!(
+            "missing_active_parent: orchestration session {} is missing authoritative parent metadata",
+            orchestration_session_id
+        );
+    }
+    if record.session.state != OrchestrationSessionState::Active {
+        anyhow::bail!(
+            "missing_active_parent: orchestration session {} is not active",
+            orchestration_session_id
+        );
+    }
+
+    let active_participant_id = session_authoritative_participant_id(&record.session).ok_or_else(
+        || {
+            anyhow::anyhow!(
+                "stale_linkage: orchestration session {} is missing authoritative orchestrator participant linkage",
+                orchestration_session_id
+            )
+        },
+    )?;
+    let participant = record
+        .participants
+        .iter()
+        .find(|participant| participant.participant_id() == active_participant_id)
+        .cloned()
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "stale_linkage: orchestration session {} references missing participant {}",
+                orchestration_session_id,
+                active_participant_id
+            )
+        })?;
+
+    if !participant.handle.state.is_live() {
+        anyhow::bail!(
+            "stale_linkage: orchestration session {} references inactive participant {}",
+            orchestration_session_id,
+            active_participant_id
+        );
+    }
+    if !participant.matches_public_parent_linkage(&record.session) {
+        anyhow::bail!(
+            "stale_linkage: orchestration session {} active participant {} does not match exact orchestrator linkage",
+            orchestration_session_id,
+            active_participant_id
+        );
+    }
+
+    Ok(ResolvedAuthoritativeSessionControl {
+        session: record.session.clone(),
+        participant: participant.clone(),
+        session_posture: classify_public_session_posture(&record.session, &participant),
+    })
+}
+
+fn detached_status_visible_participant(
+    record: &AgentRuntimeSessionRecord,
+) -> Result<Option<AgentRuntimeParticipantRecord>> {
+    let resolved =
+        resolve_authoritative_session_control(record, &record.session.orchestration_session_id)?;
+    Ok(
+        (resolved.session_posture == PublicSessionPosture::DetachedReattachable)
+            .then_some(resolved.participant),
+    )
 }
 
 #[allow(dead_code)]
@@ -3521,12 +3557,44 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn resolve_public_control_target_stop_requires_live_owner() {
+    fn resolve_public_control_target_stop_allows_detached_resumable_session() {
         with_store(|store| {
             let mut participant =
                 detached_orchestrator("codex", "sess_stop_detached", "ash_selected");
             participant.set_uaa_session_id("uaa_session");
-            let parent = active_parent(&participant);
+            let mut parent = active_parent(&participant);
+            parent.mark_parked_resumable("owner detached cleanly");
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let target = store
+                .resolve_public_control_target("sess_stop_detached", PublicControlAction::Stop)
+                .expect("stop must remain available for parked resumable sessions");
+            assert_eq!(
+                target.session_posture,
+                PublicSessionPosture::DetachedReattachable
+            );
+            assert_eq!(
+                target.active_participant.handle.participant_id,
+                "ash_selected"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_stop_requires_resume_contract_for_detached_session() {
+        with_store(|store| {
+            let mut participant =
+                detached_orchestrator("codex", "sess_stop_missing_internal", "ash_selected");
+            participant.internal.uaa_session_id = None;
+            participant.internal.resume_eligible = false;
+            let mut parent = active_parent(&participant);
+            parent.mark_parked_resumable("owner detached cleanly");
             store
                 .persist_orchestration_session(&parent)
                 .expect("persist parent");
@@ -3535,9 +3603,115 @@ mod tests {
                 .expect("persist participant");
 
             let err = store
-                .resolve_public_control_target("sess_stop_detached", PublicControlAction::Stop)
-                .expect_err("stop must fail closed without a live retained owner");
+                .resolve_public_control_target(
+                    "sess_stop_missing_internal",
+                    PublicControlAction::Stop,
+                )
+                .expect_err("detached stop must fail closed without a resumable retained owner");
             assert!(err.to_string().contains("owner_unreachable"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_stop_allows_detached_attention_session() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_stop_attention", "ash_attention");
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+            store
+                .persist_inbox_item(&pending_inbox_item(
+                    "sess_stop_attention",
+                    "item_attention",
+                    DurableInboxItemKind::ApprovalRequired,
+                ))
+                .expect("persist pending inbox item");
+
+            let target = store
+                .resolve_public_control_target("sess_stop_attention", PublicControlAction::Stop)
+                .expect("stop must remain available for attention-needed durable sessions");
+            assert_eq!(
+                target.session_posture,
+                PublicSessionPosture::DetachedReattachable
+            );
+            assert_eq!(
+                target.session.posture,
+                OrchestrationSessionPosture::AwaitingAttention
+            );
+            assert_eq!(target.session.pending_inbox_count, 1);
+            assert_eq!(
+                target.active_participant.handle.participant_id,
+                "ash_attention"
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn status_visible_participants_include_detached_authoritative_orchestrator() {
+        with_store(|store| {
+            let mut participant =
+                detached_orchestrator("codex", "sess_status_detached", "ash_detached");
+            participant.set_uaa_session_id("uaa_session");
+            let mut parent = active_parent(&participant);
+            parent.mark_parked_resumable("owner detached cleanly");
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let record = store
+                .load_session("sess_status_detached")
+                .expect("load session")
+                .expect("session record exists");
+            let visible = record.status_visible_participants();
+            assert_eq!(visible.len(), 1);
+            assert_eq!(visible[0].handle.participant_id, "ash_detached");
+            assert!(!visible[0].attached_client_present());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn status_visible_participants_include_awaiting_attention_orchestrator() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_status_attention", "ash_detached");
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+            store
+                .persist_inbox_item(&pending_inbox_item(
+                    "sess_status_attention",
+                    "item_attention",
+                    DurableInboxItemKind::RuntimeAlert,
+                ))
+                .expect("persist pending inbox item");
+
+            let record = store
+                .load_session("sess_status_attention")
+                .expect("load session")
+                .expect("session record exists");
+            assert_eq!(record.session.pending_inbox_count, 1);
+            assert_eq!(
+                record.session.posture,
+                OrchestrationSessionPosture::AwaitingAttention
+            );
+            let visible = record.status_visible_participants();
+            assert_eq!(visible.len(), 1);
+            assert_eq!(visible[0].handle.participant_id, "ash_detached");
         });
     }
 

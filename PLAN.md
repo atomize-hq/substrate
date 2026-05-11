@@ -464,8 +464,8 @@ Primary modules:
 
 Required changes:
 
-1. Add a real CLI regression that proves `start` yields a parked durable session.
-2. Add `status` proof on that same session while parked.
+1. Add a real CLI regression that proves `start` yields one non-terminal active durable session and preserves the exact session id whether the immediate posture is `active_attached` or `parked_resumable`.
+2. Add `status` proof on that same session immediately after start and again after it becomes parked.
 3. Add `turn` proof on that same session.
 4. Add `reattach` proof on that same session.
 5. Add `stop` proof on that same session.
@@ -586,8 +586,8 @@ CODE PATH COVERAGE
 USER FLOW COVERAGE
 ==================
 [+] substrate agent start --backend <host> --prompt "hello" --json
-    ├── [★★ TESTED, KEEP] clean bootstrap can land a parked durable session
-    └── [GAP] parked session remains visible in status immediately after start
+    ├── [★★ TESTED, KEEP] clean bootstrap leaves one non-terminal active durable session
+    └── [GAP] the same exact session remains visible in status whether the immediate posture is `active_attached` or `parked_resumable`
 
 [+] substrate agent status --json
     ├── [GAP] parked_resumable session is shown as active durable truth
@@ -650,9 +650,10 @@ cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 Manual validation on the merged tree must prove the public contract, not just internal unit behavior:
 
 ```bash
-# Flow A: parked-session visibility, inbox attention, turn, reattach, attached-stop
+# Flow A: active durable session visibility, parked transition proof, inbox attention, turn, reattach, attached-stop
 substrate agent start --backend <host_backend_id> --prompt "hello" --json
 substrate agent status --json
+# If start remains active_attached, wait for or otherwise prove the same exact session later normalizes to parked_resumable before detached inbox injection.
 <inject one durable inbox item onto the same session and capture persisted session truth>
 substrate agent status --json
 substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json
@@ -670,18 +671,19 @@ substrate agent status --json
 
 Manual validation is complete only when all of the following are checked:
 
-1. `start` leaves a non-terminal parked durable session when the clean bootstrap path is valid,
-2. `status` shows that parked session before any follow-up owner is attached,
-3. one detached inbox item moves the same session to `awaiting_attention`,
-4. `turn` succeeds against that same exact session,
-5. `reattach` succeeds only when attached ownership is truly restored,
-6. `status` shows that same session as `awaiting_attention`,
-7. persisted runtime truth after `reattach` is durably `active_attached` for that same exact session,
-8. attached-session `stop` succeeds against that same exact session while still attached,
-9. parked-session `stop` succeeds against a separate exact durable session with no attached owner,
-10. broken bootstrap still fails as `runtime_start_failed`,
-11. post-`Accepted` helper loss still renders explicit `Failed`,
-12. detached-world follow-up still fails closed with reattach guidance.
+1. `start` leaves one non-terminal active durable session when the clean bootstrap path is valid, even if the immediate posture is `active_attached` rather than `parked_resumable`,
+2. `status` shows that same exact session immediately after start with its real authoritative posture,
+3. if `start` remained `active_attached`, the same exact session is later proven to normalize to `parked_resumable` before detached inbox proof begins,
+4. one detached inbox item moves that same parked or detached session to `awaiting_attention`,
+5. `turn` succeeds against that same exact session,
+6. `reattach` succeeds only when attached ownership is truly restored,
+7. `status` shows that same session as `awaiting_attention`,
+8. persisted runtime truth after `reattach` is durably `active_attached` for that same exact session,
+9. attached-session `stop` succeeds against that same exact session while still attached,
+10. parked-session `stop` succeeds against a separate exact durable session with no attached owner,
+11. broken bootstrap still fails as `runtime_start_failed`,
+12. post-`Accepted` helper loss still renders explicit `Failed`,
+13. detached-world follow-up still fails closed with reattach guidance.
 
 ## Failure Modes Registry
 

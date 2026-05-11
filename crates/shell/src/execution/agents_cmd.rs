@@ -6,9 +6,10 @@ use crate::execution::agent_inventory::{
 use crate::execution::agent_runtime::control::request_private_stop;
 use crate::execution::agent_runtime::control::{
     load_hidden_owner_helper_launch_plan, load_public_prompt_source,
-    persist_hidden_owner_helper_launch_plan, private_stop_transport_path,
-    public_prompt_rendered_exit_code, remove_hidden_owner_helper_launch_plan,
-    run_public_prompt_command, wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
+    persist_hidden_owner_helper_launch_plan, persist_runtime_stop_closeout,
+    private_stop_transport_path, public_prompt_rendered_exit_code,
+    remove_hidden_owner_helper_launch_plan, run_public_prompt_command,
+    wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
     HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
     HiddenOwnerHelperStartupPromptPlan, OwnerHelperMode, PublicPromptAction,
     PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
@@ -473,7 +474,28 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
 
 fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
     let plan = build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Resume)?;
-    let receipt = launch_hidden_owner_helper(&plan, cli)?;
+    let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+    if receipt.orchestration_session_id != args.session {
+        anyhow::bail!(runtime_start_error(anyhow::anyhow!(
+            "hidden owner-helper resumed orchestration session {} instead of requested session {}",
+            receipt.orchestration_session_id,
+            args.session
+        )));
+    }
+
+    let store = AgentRuntimeStateStore::new()?;
+    let target = store
+        .resolve_public_control_target(&receipt.orchestration_session_id, PublicControlAction::Stop)
+        .map_err(runtime_start_error)?;
+    if target.session_posture != PublicSessionPosture::Active
+        || target.active_participant.handle.participant_id != receipt.participant_id
+    {
+        anyhow::bail!(runtime_start_error(anyhow::anyhow!(
+            "orchestration session {} did not reach durable active_attached ownership after reattach",
+            receipt.orchestration_session_id
+        )));
+    }
+
     render_agent_control_result(
         args.json,
         &AgentControlResultJson {
@@ -557,6 +579,38 @@ fn run_stop(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
     let target = store
         .resolve_public_control_target(&args.session, PublicControlAction::Stop)
         .map_err(|err| config_model::user_error(err.to_string()))?;
+    let participant_id = target.active_participant.handle.participant_id.clone();
+    let backend_id = target.active_participant.handle.backend_id.clone();
+    let orchestration_session_id = target.session.orchestration_session_id.clone();
+
+    if target.session_posture == PublicSessionPosture::DetachedReattachable {
+        let mut session = target.session.clone();
+        let mut manifest = target.active_participant.clone();
+        persist_runtime_stop_closeout(&store, &mut session, &mut manifest)
+            .context("failed to persist detached durable stop closeout")?;
+
+        let final_state =
+            wait_for_terminal_session_state(&store, orchestration_session_id.as_str())?
+                .ok_or_else(|| {
+                    config_model::user_error(format!(
+                        "owner_unreachable: timed out waiting for orchestration session {} to reach a terminal state",
+                        orchestration_session_id
+                    ))
+                })?;
+        return render_agent_control_result(
+            args.json,
+            &AgentControlResultJson {
+                action: "stop",
+                orchestration_session_id: orchestration_session_id.as_str(),
+                backend_id: &backend_id,
+                scope: "host",
+                state: final_state.as_str(),
+                warnings: Vec::new(),
+                participant_id: Some(&participant_id),
+                source_orchestration_session_id: None,
+            },
+        );
+    }
 
     #[cfg(not(unix))]
     {
@@ -569,10 +623,11 @@ fn run_stop(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
 
     #[cfg(unix)]
     {
-        let participant_id = target.active_participant.handle.participant_id.clone();
-        let backend_id = target.active_participant.handle.backend_id.clone();
-        let transport_path =
-            private_stop_transport_path(&store, &args.session, participant_id.as_str());
+        let transport_path = private_stop_transport_path(
+            &store,
+            orchestration_session_id.as_str(),
+            participant_id.as_str(),
+        );
         let rt = TokioRuntimeBuilder::new_current_thread()
             .enable_all()
             .build()
@@ -1990,7 +2045,7 @@ fn live_participant_status_projection(
 
 fn live_session_status_projections(session: &AgentRuntimeSessionRecord) -> Vec<SessionProjection> {
     session
-        .live_participants()
+        .status_visible_participants()
         .into_iter()
         .map(|participant| live_participant_status_projection(&participant))
         .collect()

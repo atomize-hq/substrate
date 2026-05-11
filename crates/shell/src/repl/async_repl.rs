@@ -33,10 +33,11 @@ use crate::execution::agent_inventory::{load_effective_agent_inventory, AgentInv
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::control::spawn_remote_private_prompt_owner;
 use crate::execution::agent_runtime::control::{
-    build_session_resume_extension, invalidate_stale_world_members_after_binding,
-    mark_orchestration_session_failed, mark_runtime_startup_failed, persist_runtime_snapshots,
-    persist_world_binding_authority, private_prompt_request_channel, private_stop_request_channel,
-    prompt_runtime_from_parts, register_private_prompt_transport, register_private_stop_transport,
+    apply_runtime_stop_closeout, build_session_resume_extension,
+    invalidate_stale_world_members_after_binding, mark_orchestration_session_failed,
+    mark_runtime_startup_failed, persist_runtime_snapshots, persist_world_binding_authority,
+    private_prompt_request_channel, private_stop_request_channel, prompt_runtime_from_parts,
+    register_private_prompt_transport, register_private_stop_transport,
     runtime_controls_parent_session, runtime_is_terminal, runtime_stop_transport_ids,
     spawn_local_private_prompt_owner, spawn_local_private_stop_owner, submit_host_prompt_turn,
     HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding, PrivatePromptTransport,
@@ -3079,16 +3080,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                     } else if shutdown_requested
                         && manifest_guard.handle.state == AgentRuntimeSessionState::Stopping
                     {
-                        manifest_guard.transition_state(AgentRuntimeSessionState::Stopped);
-                        manifest_guard.mark_terminal_state("stopped");
-                        manifest_guard.touch_heartbeat();
-                        if controls_parent_session {
-                            orchestration_guard
-                                .transition_state(OrchestrationSessionState::Stopped);
-                            orchestration_guard.mark_terminal("stopped");
-                        } else {
-                            orchestration_guard.touch_active();
-                        }
+                        apply_runtime_stop_closeout(&mut orchestration_guard, &mut manifest_guard);
                     } else if shutdown_requested
                         && manifest_guard.handle.state == AgentRuntimeSessionState::Failed
                     {
@@ -3099,16 +3091,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                     } else if manifest_guard.handle.state == AgentRuntimeSessionState::Invalidated {
                         // Preserve invalidation emitted when the attached control boundary ended.
                     } else if manifest_guard.handle.state == AgentRuntimeSessionState::Stopping {
-                        manifest_guard.transition_state(AgentRuntimeSessionState::Stopped);
-                        manifest_guard.mark_terminal_state("stopped");
-                        manifest_guard.touch_heartbeat();
-                        if controls_parent_session {
-                            orchestration_guard
-                                .transition_state(OrchestrationSessionState::Stopped);
-                            orchestration_guard.mark_terminal("stopped");
-                        } else {
-                            orchestration_guard.touch_active();
-                        }
+                        apply_runtime_stop_closeout(&mut orchestration_guard, &mut manifest_guard);
                     } else if can_park_host_runtime_after_detach(
                         controls_parent_session,
                         &manifest_guard,
@@ -3178,16 +3161,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                         && manifest_guard.handle.state == AgentRuntimeSessionState::Stopping
                         && reason == "cancelled"
                     {
-                        manifest_guard.transition_state(AgentRuntimeSessionState::Stopped);
-                        manifest_guard.mark_terminal_state("stopped");
-                        manifest_guard.touch_heartbeat();
-                        if controls_parent_session {
-                            orchestration_guard
-                                .transition_state(OrchestrationSessionState::Stopped);
-                            orchestration_guard.mark_terminal("stopped");
-                        } else {
-                            orchestration_guard.touch_active();
-                        }
+                        apply_runtime_stop_closeout(&mut orchestration_guard, &mut manifest_guard);
                     } else if shutdown_requested
                         && manifest_guard.handle.state == AgentRuntimeSessionState::Failed
                     {

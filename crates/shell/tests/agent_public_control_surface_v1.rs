@@ -1707,34 +1707,21 @@ fn public_start_rejects_bootstrap_only_split_prompt_flow() {
     ]);
     assert_eq!(
         start_output.status.code(),
-        Some(1),
+        Some(2),
         "public start prompt must fail closed when the backend only performs bootstrap and defers the visible prompt to a later launch: {start_output:?}"
     );
-    let start_records = parse_ndjson_output(&start_output);
-    let start_accepted = find_ndjson_record(&start_records, "accepted");
-    let start_failed = find_ndjson_record(&start_records, "failed");
-    assert_eq!(
-        start_records
-            .first()
-            .and_then(|record| record.get("kind"))
-            .and_then(Value::as_str),
-        Some("accepted"),
-        "split bootstrap start must still emit accepted before the terminal failure envelope: {start_records:?}"
+    assert!(
+        start_output.stdout.is_empty(),
+        "split bootstrap start should fail before emitting a public prompt stream envelope: {start_output:?}"
     );
-    assert_eq!(
-        start_accepted.get("scope").and_then(Value::as_str),
-        Some("host")
-    );
-    assert_eq!(
-        start_failed.get("error_code").and_then(Value::as_str),
-        Some("owner_unreachable")
+    let stderr = stderr_text(&start_output);
+    assert!(
+        stderr.contains("runtime_start_failed"),
+        "split bootstrap start must preserve runtime_start_failed taxonomy: {start_output:?}"
     );
     assert!(
-        start_failed
-            .get("message")
-            .and_then(Value::as_str)
-            .is_some_and(|message| message.contains("startup prompt stream ended before terminal completion")),
-        "split bootstrap start should fail because the first visible prompt never completed on the single startup exec: {start_records:?}"
+        stderr.contains("timed out waiting for authoritative owner-helper attached readiness"),
+        "split bootstrap start should fail because attached truth never materialized for the startup exec: {start_output:?}"
     );
 }
 
@@ -1868,6 +1855,10 @@ fn public_start_reports_runtime_start_failed_for_missing_bootstrap_handle() {
         Some(2),
         "broken bootstrap must fail closed instead of reporting a successful parked session: {start_output:?}"
     );
+    assert!(
+        start_output.stdout.is_empty(),
+        "broken bootstrap must not emit public prompt envelopes when startup ownership never becomes authoritative: {start_output:?}"
+    );
     let stderr = stderr_text(&start_output);
     assert!(
         stderr.contains("runtime_start_failed"),
@@ -1875,7 +1866,7 @@ fn public_start_reports_runtime_start_failed_for_missing_bootstrap_handle() {
     );
     assert!(
         stderr.contains("failed to establish attached control ownership")
-            || stderr.contains("timed out waiting for authoritative owner-helper readiness")
+            || stderr.contains("timed out waiting for authoritative owner-helper attached readiness")
             || stderr.contains("missing an active participant")
             || stderr.contains("owner_unreachable"),
         "broken bootstrap failure should explain the missing ownership/bootstrap continuity: {start_output:?}"

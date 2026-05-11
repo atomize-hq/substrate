@@ -647,19 +647,17 @@ pub(crate) fn wait_for_hidden_owner_helper_readiness(
 ) -> Result<()> {
     let started_at = std::time::Instant::now();
     loop {
-        if store
-            .classify_hidden_owner_helper_launch_readiness(
-                plan.orchestration_session_id(),
-                plan.participant_id(),
-                plan.requires_internal_session_id(),
-            )?
-            .allows_launch()
+        if store.classify_hidden_owner_helper_launch_readiness(
+            plan.orchestration_session_id(),
+            plan.participant_id(),
+            plan.requires_internal_session_id(),
+        )? == super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyAttached
         {
             return Ok(());
         }
         if started_at.elapsed() >= OWNER_HELPER_READY_TIMEOUT {
             anyhow::bail!(
-                "timed out waiting for authoritative owner-helper readiness for orchestration session {}",
+                "timed out waiting for authoritative owner-helper attached readiness for orchestration session {}",
                 plan.orchestration_session_id()
             );
         }
@@ -814,6 +812,30 @@ pub(crate) fn note_runtime_stop_requested(
         (orchestration_guard.clone(), manifest_guard.clone())
     };
     persist_runtime_snapshots(store, &orchestration_snapshot, &manifest_snapshot)
+}
+
+pub(crate) fn apply_runtime_stop_closeout(
+    orchestration_session: &mut OrchestrationSessionRecord,
+    manifest: &mut AgentRuntimeSessionManifest,
+) {
+    manifest.transition_state(AgentRuntimeSessionState::Stopped);
+    manifest.mark_terminal_state("stopped");
+    manifest.touch_heartbeat();
+    if runtime_controls_parent_session(&manifest.handle.role) {
+        orchestration_session.transition_state(OrchestrationSessionState::Stopped);
+        orchestration_session.mark_terminal("stopped");
+    } else {
+        orchestration_session.touch_active();
+    }
+}
+
+pub(crate) fn persist_runtime_stop_closeout(
+    store: &AgentRuntimeStateStore,
+    orchestration_session: &mut OrchestrationSessionRecord,
+    manifest: &mut AgentRuntimeSessionManifest,
+) -> Result<()> {
+    apply_runtime_stop_closeout(orchestration_session, manifest);
+    persist_runtime_snapshots(store, orchestration_session, manifest)
 }
 
 pub(crate) fn private_stop_transport_path(
@@ -2178,10 +2200,19 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        handle_private_prompt_connection, private_prompt_request_channel,
-        validate_public_prompt_command_request, LoadedPublicPrompt, OwnerHelperMode,
-        PrivateStopOutcome, PublicPromptAction, PublicPromptCommandRequest, PublicPromptEnvelope,
+        apply_runtime_stop_closeout, handle_private_prompt_connection,
+        private_prompt_request_channel, validate_public_prompt_command_request, LoadedPublicPrompt,
+        OwnerHelperMode, PrivateStopOutcome, PublicPromptAction, PublicPromptCommandRequest,
+        PublicPromptEnvelope, PURE_AGENT_PROTOCOL,
     };
+    use crate::execution::agent_runtime::{
+        mapping::AgentRuntimeBackendKind,
+        orchestration_session::{OrchestrationSessionRecord, OrchestrationSessionState},
+        session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionState},
+        validator::RuntimeSelectionDescriptor,
+    };
+    use crate::execution::config_model::AgentExecutionScope;
+    use std::path::PathBuf;
     #[cfg(unix)]
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     #[cfg(unix)]
@@ -2203,6 +2234,52 @@ mod tests {
             PrivateStopOutcome::ProtocolError,
         ];
         assert_eq!(outcomes.len(), 4);
+    }
+
+    #[test]
+    fn stop_closeout_helper_converges_on_stopped_terminal_snapshots() {
+        let descriptor = RuntimeSelectionDescriptor {
+            agent_id: "codex".to_string(),
+            backend_id: "cli:codex".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            protocol: PURE_AGENT_PROTOCOL.to_string(),
+            execution_scope: AgentExecutionScope::Host,
+            binary_path: PathBuf::from("/usr/bin/codex"),
+        };
+        let mut manifest = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+            &descriptor,
+            "sess_stop_helper".to_string(),
+            "ash_stop_helper".to_string(),
+            "lease_stop_helper".to_string(),
+        )
+        .expect("orchestrator participant");
+        manifest.transition_state(AgentRuntimeSessionState::Ready);
+        manifest.set_uaa_session_id("uaa_session");
+        manifest.mark_runtime_ownership_retained();
+        let mut orchestration = OrchestrationSessionRecord::new(
+            "sess_stop_helper".to_string(),
+            "trace_session".to_string(),
+            "/workspace".to_string(),
+            &manifest,
+        );
+        orchestration.transition_state(OrchestrationSessionState::Active);
+        orchestration.bind_active_session_handle(manifest.handle.participant_id.clone());
+
+        apply_runtime_stop_closeout(&mut orchestration, &mut manifest);
+
+        assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Stopped);
+        assert_eq!(
+            manifest.internal.termination_reason.as_deref(),
+            Some("stopped")
+        );
+        assert!(!manifest.internal.resume_eligible);
+        assert!(!manifest.internal.attached_client_present);
+        assert_eq!(orchestration.state, OrchestrationSessionState::Stopped);
+        assert!(orchestration.closed_at.is_some());
+        assert_eq!(
+            orchestration.posture,
+            crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture::Terminal
+        );
     }
 
     #[test]

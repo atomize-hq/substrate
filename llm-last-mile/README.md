@@ -61,7 +61,7 @@ This directory contains the reviewed statement-of-work packet for the prerequisi
 The original packet stops before public control-plane productization. The follow-on planning documents for that work are:
 
 - [PLAN-19.md](./PLAN-19.md)
-  - Publicize `substrate agent start|resume|fork|stop` with exact session selectors and a Linux-first fail-closed posture.
+  - Publicize the narrow `substrate agent start|reattach|fork|stop` control plane with exact session selectors, `reattach` as exact attached-owner recovery for the named durable session, and `stop` as the canonical closeout path for attached or parked durable sessions.
 - [ORCH_PLAN-19.md](./ORCH_PLAN-19.md)
   - Parent-frozen execution controller for the `PLAN-19` rollout on `feat/session-centric-state-store`.
 - [PLAN-20.md](./PLAN-20.md)
@@ -77,7 +77,7 @@ The original packet stops before public control-plane productization. The follow
 - [ORCH_PLAN-22.md](./ORCH_PLAN-22.md)
   - Parent-frozen execution controller for the `PLAN-22` rollout on the authoritative shared-owner/member-runtime parity branch.
 - [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](./23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)
-  - Landed lifecycle correction: durable host orchestration sessions now survive clean attached-client exit, retain session-local inbox work under `sessions/<session>/inbox/`, and resume through explicit parked/reattach semantics with terminal delivery after `Accepted`.
+  - Landed lifecycle correction: durable host orchestration sessions now survive clean attached-client exit, retain session-local inbox work under `sessions/<session>/inbox/`, let `status` surface `parked_resumable` and `awaiting_attention`, treat successful `reattach` as durable attached truth for that exact session, keep `stop` as the canonical closeout path for attached or parked durable sessions, and reserve non-routable meaning for `terminal` only.
 
 ## Non-Goals in This Packet
 

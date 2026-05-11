@@ -24,6 +24,43 @@ The execution decision is:
 
 That is the highest honest concurrency for this plan. `agents_cmd.rs`, `state_store.rs`, `control.rs`, `async_repl.rs`, and `agent_dev_support.rs` are one semantic seam under the frozen contract. Splitting them earlier would create merge churn and ambiguous ownership around the same control-truth hotspots. Only after that seam is merged can tests and docs proceed safely in parallel on disjoint surfaces.
 
+## Run Continuation Status
+
+This controller is now a continuation from a previously blocked `p3` run, not a net-new execution.
+
+Current blocked state before continuation:
+
+1. runtime implementation work already landed in:
+   - `crates/shell/src/execution/agents_cmd.rs`
+   - `crates/shell/src/execution/agent_runtime/state_store.rs`
+   - `crates/shell/src/execution/agent_runtime/control.rs`
+   - `crates/shell/src/repl/async_repl.rs`
+2. CLI regression work already landed in:
+   - `crates/shell/tests/agent_public_control_surface_v1.rs`
+3. docs closeout work already landed in:
+   - `llm-last-mile/README.md`
+   - `AGENT_ORCHESTRATION_GAP_MATRIX.md`
+4. the run blocked at `task-durable-host-session-closeout-p3-parent-validation-wall-and-manual-cli`
+5. the blocker was a controller mismatch, not yet a proven runtime defect:
+   - the old manual wall incorrectly required `agent start` to immediately leave `parked_resumable`
+   - the truth record only requires `agent start` to leave one active non-terminal durable session, with immediate posture allowed to be `active_attached` or `parked_resumable`
+6. `PLAN.md` and this controller have now been corrected to match [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md)
+
+Continuation rules:
+
+1. resume from `task-durable-host-session-closeout-p3-parent-validation-wall-and-manual-cli` unless new code drift forces an earlier gate replay
+2. do not rerun completed worker implementation lanes merely because the previous `p3` wall was over-constrained
+3. rerun the parent validation wall under the corrected manual contract
+4. if `p3` passes under the corrected contract, continue directly to `p4`
+5. if `p3` still fails, the new blocker must describe a real runtime or proof defect against the corrected truth, not the old “start must immediately park” assumption
+
+Previously green evidence that does not need to be re-litigated unless drift is suspected:
+
+1. `cargo test -p shell agent_runtime::state_store -- --nocapture`
+2. `cargo test -p shell agent_runtime::control -- --nocapture`
+3. `cargo test -p shell async_repl -- --nocapture`
+4. `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
+
 ## Hard Guards
 
 1. The authoritative integration checkout remains `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/host-orchestrator-durable-session`.
@@ -521,8 +558,8 @@ cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 
 Required proof surface in the test file:
 
-1. `start -> parked_resumable`
-2. parked `status`
+1. `start -> one active durable session` with immediate authoritative posture allowed to be `active_attached` or `parked_resumable`
+2. status shows that same exact session with its real authoritative posture after start and while parked
 3. parked session receives inbox work and normalizes to `awaiting_attention`
 4. `turn` resumes the same exact session
 5. `reattach` succeeds only on durable attached truth
@@ -720,9 +757,10 @@ If any command needs a syntactic adjustment, the parent may substitute the narro
 The parent must rerun the real CLI flow and capture persisted runtime evidence:
 
 ```bash
-# Flow A: parked-session visibility, inbox attention, turn, reattach, attached-stop
+# Flow A: active durable session visibility, parked transition proof, inbox attention, turn, reattach, attached-stop
 substrate agent start --backend <host_backend_id> --prompt "hello" --json
 substrate agent status --json
+# If start remains active_attached, wait for or otherwise prove the same exact session later normalizes to parked_resumable before detached inbox injection.
 <inject one durable inbox item onto the same session and capture persisted session truth>
 substrate agent status --json
 substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json
@@ -741,19 +779,22 @@ substrate agent status --json
 The parent must also prove:
 
 1. one detached inbox item moves the same session to `awaiting_attention`
-2. `status` shows that same session as `awaiting_attention`
-3. persisted runtime truth after `reattach` is durably `active_attached` for that same exact session
-4. attached-session `stop` succeeds while the session is still attached
-5. parked-session `stop` succeeds on a separate exact durable session with no attached owner
-6. broken bootstrap still fails as `runtime_start_failed`
-7. post-`Accepted` helper loss still yields explicit `Failed`
-8. detached-world follow-up still fails closed with reattach guidance
+2. if `start` remained `active_attached`, the same exact session is later proven to normalize to `parked_resumable` before detached inbox proof begins
+3. `status` shows that same session as `awaiting_attention`
+4. persisted runtime truth after `reattach` is durably `active_attached` for that same exact session
+5. attached-session `stop` succeeds while the session is still attached
+6. parked-session `stop` succeeds on a separate exact durable session with no attached owner
+7. broken bootstrap still fails as `runtime_start_failed`
+8. post-`Accepted` helper loss still yields explicit `Failed`
+9. detached-world follow-up still fails closed with reattach guidance
 
 Required final artifacts:
 
 - `manual-start.json`
 - `manual-status-after-start.json`
 - `manual-session-after-start.json`
+- `manual-session-after-parked-transition.json`
+- `manual-status-after-parked-transition.json`
 - `manual-session-after-awaiting-attention.json`
 - `manual-status-after-awaiting-attention.json`
 - `manual-turn.json`
