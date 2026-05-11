@@ -1,44 +1,52 @@
-# PLAN: Fix Host Bootstrap Readiness And Clean-Detach Parking
+<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-host-orchestrator-durable-session-autoplan-restore-20260511-131509.md -->
+# PLAN: Finish The Durable Host-Orchestrator Session Model
 
-Source SOW: [llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)  
-Prior corrective slice: [llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
-Durability ADR: [ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
-Original failing path anchor: [llm-last-mile/PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-22.md)  
+Source SOW: [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md)  
+Primary landed precursor: [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
+Corrective precursor: [24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)  
+Caller-surface contract: [20-public-non-interactive-agent-caller-surface.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/20-public-non-interactive-agent-caller-surface.md)  
+Packet index: [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md)  
+Supersedes: previous root `PLAN.md`, which was still scoped to the slice-24 bootstrap seam instead of the full durable-session truth record  
 Branch: `feat/host-orchestrator-durable-session`  
 Base branch: `main`  
-Plan type: runtime correction slice, no UI scope  
-Review posture: unified implementation plan, tightened to `/autoplan` completeness and `/plan-eng-review` execution rigor  
-Status: execution-ready planning pass on 2026-05-10
+Plan type: runtime correction and contract closeout, no UI scope, developer-facing CLI/runtime scope  
+Status: fresh unified execution plan, 2026-05-11
 
 ## Objective
 
-Fix the original host bootstrap smoke failure without backing out slice `23`.
+Finish the host-orchestrator durable session model so the repository behavior matches the truth record exactly.
 
-This slice is complete only when all of the following are true:
+This plan is complete only when all of the following are true:
 
-1. `substrate agent start --backend <backend_id> --prompt ...` succeeds when bootstrap establishes a valid resumable host session and then the bootstrap control stream ends cleanly.
-2. That clean bootstrap exit normalizes the session to `parked_resumable` or `awaiting_attention`, never `invalidated`, `failed`, or otherwise terminal, when the persisted continuity contract is satisfied.
-3. `substrate agent turn --session <id> --backend <backend_id> --prompt ...` succeeds against the exact parked session created by that bootstrap path.
-4. `substrate agent reattach --session <id>` succeeds against that same parked session and restores attached ownership without submitting a prompt.
-5. Truly broken bootstrap still fails closed as `runtime_start_failed`.
-6. The durable posture, participant attachment metadata, and session-local inbox from slice `23` remain authoritative.
-7. The public prompt bridge still guarantees explicit `Completed` or `Failed` after `Accepted`.
+1. `substrate agent start --backend <backend_id> --prompt ...` creates or binds one durable Substrate-owned orchestration session and uses the user prompt as the true initial backend prompt.
+2. That orchestration session remains open after the initial backend run exits cleanly. Clean detach is not terminal by itself.
+3. `active_attached`, `parked_resumable`, and `awaiting_attention` are all treated as active durable-session states, not three different flavors of maybe-alive.
+4. `substrate agent turn --session <id> --backend <backend_id> --prompt ...` resumes prompt-taking against that same exact durable session.
+5. `substrate agent reattach --session <id>` only reports success when attached host ownership was actually restored for that same exact durable session.
+6. `substrate agent stop --session <id>` stops the durable session cleanly whether the session is attached or parked.
+7. `substrate agent status --json` surfaces parked durable sessions as real active sessions instead of hiding them because no live owner process is attached.
+8. Durable inbox items continue to land, persist, and drive `awaiting_attention` while no host client is attached.
+9. Broken startup still fails closed as `runtime_start_failed`, and the public prompt bridge still guarantees `Accepted -> Completed|Failed`.
 
 ## Plan Summary
 
-This is not a new architecture slice. The durable session model already exists. The remaining bug is that bootstrap still trusts transient attached-process liveness more than persisted orchestration truth.
+The architecture is not missing. The contract is partially landed and still inconsistent at the public control edges.
 
-Today the runtime can model parked sessions and resume synthetic parked fixtures, but the real bootstrap path still has two bad assumptions:
+What is already true:
 
-1. readiness waits for attached-live ownership in [`hidden_owner_helper_launch_ready(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:924),
-2. clean control-stream exit after continuity exists still invalidates in [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:7505).
+1. start now uses the user prompt as the real initial prompt,
+2. clean bootstrap can park instead of invalidating,
+3. `turn` can resume the same parked session,
+4. durable inbox records and detached postures exist in the state store.
 
-The correction is one explicit contract, applied everywhere that matters:
+What is still wrong:
 
-1. define one shared notion of valid detached host continuity,
-2. make bootstrap readiness accept that continuity,
-3. make bootstrap teardown park or fail from that same contract,
-4. prove the exact CLI bootstrap path with regression tests instead of synthetic-only fixtures.
+1. `reattach` can claim success before attached ownership is durably re-established,
+2. `stop` still assumes there is a reachable live owner process,
+3. `status` still prefers live-participant projection and can under-represent parked truth,
+4. parked inbox responsibility exists in pieces but is not proven as the operational source of truth end to end.
+
+This plan fixes those seams by making every public control surface read session truth first and transport truth second.
 
 ## Locked Starting State
 
@@ -46,403 +54,499 @@ The correction is one explicit contract, applied everywhere that matters:
 
 | Sub-problem | Existing code | Decision |
 | --- | --- | --- |
-| Public root start surface | [`run_start(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:301) | Reuse. No new verb. |
-| Public follow-up and reattach surfaces | [`run_turn(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:324), [`run_reattach(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:384) | Reuse. Tighten behavior only. |
-| Hidden owner-helper readiness poll | [`wait_for_hidden_owner_helper_readiness(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs:466) | Reuse the poll loop. Change the predicate. |
-| Canonical bootstrap readiness predicate | [`hidden_owner_helper_launch_ready(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:924) | Rewrite its truth model. |
-| Persisted contract and invariant enforcement from slice `23` | [`validate_runtime_contract(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2124) | Reuse. Do not invent a second contract. |
-| Session posture primitives | [`mark_parked_resumable(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs:178), [`mark_awaiting_attention(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs:187) | Reuse. Drive them from the corrected classifier. |
-| Existing explicit parking path | [`park_host_orchestrator_runtime(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:5012) | Reuse or share logic with bootstrap teardown. |
-| Public prompt bridge | [`run_public_prompt_command(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs:1063) | Reuse. Keep terminal-delivery guarantee. |
-| Detached-world fail-closed turn behavior | [`run_turn(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:324) | Reuse exactly. |
-| Public control integration harness | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | Reuse and extend with the real bootstrap regression. |
-| Existing failing lifecycle regression | [`start_host_orchestrator_runtime_invalidates_when_attached_control_exits()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs:7505) | Replace with the corrected expected behavior. |
+| Public root start surface | [`run_start(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Reuse. No new verb. |
+| Exact follow-up prompt surface | [`run_turn(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Reuse. Preserve exact `(session, backend)` targeting. |
+| Current reattach surface | [`run_reattach(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Keep the verb. Tighten success semantics. |
+| Current stop surface | [`run_stop(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Keep the verb. Replace live-owner-only assumption. |
+| Current status surface | [`build_status_report(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Reuse the report shape. Change parked-session projection truth. |
+| Session discovery and strict linkage | [`load_session(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs), [`resolve_public_control_target(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse. Expand control posture handling. |
+| Detached continuity rules for bootstrap | [`classify_hidden_owner_helper_launch_readiness(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | Keep landed bootstrap fix. Use the same truth model elsewhere. |
+| Detached parking helpers | [`park_host_orchestrator_runtime(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs), [`build_parked_host_runtime_snapshots(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | Reuse. Do not invent a second parked-state writer. |
+| Durable inbox persistence | [`persist_inbox_item(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs), [`persist_runtime_alert_for_dev_support(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs) | Reuse. Prove it operationally for parked sessions. |
+| Posture primitives | [`mark_active_attached(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs), [`mark_parked_resumable(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs), [`mark_awaiting_attention(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs) | Reuse exactly. |
+| Public prompt bridge invariant | [`run_public_prompt_command(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) | Preserve `Accepted -> Completed|Failed`. |
 
-### Exact remaining defect
+### Exact remaining gaps
 
-1. `run_start(...)` launches the helper, then waits for readiness before prompt submission.
-2. Readiness still requires authoritative live ownership and owner-process liveness.
-3. A `codex exec` style backend can emit the session handle and internal session id, then end the bootstrap control stream cleanly.
-4. The bootstrap teardown path still interprets that clean stream end as invalidation for host orchestrators.
-5. The explicit parking path already exists, but bootstrap teardown does not consistently route through it.
-6. Current tests prove parked-session semantics mostly from synthetic parked state, not from the original failing bootstrap path.
-
-### Scope decision
-
-This remains one correction slice. Do not split it into "readiness first" and "teardown later." One half without the other leaves the runtime internally contradictory.
+| Gap | Current behavior | Why it is still wrong |
+| --- | --- | --- |
+| `reattach` is not fully landed | `run_reattach(...)` returns success immediately after helper launch | The truth doc says success means attached ownership was actually restored, not that a helper briefly existed. |
+| `stop` is still attached-owner-centric | `run_stop(...)` resolves only a live owner and uses private stop transport | Parked durable sessions should still stop cleanly. Requiring a live owner means the durable session is not actually authoritative. |
+| `status` is still live-biased | `build_status_report(...)` primarily projects live participants and uses trace fallback for gaps | Parked sessions are valid active sessions and should be shown from authoritative session truth, not as best-effort leftovers. |
+| Parked durable responsibility is under-proven | Inbox persistence exists, but not as a fully validated parked-session operational path | The truth doc explicitly says parked orchestration authority is not fully proven while `reattach`, `stop`, and `status` still disagree with the model. |
 
 ## Scope Lock
 
 ### In scope
 
-1. Reclassify hidden owner-helper startup readiness so valid parked host continuity counts as ready.
-2. Route clean bootstrap control-stream exit through park-vs-fail classification instead of unconditional invalidation.
-3. Align event-task and completion-task bootstrap teardown so race ordering cannot reintroduce invalidation.
-4. Align read-side posture and status projection with the corrected startup contract.
-5. Add real bootstrap-path regression tests for `start`, `turn`, and `reattach`.
-6. Tighten docs and plan references that still imply attached-live ownership is required after bootstrap.
+1. Make `reattach` prove durable attached ownership before returning success.
+2. Make `stop` session-centric so parked durable sessions stop cleanly without needing a live owner.
+3. Make `status` session-centric so parked active sessions stay visible.
+4. Prove that parked sessions can own durable inbox work and normalize to `awaiting_attention`.
+5. Preserve landed `start` and `turn` semantics, including exact session targeting and fail-closed world-member follow-up.
+6. Add regression coverage for the exact public CLI flows: `start`, `turn`, `reattach`, `stop`, `status`, inbox-driven posture changes.
+7. Update docs that still imply durable truth depends on an attached live owner process.
 
 ### NOT in scope
 
-1. New public verbs or selector changes.
-2. New inbox product UX such as listing or browsing inbox items.
-3. Changing the durable inbox envelope again.
-4. Detached-world recovery broadening.
-5. Reworking compaction policy.
-6. Backing out posture, attachment, or inbox fields from slice `23`.
-7. Platform broadening beyond keeping current Linux and macOS behavior compile-safe.
+1. New public verbs or UX for browsing inbox items.
+2. A new timeout or stale-session lifecycle policy.
+3. Reworking the durable inbox schema or artifact layout.
+4. Broadening world-member detached recovery beyond the existing fail-closed contract.
+5. Any rollback of slice-23 posture, participant, or inbox fields.
+6. Platform expansion beyond keeping current Linux and macOS behavior compile-safe.
 
 ## Step 0: Scope Challenge
 
 ### 0A. What already solves part of the problem
 
-1. Persisted posture and participant resumability already exist. The repo does not need a second state model.
-2. Exact `(session, backend)` routing already exists for `turn`.
-3. Explicit `parked_resumable` and `awaiting_attention` normalization already exist in session state.
-4. Public `reattach` already restores an owner loop for an orphaned authoritative session.
-5. Detached-world follow-up already fails closed with reattach guidance.
-
-What is missing is that bootstrap success is still judged with the old attached-live standard.
+1. The session-centric state store already persists the real durable authority under `sessions/<orchestration_session_id>/`.
+2. Detached postures already exist and are validated by session invariants.
+3. `turn` already uses exact session-plus-backend targeting and already rejects fuzzy recovery.
+4. Parked inbox items already drive `pending_inbox_count` and detached posture normalization.
+5. Bootstrap readiness already learned the right lesson once: persisted continuity can outrank process liveness.
 
 ### 0B. Minimum honest diff
 
-The minimum honest implementation touches these primary modules:
+The minimum honest implementation touches these modules:
 
-1. [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-2. [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
-3. [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
-4. [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
-5. targeted tests in [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) and inline module tests
-6. focused doc updates after behavior is proven
+1. [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+2. [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+3. [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
+4. [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+5. targeted tests in [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) plus inline runtime/state-store tests
+6. focused doc updates in [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md), [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md), and this root plan
 
-Anything smaller leaves readiness, teardown, or regression proof ambiguous.
+Anything smaller leaves either reattach, stop, status, or parked responsibility ambiguous.
 
 ### 0C. Complexity check
 
-This is above "tiny patch" size, but it is not overbuilt if the implementation stays local and explicit:
+This is a medium correction slice. That is fine if the implementation stays boring:
 
 1. no new crate,
-2. no new public command surface,
-3. no new background reconciler,
-4. no second persisted authority,
-5. no generic lifecycle framework.
+2. no new background daemon,
+3. no new persisted authority model,
+4. no new public CLI verb,
+5. no second detached-session state machine.
 
 ### 0D. Search and reuse check
 
-1. **[Layer 1]** Reuse the existing persisted contract from slice `23` instead of inventing new detached-session fields.
-2. **[Layer 1]** Reuse the existing parking helpers and invariant checks.
-3. **[Layer 1]** Reuse the existing public control harness and real CLI flows for regression coverage.
-4. **[EUREKA]** The correction is not "make startup more tolerant." It is "judge startup from persisted continuity truth, not process liveness."
+1. **[Layer 1]** Reuse the landed detached continuity and parked snapshot helpers. Do not re-express the same truth in a new helper tree.
+2. **[Layer 1]** Reuse existing durable inbox mutation flow. Do not create a side-channel counter or shadow queue.
+3. **[Layer 1]** Reuse current public CLI verbs and exact-session resolution.
+4. **[EUREKA]** The core bug is not “reattach/stop/status each need a fix.” The shared bug is “public control paths still privilege live-owner transport over authoritative durable session truth.”
 
 ### 0E. TODOS cross-reference
 
-There is no root `TODOS.md` today. Deferred work is captured in `NOT in scope` and `Deferred follow-ups` below instead of creating a new project convention inside this slice.
+There is no root `TODOS.md` in this repo today. Deferred work stays explicit in `NOT in scope` and `Deferred follow-ups` instead of silently inventing a new backlog surface during this correction slice.
 
-### 0F. Completeness check
+### 0F. Completeness and distribution
 
 Shortcut versions are not acceptable:
 
-1. changing readiness without changing teardown is incomplete,
-2. changing teardown without a shared continuity helper is race-prone,
-3. fixing both without a real bootstrap regression test is hand-waving,
-4. claiming success from synthetic parked fixtures alone is not enough.
+1. fixing `reattach` without `stop` still leaves parked sessions half-real,
+2. fixing `stop` without `status` still leaves operators blind,
+3. fixing public control without inbox proof still leaves the parked authority story unproven,
+4. fixing behavior without CLI regressions is just optimism with line numbers.
 
-## Frozen Runtime Contract
+No new binary, package, or container artifact is introduced here. Distribution work is not part of this slice.
+
+## Frozen Contract
 
 If implementation wants to violate any rule in this section, stop and revise the plan first.
 
-### 1. Valid detached host continuity
+### 1. Durable authority
 
-Bootstrap may be treated as successfully established when all of the following are true:
+The durable authority is:
 
-1. the orchestration session remains non-terminal,
-2. `active_session_handle_id` still points at the authoritative host participant,
-3. `attached_participant_id == null`,
-4. persisted posture is `parked_resumable` when `pending_inbox_count == 0`, or `awaiting_attention` when `pending_inbox_count > 0`,
-5. the authoritative host participant remains `resume_eligible == true`,
-6. the authoritative host participant has `attached_client_present == false`,
-7. `uaa_session_id` exists when the backend resume path requires it,
-8. no session or participant field marks the session invalidated, stopped, failed, or otherwise terminal.
+1. the orchestration session record,
+2. the authoritative participant linkage,
+3. the durable inbox and pending-count state,
+4. the persisted routing and lifecycle metadata.
 
-This is the exact proof needed for clean bootstrap exit to count as success.
+The durable authority is not:
 
-### 2. Clean bootstrap control-stream end
+1. one current helper PID,
+2. one current `codex exec` process,
+3. one active private stop transport socket.
 
-When continuity has already been established and the bootstrap control stream ends cleanly:
+### 2. Active session postures
 
-1. attachment diagnostics are released,
-2. session `state` remains `Active`,
-3. posture normalizes to `parked_resumable` or `awaiting_attention`,
-4. the authoritative participant remains `resume_eligible == true`,
-5. no `Invalidated`, `Failed`, or terminal transition occurs solely because the stream ended.
+The session remains active and durable in all three of these postures:
 
-### 3. Broken startup still fails closed
+1. `active_attached`,
+2. `parked_resumable`,
+3. `awaiting_attention`.
 
-Clean exit is still failure when any required resumability proof is missing, including:
+`terminal` is the only posture family that stops routability.
 
-1. no authoritative participant,
-2. missing required `uaa_session_id`,
-3. mismatched `active_session_handle_id`,
-4. non-host-routable or terminal authoritative participant,
-5. `resume_eligible == false`,
-6. detached posture that disagrees with pending inbox truth,
-7. already-terminal session lifecycle state.
+### 3. Reattach success semantics
 
-### 4. Public bridge invariant
+`substrate agent reattach --session <id>` may only report success when all of the following are durably true for that exact orchestration session:
 
-The public prompt bridge contract from slice `23` remains:
+1. session state is still `Active`,
+2. session posture is `active_attached`,
+3. `attached_participant_id` points at the newly attached retained owner,
+4. that participant reports `attached_client_present == true`,
+5. that participant is authoritative-live for the session,
+6. the resumed owner has not already fallen back to a detached posture before command completion.
+
+If the helper launches and immediately detaches again, the command failed. “Helper spawned” is not a success condition.
+
+### 4. Stop semantics
+
+`substrate agent stop --session <id>` must stop the durable session model, not just the live-owner transport.
+
+Rules:
+
+1. attached sessions may still use private stop transport,
+2. parked or `awaiting_attention` sessions must still stop cleanly through authoritative durable-state closeout,
+3. stale linkage or already-terminal sessions still fail closed,
+4. successful stop must drive the session to terminal persisted truth, not merely return transport success.
+
+### 5. Status semantics
+
+`substrate agent status --json` must surface active durable sessions from authoritative session truth.
+
+That means:
+
+1. a parked host session still appears as a real active session,
+2. `awaiting_attention` remains visible with pending inbox truth,
+3. live participant rows may enrich projection, but cannot be the only path to visibility,
+4. torn or malformed roots may degrade to warnings, but valid parked sessions must not disappear.
+
+### 6. Parked inbox semantics
+
+While detached:
+
+1. inbox items still persist under the authoritative session root,
+2. `pending_inbox_count` stays authoritative,
+3. zero pending items normalizes to `parked_resumable`,
+4. pending items normalize to `awaiting_attention`,
+5. later `turn`, `reattach`, or `stop` still target that same durable session.
+
+### 7. Prompt-bridge invariant
+
+The public prompt bridge invariant remains:
 
 1. after `Accepted`, emit `Completed` or `Failed`,
-2. parked continuity is runtime state, not an operator-visible third terminal envelope,
-3. EOF or helper disappearance after `Accepted` is a bug and must render `Failed`.
-
-### 5. `turn` and `reattach` semantics
-
-This slice preserves:
-
-1. `turn` as prompt-taking resume against exact `(orchestration_session_id, backend_id)`,
-2. `reattach` as attached-owner recovery only,
-3. detached-world follow-up as fail closed.
+2. parked continuity is runtime state, not a third terminal envelope,
+3. silent EOF after `Accepted` is still a bug and must render explicit `Failed`.
 
 ## Architecture Review
 
 ### Architecture thesis
 
-Persist the truth you want bootstrap to trust.
+Public control should resolve through the session record first, then pick the transport or state transition that matches that session posture.
 
-The runtime already stores enough information to know that a host session is detached but resumable. The bug is that bootstrap still trusts transient attachment liveness more than that persisted truth.
+Today some codepaths still do the opposite. That is why parked sessions are “real” in one command and “gone” in another.
 
-### Current broken lifecycle
+### Current broken control model
 
 ```text
-CURRENT BOOTSTRAP MODEL
-=======================
-run_start()
-    |
-    +--> launch hidden owner-helper
-    |
-    +--> wait_for_hidden_owner_helper_readiness()
-           |
-           \--> hidden_owner_helper_launch_ready()
-                  requires:
-                  - session Active
-                  - exact participant selected
-                  - participant authoritative-live
-                  - owner process alive
-                  - internal session id present when required
-    |
-    +--> helper exits cleanly after continuity exists
-           |
-           \--> bootstrap teardown invalidates
-                  because attached control ended
+CURRENT PUBLIC CONTROL MODEL
+============================
+durable session record exists
+        |
+        +--> turn
+        |     -> mostly session-centric, exact backend targeting
+        |
+        +--> reattach
+        |     -> spawn helper
+        |     -> report success too early
+        |
+        +--> stop
+        |     -> require reachable live owner
+        |     -> parked session looks owner_unreachable
+        |
+        \--> status
+              -> prefer live participant projection
+              -> parked session can fade behind fallback logic
 ```
 
-### Target lifecycle
+### Target durable control model
 
 ```text
-TARGET BOOTSTRAP MODEL
-======================
-run_start()
+TARGET PUBLIC CONTROL MODEL
+===========================
+authoritative session record
+        |
+        +--> posture = active_attached
+        |     -> turn
+        |     -> reattach rejects "already owned"
+        |     -> stop uses private owner transport
+        |     -> status shows active_attached
+        |
+        +--> posture = parked_resumable
+        |     -> turn resumes exact session
+        |     -> reattach restores attached ownership
+        |     -> stop closes durable session directly
+        |     -> status shows parked_resumable
+        |
+        +--> posture = awaiting_attention
+        |     -> same exact session remains routable
+        |     -> inbox work remains durable
+        |     -> stop still closes durable session directly
+        |     -> status shows awaiting_attention
+        |
+        \--> posture = terminal
+              -> turn / reattach / stop fail closed or no-op by contract
+```
+
+### Durable session state machine
+
+```text
+HOST DURABLE SESSION STATE MACHINE
+==================================
+active_attached
     |
-    +--> launch hidden owner-helper
+    +-- clean owner detach, no pending inbox --> parked_resumable
     |
-    +--> wait_for_hidden_owner_helper_readiness()
-           |
-           \--> readiness = attached-live
-                          OR valid detached continuity
+    +-- clean owner detach, pending inbox > 0 --> awaiting_attention
     |
-    +--> helper exits cleanly after continuity exists
-           |
-           \--> shared bootstrap teardown classifier
-                  |
-                  +--> continuity valid, no pending inbox
-                  |       -> state Active
-                  |       -> posture parked_resumable
-                  |
-                  +--> continuity valid, pending inbox > 0
-                  |       -> state Active
-                  |       -> posture awaiting_attention
-                  |
-                  \--> continuity invalid or incomplete
-                          -> runtime_start_failed / invalidated
+    +-- explicit stop --> terminal
+    |
+    \-- real runtime failure --> terminal
+
+parked_resumable
+    |
+    +-- reattach succeeds --> active_attached
+    +-- turn succeeds --> active_attached (then may park again later)
+    +-- inbox item arrives --> awaiting_attention
+    \-- explicit stop --> terminal
+
+awaiting_attention
+    |
+    +-- inbox drained and still detached --> parked_resumable
+    +-- reattach succeeds --> active_attached
+    +-- turn succeeds --> active_attached
+    \-- explicit stop --> terminal
 ```
 
 ### Dependency graph
 
 ```text
-BOOTSTRAP CORRECTION GRAPH
-==========================
+DURABLE CONTROL CLOSEOUT GRAPH
+==============================
 agents_cmd.rs
     |
-    \--> control.rs
+    +--> reattach result semantics
+    +--> stop resolution
+    +--> status report assembly
+    |
+    +--> state_store.rs
+    |     |
+    |     +--> exact session resolution
+    |     +--> posture classification
+    |     +--> durable inbox truth
+    |     \--> parked session projection helpers
+    |
+    +--> control.rs
+    |     |
+    |     +--> private stop for attached owners
+    |     \--> prompt bridge terminal delivery
+    |
+    \--> async_repl.rs
           |
-          +--> state_store.rs
-          |     |
-          |     +--> readiness classification
-          |     +--> continuity contract helper
-          |     \--> posture invariant validation
-          |
-          \--> async_repl.rs
-                |
-                +--> bootstrap event-task teardown
-                +--> bootstrap completion-task teardown
-                \--> parking normalization
+          +--> parked snapshot application
+          +--> retained owner lifecycle
+          \--> reattach stabilization / closeout helpers
 ```
 
 ### Production failure scenarios
 
 | Codepath | Real failure | Planned handling |
 | --- | --- | --- |
-| bootstrap readiness | valid detached continuity never counts as ready, `start` times out or fails | accept parked continuity when persisted invariants are satisfied |
-| bootstrap event-task teardown | clean helper exit invalidates a valid session | route through shared park-vs-fail classification |
-| bootstrap completion-task race | event task parks but completion path later fails the same session | use the same continuity decision in both paths |
-| posture normalization | detached session with pending items still reports `parked_resumable` | normalize to `awaiting_attention` from authoritative pending count |
-| bridge terminal delivery | `Accepted` is emitted, then stream dies and user sees silence | render explicit `Failed` |
-| detached world protection | parked-host logic accidentally broadens world follow-up | preserve explicit fail-closed branch in `run_turn(...)` |
+| reattach | helper spawns, command returns success, session is parked again one tick later | add a durable attached-success barrier before `reattach` returns success |
+| stop | parked session reports `owner_unreachable` forever | split attached-stop from durable parked-stop |
+| status | active parked session disappears because there is no live participant row | build a parked-session projection from the authoritative session record |
+| inbox | durable inbox item lands but operator still sees parked instead of attention-needed | assert status projection and posture both follow authoritative `pending_inbox_count` |
+| bridge | prompt accepted, helper disappears, caller sees silence | preserve explicit `Failed` after `Accepted` |
+| world follow-up | parked-host fixes accidentally relax detached world-member fail-closed behavior | keep world-member detached follow-up unchanged and covered by regression tests |
 
-## File and Symbol Change Map
-
-This section is binding. If implementation expands beyond this list, re-check scope before proceeding.
+## File And Symbol Change Map
 
 | File | Symbols / seams | Required change |
 | --- | --- | --- |
-| [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | `hidden_owner_helper_launch_ready(...)`, `validate_runtime_contract(...)`, posture/readiness helpers | Add one shared detached-continuity helper and use it for readiness and classification inputs. |
-| [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) | `wait_for_hidden_owner_helper_readiness(...)`, `run_public_prompt_command(...)` | Preserve poll loop, consume the corrected readiness predicate, keep `Accepted -> Completed|Failed`. |
-| [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | bootstrap event-task teardown, bootstrap completion-task teardown, `park_host_orchestrator_runtime(...)` | Route clean bootstrap exit through shared park-vs-fail classification. Keep explicit failure for broken continuity. |
-| [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | `run_start(...)`, `run_turn(...)`, `run_reattach(...)` | Align public flows with the corrected readiness/parking contract. No CLI surface changes. |
-| [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | start/turn/reattach integration coverage | Add the real bootstrap regression path. |
-| Inline tests | `state_store.rs`, `control.rs`, `async_repl.rs` | Add contract, race, and bridge guard coverage. |
+| [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | `run_reattach(...)`, `run_stop(...)`, `build_status_report(...)`, projection helpers | Reattach must wait for durable attached truth. Stop must support parked sessions. Status must project parked sessions from session truth. |
+| [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | `resolve_public_control_target(...)`, session loading/building, posture helpers, inbox helpers | Add one shared session-control posture contract used by reattach, stop, and status. Preserve exact linkage checks. |
+| [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) | private stop transport, prompt bridge helpers | Keep private stop for attached sessions. Preserve explicit terminal delivery after `Accepted`. |
+| [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | retained owner lifecycle, parking helpers | Reuse parked snapshot flow. Add any owner-stabilization or durable closeout helper needed so `reattach` and parked `stop` are not transport illusions. |
+| [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | public CLI integration coverage | Add `start -> status -> turn -> reattach -> stop` durable-session regression flow. |
+| Inline tests | `state_store.rs`, `control.rs`, `async_repl.rs` | Add posture, stop, status, inbox, and prompt-bridge regressions. |
 
 ## Detailed Execution Plan
 
-### Workstream 1: Freeze the shared continuity contract
+### Workstream 1: Freeze one session-control posture contract
 
 Primary modules:
 
 1. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-2. [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
+2. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
 
 Implement:
 
-1. factor one shared helper that decides whether persisted host continuity is sufficient for bootstrap success,
-2. update `hidden_owner_helper_launch_ready(...)` to accept either attached-live ownership or valid detached continuity,
-3. keep the `require_internal_session_id` gate and apply it to the detached path too,
-4. keep readiness false for terminal, mismatched, or non-resumable session state.
+1. add one explicit helper that classifies session control posture from authoritative session state plus authoritative participant linkage,
+2. make that helper the shared truth for `reattach`, `stop`, and parked status projection,
+3. keep exact-session resolution strict,
+4. keep world-sensitive posture fail-closed where already required.
 
 Exit criteria:
 
-1. a cleanly detached but resumable host session passes readiness,
-2. missing `uaa_session_id` still blocks readiness when required,
-3. readiness no longer depends on `owner_process_is_alive(...)` once persisted continuity is valid.
+1. the code has one obvious answer to “is this durable session attached, parked, attention-needed, or terminal?”,
+2. public control paths stop re-deriving that truth ad hoc,
+3. no helper falls back to PID liveness alone when the session record already says more.
 
-### Workstream 2: Rewrite bootstrap teardown classification
-
-Primary modules:
-
-1. [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
-2. any shared helpers added in [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-
-Implement:
-
-1. replace unconditional host invalidation on clean bootstrap stream end with shared park-vs-fail classification,
-2. route the completion-side startup-failure path through that same classification so event/completion ordering cannot diverge,
-3. preserve invalidation for genuinely broken startup and for terminal lifecycle conditions,
-4. reuse the existing parking semantics instead of inventing a second parking path.
-
-Exit criteria:
-
-1. `"shell-owned orchestrator control stream ended before completion observation"` is fatal only when continuity is not valid,
-2. valid clean detach normalizes to `parked_resumable` or `awaiting_attention`,
-3. event-task and completion-task teardown make the same decision for the same persisted state.
-
-### Workstream 3: Align public command behavior and status projection
+### Workstream 2: Make `reattach` prove actual attachment
 
 Primary modules:
 
 1. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
-2. [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
-3. read-side helpers in [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+2. [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+3. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
 
 Implement:
 
-1. ensure `run_start(...)` can proceed when continuity is valid even if the helper is already detached,
-2. keep `run_turn(...)` resuming exact parked host sessions only, no fuzzy recovery,
-3. keep detached-world follow-up fail closed,
-4. ensure read-side posture classification honors authoritative persisted posture and pending inbox count, not attachment liveness alone,
-5. keep `runtime_start_failed` taxonomy aligned with the corrected bootstrap contract.
+1. keep the hidden owner-helper resume path,
+2. add a stabilization barrier so `run_reattach(...)` only returns success after the resumed session is durably `active_attached`,
+3. fail if the helper launches and immediately parks again before command completion,
+4. preserve non-prompt-taking semantics and exact-session recovery.
 
 Exit criteria:
 
-1. public `start` succeeds on the original manual failing path,
-2. public `turn` works against the exact session created by that path,
-3. public `reattach` works against the exact session created by that path,
-4. broken bootstrap still emits explicit failure.
+1. successful `reattach` means attached ownership is actually restored,
+2. failed `reattach` never returns a false “active” JSON result,
+3. the exact parked session remains the recovery target.
 
-### Workstream 4: Replace synthetic-only proof with real regression coverage
+### Workstream 3: Make `stop` session-centric
 
 Primary modules:
 
-1. [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
-2. [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
-3. targeted unit tests in [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-4. targeted tests in [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
+1. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+2. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+3. [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
+4. [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
 
 Implement:
 
-1. replace the invalidation regression with a parked bootstrap regression,
-2. add a real public `start` test where a fake host backend emits valid resumability metadata and then exits cleanly,
-3. add a follow-up `turn` test against the parked session produced by that real bootstrap,
-4. add a follow-up `reattach` test against that same parked session,
-5. add a guard test for genuinely broken startup without resumability proof,
-6. keep synthetic parked-session tests as support, not as the only proof.
+1. keep private stop transport for truly attached sessions,
+2. add a parked-session stop path that closes the durable session from authoritative runtime state without requiring a reachable live owner,
+3. make both paths converge on one terminal session-closeout helper so the persisted end state is identical,
+4. preserve strict stale-linkage failure instead of guessing.
 
 Exit criteria:
 
-1. the original manual smoke path is now proven in tests,
-2. synthetic parked fixtures remain green,
-3. the old invalidation assertion is gone.
+1. parked sessions stop cleanly,
+2. attached sessions still stop cleanly,
+3. successful stop ends in authoritative terminal persisted truth,
+4. `owner_unreachable` is reserved for real failures, not valid parked sessions.
 
-### Workstream 5: Docs closeout
+### Workstream 4: Make `status` reflect durable parked truth
+
+Primary modules:
+
+1. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+2. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+
+Implement:
+
+1. surface parked and attention-needed sessions from authoritative session records even when no live participant row exists,
+2. preserve live participant rows as enrichments, not the sole visibility path,
+3. preserve degraded warnings for torn roots,
+4. ensure parked-session status surfaces the real posture and session id instead of vanishing into trace fallback behavior.
+
+Exit criteria:
+
+1. valid parked sessions are visible in `agent status --json`,
+2. `awaiting_attention` is visible when pending inbox work exists,
+3. status remains strict about malformed linkage while still readable for valid detached sessions.
+
+### Workstream 5: Prove parked inbox responsibility operationally
+
+Primary modules:
+
+1. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+2. [`agent_dev_support.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs)
+3. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+
+Implement:
+
+1. add regression proof that a parked session can receive a durable inbox item while detached,
+2. assert `pending_inbox_count` increments and posture becomes `awaiting_attention`,
+3. assert `status` shows that same session as `awaiting_attention`,
+4. assert later `turn`, `reattach`, or `stop` still operate on that exact session.
+
+Exit criteria:
+
+1. inbox work is not just stored, it is operationally part of the parked durable session model,
+2. detached session truth remains internally consistent across store, status, and control surfaces.
+
+### Workstream 6: Replace “looks right” with public CLI proof
+
+Primary modules:
+
+1. [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
+2. inline tests in runtime/state-store modules
+
+Implement:
+
+1. add a real CLI regression that proves `start` yields a parked durable session,
+2. add `status` proof on that same session while parked,
+3. add `turn` proof on that same session,
+4. add `reattach` proof on that same session,
+5. add `stop` proof on that same session,
+6. add parked-inbox proof for `awaiting_attention`,
+7. keep broken bootstrap fail-closed and post-`Accepted` explicit failure coverage.
+
+Exit criteria:
+
+1. the durable-session truth is proven from the actual public CLI surface,
+2. synthetic fixtures remain support evidence, not the main proof.
+
+### Workstream 7: Docs closeout
 
 Likely docs:
 
-1. [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
-2. [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md)
+1. [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md)
+2. [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
 3. this root [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)
 
 Implement:
 
-1. update docs that still imply bootstrap success requires a continuously attached live owner,
-2. clarify the distinction between successful parked bootstrap, real startup failure, and post-`Accepted` terminal failure,
-3. update any nearby ASCII diagrams that would become stale.
+1. remove any remaining wording that implies parked means gone,
+2. clarify that `reattach` success means attached truth, not helper launch,
+3. clarify that `stop` is the closeout path for attached and parked durable sessions,
+4. update nearby ASCII diagrams if they become stale.
 
 Exit criteria:
 
-1. repo truth matches code truth,
-2. no doc claims slice `24` is solved by synthetic parked fixtures alone.
+1. repo docs match runtime truth,
+2. no doc quietly preserves the attached-live-only mental model.
 
 ## Code Quality Review
 
 ### DRY and explicitness rules
 
-1. There must be one shared helper for "valid detached bootstrap continuity."
-2. There must be one shared decision path for "park vs fail on clean bootstrap exit."
-3. Do not copy the same posture predicate into `state_store.rs`, `control.rs`, and `async_repl.rs`.
-4. Keep diagnostic booleans diagnostic. Do not quietly make them authoritative again.
+1. There must be one shared helper for session-control posture classification.
+2. There must be one shared durable session closeout path for stop terminalization.
+3. There must be one obvious status projection path for parked sessions.
+4. Do not duplicate liveness-vs-authority predicates across `agents_cmd.rs`, `state_store.rs`, and `async_repl.rs`.
 
 ### Minimal-diff rules
 
-1. Reuse existing posture fields and invariant validation from slice `23`.
-2. Reuse the existing parking path and adapt bootstrap teardown to call into it or share its logic.
-3. Extend existing tests before inventing a new durability suite.
+1. Reuse the existing session store and parked snapshot writers.
+2. Reuse private stop transport for attached sessions instead of replacing it.
+3. Extend existing CLI integration coverage before inventing a new durability suite.
+4. Keep world-member detached follow-up logic unchanged unless a regression test proves a real bug there.
 
 ### Inline diagram candidates
 
 If implementation adds non-obvious transition logic, add or update nearby ASCII comments in:
 
-1. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) for readiness classification,
-2. [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) for bootstrap teardown flow,
-3. [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) for `Accepted -> Completed|Failed`.
+1. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) for session-control posture classification,
+2. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) for attached-stop vs parked-stop dispatch,
+3. [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) for retained-owner attach/detach lifecycle,
+4. [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) for prompt-bridge terminal delivery after `Accepted`.
 
 ## Test Review
 
@@ -450,9 +554,8 @@ If implementation adds non-obvious transition logic, add or update nearby ASCII 
 
 This is a Rust workspace. Primary test surfaces already exist in:
 
-1. inline module tests in [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) and [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs),
-2. REPL/runtime tests in [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs),
-3. integration coverage in [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs).
+1. inline module tests in [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs), [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs), and [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+2. integration coverage in [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
 
 ### Code path coverage
 
@@ -461,30 +564,29 @@ CODE PATH COVERAGE
 ==================
 [+] state_store.rs
     |
-    ├── [GAP] hidden_owner_helper_launch_ready() accepts detached resumable host continuity
-    ├── [GAP] readiness rejects detached continuity when required internal session id is missing
-    ├── [★★ TESTED, KEEP] parked_resumable / awaiting_attention invariant validation
-    └── [GAP] read-side posture classification no longer depends on owner_process_is_alive()
-
-[+] control.rs
-    |
-    ├── [GAP] wait_for_hidden_owner_helper_readiness() succeeds on valid detached continuity
-    ├── [★★ TESTED, KEEP] runtime_start_failed classifier plumbing
-    └── [GAP] Accepted always ends in Completed or Failed on late bootstrap failure
-
-[+] async_repl.rs
-    |
-    ├── [REGRESSION TEST REQUIRED] clean host bootstrap exit parks instead of invalidates
-    ├── [GAP] detached bootstrap with pending inbox becomes awaiting_attention
-    ├── [GAP] broken bootstrap without resumability still fails closed
-    └── [GAP] event/completion race normalizes consistently
+    ├── [GAP] resolve_public_control_target() still treats stop as live-owner-only
+    ├── [GAP] one shared session-control posture helper must feed reattach/stop/status
+    ├── [★★★ TESTED, KEEP] pending inbox persistence updates authoritative pending count
+    └── [★★ TESTED, KEEP] detached posture invariants already exist
 
 [+] agents_cmd.rs
     |
-    ├── [GAP] run_start() succeeds on real clean-exit bootstrap path
-    ├── [GAP] run_turn() resumes the parked session created by that path
-    ├── [★★ TESTED, KEEP] detached world follow-up stays fail closed
-    └── [GAP] run_reattach() restores attached ownership for that same parked session
+    ├── [REGRESSION TEST REQUIRED] run_reattach() must not report success before durable attach
+    ├── [REGRESSION TEST REQUIRED] run_stop() must stop parked durable sessions
+    ├── [GAP] build_status_report() must surface parked sessions from authoritative session truth
+    └── [★★ TESTED, KEEP] run_turn() preserves exact backend targeting
+
+[+] async_repl.rs
+    |
+    ├── [★★ TESTED, KEEP] parked snapshot helpers already normalize parked vs attention posture
+    ├── [GAP] retained-owner lifecycle needs a reattach stability proof point
+    └── [GAP] any new parked-stop closeout helper must converge on one terminal session write path
+
+[+] control.rs
+    |
+    ├── [★★ TESTED, KEEP] private stop transport exists for attached owners
+    ├── [★★ TESTED, KEEP] Accepted -> Completed|Failed bridge shape exists
+    └── [GAP] late-drop coverage must stay green while the durable control paths change
 ```
 
 ### User flow coverage
@@ -493,196 +595,177 @@ CODE PATH COVERAGE
 USER FLOW COVERAGE
 ==================
 [+] substrate agent start --backend <host> --prompt "hello" --json
-    ├── [GAP] backend emits valid session handle, then control stream ends cleanly
-    ├── [GAP] resulting session posture is parked_resumable when inbox is empty
-    └── [GAP] resulting session posture is awaiting_attention when inbox has pending work
+    ├── [★★ TESTED, KEEP] clean bootstrap can land a parked durable session
+    └── [GAP] parked session remains visible in status immediately after start
+
+[+] substrate agent status --json
+    ├── [GAP] parked_resumable session is shown as active durable truth
+    └── [GAP] awaiting_attention session is shown when pending inbox work exists
 
 [+] substrate agent turn --session <id> --backend <host> --prompt "next" --json
-    ├── [GAP] exact parked session resumes and accepts prompt
-    └── [★★ TESTED, KEEP] detached world session still fails closed with reattach guidance
+    ├── [★★ TESTED, KEEP] same parked session can resume prompt-taking
+    └── [★★ TESTED, KEEP] detached world-member follow-up still fails closed
 
 [+] substrate agent reattach --session <id> --json
-    ├── [★★ TESTED, KEEP] exact-session lineage preservation
-    └── [GAP] parked bootstrap session returns to attached ownership without prompt side effect
+    ├── [GAP] success means attached ownership actually restored
+    └── [GAP] no immediate silent re-park after reported success
 
-[+] Post-Accepted bridge behavior
-    ├── [GAP] late helper drop emits explicit Failed
-    └── [GAP] no silent terminal disappearance remains
+[+] substrate agent stop --session <id> --json
+    ├── [GAP] attached stop still works
+    └── [GAP] parked stop works without a live owner
+
+[+] parked durable inbox responsibility
+    ├── [GAP] detached runtime-alert/approval item lands durably
+    ├── [GAP] posture changes to awaiting_attention
+    └── [GAP] same exact session remains routable after inbox work appears
+
+[+] post-Accepted bridge behavior
+    └── [★★ TESTED, KEEP] helper drop after Accepted still yields explicit Failed
 ```
 
 ### Required test additions
 
-1. Replace `start_host_orchestrator_runtime_invalidates_when_attached_control_exits()` with a regression that asserts parking after continuity is established.
-2. Add a unit test for `hidden_owner_helper_launch_ready(...)` that passes when the session is detached, non-terminal, resume-eligible, and internally resumable.
-3. Add a unit test for `hidden_owner_helper_launch_ready(...)` that fails when the same detached session is missing required resume metadata.
-4. Add an event/completion race test proving the same persisted session lands on the same outcome regardless of which task observes stream end first.
-5. Extend `agent_public_control_surface_v1.rs` with a real `start -> parked -> turn` flow using a fake host backend that exits cleanly after publishing resumability metadata.
-6. Extend `agent_public_control_surface_v1.rs` with `start -> parked -> reattach` for the same session.
-7. Add a guard test proving bootstrap still fails closed when session handle or required `uaa_session_id` never becomes durable.
-8. Add a control-path test proving post-`Accepted` EOF still renders `Failed`.
+1. Add a `reattach` regression proving the command only returns success once the session is durably `active_attached`.
+2. Add a negative `reattach` regression proving immediate re-park or attach loss fails the command instead of returning false success.
+3. Add a parked-stop regression proving `stop` works when no live owner process is attached.
+4. Add an attached-stop regression to preserve current private transport behavior.
+5. Add a status regression proving a parked durable session is visible in `agent status --json`.
+6. Add a status regression proving a detached session with one pending inbox item appears as `awaiting_attention`.
+7. Add an inbox-flow regression proving parked session -> inbox item -> attention posture -> reattach or turn still targets the same session.
+8. Keep the broken-bootstrap and post-`Accepted` explicit-failure regressions green on the final merged tree.
 
 ### Test plan artifact to generate during implementation
 
 When implementation starts, write a QA-facing artifact under `~/.gstack/projects/<slug>/` that covers:
 
-1. affected CLI flows: `start`, `turn`, `reattach`,
-2. parked-empty versus attention-needed outcomes,
-3. broken bootstrap versus valid parked continuity,
-4. post-`Accepted` explicit failure delivery,
-5. detached-world fail-closed regression protection.
+1. `start`, `status`, `turn`, `reattach`, and `stop` on one exact durable session,
+2. parked-empty versus awaiting-attention posture transitions,
+3. attached-stop versus parked-stop behavior,
+4. broken-bootstrap fail-closed behavior,
+5. post-`Accepted` explicit-failure delivery,
+6. detached-world fail-closed non-regression.
 
 ### Required validation commands
 
 Run at minimum:
 
 ```bash
-cargo test -p shell async_repl -- --nocapture
 cargo test -p shell agent_runtime::state_store -- --nocapture
 cargo test -p shell agent_runtime::control -- --nocapture
+cargo test -p shell async_repl -- --nocapture
 cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 ```
 
-Manual validation must also rerun the real CLI flow and prove the persisted runtime outcomes, not just command success:
+Manual validation on the merged tree must prove the public contract, not just internal unit behavior:
 
 ```bash
 substrate agent start --backend <host_backend_id> --prompt "hello" --json
+substrate agent status --json
 substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json
 substrate agent reattach --session <orchestration_session_id> --json
+substrate agent stop --session <orchestration_session_id> --json
+substrate agent status --json
 ```
 
-The manual wall is complete only when all of the following are checked on the same merged tree:
+Manual wall is complete only when all of the following are checked:
 
-1. valid clean-exit bootstrap:
-   - `substrate agent start --backend <host_backend_id> --prompt "hello" --json` succeeds using the real clean-exit host fixture for this slice
-   - the persisted `session.json` for that session shows:
-     - non-terminal lifecycle state
-     - `attached_participant_id == null`
-     - `pending_inbox_count == 0`
-     - `posture == parked_resumable`
-2. attention-needed normalization:
-   - using the sanctioned fixture/setup for this slice, one pending inbox item is created for the detached session
-   - the persisted `session.json` then shows:
-     - `pending_inbox_count > 0`
-     - `posture == awaiting_attention`
-3. exact parked-session follow-up:
-   - `substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json` succeeds against that same parked bootstrap session
-4. exact parked-session reattach:
-   - `substrate agent reattach --session <orchestration_session_id> --json` succeeds against that same parked bootstrap session without submitting a prompt
-5. broken bootstrap fail-closed:
-   - using the sanctioned broken-bootstrap fixture for this slice, `substrate agent start --backend <broken_bootstrap_backend_id> --prompt "hello" --json` fails as `runtime_start_failed`
-6. post-`Accepted` late failure:
-   - using the sanctioned late-drop fixture for this slice, the prompt bridge emits `Accepted` and then an explicit `Failed`
-   - no silent EOF or truncated terminal behavior is accepted
-7. detached-world non-regression:
-   - detached-world follow-up still fails closed with reattach guidance on the final merged tree
+1. `start` leaves a non-terminal parked durable session when the clean bootstrap path is valid,
+2. `status` shows that parked session before any follow-up owner is attached,
+3. one detached inbox item moves the same session to `awaiting_attention`,
+4. `turn` succeeds against that same exact session,
+5. `reattach` succeeds only when attached ownership is truly restored,
+6. `stop` succeeds against that same exact session while attached and while parked,
+7. broken bootstrap still fails as `runtime_start_failed`,
+8. post-`Accepted` helper loss still renders explicit `Failed`,
+9. detached-world follow-up still fails closed with reattach guidance.
 
 ## Performance Review
 
-The hot path here is not throughput. It is correctness under polling and teardown races.
+The hot path here is correctness under session-control resolution, not raw throughput.
 
 Performance rules:
 
-1. do not make readiness polling rescan more state than necessary on every loop,
-2. do not add directory-wide scans to steady-state `start`, `turn`, or status reads,
-3. keep pending-inbox truth O(1) by trusting the persisted counter plus invariant checks,
-4. avoid duplicate full-session rewrites when only teardown classification changes one or two fields.
+1. do not add repeated full-directory scans to `stop` or `status`,
+2. prefer authoritative session record plus already-loaded participant set over extra trace fishing,
+3. keep pending-inbox posture normalization O(1) by trusting the authoritative counter and invariant checks,
+4. keep attached-stop on the existing private transport path,
+5. avoid double-writing the same session terminalization through separate attached and parked codepaths.
 
 ## Failure Modes Registry
 
 | Failure mode | Test required | Error handling required | User-visible outcome |
 | --- | --- | --- | --- |
-| valid detached continuity never counts as ready | yes | yes | `start` succeeds instead of timing out or failing spuriously |
-| clean helper exit invalidates a valid session | yes | yes | session parks instead of dying |
-| pending inbox exists but posture stays parked_resumable | yes | yes | operator sees `awaiting_attention` |
-| broken bootstrap gets parked anyway | yes | yes | explicit `runtime_start_failed` |
-| post-`Accepted` stream drop goes silent | yes | yes | explicit `Failed` |
-| detached world follow-up piggybacks on parked-host logic | yes | yes | explicit fail-closed rejection with reattach guidance |
+| `reattach` reports success while the session is still parked | yes | yes | explicit failure, not false active success |
+| parked `stop` still returns `owner_unreachable` | yes | yes | parked durable session stops cleanly |
+| parked session disappears from `status` | yes | yes | operator sees real parked session |
+| detached inbox item lands but status stays `parked_resumable` | yes | yes | operator sees `awaiting_attention` |
+| attached-stop and parked-stop produce different terminal persisted truth | yes | yes | one terminal session model, not two |
+| post-`Accepted` helper drop goes silent | yes | yes | explicit `Failed` |
+| detached world-member follow-up accidentally becomes permissive | yes | yes | explicit fail-closed rejection remains |
 
-**Critical gaps this plan must close:** 4
+**Critical gaps this plan must close:** 5
 
-1. readiness false negative on valid detached continuity,
-2. clean-exit invalidation on the bootstrap seam,
-3. race divergence between event-task and completion-task teardown,
-4. synthetic-only proof for a real CLI failure path.
+1. false-success `reattach`,
+2. live-owner-only `stop`,
+3. parked-session invisibility in `status`,
+4. unproven parked inbox operational ownership,
+5. split control truth between session authority and transport liveness.
 
 ## Worktree Parallelization Strategy
 
-There is one real parallel window, and it opens only after the shared continuity contract is frozen.
+This plan has limited real parallelism because the important work all converges on the same `crates/shell/src/execution/` and `crates/shell/src/execution/agent_runtime/` directories.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| 1. Shared continuity and readiness contract | `crates/shell/src/execution/agent_runtime/` | — |
-| 2. Bootstrap teardown rewrite | `crates/shell/src/repl/`, `crates/shell/src/execution/agent_runtime/` | 1 |
-| 3. Public command and projection alignment | `crates/shell/src/execution/`, `crates/shell/src/execution/agent_runtime/` | 1 |
-| 4. Regression and integration tests | `crates/shell/tests/`, inline test modules | 2, 3 |
-| 5. Docs closeout | `docs/`, `llm-last-mile/`, root plan docs | 4 |
+| 1. Freeze session-control posture contract | `crates/shell/src/execution/`, `crates/shell/src/execution/agent_runtime/` | — |
+| 2. Reattach durability fix | `crates/shell/src/execution/`, `crates/shell/src/repl/`, `crates/shell/src/execution/agent_runtime/` | 1 |
+| 3. Stop session-centric closeout | `crates/shell/src/execution/`, `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/repl/` | 1 |
+| 4. Status plus inbox projection/proof | `crates/shell/src/execution/`, `crates/shell/src/execution/agent_runtime/` | 1 |
+| 5. Regression tests and manual fixtures | `crates/shell/tests/`, inline runtime test modules | 2, 3, 4 |
+| 6. Docs closeout | `docs/`, `llm-last-mile/`, root plan docs | 2, 3, 4 |
 
 ### Parallel lanes
 
-Lane A: step 1 -> step 2  
-Reason: teardown behavior depends directly on the frozen continuity contract.
+Lane A: 1 -> 2 -> 3 -> 4  
+Sequential. Shared `execution/` and `agent_runtime/` ownership. Do not split this across workers unless you want merge-conflict theater.
 
-Lane B: step 1 -> step 3  
-Reason: once the shared helper and contract shape are fixed, public command behavior can be aligned mostly outside `async_repl.rs`.
+Lane B: 5  
+Starts after Lane A behavior stabilizes. Test harness work before that point is likely to chase moving semantics.
 
-Lane C: step 4 -> step 5  
-Reason: validation and docs should happen on the merged tree, not on guessed intermediate behavior.
+Lane C: 6  
+Can run in parallel with Lane B after Lane A lands, because docs can key off the frozen merged behavior.
 
 ### Execution order
 
-1. Freeze step 1 first. That is the contract every later change depends on.
-2. Launch Lane A and Lane B in parallel worktrees only after step 1 is stable.
-3. Merge A and B.
-4. Run Lane C on the merged tree for regression proof and docs closeout.
+1. Launch Lane A first and keep it single-owner.
+2. Once Lane A lands, launch Lane B and Lane C in parallel worktrees.
+3. Merge Lane B first if docs need final command/output truth from the tests.
 
 ### Conflict flags
 
-1. `state_store.rs` is the contract hotspot. If both implementation lanes need the shared helper, assign helper ownership to one lane and keep the other lane caller-only.
-2. `control.rs` is a secondary hotspot if readiness and prompt-bridge failure handling are mixed in the same patch. Split by function ownership, not fake file exclusivity.
-3. `agent_public_control_surface_v1.rs` should be test-lane owned. Do not let both implementation lanes churn it at once.
-
-## Implementation Checklist
-
-1. Define one shared helper for valid detached bootstrap continuity.
-2. Update `hidden_owner_helper_launch_ready(...)` to use that helper.
-3. Update bootstrap event-task teardown to park when continuity is valid.
-4. Update bootstrap completion-task teardown to make the same decision.
-5. Keep invalidation only for genuinely broken startup.
-6. Verify read-side posture classification respects pending inbox truth and detached resumability.
-7. Extend public `start`, `turn`, and `reattach` tests around the real clean-exit bootstrap path.
-8. Replace the old invalidation regression with a parked-session regression.
-9. Update docs and diagrams after tests prove the corrected behavior.
+1. Steps 2, 3, and 4 all touch `crates/shell/src/execution/` and `crates/shell/src/execution/agent_runtime/`. Treat them as one lane.
+2. If a test worker needs to modify helper code in `async_repl.rs` or `agents_cmd.rs`, pull that work back into Lane A instead of pretending it is independent.
 
 ## Deferred Follow-Ups
 
-These are real ideas, not part of this PR:
+These were considered and are intentionally deferred:
 
-1. Operator-facing inbox inspection commands.
-2. Inbox retention windows and compaction policy.
-3. Broader platform-parity work for the same durability model.
+1. Inbox browsing or approval UX, because this slice is about durable authority correctness, not operator productization.
+2. Automatic stale-session timeout policy, because the truth doc explicitly treats that as future deliberate lifecycle design.
+3. World-member detached recovery broadening, because the current contract is intentionally fail-closed and that is not the bug here.
+4. Broader parked-session telemetry/reporting polish, because correctness has to land before nicer visibility layers.
 
 ## Completion Summary
 
-- Step 0: Scope Challenge, scope accepted as-is, with a strict no-new-control-plane rule.
-- Architecture Review: one architectural direction, persisted detached continuity is authoritative once established.
-- Code Quality Review: single continuity helper, single park-vs-fail decision path, no diagnostic booleans as authority.
-- Test Review: coverage diagram produced, real bootstrap-path gaps identified, 4 critical.
-- Performance Review: no throughput rewrite needed, but do not add polling or scan-heavy steady-state reads.
-- NOT in scope: written.
-- What already exists: written.
-- Failure modes: 4 critical gaps flagged.
-- Parallelization: 3 lanes total, 1 real parallel window after contract freeze.
-- Lake Score: 9/9 recommendations choose the complete option over the shortcut.
-
-## GSTACK REVIEW REPORT
-
-| Review | Trigger | Why | Runs | Status | Findings |
-|--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
-| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
-| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 0 | — | Plan authored to eng-review structure, but no formal review run logged yet |
-| Design Review | `/plan-design-review` | UI/UX gaps | 0 | skipped | No UI scope |
-
-**VERDICT:** PLAN READY FOR IMPLEMENTATION REVIEW. If you want the full logged review chain later, run `/autoplan` or `/plan-eng-review` against this file.
+- Step 0: Scope Challenge — complete, scope kept broad enough to finish the durable-session model instead of re-fixing only bootstrap
+- Architecture Review: durable authority, control posture, and state-machine contracts frozen
+- Code Quality Review: one shared session-control posture helper and one stop closeout path required
+- Test Review: coverage diagrams produced, 8 concrete gaps identified
+- Performance Review: correctness-first, no new scanning or second stop path allowed
+- NOT in scope: written
+- What already exists: written
+- Failure modes: 5 critical gaps flagged
+- Parallelization: 3 lanes, 1 real post-code parallel window
+- Lake Score: the complete option was chosen throughout, because partial fixes would keep the durable-session model internally contradictory
