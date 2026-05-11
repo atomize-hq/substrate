@@ -647,18 +647,24 @@ pub(crate) fn wait_for_hidden_owner_helper_readiness(
 ) -> Result<()> {
     let started_at = std::time::Instant::now();
     loop {
-        if store.classify_hidden_owner_helper_launch_readiness(
+        let readiness = store.classify_hidden_owner_helper_launch_readiness(
             plan.orchestration_session_id(),
             plan.participant_id(),
             plan.requires_internal_session_id(),
-        )? == super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyAttached
+        )?;
+        if readiness == super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyAttached
+            || (plan.mode == OwnerHelperMode::Start
+                && matches!(
+                    readiness,
+                    super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
+                ))
         {
             return Ok(());
         }
         if started_at.elapsed() >= OWNER_HELPER_READY_TIMEOUT {
             anyhow::bail!(
-                "timed out waiting for authoritative owner-helper attached readiness for orchestration session {}",
-                plan.orchestration_session_id()
+                "timed out waiting for authoritative owner-helper readiness for orchestration session {}",
+                plan.orchestration_session_id(),
             );
         }
         thread::sleep(OWNER_HELPER_READY_POLL_INTERVAL);

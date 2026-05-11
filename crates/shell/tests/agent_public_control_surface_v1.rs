@@ -247,6 +247,23 @@ fn write_fake_codex_script(dir: &Path) -> PathBuf {
     path
 }
 
+fn write_fake_codex_script_exit_after_startup_prompt(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-exit-after-startup-prompt.sh");
+    let count_path = dir.join("fake-codex-exit-after-startup-prompt.count");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\",\"item_id\":\"msg-1\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"startup prompt success\"}}}}\\r\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  exit 0\nfi\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nprintf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\nprintf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nexit 0\n",
+        count_path.display(),
+        dir.display()
+    );
+    fs::write(&path, body).expect("write exit-after-startup fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("exit-after-startup fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set exit-after-startup fake codex permissions");
+    path
+}
+
 fn write_fake_codex_script_clean_bootstrap_then_prompt_resume(dir: &Path) -> PathBuf {
     let path = dir.join("fake-codex-clean-bootstrap-then-prompt-resume.sh");
     let count_path = dir.join("fake-codex-clean-bootstrap-then-prompt-resume.count");
@@ -1843,8 +1860,108 @@ fn public_start_rejects_bootstrap_only_split_prompt_flow() {
         "split bootstrap start must preserve runtime_start_failed taxonomy: {start_output:?}"
     );
     assert!(
-        stderr.contains("timed out waiting for authoritative owner-helper attached readiness"),
+        stderr.contains("timed out waiting for authoritative owner-helper readiness"),
         "split bootstrap start should fail because attached truth never materialized for the startup exec: {start_output:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_persists_detached_session_when_hidden_owner_helper_exits() {
+    let fixture =
+        AgentControlFixture::new_with_fake_codex(write_fake_codex_script_exit_after_startup_prompt);
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from parked start",
+        "--json",
+    ]);
+    assert!(
+        start_output.status.success(),
+        "public start should succeed even if the helper exits immediately after the startup prompt: {start_output:?}"
+    );
+    let start_records = parse_ndjson_output(&start_output);
+    let start_json = find_ndjson_record(&start_records, "completed");
+    assert_empty_warnings(start_json);
+
+    let orchestration_session_id = start_json["orchestration_session_id"]
+        .as_str()
+        .expect("start session id")
+        .to_string();
+    let participant_id = start_json["participant_id"]
+        .as_str()
+        .expect("start participant id")
+        .to_string();
+
+    let persisted_session = fixture.load_orchestration_session(&orchestration_session_id);
+    assert_eq!(
+        persisted_session.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_eq!(
+        persisted_session.get("posture").and_then(Value::as_str),
+        Some("parked_resumable"),
+        "stored session must already be detached-normalized before any later reattach"
+    );
+    assert_eq!(
+        persisted_session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str),
+        Some(participant_id.as_str())
+    );
+    assert!(persisted_session
+        .get("attached_participant_id")
+        .is_none_or(Value::is_null));
+    assert_eq!(
+        persisted_session
+            .get("pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(0)
+    );
+    assert_eq!(
+        persisted_session
+            .get("shell_owner_pid")
+            .and_then(Value::as_u64),
+        Some(0),
+        "detached normalization must clear the dead helper pid from persisted session truth"
+    );
+    assert!(persisted_session
+        .get("closed_at")
+        .is_none_or(Value::is_null));
+
+    let persisted_participant =
+        fixture.load_participant(&orchestration_session_id, &participant_id);
+    assert_eq!(
+        persisted_participant
+            .pointer("/internal/uaa_session_id")
+            .and_then(Value::as_str),
+        Some("thread-test"),
+        "detached normalization must preserve the durable internal.uaa_session_id"
+    );
+    assert_eq!(
+        persisted_participant
+            .pointer("/internal/shell_owner_pid")
+            .and_then(Value::as_u64),
+        Some(0),
+        "detached normalization must clear the dead helper pid from participant truth"
+    );
+    assert_eq!(
+        persisted_participant
+            .pointer("/internal/attached_client_present")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
+    assert_eq!(
+        persisted_participant
+            .pointer("/internal/resume_eligible")
+            .and_then(Value::as_bool),
+        Some(true)
     );
 }
 
@@ -1989,7 +2106,7 @@ fn public_start_reports_runtime_start_failed_for_missing_bootstrap_handle() {
     );
     assert!(
         stderr.contains("failed to establish attached control ownership")
-            || stderr.contains("timed out waiting for authoritative owner-helper attached readiness")
+            || stderr.contains("timed out waiting for authoritative owner-helper readiness")
             || stderr.contains("missing an active participant")
             || stderr.contains("owner_unreachable"),
         "broken bootstrap failure should explain the missing ownership/bootstrap continuity: {start_output:?}"

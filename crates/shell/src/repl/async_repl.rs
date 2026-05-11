@@ -3130,7 +3130,14 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                 }
                 startup_failure = Some(reason);
             } else if !shutdown_for_events.load(Ordering::SeqCst) && was_live {
-                if can_park_host_runtime_after_detach(controls_parent_session, &manifest_guard) {
+                if can_park_host_runtime_after_detach(
+                    &event_store,
+                    controls_parent_session,
+                    &orchestration_guard,
+                    &manifest_guard,
+                    runtime_owns_private_stop,
+                    false,
+                ) {
                     apply_parked_host_runtime_snapshots(
                         &mut orchestration_guard,
                         &mut manifest_guard,
@@ -3144,6 +3151,11 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                         MessageEventKind::Status,
                         runtime_detached_message(&runtime_role_for_events),
                     ));
+                } else if runtime_owns_private_stop && controls_parent_session {
+                    // Hidden owner-helper lifetimes are resolved by the retained completion
+                    // observer at helper-exit handoff. Losing the event stream first is not,
+                    // by itself, an invalidation condition for the durable parent session.
+                    orchestration_guard.touch_active();
                 } else {
                     let reason = if runtime_role_for_events == MEMBER_ROLE {
                         "world-scoped member control stream ended before completion observation"
@@ -3282,8 +3294,12 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                     } else if manifest_guard.handle.state == AgentRuntimeSessionState::Stopping {
                         apply_runtime_stop_closeout(&mut orchestration_guard, &mut manifest_guard);
                     } else if can_park_host_runtime_after_detach(
+                        &completion_store,
                         controls_parent_session,
+                        &orchestration_guard,
                         &manifest_guard,
+                        runtime_owns_private_stop,
+                        true,
                     ) {
                         apply_parked_host_runtime_snapshots(
                             &mut orchestration_guard,
@@ -3374,8 +3390,12 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                             orchestration_guard.touch_active();
                         }
                     } else if can_park_host_runtime_after_detach(
+                        &completion_store,
                         controls_parent_session,
+                        &orchestration_guard,
                         &manifest_guard,
+                        runtime_owns_private_stop,
+                        true,
                     ) {
                         apply_parked_host_runtime_snapshots(
                             &mut orchestration_guard,
@@ -5702,13 +5722,49 @@ async fn park_host_orchestrator_runtime(
 }
 
 fn can_park_host_runtime_after_detach(
+    store: &AgentRuntimeStateStore,
     controls_parent_session: bool,
+    orchestration_session: &OrchestrationSessionRecord,
     manifest: &AgentRuntimeSessionManifest,
+    runtime_owns_private_stop: bool,
+    owner_helper_exited: bool,
 ) -> bool {
-    controls_parent_session
-        && manifest.is_host_orchestrator()
-        && manifest.handle.state.is_live()
-        && manifest.internal.uaa_session_id.is_some()
+    if !controls_parent_session
+        || !manifest.is_host_orchestrator()
+        || !manifest.handle.state.is_live()
+        || manifest.internal.uaa_session_id.is_none()
+    {
+        return false;
+    }
+
+    if !runtime_owns_private_stop {
+        return true;
+    }
+    if !owner_helper_exited {
+        return false;
+    }
+
+    let Ok(Some(record)) = store.load_session(&orchestration_session.orchestration_session_id)
+    else {
+        return false;
+    };
+    let participant_id = manifest.handle.participant_id.as_str();
+    if record.session.state != OrchestrationSessionState::Active
+        || record.session.posture != OrchestrationSessionPosture::ActiveAttached
+        || record.session.active_participant_id() != Some(participant_id)
+        || record.session.attached_participant_id() != Some(participant_id)
+    {
+        return false;
+    }
+
+    !record.participants.iter().any(|participant| {
+        participant.participant_id() != participant_id
+            && participant.matches_public_parent_linkage(&record.session)
+            && participant.is_host_orchestrator()
+            && participant.attached_client_present()
+            && participant.is_authoritative_live()
+            && shell_owner_pid_is_alive(participant.internal.shell_owner_pid)
+    })
 }
 
 fn build_parked_host_runtime_snapshots(
@@ -5718,8 +5774,10 @@ fn build_parked_host_runtime_snapshots(
 ) -> Option<(OrchestrationSessionRecord, AgentRuntimeSessionManifest)> {
     let mut parked_orchestration = orchestration_guard.clone();
     let mut parked_manifest = manifest_guard.clone();
+    parked_orchestration.shell_owner_pid = 0;
     parked_manifest.release_runtime_ownership();
     parked_manifest.mark_client_detached(reason.to_string());
+    parked_manifest.internal.shell_owner_pid = 0;
     parked_manifest.touch_heartbeat();
     parked_orchestration.transition_state(OrchestrationSessionState::Active);
     match if parked_orchestration.pending_inbox_count > 0 {
@@ -5752,6 +5810,26 @@ fn apply_parked_host_runtime_snapshots(
     *orchestration_guard = next_orchestration.clone();
     *manifest_guard = next_manifest.clone();
     Some((next_orchestration, next_manifest))
+}
+
+#[cfg(unix)]
+fn shell_owner_pid_is_alive(pid: u32) -> bool {
+    let pid = pid as libc::pid_t;
+    if pid <= 0 {
+        return false;
+    }
+
+    let rc = unsafe { libc::kill(pid, 0) };
+    if rc == 0 {
+        return true;
+    }
+
+    matches!(io::Error::last_os_error().raw_os_error(), Some(libc::EPERM))
+}
+
+#[cfg(not(unix))]
+fn shell_owner_pid_is_alive(pid: u32) -> bool {
+    pid == std::process::id()
 }
 
 async fn abort_bootstrap_runtime(
@@ -8211,12 +8289,14 @@ mod tests {
                             parent.active_session_handle_id.as_deref(),
                             Some(manifest.handle.participant_id.as_str())
                         );
+                        assert_eq!(parent.shell_owner_pid, 0);
                         assert!(parent.closed_at.is_none());
                         assert!(!manifest.internal.ownership_valid);
                         assert!(!manifest.internal.control_owner_retained);
                         assert!(!manifest.internal.completion_observer_retained);
                         assert!(!manifest.attached_client_present());
                         assert!(manifest.is_resume_eligible());
+                        assert_eq!(manifest.internal.shell_owner_pid, 0);
                         assert_eq!(
                             manifest.internal.uaa_session_id.as_deref(),
                             Some("thread-test")

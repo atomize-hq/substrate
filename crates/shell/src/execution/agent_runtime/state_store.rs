@@ -2172,7 +2172,7 @@ fn resolve_authoritative_session_control(
     Ok(ResolvedAuthoritativeSessionControl {
         session: record.session.clone(),
         participant: participant.clone(),
-        session_posture: classify_public_session_posture(&record.session, &participant),
+        session_posture: classify_public_session_posture(record, &participant),
     })
 }
 
@@ -2189,9 +2189,10 @@ fn detached_status_visible_participant(
 
 #[allow(dead_code)]
 fn classify_public_session_posture(
-    session: &OrchestrationSessionRecord,
+    record: &AgentRuntimeSessionRecord,
     participant: &AgentRuntimeParticipantRecord,
 ) -> PublicSessionPosture {
+    let session = &record.session;
     if session.posture == OrchestrationSessionPosture::Terminal || session.state.is_terminal() {
         return PublicSessionPosture::Terminal;
     }
@@ -2205,7 +2206,7 @@ fn classify_public_session_posture(
     if valid_detached_host_continuity_posture(session, participant, true).is_some() {
         return PublicSessionPosture::DetachedReattachable;
     }
-    if recoverable_stale_host_attachment(session, participant, true) {
+    if recoverable_stale_host_attachment(record, session, participant, true) {
         return PublicSessionPosture::DetachedReattachable;
     }
     PublicSessionPosture::Terminal
@@ -2248,6 +2249,7 @@ pub(crate) fn valid_detached_host_continuity_posture(
 }
 
 fn recoverable_stale_host_attachment(
+    record: &AgentRuntimeSessionRecord,
     session: &OrchestrationSessionRecord,
     participant: &AgentRuntimeParticipantRecord,
     require_internal_session_id: bool,
@@ -2272,6 +2274,17 @@ fn recoverable_stale_host_attachment(
     if owner_process_is_alive(participant) || !participant.is_resume_eligible() {
         return false;
     }
+    if record.participants.iter().any(|candidate| {
+        candidate.participant_id() != participant.participant_id()
+            && candidate.matches_public_parent_linkage(session)
+            && candidate.is_host_orchestrator()
+            && candidate.attached_client_present()
+            && candidate.is_authoritative_live()
+            && owner_process_is_alive(candidate)
+    }) {
+        return false;
+    }
+
     !require_internal_session_id || participant.internal_uaa_session_id().is_some()
 }
 
@@ -3379,6 +3392,31 @@ mod tests {
                 target.session_posture,
                 PublicSessionPosture::DetachedReattachable
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_does_not_recover_stale_attached_owner_when_live_successor_exists()
+    {
+        with_store(|store| {
+            let mut stale = live_orchestrator("codex", "sess_turn_stale_blocked", "ash_stale");
+            stale.internal.shell_owner_pid = 999_999_999;
+            let live_successor =
+                live_orchestrator("codex", "sess_turn_stale_blocked", "ash_successor");
+            let parent = active_parent(&stale);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store.persist_participant(&stale).expect("persist stale");
+            store
+                .persist_participant(&live_successor)
+                .expect("persist live successor");
+
+            let target = store
+                .resolve_public_turn_target("sess_turn_stale_blocked", "cli:codex")
+                .expect("stale attached host target with live successor should still resolve");
+            assert_eq!(target.session_posture, PublicSessionPosture::Terminal);
         });
     }
 
