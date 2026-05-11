@@ -439,6 +439,17 @@ fn terminate_pid(pid: u32) {
     }
 }
 
+fn wait_for_pid_exit(pid: u32, timeout: Duration) -> bool {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        if !pid_is_alive(pid) {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    false
+}
+
 fn wait_for_single_active_session(
     fixture: &AgentControlFixture,
     timeout: Duration,
@@ -1593,6 +1604,118 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
 
     terminate_pid(resumed_owner_pid);
     terminate_pid(fork_owner_pid);
+}
+
+#[test]
+#[serial]
+fn public_stop_cleanly_closes_same_durable_session_after_reattach() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    write_parked_orchestration_session(&fixture, "codex", "sess_resume_stop", "ash_source", ts);
+    write_runtime_participant(
+        &fixture,
+        "ash_source",
+        "codex",
+        "sess_resume_stop",
+        "running",
+        false,
+        Some("uaa-detached-stop-1"),
+        None,
+        ts,
+    );
+
+    let reattach_output = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        "sess_resume_stop",
+        "--json",
+    ]);
+    assert!(
+        reattach_output.status.success(),
+        "public reattach should succeed for a parked durable session: {reattach_output:?}"
+    );
+    let reattach_json = parse_json_output(&reattach_output);
+    let resumed_participant_id = reattach_json["participant_id"]
+        .as_str()
+        .expect("reattach participant id")
+        .to_string();
+    let resumed_owner_pid = wait_for_successor_owner_pid(
+        &fixture,
+        "sess_resume_stop",
+        "ash_source",
+        Duration::from_secs(5),
+    );
+    let reattached_session = wait_for_session_posture(
+        &fixture,
+        "sess_resume_stop",
+        "active_attached",
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        reattached_session
+            .get("attached_participant_id")
+            .and_then(Value::as_str),
+        Some(resumed_participant_id.as_str())
+    );
+    assert!(pid_is_alive(resumed_owner_pid));
+
+    let stop_output = fixture.run(&["agent", "stop", "--session", "sess_resume_stop", "--json"]);
+    assert!(
+        stop_output.status.success(),
+        "public stop should close the same durable session after reattach: {stop_output:?}"
+    );
+    let stop_json = parse_json_output(&stop_output);
+    assert_eq!(
+        stop_json.get("action").and_then(Value::as_str),
+        Some("stop")
+    );
+    assert_eq!(
+        stop_json
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some("sess_resume_stop")
+    );
+    assert_eq!(
+        stop_json.get("state").and_then(Value::as_str),
+        Some("stopped")
+    );
+
+    let stopped_session = fixture.load_orchestration_session("sess_resume_stop");
+    assert_eq!(
+        stopped_session.get("state").and_then(Value::as_str),
+        Some("stopped")
+    );
+    assert_eq!(
+        stopped_session.get("posture").and_then(Value::as_str),
+        Some("terminal")
+    );
+    assert!(stopped_session
+        .get("attached_participant_id")
+        .is_none_or(Value::is_null));
+    assert!(stopped_session
+        .get("closed_at")
+        .and_then(Value::as_str)
+        .is_some());
+    assert!(
+        wait_for_pid_exit(resumed_owner_pid, Duration::from_secs(5)),
+        "reattach stop should leave no live hidden owner-helper"
+    );
+
+    let repeated_stop_output =
+        fixture.run(&["agent", "stop", "--session", "sess_resume_stop", "--json"]);
+    assert_eq!(
+        repeated_stop_output.status.code(),
+        Some(2),
+        "repeated stop must no longer see a routable active parent after terminal convergence: {repeated_stop_output:?}"
+    );
+    assert!(
+        stderr_text(&repeated_stop_output).contains("missing_active_parent"),
+        "repeated stop must fail closed as non-active after terminal convergence: {repeated_stop_output:?}"
+    );
 }
 
 #[test]

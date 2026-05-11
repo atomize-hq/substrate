@@ -35,9 +35,9 @@ use crate::execution::agent_runtime::control::spawn_remote_private_prompt_owner;
 use crate::execution::agent_runtime::control::{
     apply_runtime_stop_closeout, build_session_resume_extension,
     invalidate_stale_world_members_after_binding, mark_orchestration_session_failed,
-    mark_runtime_startup_failed, persist_runtime_snapshots, persist_world_binding_authority,
-    private_prompt_request_channel, private_stop_request_channel, prompt_runtime_from_parts,
-    register_private_prompt_transport, register_private_stop_transport,
+    mark_runtime_startup_failed, note_runtime_stop_requested, persist_runtime_snapshots,
+    persist_world_binding_authority, private_prompt_request_channel, private_stop_request_channel,
+    prompt_runtime_from_parts, register_private_prompt_transport, register_private_stop_transport,
     runtime_controls_parent_session, runtime_is_terminal, runtime_stop_transport_ids,
     spawn_local_private_prompt_owner, spawn_local_private_stop_owner, submit_host_prompt_turn,
     HiddenOwnerHelperLaunchPlan, OwnerHelperMode, PersistedWorldBinding, PrivatePromptTransport,
@@ -1790,6 +1790,8 @@ enum RetainedRunControl {
     Remote(RemoteRetainedRunControl),
 }
 
+const LOCAL_RETAINED_STOP_COMPLETION_TIMEOUT: Duration = Duration::from_secs(5);
+
 struct AsyncReplAgentRuntime {
     descriptor: RuntimeSelectionDescriptor,
     orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
@@ -1798,6 +1800,7 @@ struct AsyncReplAgentRuntime {
     uaa_session_handle_id: String,
     retained_control: RetainedRunControl,
     shutdown_requested: Arc<AtomicBool>,
+    private_stop_rx: Option<PrivateStopRequestReceiver>,
     stop_transport: Option<PrivateStopTransport>,
     stop_owner_task: Option<tokio::task::JoinHandle<()>>,
     prompt_transport: Option<PrivatePromptTransport>,
@@ -2495,17 +2498,50 @@ fn prepare_hidden_owner_helper_runtime(
     })
 }
 
-async fn wait_for_hidden_owner_helper_completion(
-    mut runtime: AsyncReplAgentRuntime,
-) -> Result<i32> {
+async fn wait_for_hidden_owner_helper_completion(runtime: AsyncReplAgentRuntime) -> Result<i32> {
+    let AsyncReplAgentRuntime {
+        descriptor: _,
+        orchestration_session,
+        manifest,
+        store,
+        uaa_session_handle_id: _,
+        mut retained_control,
+        shutdown_requested,
+        private_stop_rx,
+        mut stop_transport,
+        mut stop_owner_task,
+        mut prompt_transport,
+        mut prompt_owner_task,
+        mut heartbeat_stop_tx,
+        mut heartbeat_task,
+    } = runtime;
+
     let mut join_failed = false;
-    match &mut runtime.retained_control {
+
+    match &mut retained_control {
         RetainedRunControl::Local(retained_control) => {
-            if let Some(task) = retained_control.completion_task.take() {
-                join_failed |= task.await.is_err();
-            }
-            if let Some(task) = retained_control.event_task.take() {
-                let _ = task.await;
+            if let Some(stop_rx) = private_stop_rx {
+                join_failed |= wait_for_hidden_owner_helper_local_runtime(
+                    &store,
+                    &orchestration_session,
+                    &manifest,
+                    &shutdown_requested,
+                    retained_control,
+                    stop_rx,
+                    &mut stop_transport,
+                    &mut prompt_transport,
+                    &mut prompt_owner_task,
+                    &mut heartbeat_stop_tx,
+                    &mut heartbeat_task,
+                )
+                .await;
+            } else {
+                if let Some(task) = retained_control.completion_task.take() {
+                    join_failed |= task.await.is_err();
+                }
+                if let Some(task) = retained_control.event_task.take() {
+                    let _ = task.await;
+                }
             }
         }
         #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2516,21 +2552,26 @@ async fn wait_for_hidden_owner_helper_completion(
         }
     }
 
-    if let Some(mut stop_transport) = runtime.stop_transport.take() {
+    if let Some(mut stop_transport) = stop_transport.take() {
         stop_transport.close().await;
     }
-    if let Some(task) = runtime.stop_owner_task.take() {
+    if let Some(task) = stop_owner_task.take() {
         let _ = task.await;
     }
-    if let Some(stop_tx) = runtime.heartbeat_stop_tx.take() {
+    if let Some(mut prompt_transport) = prompt_transport.take() {
+        prompt_transport.close().await;
+    }
+    if let Some(task) = prompt_owner_task.take() {
+        let _ = task.await;
+    }
+    if let Some(stop_tx) = heartbeat_stop_tx.take() {
         let _ = stop_tx.send(());
     }
-    if let Some(task) = runtime.heartbeat_task.take() {
+    if let Some(task) = heartbeat_task.take() {
         let _ = task.await;
     }
 
-    let manifest = runtime
-        .manifest
+    let manifest = manifest
         .lock()
         .expect("hidden owner-helper manifest mutex poisoned")
         .clone();
@@ -2541,6 +2582,151 @@ async fn wait_for_hidden_owner_helper_completion(
             0
         },
     )
+}
+
+async fn wait_for_hidden_owner_helper_local_runtime(
+    store: &AgentRuntimeStateStore,
+    orchestration_session: &Arc<Mutex<OrchestrationSessionRecord>>,
+    manifest: &Arc<Mutex<AgentRuntimeSessionManifest>>,
+    shutdown_requested: &Arc<AtomicBool>,
+    retained_control: &mut LocalRetainedRunControl,
+    mut stop_rx: PrivateStopRequestReceiver,
+    stop_transport: &mut Option<PrivateStopTransport>,
+    prompt_transport: &mut Option<PrivatePromptTransport>,
+    prompt_owner_task: &mut Option<tokio::task::JoinHandle<()>>,
+    heartbeat_stop_tx: &mut Option<tokio::sync::oneshot::Sender<()>>,
+    heartbeat_task: &mut Option<tokio::task::JoinHandle<()>>,
+) -> bool {
+    let mut join_failed = false;
+    let Some(mut completion_task) = retained_control.completion_task.take() else {
+        return true;
+    };
+
+    let accepted_stop = tokio::select! {
+        result = &mut completion_task => {
+            join_failed |= result.is_err();
+            false
+        }
+        maybe_request = stop_rx.recv() => {
+            let Some(request) = maybe_request else {
+                join_failed |= completion_task.await.is_err();
+                return join_failed;
+            };
+
+            if runtime_is_terminal(manifest) {
+                let _ = request.response_tx.send(PrivateStopOutcome::AlreadyTerminal);
+                join_failed |= completion_task.await.is_err();
+                return join_failed;
+            }
+
+            if let Err(err) = note_runtime_stop_requested(store, orchestration_session, manifest) {
+                persist_hidden_owner_helper_stop_failure(
+                    store,
+                    orchestration_session,
+                    manifest,
+                    format!("failed to persist stop request before shutdown: {err:#}"),
+                );
+                let _ = request.response_tx.send(PrivateStopOutcome::ProtocolError);
+                shutdown_requested.store(true, Ordering::SeqCst);
+                retained_control.cancel.cancel();
+                join_failed |= completion_task.await.is_err();
+                return join_failed;
+            }
+
+            let _ = request.response_tx.send(PrivateStopOutcome::Accepted);
+            true
+        }
+    };
+
+    if accepted_stop {
+        if let Some(mut owned_stop_transport) = stop_transport.take() {
+            owned_stop_transport.close().await;
+        }
+        if let Some(mut owned_prompt_transport) = prompt_transport.take() {
+            owned_prompt_transport.close().await;
+        }
+        if let Some(task) = prompt_owner_task.take() {
+            let _ = task.await;
+        }
+        shutdown_requested.store(true, Ordering::SeqCst);
+        if let Some(stop_tx) = heartbeat_stop_tx.take() {
+            let _ = stop_tx.send(());
+        }
+        retained_control.cancel.cancel();
+
+        let mut completion_observed = false;
+        let mut stop_failed = false;
+        tokio::select! {
+            result = &mut completion_task => {
+                completion_observed = true;
+                join_failed |= result.is_err();
+                stop_failed |= result.is_err();
+            }
+            _ = tokio::time::sleep(LOCAL_RETAINED_STOP_COMPLETION_TIMEOUT) => {
+                completion_task.abort();
+                let _ = completion_task.await;
+                stop_failed = true;
+            }
+        }
+
+        if let Some(task) = retained_control.event_task.take() {
+            match tokio::time::timeout(LOCAL_RETAINED_STOP_COMPLETION_TIMEOUT, task).await {
+                Ok(_) => {}
+                Err(_) => join_failed = true,
+            }
+        }
+        if let Some(task) = heartbeat_task.take() {
+            let _ = task.await;
+        }
+
+        if stop_failed || !completion_observed {
+            persist_hidden_owner_helper_stop_failure(
+                store,
+                orchestration_session,
+                manifest,
+                "hidden owner-helper stop did not produce authoritative terminal completion"
+                    .to_string(),
+            );
+        }
+    } else {
+        if let Some(task) = retained_control.event_task.take() {
+            let _ = task.await;
+        }
+    }
+
+    join_failed
+}
+
+fn persist_hidden_owner_helper_stop_failure(
+    store: &AgentRuntimeStateStore,
+    orchestration_session: &Arc<Mutex<OrchestrationSessionRecord>>,
+    manifest: &Arc<Mutex<AgentRuntimeSessionManifest>>,
+    reason: String,
+) {
+    let (orchestration_snapshot, manifest_snapshot) = {
+        let mut orchestration_guard = orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned");
+        let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+
+        if !manifest_guard.handle.state.is_live() {
+            return;
+        }
+
+        manifest_guard.transition_state(AgentRuntimeSessionState::Failed);
+        manifest_guard.mark_terminal_state(reason.clone());
+        manifest_guard.internal.last_error_bucket = Some("runtime_shutdown".to_string());
+        manifest_guard.internal.last_error_message = Some(reason.clone());
+        if runtime_controls_parent_session(&manifest_guard.handle.role) {
+            orchestration_guard.transition_state(OrchestrationSessionState::Failed);
+            orchestration_guard.mark_terminal(reason);
+        } else {
+            orchestration_guard.touch_active();
+        }
+        (orchestration_guard.clone(), manifest_guard.clone())
+    };
+
+    let _ = persist_runtime_snapshots(store, &orchestration_snapshot, &manifest_snapshot);
 }
 
 pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Result<i32> {
@@ -2566,6 +2752,7 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
             Some(prepared),
             None,
             initial_prompt,
+            true,
             &ReplPrinter::Stdout,
             &mut telemetry,
         )
@@ -2588,6 +2775,7 @@ async fn start_host_orchestrator_runtime_with_prepared(
         prepared,
         initial_world_binding,
         None,
+        false,
         agent_printer,
         telemetry,
     )
@@ -2598,6 +2786,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     prepared: Option<PreparedAgentRuntime>,
     initial_world_binding: Option<&PersistedWorldBinding>,
     initial_prompt: Option<InitialExecPromptPlan>,
+    runtime_owns_private_stop: bool,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
@@ -3458,14 +3647,21 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             });
         }
     };
-    let stop_owner_task = spawn_local_private_stop_owner(
-        startup_context.store.clone(),
-        Arc::clone(&startup_context.orchestration_session),
-        Arc::clone(&manifest),
-        Arc::clone(&shutdown_requested),
-        retained_control.cancel.clone(),
-        stop_rx,
-    );
+    let (private_stop_rx, stop_owner_task) = if runtime_owns_private_stop {
+        (Some(stop_rx), None)
+    } else {
+        (
+            None,
+            Some(spawn_local_private_stop_owner(
+                startup_context.store.clone(),
+                Arc::clone(&startup_context.orchestration_session),
+                Arc::clone(&manifest),
+                Arc::clone(&shutdown_requested),
+                retained_control.cancel.clone(),
+                stop_rx,
+            )),
+        )
+    };
     let (prompt_tx, prompt_rx) = private_prompt_request_channel();
     let prompt_transport = match register_private_prompt_transport(
         &startup_context.store,
@@ -3516,8 +3712,9 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         uaa_session_handle_id,
         retained_control: RetainedRunControl::Local(retained_control),
         shutdown_requested,
+        private_stop_rx,
         stop_transport: Some(stop_transport),
-        stop_owner_task: Some(stop_owner_task),
+        stop_owner_task,
         prompt_transport: Some(prompt_transport),
         prompt_owner_task: Some(prompt_owner_task),
         heartbeat_stop_tx,
@@ -3708,6 +3905,7 @@ async fn dispatch_targeted_follow_up_turn(
                     Some(InitialExecPromptPlan::Replace(
                         targeted_turn.prompt.to_string(),
                     )),
+                    false,
                     agent_printer,
                     telemetry,
                 )
@@ -4688,6 +4886,7 @@ async fn start_remote_member_runtime_with_prepared(
             observe_task,
         }),
         shutdown_requested,
+        private_stop_rx: None,
         stop_transport: Some(stop_transport),
         stop_owner_task: Some(stop_owner_task),
         prompt_transport: Some(prompt_transport),
@@ -8234,6 +8433,141 @@ mod tests {
             assert_eq!(
                 manifest.internal.termination_reason.as_deref(),
                 Some("stopped")
+            );
+        });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn hidden_owner_private_stop_fails_closed_when_completion_never_resolves() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_codex = write_fake_codex_script(&temp, true);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            format!(
+                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+                fake_codex.display()
+            ),
+        )
+        .expect("write codex agent file");
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let prepared = prepare_host_orchestrator_runtime_startup(&config)
+                .expect("prepare host runtime should succeed")
+                .expect("host runtime should be configured");
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            let mut runtime = start_host_orchestrator_runtime_with_prepared_prompt(
+                Some(prepared),
+                None,
+                None,
+                true,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("hidden helper runtime should start")
+            .expect("runtime");
+            let store = runtime.store.clone();
+            let orchestration_session_id = runtime
+                .orchestration_session
+                .lock()
+                .expect("orchestration session mutex poisoned")
+                .orchestration_session_id
+                .clone();
+            let participant_id = runtime
+                .manifest
+                .lock()
+                .expect("runtime manifest mutex poisoned")
+                .handle
+                .participant_id
+                .clone();
+
+            match &mut runtime.retained_control {
+                RetainedRunControl::Local(retained_control) => {
+                    if let Some(task) = retained_control.completion_task.take() {
+                        task.abort();
+                        let _ = task.await;
+                    }
+                    retained_control.completion_task =
+                        Some(tokio::spawn(std::future::pending::<()>()));
+                }
+                #[cfg(any(target_os = "linux", target_os = "macos"))]
+                RetainedRunControl::Remote(_) => {
+                    panic!("host helper runtime should stay on the local retained-control path")
+                }
+            }
+
+            let helper_task = tokio::spawn(wait_for_hidden_owner_helper_completion(runtime));
+            let stop_transport_path =
+                crate::execution::agent_runtime::control::private_stop_transport_path(
+                    &store,
+                    &orchestration_session_id,
+                    &participant_id,
+                );
+            tokio::time::timeout(Duration::from_secs(3), async {
+                while !stop_transport_path.exists() {
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+            })
+            .await
+            .expect("hidden helper stop transport should be published");
+
+            let outcome = crate::execution::agent_runtime::control::request_private_stop(
+                &stop_transport_path,
+            )
+            .await
+            .expect("private stop request should connect");
+            assert_eq!(outcome, PrivateStopOutcome::Accepted);
+
+            let exit_code = helper_task
+                .await
+                .expect("hidden helper wait task should join")
+                .expect("hidden helper wait should return an exit code");
+            assert_eq!(exit_code, 1);
+
+            let parent = store
+                .load_orchestration_session(&orchestration_session_id)
+                .expect("load orchestration session")
+                .expect("terminal orchestration session should exist");
+            assert_eq!(parent.state, OrchestrationSessionState::Failed);
+            assert_eq!(parent.posture, OrchestrationSessionPosture::Terminal);
+            assert!(parent.attached_participant_id.is_none());
+            assert!(parent.closed_at.is_some());
+
+            let manifest = store
+                .list_manifests()
+                .expect("list manifests")
+                .into_iter()
+                .find(|manifest| manifest.handle.participant_id == participant_id)
+                .expect("failed manifest should exist");
+            assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Failed);
+            assert_eq!(
+                manifest.internal.last_error_bucket.as_deref(),
+                Some("runtime_shutdown")
             );
         });
         std::env::remove_var("SUBSTRATE_HOME");
