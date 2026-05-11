@@ -105,6 +105,19 @@ impl AgentRuntimeSessionRecord {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum HiddenOwnerHelperLaunchReadiness {
+    Pending,
+    ReadyAttached,
+    ReadyDetached(OrchestrationSessionPosture),
+}
+
+impl HiddenOwnerHelperLaunchReadiness {
+    pub(crate) fn allows_launch(self) -> bool {
+        matches!(self, Self::ReadyAttached)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum DurableInboxItemKind {
@@ -921,20 +934,20 @@ impl AgentRuntimeStateStore {
         })
     }
 
-    pub(crate) fn hidden_owner_helper_launch_ready(
+    pub(crate) fn classify_hidden_owner_helper_launch_readiness(
         &self,
         orchestration_session_id: &str,
         participant_id: &str,
         require_internal_session_id: bool,
-    ) -> Result<bool> {
+    ) -> Result<HiddenOwnerHelperLaunchReadiness> {
         let Some(record) = self.load_session(orchestration_session_id)? else {
-            return Ok(false);
+            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
         };
         if record.session.state != OrchestrationSessionState::Active {
-            return Ok(false);
+            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
         }
         if record.session.active_participant_id() != Some(participant_id) {
-            return Ok(false);
+            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
         }
 
         let Some(participant) = record
@@ -942,19 +955,43 @@ impl AgentRuntimeStateStore {
             .iter()
             .find(|participant| participant.participant_id() == participant_id)
         else {
-            return Ok(false);
+            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
         };
         if !participant.matches_public_parent_linkage(&record.session) {
-            return Ok(false);
-        }
-        if !participant.is_authoritative_live() || !owner_process_is_alive(participant) {
-            return Ok(false);
+            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
         }
         if require_internal_session_id && participant.internal_uaa_session_id().is_none() {
-            return Ok(false);
+            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
         }
 
-        Ok(true)
+        let attached_live = session_attached_to_participant(&record.session, participant)
+            && participant.attached_client_present()
+            && participant.is_authoritative_live()
+            && owner_process_is_alive(participant);
+        if attached_live {
+            return Ok(HiddenOwnerHelperLaunchReadiness::ReadyAttached);
+        }
+
+        if record.session.attached_participant_id().is_none()
+            && participant.is_resume_eligible()
+            && participant.internal_uaa_session_id().is_some()
+        {
+            match record.session.posture {
+                OrchestrationSessionPosture::ParkedResumable => {
+                    return Ok(HiddenOwnerHelperLaunchReadiness::ReadyDetached(
+                        OrchestrationSessionPosture::ParkedResumable,
+                    ));
+                }
+                OrchestrationSessionPosture::AwaitingAttention => {
+                    return Ok(HiddenOwnerHelperLaunchReadiness::ReadyDetached(
+                        OrchestrationSessionPosture::AwaitingAttention,
+                    ));
+                }
+                _ => {}
+            }
+        }
+
+        Ok(HiddenOwnerHelperLaunchReadiness::Pending)
     }
 
     pub(crate) fn resolve_live_orchestrator_participant(

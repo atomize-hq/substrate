@@ -469,11 +469,14 @@ pub(crate) fn wait_for_hidden_owner_helper_readiness(
 ) -> Result<()> {
     let started_at = std::time::Instant::now();
     loop {
-        if store.hidden_owner_helper_launch_ready(
-            plan.orchestration_session_id(),
-            plan.participant_id(),
-            plan.requires_internal_session_id(),
-        )? {
+        if store
+            .classify_hidden_owner_helper_launch_readiness(
+                plan.orchestration_session_id(),
+                plan.participant_id(),
+                plan.requires_internal_session_id(),
+            )?
+            .allows_launch()
+        {
             return Ok(());
         }
         if started_at.elapsed() >= OWNER_HELPER_READY_TIMEOUT {
