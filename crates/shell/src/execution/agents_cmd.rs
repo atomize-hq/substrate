@@ -307,18 +307,62 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     let context = resolve_command_context(cli)?;
     let plan = build_start_launch_plan(args, &context)?;
     let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
-    run_public_prompt_command(
-        PublicPromptCommandRequest {
-            action: PublicPromptAction::Start,
-            orchestration_session_id: Some(receipt.orchestration_session_id),
-            backend_id: receipt.backend_id,
-            prompt,
-            json: args.json,
-        },
-        cli.world,
-        cli.no_world,
-    )
-    .map_err(normalize_public_prompt_error)
+    let request = PublicPromptCommandRequest {
+        action: PublicPromptAction::Start,
+        orchestration_session_id: Some(receipt.orchestration_session_id.clone()),
+        backend_id: receipt.backend_id.clone(),
+        prompt,
+        json: args.json,
+    };
+    match run_public_prompt_command(request.clone(), cli.world, cli.no_world) {
+        Ok(()) => Ok(()),
+        Err(err)
+            if recoverable_detached_start_retry(
+                &receipt.orchestration_session_id,
+                &receipt.backend_id,
+                &err,
+            )? =>
+        {
+            let plan = build_successor_launch_plan(
+                cli,
+                &receipt.orchestration_session_id,
+                OwnerHelperMode::Resume,
+            )
+            .map_err(runtime_start_error)?;
+            if plan.descriptor.backend_id != receipt.backend_id {
+                return Err(normalize_public_prompt_error(err));
+            }
+            let _ = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+            run_public_prompt_command(request, cli.world, cli.no_world)
+                .map_err(normalize_public_prompt_error)
+        }
+        Err(err) => Err(normalize_public_prompt_error(err)),
+    }
+}
+
+fn recoverable_detached_start_retry(
+    orchestration_session_id: &str,
+    backend_id: &str,
+    err: &anyhow::Error,
+) -> Result<bool> {
+    if public_prompt_rendered_exit_code(err).is_some() {
+        return Ok(false);
+    }
+
+    let message = err.to_string();
+    let prompt_transport_failed = message.contains("private prompt transport")
+        || message.starts_with("stream_bridge_failed:")
+        || message.contains("prompt owner closed the stream before accepting the request");
+    if !prompt_transport_failed {
+        return Ok(false);
+    }
+
+    let store = AgentRuntimeStateStore::new()?;
+    let Ok(target) = store.resolve_public_turn_target(orchestration_session_id, backend_id) else {
+        return Ok(false);
+    };
+    Ok(target.target_kind == PublicTurnTargetKind::Host
+        && target.session_posture == PublicSessionPosture::DetachedReattachable)
 }
 
 fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {

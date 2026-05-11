@@ -7,11 +7,11 @@ use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde_json::{json, Value};
 use serial_test::serial;
 use std::fs;
-use std::io::Write;
+use std::io::{BufRead, Write};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::Output;
+use std::process::{Child, Output, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -49,6 +49,10 @@ struct AgentControlFixture {
 
 impl AgentControlFixture {
     fn new() -> Self {
+        Self::new_with_fake_codex(write_fake_codex_script)
+    }
+
+    fn new_with_fake_codex(script_writer: fn(&Path) -> PathBuf) -> Self {
         let temp = tempfile::Builder::new()
             .prefix("sac-")
             .tempdir_in("/tmp")
@@ -61,7 +65,7 @@ impl AgentControlFixture {
         fs::create_dir_all(substrate_home.join("shims")).expect("create shims dir");
         fs::create_dir_all(&workspace_root).expect("create workspace root");
         fs::write(substrate_home.join("trace.jsonl"), "").expect("seed trace");
-        let fake_codex = write_fake_codex_script(temp.path());
+        let fake_codex = script_writer(temp.path());
         Self {
             _temp: temp,
             home,
@@ -142,6 +146,23 @@ impl AgentControlFixture {
             .expect("run substrate command")
     }
 
+    fn spawn(&self, args: &[&str]) -> Child {
+        ensure_substrate_built();
+
+        std::process::Command::new(binary_path())
+            .env("HOME", &self.home)
+            .env("USERPROFILE", &self.home)
+            .env("SUBSTRATE_HOME", &self.substrate_home)
+            .env("SUBSTRATE_MANAGER_MANIFEST", manager_manifest_path())
+            .env("SHIM_TRACE_LOG", self.trace_path())
+            .current_dir(&self.workspace_root)
+            .args(args)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn substrate command")
+    }
+
     fn trace_path(&self) -> PathBuf {
         self.substrate_home.join("trace.jsonl")
     }
@@ -191,6 +212,54 @@ fn write_fake_codex_script(dir: &Path) -> PathBuf {
         .permissions();
     perms.set_mode(0o755);
     fs::set_permissions(&path, perms).expect("set fake codex permissions");
+    path
+}
+
+fn write_fake_codex_script_clean_bootstrap_then_prompt_resume(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-clean-bootstrap-then-prompt-resume.sh");
+    let count_path = dir.join("fake-codex-clean-bootstrap-then-prompt-resume.count");
+    let start_ready_path = dir.join("fake-codex-clean-bootstrap-start.ready");
+    let turn_ready_path = dir.join("fake-codex-clean-bootstrap-turn.ready");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\nSTART_READY='{}'\nTURN_READY='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nif [ \"$count\" -eq 1 ]; then\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  exit 0\nfi\nif [ \"$count\" -eq 2 ]; then\n  trap 'exit 0' INT TERM\n  rm -f \"$START_READY\"\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-2\"}}\\r\\n'\n  while [ ! -f \"$START_READY\" ]; do sleep 0.1; done\n  exit 0\nfi\nif [ \"$count\" -eq 3 ]; then\n  : > \"$START_READY\"\n  printf 'start prompt success\\n'\n  exit 0\nfi\nif [ \"$count\" -eq 4 ]; then\n  trap 'exit 0' INT TERM\n  rm -f \"$TURN_READY\"\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-4\"}}\\r\\n'\n  while [ ! -f \"$TURN_READY\" ]; do sleep 0.1; done\n  exit 0\nfi\nif [ \"$count\" -eq 5 ]; then\n  : > \"$TURN_READY\"\n  printf 'turn prompt success\\n'\n  exit 0\nfi\ntrap 'exit 0' INT TERM\nprintf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nwhile :; do sleep 1; done\n",
+        count_path.display(),
+        start_ready_path.display(),
+        turn_ready_path.display()
+    );
+    fs::write(&path, body).expect("write clean bootstrap fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("clean bootstrap fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set clean bootstrap fake codex permissions");
+    path
+}
+
+fn write_fake_codex_script_without_session_handle(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-no-session-handle.sh");
+    let body = "#!/bin/sh\nprintf 'bootstrap-without-session-handle\\n'\n";
+    fs::write(&path, body).expect("write fake codex script without session handle");
+    let mut perms = fs::metadata(&path)
+        .expect("fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set fake codex permissions");
+    path
+}
+
+fn write_fake_codex_script_with_delayed_prompt_completion(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-delayed-prompt-completion.sh");
+    let count_path = dir.join("fake-codex-delayed-prompt-completion.count");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nsleep 5\nexit 0\n",
+        count_path.display()
+    );
+    fs::write(&path, body).expect("write delayed prompt fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("delayed prompt fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set delayed prompt fake codex permissions");
     path
 }
 
@@ -252,6 +321,18 @@ fn canonical_participants_dir(substrate_home: &Path, orchestration_session_id: &
         .join("run/agent-hub/sessions")
         .join(orchestration_session_id)
         .join("participants")
+}
+
+fn canonical_inbox_item_path(
+    substrate_home: &Path,
+    orchestration_session_id: &str,
+    item_id: &str,
+) -> PathBuf {
+    substrate_home
+        .join("run/agent-hub/sessions")
+        .join(orchestration_session_id)
+        .join("inbox")
+        .join(format!("{item_id}.json"))
 }
 
 fn read_json_file(path: &Path) -> Value {
@@ -385,6 +466,54 @@ fn wait_for_single_active_session(
     panic!("timed out waiting for a single active orchestration session");
 }
 
+fn wait_for_session_posture(
+    fixture: &AgentControlFixture,
+    orchestration_session_id: &str,
+    expected_posture: &str,
+    timeout: Duration,
+) -> Value {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        let session = fixture.load_orchestration_session(orchestration_session_id);
+        if session.get("posture").and_then(Value::as_str) == Some(expected_posture) {
+            return session;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    panic!(
+        "timed out waiting for session {} posture {}",
+        orchestration_session_id, expected_posture
+    );
+}
+
+fn wait_for_successor_owner_pid(
+    fixture: &AgentControlFixture,
+    orchestration_session_id: &str,
+    previous_participant_id: &str,
+    timeout: Duration,
+) -> u32 {
+    let start = Instant::now();
+    while start.elapsed() < timeout {
+        let session = fixture.load_orchestration_session(orchestration_session_id);
+        let participant_changed = session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str)
+            .is_some_and(|participant_id| participant_id != previous_participant_id);
+        let shell_owner_pid = session
+            .get("shell_owner_pid")
+            .and_then(Value::as_u64)
+            .map(|pid| pid as u32);
+        if participant_changed && shell_owner_pid.is_some_and(pid_is_alive) {
+            return shell_owner_pid.expect("owner pid");
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    panic!(
+        "timed out waiting for successor owner pid in orchestration session {}",
+        orchestration_session_id
+    );
+}
+
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn session_participant_manifests(
     substrate_home: &Path,
@@ -493,6 +622,44 @@ fn write_json_file(path: &Path, value: &Value) {
         serde_json::to_vec_pretty(value).expect("serialize fixture json"),
     )
     .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
+}
+
+fn write_pending_inbox_item(
+    fixture: &AgentControlFixture,
+    orchestration_session_id: &str,
+    item_id: &str,
+    ts: &str,
+) {
+    write_json_file(
+        &canonical_inbox_item_path(&fixture.substrate_home, orchestration_session_id, item_id),
+        &json!({
+            "orchestration_session_id": orchestration_session_id,
+            "item_id": item_id,
+            "kind": "runtime_alert",
+            "state": "pending",
+            "created_at": ts,
+            "updated_at": ts,
+            "message": format!("attention needed for {item_id}")
+        }),
+    );
+}
+
+fn mark_session_awaiting_attention(
+    fixture: &AgentControlFixture,
+    orchestration_session_id: &str,
+    ts: &str,
+) -> Value {
+    let mut session = fixture.load_orchestration_session(orchestration_session_id);
+    session["posture"] = Value::String("awaiting_attention".to_string());
+    session["posture_changed_at"] = Value::String(ts.to_string());
+    session["attached_participant_id"] = Value::Null;
+    session["pending_inbox_count"] = Value::from(1u64);
+    session["last_attention_at"] = Value::String(ts.to_string());
+    write_json_file(
+        &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
+        &session,
+    );
+    fixture.load_orchestration_session(orchestration_session_id)
 }
 
 fn write_active_orchestration_session(
@@ -1453,6 +1620,469 @@ fn public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_
             .get("resumed_from_participant_id")
             .and_then(Value::as_str),
         Some("ash_parked")
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_parks_clean_bootstrap_and_supports_exact_turn_and_reattach() {
+    let fixture = AgentControlFixture::new_with_fake_codex(
+        write_fake_codex_script_clean_bootstrap_then_prompt_resume,
+    );
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from clean bootstrap",
+        "--json",
+    ]);
+    assert!(
+        start_output.status.success(),
+        "public start should succeed when bootstrap establishes detached continuity: {start_output:?}"
+    );
+    let start_records = parse_ndjson_output(&start_output);
+    let start_accepted = find_ndjson_record(&start_records, "accepted");
+    let start_completed = find_ndjson_record(&start_records, "completed");
+    assert_eq!(
+        start_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "clean bootstrap start must emit accepted before the terminal envelope: {start_records:?}"
+    );
+    assert_eq!(
+        start_completed.get("action").and_then(Value::as_str),
+        Some("start")
+    );
+    assert_eq!(
+        start_accepted.get("scope").and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        start_completed.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        start_completed.get("turn_outcome").and_then(Value::as_str),
+        Some("success")
+    );
+    assert_eq!(
+        start_completed.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_empty_warnings(start_completed);
+
+    let orchestration_session_id = start_completed["orchestration_session_id"]
+        .as_str()
+        .expect("start session id")
+        .to_string();
+    let original_participant_id = start_completed["participant_id"]
+        .as_str()
+        .expect("start participant id")
+        .to_string();
+    let parked_session = wait_for_session_posture(
+        &fixture,
+        &orchestration_session_id,
+        "parked_resumable",
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        parked_session.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_eq!(
+        parked_session.get("posture").and_then(Value::as_str),
+        Some("parked_resumable")
+    );
+    assert_eq!(
+        parked_session
+            .get("attached_participant_id")
+            .is_none_or(Value::is_null),
+        true
+    );
+    assert_eq!(
+        parked_session
+            .get("pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(0)
+    );
+    assert_eq!(
+        parked_session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str),
+        Some(original_participant_id.as_str()),
+        "the parked session must retain the authoritative participant handle"
+    );
+    let parked_participant =
+        fixture.load_participant(&orchestration_session_id, &original_participant_id);
+    assert_eq!(
+        parked_participant
+            .pointer("/internal/resume_eligible")
+            .and_then(Value::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        parked_participant
+            .pointer("/internal/attached_client_present")
+            .and_then(Value::as_bool),
+        Some(false)
+    );
+
+    let turn_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        &orchestration_session_id,
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "resume the parked session",
+        "--json",
+    ]);
+    assert!(
+        turn_output.status.success(),
+        "public turn should succeed against the exact parked bootstrap session: {turn_output:?}"
+    );
+    let turn_records = parse_ndjson_output(&turn_output);
+    let turn_accepted = find_ndjson_record(&turn_records, "accepted");
+    let turn_completed = find_ndjson_record(&turn_records, "completed");
+    assert_eq!(
+        turn_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "parked host turn must keep the accepted -> terminal contract: {turn_records:?}"
+    );
+    assert_eq!(
+        turn_accepted.get("scope").and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        turn_completed.get("action").and_then(Value::as_str),
+        Some("turn")
+    );
+    assert_eq!(
+        turn_completed
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id.as_str())
+    );
+    assert_eq!(
+        turn_completed.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        turn_completed.get("turn_outcome").and_then(Value::as_str),
+        Some("success")
+    );
+    assert_eq!(
+        turn_completed.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_empty_warnings(turn_completed);
+    let turn_participant_id = turn_completed["participant_id"]
+        .as_str()
+        .expect("turn participant id")
+        .to_string();
+    assert_ne!(
+        turn_participant_id, original_participant_id,
+        "the exact-session turn should allocate a successor participant for the resumed parked owner"
+    );
+
+    let parked_again = wait_for_session_posture(
+        &fixture,
+        &orchestration_session_id,
+        "parked_resumable",
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        parked_again.get("posture").and_then(Value::as_str),
+        Some("parked_resumable"),
+        "the same orchestration session must park again after the exact-session follow-up turn"
+    );
+    assert_eq!(
+        parked_again
+            .get("attached_participant_id")
+            .is_none_or(Value::is_null),
+        true
+    );
+
+    let reattach_output = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        &orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        reattach_output.status.success(),
+        "public reattach should succeed against the exact parked bootstrap session: {reattach_output:?}"
+    );
+    let reattach_json = parse_json_output(&reattach_output);
+    assert_eq!(
+        reattach_json.get("action").and_then(Value::as_str),
+        Some("reattach")
+    );
+    assert_eq!(
+        reattach_json
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id.as_str())
+    );
+    assert_eq!(
+        reattach_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        reattach_json.get("scope").and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        reattach_json.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert!(
+        reattach_json.get("source_orchestration_session_id").is_none(),
+        "reattach must stay inside the exact bootstrap-created orchestration session: {reattach_json}"
+    );
+    assert_empty_warnings(&reattach_json);
+
+    let resumed_participant_id = reattach_json["participant_id"]
+        .as_str()
+        .expect("reattach participant id")
+        .to_string();
+    assert_ne!(
+        resumed_participant_id, original_participant_id,
+        "reattach must allocate a successor participant instead of mutating the parked source participant"
+    );
+    let resumed_participant =
+        fixture.load_participant(&orchestration_session_id, &resumed_participant_id);
+    assert_eq!(
+        resumed_participant
+            .get("resumed_from_participant_id")
+            .and_then(Value::as_str),
+        Some(turn_participant_id.as_str())
+    );
+    let resumed_owner_pid = fixture.load_orchestration_session(&orchestration_session_id)
+        ["shell_owner_pid"]
+        .as_u64()
+        .expect("reattach owner pid") as u32;
+    assert!(
+        pid_is_alive(resumed_owner_pid),
+        "reattach must leave the resumed owner live"
+    );
+
+    terminate_pid(resumed_owner_pid);
+}
+
+#[test]
+#[serial]
+fn public_start_detached_pending_inbox_normalizes_to_awaiting_attention() {
+    let fixture = AgentControlFixture::new_with_fake_codex(
+        write_fake_codex_script_clean_bootstrap_then_prompt_resume,
+    );
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from clean bootstrap",
+        "--json",
+    ]);
+    assert!(
+        start_output.status.success(),
+        "public start should succeed before pending inbox normalization: {start_output:?}"
+    );
+    let start_records = parse_ndjson_output(&start_output);
+    let start_completed = find_ndjson_record(&start_records, "completed");
+    let orchestration_session_id = start_completed["orchestration_session_id"]
+        .as_str()
+        .expect("start session id");
+
+    let ts = "2026-05-11T02:00:00Z";
+    write_pending_inbox_item(&fixture, orchestration_session_id, "item_attention", ts);
+    let attention_session = mark_session_awaiting_attention(&fixture, orchestration_session_id, ts);
+    assert_eq!(
+        attention_session.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_eq!(
+        attention_session.get("posture").and_then(Value::as_str),
+        Some("awaiting_attention")
+    );
+    assert_eq!(
+        attention_session.get("attached_participant_id"),
+        Some(&Value::Null)
+    );
+    assert_eq!(
+        attention_session
+            .get("pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(1)
+    );
+    assert_eq!(
+        fixture
+            .load_participant(
+                orchestration_session_id,
+                start_completed["participant_id"]
+                    .as_str()
+                    .expect("participant id"),
+            )
+            .pointer("/internal/resume_eligible")
+            .and_then(Value::as_bool),
+        Some(true),
+        "detached awaiting-attention normalization must keep the authoritative host participant resumable"
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_reports_runtime_start_failed_for_missing_bootstrap_handle() {
+    let fixture =
+        AgentControlFixture::new_with_fake_codex(write_fake_codex_script_without_session_handle);
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from broken bootstrap",
+        "--json",
+    ]);
+    assert_eq!(
+        start_output.status.code(),
+        Some(2),
+        "broken bootstrap must fail closed instead of reporting a successful parked session: {start_output:?}"
+    );
+    let stderr = stderr_text(&start_output);
+    assert!(
+        stderr.contains("runtime_start_failed"),
+        "broken bootstrap must keep the runtime_start_failed taxonomy: {start_output:?}"
+    );
+    assert!(
+        stderr.contains("failed to establish attached control ownership")
+            || stderr.contains("timed out waiting for authoritative owner-helper readiness")
+            || stderr.contains("missing an active participant")
+            || stderr.contains("owner_unreachable"),
+        "broken bootstrap failure should explain the missing ownership/bootstrap continuity: {start_output:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_turn_emits_explicit_failed_after_accepted_owner_drop() {
+    let fixture = AgentControlFixture::new_with_fake_codex(
+        write_fake_codex_script_with_delayed_prompt_completion,
+    );
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        "sess_late_drop",
+        "ash_late_drop_source",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_late_drop_source",
+        "codex",
+        "sess_late_drop",
+        "running",
+        false,
+        Some("uaa-late-drop-1"),
+        None,
+        ts,
+    );
+
+    let mut child = fixture.spawn(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_late_drop",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "force late owner loss",
+        "--json",
+    ]);
+    let stdout = child.stdout.take().expect("stdout pipe");
+    let mut reader = std::io::BufReader::new(stdout);
+    let mut line = String::new();
+    let mut records = Vec::new();
+    let mut killed_owner = false;
+    loop {
+        line.clear();
+        let bytes_read = reader.read_line(&mut line).expect("read stdout line");
+        if bytes_read == 0 {
+            break;
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let record: Value = serde_json::from_str(trimmed).expect("stdout should be valid NDJSON");
+        if !killed_owner && record.get("kind").and_then(Value::as_str) == Some("accepted") {
+            let owner_pid = wait_for_successor_owner_pid(
+                &fixture,
+                "sess_late_drop",
+                "ash_late_drop_source",
+                Duration::from_secs(5),
+            );
+            terminate_pid(owner_pid);
+            killed_owner = true;
+        }
+        records.push(record);
+    }
+
+    let status = child.wait().expect("wait for child");
+    let stderr = {
+        let mut stderr = String::new();
+        let mut handle = child.stderr.take().expect("stderr pipe");
+        std::io::Read::read_to_string(&mut handle, &mut stderr).expect("read stderr");
+        stderr
+    };
+
+    assert_eq!(
+        status.code(),
+        Some(1),
+        "owner loss after accepted must fail the public turn command: {records:?}\nstderr={stderr}"
+    );
+    assert_eq!(
+        records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "the late-drop prompt path must emit accepted before the owner is terminated: {records:?}"
+    );
+    let failed = find_ndjson_record(&records, "failed");
+    assert_eq!(failed.get("terminal").and_then(Value::as_bool), Some(true));
+    assert_eq!(
+        failed.get("error_code").and_then(Value::as_str),
+        Some("owner_unreachable")
+    );
+    assert!(
+        records
+            .iter()
+            .all(|record| record.get("kind").and_then(Value::as_str) != Some("completed")),
+        "owner drop after accepted must not silently produce completed: {records:?}"
     );
 }
 

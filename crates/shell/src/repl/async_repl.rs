@@ -44,6 +44,7 @@ use crate::execution::agent_runtime::control::{
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
+use crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture;
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
@@ -2606,31 +2607,48 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                 }
                 startup_failure = Some(reason);
             } else if !shutdown_for_events.load(Ordering::SeqCst) && was_live {
-                let reason = if runtime_role_for_events == MEMBER_ROLE {
-                    "world-scoped member control stream ended before completion observation"
+                if can_park_host_runtime_after_detach(controls_parent_session, &manifest_guard) {
+                    park_host_runtime_in_place(
+                        &mut orchestration_guard,
+                        &mut manifest_guard,
+                        "owner detached cleanly",
+                    );
+                    publish_events.push(build_runtime_message_event(
+                        &manifest_guard,
+                        &orchestration_guard,
+                        run_id_for_tasks.clone(),
+                        MessageEventKind::Status,
+                        runtime_detached_message(&runtime_role_for_events),
+                    ));
                 } else {
-                    "shell-owned orchestrator control stream ended before completion observation"
+                    let reason = if runtime_role_for_events == MEMBER_ROLE {
+                        "world-scoped member control stream ended before completion observation"
+                    } else {
+                        "shell-owned orchestrator control stream ended before completion observation"
+                    }
+                    .to_string();
+                    manifest_guard.transition_state(AgentRuntimeSessionState::Invalidated);
+                    manifest_guard.mark_terminal_state(reason.clone());
+                    manifest_guard.internal.last_error_bucket =
+                        Some("runtime_lifecycle".to_string());
+                    manifest_guard.internal.last_error_message = Some(reason.clone());
+                    if controls_parent_session {
+                        orchestration_guard
+                            .transition_state(OrchestrationSessionState::Invalidated);
+                        orchestration_guard.mark_terminal(reason.clone());
+                    } else {
+                        orchestration_guard.touch_active();
+                    }
+                    let mut event = AgentEvent::alert(
+                        manifest_guard.handle.agent_id.clone(),
+                        manifest_guard.handle.orchestration_session_id.clone(),
+                        run_id_for_tasks.clone(),
+                        runtime_stream_closed_alert_code(&runtime_role_for_events),
+                        reason,
+                    );
+                    apply_runtime_participant_lineage(&mut event, &manifest_guard);
+                    publish_events.push(event);
                 }
-                .to_string();
-                manifest_guard.transition_state(AgentRuntimeSessionState::Invalidated);
-                manifest_guard.mark_terminal_state(reason.clone());
-                manifest_guard.internal.last_error_bucket = Some("runtime_lifecycle".to_string());
-                manifest_guard.internal.last_error_message = Some(reason.clone());
-                if controls_parent_session {
-                    orchestration_guard.transition_state(OrchestrationSessionState::Invalidated);
-                    orchestration_guard.mark_terminal(reason.clone());
-                } else {
-                    orchestration_guard.touch_active();
-                }
-                let mut event = AgentEvent::alert(
-                    manifest_guard.handle.agent_id.clone(),
-                    manifest_guard.handle.orchestration_session_id.clone(),
-                    run_id_for_tasks.clone(),
-                    runtime_stream_closed_alert_code(&runtime_role_for_events),
-                    reason,
-                );
-                apply_runtime_participant_lineage(&mut event, &manifest_guard);
-                publish_events.push(event);
             }
             (orchestration_guard.clone(), manifest_guard.clone())
         };
@@ -2734,6 +2752,22 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                         } else {
                             orchestration_guard.touch_active();
                         }
+                    } else if can_park_host_runtime_after_detach(
+                        controls_parent_session,
+                        &manifest_guard,
+                    ) {
+                        park_host_runtime_in_place(
+                            &mut orchestration_guard,
+                            &mut manifest_guard,
+                            "owner detached cleanly",
+                        );
+                        publish_events.push(build_runtime_message_event(
+                            &manifest_guard,
+                            &orchestration_guard,
+                            run_id_for_completion.clone(),
+                            MessageEventKind::Status,
+                            runtime_detached_message(&runtime_role_for_completion),
+                        ));
                     } else {
                         let reason = format!(
                             "attached control turn exited with status {}",
@@ -2818,6 +2852,22 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                         } else {
                             orchestration_guard.touch_active();
                         }
+                    } else if can_park_host_runtime_after_detach(
+                        controls_parent_session,
+                        &manifest_guard,
+                    ) {
+                        park_host_runtime_in_place(
+                            &mut orchestration_guard,
+                            &mut manifest_guard,
+                            "owner detached cleanly",
+                        );
+                        publish_events.push(build_runtime_message_event(
+                            &manifest_guard,
+                            &orchestration_guard,
+                            run_id_for_completion.clone(),
+                            MessageEventKind::Status,
+                            runtime_detached_message(&runtime_role_for_completion),
+                        ));
                     } else {
                         let reason = format!("attached control turn ended unexpectedly: {reason}");
                         manifest_guard.transition_state(AgentRuntimeSessionState::Invalidated);
@@ -5084,11 +5134,7 @@ async fn park_host_orchestrator_runtime(
             .manifest
             .lock()
             .expect("runtime manifest mutex poisoned");
-        manifest_guard.release_runtime_ownership();
-        manifest_guard.mark_client_detached(reason.clone());
-        manifest_guard.touch_heartbeat();
-        orchestration_guard.transition_state(OrchestrationSessionState::Active);
-        orchestration_guard.mark_parked_resumable(reason.clone());
+        park_host_runtime_in_place(&mut orchestration_guard, &mut manifest_guard, &reason);
         (orchestration_guard.clone(), manifest_guard.clone())
     };
     let _ = persist_runtime_snapshots(&runtime.store, &orchestration_session, &manifest);
@@ -5104,6 +5150,46 @@ async fn park_host_orchestrator_runtime(
         agent_printer,
     );
     true
+}
+
+fn can_park_host_runtime_after_detach(
+    controls_parent_session: bool,
+    manifest: &AgentRuntimeSessionManifest,
+) -> bool {
+    controls_parent_session
+        && manifest.is_host_orchestrator()
+        && manifest.handle.state.is_live()
+        && manifest.internal.uaa_session_id.is_some()
+}
+
+fn detached_host_posture(session: &OrchestrationSessionRecord) -> OrchestrationSessionPosture {
+    if session.pending_inbox_count > 0 {
+        OrchestrationSessionPosture::AwaitingAttention
+    } else {
+        OrchestrationSessionPosture::ParkedResumable
+    }
+}
+
+fn park_host_runtime_in_place(
+    orchestration_guard: &mut OrchestrationSessionRecord,
+    manifest_guard: &mut AgentRuntimeSessionManifest,
+    reason: &str,
+) {
+    manifest_guard.release_runtime_ownership();
+    manifest_guard.mark_client_detached(reason.to_string());
+    manifest_guard.touch_heartbeat();
+    orchestration_guard.transition_state(OrchestrationSessionState::Active);
+    match detached_host_posture(orchestration_guard) {
+        OrchestrationSessionPosture::ParkedResumable => {
+            orchestration_guard.mark_parked_resumable(reason.to_string());
+        }
+        OrchestrationSessionPosture::AwaitingAttention => {
+            orchestration_guard.mark_awaiting_attention();
+        }
+        OrchestrationSessionPosture::ActiveAttached | OrchestrationSessionPosture::Terminal => {
+            unreachable!("detached host parking only normalizes to parked or attention posture")
+        }
+    }
 }
 
 async fn abort_bootstrap_runtime(
@@ -7502,7 +7588,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     #[serial_test::serial]
-    fn start_host_orchestrator_runtime_invalidates_when_attached_control_exits() {
+    fn start_host_orchestrator_runtime_parks_when_attached_control_exits() {
         let _world_env_guard = crate::execution::world_env_guard();
         let temp = TempDir::new().expect("tempdir");
         let workspace_root = temp.path().join("workspace");
@@ -7556,76 +7642,54 @@ mod tests {
                         .load_orchestration_session(&manifest.handle.orchestration_session_id)
                         .expect("load orchestration session")
                         .expect("runtime orchestration session should exist");
-                    if manifest.handle.state == AgentRuntimeSessionState::Invalidated {
-                        assert_persisted_participant_snapshot(
-                            &store,
-                            &manifest.handle.participant_id,
-                            &AgentRuntimeSessionState::Invalidated,
-                        );
-                        assert_eq!(parent.state, OrchestrationSessionState::Invalidated);
+                    if parent.posture == OrchestrationSessionPosture::ParkedResumable {
+                        assert_eq!(parent.state, OrchestrationSessionState::Active);
+                        assert_eq!(parent.attached_participant_id.as_deref(), None);
                         assert_eq!(
                             parent.active_session_handle_id.as_deref(),
                             Some(manifest.handle.participant_id.as_str())
                         );
-                        assert!(parent.closed_at.is_some());
+                        assert!(parent.closed_at.is_none());
                         assert!(!manifest.internal.ownership_valid);
                         assert!(!manifest.internal.control_owner_retained);
                         assert!(!manifest.internal.completion_observer_retained);
-                        assert!(manifest.internal.terminal_observed_at.is_some());
+                        assert!(!manifest.attached_client_present());
+                        assert!(manifest.is_resume_eligible());
+                        assert_eq!(
+                            manifest.internal.uaa_session_id.as_deref(),
+                            Some("thread-test")
+                        );
                         break;
                     }
                     tokio::time::sleep(Duration::from_millis(25)).await;
                 }
             })
             .await
-            .expect("runtime should invalidate promptly after attached control exits");
+            .expect("runtime should park promptly after attached control exits");
 
+            let live_orchestrator = AgentRuntimeStateStore::new()
+                .expect("state store")
+                .find_live_orchestrator("codex");
             assert!(
-                AgentRuntimeStateStore::new()
-                    .expect("state store")
-                    .find_live_orchestrator("codex")
-                    .expect("load live orchestrator")
-                    .is_none(),
-                "invalidated attached control must disappear from authoritative live lookups"
+                match &live_orchestrator {
+                    Ok(None) => true,
+                    Err(err) => err.to_string().contains("references inactive participant"),
+                    Ok(Some(_)) => false,
+                },
+                "parked detached control must disappear from authoritative live lookups: {live_orchestrator:?}"
             );
+            let live_session = AgentRuntimeStateStore::new()
+                .expect("state store")
+                .resolve_live_orchestrator_session("codex");
             assert!(
-                AgentRuntimeStateStore::new()
-                    .expect("state store")
-                    .resolve_live_orchestrator_session("codex")
-                    .expect("resolve live orchestrator session")
-                    .is_none(),
-                "invalidated attached control must disappear from parent-gated live resolution"
+                match &live_session {
+                    Ok(None) => true,
+                    Err(err) => err.to_string().contains("references inactive participant"),
+                    Ok(Some(_)) => false,
+                },
+                "parked detached control must disappear from parent-gated live resolution: {live_session:?}"
             );
-            assert!(
-                AgentRuntimeStateStore::new()
-                    .expect("state store")
-                    .find_active_orchestration_session_for_pid(std::process::id())
-                    .expect("find active orchestration session for pid")
-                    .is_none(),
-                "invalidated orchestrator must not remain active for the current shell pid"
-            );
-
             shutdown_host_orchestrator_runtime(runtime, &ReplPrinter::Stdout, &mut telemetry).await;
-
-            let manifest = AgentRuntimeStateStore::new()
-                .expect("state store")
-                .list_manifests()
-                .expect("list manifests")
-                .into_iter()
-                .find(|manifest| manifest.handle.agent_id == "codex")
-                .expect("runtime manifest should still exist");
-            assert_eq!(manifest.handle.state, AgentRuntimeSessionState::Invalidated);
-            assert_persisted_participant_snapshot(
-                &AgentRuntimeStateStore::new().expect("state store"),
-                &manifest.handle.participant_id,
-                &AgentRuntimeSessionState::Invalidated,
-            );
-            let parent = AgentRuntimeStateStore::new()
-                .expect("state store")
-                .load_orchestration_session(&manifest.handle.orchestration_session_id)
-                .expect("load invalidated orchestration session")
-                .expect("invalidated orchestration session should exist");
-            assert_eq!(parent.state, OrchestrationSessionState::Invalidated);
         });
         std::env::remove_var("SUBSTRATE_HOME");
     }

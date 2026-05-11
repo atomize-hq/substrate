@@ -114,7 +114,7 @@ pub(crate) enum HiddenOwnerHelperLaunchReadiness {
 
 impl HiddenOwnerHelperLaunchReadiness {
     pub(crate) fn allows_launch(self) -> bool {
-        matches!(self, Self::ReadyAttached)
+        matches!(self, Self::ReadyAttached | Self::ReadyDetached(_))
     }
 }
 
@@ -972,23 +972,12 @@ impl AgentRuntimeStateStore {
             return Ok(HiddenOwnerHelperLaunchReadiness::ReadyAttached);
         }
 
-        if record.session.attached_participant_id().is_none()
-            && participant.is_resume_eligible()
-            && participant.internal_uaa_session_id().is_some()
-        {
-            match record.session.posture {
-                OrchestrationSessionPosture::ParkedResumable => {
-                    return Ok(HiddenOwnerHelperLaunchReadiness::ReadyDetached(
-                        OrchestrationSessionPosture::ParkedResumable,
-                    ));
-                }
-                OrchestrationSessionPosture::AwaitingAttention => {
-                    return Ok(HiddenOwnerHelperLaunchReadiness::ReadyDetached(
-                        OrchestrationSessionPosture::AwaitingAttention,
-                    ));
-                }
-                _ => {}
-            }
+        if let Some(posture) = valid_detached_host_continuity_posture(
+            &record.session,
+            participant,
+            require_internal_session_id,
+        ) {
+            return Ok(HiddenOwnerHelperLaunchReadiness::ReadyDetached(posture));
         }
 
         Ok(HiddenOwnerHelperLaunchReadiness::Pending)
@@ -1632,8 +1621,8 @@ impl AgentRuntimeStateStore {
                             participant.is_authoritative_live()
                                 && owner_process_is_alive(participant)
                         } else {
-                            participant.is_resume_eligible()
-                                && participant.internal_uaa_session_id().is_some()
+                            valid_detached_host_continuity_posture(&session, participant, true)
+                                .is_some()
                         }
                     }
                     Some(participant) => {
@@ -2139,10 +2128,46 @@ fn classify_public_session_posture(
     {
         return PublicSessionPosture::Active;
     }
-    if participant.is_resume_eligible() && participant.internal_uaa_session_id().is_some() {
+    if valid_detached_host_continuity_posture(session, participant, true).is_some() {
         return PublicSessionPosture::DetachedReattachable;
     }
     PublicSessionPosture::Terminal
+}
+
+// Detached continuity is valid only when persisted session truth and participant truth agree.
+fn valid_detached_host_continuity_posture(
+    session: &OrchestrationSessionRecord,
+    participant: &AgentRuntimeParticipantRecord,
+    require_internal_session_id: bool,
+) -> Option<OrchestrationSessionPosture> {
+    if session.state.is_terminal() || !participant.handle.state.is_live() {
+        return None;
+    }
+    if session.active_participant_id() != Some(participant.participant_id()) {
+        return None;
+    }
+    if !participant.matches_public_parent_linkage(session) {
+        return None;
+    }
+    if session.attached_participant_id().is_some() || participant.attached_client_present() {
+        return None;
+    }
+    if !participant.is_resume_eligible() {
+        return None;
+    }
+    if require_internal_session_id && participant.internal_uaa_session_id().is_none() {
+        return None;
+    }
+
+    match session.posture {
+        OrchestrationSessionPosture::ParkedResumable if session.pending_inbox_count == 0 => {
+            Some(OrchestrationSessionPosture::ParkedResumable)
+        }
+        OrchestrationSessionPosture::AwaitingAttention if session.pending_inbox_count > 0 => {
+            Some(OrchestrationSessionPosture::AwaitingAttention)
+        }
+        _ => None,
+    }
 }
 
 fn session_authoritative_participant_id(session: &OrchestrationSessionRecord) -> Option<&str> {
@@ -3225,6 +3250,72 @@ mod tests {
                 target.session_posture,
                 PublicSessionPosture::DetachedReattachable
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn hidden_owner_helper_launch_classifier_accepts_detached_attention_needed_session() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_ready_attention", "ash_detached");
+            let parent = parked_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+            store
+                .persist_inbox_item(&pending_inbox_item(
+                    "sess_ready_attention",
+                    "item_attention",
+                    DurableInboxItemKind::ApprovalRequired,
+                ))
+                .expect("persist pending inbox item");
+
+            let readiness = store
+                .classify_hidden_owner_helper_launch_readiness(
+                    "sess_ready_attention",
+                    "ash_detached",
+                    true,
+                )
+                .expect("classify readiness");
+            assert_eq!(
+                readiness,
+                HiddenOwnerHelperLaunchReadiness::ReadyDetached(
+                    OrchestrationSessionPosture::AwaitingAttention,
+                )
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn hidden_owner_helper_launch_classifier_rejects_detached_posture_pending_mismatch() {
+        with_store(|store| {
+            let participant = detached_orchestrator("codex", "sess_bad_detached", "ash_detached");
+            let mut parent = parked_parent(&participant);
+            parent.pending_inbox_count = 1;
+            write_canonical_session_file(store, &parent);
+            write_flat_session_file(store, &parent);
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .classify_hidden_owner_helper_launch_readiness(
+                    "sess_bad_detached",
+                    "ash_detached",
+                    true,
+                )
+                .expect_err("invalid detached posture must fail closed");
+            assert!(err.to_string().contains("invalid session record"));
+
+            let loaded = store
+                .load_session("sess_bad_detached")
+                .expect_err("invalid detached posture must fail closed during load");
+            assert!(loaded.to_string().contains("invalid session record"));
         });
     }
 
