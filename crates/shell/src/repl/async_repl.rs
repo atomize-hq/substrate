@@ -2522,17 +2522,19 @@ async fn wait_for_hidden_owner_helper_completion(runtime: AsyncReplAgentRuntime)
         RetainedRunControl::Local(retained_control) => {
             if let Some(stop_rx) = private_stop_rx {
                 join_failed |= wait_for_hidden_owner_helper_local_runtime(
-                    &store,
-                    &orchestration_session,
-                    &manifest,
-                    &shutdown_requested,
+                    HiddenOwnerHelperLocalRuntimeContext {
+                        store: &store,
+                        orchestration_session: &orchestration_session,
+                        manifest: &manifest,
+                        shutdown_requested: &shutdown_requested,
+                        stop_transport: &mut stop_transport,
+                        prompt_transport: &mut prompt_transport,
+                        prompt_owner_task: &mut prompt_owner_task,
+                        heartbeat_stop_tx: &mut heartbeat_stop_tx,
+                        heartbeat_task: &mut heartbeat_task,
+                    },
                     retained_control,
                     stop_rx,
-                    &mut stop_transport,
-                    &mut prompt_transport,
-                    &mut prompt_owner_task,
-                    &mut heartbeat_stop_tx,
-                    &mut heartbeat_task,
                 )
                 .await;
             } else {
@@ -2584,19 +2586,35 @@ async fn wait_for_hidden_owner_helper_completion(runtime: AsyncReplAgentRuntime)
     )
 }
 
+struct HiddenOwnerHelperLocalRuntimeContext<'a> {
+    store: &'a AgentRuntimeStateStore,
+    orchestration_session: &'a Arc<Mutex<OrchestrationSessionRecord>>,
+    manifest: &'a Arc<Mutex<AgentRuntimeSessionManifest>>,
+    shutdown_requested: &'a Arc<AtomicBool>,
+    stop_transport: &'a mut Option<PrivateStopTransport>,
+    prompt_transport: &'a mut Option<PrivatePromptTransport>,
+    prompt_owner_task: &'a mut Option<tokio::task::JoinHandle<()>>,
+    heartbeat_stop_tx: &'a mut Option<tokio::sync::oneshot::Sender<()>>,
+    heartbeat_task: &'a mut Option<tokio::task::JoinHandle<()>>,
+}
+
 async fn wait_for_hidden_owner_helper_local_runtime(
-    store: &AgentRuntimeStateStore,
-    orchestration_session: &Arc<Mutex<OrchestrationSessionRecord>>,
-    manifest: &Arc<Mutex<AgentRuntimeSessionManifest>>,
-    shutdown_requested: &Arc<AtomicBool>,
+    context: HiddenOwnerHelperLocalRuntimeContext<'_>,
     retained_control: &mut LocalRetainedRunControl,
     mut stop_rx: PrivateStopRequestReceiver,
-    stop_transport: &mut Option<PrivateStopTransport>,
-    prompt_transport: &mut Option<PrivatePromptTransport>,
-    prompt_owner_task: &mut Option<tokio::task::JoinHandle<()>>,
-    heartbeat_stop_tx: &mut Option<tokio::sync::oneshot::Sender<()>>,
-    heartbeat_task: &mut Option<tokio::task::JoinHandle<()>>,
 ) -> bool {
+    let HiddenOwnerHelperLocalRuntimeContext {
+        store,
+        orchestration_session,
+        manifest,
+        shutdown_requested,
+        stop_transport,
+        prompt_transport,
+        prompt_owner_task,
+        heartbeat_stop_tx,
+        heartbeat_task,
+    } = context;
+
     let mut join_failed = false;
     let Some(mut completion_task) = retained_control.completion_task.take() else {
         return true;
@@ -2688,10 +2706,8 @@ async fn wait_for_hidden_owner_helper_local_runtime(
                     .to_string(),
             );
         }
-    } else {
-        if let Some(task) = retained_control.event_task.take() {
-            let _ = task.await;
-        }
+    } else if let Some(task) = retained_control.event_task.take() {
+        let _ = task.await;
     }
 
     join_failed
@@ -8282,7 +8298,13 @@ mod tests {
                         .load_orchestration_session(&manifest.handle.orchestration_session_id)
                         .expect("load orchestration session")
                         .expect("runtime orchestration session should exist");
-                    if parent.posture == OrchestrationSessionPosture::ParkedResumable {
+                    if parent.posture == OrchestrationSessionPosture::ParkedResumable
+                        && !manifest.internal.ownership_valid
+                        && !manifest.internal.control_owner_retained
+                        && !manifest.internal.completion_observer_retained
+                        && !manifest.attached_client_present()
+                        && manifest.is_resume_eligible()
+                    {
                         assert_eq!(parent.state, OrchestrationSessionState::Active);
                         assert_eq!(parent.attached_participant_id.as_deref(), None);
                         assert_eq!(

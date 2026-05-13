@@ -20,6 +20,8 @@ use crate::execution::agent_runtime::control::{
     register_hidden_owner_helper_startup_prompt_listener,
     run_hidden_owner_helper_startup_prompt_stream,
 };
+#[cfg(unix)]
+use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
 use crate::execution::agent_runtime::validator::{
     exact_backend_selection_error_exit_code, member_selection_error_exit_code,
     validate_exact_backend_selection, validate_member_selection,
@@ -55,6 +57,12 @@ use substrate_common::{AgentEvent, PlacementExecution};
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 use uuid::Uuid;
 const TOOLBOX_VERSION: u32 = 1;
+#[cfg(unix)]
+const START_DETACH_NORMALIZATION_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(unix)]
+const START_DETACH_NORMALIZATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
+#[cfg(unix)]
+const START_ATTACHED_GRACE_TIMEOUT: Duration = Duration::from_millis(250);
 
 pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
     match &cmd.action {
@@ -279,6 +287,13 @@ pub(crate) fn launch_hidden_owner_helper(
         let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
         return Err(err);
     }
+    #[cfg(unix)]
+    if let Err(err) = stabilize_hidden_owner_helper_start_return(&store, plan, &mut child) {
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
+        return Err(err);
+    }
 
     Ok(HiddenOwnerHelperLaunchReceipt {
         helper_pid: child.id(),
@@ -365,6 +380,78 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
             }
             Err(err) => Err(normalize_public_prompt_error(err)),
         }
+    }
+}
+
+#[cfg(unix)]
+fn stabilize_hidden_owner_helper_start_return(
+    store: &AgentRuntimeStateStore,
+    plan: &HiddenOwnerHelperLaunchPlan,
+    child: &mut std::process::Child,
+) -> Result<()> {
+    if plan.mode != OwnerHelperMode::Start {
+        return Ok(());
+    }
+
+    let grace_started_at = std::time::Instant::now();
+    loop {
+        if matches!(
+            store.classify_hidden_owner_helper_launch_readiness(
+                plan.orchestration_session_id(),
+                plan.participant_id(),
+                plan.requires_internal_session_id(),
+            )?,
+            HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
+        ) {
+            return Ok(());
+        }
+        if child
+            .try_wait()
+            .context("failed to poll hidden owner-helper exit status")?
+            .is_some()
+        {
+            break;
+        }
+        if grace_started_at.elapsed() >= START_ATTACHED_GRACE_TIMEOUT {
+            return Ok(());
+        }
+        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
+    }
+
+    let normalization_started_at = std::time::Instant::now();
+    loop {
+        if matches!(
+            store.classify_hidden_owner_helper_launch_readiness(
+                plan.orchestration_session_id(),
+                plan.participant_id(),
+                plan.requires_internal_session_id(),
+            )?,
+            HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
+        ) {
+            return Ok(());
+        }
+
+        if normalization_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
+            let snapshot_summary = store
+                .load_orchestration_session(plan.orchestration_session_id())?
+                .map(|session| {
+                    format!(
+                        "state={:?}, posture={:?}, attached_participant_id={:?}, shell_owner_pid={}",
+                        session.state,
+                        session.posture,
+                        session.attached_participant_id,
+                        session.shell_owner_pid,
+                    )
+                })
+                .unwrap_or_else(|| "session_missing".to_string());
+            anyhow::bail!(
+                "timed out waiting for detached start normalization for orchestration session {} after hidden owner-helper {} exited ({snapshot_summary})",
+                plan.orchestration_session_id(),
+                child.id(),
+            );
+        }
+
+        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
     }
 }
 

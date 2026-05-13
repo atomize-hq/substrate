@@ -365,6 +365,7 @@ fn canonical_participant_manifest_path(
         .join(format!("{participant_id}.json"))
 }
 
+#[cfg(target_os = "linux")]
 fn canonical_participants_dir(substrate_home: &Path, orchestration_session_id: &str) -> PathBuf {
     substrate_home
         .join("run/agent-hub/sessions")
@@ -588,7 +589,7 @@ fn wait_for_successor_owner_pid(
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn session_participant_manifests(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -609,7 +610,7 @@ fn session_participant_manifests(
     manifests
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn participant_is_authoritative_live(manifest: &Value) -> bool {
     let Some(state) = manifest.get("state").and_then(Value::as_str) else {
         return false;
@@ -644,7 +645,7 @@ fn participant_is_authoritative_live(manifest: &Value) -> bool {
             .is_none_or(Value::is_null)
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn authoritative_live_world_member_manifests_for_session(
     substrate_home: &Path,
     orchestration_session_id: &str,
@@ -659,7 +660,7 @@ fn authoritative_live_world_member_manifests_for_session(
         .collect()
 }
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(target_os = "linux")]
 fn wait_for_live_world_member_count(
     fixture: &AgentControlFixture,
     orchestration_session_id: &str,
@@ -772,6 +773,7 @@ fn write_parked_orchestration_session(
     );
 }
 
+#[cfg(target_os = "linux")]
 fn write_parked_world_orchestration_session(
     fixture: &AgentControlFixture,
     agent_id: &str,
@@ -956,6 +958,7 @@ fn write_runtime_participant(
     );
 }
 
+#[cfg(target_os = "linux")]
 #[allow(clippy::too_many_arguments)]
 fn write_world_member_participant(
     fixture: &AgentControlFixture,
@@ -1679,6 +1682,13 @@ fn public_stop_cleanly_closes_same_durable_session_after_reattach() {
         Some(resumed_participant_id.as_str())
     );
     assert!(pid_is_alive(resumed_owner_pid));
+    assert!(
+        wait_for_path(
+            &stop_transport_path(&fixture, "sess_resume_stop", &resumed_participant_id),
+            Duration::from_secs(5),
+        ),
+        "reattach must materialize the per-session private stop transport before stop is exercised"
+    );
 
     let stop_output = fixture.run(&["agent", "stop", "--session", "sess_resume_stop", "--json"]);
     assert!(
