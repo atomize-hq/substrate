@@ -161,8 +161,8 @@ JSON rules:
 
 #### Behavior
 
-- `substrate agent status` reports the live successor view for the current process.
-- It returns the selected orchestrator identity plus every active pure-agent session row that survives the requested filters.
+- `substrate agent status` reports the selected successor status surface for the current process.
+- It returns the selected orchestrator identity plus every selected pure-agent session row that survives the requested filters after live-runtime-first selection and trace fallback for gaps.
 - It renders nested gateway-backed LLM activity as separate correlated rows.
 
 #### Human-readable sections
@@ -174,22 +174,30 @@ Human-readable status output renders:
 
 Pure-agent session render rules:
 - Each session row renders these fields in this order:
-  1. `participant_id`
-  2. `orchestration_session_id`
+  1. `orchestration_session_id`
+  2. `participant_id`
   3. `agent_id`
-  4. `backend_id`
-  5. `client`
-  6. `router`
-  7. `protocol`
-  8. `execution.scope`
-  9. `role`
-  10. `last_event_at`
-  11. `world_id`
-  12. `world_generation`
+  4. `source_kind`
+  5. `backend_id`
+  6. `client`
+  7. `router`
+  8. `protocol`
+  9. `execution.scope`
+  10. `role`
+  11. `posture`
+  12. `attached_participant_id`
+  13. `pending_inbox_count`
+  14. `last_event_at`
+  15. `world_id`
+  16. `world_generation`
 - `client` renders exactly as the executing session's `agent_id`.
 - `router` renders `agent_hub`.
 - `protocol` renders `uaa.agent.session`.
 - `participant_id` renders the canonical child identity for the live participant row.
+- `source_kind` renders `live_runtime` or `trace_fallback`.
+- `posture`, `attached_participant_id`, and `pending_inbox_count` render authoritative live session-root values only on `source_kind=live_runtime` pure-agent rows.
+- Human-readable `source_kind=trace_fallback` rows render `posture=<unknown>`, `attached_participant_id=<unknown>`, and `pending_inbox_count=<unknown>`.
+- Human-readable `source_kind=live_runtime` rows render `attached_participant_id=<none>` when the authoritative parent session has no current attachment.
 - `world_id` and `world_generation` render only when `execution.scope=world`.
 - Host-scoped rows omit `world_id` and `world_generation`.
 - Pure-agent session rows omit `provider` and `auth_authority`.
@@ -222,9 +230,10 @@ Nested LLM render rules:
   "orchestrator_agent_id": "claude_code",
   "sessions": [
     {
-      "participant_id": "ash_001",
       "orchestration_session_id": "sess_001",
+      "participant_id": "ash_001",
       "agent_id": "codex",
+      "source_kind": "live_runtime",
       "backend_id": "cli:codex",
       "client": "codex",
       "router": "agent_hub",
@@ -233,6 +242,9 @@ Nested LLM render rules:
         "scope": "world"
       },
       "role": null,
+      "posture": "active_attached",
+      "attached_participant_id": "ash_orch_001",
+      "pending_inbox_count": 0,
       "last_event_at": "2026-04-24T18:30:00Z",
       "world_id": "world-17",
       "world_generation": 3
@@ -260,8 +272,11 @@ Nested LLM render rules:
 JSON rules:
 - `orchestrator_agent_id` is the selected inventory id, not the derived `backend_id`.
 - Each pure-agent session object includes `participant_id` as the canonical child identity.
+- Each pure-agent session object includes `source_kind`.
 - Each pure-agent session object includes `client`, `router`, and `protocol`.
 - Each pure-agent session object omits `provider` and `auth_authority`.
+- Each pure-agent `source_kind=live_runtime` session object includes authoritative `posture`, `attached_participant_id`, and `pending_inbox_count` from the session-root parent record.
+- Each pure-agent `source_kind=trace_fallback` session object renders `posture`, `attached_participant_id`, and `pending_inbox_count` as explicit `null`.
 - `world_id` and `world_generation` are both present or both absent.
 - `world_generation` is an integer that starts at `0` for a fresh world allocation and increments by `1` on each hub-driven restart of that orchestration session's world.
 - Each nested record includes `run_id` as the nested request correlation id.

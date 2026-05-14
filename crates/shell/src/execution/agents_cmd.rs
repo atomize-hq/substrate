@@ -20,6 +20,9 @@ use crate::execution::agent_runtime::control::{
     register_hidden_owner_helper_startup_prompt_listener,
     run_hidden_owner_helper_startup_prompt_stream,
 };
+use crate::execution::agent_runtime::orchestration_session::{
+    OrchestrationSessionPosture, OrchestrationSessionRecord,
+};
 #[cfg(unix)]
 use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
 use crate::execution::agent_runtime::validator::{
@@ -1199,6 +1202,9 @@ struct StatusSessionJson {
     protocol: String,
     execution: ExecutionScopeJson<'static>,
     role: Option<String>,
+    posture: Option<String>,
+    attached_participant_id: Option<String>,
+    pending_inbox_count: Option<u64>,
     last_event_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     world_id: Option<String>,
@@ -1380,6 +1386,9 @@ fn build_status_report<'a>(
                         scope: scope.as_str(),
                     },
                     role: role.map(ToOwned::to_owned),
+                    posture: None,
+                    attached_participant_id: None,
+                    pending_inbox_count: None,
                     last_event_at: event.ts.to_rfc3339(),
                     world_id: if scope == AgentExecutionScope::World {
                         world_id.clone()
@@ -1688,6 +1697,21 @@ fn render_status_report(report: &StatusReportJson<'_>, json_mode: bool) -> Resul
             format!("protocol={}", session.protocol),
             format!("execution.scope={}", session.execution.scope),
             format!("role={}", session.role.as_deref().unwrap_or("")),
+            format!(
+                "posture={}",
+                human_status_option_str(session.posture.as_deref(), session.source_kind)
+            ),
+            format!(
+                "attached_participant_id={}",
+                human_status_option_str(
+                    session.attached_participant_id.as_deref(),
+                    session.source_kind
+                )
+            ),
+            format!(
+                "pending_inbox_count={}",
+                human_status_option_u64(session.pending_inbox_count, session.source_kind)
+            ),
             format!("last_event_at={}", session.last_event_at),
         ];
         if let (Some(world_id), Some(world_generation)) =
@@ -2090,6 +2114,7 @@ fn shell_single_quote(value: &str) -> String {
 }
 
 fn live_participant_status_projection(
+    session: &OrchestrationSessionRecord,
     participant: &AgentRuntimeParticipantRecord,
 ) -> SessionProjection {
     SessionProjection {
@@ -2110,6 +2135,9 @@ fn live_participant_status_projection(
                 },
             },
             role: Some(participant.handle.role.clone()),
+            posture: Some(orchestration_session_posture_label(session.posture).to_string()),
+            attached_participant_id: session.attached_participant_id.clone(),
+            pending_inbox_count: Some(session.pending_inbox_count),
             last_event_at: participant.last_status_at().to_rfc3339(),
             world_id: participant.handle.world_id.clone(),
             world_generation: participant.handle.world_generation,
@@ -2134,8 +2162,33 @@ fn live_session_status_projections(session: &AgentRuntimeSessionRecord) -> Vec<S
     session
         .status_visible_participants()
         .into_iter()
-        .map(|participant| live_participant_status_projection(&participant))
+        .map(|participant| live_participant_status_projection(&session.session, &participant))
         .collect()
+}
+
+fn orchestration_session_posture_label(posture: OrchestrationSessionPosture) -> &'static str {
+    match posture {
+        OrchestrationSessionPosture::ActiveAttached => "active_attached",
+        OrchestrationSessionPosture::ParkedResumable => "parked_resumable",
+        OrchestrationSessionPosture::AwaitingAttention => "awaiting_attention",
+        OrchestrationSessionPosture::Terminal => "terminal",
+    }
+}
+
+fn human_status_option_str(value: Option<&str>, source_kind: &str) -> String {
+    match value {
+        Some(value) => value.to_string(),
+        None if source_kind == "trace_fallback" => "<unknown>".to_string(),
+        None => "<none>".to_string(),
+    }
+}
+
+fn human_status_option_u64(value: Option<u64>, source_kind: &str) -> String {
+    match value {
+        Some(value) => value.to_string(),
+        None if source_kind == "trace_fallback" => "<unknown>".to_string(),
+        None => "<none>".to_string(),
+    }
 }
 
 fn session_fallback_suppression_key(projection: &SessionProjection) -> StatusIdentityKey {

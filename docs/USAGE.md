@@ -81,6 +81,8 @@ Operator-visible identity rules on these surfaces:
 - `backend_id` always renders as `<kind>:<agent_id>`.
 - Pure-agent list rows omit `provider`, `auth_authority`, `world_id`, and `world_generation`.
 - Pure-agent status rows omit `provider` and `auth_authority`.
+- Pure-agent `source_kind=live_runtime` status rows carry authoritative `posture`, `attached_participant_id`, and `pending_inbox_count` from the session-root parent record.
+- Pure-agent `source_kind=trace_fallback` status rows keep `posture`, `attached_participant_id`, and `pending_inbox_count` as explicit `null` in `--json`; human-readable output marks those fields as `<unknown>`.
 - `world_id` and `world_generation` render only for world-scoped pure-agent session rows.
 - Nested gateway-backed status rows stay separate from pure-agent rows and are the only rows that publish `provider` and `auth_authority`.
 - Nested gateway-backed status rows depend on valid trace-side `parent_run_id` correlation; stale historical nested rows are ignored, and malformed selected-surface rows fail closed.
@@ -92,11 +94,11 @@ When the async REPL owns a shell-scoped orchestrator session, live session disco
 - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/session.json`
 - `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/<participant_id>.json`
 
-`substrate agent status` and `substrate agent toolbox ...` resolve live state from those session records first. Those canonical session-root parent plus participant records are the live-state authority boundary.
+`substrate agent status` and `substrate agent toolbox ...` resolve live state from those session records first. Those canonical session-root parent plus participant records are the live-state authority boundary for live-runtime pure-agent rows.
 
 `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>.json` and `~/.substrate/run/agent-hub/participants/*.json` remain flat compatibility bridge input/output only during the cutover. Legacy `~/.substrate/run/agent-hub/handles/*.json` remains compatibility input only and is last-resort compatibility input only. None of those files outrank the canonical session-root records.
 
-Trace is historical fallback only for `substrate agent status` gaps after live-state filtering. Trace never authorizes current-session toolbox state or `substrate agent toolbox env`.
+Trace is historical fallback only for `substrate agent status` gaps after live-state filtering. It can still contribute `source_kind=trace_fallback` pure-agent rows and trace-correlated `nested_llm_records`, but it never authorizes live posture truth for the three durable-session fields and never authorizes current-session toolbox state or `substrate agent toolbox env`.
 
 ### Public Session Control
 

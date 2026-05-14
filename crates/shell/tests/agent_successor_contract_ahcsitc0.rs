@@ -708,9 +708,41 @@ fn write_orchestration_session_impl(
     ts: &str,
     world_binding: Option<(&str, u64)>,
 ) {
+    write_orchestration_session_with_manifest_options(
+        fixture,
+        agent_id,
+        orchestration_session_id,
+        active_session_handle_id,
+        state,
+        ts,
+        world_binding,
+        OrchestrationSessionManifestOptions::default(),
+    );
+}
+
+#[derive(Clone, Copy, Default)]
+struct OrchestrationSessionManifestOptions<'a> {
+    posture: Option<&'a str>,
+    attached_participant_id: Option<Option<&'a str>>,
+    pending_inbox_count: Option<u64>,
+    last_parked_at: Option<Option<&'a str>>,
+    last_attention_at: Option<Option<&'a str>>,
+    parked_reason: Option<Option<&'a str>>,
+}
+
+fn write_orchestration_session_with_manifest_options(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: Option<&str>,
+    state: &str,
+    ts: &str,
+    world_binding: Option<(&str, u64)>,
+    options: OrchestrationSessionManifestOptions<'_>,
+) {
     write_json_file(
         &canonical_orchestration_session_path(fixture, orchestration_session_id),
-        &orchestration_session_manifest(
+        &orchestration_session_manifest_with_options(
             fixture,
             agent_id,
             orchestration_session_id,
@@ -718,6 +750,7 @@ fn write_orchestration_session_impl(
             state,
             ts,
             world_binding,
+            options,
         ),
     );
 }
@@ -754,29 +787,76 @@ fn orchestration_session_manifest(
     ts: &str,
     world_binding: Option<(&str, u64)>,
 ) -> Value {
+    orchestration_session_manifest_with_options(
+        fixture,
+        agent_id,
+        orchestration_session_id,
+        active_session_handle_id,
+        state,
+        ts,
+        world_binding,
+        OrchestrationSessionManifestOptions::default(),
+    )
+}
+
+fn orchestration_session_manifest_with_options(
+    fixture: &AgentSuccessorFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+    active_session_handle_id: Option<&str>,
+    state: &str,
+    ts: &str,
+    world_binding: Option<(&str, u64)>,
+    options: OrchestrationSessionManifestOptions<'_>,
+) -> Value {
     let (world_id, world_generation) = match world_binding {
         Some((world_id, world_generation)) => (json!(world_id), json!(world_generation)),
         None => (Value::Null, Value::Null),
     };
-    let (posture, attached_participant_id, closed_at) = match (state, active_session_handle_id) {
-        ("active", Some(active_session_handle_id)) => (
-            "active_attached",
-            Value::String(active_session_handle_id.to_string()),
-            Value::Null,
-        ),
-        ("active", None) => ("parked_resumable", Value::Null, Value::Null),
-        ("stopped", _) | ("failed", _) | ("invalidated", _) => ("terminal", Value::Null, json!(ts)),
-        _ => (
-            "active_attached",
-            active_session_handle_id
-                .map(Value::from)
-                .unwrap_or(Value::Null),
-            if state == "active" {
-                Value::Null
-            } else {
-                json!(ts)
-            },
-        ),
+    let (default_posture, default_attached_participant_id, closed_at) =
+        match (state, active_session_handle_id) {
+            ("active", Some(active_session_handle_id)) => (
+                "active_attached",
+                Value::String(active_session_handle_id.to_string()),
+                Value::Null,
+            ),
+            ("active", None) => ("parked_resumable", Value::Null, Value::Null),
+            ("stopped", _) | ("failed", _) | ("invalidated", _) => {
+                ("terminal", Value::Null, json!(ts))
+            }
+            _ => (
+                "active_attached",
+                active_session_handle_id
+                    .map(Value::from)
+                    .unwrap_or(Value::Null),
+                if state == "active" {
+                    Value::Null
+                } else {
+                    json!(ts)
+                },
+            ),
+        };
+    let posture = options.posture.unwrap_or(default_posture);
+    let attached_participant_id = match options.attached_participant_id {
+        Some(Some(participant_id)) => Value::String(participant_id.to_string()),
+        Some(None) => Value::Null,
+        None => default_attached_participant_id,
+    };
+    let pending_inbox_count = options.pending_inbox_count.unwrap_or(0);
+    let last_parked_at = match options.last_parked_at {
+        Some(Some(value)) => json!(value),
+        Some(None) => Value::Null,
+        None => Value::Null,
+    };
+    let last_attention_at = match options.last_attention_at {
+        Some(Some(value)) => json!(value),
+        Some(None) => Value::Null,
+        None => Value::Null,
+    };
+    let parked_reason = match options.parked_reason {
+        Some(Some(value)) => json!(value),
+        Some(None) => Value::Null,
+        None => Value::Null,
     };
     json!({
         "orchestration_session_id": orchestration_session_id,
@@ -793,10 +873,10 @@ fn orchestration_session_manifest(
         "orchestrator_protocol": PURE_AGENT_PROTOCOL,
         "active_session_handle_id": active_session_handle_id,
         "attached_participant_id": attached_participant_id,
-        "pending_inbox_count": 0,
-        "last_parked_at": Value::Null,
-        "last_attention_at": Value::Null,
-        "parked_reason": Value::Null,
+        "pending_inbox_count": pending_inbox_count,
+        "last_parked_at": last_parked_at,
+        "last_attention_at": last_attention_at,
+        "parked_reason": parked_reason,
         "latest_run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fab",
         "world_id": world_id,
         "world_generation": world_generation,
@@ -1098,6 +1178,23 @@ fn find_session_by_participant<'a>(sessions: &'a [Value], participant_id: &str) 
             session.pointer("/participant_id").and_then(Value::as_str) == Some(participant_id)
         })
         .unwrap_or_else(|| panic!("expected session row for participant `{participant_id}`"))
+}
+
+fn find_text_session_line<'a>(stdout: &'a str, agent_id: &str) -> &'a str {
+    stdout
+        .lines()
+        .find(|line| line.contains(&format!("agent_id={agent_id}")))
+        .unwrap_or_else(|| panic!("expected text session row for agent `{agent_id}`"))
+}
+
+fn assert_substrings_in_order(haystack: &str, needles: &[&str]) {
+    let mut search_from = 0;
+    for needle in needles {
+        let relative = haystack[search_from..]
+            .find(needle)
+            .unwrap_or_else(|| panic!("expected `{needle}` in order within `{haystack}`"));
+        search_from += relative + needle.len();
+    }
 }
 
 fn seed_nested_gateway_status_fixture(fixture: &AgentSuccessorFixture) {
@@ -2485,6 +2582,342 @@ fn agent_status_prefers_live_manifest_over_trace_fallback_for_selected_orchestra
 }
 
 #[test]
+fn agent_status_json_surfaces_durable_session_fields_for_live_runtime_rows() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb9",
+        "ash_live_runtime_fields",
+        "2026-04-05T00:00:02Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb9",
+        Some("ash_live_runtime_fields"),
+        "2026-04-05T00:00:02Z",
+    );
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status should surface live runtime durable session fields: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let live_row = find_session_by_participant(sessions, "ash_live_runtime_fields");
+    assert_eq!(
+        live_row.pointer("/source_kind").and_then(Value::as_str),
+        Some("live_runtime")
+    );
+    assert_eq!(
+        live_row.pointer("/posture").and_then(Value::as_str),
+        Some("active_attached")
+    );
+    assert_eq!(
+        live_row
+            .pointer("/attached_participant_id")
+            .and_then(Value::as_str),
+        Some("ash_live_runtime_fields")
+    );
+    assert_eq!(
+        live_row
+            .pointer("/pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(0)
+    );
+}
+
+#[test]
+fn agent_status_json_surfaces_parked_resumable_fields_from_parent_session_truth() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_runtime_participant(
+        &fixture,
+        "ash_parked_detached",
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fba",
+        RuntimeParticipantOptions::host_orchestrator("running", false, "2026-04-05T00:00:02Z"),
+    );
+    write_orchestration_session_with_manifest_options(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fba",
+        Some("ash_parked_detached"),
+        "active",
+        "2026-04-05T00:00:02Z",
+        None,
+        OrchestrationSessionManifestOptions {
+            posture: Some("parked_resumable"),
+            attached_participant_id: Some(None),
+            pending_inbox_count: Some(0),
+            last_parked_at: Some(Some("2026-04-05T00:00:02Z")),
+            last_attention_at: Some(None),
+            parked_reason: Some(Some("owner detached cleanly")),
+        },
+    );
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status should keep detached parked sessions visible: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let parked = find_session_by_participant(sessions, "ash_parked_detached");
+    assert_eq!(
+        parked.pointer("/source_kind").and_then(Value::as_str),
+        Some("live_runtime")
+    );
+    assert_eq!(
+        parked.pointer("/posture").and_then(Value::as_str),
+        Some("parked_resumable")
+    );
+    assert!(
+        parked
+            .pointer("/attached_participant_id")
+            .is_some_and(Value::is_null),
+        "parked detached rows must preserve null attached_participant_id from parent truth: {parked}"
+    );
+    assert_eq!(
+        parked
+            .pointer("/pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(0)
+    );
+}
+
+#[test]
+fn agent_status_json_surfaces_awaiting_attention_fields_from_parent_session_truth() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_runtime_participant(
+        &fixture,
+        "ash_attention_detached",
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbb",
+        RuntimeParticipantOptions::host_orchestrator("running", false, "2026-04-05T00:00:03Z"),
+    );
+    write_orchestration_session_with_manifest_options(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbb",
+        Some("ash_attention_detached"),
+        "active",
+        "2026-04-05T00:00:03Z",
+        None,
+        OrchestrationSessionManifestOptions {
+            posture: Some("awaiting_attention"),
+            attached_participant_id: Some(None),
+            pending_inbox_count: Some(2),
+            last_parked_at: Some(None),
+            last_attention_at: Some(Some("2026-04-05T00:00:03Z")),
+            parked_reason: Some(None),
+        },
+    );
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status should keep detached awaiting-attention sessions visible: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let attention = find_session_by_participant(sessions, "ash_attention_detached");
+    assert_eq!(
+        attention.pointer("/source_kind").and_then(Value::as_str),
+        Some("live_runtime")
+    );
+    assert_eq!(
+        attention.pointer("/posture").and_then(Value::as_str),
+        Some("awaiting_attention")
+    );
+    assert!(
+        attention
+            .pointer("/attached_participant_id")
+            .is_some_and(Value::is_null),
+        "awaiting-attention rows must preserve null attached_participant_id from parent truth: {attention}"
+    );
+    assert_eq!(
+        attention
+            .pointer("/pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(2)
+    );
+}
+
+#[test]
+fn agent_status_json_trace_fallback_rows_emit_explicit_null_posture_fields() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    fixture.write_trace_events(&[json!({
+        "ts": "2026-04-05T00:00:04Z",
+        "event_type": "agent_event",
+        "session_id": "ses_agent_hub",
+        "component": "agent-hub",
+        "kind": "status",
+        "agent_id": "claude_code",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbc",
+        "participant_id": "ash_trace_only",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fbd",
+        "backend_id": "cli:claude_code",
+        "client": "claude_code",
+        "router": "agent_hub",
+        "protocol": "uaa.agent.session",
+        "role": "orchestrator",
+        "data": { "message": "trace fallback row should keep durable posture fields null" }
+    })]);
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status should keep trace-fallback rows readable: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let fallback = find_session_by_participant(sessions, "ash_trace_only");
+    assert_eq!(
+        fallback.pointer("/source_kind").and_then(Value::as_str),
+        Some("trace_fallback")
+    );
+    assert!(
+        fallback.pointer("/posture").is_some_and(Value::is_null),
+        "trace fallback rows must publish posture as explicit null: {fallback}"
+    );
+    assert!(
+        fallback
+            .pointer("/attached_participant_id")
+            .is_some_and(Value::is_null),
+        "trace fallback rows must publish attached_participant_id as explicit null: {fallback}"
+    );
+    assert!(
+        fallback
+            .pointer("/pending_inbox_count")
+            .is_some_and(Value::is_null),
+        "trace fallback rows must publish pending_inbox_count as explicit null: {fallback}"
+    );
+}
+
+#[test]
+fn agent_status_human_output_includes_durable_session_fields_for_live_rows() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_live_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbe",
+        "ash_text_live",
+        "2026-04-05T00:00:05Z",
+    );
+    write_active_orchestration_session(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbe",
+        Some("ash_text_live"),
+        "2026-04-05T00:00:05Z",
+    );
+
+    let output = fixture.run(&["agent", "status"]);
+    assert!(
+        output.status.success(),
+        "agent status text output should succeed for live runtime rows: {output:?}"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let session_line = find_text_session_line(&stdout, "claude_code");
+    assert_substrings_in_order(
+        session_line,
+        &[
+            "orchestration_session_id=0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbe",
+            "participant_id=ash_text_live",
+            "agent_id=claude_code",
+            "source_kind=live_runtime",
+            "backend_id=cli:claude_code",
+            "client=claude_code",
+            "router=agent_hub",
+            "protocol=uaa.agent.session",
+            "execution.scope=host",
+            "role=orchestrator",
+            "posture=active_attached",
+            "attached_participant_id=ash_text_live",
+            "pending_inbox_count=0",
+            "last_event_at=2026-04-05T00:00:05+00:00",
+        ],
+    );
+}
+
+#[test]
+fn agent_status_human_output_marks_fallback_rows_unknown_for_durable_session_fields() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    fixture.write_trace_events(&[json!({
+        "ts": "2026-04-05T00:00:06Z",
+        "event_type": "agent_event",
+        "session_id": "ses_agent_hub",
+        "component": "agent-hub",
+        "kind": "status",
+        "agent_id": "claude_code",
+        "orchestration_session_id": "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbf",
+        "participant_id": "ash_text_trace",
+        "run_id": "0195f8f1-7a35-7b7f-9c4d-9a7c2f5d6fc0",
+        "backend_id": "cli:claude_code",
+        "client": "claude_code",
+        "router": "agent_hub",
+        "protocol": "uaa.agent.session",
+        "role": "orchestrator",
+        "data": { "message": "trace fallback row should keep text durable posture fields unknown" }
+    })]);
+
+    let output = fixture.run(&["agent", "status"]);
+    assert!(
+        output.status.success(),
+        "agent status text output should succeed for trace fallback rows: {output:?}"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let session_line = find_text_session_line(&stdout, "claude_code");
+    assert_substrings_in_order(
+        session_line,
+        &[
+            "orchestration_session_id=0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbf",
+            "participant_id=ash_text_trace",
+            "agent_id=claude_code",
+            "source_kind=trace_fallback",
+            "backend_id=cli:claude_code",
+            "client=claude_code",
+            "router=agent_hub",
+            "protocol=uaa.agent.session",
+            "execution.scope=host",
+            "role=orchestrator",
+            "posture=<unknown>",
+            "attached_participant_id=<unknown>",
+            "pending_inbox_count=<unknown>",
+            "last_event_at=2026-04-05T00:00:06+00:00",
+        ],
+    );
+}
+
+#[test]
 fn agent_status_tombstone_suppression_beats_stale_trace_fallback_for_world_member() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();
@@ -3278,6 +3711,10 @@ fn agent_status_json_prefers_live_runtime_member_manifest_with_top_level_world_i
         .expect("sessions should be an array");
     let member = find_session_by_agent(sessions, "codex");
     assert_eq!(
+        member.pointer("/source_kind").and_then(Value::as_str),
+        Some("live_runtime")
+    );
+    assert_eq!(
         member.pointer("/participant_id").and_then(Value::as_str),
         Some("ash_codex_runtime_member"),
         "the selected live member must come from runtime state rather than trace fallback: {json}"
@@ -3295,6 +3732,27 @@ fn agent_status_json_prefers_live_runtime_member_manifest_with_top_level_world_i
         member.pointer("/world_generation").and_then(Value::as_u64),
         Some(9),
         "runtime-owned world members must publish world_generation at the top level on agent status --json: {json}"
+    );
+    assert_eq!(
+        member.pointer("/posture").and_then(Value::as_str),
+        Some("active_attached")
+    );
+    assert_eq!(
+        member
+            .pointer("/attached_participant_id")
+            .and_then(Value::as_str),
+        Some("ash_orchestrator_runtime_member")
+    );
+    assert_ne!(
+        member.pointer("/attached_participant_id").and_then(Value::as_str),
+        member.pointer("/participant_id").and_then(Value::as_str),
+        "member rows must source attached_participant_id from the parent session rather than the member participant id: {json}"
+    );
+    assert_eq!(
+        member
+            .pointer("/pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(0)
     );
 }
 
