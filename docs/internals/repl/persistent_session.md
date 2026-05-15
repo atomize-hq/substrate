@@ -54,3 +54,23 @@ When uncaged traversal moves outside the workspace:
 - a drift restart can be expected (new cwd ⇒ potentially different workspace root and policy), and
 - the REPL should attempt best-effort cwd continuity on restart (see DR-17 in the project docs).
 
+## Host Readiness Split
+
+Persistent-session startup now preserves a caller-shape split between sync bootstrap code and the
+async REPL startup path.
+
+- Sync callers still use `PlatformWorldContext.ensure_ready()`. That remains the shell-facing sync
+  bridge for request builders and bootstrap flows that are not already inside async startup.
+- The macOS async persistent-session startup path no longer calls that sync bridge. When
+  `build_ws_and_start_session_frame(...)` needs to bring the Lima-backed world path online without a
+  `SUBSTRATE_WORLD_SOCKET` override, it now awaits
+  `PlatformWorldContext.ensure_persistent_session_ready_async()`, which delegates to backend-owned
+  readiness.
+- On macOS, the backend-owned async path is `MacLimaBackend::ensure_persistent_session_ready_async`.
+  The shell does not duplicate VM startup, forwarding, or readiness verification logic.
+- `SUBSTRATE_WORLD_SOCKET` keeps exact bypass semantics. If callers override the socket path, the
+  persistent-session client connects directly to that socket and does not invoke platform readiness
+  helpers first.
+- The Windows/WSL backend now mirrors the same split internally for parity, but this slice does not
+  ship a Windows persistent-session shell caller. The parity work only keeps backend-owned
+  readiness helpers aligned with the macOS/Linux contract.

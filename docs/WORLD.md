@@ -51,6 +51,12 @@ Always-on by default (unless disabled via `SUBSTRATE_WORLD=disabled`):
 
 - REPL integration
   - The Substrate REPL can force PTY per‑line using the `:pty ` prefix. The shell strips this prefix before sending the command to the agent.
+  - Persistent-session startup keeps a caller-shape split: sync shell/bootstrap callers continue to
+    use sync `PlatformWorldContext.ensure_ready()`, while the macOS async REPL startup path now
+    uses a dedicated async readiness seam that delegates back into backend-owned Lima readiness.
+  - `SUBSTRATE_WORLD_SOCKET` keeps exact bypass semantics for persistent-session startup. When that
+    override is set, the shell connects directly to the requested socket instead of invoking the
+    platform readiness seam first.
 
 - Fallback
   - If `world_fs.require_world=false` and the agent/socket is unavailable (or a transport handshake fails), the shell prints exactly one warning and runs on the host path for that command. Subsequent commands continue to attempt world routing.
@@ -86,6 +92,8 @@ Current enforcement boundary:
 - On macOS, the supported Lima-backed transport path now preserves the same explicit shared-owner proof contract: the shell forwards `SharedWorldOwnerSpec`, requires `ready.shared_world` / `WorldHandle.shared_binding` proof, and keeps replacement fail-closed on the forwarded guest path.
 - On macOS, explicit shared-owner requests still reject when callers bypass the Lima-backed path with `SUBSTRATE_WORLD_SOCKET`, because that override skips the authoritative forwarded transport.
 - Windows still rejects explicit shared-owner requests before bootstrap/fallback logic runs in this slice.
+- Windows/WSL readiness split work in this slice is internal-only parity hardening. It does not
+  create a supported Windows persistent-session shell caller.
 
 Replacement and recovery guarantees on Linux:
 
@@ -189,6 +197,9 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
   2. SSH Unix domain socket forwarding (`~/.substrate/sock/agent.sock`)
   3. SSH TCP forwarding (`127.0.0.1:<port>`)
   - The backend attempts transports in that order; failure logs include remediation hints and the shell degrades to host execution after a single warning if all transports fail.
+  - For async persistent-session startup on macOS, the shell now awaits the backend-owned async
+    readiness path before opening `/v1/stream` unless `SUBSTRATE_WORLD_SOCKET` is explicitly
+    overriding the transport.
 
 - Logs & diagnostics
   - Agent logs live in the guest: `substrate sudo journalctl -u substrate-world-agent -n 200` (the CLI shells into Lima automatically) or manually via `limactl shell substrate sudo journalctl -u substrate-world-agent -n 200`.
