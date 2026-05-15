@@ -1,900 +1,641 @@
-# ORCH_PLAN: Durable Host Session Closeout
+# ORCH_PLAN: Async Persistent-Session Bootstrap Readiness Split
 
-Authoritative execution branch: `feat/host-orchestrator-durable-session`  
-Plan source: [/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)  
-Truth record: [/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md)  
-Controller path: [/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md)  
-Live workspace root: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`  
-Worktree root: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-durable-host-session-closeout`  
-Run id: `durable-host-session-closeout`  
-Worker model: `GPT-5.4`  
-Reasoning effort: `high`  
+Authoritative plan source: [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)  
+Primary protocol doc: [persistent_session.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/repl/persistent_session.md)  
+World backend doc: [WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)  
+Stale note: the existing durable-session orchestration content is out of scope for this run and is replaced by this controller.  
+Live repo root: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`  
+Fresh worktree root: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split`  
+Baseline branch: `feat/host-orchestrator-durable-session`  
+Run id: `slice-26-async-persistent-session-bootstrap-readiness`  
 Max concurrent workers: `2`  
-Parent integrator: `only integrator, only gate authority, only writer of .runs artifacts`
+Parent role: only integrator, only gate authority, only writer of `.runs` artifacts
 
 ## Summary
 
-This document is the authoritative orchestration controller for executing [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md) to completion. It is not another design plan. It tells the parent agent exactly how to execute the implementation across workers, gates, worktrees, validations, and final acceptance.
+This controller operationalizes [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md) for the async persistent-session bootstrap readiness split.
 
-The execution decision is:
+Execution shape is fixed:
 
-1. keep runtime correction work single-owner until the durable control model is fully integrated and stable
-2. open exactly one late parallel window, with two workers only, after the runtime lane is merged
-3. keep final integration, manual CLI proof, and acceptance wall parent-only
+1. Parent source-locks the plan and creates a clean integration branch from the current slice branch.
+2. Worker A lands `A1`, which freezes the shell-facing async readiness contract without widening sync surfaces.
+3. Workers B and C run in the only parallel window, on disjoint backend crates.
+4. Worker A returns for `A2` to wire the shell caller migration and sync-regression proof against the merged backend seams.
+5. Worker D updates docs late.
+6. Parent runs the full validation wall and decides final acceptance.
 
-That is the highest honest concurrency for this plan. `agents_cmd.rs`, `state_store.rs`, `control.rs`, `async_repl.rs`, and `agent_dev_support.rs` are one semantic seam under the frozen contract. Splitting them earlier would create merge churn and ambiguous ownership around the same control-truth hotspots. Only after that seam is merged can tests and docs proceed safely in parallel on disjoint surfaces.
+This preserves the slice contract:
 
-## Run Continuation Status
-
-This controller is now a continuation from a previously blocked `p3` run, not a net-new execution.
-
-Current blocked state before continuation:
-
-1. runtime implementation work already landed in:
-   - `crates/shell/src/execution/agents_cmd.rs`
-   - `crates/shell/src/execution/agent_runtime/state_store.rs`
-   - `crates/shell/src/execution/agent_runtime/control.rs`
-   - `crates/shell/src/repl/async_repl.rs`
-2. CLI regression work already landed in:
-   - `crates/shell/tests/agent_public_control_surface_v1.rs`
-3. docs closeout work already landed in:
-   - `llm-last-mile/README.md`
-   - `AGENT_ORCHESTRATION_GAP_MATRIX.md`
-4. the run blocked at `task-durable-host-session-closeout-p3-parent-validation-wall-and-manual-cli`
-5. the blocker was a controller mismatch, not yet a proven runtime defect:
-   - the old manual wall incorrectly required `agent start` to immediately leave `parked_resumable`
-   - the truth record only requires `agent start` to leave one active non-terminal durable session, with immediate posture allowed to be `active_attached` or `parked_resumable`
-6. `PLAN.md` and this controller have now been corrected to match [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md)
-
-Continuation rules:
-
-1. resume from `task-durable-host-session-closeout-p3-parent-validation-wall-and-manual-cli` unless new code drift forces an earlier gate replay
-2. do not rerun completed worker implementation lanes merely because the previous `p3` wall was over-constrained
-3. rerun the parent validation wall under the corrected manual contract
-4. if `p3` passes under the corrected contract, continue directly to `p4`
-5. if `p3` still fails, the new blocker must describe a real runtime or proof defect against the corrected truth, not the old “start must immediately park” assumption
-
-Previously green evidence that does not need to be re-litigated unless drift is suspected:
-
-1. `cargo test -p shell agent_runtime::state_store -- --nocapture`
-2. `cargo test -p shell agent_runtime::control -- --nocapture`
-3. `cargo test -p shell async_repl -- --nocapture`
-4. `cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture`
+1. no async `WorldBackend` rewrite
+2. sync `ensure_ready` preserved for sync callers
+3. macOS async persistent-session startup stops using the sync bridge
+4. socket override bypass remains exact
+5. backend-owned readiness stays backend-owned
+6. WSL work is internal parity only
+7. tests, docs, and validation are mandatory
+8. concurrency stays honest
 
 ## Hard Guards
 
-1. The authoritative integration checkout remains `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/host-orchestrator-durable-session`.
-2. The parent is the only integrator, the only approval authority, and the only writer of `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/durable-host-session-closeout/**`.
-3. [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md) is the frozen implementation contract. This controller operationalizes that contract and may not broaden it.
-4. No new public verbs, no selector broadening, no “latest session” fallback, and no shortcuts that contradict `PLAN.md`.
-5. The durable authority remains the persisted orchestration session record, authoritative participant linkage, durable inbox state, and persisted lifecycle metadata.
-6. `active_attached`, `parked_resumable`, and `awaiting_attention` all remain active durable-session postures. `terminal` is the only non-routable posture family.
-7. `reattach` may report success only when attached ownership is durably restored for that exact session.
-8. `stop` must stop the durable session model, not merely a reachable attached owner transport.
-9. `status --json` must surface valid parked and attention-needed sessions from authoritative session truth even when no live owner process is attached.
-10. Parked durable inbox items must continue to persist and normalize posture to `awaiting_attention`.
-11. The prompt-bridge invariant stays frozen: after `Accepted`, the public bridge must emit `Completed` or `Failed`.
-12. Detached world-member follow-up remains fail closed. This run must not weaken that contract.
-13. No worker edits `.runs/**`, `PLAN.md`, or this `ORCH_PLAN.md`.
-14. Docs stay late. No worker edits docs before the merged runtime tree proves the shipped behavior.
-15. Any need for a new timeout or stale-session lifecycle, new durable inbox schema, or broader world recovery policy is an immediate blocker and must produce `blocked.json`.
-16. Any required `gitnexus_impact` result that comes back `HIGH` or `CRITICAL` must be escalated to the parent before edits proceed.
+1. `WorldBackend` remains synchronous for this slice.
+2. `PlatformWorldContext.ensure_ready` remains available and unchanged for sync callers.
+3. The macOS persistent-session async startup path must stop calling the sync bridge.
+4. `SUBSTRATE_WORLD_SOCKET` override behavior must remain exact, including bypass semantics.
+5. Shell code may dispatch to backend-owned readiness. It may not duplicate VM, forwarding, client, or capability logic.
+6. Linux behavior stays structurally unchanged unless a tiny compile-only adapter is needed.
+7. WSL hardening is internal-only and must not create a shipped Windows persistent-session shell caller.
+8. Readiness failures stay fail closed and return normal errors, never a Tokio panic and never best-effort degraded startup.
+9. Docs ship only after merged behavior is stable.
+10. Workers do not edit [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md), [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md), or `.runs/**`.
+11. Every symbol edit requires prior GitNexus impact analysis.
+12. Any `HIGH` or `CRITICAL` GitNexus impact result is a parent-only escalation point.
+13. Every worker handoff must include `gitnexus_detect_changes()` status before the parent considers merge.
+14. Parent runs a final `gitnexus_detect_changes()` on the merged branch before closeout.
 
-Stop the run immediately and write `blocked.json` if any of these occur:
+## Worktree Creation Order And Commands
 
-1. the runtime lane cannot complete Workstreams 1 through 5 without reopening the public contract
-2. the CLI regression lane needs edits in runtime ownership files
-3. the docs lane finds unresolved behavior ambiguity after runtime integration
-4. the final merged tree cannot prove the exact manual CLI wall required by `PLAN.md`
-5. `reattach`, `stop`, `status`, or parked inbox behavior can only be made green by introducing a new public behavior not already frozen in `PLAN.md`
+Parent creates worktrees in this exact order.
 
-## Workstream Plan
-
-### Parent-only sequential initialization and contract freeze
-
-This phase is strictly sequential and parent-owned.
-
-Purpose:
-
-1. initialize run-state artifacts
-2. source-lock `PLAN.md` and the truth record
-3. freeze lane ownership
-4. freeze merge order
-5. freeze the validation wall
-6. launch the runtime lane with unambiguous boundaries
-
-Why parent-only:
-
-1. this phase defines the contract the workers must obey
-2. it decides the only honest concurrency window
-3. it records blocker conditions and acceptance surfaces before any worker edits code
-
-### Runtime control lane
-
-This is the main implementation lane and remains single-owner.
-
-Owner:
-
-- Worker A only
-
-Scope:
-
-1. Workstream 1: freeze one session-control posture contract in code
-2. Workstream 2: make `reattach` prove actual attachment
-3. Workstream 3: make `stop` session-centric
-4. Workstream 4: make `status` reflect durable parked truth
-5. Workstream 5: prove parked inbox responsibility operationally
-
-Execution decision:
-
-- no parallel workers are allowed in this phase because all required runtime changes share the same control-model seam and the same acceptance invariants
-
-### Late parallel window
-
-This is the only honest parallel window.
-
-Owners:
-
-- Worker B: CLI regression proof
-- Worker C: docs closeout
-
-Entry condition:
-
-- the runtime control lane is merged and targeted runtime validation is green
-
-Why this window is safe:
-
-1. the CLI regression surface is `crates/shell/tests/agent_public_control_surface_v1.rs`
-2. the docs surface is late and disjoint
-3. neither lane is allowed to reopen runtime ownership files
-
-Why there is no earlier or broader parallelism:
-
-1. before runtime integration, tests would chase moving semantics
-2. before runtime integration, docs would document intent instead of shipped truth
-3. adding a third worker would overlap either the runtime seam or the parent’s integration and validation wall, which would be dishonest concurrency
-
-### Parent-only integration and validation closeout
-
-This phase is strictly parent-owned.
-
-Purpose:
-
-1. integrate accepted worker outputs in frozen order
-2. run the full validation wall from `PLAN.md`
-3. run the manual CLI proof on the merged tree
-4. run doctor and health evidence capture
-5. run `gitnexus_detect_changes()`
-6. close the run with a complete artifact trail
-
-## Fresh Worktrees And Branches
-
-Fresh worktree root:
-
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-durable-host-session-closeout`
-
-Parent integration surface:
-
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`
-- branch: `feat/host-orchestrator-durable-session`
-
-Worker worktrees and branches:
-
-- Worker A worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-durable-host-session-closeout/runtime-control`
-- Worker A branch: `codex/feat-host-orchestrator-durable-session-runtime-control`
-- Worker B worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-durable-host-session-closeout/cli-regressions`
-- Worker B branch: `codex/feat-host-orchestrator-durable-session-cli-regressions`
-- Worker C worktree: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-durable-host-session-closeout/docs-closeout`
-- Worker C branch: `codex/feat-host-orchestrator-durable-session-docs-closeout`
-
-Launch commands for Worker A:
+### 1. Create parent integration worktree
 
 ```bash
-mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-durable-host-session-closeout
+mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split
 
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-durable-host-session-closeout/runtime-control \
-  -b codex/feat-host-orchestrator-durable-session-runtime-control \
-  HEAD
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate fetch origin
+
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
+  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/parent \
+  -b codex/slice-26-async-persistent-session-readiness \
+  feat/host-orchestrator-durable-session
 ```
 
-Late-window launch commands, to run only after runtime integration is accepted:
+### 2. Create Worker A worktree for `A1`
 
 ```bash
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-durable-host-session-closeout/cli-regressions \
-  -b codex/feat-host-orchestrator-durable-session-cli-regressions \
-  HEAD
-
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-durable-host-session-closeout/docs-closeout \
-  -b codex/feat-host-orchestrator-durable-session-docs-closeout \
-  HEAD
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
+  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/shell-lane \
+  -b codex/slice-26-shell-readiness-seam \
+  codex/slice-26-async-persistent-session-readiness
 ```
 
-## Parent-Owned Run-State Surface
+### 3. After `G1`, create Worker B and Worker C worktrees
+
+```bash
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
+  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/mac-lima-lane \
+  -b codex/slice-26-mac-lima-readiness-split \
+  codex/slice-26-async-persistent-session-readiness
+
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
+  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/wsl-lane \
+  -b codex/slice-26-wsl-readiness-parity \
+  codex/slice-26-async-persistent-session-readiness
+```
+
+### 4. After `G2`, refresh Worker A for `A2`
+
+If the original Worker A worktree is still clean and easy to reuse, rebase it on the parent branch. Otherwise, remove and recreate it.
+
+```bash
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/shell-lane fetch origin
+
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/shell-lane rebase \
+  codex/slice-26-async-persistent-session-readiness
+```
+
+If recreate is cleaner:
+
+```bash
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree remove \
+  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/shell-lane
+
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
+  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/shell-lane \
+  -B codex/slice-26-shell-readiness-seam \
+  codex/slice-26-async-persistent-session-readiness
+```
+
+### 5. After `G3`, create Worker D worktree
+
+```bash
+git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
+  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/docs-lane \
+  -b codex/slice-26-docs-readiness-split \
+  codex/slice-26-async-persistent-session-readiness
+```
+
+## Parent-Owned Run-State Surface / Artifact Ledger
 
 Canonical run root:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/durable-host-session-closeout/`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/slice-26-async-persistent-session-bootstrap-readiness/`
 
-Required top-level artifacts:
+Required directory tree:
 
-- `run-state.json`
-- `task-ledger.json`
-- `session-log.md`
-- `contract-freeze.json`
-- `lane-ownership.json`
-- `merge-order.json`
-- `impact/`
-- `validation/`
-- `quarantine/`
-- `gates/`
-- `qa/`
-- `sentinels/`
-- `blocked.json` on blocked termination only
-- `closeout.md` on successful completion only
+```text
+.runs/slice-26-async-persistent-session-bootstrap-readiness/
+  run-state.json
+  source-lock.json
+  branch-map.json
+  ownership-boundaries.json
+  task-ledger.json
+  merge-log.md
+  final-summary.md
+  blocked.json                           # only if run blocks
+  sentinels/
+    RUN_OPEN
+    RUN_BLOCKED                         # only if blocked
+    RUN_COMPLETE                        # only if complete
+  gates/
+    G0-source-lock/
+      gate.json
+      evidence.md
+      OPEN
+    G1-shell-contract-freeze/
+      gate.json
+      evidence.md
+      OPEN
+      REOPENED                          # touched only if contract drift forces reset
+    G2-backend-parallel-window/
+      gate.json
+      evidence.md
+      OPEN
+    G3-shell-migration/
+      gate.json
+      evidence.md
+      OPEN
+    G4-docs-closeout/
+      gate.json
+      evidence.md
+      OPEN
+    G5-final-acceptance/
+      gate.json
+      evidence.md
+      OPEN
+  tasks/
+    P0-source-lock/
+    P1-parent-branch-init/
+    A1-shell-contract-freeze/
+    G1-shell-contract-accept/
+    B1-mac-lima-readiness-split/
+    C1-wsl-parity-hardening/
+    G2-backend-accept/
+    A2-shell-migration-and-sync-regressions/
+    G3-shell-accept/
+    D1-docs-closeout/
+    G4-docs-accept/
+    P2-final-validation-wall/
+    P3-final-gitnexus-closeout/
+    P4-final-summary/
+```
 
-Required task roots:
+Required per-task artifact files under each `tasks/<task-id>/` directory:
 
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-p0-parent-run-init-and-source-lock/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-p1-parent-contract-freeze-and-lane-lock/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-g1-parent-runtime-lane-launch-gate/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-a1-worker-runtime-control-implementation/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-a2-worker-runtime-control-validation-and-handoff/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-g2-parent-runtime-acceptance-gate/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-p2-parent-runtime-integration-and-stabilization/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-g3-parent-late-window-launch-gate/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-b1-worker-cli-regression-implementation/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-b2-worker-cli-regression-validation-and-handoff/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-c1-worker-docs-closeout-implementation/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-c2-worker-docs-closeout-validation-and-handoff/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-g4-parent-late-window-acceptance-gate/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-p3-parent-validation-wall-and-manual-cli/`
-- `.runs/durable-host-session-closeout/tasks/task-durable-host-session-closeout-p4-parent-final-closeout/`
+1. `task.json`
+2. `owner.txt`
+3. `status.txt`
+4. `dependency-status.json`
+5. `scope.txt`
+6. `deliverable.txt`
+7. `acceptance-notes.md`
+8. `changed-files.txt`
+9. `commands.txt`
+10. `exit-codes.json`
+11. `impact-analysis-summary.md`
+12. `gitnexus-detect-changes.txt`
+13. `handoff-notes.md`
+14. `blocker-notes.md` if blocked
+15. `HEAD_SHA.txt`
+16. sentinel file exactly one of:
+   - `READY_FOR_REVIEW`
+   - `ACCEPTED`
+   - `REJECTED`
+   - `BLOCKED`
 
-Each task directory must contain:
+Rules:
 
-- `task.json`
-- `commands.txt`
-- `summary.md`
+1. Workers do not write these artifacts directly.
+2. Workers return the content in their handoff.
+3. Parent transcribes the handoff into `.runs/**`.
+4. No task is considered complete until the parent has written the task artifacts and touched the correct sentinel.
 
-Each gate directory must also contain:
+## GitNexus Workflow
 
-- `gate-checklist.md`
-- `gate-result.json`
+GitNexus is an active part of the run, not a passive guard.
 
-Each worker task directory must also contain:
+### Source-lock stage
 
-- `worker-report.md`
-- `worker-output.patch`
-- `evidence-manifest.json`
-- `impact-analysis.md`
+1. Parent checks GitNexus availability and index freshness.
+2. If stale, parent runs `npx gitnexus analyze` from the parent worktree before any worker starts.
+3. Parent records GitNexus freshness status in `tasks/P0-source-lock/impact-analysis-summary.md`.
 
-Validation artifact roots:
+### Before each worker edits symbols
 
-- `.runs/durable-host-session-closeout/validation/lane-a/`
-- `.runs/durable-host-session-closeout/validation/lane-b/`
-- `.runs/durable-host-session-closeout/validation/lane-c/`
-- `.runs/durable-host-session-closeout/validation/integration/`
-- `.runs/durable-host-session-closeout/validation/final/`
-- `.runs/durable-host-session-closeout/validation/validation-wall.md`
+The worker must run impact analysis on the symbols it expects to touch and include a concise summary in handoff. Minimum required targets by lane:
 
-Required sentinels:
+- `A1`
+  - `PlatformWorldContext`
+  - `build_ws_and_start_session_frame`
+- `B1`
+  - `MacLimaBackend::ensure_session`
+  - any backend-local readiness helper being split
+- `C1`
+  - `WindowsWslBackend::ensure_session`
+  - any backend-local readiness helper being split
+- `A2`
+  - `ReplPersistentSessionClient::start_with`
+  - `open_world_session`
+  - any sync shell caller or regression surface being touched
+- `D1`
+  - no GitNexus impact required if docs-only, but worker still reports docs-only status
 
-- `01--task-durable-host-session-closeout-p0-parent-run-init-and-source-lock.ok`
-- `02--task-durable-host-session-closeout-p1-parent-contract-freeze-and-lane-lock.ok`
-- `03--task-durable-host-session-closeout-g1-parent-runtime-lane-launch-gate.ok`
-- `04--task-durable-host-session-closeout-a2-worker-runtime-control-validation-and-handoff.ok`
-- `05--task-durable-host-session-closeout-g2-parent-runtime-acceptance-gate.ok`
-- `06--task-durable-host-session-closeout-p2-parent-runtime-integration-and-stabilization.ok`
-- `07--task-durable-host-session-closeout-g3-parent-late-window-launch-gate.ok`
-- `08--task-durable-host-session-closeout-b2-worker-cli-regression-validation-and-handoff.ok`
-- `09--task-durable-host-session-closeout-c2-worker-docs-closeout-validation-and-handoff.ok`
-- `10--task-durable-host-session-closeout-g4-parent-late-window-acceptance-gate.ok`
-- `11--task-durable-host-session-closeout-p3-parent-validation-wall-and-manual-cli.ok`
-- `12--task-durable-host-session-closeout-p4-parent-final-closeout.ok`
+Escalation rule:
 
-Ledger rules:
+1. If any impact analysis returns `HIGH` or `CRITICAL`, the worker stops before editing and returns a blocker handoff.
+2. Parent records the blocker, decides whether the slice still fits [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md), and either relaunches with narrower scope or blocks the run.
 
-1. `run-state.json` is the authoritative run ledger
-2. `task-ledger.json` is the machine-readable task status map
-3. `session-log.md` is the parent-authored decision log
-4. workers never write sentinels
-5. the parent writes a sentinel only after the corresponding task or gate is accepted
-6. `blocked.json` is written once, by the parent only, at the exact stop decision
+### Before each worker handoff
 
-## Frozen Runtime Contract For This Run
+Each coding lane runs `gitnexus_detect_changes()` and reports:
 
-`contract-freeze.json` must freeze these exact truths before Worker A launches:
+1. pass or fail
+2. changed symbols
+3. changed execution flows
+4. whether the result matches the intended lane scope
 
-1. one shared session-control posture truth governs `reattach`, `stop`, and parked-session `status`
-2. `reattach` success means the exact session is durably `active_attached`
-3. `stop` must dispatch by session posture, not live-owner availability alone
-4. parked and `awaiting_attention` sessions remain active durable sessions
-5. parked inbox truth is authoritative via `pending_inbox_count` and persisted inbox state
-6. `turn` remains exact `(session, backend)` follow-up prompt-taking only
-7. `reattach` remains non-prompt-taking attached-owner recovery only
-8. `start` and `turn` semantics already landed must be preserved
-9. broken startup remains fail closed as `runtime_start_failed`
-10. the public prompt bridge remains `Accepted -> Completed|Failed`
-11. detached-world follow-up remains fail closed
-12. no new public behavior may be introduced to get tests green
+### Before final closeout
 
-`contract-freeze.json` must also record:
+Parent runs `gitnexus_detect_changes()` on the merged parent branch and records the result under `tasks/P3-final-gitnexus-closeout/`.
 
-- runtime lane ownership files
-- late CLI regression lane ownership files
-- docs lane ownership files
-- parent-only integration surfaces
-- the exact validation wall from `PLAN.md`
-- blocker conditions that force `blocked.json`
+The run cannot close green if final GitNexus detection shows unexpected symbol drift that the parent cannot explain from the task ledger.
 
 ## Frozen Ownership Boundaries
 
-Parent-only for the entire run:
+### Worker A, phase `A1`: shell contract freeze only
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/**`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md`
-- final integration in `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`
-- final manual CLI validation and doctor and health captures
+Owned files:
 
-Worker A owned files:
+1. [crates/shell/src/execution/platform_world/mod.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform_world/mod.rs)
+2. [crates/shell/src/execution/routing/dispatch/world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs)
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs`
-- inline tests inside those files
+Purpose:
 
-Worker B owned files:
+1. add the shell-facing async readiness seam
+2. preserve sync `ensure_ready`
+3. freeze helper names, dispatch shape, and error-shape expectations for backend lanes
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs`
-- harness-only test helper files created or modified strictly for that integration test, if and only if they do not overlap Worker A or Worker C surfaces
+Not allowed in `A1`:
 
-Worker C owned files:
+1. no edits to `async_repl.rs`
+2. no backend crate edits
+3. no docs
+4. no sync regression additions outside minimal compile coverage
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md`
-- any additional doc file only if the parent explicitly adds it to `lane-ownership.json` after runtime integration
+### Worker B, phase `B1`: macOS backend split
 
-Explicit prohibitions:
+Owned files:
 
-1. Worker A may not edit docs, `.runs/**`, or `crates/shell/tests/agent_public_control_surface_v1.rs`
-2. Worker B may not edit runtime code files
-3. Worker C may not edit runtime code files or test files
-4. no worker may widen ownership without a parent gate decision recorded in `session-log.md`
-5. parent integration fixes must remain narrow and recorded as parent-owned glue
+1. [crates/world-mac-lima/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs)
 
-## Task Ledger
+Purpose:
 
-| Task ID | Owner | Depends on | Worktree / branch | Deliverable |
-| --- | --- | --- | --- | --- |
-| `task-durable-host-session-closeout-p0-parent-run-init-and-source-lock` | parent | — | main checkout / `feat/host-orchestrator-durable-session` | run scaffold, source lock, preflight impact root, QA artifact path |
-| `task-durable-host-session-closeout-p1-parent-contract-freeze-and-lane-lock` | parent | `p0` | main checkout / `feat/host-orchestrator-durable-session` | frozen contract, lane ownership, merge order, validation wall |
-| `task-durable-host-session-closeout-g1-parent-runtime-lane-launch-gate` | parent | `p1` | main checkout / `feat/host-orchestrator-durable-session` | launch Worker A |
-| `task-durable-host-session-closeout-a1-worker-runtime-control-implementation` | Worker A | `g1` | runtime-control / `codex/feat-host-orchestrator-durable-session-runtime-control` | runtime code implementing Workstreams 1 through 5 |
-| `task-durable-host-session-closeout-a2-worker-runtime-control-validation-and-handoff` | Worker A | `a1` | same | validated patch, impact record, lane evidence |
-| `task-durable-host-session-closeout-g2-parent-runtime-acceptance-gate` | parent | `a2` | main checkout / `feat/host-orchestrator-durable-session` | accept, reject, or quarantine runtime lane |
-| `task-durable-host-session-closeout-p2-parent-runtime-integration-and-stabilization` | parent | `g2` | main checkout / `feat/host-orchestrator-durable-session` | merged runtime tree, targeted stabilization, late-window launch base |
-| `task-durable-host-session-closeout-g3-parent-late-window-launch-gate` | parent | `p2` | main checkout / `feat/host-orchestrator-durable-session` | launch Workers B and C |
-| `task-durable-host-session-closeout-b1-worker-cli-regression-implementation` | Worker B | `g3` | cli-regressions / `codex/feat-host-orchestrator-durable-session-cli-regressions` | CLI regression proof in integration test surface |
-| `task-durable-host-session-closeout-b2-worker-cli-regression-validation-and-handoff` | Worker B | `b1` | same | validated patch, impact record, lane evidence |
-| `task-durable-host-session-closeout-c1-worker-docs-closeout-implementation` | Worker C | `g3` | docs-closeout / `codex/feat-host-orchestrator-durable-session-docs-closeout` | docs aligned to merged runtime truth |
-| `task-durable-host-session-closeout-c2-worker-docs-closeout-validation-and-handoff` | Worker C | `c1` | same | validated patch and lane evidence |
-| `task-durable-host-session-closeout-g4-parent-late-window-acceptance-gate` | parent | `b2`, `c2` | main checkout / `feat/host-orchestrator-durable-session` | accept, reject, or quarantine each late lane |
-| `task-durable-host-session-closeout-p3-parent-validation-wall-and-manual-cli` | parent | `g4` | main checkout / `feat/host-orchestrator-durable-session` | final command wall, manual CLI evidence, repo runtime evidence |
-| `task-durable-host-session-closeout-p4-parent-final-closeout` | parent | `p3` | main checkout / `feat/host-orchestrator-durable-session` | `gitnexus_detect_changes()` record, closeout, run completion |
+1. split shared setup and async verification from the sync wrapper
+2. keep sync `ensure_session(...)` working
+3. harden `block_on_compat(...)` as defense-in-depth
+
+### Worker C, phase `C1`: WSL parity hardening
+
+Owned files:
+
+1. [crates/world-windows-wsl/src/backend.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/backend.rs)
+2. [crates/world-windows-wsl/src/tests.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/tests.rs)
+
+Purpose:
+
+1. mirror the readiness split internally
+2. preserve existing sync behavior
+3. explicitly avoid shipping a Windows persistent-session caller
+
+### Worker A, phase `A2`: shell caller migration and sync regressions
+
+Owned files:
+
+1. [crates/shell/src/execution/routing/dispatch/world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs)
+2. [crates/shell/src/repl/async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+3. [crates/shell/src/execution/routing/world.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/world.rs)
+4. [crates/shell/src/execution/routing/dispatch/world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs)
+5. [crates/shell/src/execution/workspace_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/workspace_cmd.rs)
+6. [crates/shell/tests/repl_world_first_routing_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs)
+7. any directly related shell-side tests required by the slice
+
+Purpose:
+
+1. replace the macOS sync bridge with the async seam
+2. preserve exact socket override behavior
+3. prove sync callers still use sync `ensure_ready`
+
+Reason `A1` and `A2` are serialized:
+
+1. `A1` defines the shell-to-backend seam consumed by `B1` and `C1`
+2. `A2` cannot honestly finish until the backend adapters are merged and stable
+3. merging them into one long shell lane would either block the backend window or force backend workers to guess the final shell contract
+
+### Worker D, phase `D1`: docs late
+
+Owned files:
+
+1. [docs/internals/repl/persistent_session.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/repl/persistent_session.md)
+2. [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
+3. optional [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md) only if needed for index hygiene
+
+Purpose:
+
+1. document the shipped caller-shape split
+2. document the Windows parity decision as internal only
+
+## Detailed Task Ledger
+
+| Task ID | Owner | Worktree / Branch | Depends on | Deliverable | Acceptance notes |
+| --- | --- | --- | --- | --- | --- |
+| `P0` | Parent | `parent` / `codex/slice-26-async-persistent-session-readiness` | none | source lock, GitNexus freshness check, run-state init | `source-lock.json` exists, `RUN_OPEN` touched |
+| `P1` | Parent | `parent` / `codex/slice-26-async-persistent-session-readiness` | `P0` | parent branch ready, Worker A launched | clean parent branch exists, `branch-map.json` written |
+| `A1` | Worker A | `shell-lane` / `codex/slice-26-shell-readiness-seam` | `P1` | shell-facing async readiness seam only | sync `ensure_ready` preserved, no backend or `async_repl.rs` edits |
+| `G1` | Parent | `parent` / same | `A1` | shell contract accepted | contract artifact written, gate `G1` opened |
+| `B1` | Worker B | `mac-lima-lane` / `codex/slice-26-mac-lima-readiness-split` | `G1` | macOS backend shared sync/async readiness split | crate tests green, no shell edits |
+| `C1` | Worker C | `wsl-lane` / `codex/slice-26-wsl-readiness-parity` | `G1` | WSL parity hardening and tests | crate tests green, no product-surface expansion |
+| `G2` | Parent | `parent` / same | `B1`, `C1` | backend window accepted | both backend merges recorded, gate `G2` opened |
+| `A2` | Worker A | `shell-lane` / `codex/slice-26-shell-readiness-seam` rebased | `G2` | shell caller migration plus sync regressions | macOS path off sync bridge, socket override exact, shell tests green |
+| `G3` | Parent | `parent` / same | `A2` | shell migration accepted | merged tree satisfies code-path split, gate `G3` opened |
+| `D1` | Worker D | `docs-lane` / `codex/slice-26-docs-readiness-split` | `G3` | docs updates only | docs match merged code, no code edits |
+| `G4` | Parent | `parent` / same | `D1` | docs accepted | gate `G4` opened |
+| `P2` | Parent | `parent` / same | `G4` | final validation wall | all commands executed and logged |
+| `P3` | Parent | `parent` / same | `P2` | final GitNexus detect-changes closeout | output matches expected scope |
+| `P4` | Parent | `parent` / same | `P3` | final summary and run completion | `RUN_COMPLETE` touched |
+
+## Lane Handoff Requirements
+
+Every worker handoff must include, at minimum:
+
+1. `HEAD` commit SHA
+2. exact changed file list
+3. exact commands run
+4. per-command exit codes
+5. concise GitNexus impact summary
+6. whether any impact call returned `HIGH` or `CRITICAL`
+7. whether `gitnexus_detect_changes()` passed
+8. concise explanation of any unexpected file drift
+9. blocker notes if not green
+10. statement of whether the lane stayed within ownership boundaries
+
+Parent records this under the matching `tasks/<task-id>/` artifact directory.
+
+### Minimum handoff packet format for coding lanes
+
+1. `changed-files.txt`
+2. `commands.txt`
+3. `exit-codes.json`
+4. `impact-analysis-summary.md`
+5. `gitnexus-detect-changes.txt`
+6. `handoff-notes.md`
+7. `HEAD_SHA.txt`
+
+### Required lane-specific notes
+
+`A1` must additionally state:
+
+1. the exact new shell-facing async helper name
+2. which backend-facing contract points were frozen
+3. whether any shell test additions were deferred to `A2`
+
+`B1` must additionally state:
+
+1. which sync and async backend-local helpers now exist
+2. whether `block_on_compat(...)` behavior changed only as hardening
+3. whether any shell contract mismatch was discovered
+
+`C1` must additionally state:
+
+1. which backend-local parity helpers now exist
+2. whether any Windows product-surface change was avoided explicitly
+3. whether any shell contract mismatch was discovered
+
+`A2` must additionally state:
+
+1. which call site stopped using the sync bridge
+2. how socket override bypass was preserved
+3. which sync caller regressions were tested
+
+`D1` must additionally state:
+
+1. docs touched
+2. exact statements added for macOS async split and Windows internal-only scope
 
 ## Task Graph And Control Points
 
-### `task-durable-host-session-closeout-p0-parent-run-init-and-source-lock`
-
-Required actions:
-
-1. create the full `.runs/durable-host-session-closeout/` tree
-2. write initial `run-state.json`, `task-ledger.json`, `lane-ownership.json`, and `validation/validation-wall.md`
-3. source-lock these inputs:
-   - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md`
-   - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md`
-   - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`
-   - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/20-public-non-interactive-agent-caller-surface.md`
-   - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md`
-   - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md`
-4. write the QA-facing test-plan artifact required by `PLAN.md` under `~/.gstack/projects/<slug>/`
-5. record the QA artifact path in `.runs/durable-host-session-closeout/qa/test-plan-artifact-path.txt`
-6. inventory expected symbol surfaces for Worker A and Worker B
-
-Acceptance:
-
-- source lock recorded in `session-log.md`
-- run-state scaffolding exists
-- QA artifact path recorded
-- `01--task-durable-host-session-closeout-p0-parent-run-init-and-source-lock.ok`
-
-### `task-durable-host-session-closeout-p1-parent-contract-freeze-and-lane-lock`
-
-Required actions:
-
-1. freeze the runtime contract from `PLAN.md` into `contract-freeze.json`
-2. freeze lane ownership and prohibitions into `lane-ownership.json`
-3. freeze `merge-order.json`
-4. freeze the exact validation wall and artifact names into `validation/validation-wall.md`
-5. record that runtime code is a single-owner lane and late parallelism is tests plus docs only
-6. record blocker conditions that force `blocked.json`
-
-Acceptance:
-
-- the contract freeze matches `PLAN.md` exactly
-- lane boundaries are narrow and auditable
-- no early fake parallelism remains in the plan
-- `02--task-durable-host-session-closeout-p1-parent-contract-freeze-and-lane-lock.ok`
-
-### `task-durable-host-session-closeout-g1-parent-runtime-lane-launch-gate`
-
-Gate must reject launch if:
-
-1. contract freeze is incomplete
-2. runtime ownership is still ambiguous
-3. late-lane ownership overlaps runtime files
-4. the parent has not recorded the exact validation commands Worker A must run
-
-Acceptance:
-
-- Worker A worktree created from the accepted `p1` launch base
-- `03--task-durable-host-session-closeout-g1-parent-runtime-lane-launch-gate.ok`
-
-### `task-durable-host-session-closeout-a1-worker-runtime-control-implementation`
-
-Scope:
-
-1. implement the shared session-control posture contract
-2. make `reattach` prove durable attached ownership
-3. make `stop` session-centric for attached and parked sessions
-4. make `status` surface parked and `awaiting_attention` sessions from authoritative truth
-5. prove parked inbox responsibility operationally
-6. preserve `start` and `turn` semantics already frozen in `PLAN.md`
-7. preserve detached-world fail-closed behavior
-8. preserve the prompt-bridge invariant
-
-Before first edit:
-
-1. run `gitnexus_impact` for each production symbol to be changed
-2. record direct callers, affected processes, and risk level in `impact-analysis.md`
-3. stop and escalate to the parent if any required edit is `HIGH` or `CRITICAL`
-
-### `task-durable-host-session-closeout-a2-worker-runtime-control-validation-and-handoff`
-
-Minimum lane-A validation:
-
-```bash
-cargo test -p shell agent_runtime::state_store -- --nocapture
-cargo test -p shell agent_runtime::control -- --nocapture
-cargo test -p shell async_repl -- --nocapture
+```mermaid
+graph TD
+  P0["P0 Source lock + GitNexus freshness"] --> P1["P1 Parent branch init"]
+  P1 --> A1["A1 Shell contract freeze"]
+  A1 --> G1["G1 Parent accepts shell contract"]
+  G1 --> B1["B1 macOS backend split"]
+  G1 --> C1["C1 WSL parity hardening"]
+  B1 --> G2["G2 Parent accepts backend window"]
+  C1 --> G2
+  G2 --> A2["A2 Shell migration + sync regressions"]
+  A2 --> G3["G3 Parent accepts shell migration"]
+  G3 --> D1["D1 Docs closeout"]
+  D1 --> G4["G4 Parent accepts docs"]
+  G4 --> P2["P2 Final validation wall"]
+  P2 --> P3["P3 Final GitNexus closeout"]
+  P3 --> P4["P4 Final summary"]
 ```
 
-If cargo filters need syntactic adjustment, Worker A must run the narrowest equivalent commands and record exact substitutions in `commands.txt`.
+## Validation Commands By Task
 
-Required handoff artifacts:
+These are the required commands, not examples.
 
-- `worker-report.md`
-- `worker-output.patch`
-- `evidence-manifest.json`
-- `impact-analysis.md`
+### `A1` validation commands
 
-Acceptance target for parent:
-
-- Worker A stayed inside owned files
-- Workstreams 1 through 5 are implemented in one coherent lane
-- the lane includes inline runtime tests needed for changed runtime files
-- `04--task-durable-host-session-closeout-a2-worker-runtime-control-validation-and-handoff.ok`
-
-### `task-durable-host-session-closeout-g2-parent-runtime-acceptance-gate`
-
-Gate rules:
-
-1. Worker A output must originate from the accepted `g1` launch base
-2. Worker A is rejected or quarantined if it widened into docs, `.runs/**`, or the late integration test surface
-3. any output that weakens the frozen contract is rejected
-4. any unresolved `HIGH` or `CRITICAL` impact escalation must be parent-resolved before acceptance
-
-Acceptance:
-
-- accepted or quarantined state recorded in `run-state.json`
-- `05--task-durable-host-session-closeout-g2-parent-runtime-acceptance-gate.ok`
-
-### `task-durable-host-session-closeout-p2-parent-runtime-integration-and-stabilization`
-
-Required parent actions:
-
-1. integrate the accepted Worker A lane
-2. run targeted runtime validation on the merged tree
-3. apply only narrow parent-owned glue if needed
-4. verify the merged runtime tree is stable enough that the CLI regression lane will not need runtime edits
-5. record the late-window launch base in `merge-order.json`
-
-Acceptance:
-
-- runtime lane merged into the authoritative branch
-- targeted runtime validation is green
-- late-window launch base recorded
-- `06--task-durable-host-session-closeout-p2-parent-runtime-integration-and-stabilization.ok`
-
-### `task-durable-host-session-closeout-g3-parent-late-window-launch-gate`
-
-Gate must reject launch if:
-
-1. the merged runtime tree is not stable
-2. Worker B would need runtime file edits
-3. docs truth is still unsettled
-4. parent integration work is still open in runtime files
-
-Acceptance:
-
-- Worker B and Worker C worktrees created from the accepted `p2` launch base
-- `07--task-durable-host-session-closeout-g3-parent-late-window-launch-gate.ok`
-
-### `task-durable-host-session-closeout-b1-worker-cli-regression-implementation`
-
-Scope:
-
-1. extend `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs`
-2. prove the exact CLI flows from `PLAN.md`
-3. keep runtime file ownership closed
-4. request parent escalation instead of reopening runtime files
-
-Before first edit:
-
-1. run `gitnexus_impact` on the production symbols under test
-2. record the blast radius in `impact-analysis.md`
-3. stop and escalate if the test lane would require production file edits
-
-### `task-durable-host-session-closeout-b2-worker-cli-regression-validation-and-handoff`
-
-Minimum lane-B validation:
+Run from `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/shell-lane`:
 
 ```bash
-cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
+cargo fmt --all
+cargo test -p shell --lib -- --nocapture
+cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
 ```
 
-Required proof surface in the test file:
+### `B1` validation commands
 
-1. `start -> one active durable session` with immediate authoritative posture allowed to be `active_attached` or `parked_resumable`
-2. status shows that same exact session with its real authoritative posture after start and while parked
-3. parked session receives inbox work and normalizes to `awaiting_attention`
-4. `turn` resumes the same exact session
-5. `reattach` succeeds only on durable attached truth
-6. attached and parked `stop` both succeed
-7. broken bootstrap still fails as `runtime_start_failed`
-8. post-`Accepted` helper loss still yields explicit `Failed`
-9. detached-world follow-up remains fail closed
-
-Acceptance target for parent:
-
-- Worker B stayed out of runtime files
-- the CLI regression proof matches the frozen contract
-- `08--task-durable-host-session-closeout-b2-worker-cli-regression-validation-and-handoff.ok`
-
-### `task-durable-host-session-closeout-c1-worker-docs-closeout-implementation`
-
-Scope:
-
-1. remove attached-live-only wording from owned docs
-2. state that `reattach` success means durable attached truth
-3. state that `stop` is the canonical closeout path for attached and parked sessions
-4. state that `status` surfaces parked durable sessions
-5. update nearby diagrams only if runtime truth is already proven and the diagrams would otherwise be stale
-
-### `task-durable-host-session-closeout-c2-worker-docs-closeout-validation-and-handoff`
-
-Minimum lane-C validation:
-
-1. record every changed doc path in `worker-report.md`
-2. include quoted before and after truth statements for each changed behavioral claim
-3. confirm no doc claims exceed what the merged runtime tree already proves
-
-Acceptance target for parent:
-
-- Worker C stayed inside owned docs
-- docs do not introduce new behavior
-- `09--task-durable-host-session-closeout-c2-worker-docs-closeout-validation-and-handoff.ok`
-
-### `task-durable-host-session-closeout-g4-parent-late-window-acceptance-gate`
-
-Gate rules:
-
-1. Worker B and Worker C outputs must originate from the accepted `p2` launch base
-2. Worker B is quarantined if it requires runtime edits
-3. Worker C is quarantined if it documents behavior not yet proven
-4. either lane may be rejected independently without invalidating the other
-
-Acceptance:
-
-- accepted late-lane set recorded in `run-state.json`
-- `10--task-durable-host-session-closeout-g4-parent-late-window-acceptance-gate.ok`
-
-### `task-durable-host-session-closeout-p3-parent-validation-wall-and-manual-cli`
-
-Required parent actions:
-
-1. integrate accepted late-lane outputs in frozen order: Worker B first, Worker C second
-2. run the full command wall from `PLAN.md`
-3. run the full manual CLI wall from `PLAN.md`
-4. capture repo-level runtime evidence
-5. write `command-mapping.md` if any `PLAN.md` command required a narrow equivalent
-
-Acceptance:
-
-- the exact CLI contract from `PLAN.md` is proven on the final merged tree
-- evidence is recorded under `validation/final/`
-- `11--task-durable-host-session-closeout-p3-parent-validation-wall-and-manual-cli.ok`
-
-### `task-durable-host-session-closeout-p4-parent-final-closeout`
-
-Required final actions:
-
-1. run `gitnexus_detect_changes()` before any commit or landing prep
-2. record final symbol and flow drift
-3. verify final validation artifacts exist
-4. resolve or explicitly retain no quarantined outputs
-5. write `closeout.md`
-6. mark the run complete in `run-state.json`
-
-Acceptance:
-
-- `blocked.json` is absent
-- `12--task-durable-host-session-closeout-p4-parent-final-closeout.ok`
-
-## Merge Order And Quarantine Rules
-
-`merge-order.json` must record:
-
-- `authoritative_branch: "feat/host-orchestrator-durable-session"`
-- `runtime_launch_base: "post-p1-head"`
-- `late_window_launch_base: "post-p2-integrated-runtime-head"`
-- `integration_order: ["task-durable-host-session-closeout-a1-worker-runtime-control-implementation", "task-durable-host-session-closeout-p2-parent-runtime-integration-and-stabilization", "task-durable-host-session-closeout-b1-worker-cli-regression-implementation", "task-durable-host-session-closeout-c1-worker-docs-closeout-implementation", "task-durable-host-session-closeout-p3-parent-validation-wall-and-manual-cli"]`
-- `quarantine_on_scope_drift: true`
-
-Quarantine rules:
-
-1. quarantined output is copied under `.runs/durable-host-session-closeout/quarantine/<task-id>/`
-2. quarantined output must include the patch, report, impact artifact, and evidence manifest
-3. quarantined output is never treated as partially accepted without an explicit parent reconciliation note in `session-log.md`
-4. if Worker B needs runtime edits, the entire late-window CLI lane is quarantined automatically
-5. if Worker C documents behavior beyond the merged runtime tree, the docs lane is quarantined automatically
-
-## GitNexus Operating Procedure
-
-GitNexus is mandatory for the execution run described by this controller.
-
-During `task-durable-host-session-closeout-p0-parent-run-init-and-source-lock`:
-
-1. inspect index freshness
-2. if stale, run `npx gitnexus analyze`
-3. record index status under `.runs/durable-host-session-closeout/impact/preflight/`
-
-Before Worker A edits runtime symbols:
-
-1. run `gitnexus_impact` for each target symbol in `agents_cmd.rs`, `state_store.rs`, `control.rs`, `async_repl.rs`, and `agent_dev_support.rs`
-2. record direct callers, affected processes, and risk level in `impact-analysis.md`
-3. escalate any `HIGH` or `CRITICAL` result before editing
-
-Before Worker B edits the integration test surface:
-
-1. run `gitnexus_impact` for the production symbols the regression file is proving
-2. record the blast radius in `impact-analysis.md`
-3. do not use the test lane to silently drive production behavior changes
-
-During `task-durable-host-session-closeout-p4-parent-final-closeout`:
-
-1. run `gitnexus_detect_changes()`
-2. verify only expected symbols and execution flows changed
-3. record the result in `.runs/durable-host-session-closeout/validation/final/`
-4. do not declare completion without that record
-
-## Context-Control Rules
-
-Parent live context limit:
-
-1. [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)
-2. `run-state.json`
-3. `contract-freeze.json`
-4. the latest integrated diff summary
-5. worker reports only for the lane currently at gate review
-
-Worker A prompt contents only:
-
-1. its task brief
-2. the frozen runtime contract
-3. exact owned files
-4. explicit forbidden touch surfaces
-5. validation commands
-
-Worker B prompt contents only:
-
-1. its task brief
-2. the frozen CLI contract and required flows
-3. the exact owned test surface
-4. explicit prohibition on runtime edits
-5. validation commands
-
-Worker C prompt contents only:
-
-1. its task brief
-2. the frozen runtime truths already proven by runtime integration
-3. exact owned docs
-4. explicit prohibition on behavior invention
-5. validation expectations
-
-Every worker must return:
-
-1. changed files
-2. symbols touched or production symbols proved
-3. commands run and exit codes
-4. blockers or scope-drift requests
-5. any disputed assumptions
-
-## Validation And Acceptance
-
-### Required command wall from `PLAN.md`
-
-These commands are mandatory on the final merged tree:
+Run from `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/mac-lima-lane`:
 
 ```bash
-cargo test -p shell agent_runtime::state_store -- --nocapture
-cargo test -p shell agent_runtime::control -- --nocapture
-cargo test -p shell async_repl -- --nocapture
-cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
+cargo fmt --all
+cargo test -p world-mac-lima -- --nocapture
 ```
 
-If any command needs a syntactic adjustment, the parent may substitute the narrowest equivalent command only if:
+### `C1` validation commands
 
-1. it covers the same behavior
-2. the substitution is written to `.runs/durable-host-session-closeout/validation/final/command-mapping.md`
-3. both the original and replacement commands are recorded
-
-### Required manual CLI wall from `PLAN.md`
-
-The parent must rerun the real CLI flow and capture persisted runtime evidence:
+Run from `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/wsl-lane`:
 
 ```bash
-# Flow A: active durable session visibility, parked transition proof, inbox attention, turn, reattach, attached-stop
-substrate agent start --backend <host_backend_id> --prompt "hello" --json
-substrate agent status --json
-# If start remains active_attached, wait for or otherwise prove the same exact session later normalizes to parked_resumable before detached inbox injection.
-<inject one durable inbox item onto the same session and capture persisted session truth>
-substrate agent status --json
-substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json
-substrate agent reattach --session <orchestration_session_id> --json
-substrate agent status --json
-substrate agent stop --session <orchestration_session_id> --json
-substrate agent status --json
-
-# Flow B: parked-stop proof on a separate exact durable session
-substrate agent start --backend <host_backend_id> --prompt "hello again" --json
-substrate agent status --json
-substrate agent stop --session <second_orchestration_session_id> --json
-substrate agent status --json
+cargo fmt --all
+cargo test -p world-windows-wsl -- --nocapture
 ```
 
-The parent must also prove:
+### `A2` validation commands
 
-1. one detached inbox item moves the same session to `awaiting_attention`
-2. if `start` remained `active_attached`, the same exact session is later proven to normalize to `parked_resumable` before detached inbox proof begins
-3. `status` shows that same session as `awaiting_attention`
-4. persisted runtime truth after `reattach` is durably `active_attached` for that same exact session
-5. attached-session `stop` succeeds while the session is still attached
-6. parked-session `stop` succeeds on a separate exact durable session with no attached owner
-7. broken bootstrap still fails as `runtime_start_failed`
-8. post-`Accepted` helper loss still yields explicit `Failed`
-9. detached-world follow-up still fails closed with reattach guidance
-
-Required final artifacts:
-
-- `manual-start.json`
-- `manual-status-after-start.json`
-- `manual-session-after-start.json`
-- `manual-session-after-parked-transition.json`
-- `manual-status-after-parked-transition.json`
-- `manual-session-after-awaiting-attention.json`
-- `manual-status-after-awaiting-attention.json`
-- `manual-turn.json`
-- `manual-reattach.json`
-- `manual-session-after-reattach.json`
-- `manual-status-after-reattach.json`
-- `manual-stop-attached.json`
-- `manual-stop-parked.json`
-- `manual-stop-modes-summary.md`
-- `manual-final-status.json`
-- `manual-second-start.json`
-- `manual-status-before-parked-stop.json`
-- `manual-final-status-after-parked-stop.json`
-- `manual-broken-bootstrap.json`
-- `manual-post-accepted-late-failure.json`
-- `manual-detached-world-fail-closed.json`
-- `manual-cli-summary.md`
-
-### Required repo-level shell-runtime evidence
-
-Because this run changes shell runtime behavior, the parent must also record:
+Run from `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/shell-lane` after rebase to the parent branch:
 
 ```bash
-substrate shim doctor --json
-substrate health --json
+cargo fmt --all
+cargo test -p shell --lib -- --nocapture
+cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
+cargo test -p shell -- --nocapture
 ```
 
-These outputs must be captured as:
+### `D1` validation commands
 
-- `.runs/durable-host-session-closeout/validation/final/shim-doctor.json`
-- `.runs/durable-host-session-closeout/validation/final/health.json`
+Run from `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/docs-lane`:
 
-World-doctor evidence is conditional:
+```bash
+git diff -- docs/internals/repl/persistent_session.md docs/WORLD.md llm-last-mile/README.md
+```
 
-1. if the merged diff touches world backends, world transport, or world-facing runtime ownership behavior, run `substrate world doctor --json` and capture `world-doctor.json`
-2. if the merged diff stays outside world-owned surfaces, write `world-doctor-rationale.md` naming the touched files and the reason `world doctor` was not required
+### Parent final validation wall in `P2`
 
-### Repo hygiene wall
-
-Before completion, the parent should also run and record:
+Run from `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-slice-26-readiness-split/parent`:
 
 ```bash
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace -- --nocapture
+cargo test -p shell -- --nocapture
+cargo test -p world-mac-lima -- --nocapture
+cargo test -p world-windows-wsl -- --nocapture
+script -q /dev/null zsh -lc 'RUST_BACKTRACE=1 ~/.substrate/bin/substrate'
 ```
 
-If full-workspace execution is not feasible in the local environment, the parent must record the exact reason and unresolved risk in `validation/final/repo-hygiene-rationale.md`.
+## Conflict-Resolution Rule For Cross-Lane Contract Drift
 
-## Blocked-Run Artifact Behavior
+Contract drift after `G1` is handled explicitly.
 
-`blocked.json` is parent-written only and must include:
+If `B1` or `C1` discovers that the `A1` shell contract is insufficient or wrong:
 
-- `run_id`
-- `authoritative_branch`
-- `plan_source`
-- `timestamp`
-- `current_task_id`
-- `gate_state`
-- `stop_condition_id`
-- `summary`
-- `blocking_files`
-- `worker_lane`
-- `accepted_sentinels`
-- `rejected_or_quarantined_outputs`
-- `impact_artifacts`
-- `next_required_parent_action`
+1. The worker stops immediately.
+2. The worker does not patch shell files locally.
+3. The worker returns a blocker handoff describing the exact contract mismatch.
+4. Parent writes `BLOCKED` for that task and touches `REOPENED` under `gates/G1-shell-contract-freeze/`.
+5. Parent closes downstream acceptance for unmerged work based on the stale contract.
+6. Parent either:
+   - launches a narrow `A1R1` correction on the shell lane, or
+   - blocks the run if the required change violates [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)
+7. If `A1R1` lands, parent updates:
+   - `source-lock.json` only if the plan authority itself changed
+   - `gates/G1-shell-contract-freeze/gate.json`
+   - `ownership-boundaries.json` if file boundaries changed
+   - `task-ledger.json`
+8. Parent then relaunches affected backend lanes from the new parent base. Old backend commits against the stale contract are not merged opportunistically.
 
-Blocked-run rules:
+## Gate Rules And Stop Conditions
 
-1. parent writes `blocked.json` before any later-phase sentinel is created
-2. parent updates `run-state.json` to blocked in the same decision window
-3. parent records the reason in `session-log.md`
-4. `closeout.md` is not written on a blocked run
+### Gate `G1` acceptance rule
 
-## Completion Conditions
+Open only when:
 
-This orchestration controller succeeds only when the parent can say all of the following are true on the same merged tree:
+1. `A1` handoff is complete
+2. parent confirms sync `ensure_ready` still exists for sync callers
+3. parent confirms `A1` did not spill into backend crates or `async_repl.rs`
+4. parent has a written shell contract artifact under `tasks/G1-shell-contract-accept/`
 
-1. the current [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md) drove the run from start to finish
-2. the authoritative branch stayed `feat/host-orchestrator-durable-session`
-3. the run used one honest late two-worker window and no dishonest early parallelism
-4. the parent remained the only integrator and the only gate authority
-5. `reattach` success means durable `active_attached`, not helper launch
-6. `stop` cleanly closes attached and parked sessions through authoritative durable truth
-7. `status --json` surfaces valid `parked_resumable` and `awaiting_attention` sessions from session truth
-8. a detached inbox item persists and drives `awaiting_attention` on the same session
-9. `start` and `turn` semantics remain preserved
-10. broken bootstrap still fails closed as `runtime_start_failed`
-11. the prompt bridge still guarantees `Accepted -> Completed|Failed`
-12. detached-world follow-up remains fail closed
-13. the CLI regression wall proves `start -> status -> turn -> reattach -> stop` on one durable session
-14. docs reflect shipped truth and do not preserve the attached-live-only mental model
-15. the run leaves behind a complete `.runs/durable-host-session-closeout/` audit trail
-16. `gitnexus_detect_changes()` is recorded and consistent with expected scope
+### Gate `G2` acceptance rule
+
+Open only when:
+
+1. `B1` and `C1` are both merged into the parent branch
+2. their required crate tests passed
+3. neither lane expanded public Windows persistent-session surface
+4. neither lane forced shell changes after `G1` without reopening the gate
+
+### Gate `G3` acceptance rule
+
+Open only when:
+
+1. `A2` is merged
+2. macOS persistent-session startup no longer uses the sync bridge
+3. socket override bypass is still exact
+4. sync caller regressions are covered and green
+
+### Gate `G4` acceptance rule
+
+Open only when:
+
+1. docs are based on the merged parent branch
+2. docs explicitly describe:
+   - async persistent-session startup using a dedicated async readiness seam
+   - sync request-builders continuing to use sync `ensure_ready`
+   - WSL work in this slice being internal-only parity hardening
+
+### Run stop conditions
+
+Write `blocked.json`, touch `RUN_BLOCKED`, and stop if any are true:
+
+1. the slice requires an async `WorldBackend`
+2. sync `ensure_ready` cannot be preserved
+3. exact socket override bypass cannot be preserved
+4. shell code must duplicate backend readiness logic to succeed
+5. a backend lane requires a shipped Windows persistent-session caller to validate the design
+6. final manual smoke still produces a Tokio panic
+7. final GitNexus detect-changes shows unexpected scope the parent cannot justify
+8. required macOS smoke cannot be run honestly and the user has not explicitly approved an evidence waiver
+
+## Final Acceptance Wall
+
+The run passes only if all of the following are true on the merged parent branch:
+
+1. Persistent-session startup no longer calls the sync readiness bridge on the macOS async path.
+2. macOS current-thread REPL startup no longer panics on `block_in_place`.
+3. Readiness failures surface as normal `Result` errors.
+4. Existing sync bootstrap and request-builder callers still use sync `ensure_ready`.
+5. Shared readiness rules remain backend-owned across sync and async entrypoints.
+6. `SUBSTRATE_WORLD_SOCKET` override bypass remains exact.
+7. WSL parity hardening stayed internal-only.
+8. Required tests are present and pass.
+9. Docs clearly encode the caller-shape split and Windows scope decision.
+10. Final GitNexus detect-changes matches expected scope.
+
+### Manual smoke expectation
+
+Primary honest smoke:
+
+1. Run the parent `script -q /dev/null zsh -lc 'RUST_BACKTRACE=1 ~/.substrate/bin/substrate'` check in a macOS environment where the current-thread REPL path is meaningful for this slice.
+2. Pass if startup succeeds without panic.
+3. Pass if startup fails as a normal readiness error without Tokio runtime panic.
+4. Fail if a Tokio panic or `block_in_place` runtime invariant panic is observed.
+
+### If the environment cannot run the smoke honestly
+
+This does not default to pass.
+
+Rules:
+
+1. Parent records `SMOKE_UNAVAILABLE` in `tasks/P2-final-validation-wall/acceptance-notes.md`.
+2. Parent explains exactly why the environment is not honest for this smoke.
+3. Parent marks the run blocked unless the user explicitly accepts a smoke-evidence waiver.
+4. If a waiver is granted, parent still records the gap in `final-summary.md`. The run is “accepted with waived manual smoke,” not “fully validated.”
+
+## Tests And Acceptance Mapping To PLAN.md
+
+The parent should use this direct mapping when deciding final acceptance:
+
+1. PLAN completion point `1`: covered by `A2`, `G3`, and final code inspection
+2. PLAN completion point `2`: covered by `A2` tests and manual smoke
+3. PLAN completion point `3`: covered by shell and backend error-path tests and smoke failure mode
+4. PLAN completion point `4`: covered by `A1`, `A2`, and sync shell regressions
+5. PLAN completion point `5`: covered by `B1`, `C1`, `A2`, and docs
+6. PLAN completion point `6`: covered by `C1` scope notes and docs
+7. PLAN completion point `7`: covered by `D1` and parent doc review
 
 ## Assumptions
 
-1. the checked-out authoritative branch remains `feat/host-orchestrator-durable-session` throughout the run
-2. the repository’s current GitNexus index is available or can be refreshed with `npx gitnexus analyze`
-3. the manual CLI proof can run against sanctioned host backend fixtures already expected by `PLAN.md`
-4. no hidden repo policy requires editing files outside the ownership boundaries listed above
-5. full workspace validation may expose unrelated pre-existing failures; if so, those are recorded rather than silently folded into this slice
+1. The parent will create a clean integration worktree from the current slice branch, `feat/host-orchestrator-durable-session`, and treat the current [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md) text as the locked slice authority in run-state artifacts.
+2. If the manual smoke environment is unavailable, that is a real acceptance gap, not a silent skip.
+3. The parent can access GitNexus through the required MCP workflow or equivalent repo-supported invocation before worker edits begin.
