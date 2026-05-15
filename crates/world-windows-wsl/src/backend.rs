@@ -293,6 +293,14 @@ impl WindowsWslBackend {
         }
     }
 
+    pub(crate) fn ensure_ready(&self) -> Result<()> {
+        self.ensure_agent_ready()
+    }
+
+    pub(crate) fn ensure_persistent_session_ready(&self) -> Result<()> {
+        self.ensure_agent_ready()
+    }
+
     fn convert_exec_request(&self, req: &ExecRequest) -> Result<ExecuteRequest> {
         let cwd = to_wsl_path(&self.project_path, &req.cwd)?;
         let env = if req.env.is_empty() {
@@ -392,12 +400,12 @@ impl WorldBackend for WindowsWslBackend {
                 .expect("session cache poisoned")
                 .clone()
             {
-                self.ensure_agent_ready()?;
+                self.ensure_persistent_session_ready()?;
                 return Ok(handle);
             }
         }
 
-        self.ensure_agent_ready()?;
+        self.ensure_ready()?;
 
         let handle = self.generate_world_handle();
         if spec.reuse_session {
