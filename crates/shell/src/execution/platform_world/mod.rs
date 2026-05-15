@@ -12,7 +12,9 @@ use crate::execution::policy_snapshot::bootstrap_world_spec;
 #[cfg(not(target_os = "windows"))]
 use crate::execution::settings;
 use agent_api_types::SharedWorldOwnerSpec;
-use anyhow::{Context, Result};
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use anyhow::Context;
+use anyhow::Result;
 use std::fmt;
 use std::future::Future;
 use std::path::PathBuf;
@@ -172,18 +174,8 @@ pub fn detect() -> Result<PlatformWorldContext> {
     });
     let ensure_persistent_session_ready_async = Box::new(move || {
         let backend = ensure_persistent_session_ready_async_backend.clone();
-        Box::pin(async move {
-            tokio::task::spawn_blocking(move || {
-                use world_api::WorldBackend as _;
-                let spec = bootstrap_world_spec(
-                    settings::world_root_from_env().path,
-                    substrate_broker::world_fs_mode(),
-                );
-                backend.ensure_session(&spec).map(|_| ())
-            })
-            .await
-            .context("persistent-session readiness join failure")?
-        }) as PersistentSessionReadyFuture
+        Box::pin(async move { backend.ensure_persistent_session_ready_async().await })
+            as PersistentSessionReadyFuture
     });
 
     Ok(PlatformWorldContext {

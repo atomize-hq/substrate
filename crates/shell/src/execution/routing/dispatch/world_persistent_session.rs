@@ -772,7 +772,7 @@ mod imp {
                 pw::get_context().ok_or_else(|| anyhow!("no platform world context"))?
             }
         };
-        (ctx.ensure_ready.as_ref())()?;
+        pw::ensure_persistent_session_ready_async(&ctx).await?;
 
         let (ws, _resp) = match &ctx.transport {
             pw::WorldTransport::Unix(path) => {
@@ -869,6 +869,26 @@ mod imp {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[cfg(target_os = "macos")]
+        use anyhow::Result;
+        #[cfg(target_os = "macos")]
+        use futures::{SinkExt, StreamExt};
+        #[cfg(target_os = "macos")]
+        use serial_test::serial;
+        #[cfg(target_os = "macos")]
+        use std::path::{Path, PathBuf};
+        #[cfg(target_os = "macos")]
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        #[cfg(target_os = "macos")]
+        use std::sync::{Arc, Mutex, OnceLock};
+        #[cfg(target_os = "macos")]
+        use tempfile::tempdir;
+        #[cfg(target_os = "macos")]
+        use tokio::net::UnixListener;
+        #[cfg(target_os = "macos")]
+        use tokio_tungstenite::accept_async;
+        #[cfg(target_os = "macos")]
+        use world_api::{ExecRequest, ExecResult, FsDiff, WorldBackend, WorldHandle, WorldSpec};
 
         #[test]
         fn signal_frame_serializes_sig_field() {
@@ -937,6 +957,199 @@ mod imp {
                     "action": "attach_or_create",
                 })
             );
+        }
+
+        #[cfg(target_os = "macos")]
+        static TEST_SYNC_READY_CALLS: AtomicUsize = AtomicUsize::new(0);
+        #[cfg(target_os = "macos")]
+        static TEST_ASYNC_READY_CALLS: AtomicUsize = AtomicUsize::new(0);
+
+        #[cfg(target_os = "macos")]
+        fn test_env_lock() -> &'static Mutex<()> {
+            static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+            LOCK.get_or_init(|| Mutex::new(()))
+        }
+
+        #[cfg(target_os = "macos")]
+        #[derive(Clone)]
+        struct StubWorldBackend;
+
+        #[cfg(target_os = "macos")]
+        impl WorldBackend for StubWorldBackend {
+            fn ensure_session(&self, _spec: &WorldSpec) -> Result<WorldHandle> {
+                Ok(WorldHandle {
+                    id: "wld_test".to_string(),
+                    shared_binding: None,
+                })
+            }
+
+            fn exec(&self, _world: &WorldHandle, _req: ExecRequest) -> Result<ExecResult> {
+                anyhow::bail!("exec not implemented in test backend")
+            }
+
+            fn fs_diff(&self, _world: &WorldHandle, _span_id: &str) -> Result<FsDiff> {
+                Ok(FsDiff::default())
+            }
+
+            fn apply_policy(&self, _world: &WorldHandle, _spec: &WorldSpec) -> Result<()> {
+                Ok(())
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        fn test_start_params() -> ReplSessionStartParams {
+            ReplSessionStartParams {
+                cwd: "/tmp/project".to_string(),
+                env: HashMap::new(),
+                policy_snapshot: agent_api_types::PolicySnapshotV3 {
+                    schema_version: 3,
+                    net_allowed: Vec::new(),
+                    world_fs: agent_api_types::PolicySnapshotWorldFsV3 {
+                        host_visible: true,
+                        fail_closed: agent_api_types::PolicySnapshotWorldFsFailClosedV3 {
+                            routing: false,
+                        },
+                        deny_enforcement: None,
+                        caged_required: false,
+                        discover: None,
+                        read: None,
+                        write: agent_api_types::PolicySnapshotWorldFsWriteV3 {
+                            enabled: true,
+                            allow_list: vec![".".to_string()],
+                            deny_list: Vec::new(),
+                        },
+                    },
+                },
+                shared_world: None,
+                world_network: agent_api_types::WorldNetworkRoutingV1 {
+                    isolate_network: false,
+                    allowed_domains: Vec::new(),
+                },
+                cols: 80,
+                rows: 24,
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        async fn spawn_ready_server(socket_path: &Path) -> tokio::task::JoinHandle<Result<()>> {
+            if let Some(parent) = socket_path.parent() {
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .expect("create socket parent");
+            }
+            let _ = tokio::fs::remove_file(socket_path).await;
+            let listener = UnixListener::bind(socket_path).expect("bind ready socket");
+            tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.expect("accept start_session");
+                let mut ws = accept_async(stream).await.expect("accept websocket");
+                let message = ws.next().await.expect("start frame").expect("frame");
+                let text = message.into_text().expect("text frame");
+                assert!(
+                    text.contains("\"type\":\"start_session\""),
+                    "expected start_session frame, got: {text}"
+                );
+                let ready = serde_json::json!({
+                    "type": "ready",
+                    "session_nonce": "0123456789abcdef0123456789abcdef",
+                    "world_id": "wld_test",
+                    "cwd": "/tmp/project",
+                    "protocol_version": 1,
+                });
+                ws.send(tungs::tungstenite::Message::Text(ready.to_string().into()))
+                    .await
+                    .expect("send ready");
+                Ok(())
+            })
+        }
+
+        #[cfg(target_os = "macos")]
+        fn install_test_platform_context_once(socket_path: PathBuf) {
+            if pw::get_context().is_some() {
+                return;
+            }
+
+            let backend: Arc<dyn WorldBackend> = Arc::new(StubWorldBackend);
+            let transport = pw::WorldTransport::Unix(socket_path.clone());
+            let ensure_ready = Box::new(|| {
+                TEST_SYNC_READY_CALLS.fetch_add(1, Ordering::SeqCst);
+                tokio::task::block_in_place(|| Ok(()))
+            });
+            let ensure_persistent_session_ready_async = Box::new(|| {
+                TEST_ASYNC_READY_CALLS.fetch_add(1, Ordering::SeqCst);
+                Box::pin(async { Ok(()) }) as pw::PersistentSessionReadyFuture
+            });
+
+            pw::store_context_globally(pw::PlatformWorldContext {
+                backend,
+                transport,
+                socket_path,
+                ensure_ready,
+                ensure_persistent_session_ready_async,
+            });
+        }
+
+        #[cfg(target_os = "macos")]
+        #[test]
+        #[serial]
+        fn macos_no_override_current_thread_start_uses_async_readiness_without_panic() {
+            let _guard = test_env_lock().lock().expect("env lock");
+            TEST_SYNC_READY_CALLS.store(0, Ordering::SeqCst);
+            TEST_ASYNC_READY_CALLS.store(0, Ordering::SeqCst);
+            std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
+
+            let temp = tempdir().expect("tempdir");
+            let socket_path = temp.path().join("world.sock");
+            install_test_platform_context_once(socket_path.clone());
+
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("current-thread runtime");
+
+            runtime.block_on(async {
+                let server = spawn_ready_server(&socket_path).await;
+                let client =
+                    ReplPersistentSessionClient::start_with(test_start_params(), Arc::new(|_| {}))
+                        .await
+                        .expect("start persistent session");
+                client.close().await.expect("close client");
+                server.await.expect("server join").expect("server result");
+            });
+
+            assert_eq!(TEST_SYNC_READY_CALLS.load(Ordering::SeqCst), 0);
+            assert_eq!(TEST_ASYNC_READY_CALLS.load(Ordering::SeqCst), 1);
+        }
+
+        #[cfg(target_os = "macos")]
+        #[test]
+        #[serial]
+        fn macos_socket_override_bypasses_platform_async_readiness() {
+            let _guard = test_env_lock().lock().expect("env lock");
+            TEST_SYNC_READY_CALLS.store(0, Ordering::SeqCst);
+            TEST_ASYNC_READY_CALLS.store(0, Ordering::SeqCst);
+
+            let temp = tempdir().expect("tempdir");
+            let socket_path = temp.path().join("override.sock");
+
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("current-thread runtime");
+
+            runtime.block_on(async {
+                let server = spawn_ready_server(&socket_path).await;
+                std::env::set_var("SUBSTRATE_WORLD_SOCKET", &socket_path);
+                let client =
+                    ReplPersistentSessionClient::start_with(test_start_params(), Arc::new(|_| {}))
+                        .await
+                        .expect("start persistent session with override");
+                std::env::remove_var("SUBSTRATE_WORLD_SOCKET");
+                client.close().await.expect("close client");
+                server.await.expect("server join").expect("server result");
+            });
+
+            assert_eq!(TEST_SYNC_READY_CALLS.load(Ordering::SeqCst), 0);
+            assert_eq!(TEST_ASYNC_READY_CALLS.load(Ordering::SeqCst), 0);
         }
     }
 }
