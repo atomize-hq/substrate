@@ -109,12 +109,9 @@ pub fn detect() -> Result<PlatformWorldContext> {
     let ensure_persistent_session_ready_async = Box::new(move || {
         let backend = ensure_persistent_session_ready_async_backend.clone();
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || {
-                let spec = bootstrap_world_spec();
-                backend.ensure_session(&spec).map(|_| ())
-            })
-            .await
-            .context("persistent-session readiness join failure")?
+            tokio::task::spawn_blocking(move || backend.ensure_persistent_session_ready())
+                .await
+                .context("persistent-session readiness join failure")?
         }) as super::PersistentSessionReadyFuture
     });
 
