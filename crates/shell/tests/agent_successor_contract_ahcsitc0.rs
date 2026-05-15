@@ -730,6 +730,7 @@ struct OrchestrationSessionManifestOptions<'a> {
     parked_reason: Option<Option<&'a str>>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_orchestration_session_with_manifest_options(
     fixture: &AgentSuccessorFixture,
     agent_id: &str,
@@ -799,6 +800,7 @@ fn orchestration_session_manifest(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn orchestration_session_manifest_with_options(
     fixture: &AgentSuccessorFixture,
     agent_id: &str,

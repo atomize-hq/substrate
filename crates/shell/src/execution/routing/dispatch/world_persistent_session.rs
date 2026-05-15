@@ -1055,7 +1055,7 @@ mod imp {
                     "cwd": "/tmp/project",
                     "protocol_version": 1,
                 });
-                ws.send(tungs::tungstenite::Message::Text(ready.to_string().into()))
+                ws.send(tungs::tungstenite::Message::Text(ready.to_string()))
                     .await
                     .expect("send ready");
                 Ok(())
