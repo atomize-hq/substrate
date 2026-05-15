@@ -1,54 +1,86 @@
 # PLAN-25: Durable Host Session Closeout, Inbox Contract Honesty, And QA Hardening
 
 Source SOW: [25-host-durable-session-closeout-and-qa-hardening.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md)  
-Gap matrix anchors: [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md:79), [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md:113)  
-Truth anchors: [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md:184), [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:105), [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md:61)  
+Truth anchors: [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md:184), [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md:79), [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:105), [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md:61)  
 Adjacent landed slices: [PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-22.md), [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md), [24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)  
 Branch: `feat/host-orchestrator-durable-session`  
 Base branch: `main`  
-Plan type: closeout pass for the durable host-session contract, focused on truth convergence, QA hardening, and inbox-contract honesty  
-Review posture: unified execution plan, tightened to `/autoplan` and `/plan-eng-review` rigor  
+Plan type: closeout pass  
 Status: execution-ready planning pass on 2026-05-14
 
 ## Objective
 
-Close the durable host-session slice without reopening the model.
+Close the durable host-session slice without reopening the product model.
 
-This plan is complete only when all of the following are true:
+This plan is done only when all of the following are true:
 
-1. The public recovery contract is frozen and stated unambiguously: `turn` is prompt-taking resume, `reattach` is attached-owner recovery, `stop` is durable session closeout, and `status` reflects durable session truth while parked.
-2. Parked and attention-needed host sessions remain visible on `substrate agent status --json` from canonical session-root truth, not just from attached-live process truth.
-3. `reattach` and `stop` remain regression-proof for the same durable session after detached parking, with command-level evidence instead of only store-level evidence.
-4. The repo stops overstating inbox reality. Docs must say exactly what is shipped today and exactly what is not.
-5. Manual and automated validation cover the whole operator lifecycle: parked `start`, parked `status`, parked `turn`, parked `reattach`, parked `stop`, and detached-world fail-closed behavior.
+1. The repo states one unambiguous public recovery contract:
+   - `turn` is prompt-taking follow-up on the same durable session,
+   - `reattach` is attached-owner recovery only,
+   - `stop` is durable closeout for attached and parked host sessions,
+   - `status --json` reports durable session truth while the session is parked.
+2. Parked and `awaiting_attention` host sessions stay visible on `substrate agent status --json` from authoritative session-root truth, not only from attached-live process truth.
+3. One command-level lifecycle proof covers the same durable session through parked `status`, parked `turn`, `reattach`, and `stop`.
+4. Docs stop overstating inbox reality. They must say what is shipped today and what is not shipped today.
+5. Validation is complete enough that a future patch cannot silently regress the operator lifecycle or the contract wording.
 
-This is a closeout and honesty pass. It is not a new orchestration model and it is not an inbox product expansion.
+This is a closeout slice. It is not a new orchestration design and it is not inbox product expansion.
+
+## Why This Closeout Exists
+
+The branch has already landed most of the runtime behavior that the older SOW still treated as open.
+
+The remaining work is narrower and more important:
+
+1. The code, tests, usage docs, truth doc, gap matrix, and packet README still do not tell exactly the same story.
+2. The runtime has real inbox persistence and posture math, but the repo still risks implying a finished operator-facing inbox workflow that the code does not prove.
+3. Lifecycle QA is strong but fragmented. The branch still lacks one crisp closeout wall that proves the full operator path on one durable session.
+4. `status` is already functionally landed, but it is a high-risk operator read surface. A regression there lies to operators even if the underlying session store is correct.
+
+The work here is boring on purpose. Freeze the contract, prove it end to end, and stop saying more than the code supports.
 
 ## Plan Summary
 
-The source SOW is directionally right, but the branch has moved a lot since it was written.
+The runtime contract is already chosen on this branch:
 
-What is already landed on this branch:
+1. `substrate agent start --backend <backend_id> --prompt ... --json` is the public root prompt-taking surface.
+2. `substrate agent turn --session <orchestration_session_id> --backend <backend_id> --prompt ... --json` is the public parked-session follow-up surface.
+3. `substrate agent reattach --session <orchestration_session_id> --json` is the explicit attached-owner recovery surface.
+4. `substrate agent stop --session <orchestration_session_id> --json` is the public closeout surface.
+5. Parked host sessions are durable and routable. Detached-world follow-up remains fail closed until `reattach` restores an active host owner.
 
-1. Public prompt-taking and control verbs already exist in [`run_turn(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:505), [`run_reattach(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:565), and [`run_stop(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:667).
-2. Hidden owner-helper readiness already accepts detached durable host continuity through [`wait_for_hidden_owner_helper_readiness(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs:645) and [`valid_detached_host_continuity_posture(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2216).
-3. Status already prefers authoritative runtime state through [`build_status_report(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:1307) and [`list_status_sessions_for_agent(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:630), and detached parked rows stay readable through [`status_visible_participants(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:66).
-4. Command-level coverage already exists for the core lifecycle: [`public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1231), [`public_stop_cleanly_closes_same_durable_session_after_reattach()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1631), [`public_start_persists_detached_session_when_hidden_owner_helper_exits()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1880), [`detached_pending_inbox_normalizes_to_awaiting_attention()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1980), and [`public_turn_routes_linux_world_member_follow_up_through_typed_submit_path()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2689).
-5. The public turn fail-closed taxonomy is already substantially pinned in [`public_turn_fail_closed_taxonomy_is_explicit_for_missing_backend_unknown_session_and_parent_slot_errors(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2363) and [`public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_detached_rejection()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2492).
+What is not closed yet is the repo-wide explanation and the regression floor around that behavior.
 
-What is still actually open is narrower:
+This plan therefore does four things, in order:
 
-1. The truth docs disagree with the code. [`HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md:206) still says `reattach`, `stop`, and `status` are unfinished, while the branch now ships those paths and tests them.
-2. The inbox contract is still overstated. The only production-code caller to durable inbox persistence is the dev-support seam in [`persist_runtime_alert_for_dev_support(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs:11). Repo docs currently talk like world-originated approvals, completions, and follow-up work are already a supported runtime contract. That is not what the code proves today.
-3. The QA story is fragmented. The branch has good targeted tests, but it still needs one explicit closeout matrix that proves the whole operator lifecycle on the same durable session and publishes the exact manual validation sequence.
-4. The `status` seam is functionally landed but still deserves regression-first treatment because GitNexus marks [`build_status_report(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:1307) as `HIGH` blast radius: 1 direct caller, 2 affected execution flows, 3 affected modules.
+1. freeze the already-chosen public contract in every truth surface,
+2. add one command-level same-session lifecycle proof plus explicit parked-status assertions,
+3. narrow inbox claims to the actual shipped surface,
+4. publish one exact validation wall future patches must keep green.
 
-The minimum honest implementation is one closeout slice with four ordered workstreams:
+## Scope
 
-1. freeze the already-chosen public recovery contract and remove contradictory truth-doc language,
-2. harden lifecycle QA around parked `status`, `turn`, `reattach`, and `stop`,
-3. freeze the inbox contract honestly around what is truly shipped today,
-4. publish a final validation matrix and manual smoke path that future edits must keep green.
+In scope:
+
+1. truth-doc convergence across usage docs, truth docs, gap matrix, and packet docs,
+2. command-level lifecycle regression coverage for parked host `status`, `turn`, `reattach`, and `stop`,
+3. command-level `status --json` assertions for `parked_resumable` and `awaiting_attention`,
+4. code-comment tightening where the shipped inbox scope is currently easy to misread,
+5. one exact manual validation path plus one exact automated validation wall.
+
+## NOT in scope
+
+This slice does not include:
+
+1. changing the public `turn` / `reattach` / `stop` split,
+2. adding default-agent routing or fuzzy selectors,
+3. adding a public inbox grammar such as `substrate agent inbox`,
+4. adding a production runtime approval/completion/follow-up inbox workflow,
+5. widening detached-world recovery beyond the current fail-closed contract,
+6. redesigning the durable session model, daemon model, or state store,
+7. Windows/WSL product-parity work.
+
+Anything in that list is a separate slice. This plan explicitly does not smuggle it in.
 
 ## Locked Starting State
 
@@ -56,91 +88,83 @@ The minimum honest implementation is one closeout slice with four ordered workst
 
 | Sub-problem | Existing code | Decision |
 | --- | --- | --- |
-| Public parked-session prompt-taking | [`run_turn(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:505) | Reuse. `turn` is already the public follow-up verb. Do not collapse it back into `reattach` or invent a new prompt verb. |
-| Public attached-owner recovery | [`run_reattach(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:565) | Reuse. The branch already chose `reattach` as a real public verb. This plan freezes that choice. |
-| Public durable stop | [`run_stop(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:667) | Reuse. `stop` is already the canonical closeout surface for attached and parked durable host sessions. |
-| Live-runtime status authority | [`build_status_report(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:1307), [`list_status_sessions_for_agent(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:630) | Reuse and regression-proof. Do not redesign status shape in this slice. |
-| Detached parked-session posture classification | [`classify_public_session_posture(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2191), [`valid_detached_host_continuity_posture(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2216) | Reuse exactly. This is the durable host continuity contract. |
-| Parked-session visibility on the read path | [`status_visible_participants(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:66) plus tests at [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:3695) | Reuse. Add command-level status assertions, not a second status model. |
-| Pending inbox normalization | [`persist_inbox_item(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1039) and [`apply_pending_inbox_count(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1726) | Reuse the persistence and posture math. Do not pretend this is already a broad runtime product surface. |
-| Detached start parking behavior | [`public_start_persists_detached_session_when_hidden_owner_helper_exits()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1880) | Reuse as the base regression. Extend validation around `status`, not startup semantics. |
-| Awaiting-attention normalization | [`detached_pending_inbox_normalizes_to_awaiting_attention()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1980) | Reuse. This proves posture math, not runtime inbox product completeness. |
-| Linux world follow-up fail-closed guidance | [`public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_detached_rejection()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2492) | Reuse. This slice must not widen detached-world recovery. |
+| Public parked-session follow-up | [`run_turn(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:505) | Reuse. `turn` is already the public prompt-taking follow-up verb. |
+| Public attached-owner recovery | [`run_reattach(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:565) | Reuse. `reattach` already exists and stays public in this slice. |
+| Public closeout | [`run_stop(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:667) | Reuse. `stop` remains the canonical closeout path for attached and parked host sessions. |
+| Authoritative parked-session read path | [`build_status_report(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:1333), [`list_status_sessions_for_agent(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:630), [`status_visible_participants(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:66) | Reuse and harden. Do not add a second status model. |
+| Detached host continuity classification | [`classify_public_session_posture(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2191), [`valid_detached_host_continuity_posture(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2216) | Reuse exactly. This is the public continuity contract. |
+| Durable inbox persistence and posture math | [`persist_inbox_item(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1039), [`apply_pending_inbox_count(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1726) | Reuse. Narrow the claims, not the implementation. |
+| Dev-support runtime alert ingress | [`persist_runtime_alert_for_dev_support(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs:11) | Reuse and document honestly. Do not present this as a public product surface. |
+| Existing lifecycle proof points | [`public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1231), [`public_stop_cleanly_closes_same_durable_session_after_reattach()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1631), [`public_start_persists_detached_session_when_hidden_owner_helper_exits()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1880), [`detached_pending_inbox_normalizes_to_awaiting_attention()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1980), [`public_turn_fail_closed_taxonomy_is_explicit_for_missing_backend_unknown_session_and_parent_slot_errors(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2363), [`public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_detached_rejection()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2492), [`public_turn_routes_linux_world_member_follow_up_through_typed_submit_path()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2689) | Reuse. Add a cohesive closeout wall rather than inventing new semantics. |
 
 ### Exact remaining gap
 
-The remaining gap is now primarily contract honesty and QA completeness:
+The remaining gap is not a missing runtime model. The remaining gap is contract convergence and closeout rigor:
 
-1. The code, tests, usage docs, README, truth doc, and gap matrix do not currently tell the same story.
-2. The branch has real durable inbox persistence primitives, but it does not yet prove a production runtime path that creates or resolves world-originated inbox items. That means the current docs oversell the feature.
-3. The branch has targeted lifecycle tests, but it still needs one closeout-level lifecycle proof that explicitly exercises the durable session across `status`, `turn`, `reattach`, and `stop` as one cohesive operator story.
-4. The branch has store-level proofs for parked and attention-needed visibility, but the status command path still needs a clearer regression floor because `status` is a high-blast-radius read surface.
+1. Some truth docs still describe `reattach`, `stop`, and parked `status` as unfinished, even though the branch now ships them.
+2. Inbox language is ahead of the proven runtime. Persistence exists. Posture math exists. A broad operator-facing inbox contract does not.
+3. The branch has targeted lifecycle tests, but it still needs one same-session closeout proof that reads like the actual operator story.
+4. The branch has store-level status visibility proof, but the command path still needs an explicit regression floor for parked and `awaiting_attention` rows.
 
 ### Blast radius
 
-GitNexus says the control/read seams are sensitive even though this slice should stay narrow:
+Even though the remaining work is narrow, the touched seams are high-consequence seams:
 
-| Symbol | GitNexus risk | Why it matters |
-| --- | --- | --- |
-| [`run_stop(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:667) | `HIGH` | 1 direct caller, 2 affected execution flows, 4 affected modules. This is a top-level CLI control surface. |
-| [`run_reattach(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:565) | `HIGH` | Same blast profile as `run_stop(...)`. A fake success here poisons the whole durable-session story. |
-| [`build_status_report(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:1307) | `HIGH` | 1 direct caller, 2 affected execution flows, 3 affected modules. It is a read surface, but a wrong answer here lies to operators. |
-| [`persist_inbox_item(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1039) | low production call-site count, high truth risk | Grep shows production callers are basically absent apart from dev support. The code seam is small. The product-claim risk is not. |
+1. `run_turn(...)`, `run_reattach(...)`, and `run_stop(...)` are top-level CLI contract surfaces.
+2. `build_status_report(...)` is the operator truth surface for durable session visibility.
+3. `persist_inbox_item(...)` is where documentation can drift far ahead of product reality because the persistence primitive looks more complete than the operator surface actually is.
 
-Implication: keep code changes boring, mostly additive, and test-first. The risky part is not complexity. The risky part is drifting the contract again.
+Implication: keep production code changes minimal, keep test additions explicit, and keep the docs exact.
 
 ## Frozen Execution Contract
 
-If implementation wants to do something else, revise this plan first.
+If implementation wants a different contract, revise this plan first. Do not drift the behavior silently.
 
-### Non-negotiable invariants
+### Public operator contract
 
-1. `substrate agent turn --session <orchestration_session_id> --backend <backend_id> --prompt ...` remains the exact follow-up prompt-taking surface.
-2. `substrate agent reattach --session <orchestration_session_id>` remains attached-owner recovery only. It is not a prompt-taking alias.
-3. `substrate agent stop --session <orchestration_session_id>` remains the durable session closeout action for attached and parked host sessions.
-4. `substrate agent status --json` remains the authoritative parked-session read surface for live-runtime rows, with posture, `attached_participant_id`, and `pending_inbox_count` sourced from canonical session-root truth.
-5. `parked_resumable` and `awaiting_attention` remain routable durable host postures. `terminal` remains the only non-routable posture family.
-6. Detached-world follow-up remains fail closed until `reattach` restores an active host owner. This slice does not widen that posture.
-7. No new public inbox grammar lands in this slice. No `agent inbox`, no public ack/dismiss surface, no new router.
-8. Docs may only claim runtime inbox behavior that the code actually produces today.
-9. `substrate -c`, `--command`, and piped shell mode remain shell execution surfaces, not agent-prompt aliases.
+1. `substrate agent start --backend <backend_id> --prompt ... --json` remains the canonical public root prompt-taking surface and remains host-only in v1.
+2. `substrate agent turn --session <orchestration_session_id> --backend <backend_id> --prompt ... --json` remains the canonical public follow-up surface.
+3. `substrate agent reattach --session <orchestration_session_id> --json` remains attached-owner recovery only. It is not a prompt-taking alias.
+4. `substrate agent stop --session <orchestration_session_id> --json` remains the durable closeout action for attached and parked host sessions.
+5. `substrate agent status --json` remains the authoritative parked-session read surface for live-runtime rows, with `posture`, `attached_participant_id`, and `pending_inbox_count` sourced from durable session-root truth.
+6. `parked_resumable` and `awaiting_attention` remain routable durable host postures. `terminal` remains the only non-routable posture family.
+7. Detached-world follow-up remains fail closed until `reattach` restores an active host owner.
+8. `substrate -c`, `--command`, and piped shell mode remain shell execution surfaces, not agent-prompt aliases.
 
-### Public recovery contract to freeze
+### Durable inbox contract
+
+This slice freezes the narrow, honest contract:
+
+1. Durable inbox persistence primitives are shipped.
+2. `pending_inbox_count` plus posture normalization into `awaiting_attention` are shipped.
+3. Internal ack/dismiss support is shipped.
+4. Dev-support and test ingress are shipped.
+5. A public operator-facing inbox command surface is not shipped.
+6. A proven production runtime path for world-originated approval/completion/follow-up inbox items is not shipped as part of the supported public contract.
+7. An automatic parked-session resume mechanism driven by inbox items is not shipped.
+
+### Contract diagram
 
 ```text
 parked host session
     |
-    +--> agent status
-    |      `--> read durable parent-session truth
+    +--> agent status --json
+    |      `--> read durable session-root truth
     |
-    +--> agent turn
-    |      `--> submit a prompt against the same orchestration session/backend pair
+    +--> agent turn --session <sess> --backend <backend>
+    |      `--> submit a prompt against the same durable session/backend pair
     |
-    +--> agent reattach
+    +--> agent reattach --session <sess>
     |      `--> restore active_attached host ownership without submitting a prompt
     |
-    `--> agent stop
-           `--> close the same durable orchestration session terminally
+    `--> agent stop --session <sess>
+           `--> close the same durable session terminally
+
+detached world member
+    |
+    `--> agent turn ... while detached
+           `--> fail closed with reattach guidance
 ```
-
-This is the chosen v1 shape. The plan does not revisit whether `reattach` should exist. The branch already answered that question.
-
-### Durable inbox contract to freeze
-
-The v1 inbox contract is narrower than the SOW originally implied:
-
-1. The persistence primitives are real.
-2. Posture normalization from parked to `awaiting_attention` based on `pending_inbox_count` is real.
-3. Store-level ack/dismiss support is real.
-4. A public operator-facing inbox UX is not shipped.
-5. A production runtime path that creates world-originated approvals, completions, or follow-up inbox items is not yet proven on this branch.
-
-That means this slice must choose honesty over aspiration:
-
-1. either land one real production runtime producer and document it exactly, or
-2. explicitly narrow the docs so inbox is described as persisted scaffolding plus posture normalization, not a finished runtime resume mechanism.
-
-This plan chooses option 2. It is the smallest complete and honest closeout.
 
 ## Step 0: Scope Challenge
 
@@ -148,234 +172,147 @@ This plan chooses option 2. It is the smallest complete and honest closeout.
 
 The minimum honest implementation is:
 
-1. update the truth docs so they stop claiming `reattach`, `stop`, and parked `status` are unfinished,
-2. add command-level lifecycle coverage that proves the same durable session survives parked `status`, parked `turn`, attached `reattach`, and `stop`,
-3. add command-level status assertions for parked and attention-needed sessions so `build_status_report(...)` cannot silently regress,
-4. narrow inbox wording everywhere so the repo only claims what the code actually ships today,
-5. publish the exact manual validation sequence future patches must keep green.
+1. update the truth docs so they stop claiming shipped behavior is unshipped,
+2. add one same-session lifecycle regression that covers parked `status`, parked `turn`, `reattach`, and `stop`,
+3. add explicit command-level parked-status assertions for both `parked_resumable` and `awaiting_attention`,
+4. narrow inbox wording everywhere to the actually shipped surface,
+5. publish one exact validation wall and one exact manual smoke path.
 
-Anything smaller leaves contradictions in the repo. Anything bigger widens scope into inbox productization.
+Anything smaller leaves contradictions behind. Anything bigger expands scope into a new inbox feature.
 
-### 0B. Complexity check
+### 0B. Existing-code leverage
 
-This slice should stay below the "new architecture" threshold even if it touches several files.
+This slice should build on the already-landed seams, not introduce parallel ones:
 
-Expected primary modules:
+1. extend [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs), do not add a new integration harness,
+2. keep the authoritative `status` path in `agents_cmd.rs` plus `state_store.rs`,
+3. keep posture classification in `classify_public_session_posture(...)`,
+4. keep inbox semantics where they are and document them correctly,
+5. keep docs aligned to [`docs/USAGE.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:105) as the operator contract source.
 
-1. `crates/shell/tests/agent_public_control_surface_v1.rs`
-2. `crates/shell/src/execution/agents_cmd.rs`
-3. `crates/shell/src/execution/agent_runtime/state_store.rs`
-4. `docs/USAGE.md`
-5. `HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`
-6. `AGENT_ORCHESTRATION_GAP_MATRIX.md`
-7. `llm-last-mile/README.md`
-8. `llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md`
+### 0C. Complexity check
 
-That is above the smell threshold on file count, but the shape is still boring:
+Expected touched areas:
 
-1. no new public verbs,
-2. no new selector types,
-3. no new runtime daemon,
-4. no new inbox UI,
-5. mostly tests and truth-sync, with only tiny production changes if the new regressions expose a real hole.
+1. `crates/shell/tests/`
+2. `crates/shell/src/execution/`
+3. `docs/`
+4. repo-root truth docs
+5. `llm-last-mile/`
 
-### 0C. Search and reuse check
+That is a multi-file slice, but it is still the right size because:
 
-Search-before-building result, in practical terms:
+1. there are no new public verbs,
+2. there is no new state model,
+3. there is no new daemon or control plane,
+4. almost all of the work is truth-sync and regression hardening,
+5. any production code change should be tiny and test-driven.
 
-- **[Layer 1]** reuse the existing command-level control suite in [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs).
-- **[Layer 1]** reuse the status authority path in [`build_status_report(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:1307) and [`list_status_sessions_for_agent(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:630).
-- **[Layer 1]** reuse the detached continuity classifier in [`valid_detached_host_continuity_posture(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2216).
-- **[Layer 1]** reuse the existing docs surface in [`docs/USAGE.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:105) as the operator contract source.
-- **[EUREKA]** the real remaining gap is not runtime invention. It is that the repo still speaks in two voices: code says "landed narrowly," some docs still say "unfinished," and the inbox claims are ahead of the code.
+### 0D. Search and reuse conclusion
 
-### 0D. TODOS cross-reference
+This is a straight Layer 1 reuse exercise:
+
+1. reuse the existing command-level control suite,
+2. reuse the existing live-status authority path,
+3. reuse the existing detached continuity classifier,
+4. reuse the existing docs as the operator contract source,
+5. fix the contradiction, not the architecture.
+
+### 0E. TODO cross-reference
 
 There is no `TODOS.md` in the repo root today.
 
-That means deferrals must be captured explicitly in this plan's `NOT in scope` section and, if desired later, in a follow-on packet. Do not assume a root backlog file will preserve nuance.
+That means all deferrals must stay explicit in the `NOT in scope` section of this plan. Do not assume a missing backlog file will preserve the reasoning.
 
-### 0E. Completeness check
+### 0F. Completeness check
 
-The complete version here is still a lake, not an ocean:
+The complete version is still a lake:
 
-1. all truth docs agree on the same public contract,
-2. status gets command-level parked and attention-needed regression coverage,
-3. the same durable session lifecycle is proven end to end,
-4. inbox wording is reduced to what the code actually proves,
-5. manual validation steps are explicit.
+1. all truth surfaces agree,
+2. the lifecycle is proven on one durable session,
+3. parked and `awaiting_attention` rows are command-level regression protected,
+4. inbox wording is exact,
+5. validation is published.
 
-Trying to add a broad inbox UX, approval flow, or automatic parked-world resume mechanism in this slice would turn a lake into an ocean. Do not do that here.
-
-### 0F. Distribution and docs check
-
-No new artifact type is introduced.
-
-Distribution still matters in the boring sense:
-
-1. `docs/USAGE.md` is operator contract,
-2. `HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md` is architecture truth,
-3. `AGENT_ORCHESTRATION_GAP_MATRIX.md` is rollout truth,
-4. `llm-last-mile/README.md` is packet index truth,
-5. this plan becomes the implementation truth for closeout.
-
-If those documents disagree, the feature is not closed.
+Trying to add a public inbox UX or broader runtime producer contract here would turn the lake into an ocean. This plan does not do that.
 
 ## Architecture Review
 
 ### Architecture thesis
 
-Do not redesign the durable host-session model. Freeze it.
+Do not redesign the durable host-session model. Freeze it and prove it.
 
-The runtime contract is already in the code. This slice just makes that contract explicit, regression-proof, and honest about where inbox behavior stops.
+The architecture is already correct enough for v1:
 
-### Data flow
+1. the durable session is the authority,
+2. the attached host owner is an attachable execution client, not the identity of the session,
+3. parked host state remains real state,
+4. detached-world follow-up remains intentionally fail closed,
+5. the operator contract is narrow and exact.
+
+### Current-to-target shape
 
 ```text
-CURRENT SHIPPED SHAPE
+CURRENT BRANCH SHAPE
+====================
+runtime contract: mostly landed
+docs contract: partially contradictory
+qa contract: strong but fragmented
+inbox wording: broader than the shipped operator surface
+
+TARGET CLOSEOUT SHAPE
 =====================
-agent start
-    |
-    +--> hidden owner-helper launches
-    +--> startup prompt completes
-    `--> session can park as parked_resumable / awaiting_attention
-
-agent status
-    |
-    +--> build_status_report(...)
-    +--> live runtime state_store first
-    `--> trace fallback only when live runtime truth is unavailable
-
-agent turn
-    |
-    +--> exact (session, backend) resolution
-    +--> parked host resumes same durable session
-    `--> detached world fails closed with reattach guidance
-
-agent reattach
-    |
-    `--> restore active_attached host ownership for same durable session
-
-agent stop
-    |
-    +--> detached durable path closes via persisted closeout
-    `--> attached path closes via private owner transport
-
-WHAT IS STILL WEAK
-==================
-- truth docs still contradict runtime truth
-- inbox persistence is real, runtime producers are not yet a supported product contract
-- lifecycle QA exists in pieces rather than one closeout matrix
-
-TARGET SHAPE
-============
-same runtime contract
-    |
-    +--> one repo-wide story
-    +--> one command-level lifecycle validation story
-    `--> one honest inbox story
+runtime contract: unchanged
+docs contract: one story everywhere
+qa contract: one same-session lifecycle wall + explicit status assertions
+inbox wording: exactly matches shipped reality
 ```
 
-### Workstream 1: contract convergence and truth-doc closeout
+### Dependency graph
 
-Goal: remove contradictory statements and freeze the already-chosen public recovery contract.
+```text
+docs/USAGE.md
+    |
+    +--> repo-root truth docs
+    |      +--> HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md
+    |      `--> AGENT_ORCHESTRATION_GAP_MATRIX.md
+    |
+    `--> llm-last-mile docs
+           +--> README.md
+           +--> SOW 25
+           `--> PLAN-25
 
-Files:
+crates/shell/src/execution/
+    |
+    +--> agents_cmd.rs
+    |      +--> run_turn(...)
+    |      +--> run_reattach(...)
+    |      +--> run_stop(...)
+    |      `--> build_status_report(...)
+    |
+    +--> agent_runtime/state_store.rs
+    |      +--> list_status_sessions_for_agent(...)
+    |      +--> status_visible_participants(...)
+    |      +--> persist_inbox_item(...)
+    |      `--> classify_public_session_posture(...)
+    |
+    `--> agent_dev_support.rs
+           `--> persist_runtime_alert_for_dev_support(...)
 
-1. [`HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md)
-2. [`AGENT_ORCHESTRATION_GAP_MATRIX.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
-3. [`docs/USAGE.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md)
-4. [`llm-last-mile/README.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md)
-5. [`llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md)
+crates/shell/tests/
+    |
+    `--> agent_public_control_surface_v1.rs
+           `--> command-level lifecycle and status contract wall
+```
 
-Required changes:
+### Realistic production failure scenarios
 
-1. Rewrite the "Current Unfinished Gaps" section in the truth doc so it no longer says `reattach`, `stop`, and parked `status` are unlanded.
-2. Keep the durable-session contract explicit: `turn`, `reattach`, `stop`, `status`, and detached-world fail-closed behavior.
-3. Rewrite inbox language to distinguish shipped persistence/math from unshipped runtime producer and consumer paths.
-4. Keep the gap matrix honest: remaining work here is closeout and parity breadth, not core durable-session existence.
+1. `status` regresses to trace-fallback null fields for a valid parked session. Operators think the session vanished or lost posture truth.
+2. `reattach` returns success before durable attached truth is actually restored. Operators trust a fake success and the next command misbehaves.
+3. `stop` still depends on the attached-live owner plane for a valid parked session. The session becomes impossible to close cleanly.
+4. Docs advertise a richer inbox workflow than the code supports. Operators try a workflow that does not exist.
 
-Exit criteria:
-
-1. no repo-truth doc claims that parked-session `status` is still missing,
-2. no repo-truth doc claims a finished runtime inbox workflow that the code does not provide,
-3. the same public recovery model appears everywhere.
-
-### Workstream 2: lifecycle QA hardening on the same durable session
-
-Goal: make the operator lifecycle provable as one cohesive story instead of several disconnected unit wins.
-
-Files:
-
-1. [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
-2. only tiny production changes in [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) or [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) if the new regression floor exposes a real mismatch
-
-Required changes:
-
-1. Add one end-to-end command-level test that exercises the same durable session through:
-   - parked `start`,
-   - `status --json`,
-   - parked `turn`,
-   - `status --json` again,
-   - `reattach`,
-   - and `stop`.
-2. Assert the orchestration-session id is stable across the parked `status`, parked `turn`, and `reattach` phases, then becomes terminal only after `stop`.
-3. Assert that `status --json` shows live-runtime `posture`, `attached_participant_id`, and `pending_inbox_count` on parked rows, not trace-fallback nulls.
-4. Preserve detached-world follow-up rejection in the same suite as a non-regression wall.
-
-Exit criteria:
-
-1. the entire host durable-session lifecycle is proven on one named session,
-2. status visibility is proven at the command layer, not only at the store layer,
-3. no new production code path is introduced unless a regression requires it.
-
-### Workstream 3: inbox contract honesty
-
-Goal: explicitly freeze what the inbox is today so future readers stop inferring a richer feature than exists.
-
-Files:
-
-1. [`crates/shell/src/execution/agent_dev_support.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs)
-2. [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-3. the docs listed in Workstream 1
-
-Required changes:
-
-1. Make it explicit in code comments and docs that the shipped runtime surface today is:
-   - durable inbox persistence primitives,
-   - pending-count and posture normalization,
-   - internal ack/dismiss support,
-   - and dev-support/test ingress.
-2. Make it explicit that the branch does **not** yet ship:
-   - a public inbox operator surface,
-   - a proven production runtime path for world-originated approval/completion/follow-up items,
-   - or an automatic parked-session resume mechanism driven by inbox items.
-3. If small comments are missing near [`persist_runtime_alert_for_dev_support(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs:11) or [`persist_inbox_item(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1039), add them so the code matches the docs.
-
-Exit criteria:
-
-1. no reader can confuse "durable inbox scaffolding exists" with "runtime inbox workflow is finished",
-2. inbox claims are uniform across code comments and docs.
-
-### Workstream 4: validation publication and manual smoke contract
-
-Goal: leave behind one exact validation sequence that future patches must preserve.
-
-Files:
-
-1. [`llm-last-mile/PLAN-25.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-25.md)
-2. optionally the closest durable-session validation doc if a better home exists
-
-Required changes:
-
-1. Publish the exact command sequence for parked `start`, parked `status`, parked `turn`, parked `reattach`, and parked `stop`.
-2. Publish the exact detached-world fail-closed check and expected wording.
-3. Tie the manual validation steps to the automated regression names in `agent_public_control_surface_v1.rs`.
-
-Exit criteria:
-
-1. the repo has one exact closeout validation path,
-2. future contributors can tell what must still work without reverse-engineering several test files.
+This plan must close all four.
 
 ## Code Quality Review
 
@@ -384,85 +321,85 @@ Exit criteria:
 1. One prompt-taking resume verb, `turn`.
 2. One owner-recovery verb, `reattach`.
 3. One closeout verb, `stop`.
-4. One parked-session authority path, canonical session-root state.
-5. One honest inbox story, no more, no less.
+4. One parked-session authority path, durable session-root truth.
+5. One honest inbox story, no more and no less.
 
-### DRY and abstraction guardrails
+### DRY guardrails
 
-1. Do not add a second status projection helper just for tests. Exercise the real command path.
-2. Do not add a second parked-session classifier just for docs. Reuse [`classify_public_session_posture(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2191) and explain it accurately.
-3. Do not add a faux production inbox writer just to make docs feel better. Either prove a real one or narrow the docs. This plan narrows the docs.
-4. If code comments need tightening, update them near the real seams rather than adding a new explanatory file.
+1. Do not add a new status helper for tests. Test the real command path.
+2. Do not add a second parked-session classifier for docs or assertions. Reuse the real posture logic.
+3. Do not invent a fake production inbox producer just to make the docs sound nicer.
+4. If comment tightening is needed, do it next to the real seams in `agent_dev_support.rs` or `state_store.rs`.
+
+### Engineered-enough boundary
+
+This slice should be explicit rather than clever:
+
+1. one new lifecycle regression is better than three new micro-tests that still leave the operator story fragmented,
+2. one command-level parked-status assertion is better than a new helper or abstraction layer,
+3. a doc narrowing diff is better than speculative runtime code that tries to make the docs true.
 
 ### Diagram maintenance
 
-If touched files already contain nearby contract comments or ASCII diagrams, update them in the same change.
+If any touched production file already has nearby contract comments or ASCII diagrams, update them in the same change. Stale diagrams are worse than no diagrams.
 
-Recommended inline comment targets if production code changes are needed:
+Recommended comment targets if production code changes are needed:
 
-1. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:505), around the `turn` / `reattach` / `stop` contract split,
-2. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2191), around public posture classification and detached continuity,
+1. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:505), around the `turn` / `reattach` / `stop` split,
+2. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2191), around detached continuity and public posture classification,
 3. [`agent_dev_support.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs:11), around dev-support-only inbox ingress.
 
 ## Test Review
 
 ### Test framework detection
 
-This repo is Rust-first. The relevant acceptance floor is `cargo test`, with shell integration tests carrying most of the contract proof.
+This is a Rust workspace. The relevant proof wall for this slice is `cargo test`, with shell integration tests carrying the operator contract and state-store tests carrying the durable posture math.
 
-Primary suites for this slice:
+Primary suites:
 
 1. [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
-2. targeted `state_store.rs` unit coverage where detached continuity and inbox posture are already modeled
+2. targeted `state_store.rs` tests for detached continuity and inbox posture math
 
 ### Code path coverage
 
 ```text
 CODE PATH COVERAGE
 ===========================
-[+] Public durable start / turn / stop
+[+] Public durable host lifecycle
     |
-    ├── [★★★ TESTED] start + streamed turn + authoritative terminal stop
+    ├── [TESTED] start + streamed turn + authoritative stop
     │       agent_public_control_surface_v1.rs:1231
     |
-    ├── [★★★ TESTED] detached parked start persists durable session
+    ├── [TESTED] detached parked start persists durable session
     │       agent_public_control_surface_v1.rs:1880
     |
-    ├── [★★★ TESTED] detached pending inbox normalizes to awaiting_attention
+    ├── [TESTED] pending inbox normalizes to awaiting_attention
     │       agent_public_control_surface_v1.rs:1980
     |
-    ├── [★★★ TESTED] same-session stop after reattach
+    ├── [TESTED] same-session stop after reattach
     │       agent_public_control_surface_v1.rs:1631
     |
-    ├── [★★★ TESTED] world follow-up typed submit path
+    ├── [TESTED] exact world-member follow-up routing
     │       agent_public_control_surface_v1.rs:2689
     |
-    ├── [★★★ TESTED] fail-closed taxonomy for missing backend / unknown session / detached world
+    ├── [TESTED] fail-closed taxonomy for unknown session, bad backend, detached world
     │       agent_public_control_surface_v1.rs:2363, 2492
     |
-    ├── [GAP -> INTEG] one cohesive same-session lifecycle:
+    ├── [GAP -> INTEG] one same-session lifecycle:
     │       parked start -> status -> parked turn -> status -> reattach -> stop
     |
-    └── [GAP -> INTEG] explicit command-level assertion that parked/attention-needed
-            status rows are sourced from live runtime truth, not trace fallback
+    └── [GAP -> INTEG] explicit command-level assertion that parked and
+            awaiting_attention rows expose live-runtime posture fields
 
 [+] Durable inbox persistence math
     |
-    ├── [★★★ TESTED] pending count increments and posture becomes awaiting_attention
-    │       state_store.rs:2749+
+    ├── [TESTED] pending count increments and posture becomes awaiting_attention
+    │       state_store.rs existing unit coverage
     |
-    ├── [★★★ TESTED] ack/dismiss resolution updates pending count and posture
-    │       state_store.rs:2802+
+    ├── [TESTED] ack/dismiss resolution updates pending count and posture
+    │       state_store.rs existing unit coverage
     |
-    └── [GAP -> DOC HONESTY] no production runtime producer is proven beyond dev support
-
----------------------------------
-COVERAGE TARGET
-- keep all landed lifecycle tests green
-- add one same-session closeout lifecycle proof
-- add one command-level parked status proof
-- add zero fake inbox tests for behavior the runtime does not ship
----------------------------------
+    └── [GAP -> DOC HONESTY] no shipped public runtime producer beyond dev support
 ```
 
 ### Operator flow coverage
@@ -470,41 +407,42 @@ COVERAGE TARGET
 ```text
 OPERATOR FLOW COVERAGE
 ===========================
-[+] operator runs `substrate agent start --backend cli:codex --prompt "hello" --json`
+[+] start --backend <host_backend_id> --prompt ...
     |
-    └── [★★★ TESTED] session can complete startup and park durably
+    └── [TESTED] session can establish and park durably
 
-[+] operator runs `substrate agent status --json`
+[+] status --json on that session
     |
-    └── [GAP -> INTEG] explicit parked and awaiting_attention assertions at command layer
+    └── [GAP -> INTEG] parked and awaiting_attention command-level field assertions
 
-[+] operator runs `substrate agent turn --session <sess> --backend cli:codex --prompt "next" --json`
+[+] turn --session <sess> --backend <host_backend_id> --prompt ...
     |
-    └── [★★★ TESTED] exact host follow-up resumes durable session
+    └── [TESTED] exact follow-up resumes the durable session
 
-[+] operator runs `substrate agent reattach --session <sess> --json`
+[+] reattach --session <sess>
     |
-    └── [★★★ TESTED] attached ownership recovery works and can be followed by stop
+    └── [TESTED] attached-owner recovery works and remains same-session
 
-[+] operator runs `substrate agent stop --session <sess> --json`
+[+] stop --session <sess>
     |
-    └── [★★★ TESTED] detached or reattached durable session closes terminally
+    └── [TESTED] durable closeout works for valid parked or reattached host sessions
 
-[+] operator targets detached world follow-up
+[+] turn against detached world member
     |
-    └── [★★★ TESTED] fail closed with reattach guidance
+    └── [TESTED] fail closed with reattach guidance
 ```
 
-### Required test files and assertions
+### Required test additions
 
 | Area | File | Required assertions |
 | --- | --- | --- |
-| Same-session durable lifecycle | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | parked `start` -> `status` -> `turn` -> `status` -> `reattach` -> `stop` on the same orchestration-session id |
-| Parked status authority | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | parked and `awaiting_attention` rows show live-runtime posture fields, not trace-fallback nulls |
-| Detached-world non-regression | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | detached world still fails closed and still points operators at `reattach` |
-| Inbox posture math | existing `state_store.rs` tests | no new semantics, just keep existing pending-count and posture invariants green |
+| Same-session lifecycle closeout | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | parked `start` -> `status` -> parked `turn` -> `status` -> `reattach` -> `stop` on one orchestration-session id |
+| Parked status authority | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | parked rows show live-runtime `posture`, `attached_participant_id`, and `pending_inbox_count`, not trace-fallback nulls |
+| Attention-needed status authority | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | `awaiting_attention` rows show the same live-runtime fields |
+| Detached-world non-regression | existing detached-world tests in `agent_public_control_surface_v1.rs` | detached-world follow-up still fails closed and still points operators to `reattach` |
+| Inbox posture math | existing `state_store.rs` tests | keep pending-count and posture invariants green, add nothing that implies new product semantics |
 
-### Required commands
+### Automated commands
 
 ```bash
 cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
@@ -514,7 +452,7 @@ cargo test --workspace -- --nocapture
 
 ### Test plan artifact
 
-Implementation should write the normal eng-review test artifact alongside code changes:
+Implementation should write the normal eng-review test artifact to:
 
 ```text
 ~/.gstack/projects/<slug>/<user>-feat-host-orchestrator-durable-session-eng-review-test-plan-<timestamp>.md
@@ -526,43 +464,44 @@ Required contents:
 2. parked `status` visibility,
 3. parked host `turn` reuse of the same session id,
 4. `reattach` recovery,
-5. `stop` closeout from both detached and reattached states,
+5. `stop` closeout from detached and reattached states,
 6. detached-world fail-closed behavior,
-7. explicit note that inbox runtime producers are not part of the shipped operator contract yet.
+7. explicit note that public inbox runtime producers are not part of the shipped operator contract yet.
 
 ## Performance Review
 
-This slice is low-risk on runtime cost. The risk is flakiness and regression noise.
+Runtime cost risk is low. Flake risk is real.
 
 Guardrails:
 
-1. prefer extending existing fixture helpers over adding new polling loops,
-2. keep status assertions store-backed and deterministic,
-3. avoid broad trace scanning in tests when the live-runtime store already has the answer,
-4. do not add expensive new smoke harnesses when the shell integration suite already models the lifecycle.
+1. extend existing fixture helpers, do not add new sleep-driven polling loops,
+2. keep parked-status assertions store-backed and deterministic,
+3. prefer authoritative runtime rows over broad trace scanning,
+4. do not add a new smoke harness when the shell integration suite already models the lifecycle.
 
-The performance rule here is simple: harden correctness without turning the closeout suite into a sleep-driven integration swamp.
+The performance rule is simple: harden correctness without turning the closeout suite into an integration swamp.
 
 ## Failure Modes Registry
 
 | Codepath | Realistic production failure | Test required | Error handling required | User-visible outcome |
 | --- | --- | --- | --- | --- |
-| parked `status` read | live parked session regresses to trace-fallback null posture fields | yes | prefer live state-store rows, warn only on true degradation | parked session remains visible and understandable |
-| `reattach` success path | command returns success before durable attached truth is actually restored | yes | success only after active-attached proof | no fake "reattached" message |
-| detached durable `stop` | command still depends on attached-live owner plane and fails on a valid parked session | yes | detached closeout path remains authoritative | session stops cleanly |
-| lifecycle truth docs | repo claims `reattach` / `stop` / parked `status` are unfinished after code ships them | yes, via doc review | update docs | operator and maintainer expectations stay aligned |
-| durable inbox docs | repo claims world-originated approvals/completions are already supported runtime behavior | yes, via doc review | narrow docs | no false operator expectation |
-| detached world follow-up | later edits silently widen detached-world resume instead of requiring `reattach` | yes | keep fail-closed classifier and guidance | clear rejection, no unsafe fallback |
+| parked `status` read | valid parked session regresses to trace-fallback null posture fields | yes | keep live-runtime rows authoritative | parked session stays visible and understandable |
+| `awaiting_attention` status read | detached session with pending inbox work loses posture and count fields | yes | keep pending-count posture truth authoritative | operator sees pending attention state, not a ghost row |
+| `reattach` success path | command reports success before durable attached truth is restored | yes | succeed only after durable attached proof | no fake reattach success |
+| detached durable `stop` | stop still depends on attached-live control plane | yes | detached closeout remains authoritative | session stops cleanly |
+| lifecycle truth docs | repo says `reattach`, `stop`, or parked `status` are unfinished | yes, via doc review | update truth docs | operator expectations stay aligned |
+| inbox docs | repo implies a broader public inbox workflow than the code ships | yes, via doc review | narrow docs and comments | no false operator expectation |
+| detached-world follow-up | later edits silently widen detached-world recovery | yes | preserve fail-closed routing and guidance | clear rejection, no unsafe fallback |
 
 Critical-gap rule for this plan:
 
-1. Any regression that hides a valid parked or attention-needed session from `agent status --json` is a release blocker.
-2. Any doc claim that advertises a production runtime inbox path not backed by code is a release blocker.
-3. Any `reattach` success that does not correspond to real durable attached truth is a release blocker.
+1. any regression that hides a valid parked or `awaiting_attention` session from `agent status --json` is a release blocker,
+2. any fake `reattach` success is a release blocker,
+3. any doc claim that advertises a public inbox workflow not backed by code is a release blocker.
 
 ## Implementation Sequence
 
-### Step 1. Freeze the chosen public contract in the docs
+### Step 1. Freeze repo truth first
 
 Files:
 
@@ -574,11 +513,11 @@ Files:
 
 Deliver:
 
-1. remove stale "unfinished" wording for shipped `reattach`, `stop`, and parked `status`,
-2. freeze the exact `turn` / `reattach` / `stop` split,
-3. narrow inbox claims to persisted scaffolding plus posture normalization.
+1. remove stale language that still calls parked `status`, `reattach`, or `stop` unfinished,
+2. freeze the exact `turn` / `reattach` / `stop` contract everywhere,
+3. narrow inbox claims to persisted scaffolding plus posture normalization plus dev-support/test ingress.
 
-Done means the repo has one story again.
+Done means the repo has one story again before any new test work lands.
 
 ### Step 2. Add one same-session lifecycle regression
 
@@ -588,28 +527,29 @@ Files:
 
 Deliver:
 
-1. create one lifecycle test that walks the same durable session through parked `status`, parked `turn`, `reattach`, and `stop`,
-2. assert the session id stays stable until terminal closeout,
-3. keep existing detached-world fail-closed assertions intact.
+1. one lifecycle test covering parked `start` -> `status` -> parked `turn` -> `status` -> `reattach` -> `stop`,
+2. stable orchestration-session id across every non-terminal step,
+3. terminal closeout only after `stop`,
+4. no change to the public command grammar.
 
-Done means the closeout contract is not scattered across five unrelated tests anymore.
+Done means the operator story is proven in one place instead of scattered across several tests.
 
-### Step 3. Add command-level parked-status assertions
+### Step 3. Add explicit parked-status assertions
 
 Files:
 
 1. [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
-2. only minimal production code if the new assertions expose a real bug
+2. production files in `crates/shell/src/execution/` only if the new assertions expose a real mismatch
 
 Deliver:
 
-1. assert parked rows surface live-runtime `posture`, `attached_participant_id`, and `pending_inbox_count`,
-2. assert `awaiting_attention` rows do the same,
-3. preserve trace-fallback null behavior only for true trace-only rows.
+1. parked rows must expose live-runtime `posture`, `attached_participant_id`, and `pending_inbox_count`,
+2. `awaiting_attention` rows must expose the same fields,
+3. trace-fallback null behavior remains limited to true trace-only rows.
 
-Done means `status` is treated as the hardening seam it actually is.
+Done means `status` is hardened as a real operator seam.
 
-### Step 4. Tighten inbox-contract comments if needed
+### Step 4. Tighten inbox comments only if needed
 
 Files:
 
@@ -619,12 +559,12 @@ Files:
 Deliver:
 
 1. make dev-support-only ingress obvious,
-2. make persistence vs product-surface scope obvious,
-3. do not add new runtime behavior.
+2. make persistence-vs-product-surface scope obvious,
+3. add zero new runtime behavior.
 
-Done means the code comments stop fighting the docs.
+Done means code comments cannot be read as promising a public inbox feature that does not exist.
 
-### Step 5. Publish the exact validation wall
+### Step 5. Publish the validation wall
 
 Files:
 
@@ -632,90 +572,139 @@ Files:
 
 Deliver:
 
-1. final automated command list,
-2. final manual smoke steps,
-3. mapping from manual checks to automated tests.
+1. exact automated command list,
+2. exact manual host-lifecycle smoke path,
+3. explicit note that `awaiting_attention` and detached-world fail-closed remain automated-only proofs because no public inbox producer surface exists and world-member reproduction is fixture-heavy.
 
-Done means future closeout reviews have one source of truth.
+Done means future reviewers know exactly what must still work and what cannot honestly be claimed as a manual public flow.
+
+## Acceptance Criteria
+
+1. No repo truth surface says parked `status`, `reattach`, or `stop` are unfinished.
+2. No repo truth surface implies a public inbox workflow beyond persisted scaffolding, posture normalization, and dev-support/test ingress.
+3. One command-level lifecycle test proves parked `status`, parked `turn`, `reattach`, and `stop` on the same durable session id.
+4. Command-level `status --json` assertions prove live-runtime fields for `parked_resumable` and `awaiting_attention`.
+5. Detached-world follow-up remains fail closed with `reattach` guidance.
+6. Existing lifecycle tests remain green.
+7. Workspace tests stay green.
+8. This plan contains the final validation wall and manual smoke rules.
 
 ## Validation Matrix
 
 | Promise | Proof |
 | --- | --- |
 | parked durable host sessions stay visible on `status` | new command-level parked-status assertions plus existing store-level visibility tests |
+| `awaiting_attention` remains authoritative | new command-level attention-needed assertions plus existing state-store posture math tests |
 | same-session parked lifecycle remains stable through follow-up and closeout | new same-session lifecycle regression |
-| `reattach` remains real attached-owner recovery | existing `public_stop_cleanly_closes_same_durable_session_after_reattach()` plus new lifecycle test |
-| detached parked `stop` remains canonical closeout | existing stop-after-reattach and detached stop coverage stays green |
-| detached world follow-up remains fail closed | existing detached-world fail-closed tests stay green |
-| inbox posture math is real but runtime product claims are narrow | existing store tests plus truth-doc narrowing |
+| `reattach` remains real attached-owner recovery | existing same-session stop-after-reattach coverage plus new lifecycle regression |
+| detached parked `stop` remains canonical closeout | existing stop coverage plus new lifecycle regression |
+| detached-world follow-up remains fail closed | existing detached-world fail-closed tests stay green |
+| inbox posture math is real but public inbox workflow claims stay narrow | existing state-store tests plus doc/comment narrowing |
 | repo truth matches code truth | doc diff review in the same PR |
 
-## NOT in scope
+## Manual Validation
 
-- adding a public inbox grammar, because this slice is closeout and honesty, not new operator UX
-- adding a production runtime approval/completion/follow-up inbox workflow, because that is a separate feature slice
-- changing the `turn` / `reattach` / `stop` public split, because the branch already chose it
-- widening detached-world recovery, because fail-closed guidance is already the intended v1 posture
-- default-agent routing or fuzzy selectors, because exact session/backend targeting remains the safety story
-- public world-root `start`, because root `start` remains host-only in v1
-- Windows/WSL parity work, because this slice is about durable host-session closeout on the already-supported narrow surface
+### Exact manual smoke path
+
+The manual smoke path for this slice is host-only. It must be runnable without special internal inbox or world-member fixtures.
+
+```bash
+substrate agent start --backend <host_backend_id> --prompt "hello" --json
+substrate agent status --json
+substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json
+substrate agent status --json
+substrate agent reattach --session <orchestration_session_id> --json
+substrate agent stop --session <orchestration_session_id> --json
+substrate agent status --json
+```
+
+Manual expectations:
+
+1. `start` creates one durable orchestration session and the prompt-driven host client can exit without invalidating it.
+2. the first `status --json` call shows the session as `parked_resumable` if `pending_inbox_count == 0`.
+3. `turn` reuses the same orchestration-session id and does not require `reattach` first.
+4. the second `status --json` call still shows the same session with live-runtime posture fields populated.
+5. `reattach` restores attached ownership without submitting a prompt.
+6. `stop` closes the same durable session terminally.
+7. the final `status --json` call no longer presents the session as a live non-terminal durable session.
+
+### Automated-only checks
+
+The following remain automated-only on purpose:
+
+1. `awaiting_attention` command-level visibility, because there is no public inbox producer surface to create that state manually without dev-support/test ingress.
+2. detached-world fail-closed reproduction, because the retained world-member setup is fixture-heavy and the branch already treats the shell integration suite as the authoritative proof surface.
+
+Automated expectations:
+
+1. detached-world failure output still points operators to `substrate agent reattach --session <orchestration_session_id>`,
+2. `awaiting_attention` rows still expose live-runtime fields at the command layer,
+3. no test adds fake public inbox behavior just to make a manual demo path prettier.
 
 ## Worktree Parallelization Strategy
 
-This slice has limited but real parallelization room.
+This slice has one real code lane and one real docs lane. It does not justify splitting the shell control suite across multiple workers.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| Lifecycle QA hardening | `crates/shell/tests/`, maybe tiny `crates/shell/src/execution/` adjustments | — |
-| Truth-doc convergence | `docs/`, repo root truth docs, `llm-last-mile/` | frozen public contract only |
-| Inbox contract honesty comments | `crates/shell/src/execution/agent_dev_support.rs`, `crates/shell/src/execution/agent_runtime/`, docs | Truth-doc convergence |
-| Final validation wall | `llm-last-mile/` | Lifecycle QA hardening, Truth-doc convergence |
+| Truth-doc convergence | `docs/`, repo root docs, `llm-last-mile/` | frozen contract in this plan |
+| Lifecycle QA hardening | `crates/shell/tests/`, maybe tiny `crates/shell/src/execution/` fixes | frozen contract in this plan |
+| Inbox-scope comment tightening | `crates/shell/src/execution/`, maybe `docs/` | truth-doc convergence |
+| Final validation wall | `llm-last-mile/` | truth-doc convergence, lifecycle QA hardening |
 
 ### Parallel lanes
 
 Lane A: lifecycle QA hardening  
-Sequential inside the shell control suite because the same integration file owns most of the contract.
+Owns `crates/shell/tests/agent_public_control_surface_v1.rs` and any tiny supporting runtime fix it exposes.
 
 Lane B: truth-doc convergence  
-Can start once the parent freezes the public contract. Mostly doc-only, no shell test conflict.
+Owns `docs/`, repo-root truth docs, and packet docs. Do not edit Rust files in this lane unless Lane A is finished.
 
-Lane C: inbox-contract comments and final validation wall  
-Waits for B so wording is not duplicated or contradictory.
+Lane C: inbox-scope comments plus final validation wall  
+Runs after Lane A and Lane B converge. Small cleanup lane.
 
 ### Execution order
 
-1. Freeze the contract in the parent plan.
-2. Launch Lane A and Lane B in parallel.
-3. Merge Lane A first if it requires any tiny runtime adjustment.
-4. Rebase Lane B if necessary, then finish Lane C.
+1. Freeze the contract in this plan.
+2. Launch Lane A and Lane B in parallel worktrees.
+3. Merge Lane A first if any runtime fix is needed.
+4. Rebase Lane B if necessary and merge it next.
+5. Run Lane C last for comment tightening and final validation publication.
 
 ### Conflict flags
 
-1. If Lane B starts changing code comments in `state_store.rs` while Lane A is editing the same file for test fixes, merge conflicts are likely. Keep Lane B doc-heavy until Lane A settles.
-2. Do not split the shell lifecycle assertions across multiple workers. `agent_public_control_surface_v1.rs` is one hotspot.
+1. Do not split `agent_public_control_surface_v1.rs` across multiple workers. That file is one hotspot and will just create merge noise.
+2. If Lane B wants to edit comments in `state_store.rs` or `agent_dev_support.rs`, wait until Lane A settles. Both lanes may need those files.
+3. Keep Lane B doc-only unless a doc contradiction cannot be resolved without a tiny code comment fix.
 
 ### Parallelization verdict
 
-Three workstreams, one real code lane, one real docs lane, one short cleanup lane after both land.
+Three lanes total:
+
+1. one code lane,
+2. one docs lane,
+3. one short cleanup lane after both converge.
+
+If only one engineer is working the slice, execute sequentially in the same order and do not over-optimize for parallelism.
 
 ## Completion Summary
 
-- Step 0: Scope Challenge, accepted as-is. The branch already chose the runtime contract. This slice closes the honesty and QA gap.
-- Architecture Review: reuse the landed durable-session model and harden the seams around `status`, `reattach`, and `stop`.
+- Step 0: Scope Challenge, accepted as-is. The runtime contract is already chosen; the remaining work is closeout and truth convergence.
+- Architecture Review: reuse the landed durable-session model and harden the contract seams around `status`, `reattach`, `stop`, and inbox wording.
 - Code Quality Review: one public recovery model, one status authority path, one honest inbox story.
-- Test Review: coverage diagram produced, two real gaps identified, same-session lifecycle proof and command-level parked-status proof.
-- Performance Review: low runtime risk, moderate flake risk if tests are implemented with new polling instead of existing helpers.
+- Test Review: coverage diagram produced, two real test gaps identified, same-session lifecycle proof and command-level parked-status proof.
+- Performance Review: low runtime-cost risk, moderate flake risk if new tests add custom polling or sleep-driven behavior.
 - NOT in scope: written.
 - What already exists: written.
-- Failure modes: release blockers frozen around status visibility, fake reattach success, and overstated inbox claims.
-- Parallelization: 3 workstreams, 1 code lane, 1 docs lane, 1 cleanup lane.
-- Lake Score: the complete option is to finish closeout and truth sync now, not ship another cycle of contradictory docs.
+- Failure modes: release blockers frozen around status visibility, fake reattach success, detached stop regression, and overstated inbox claims.
+- Parallelization: 3 lanes, 2 can start independently, 1 waits for convergence.
+- Lake Score: the complete option is to finish truth sync and closeout proof now, not ship another cycle of contradictory docs.
 
 ## Completion Checklist
 
-- [ ] truth docs no longer say `reattach`, `stop`, or parked `status` are unfinished
+- [ ] truth docs no longer say parked `status`, `reattach`, or `stop` are unfinished
 - [ ] inbox docs say exactly what is shipped today and nothing more
 - [ ] one same-session lifecycle regression proves parked `status`, parked `turn`, `reattach`, and `stop`
 - [ ] command-level parked `status` rows show live-runtime posture fields
@@ -723,10 +712,15 @@ Three workstreams, one real code lane, one real docs lane, one short cleanup lan
 - [ ] detached-world fail-closed guidance remains green
 - [ ] existing lifecycle tests stay green
 - [ ] workspace test wall passes
-- [ ] manual validation sequence is published in this plan
+- [ ] manual host lifecycle validation sequence is published in this plan
+- [ ] automated-only checks are explicitly called out where no honest manual public flow exists
 
 ## Done Means
 
 This slice is done when the durable host-session story stops depending on tribal knowledge.
 
-Operators should be able to read the docs, run `status`, `turn`, `reattach`, and `stop`, and get exactly the behavior the repo claims. Reviewers should be able to inspect one lifecycle test and one validation matrix and know the contract is real. And nobody should walk away thinking the inbox product is more complete than the code actually proves.
+An operator should be able to read the docs, run `status`, `turn`, `reattach`, and `stop`, and get exactly the behavior the repo claims.
+
+A reviewer should be able to inspect one lifecycle regression, one validation matrix, and one manual smoke path and know the contract is real.
+
+And nobody should walk away thinking the inbox product is more complete than the code actually proves.

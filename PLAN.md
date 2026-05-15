@@ -1,780 +1,456 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/feat-host-orchestrator-durable-session-autoplan-restore-20260511-131509.md -->
-# PLAN: Finish The Durable Host-Orchestrator Session Model
+# PLAN: Async Persistent-Session Bootstrap Readiness Split
 
-Source SOW: [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md)  
-Primary landed precursor: [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
-Corrective precursor: [24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)  
-Caller-surface contract: [20-public-non-interactive-agent-caller-surface.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/20-public-non-interactive-agent-caller-surface.md)  
-Packet index: [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md)  
-Supersedes: previous root `PLAN.md`, which was still scoped to the slice-24 bootstrap seam instead of the full durable-session truth record  
-Branch: `feat/host-orchestrator-durable-session`  
+Source SOW: [26-async-persistent-session-bootstrap-readiness.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/26-async-persistent-session-bootstrap-readiness.md)  
+Related slices: [21-macos-lima-shared-owner-and-member-runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/21-macos-lima-shared-owner-and-member-runtime-parity.md), [24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md), [25-host-durable-session-closeout-and-qa-hardening.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md)  
+Primary protocol doc: [persistent_session.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/repl/persistent_session.md)  
+World backend docs: [WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)  
+Supersedes: previous root `PLAN.md`, which tracked durable host-orchestrator closeout instead of the slice-26 readiness split  
+Current workspace branch: `feat/host-orchestrator-durable-session`  
 Base branch: `main`  
-Plan type: runtime correction and contract closeout, no UI scope, developer-facing CLI/runtime scope  
-Status: unified implementation plan, 2026-05-11
+Plan type: backend/runtime correction, no UI scope, developer-facing runtime scope  
+Status: unified implementation plan, 2026-05-15
 
 ## Objective
 
-Finish the host-orchestrator durable session model so runtime behavior matches the truth record exactly, not approximately.
+Fix the async persistent-session startup seam so REPL world-session bootstrap no longer crosses the synchronous readiness bridge on macOS, while keeping the existing synchronous bootstrap and request-builder surfaces intact.
 
-The architecture is already mostly present. The remaining problem is contract inconsistency at the public control surfaces. `start` and `turn` already behave like durable-session commands in important ways, but `reattach`, `stop`, and `status` still partially privilege live-owner transport over authoritative session truth. That leaves the model internally contradictory.
-
-This plan closes that gap. It does not introduce a new lifecycle model. It makes the existing durable-session model authoritative everywhere.
+This is a design correction, not a trait rewrite. The plan lands one explicit async readiness path for persistent-session startup, keeps `WorldBackend` synchronous in this slice, preserves fail-closed behavior, and makes the Windows parity decision explicit instead of hand-waving it.
 
 ## Acceptance Criteria
 
 This plan is complete only when all of the following are true:
 
-1. `substrate agent start --backend <backend_id> --prompt ...` creates or binds one durable Substrate-owned orchestration session and uses the user prompt as the true initial backend prompt.
-2. That orchestration session remains open after the initial backend run exits cleanly. Clean detach is not terminal by itself.
-3. `active_attached`, `parked_resumable`, and `awaiting_attention` are all treated as active durable-session states, not three different flavors of maybe-alive.
-4. `substrate agent turn --session <id> --backend <backend_id> --prompt ...` resumes prompt-taking against that same exact durable session.
-5. `substrate agent reattach --session <id>` reports success only when attached host ownership was durably re-established for that same exact durable session.
-6. `substrate agent stop --session <id>` stops the durable session cleanly whether the session is attached or parked.
-7. `substrate agent status --json` surfaces parked durable sessions as real active sessions instead of hiding them because no live owner process is attached.
-8. Durable inbox items continue to land, persist, and drive `awaiting_attention` while no host client is attached.
-9. Broken startup still fails closed as `runtime_start_failed`, and the public prompt bridge still guarantees `Accepted -> Completed|Failed`.
+1. Persistent-session startup no longer calls `PlatformWorldContext.ensure_ready` from [world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs).
+2. macOS/Lima REPL startup under the current-thread Tokio runtime no longer panics with the `block_in_place` runtime invariant.
+3. Readiness failures now surface as normal `Result` errors, not panic unwinds.
+4. Existing synchronous bootstrap and request-builder callers keep using `ensure_ready` with no async signature expansion.
+5. Shared readiness rules remain consistent across sync and async entrypoints for VM start, forwarding, client construction, and capabilities verification.
+6. The Windows/WSL backend is either hardened with the same split-ready internals or explicitly documented as a future-only consumer with no current persistent-session caller.
+7. Tests and docs make the caller-shape split obvious enough that a future async caller does not regress back through the sync bridge.
 
-## Scope Lock
-
-### In scope
-
-1. Make `reattach` prove durable attached ownership before returning success.
-2. Make `stop` session-centric so parked durable sessions stop cleanly without needing a live owner.
-3. Make `status` session-centric so parked active sessions stay visible.
-4. Prove that parked sessions can own durable inbox work and normalize to `awaiting_attention`.
-5. Preserve landed `start` and `turn` semantics, including exact session targeting and fail-closed world-member follow-up.
-6. Add regression coverage for the exact public CLI flows: `start`, `turn`, `reattach`, `stop`, `status`, inbox-driven posture changes.
-7. Update docs that still imply durable truth depends on an attached live owner process.
-
-### NOT in scope
-
-1. New public verbs or UX for browsing inbox items.
-2. A new timeout or stale-session lifecycle policy.
-3. Reworking the durable inbox schema or artifact layout.
-4. Broadening world-member detached recovery beyond the existing fail-closed contract.
-5. Any rollback of slice-23 posture, participant, or inbox fields.
-6. Platform expansion beyond keeping current Linux and macOS behavior compile-safe.
-
-## Starting Point
+## Step 0: Scope Challenge
 
 ### What already exists
 
-| Sub-problem | Existing code | Decision |
+| Sub-problem | Existing code | Plan decision |
 | --- | --- | --- |
-| Public root start surface | [`run_start(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Reuse. No new verb. |
-| Exact follow-up prompt surface | [`run_turn(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Reuse. Preserve exact `(session, backend)` targeting. |
-| Current reattach surface | [`run_reattach(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Keep the verb. Tighten success semantics. |
-| Current stop surface | [`run_stop(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Keep the verb. Replace live-owner-only assumption. |
-| Current status surface | [`build_status_report(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | Reuse the report shape. Change parked-session projection truth. |
-| Session discovery and strict linkage | [`load_session(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs), [`resolve_public_control_target(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse. Expand control-posture handling. |
-| Detached continuity rules for bootstrap | [`classify_hidden_owner_helper_launch_readiness(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | Keep landed bootstrap fix. Use the same truth model elsewhere. |
-| Detached parking helpers | [`park_host_orchestrator_runtime(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs), [`build_parked_host_runtime_snapshots(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | Reuse. Do not invent a second parked-state writer. |
-| Durable inbox persistence | [`persist_inbox_item(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs), [`persist_runtime_alert_for_dev_support(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs) | Reuse. Prove it operationally for parked sessions. |
-| Posture primitives | [`mark_active_attached(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs), [`mark_parked_resumable(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs), [`mark_awaiting_attention(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs) | Reuse exactly. |
-| Public prompt bridge invariant | [`run_public_prompt_command(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) | Preserve `Accepted -> Completed|Failed`. |
-
-### Exact remaining gaps
-
-| Gap | Current behavior | Why it is still wrong |
-| --- | --- | --- |
-| `reattach` is not fully landed | `run_reattach(...)` returns success immediately after helper launch | The truth record says success means attached ownership was actually restored, not that a helper briefly existed. |
-| `stop` is still attached-owner-centric | `run_stop(...)` resolves only a live owner and uses private stop transport | Parked durable sessions should still stop cleanly. Requiring a live owner means the durable session is not actually authoritative. |
-| `status` is still live-biased | `build_status_report(...)` primarily projects live participants and uses trace fallback for gaps | Parked sessions are valid active sessions and should be shown from authoritative session truth, not as best-effort leftovers. |
-| Parked durable responsibility is under-proven | Inbox persistence exists, but not as a fully validated parked-session operational path | The truth record explicitly says parked orchestration authority is not fully proven while `reattach`, `stop`, and `status` still disagree with the model. |
+| REPL async caller | [`open_world_session(...)` in async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs), [`ReplPersistentSessionClient::start_with(...)` in world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) | Reuse. The caller is already async and stays async. |
+| Persistent-session transport/bootstrap | [`build_ws_and_start_session_frame(...)` in world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) | Reuse transport and handshake logic. Replace only the readiness bridge. |
+| Sync platform-world context | [`PlatformWorldContext` in platform_world/mod.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform_world/mod.rs) | Keep `ensure_ready` for sync callers. Add a separate async-ready path instead of widening the existing one. |
+| macOS readiness ownership | [`MacLimaBackend` in world-mac-lima/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs) | Reuse backend-owned VM/forwarding/client logic. Split adapters, not ownership. |
+| Windows readiness ownership | [`WindowsWslBackend` in world-windows-wsl/src/backend.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/backend.rs) | Reuse. Harden parity logic now, but do not invent a Windows persistent-session feature in this slice. |
+| Sync bootstrap callers | [`routing/world.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/world.rs), [`world_ops.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs), [`workspace_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/workspace_cmd.rs) | Preserve behavior. Regression-test them instead of rewriting them. |
 
 ### Minimum honest diff
 
-The minimum honest implementation touches these modules:
+The minimum honest implementation touches these module groups:
 
-1. [`crates/shell/src/execution/agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
-2. [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-3. [`crates/shell/src/execution/agent_runtime/control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
-4. [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
-5. targeted tests in [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) plus inline runtime/state-store tests
-6. focused doc updates in [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md), [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md), and this root plan
+1. [`crates/shell/src/execution/platform_world/`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform_world/)
+2. [`crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs)
+3. [`crates/world-mac-lima/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs)
+4. [`crates/world-windows-wsl/src/backend.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/backend.rs)
+5. targeted tests in [`crates/shell/tests/`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/), macOS backend tests in [`crates/world-mac-lima/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs), and WSL tests in [`crates/world-windows-wsl/src/tests.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/tests.rs)
+6. docs in [persistent_session.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/repl/persistent_session.md) and [WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
 
-Anything smaller leaves either `reattach`, `stop`, `status`, or parked responsibility ambiguous.
+Anything smaller is a shortcut. It would either leave the async caller on the sync bridge, duplicate readiness rules in shell code, or fail to prove the sync surfaces still behave correctly.
 
-### Complexity, reuse, and completeness
+### Complexity, completeness, and distribution verdict
 
-This is a medium correction slice. It stays acceptable only if the implementation stays boring:
+1. This is a medium slice. It touches more than 8 files once tests and docs are counted, but the spread is justified because the bug spans one async caller, one shared shell context, and two backend adapter implementations.
+2. The complete fix is still the right fix. A hotfix inside `block_on_compat(...)` alone is cheaper to type, but it leaves the wrong architecture in place and guarantees the same confusion later.
+3. No new binary, package, service, or distribution pipeline is introduced. Distribution is unchanged in this slice.
+4. There is no repo-root `TODOS.md` today. Deferred work stays in `NOT in scope` and `Deferred follow-ups` instead of inventing a backlog surface mid-slice.
 
-1. no new crate,
-2. no new background daemon,
-3. no new persisted authority model,
-4. no new public CLI verb,
-5. no second detached-session state machine.
+### Repo-truth parity decision
 
-Reuse rules:
+`world_persistent_session.rs` is compiled only on Linux and macOS today. That means the shell-side async persistent-session seam is a macOS problem right now, not a live Windows user path.
 
-1. **[Layer 1]** Reuse the landed detached continuity and parked snapshot helpers. Do not re-express the same truth in a new helper tree.
-2. **[Layer 1]** Reuse existing durable inbox mutation flow. Do not create a side-channel counter or shadow queue.
-3. **[Layer 1]** Reuse current public CLI verbs and exact-session resolution.
-4. **[EUREKA]** The shared bug is not “reattach, stop, and status each need a one-off fix.” The shared bug is “public control paths still privilege live-owner transport over authoritative durable session truth.”
+The parity decision for this plan is:
 
-There is no root `TODOS.md` in this repo today. Deferred work stays explicit in `NOT in scope` and `Deferred follow-ups` instead of inventing a new backlog surface during this slice.
+1. land the shell-side async readiness split for macOS now,
+2. harden and refactor WSL readiness internals now so future async callers do not hit the same sync-over-async trap,
+3. do **not** add Windows persistent-session support in this slice.
 
-Shortcut versions are not acceptable:
+That is the boring choice. It fixes the real bug without pretending the Windows REPL caller already exists.
 
-1. fixing `reattach` without `stop` still leaves parked sessions half-real,
-2. fixing `stop` without `status` still leaves operators blind,
-3. fixing public control without inbox proof still leaves the parked authority story unproven,
-4. fixing behavior without CLI regressions is just optimism with line numbers.
+## Problem Statement
 
-No new binary, package, or container artifact is introduced here. Distribution work is not part of this slice.
+The repo already has a real async persistent-session startup path:
 
-## Frozen Contract
+```text
+CURRENT BROKEN STARTUP
+======================
+async REPL current-thread runtime
+    -> open_world_session(...)
+    -> ReplPersistentSessionClient::start_with(...)
+    -> build_ws_and_start_session_frame(...)
+    -> ctx.ensure_ready()                    [sync closure]
+    -> backend.ensure_session(...)
+    -> ensure_agent_ready(...)
+    -> block_on_compat(client.capabilities())
+    -> Tokio panic on macOS current-thread runtime
+```
 
-If implementation wants to violate any rule in this section, stop and revise the plan first. Do not improvise around the contract.
+The mismatch is narrow but real:
 
-### 1. Durable authority
+1. the caller is async,
+2. the readiness bridge is sync,
+3. the backend uses sync-over-async capability verification that is only safe under some runtime shapes.
 
-The durable authority is:
-
-1. the orchestration session record,
-2. the authoritative participant linkage,
-3. the durable inbox and pending-count state,
-4. the persisted routing and lifecycle metadata.
-
-The durable authority is not:
-
-1. one current helper PID,
-2. one current `codex exec` process,
-3. one active private stop transport socket.
-
-### 2. Active session postures
-
-The session remains active and durable in all three of these postures:
-
-1. `active_attached`,
-2. `parked_resumable`,
-3. `awaiting_attention`.
-
-`terminal` is the only posture family that stops routability.
-
-### 3. Reattach success semantics
-
-`substrate agent reattach --session <id>` may only report success when all of the following are durably true for that exact orchestration session:
-
-1. session state is still `Active`,
-2. session posture is `active_attached`,
-3. `attached_participant_id` points at the newly attached retained owner,
-4. that participant reports `attached_client_present == true`,
-5. that participant is authoritative-live for the session,
-6. the resumed owner has not already fallen back to a detached posture before command completion.
-
-If the helper launches and immediately detaches again, the command failed. “Helper spawned” is not a success condition.
-
-### 4. Stop semantics
-
-`substrate agent stop --session <id>` must stop the durable session model, not just the live-owner transport.
-
-Rules:
-
-1. attached sessions may still use private stop transport,
-2. parked or `awaiting_attention` sessions must still stop cleanly through authoritative durable-state closeout,
-3. stale linkage or already-terminal sessions still fail closed,
-4. successful stop must drive the session to terminal persisted truth, not merely return transport success.
-
-### 5. Status semantics
-
-`substrate agent status --json` must surface active durable sessions from authoritative session truth.
-
-That means:
-
-1. a parked host session still appears as a real active session,
-2. `awaiting_attention` remains visible with pending inbox truth,
-3. live participant rows may enrich projection, but cannot be the only path to visibility,
-4. torn or malformed roots may degrade to warnings, but valid parked sessions must not disappear.
-
-### 6. Parked inbox semantics
-
-While detached:
-
-1. inbox items still persist under the authoritative session root,
-2. `pending_inbox_count` stays authoritative,
-3. zero pending items normalizes to `parked_resumable`,
-4. pending items normalize to `awaiting_attention`,
-5. later `turn`, `reattach`, or `stop` still target that same durable session.
-
-### 7. Prompt-bridge invariant
-
-The public prompt bridge invariant remains:
-
-1. after `Accepted`, emit `Completed` or `Failed`,
-2. parked continuity is runtime state, not a third terminal envelope,
-3. silent EOF after `Accepted` is still a bug and must render explicit `Failed`.
+The fix is not “teach `block_in_place` a new trick.” The fix is to stop sending an async caller through the sync bridge.
 
 ## Architecture
 
 ### Architecture thesis
 
-Public control should resolve through the session record first, then pick the transport or state transition that matches that session posture.
+Caller shape should decide the bootstrap adapter. Readiness ownership stays with the backend, but the shell must stop pretending sync and async callers are the same thing.
 
-Today some codepaths still do the opposite. That is why parked sessions are “real” in one command and “gone” in another.
-
-### Current broken control model
+### Target architecture
 
 ```text
-CURRENT PUBLIC CONTROL MODEL
-============================
-durable session record exists
-        |
-        +--> turn
-        |     -> mostly session-centric, exact backend targeting
-        |
-        +--> reattach
-        |     -> spawn helper
-        |     -> report success too early
-        |
-        +--> stop
-        |     -> require reachable live owner
-        |     -> parked session looks owner_unreachable
-        |
-        \--> status
-              -> prefer live participant projection
-              -> parked session can fade behind fallback logic
+TARGET STARTUP MODEL
+====================
+async REPL current-thread runtime
+    -> open_world_session(...)
+    -> build_ws_and_start_session_frame(...)
+    -> ensure_persistent_session_ready_async(ctx)
+    -> backend-specific async readiness adapter
+    -> transport connect
+    -> websocket handshake
+    -> ready frame
+
+sync bootstrap / sync request-builders
+    -> ctx.ensure_ready()
+    -> backend.ensure_session(...)
+    -> backend-specific sync adapter
+    -> unchanged caller contract
 ```
 
-### Target durable control model
+### Shared-readiness split
 
 ```text
-TARGET PUBLIC CONTROL MODEL
+BACKEND READINESS OWNERSHIP
 ===========================
-authoritative session record
-        |
-        +--> posture = active_attached
-        |     -> turn
-        |     -> reattach rejects "already owned"
-        |     -> stop uses private owner transport
-        |     -> status shows active_attached
-        |
-        +--> posture = parked_resumable
-        |     -> turn resumes exact session
-        |     -> reattach restores attached ownership
-        |     -> stop closes durable session directly
-        |     -> status shows parked_resumable
-        |
-        +--> posture = awaiting_attention
-        |     -> same exact session remains routable
-        |     -> inbox work remains durable
-        |     -> stop still closes durable session directly
-        |     -> status shows awaiting_attention
-        |
-        \--> posture = terminal
-              -> turn / reattach / stop fail closed or no-op by contract
+shared sync-safe steps
+    - ensure_vm_running() / warm backend
+    - ensure_forwarding()
+    - build_agent_client()
+
+shared async verification step
+    - capabilities probe
+    - timeout / retry policy
+    - fail-closed error mapping
+
+sync adapter
+    -> shared setup
+    -> block_on(private_runtime_or_safe_bridge, async verification)
+
+async adapter
+    -> shared setup
+    -> await async verification directly
 ```
 
-### Durable session state machine
+This is the whole design. No async `WorldBackend`, no shell-side Lima logic clone, no new protocol.
 
-```text
-HOST DURABLE SESSION STATE MACHINE
-==================================
-active_attached
-    |
-    +-- clean owner detach, no pending inbox --> parked_resumable
-    |
-    +-- clean owner detach, pending inbox > 0 --> awaiting_attention
-    |
-    +-- explicit stop --> terminal
-    |
-    \-- real runtime failure --> terminal
+## Frozen Contract
 
-parked_resumable
-    |
-    +-- reattach succeeds --> active_attached
-    +-- turn succeeds --> active_attached (then may park again later)
-    +-- inbox item arrives --> awaiting_attention
-    \-- explicit stop --> terminal
+If implementation wants to violate any rule below, stop and revise the plan first.
 
-awaiting_attention
-    |
-    +-- inbox drained and still detached --> parked_resumable
-    +-- reattach succeeds --> active_attached
-    +-- turn succeeds --> active_attached
-    \-- explicit stop --> terminal
-```
-
-### Dependency graph
-
-```text
-DURABLE CONTROL CLOSEOUT GRAPH
-==============================
-agents_cmd.rs
-    |
-    +--> reattach result semantics
-    +--> stop resolution
-    +--> status report assembly
-    |
-    +--> state_store.rs
-    |     |
-    |     +--> exact session resolution
-    |     +--> posture classification
-    |     +--> durable inbox truth
-    |     \--> parked session projection helpers
-    |
-    +--> control.rs
-    |     |
-    |     +--> private stop for attached owners
-    |     \--> prompt bridge terminal delivery
-    |
-    \--> async_repl.rs
-          |
-          +--> parked snapshot application
-          +--> retained owner lifecycle
-          \--> reattach stabilization / closeout helpers
-```
-
-### Production failure scenarios
-
-| Codepath | Real failure | Planned handling |
-| --- | --- | --- |
-| `reattach` | helper spawns, command returns success, session is parked again one tick later | add a durable attached-success barrier before `reattach` returns success |
-| `stop` | parked session reports `owner_unreachable` forever | split attached-stop from durable parked-stop |
-| `status` | active parked session disappears because there is no live participant row | build a parked-session projection from the authoritative session record |
-| inbox | durable inbox item lands but operator still sees parked instead of attention-needed | assert status projection and posture both follow authoritative `pending_inbox_count` |
-| bridge | prompt accepted, helper disappears, caller sees silence | preserve explicit `Failed` after `Accepted` |
-| world follow-up | parked-host fixes accidentally relax detached world-member fail-closed behavior | keep world-member detached follow-up unchanged and covered by regression tests |
-
-## File And Symbol Change Map
-
-| File | Symbols / seams | Required change |
-| --- | --- | --- |
-| [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) | `run_reattach(...)`, `run_stop(...)`, `build_status_report(...)`, projection helpers | `reattach` must wait for durable attached truth. `stop` must support parked sessions. `status` must project parked sessions from session truth. |
-| [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | `resolve_public_control_target(...)`, session loading/building, posture helpers, inbox helpers | Add one shared session-control posture contract used by `reattach`, `stop`, and `status`. Preserve exact linkage checks. |
-| [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) | private stop transport, prompt bridge helpers | Keep private stop for attached sessions. Preserve explicit terminal delivery after `Accepted`. |
-| [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | retained owner lifecycle, parking helpers | Reuse parked snapshot flow. Add any owner-stabilization or durable closeout helper needed so `reattach` and parked `stop` are not transport illusions. |
-| [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | public CLI integration coverage | Add `start -> status -> turn -> reattach -> stop` durable-session regression flow. |
-| Inline tests | `state_store.rs`, `control.rs`, `async_repl.rs` | Add posture, stop, status, inbox, and prompt-bridge regressions. |
+1. `WorldBackend` stays synchronous in this slice.
+2. `PlatformWorldContext.ensure_ready` remains available and continues to serve sync callers.
+3. Persistent-session startup must not call `ensure_ready` except on Linux, where the current startup path is already sync-safe and directly guarded by `ensure_world_agent_ready()`.
+4. Explicit `SUBSTRATE_WORLD_SOCKET` overrides continue to bypass Lima detection and startup exactly as they do today.
+5. VM/forwarder/client/capabilities rules remain backend-owned. Shell code may orchestrate, not duplicate.
+6. All readiness failures remain fail closed. A missing VM, failed forwarder, failed capabilities probe, or bad websocket connect returns an error, never a best-effort degraded session.
+7. Windows/WSL does not gain new persistent-session product surface in this slice. Only internal readiness parity and hardening land there.
 
 ## Implementation Plan
 
-There are no unresolved design choices in this plan. The work is sequential until the control model is frozen, then parallelizable for tests and docs. Each workstream below specifies exactly what must change and what counts as done.
+### Phase 1: Add the async shell bootstrap seam
 
-### Workstream 1: Freeze one session-control posture contract
+Files:
 
-Primary modules:
+1. [platform_world/mod.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform_world/mod.rs)
+2. [world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs)
 
-1. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-2. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+Actions:
 
-Required changes:
+1. Extend `PlatformWorldContext` with an explicit async bootstrap handle or enum that preserves access to the concrete backend needed for persistent-session readiness.
+2. Add one shell-facing async helper, named for persistent-session startup rather than a generic future rewrite. The helper should perform detection/context hydration exactly once, then dispatch to the concrete backend async adapter.
+3. Keep Linux behavior simple. Linux continues using the existing world-agent readiness flow and does not need the new non-Linux forwarded-bootstrap path.
 
-1. Add one explicit helper that classifies session control posture from authoritative session state plus authoritative participant linkage.
-2. Make that helper the shared truth for `reattach`, `stop`, and parked status projection.
-3. Keep exact-session resolution strict.
-4. Keep world-sensitive posture fail-closed where already required.
+Exit criteria:
 
-Done when:
+1. `build_ws_and_start_session_frame(...)` can await an async readiness helper on macOS.
+2. No sync caller changes signature.
 
-1. the code has one obvious answer to “is this durable session attached, parked, attention-needed, or terminal?”,
-2. public control paths stop re-deriving that truth ad hoc,
-3. no helper falls back to PID liveness alone when the session record already says more.
+### Phase 2: Refactor macOS/Lima readiness into shared internals plus sync/async adapters
 
-### Workstream 2: Make `reattach` prove actual attachment
+Files:
 
-Primary modules:
+1. [world-mac-lima/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs)
 
-1. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
-2. [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
-3. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+Actions:
 
-Required changes:
+1. Keep `ensure_vm_running()` and `ensure_forwarding()` as shared sync-safe setup steps.
+2. Extract capabilities verification into an async helper that can be awaited directly.
+3. Make `ensure_agent_ready()` the sync wrapper and add a dedicated async wrapper for persistent-session startup.
+4. Tighten `block_on_compat(...)` so accidental future misuse fails predictably instead of panicking in obscure ways.
 
-1. Keep the hidden owner-helper resume path.
-2. Add a stabilization barrier so `run_reattach(...)` returns success only after the resumed session is durably `active_attached`.
-3. Fail if the helper launches and immediately parks again before command completion.
-4. Preserve non-prompt-taking semantics and exact-session recovery.
+Exit criteria:
 
-Done when:
+1. macOS sync `ensure_session(...)` still works.
+2. macOS async persistent-session bootstrap no longer touches `block_on_compat(...)`.
 
-1. successful `reattach` means attached ownership is actually restored,
-2. failed `reattach` never returns a false “active” JSON result,
-3. the exact parked session remains the recovery target.
+### Phase 3: Migrate persistent-session startup to the async seam
 
-### Workstream 3: Make `stop` session-centric
+Files:
 
-Primary modules:
+1. [world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs)
+2. [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
 
-1. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
-2. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-3. [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs)
-4. [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+Actions:
 
-Required changes:
+1. Leave `ReplSessionStartParams`, policy/env normalization, shared-world request wiring, and websocket framing alone.
+2. Replace the macOS `ctx.ensure_ready` call with the new async readiness helper.
+3. Preserve socket-override short-circuiting exactly. The override path is already the clean escape hatch for tests and explicit custom agent sockets.
 
-1. Keep private stop transport for truly attached sessions.
-2. Add a parked-session stop path that closes the durable session from authoritative runtime state without requiring a reachable live owner.
-3. Make both paths converge on one terminal session-closeout helper so the persisted end state is identical.
-4. Preserve strict stale-linkage failure instead of guessing.
+Exit criteria:
 
-Done when:
+1. REPL startup path is still one straight async flow.
+2. The only semantic change is the readiness boundary before transport connect.
 
-1. parked sessions stop cleanly,
-2. attached sessions still stop cleanly,
-3. successful stop ends in authoritative terminal persisted truth,
-4. `owner_unreachable` is reserved for real failures, not valid parked sessions.
+### Phase 4: WSL parity hardening, not product-surface expansion
 
-### Workstream 4: Make `status` reflect durable parked truth
+Files:
 
-Primary modules:
+1. [world-windows-wsl/src/backend.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/backend.rs)
+2. [world-windows-wsl/src/tests.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/tests.rs)
 
-1. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
-2. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+Actions:
 
-Required changes:
+1. Split WSL capabilities verification and warm-retry logic into shared async internals plus a sync wrapper.
+2. Harden `block_on(...)` the same way macOS is hardened.
+3. Do **not** thread a Windows async persistent-session caller through shell code in this slice.
 
-1. Surface parked and attention-needed sessions from authoritative session records even when no live participant row exists.
-2. Preserve live participant rows as enrichments, not the sole visibility path.
-3. Preserve degraded warnings for torn roots.
-4. Ensure parked-session status surfaces the real posture and session id instead of vanishing into trace fallback behavior.
+Exit criteria:
 
-Done when:
+1. WSL remains compile-safe and behaviorally unchanged for existing sync callers.
+2. Future async callers have a safe backend-local seam waiting for them.
 
-1. valid parked sessions are visible in `agent status --json`,
-2. `awaiting_attention` is visible when pending inbox work exists,
-3. status remains strict about malformed linkage while still readable for valid detached sessions.
+### Phase 5: Prove sync callers still work
 
-### Workstream 5: Prove parked inbox responsibility operationally
+Files:
 
-Primary modules:
+1. [routing/world.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/world.rs)
+2. [world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs)
+3. [workspace_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/workspace_cmd.rs)
 
-1. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
-2. [`agent_dev_support.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs)
-3. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs)
+Actions:
 
-Required changes:
+1. Preserve call sites unless a tiny adapter shim is required for compilation.
+2. Add regression tests that prove sync bootstrap and sync request-building still succeed and still fail closed.
 
-1. Add regression proof that a parked session can receive a durable inbox item while detached.
-2. Assert `pending_inbox_count` increments and posture becomes `awaiting_attention`.
-3. Assert `status` shows that same session as `awaiting_attention`.
-4. Assert later `turn`, `reattach`, or `stop` still operate on that exact session.
+Exit criteria:
 
-Done when:
+1. Sync callers remain boring.
+2. No hidden async creep enters these surfaces.
 
-1. inbox work is not just stored, it is operationally part of the parked durable session model,
-2. detached session truth remains internally consistent across store, status, and control surfaces.
+### Phase 6: Docs and manual validation
 
-### Workstream 6: Replace “looks right” with public CLI proof
+Files:
 
-Primary modules:
+1. [persistent_session.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/repl/persistent_session.md)
+2. [WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
+3. optionally [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md) if the packet index needs a note
 
-1. [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
-2. inline tests in runtime/state-store modules
+Actions:
 
-Required changes:
+1. Document the caller-shape split explicitly.
+2. Call out that persistent-session startup on macOS uses an async readiness adapter while sync request-builders still use the legacy sync seam.
+3. Record the Windows parity decision so nobody mistakes “hardened internals” for “Windows persistent REPL shipped.”
 
-1. Add a real CLI regression that proves `start` yields one non-terminal active durable session and preserves the exact session id whether the immediate posture is `active_attached` or `parked_resumable`.
-2. Add `status` proof on that same session immediately after start and again after it becomes parked.
-3. Add `turn` proof on that same session.
-4. Add `reattach` proof on that same session.
-5. Add `stop` proof on that same session.
-6. Add parked-inbox proof for `awaiting_attention`.
-7. Keep broken bootstrap fail-closed and post-`Accepted` explicit failure coverage.
+Exit criteria:
 
-Done when:
-
-1. the durable-session truth is proven from the actual public CLI surface,
-2. synthetic fixtures remain support evidence, not the main proof.
-
-### Workstream 7: Docs closeout
-
-Likely docs:
-
-1. [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md)
-2. [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
-3. this root [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)
-
-Required changes:
-
-1. Remove any remaining wording that implies parked means gone.
-2. Clarify that `reattach` success means attached truth, not helper launch.
-3. Clarify that `stop` is the closeout path for attached and parked durable sessions.
-4. Update nearby ASCII diagrams if they become stale.
-
-Done when:
-
-1. repo docs match runtime truth,
-2. no doc quietly preserves the attached-live-only mental model.
-
-### Implementation order
-
-1. Land Workstream 1 first. Everything else depends on one shared control-posture truth.
-2. Land Workstreams 2, 3, and 4 in that order inside one sequential lane. They all touch the same control modules and are semantically coupled.
-3. Land Workstream 5 once `status` and `stop` reflect the same durable truth.
-4. Land Workstream 6 after behavior stabilizes, because the integration test should prove final semantics, not chase churn.
-5. Land Workstream 7 after code behavior and tests are frozen.
-
-## Engineering Guardrails
-
-### Code quality guardrails
-
-1. There must be one shared helper for session-control posture classification.
-2. There must be one shared durable session closeout path for stop terminalization.
-3. There must be one obvious status projection path for parked sessions.
-4. Do not duplicate liveness-vs-authority predicates across `agents_cmd.rs`, `state_store.rs`, and `async_repl.rs`.
-5. Reuse the existing session store and parked snapshot writers.
-6. Reuse private stop transport for attached sessions instead of replacing it.
-7. Extend existing CLI integration coverage before inventing a new durability suite.
-8. Keep world-member detached follow-up logic unchanged unless a regression test proves a real bug there.
-
-### Inline diagram candidates
-
-If implementation adds non-obvious transition logic, add or update nearby ASCII comments in:
-
-1. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) for session-control posture classification,
-2. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) for attached-stop vs parked-stop dispatch,
-3. [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) for retained-owner attach/detach lifecycle,
-4. [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs) for prompt-bridge terminal delivery after `Accepted`.
-
-### Performance guardrails
-
-The hot path here is correctness under session-control resolution, not raw throughput.
-
-Performance rules:
-
-1. do not add repeated full-directory scans to `stop` or `status`,
-2. prefer authoritative session record plus already-loaded participant set over extra trace fishing,
-3. keep pending-inbox posture normalization O(1) by trusting the authoritative counter and invariant checks,
-4. keep attached-stop on the existing private transport path,
-5. avoid double-writing the same session terminalization through separate attached and parked codepaths.
+1. The docs reflect the real architecture.
+2. The next person reading the code does not have to reverse-engineer why the split exists.
 
 ## Test Strategy
-
-### Test framework
-
-This is a Rust workspace. Primary test surfaces already exist in:
-
-1. inline module tests in [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs), [`control.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/control.rs), and [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
-2. integration coverage in [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
 
 ### Code path coverage
 
 ```text
 CODE PATH COVERAGE
 ==================
-[+] state_store.rs
-    |
-    ├── [GAP] resolve_public_control_target() still treats stop as live-owner-only
-    ├── [GAP] one shared session-control posture helper must feed reattach/stop/status
-    ├── [★★★ TESTED, KEEP] pending inbox persistence updates authoritative pending count
-    └── [★★ TESTED, KEEP] detached posture invariants already exist
+[+] Async REPL startup
+    async_repl::start_world_session(...)
+        -> open_world_session(...)
+        -> ReplPersistentSessionClient::start_with(...)
+        -> build_ws_and_start_session_frame(...)
+        -> async readiness helper
+        -> websocket connect / ready frame
+    Required tests:
+        - macOS current-thread startup succeeds without panic
+        - readiness failure returns Result error
+        - explicit SUBSTRATE_WORLD_SOCKET override still bypasses bootstrap
 
-[+] agents_cmd.rs
-    |
-    ├── [REGRESSION TEST REQUIRED] run_reattach() must not report success before durable attach
-    ├── [REGRESSION TEST REQUIRED] run_stop() must stop parked durable sessions
-    ├── [GAP] build_status_report() must surface parked sessions from authoritative session truth
-    └── [★★ TESTED, KEEP] run_turn() preserves exact backend targeting
+[+] Sync bootstrap callers
+    routing/world.rs
+        -> ctx.ensure_ready()
+        -> backend.ensure_session(...)
+    world_ops.rs request builders
+        -> ctx.ensure_ready()
+        -> AgentClient transport selection
+    workspace_cmd.rs capabilities checks
+        -> dedicated runtime.block_on(...)
+    Required tests:
+        - sync bootstrap unchanged
+        - sync request builders unchanged
+        - fail-closed behavior preserved
 
-[+] async_repl.rs
-    |
-    ├── [★★ TESTED, KEEP] parked snapshot helpers already normalize parked vs attention posture
-    ├── [GAP] retained-owner lifecycle needs a reattach stability proof point
-    └── [GAP] any new parked-stop closeout helper must converge on one terminal session write path
-
-[+] control.rs
-    |
-    ├── [★★ TESTED, KEEP] private stop transport exists for attached owners
-    ├── [★★ TESTED, KEEP] Accepted -> Completed|Failed bridge shape exists
-    └── [GAP] late-drop coverage must stay green while the durable control paths change
+[+] Backend adapters
+    MacLimaBackend
+        -> ensure_vm_running()
+        -> ensure_forwarding()
+        -> async capabilities probe
+    WindowsWslBackend
+        -> warm / retry path
+        -> async capabilities probe
+    Required tests:
+        - async adapter success
+        - probe failure returns normal error
+        - sync adapter still works
 ```
 
-### User flow coverage
+### User-flow and error-state coverage
 
 ```text
 USER FLOW COVERAGE
 ==================
-[+] substrate agent start --backend <host> --prompt "hello" --json
-    ├── [★★ TESTED, KEEP] clean bootstrap leaves one non-terminal active durable session
-    └── [GAP] the same exact session remains visible in status whether the immediate posture is `active_attached` or `parked_resumable`
+[+] macOS REPL startup, default transport
+    - world session starts under current-thread runtime
+    - user sees normal REPL startup, not Tokio panic
 
-[+] substrate agent status --json
-    ├── [GAP] parked_resumable session is shown as active durable truth
-    └── [GAP] awaiting_attention session is shown when pending inbox work exists
+[+] macOS REPL startup, readiness failure
+    - VM unavailable / forwarder unavailable / capabilities probe fails
+    - user sees explicit readiness failure
 
-[+] substrate agent turn --session <id> --backend <host> --prompt "next" --json
-    ├── [★★ TESTED, KEEP] same parked session can resume prompt-taking
-    └── [★★ TESTED, KEEP] detached world-member follow-up still fails closed
+[+] macOS REPL startup, explicit socket override
+    - no Lima bootstrap side effects
+    - custom socket still connects
 
-[+] substrate agent reattach --session <id> --json
-    ├── [GAP] success means attached ownership actually restored
-    └── [GAP] no immediate silent re-park after reported success
+[+] Sync command surfaces
+    - world bootstrap still works
+    - world_ops request builders still work
+    - workspace capabilities checks still work
 
-[+] substrate agent stop --session <id> --json
-    ├── [GAP] attached stop still works
-    └── [GAP] parked stop works without a live owner
-
-[+] parked durable inbox responsibility
-    ├── [GAP] detached runtime-alert/approval item lands durably
-    ├── [GAP] posture changes to awaiting_attention
-    └── [GAP] same exact session remains routable after inbox work appears
-
-[+] post-Accepted bridge behavior
-    └── [★★ TESTED, KEEP] helper drop after Accepted still yields explicit Failed
+[+] WSL backend hardening
+    - existing sync flows unaffected
+    - future async callers no longer depend on unsafe sync-over-async behavior
 ```
 
-### Required test additions
+### Concrete test additions
 
-1. Add a `reattach` regression proving the command only returns success once the session is durably `active_attached`.
-2. Add a negative `reattach` regression proving immediate re-park or attach loss fails the command instead of returning false success.
-3. Add a parked-stop regression proving `stop` works when no live owner process is attached.
-4. Add an attached-stop regression to preserve current private transport behavior.
-5. Add a status regression proving a parked durable session is visible in `agent status --json`.
-6. Add a status regression proving a detached session with one pending inbox item appears as `awaiting_attention`.
-7. Add an inbox-flow regression proving parked session -> inbox item -> attention posture -> reattach or turn still targets the same session.
-8. Keep the broken-bootstrap and post-`Accepted` explicit-failure regressions green on the final merged tree.
-
-### Test plan artifact to generate during implementation
-
-When implementation starts, write a QA-facing artifact under `~/.gstack/projects/<slug>/` that covers:
-
-1. `start`, `status`, `turn`, `reattach`, and `stop` on one exact durable session,
-2. parked-empty versus awaiting-attention posture transitions,
-3. attached-stop versus parked-stop behavior,
-4. broken-bootstrap fail-closed behavior,
-5. post-`Accepted` explicit-failure delivery,
-6. detached-world fail-closed non-regression.
-
-### Required validation commands
-
-Run at minimum:
-
-```bash
-cargo test -p shell agent_runtime::state_store -- --nocapture
-cargo test -p shell agent_runtime::control -- --nocapture
-cargo test -p shell async_repl -- --nocapture
-cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
-```
-
-Manual validation on the merged tree must prove the public contract, not just internal unit behavior:
-
-```bash
-# Flow A: active durable session visibility, parked transition proof, inbox attention, turn, reattach, attached-stop
-substrate agent start --backend <host_backend_id> --prompt "hello" --json
-substrate agent status --json
-# If start remains active_attached, wait for or otherwise prove the same exact session later normalizes to parked_resumable before detached inbox injection.
-<inject one durable inbox item onto the same session and capture persisted session truth>
-substrate agent status --json
-substrate agent turn --session <orchestration_session_id> --backend <host_backend_id> --prompt "next" --json
-substrate agent reattach --session <orchestration_session_id> --json
-substrate agent status --json
-substrate agent stop --session <orchestration_session_id> --json
-substrate agent status --json
-
-# Flow B: parked-stop proof on a separate exact durable session
-substrate agent start --backend <host_backend_id> --prompt "hello again" --json
-substrate agent status --json
-substrate agent stop --session <second_orchestration_session_id> --json
-substrate agent status --json
-```
-
-Manual validation is complete only when all of the following are checked:
-
-1. `start` leaves one non-terminal active durable session when the clean bootstrap path is valid, even if the immediate posture is `active_attached` rather than `parked_resumable`,
-2. `status` shows that same exact session immediately after start with its real authoritative posture,
-3. if `start` remained `active_attached`, the same exact session is later proven to normalize to `parked_resumable` before detached inbox proof begins,
-4. one detached inbox item moves that same parked or detached session to `awaiting_attention`,
-5. `turn` succeeds against that same exact session,
-6. `reattach` succeeds only when attached ownership is truly restored,
-7. `status` shows that same session as `awaiting_attention`,
-8. persisted runtime truth after `reattach` is durably `active_attached` for that same exact session,
-9. attached-session `stop` succeeds against that same exact session while still attached,
-10. parked-session `stop` succeeds against a separate exact durable session with no attached owner,
-11. broken bootstrap still fails as `runtime_start_failed`,
-12. post-`Accepted` helper loss still renders explicit `Failed`,
-13. detached-world follow-up still fails closed with reattach guidance.
+1. Extend [`crates/shell/tests/repl_world_first_routing_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs) with a current-thread REPL startup regression that executes the persistent-session startup path without panic.
+2. Add or extend focused tests around [`world_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) for:
+   - async readiness success,
+   - readiness error propagation,
+   - socket override bypass.
+3. Extend macOS backend tests in [`world-mac-lima/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs) using the existing `session_setup_override` seam to prove sync and async adapters share readiness rules.
+4. Extend WSL tests in [`world-windows-wsl/src/tests.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/tests.rs) for async-parity helper behavior and sync-wrapper preservation.
+5. Add sync regression coverage for [`routing/world.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/world.rs) and the request-builder helpers in [`world_ops.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs).
 
 ## Failure Modes Registry
 
-| Failure mode | Test required | Error handling required | User-visible outcome |
-| --- | --- | --- | --- |
-| `reattach` reports success while the session is still parked | yes | yes | explicit failure, not false active success |
-| parked `stop` still returns `owner_unreachable` | yes | yes | parked durable session stops cleanly |
-| parked session disappears from `status` | yes | yes | operator sees real parked session |
-| detached inbox item lands but status stays `parked_resumable` | yes | yes | operator sees `awaiting_attention` |
-| attached-stop and parked-stop produce different terminal persisted truth | yes | yes | one terminal session model, not two |
-| post-`Accepted` helper drop goes silent | yes | yes | explicit `Failed` |
-| detached world-member follow-up accidentally becomes permissive | yes | yes | explicit fail-closed rejection remains |
+| Failure mode | Where it happens | Required handling | Test requirement | Critical gap if missing |
+| --- | --- | --- | --- | --- |
+| Tokio current-thread panic | macOS REPL startup | Eliminate by moving async caller off sync bridge | REPL startup regression | Yes |
+| VM starts but forwarding is absent | macOS async adapter | Return fail-closed readiness error | macOS adapter test | Yes |
+| Capabilities probe hangs or fails | macOS + WSL adapters | Return normal error with context, no panic | adapter timeout/failure tests | Yes |
+| Explicit socket override accidentally triggers platform bootstrap | macOS startup override path | Preserve short-circuit bypass | override regression test | Yes |
+| Sync bootstrap silently starts using async path | routing/world.rs or world_ops.rs | Keep sync callers on `ensure_ready` | sync regression tests | Yes |
+| Future Windows async caller repeats the same trap | WSL backend | Land async-parity internals and harden sync bridge | WSL parity tests | No, but document if partially deferred |
 
-**Critical gaps this plan must close:** 5
+## NOT in scope
 
-1. false-success `reattach`,
-2. live-owner-only `stop`,
-3. parked-session invisibility in `status`,
-4. unproven parked inbox operational ownership,
-5. split control truth between session authority and transport liveness.
+1. Converting [`WorldBackend`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-api/src/lib.rs) into an async trait.
+2. Rewriting LinuxLocalBackend.
+3. Redesigning the persistent-session protocol or `ready` frame contract.
+4. Broad transport refactors unrelated to readiness.
+5. Shipping Windows persistent-session REPL support as a new product surface.
+6. Changing public CLI behavior outside of replacing the panic with normal readiness errors.
+
+## Deferred Follow-Ups
+
+1. Full async `WorldBackend` migration, if future async callers justify the cost.
+2. Broader unification of sync request-builders if those surfaces ever move fully async.
+3. Any Windows persistent-session feature work beyond backend hardening.
 
 ## Worktree Parallelization Strategy
-
-This plan has limited real parallelism because the important work all converges on the same `crates/shell/src/execution/` and `crates/shell/src/execution/agent_runtime/` directories. The practical strategy is one code lane first, then split tests and docs once semantics are stable.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| 1. Freeze session-control posture contract | `crates/shell/src/execution/`, `crates/shell/src/execution/agent_runtime/` | — |
-| 2. Reattach durability fix | `crates/shell/src/execution/`, `crates/shell/src/repl/`, `crates/shell/src/execution/agent_runtime/` | 1 |
-| 3. Stop session-centric closeout | `crates/shell/src/execution/`, `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/repl/` | 1, 2 |
-| 4. Status plus inbox projection/proof | `crates/shell/src/execution/`, `crates/shell/src/execution/agent_runtime/` | 1, 3 |
-| 5. Regression tests and manual fixtures | `crates/shell/tests/`, inline runtime test modules | 2, 3, 4 |
-| 6. Docs closeout | `docs/`, `llm-last-mile/`, root plan docs | 2, 3, 4 |
+| 1. Define async shell bootstrap contract | `crates/shell/src/execution/platform_world/` | — |
+| 2. Refactor macOS shared readiness internals | `crates/world-mac-lima/` | 1 |
+| 3. Harden WSL parity internals | `crates/world-windows-wsl/` | 1 |
+| 4. Migrate persistent-session caller to async seam | `crates/shell/src/execution/routing/dispatch/`, `crates/shell/src/repl/` | 1, 2 |
+| 5. Add sync-regression coverage | `crates/shell/tests/`, `crates/shell/src/execution/routing/` | 4 |
+| 6. Update docs and smoke notes | `docs/`, `llm-last-mile/` | 4, 5 |
 
 ### Parallel lanes
 
-Lane A: 1 -> 2 -> 3 -> 4  
-Sequential. Shared `execution/` and `agent_runtime/` ownership. Do not split this across workers unless you want merge-conflict theater.
+Lane A: Step 1 -> Step 4 -> Step 5  
+Reason: shared shell modules, sequential changes
 
-Lane B: 5  
-Starts after Lane A behavior stabilizes. Test harness work before that point is likely to chase moving semantics.
+Lane B: Step 2  
+Reason: isolated macOS backend work once Step 1 contract is set
 
-Lane C: 6  
-Can run in parallel with Lane B after Lane A lands, because docs can key off the frozen merged behavior.
+Lane C: Step 3  
+Reason: isolated WSL backend hardening once Step 1 contract is set
+
+Lane D: Step 6  
+Reason: can start after Step 4 is stable, then finish after Step 5 validation lands
 
 ### Execution order
 
-1. Launch Lane A first and keep it single-owner.
-2. Once Lane A lands, launch Lane B and Lane C in parallel worktrees.
-3. Merge Lane B first if docs need final command or output truth from the tests.
+1. Land Step 1 first. This defines the contract every other lane depends on.
+2. Launch Lane B and Lane C in parallel worktrees after Step 1 merges or at least the contract is frozen.
+3. Merge B first if macOS is the primary blocker, then complete Lane A Step 4 against the landed contract.
+4. Run Step 5 after Step 4 because sync-regression coverage needs the final shell wiring in place.
+5. Finish docs last, after test names and behavior are final.
 
 ### Conflict flags
 
-1. Steps 2, 3, and 4 all touch `crates/shell/src/execution/` and `crates/shell/src/execution/agent_runtime/`. Treat them as one lane.
-2. If a test worker needs to modify helper code in `async_repl.rs` or `agents_cmd.rs`, pull that work back into Lane A instead of pretending it is independent.
+1. Lane A and Lane B both conceptually depend on the shell-to-backend contract. Freeze function names and result types before parallelizing.
+2. Lane A Step 5 touches shell routing modules that may also pick up small compile fixes from Step 4. Keep those changes in the same lane to avoid churn.
+3. Lane B and Lane C are safe in parallel. They touch different backend crates.
 
-## Deferred Follow-Ups
+## Validation Commands
 
-These were considered and are intentionally deferred:
+```bash
+cargo fmt --all
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p substrate-shell -- --nocapture
+cargo test -p world-mac-lima -- --nocapture
+cargo test -p world-windows-wsl -- --nocapture
+script -q /dev/null zsh -lc 'RUST_BACKTRACE=1 ~/.substrate/bin/substrate'
+```
 
-1. Inbox browsing or approval UX, because this slice is about durable authority correctness, not operator productization.
-2. Automatic stale-session timeout policy, because the truth record explicitly treats that as future deliberate lifecycle design.
-3. World-member detached recovery broadening, because the current contract is intentionally fail-closed and that is not the bug here.
-4. Broader parked-session telemetry and reporting polish, because correctness has to land before nicer visibility layers.
-
-## Completion Checklist
-
-The slice is not done until every item below is true on the merged tree:
-
-1. one shared session-control posture helper governs `reattach`, `stop`, and parked-session `status`,
-2. `reattach` success means durable `active_attached`, not “helper started,”
-3. `stop` closes parked and attached sessions through one authoritative terminal closeout model,
-4. `status --json` shows valid `parked_resumable` and `awaiting_attention` sessions from session truth,
-5. a detached inbox item updates posture and stays tied to the same exact session,
-6. the CLI regression wall proves `start -> status -> turn -> reattach -> stop` on one durable session,
-7. broken bootstrap still fails closed,
-8. post-`Accepted` helper loss still yields explicit `Failed`,
-9. detached-world follow-up remains fail closed,
-10. docs and nearby ASCII diagrams no longer describe an attached-live-only mental model.
+If the macOS manual smoke still fails, it must fail as a normal readiness error. A Tokio runtime panic means the slice is not done.
 
 ## Completion Summary
 
-- Step 0: Scope Challenge — complete, scope kept broad enough to finish the durable-session model instead of re-fixing only bootstrap
-- Architecture — durable authority, control posture, and state-machine contracts frozen
-- Implementation Plan — 7 workstreams with explicit dependencies and done criteria
-- Engineering Guardrails — one posture helper, one stop closeout path, minimal-diff rules locked
-- Test Strategy — coverage diagrams produced, 8 concrete gaps identified
-- Failure modes — 5 critical gaps flagged
-- NOT in scope — written
-- What already exists — written
-- Parallelization — 3 lanes, 1 real post-code parallel window
-- Lake Score — the complete option was chosen throughout, because partial fixes would keep the durable-session model internally contradictory
+This plan is ready to implement when the work lands with this end state:
+
+1. Step 0: scope accepted as-is, no trait rewrite, no protocol rewrite.
+2. Architecture: one async persistent-session readiness seam added, sync seam preserved.
+3. Code quality: backend-owned readiness logic shared, no shell-side duplication.
+4. Tests: REPL startup regression, socket override regression, sync surface regressions, macOS adapter coverage, WSL parity coverage.
+5. Performance: unchanged in the steady state. This slice is about correctness and startup safety, not throughput tuning.
+6. `NOT in scope`: written.
+7. `What already exists`: written.
+8. Failure modes: six named production failures accounted for, four of them critical if left untested.
+9. Parallelization: four lanes, two backend lanes safely parallel after the shell contract lands.
+10. Lake score: the complete fix wins over the hotfix. The repo pays the right engineering cost once instead of paying the bug twice.
