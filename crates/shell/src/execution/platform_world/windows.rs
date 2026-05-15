@@ -4,7 +4,7 @@ use crate::execution::settings;
 #[cfg(test)]
 use crate::execution::world_env_guard;
 use agent_api_client::{AgentClient, Transport};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use substrate_broker::world_fs_mode;
@@ -101,9 +101,21 @@ pub fn detect() -> Result<PlatformWorldContext> {
     let transport = to_world_transport(&transport_config);
     let socket_path = socket_path_from_transport(&transport_config);
     let ensure_backend = ctx.backend_trait.clone();
+    let ensure_persistent_session_ready_async_backend = ctx.backend_trait.clone();
     let ensure_ready = Box::new(move || {
         let spec = bootstrap_world_spec();
         ensure_backend.ensure_session(&spec).map(|_| ())
+    });
+    let ensure_persistent_session_ready_async = Box::new(move || {
+        let backend = ensure_persistent_session_ready_async_backend.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                let spec = bootstrap_world_spec();
+                backend.ensure_session(&spec).map(|_| ())
+            })
+            .await
+            .context("persistent-session readiness join failure")?
+        }) as super::PersistentSessionReadyFuture
     });
 
     Ok(PlatformWorldContext {
@@ -111,6 +123,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
         transport,
         socket_path,
         ensure_ready,
+        ensure_persistent_session_ready_async,
     })
 }
 
