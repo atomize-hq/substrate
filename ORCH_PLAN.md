@@ -45,12 +45,14 @@ This preserves the slice contract:
 6. Linux behavior stays structurally unchanged unless a tiny compile-only adapter is needed.
 7. WSL hardening is internal-only and must not create a shipped Windows persistent-session shell caller.
 8. Readiness failures stay fail closed and return normal errors, never a Tokio panic and never best-effort degraded startup.
-9. Docs ship only after merged behavior is stable.
-10. Workers do not edit [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md), [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md), or `.runs/**`.
-11. Every symbol edit requires prior GitNexus impact analysis.
-12. Any `HIGH` or `CRITICAL` GitNexus impact result is a parent-only escalation point.
-13. Every worker handoff must include `gitnexus_detect_changes()` status before the parent considers merge.
-14. Parent runs a final `gitnexus_detect_changes()` on the merged branch before closeout.
+9. The `A1` shell contract must preserve a concrete backend-owned async-ready access path. It is not enough to add a free shell helper if `PlatformWorldContext` still erases the backend behind `Arc<dyn WorldBackend>` with no async-ready access surface.
+10. The no-panic regression must exercise a no-override path that previously crossed `ctx.ensure_ready()`. `SUBSTRATE_WORLD_SOCKET` override tests remain required, but they are not valid evidence for the original panic fix.
+11. Docs ship only after merged behavior is stable.
+12. Workers do not edit [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md), [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md), or `.runs/**`.
+13. Every symbol edit requires prior GitNexus impact analysis.
+14. Any `HIGH` or `CRITICAL` GitNexus impact result is a parent-only escalation point.
+15. Every worker handoff must include `gitnexus_detect_changes()` status before the parent considers merge.
+16. Parent runs a final `gitnexus_detect_changes()` on the merged branch before closeout.
 
 ## Worktree Creation Order And Commands
 
@@ -277,19 +279,22 @@ Owned files:
 
 1. [crates/shell/src/execution/platform_world/mod.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform_world/mod.rs)
 2. [crates/shell/src/execution/routing/dispatch/world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs)
+3. [crates/shell/src/execution/platform_world/windows.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform_world/windows.rs) if the context shape changes require the Windows detector to populate the same async-ready access surface
 
 Purpose:
 
 1. add the shell-facing async readiness seam
 2. preserve sync `ensure_ready`
-3. freeze helper names, dispatch shape, and error-shape expectations for backend lanes
+3. preserve a backend-owned async-ready access path despite backend type erasure in `PlatformWorldContext`
+4. freeze helper names, dispatch shape, and error-shape expectations for backend lanes
 
 Not allowed in `A1`:
 
 1. no edits to `async_repl.rs`
 2. no backend crate edits
 3. no docs
-4. no sync regression additions outside minimal compile coverage
+4. no attempt to prove the macOS no-panic regression through `SUBSTRATE_WORLD_SOCKET` override-only tests
+5. no sync regression additions outside minimal compile coverage
 
 ### Worker B, phase `B1`: macOS backend split
 
@@ -332,7 +337,8 @@ Purpose:
 
 1. replace the macOS sync bridge with the async seam
 2. preserve exact socket override behavior
-3. prove sync callers still use sync `ensure_ready`
+3. land the honest no-override no-panic regression separately from the override-path regression
+4. prove sync callers still use sync `ensure_ready`
 
 Reason `A1` and `A2` are serialized:
 
@@ -364,7 +370,7 @@ Purpose:
 | `B1` | Worker B | `mac-lima-lane` / `codex/slice-26-mac-lima-readiness-split` | `G1` | macOS backend shared sync/async readiness split | crate tests green, no shell edits |
 | `C1` | Worker C | `wsl-lane` / `codex/slice-26-wsl-readiness-parity` | `G1` | WSL parity hardening and tests | crate tests green, no product-surface expansion |
 | `G2` | Parent | `parent` / same | `B1`, `C1` | backend window accepted | both backend merges recorded, gate `G2` opened |
-| `A2` | Worker A | `shell-lane` / `codex/slice-26-shell-readiness-seam` rebased | `G2` | shell caller migration plus sync regressions | macOS path off sync bridge, socket override exact, shell tests green |
+| `A2` | Worker A | `shell-lane` / `codex/slice-26-shell-readiness-seam` rebased | `G2` | shell caller migration plus sync regressions | macOS path off sync bridge, no-override panic regression present, socket override exact, shell tests green |
 | `G3` | Parent | `parent` / same | `A2` | shell migration accepted | merged tree satisfies code-path split, gate `G3` opened |
 | `D1` | Worker D | `docs-lane` / `codex/slice-26-docs-readiness-split` | `G3` | docs updates only | docs match merged code, no code edits |
 | `G4` | Parent | `parent` / same | `D1` | docs accepted | gate `G4` opened |
@@ -405,7 +411,8 @@ Parent records this under the matching `tasks/<task-id>/` artifact directory.
 
 1. the exact new shell-facing async helper name
 2. which backend-facing contract points were frozen
-3. whether any shell test additions were deferred to `A2`
+3. how the platform-world layer preserved concrete backend-owned async-ready access
+4. whether any shell test additions were deferred to `A2`
 
 `B1` must additionally state:
 
@@ -423,7 +430,8 @@ Parent records this under the matching `tasks/<task-id>/` artifact directory.
 
 1. which call site stopped using the sync bridge
 2. how socket override bypass was preserved
-3. which sync caller regressions were tested
+3. where the no-override current-thread no-panic regression lives
+4. which sync caller regressions were tested
 
 `D1` must additionally state:
 
@@ -461,7 +469,6 @@ Run from `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-
 ```bash
 cargo fmt --all
 cargo test -p shell --lib -- --nocapture
-cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
 ```
 
 ### `B1` validation commands
@@ -543,8 +550,9 @@ Open only when:
 
 1. `A1` handoff is complete
 2. parent confirms sync `ensure_ready` still exists for sync callers
-3. parent confirms `A1` did not spill into backend crates or `async_repl.rs`
-4. parent has a written shell contract artifact under `tasks/G1-shell-contract-accept/`
+3. parent confirms the frozen shell contract preserves a backend-owned async-ready access path for downstream backend lanes
+4. parent confirms `A1` did not spill into backend crates or `async_repl.rs`
+5. parent has a written shell contract artifact under `tasks/G1-shell-contract-accept/`
 
 ### Gate `G2` acceptance rule
 
@@ -562,7 +570,8 @@ Open only when:
 1. `A2` is merged
 2. macOS persistent-session startup no longer uses the sync bridge
 3. socket override bypass is still exact
-4. sync caller regressions are covered and green
+4. a no-override current-thread regression covers the former panic path without relying on `SUBSTRATE_WORLD_SOCKET`
+5. sync caller regressions are covered and green
 
 ### Gate `G4` acceptance rule
 
@@ -598,7 +607,7 @@ The run passes only if all of the following are true on the merged parent branch
 5. Shared readiness rules remain backend-owned across sync and async entrypoints.
 6. `SUBSTRATE_WORLD_SOCKET` override bypass remains exact.
 7. WSL parity hardening stayed internal-only.
-8. Required tests are present and pass.
+8. Required tests are present and pass, including a no-override current-thread regression for the former panic path and a separate override-path regression.
 9. Docs clearly encode the caller-shape split and Windows scope decision.
 10. Final GitNexus detect-changes matches expected scope.
 
@@ -627,7 +636,7 @@ Rules:
 The parent should use this direct mapping when deciding final acceptance:
 
 1. PLAN completion point `1`: covered by `A2`, `G3`, and final code inspection
-2. PLAN completion point `2`: covered by `A2` tests and manual smoke
+2. PLAN completion point `2`: covered by the no-override current-thread regression in `A2` plus manual smoke
 3. PLAN completion point `3`: covered by shell and backend error-path tests and smoke failure mode
 4. PLAN completion point `4`: covered by `A1`, `A2`, and sync shell regressions
 5. PLAN completion point `5`: covered by `B1`, `C1`, `A2`, and docs

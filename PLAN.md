@@ -24,7 +24,7 @@ This plan is complete only when all of the following are true:
 2. macOS/Lima REPL startup under the current-thread Tokio runtime no longer panics with the `block_in_place` runtime invariant.
 3. Readiness failures surface as normal `Result` errors, not panic unwinds.
 4. Existing synchronous bootstrap and request-builder callers keep using `ensure_ready` with no async signature expansion.
-5. Shared readiness rules remain consistent across sync and async entrypoints for VM start, forwarding, client construction, and capabilities verification.
+5. Shared readiness rules remain consistent across sync and async entrypoints for VM start, forwarding, client construction, and backend-owned capabilities verification semantics.
 6. The Windows/WSL backend is either hardened with the same split-ready internals or explicitly documented as a future-only consumer with no current persistent-session caller.
 7. Tests and docs make the caller-shape split obvious enough that a future async caller does not regress back through the sync bridge.
 
@@ -62,6 +62,7 @@ Anything smaller is a shortcut. It would either leave the async caller on the sy
    - Lima uses `block_on_compat(...)` in [`world-mac-lima/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs).
    - WSL uses `block_on(...)` in [`world-windows-wsl/src/backend.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/backend.rs).
 4. The real defect is not the websocket protocol and not `WorldBackend` itself. The defect is that an already-async caller is still forced through a sync bootstrap seam that uses sync-over-async capability verification.
+5. [`PlatformWorldContext`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform_world/mod.rs) currently erases the concrete backend behind `Arc<dyn WorldBackend>` and only stores the sync `ensure_ready` closure. Phase 1 therefore must preserve some concrete async-ready access path in the platform-world layer; a pure shell helper that "dispatches to the concrete backend" is not implementable unless that access path is added deliberately.
 
 ### Complexity, completeness, and distribution verdict
 
@@ -139,7 +140,7 @@ shared sync-safe steps
 
 shared async verification step
     - capabilities probe
-    - timeout / retry policy
+    - preserve current per-backend timeout / retry behavior
     - fail-closed error mapping
 
 sync adapter
@@ -174,6 +175,7 @@ If implementation wants to violate any rule below, stop and revise the plan firs
 5. VM/forwarder/client/capabilities rules remain backend-owned. Shell code may orchestrate, not duplicate.
 6. All readiness failures remain fail closed. A missing VM, failed forwarder, failed capabilities probe, or bad websocket connect returns an error, never a best-effort degraded session.
 7. Windows/WSL does not gain a new persistent-session product surface in this slice. Only internal readiness parity and hardening land there.
+8. The platform-world layer must preserve a concrete backend-owned async-ready path for persistent-session startup, whether through an additional callback, a typed carrier, or another testable adapter surface. Shell code must not recover that access by duplicating backend logic.
 
 ## Code Quality Review
 
@@ -186,8 +188,12 @@ If implementation wants to violate any rule below, stop and revise the plan firs
    - shared async verification,
    - sync wrapper,
    - async wrapper.
-4. Harden sync bridge helpers as defense-in-depth only. If `block_on_compat(...)` or WSL `block_on(...)` are touched, the change is there to produce a controlled error instead of a panic, not to justify leaving the async caller on the sync bridge.
-5. Preserve Linux simplicity. Do not backdoor a second non-Linux abstraction into Linux just for symmetry.
+4. Because `PlatformWorldContext` currently erases concrete backend type information, Phase 1 must also define how the shell reaches the backend-owned async-ready adapter. The acceptable shapes are narrow:
+   - an additional async-ready callback stored alongside `ensure_ready`,
+   - a typed platform carrier that still preserves the sync surface,
+   - or an equivalent platform-world adapter that remains shell-thin and testable.
+5. Harden sync bridge helpers as defense-in-depth only. If `block_on_compat(...)` or WSL `block_on(...)` are touched, the change is there to produce a controlled error instead of a panic, not to justify leaving the async caller on the sync bridge.
+6. Preserve Linux simplicity. Do not backdoor a second non-Linux abstraction into Linux just for symmetry.
 
 ### Naming and ownership expectations
 
@@ -195,7 +201,7 @@ The plan is intentionally opinionated about the shape of the new seam:
 
 1. The shell helper should be named for the real caller, for example `ensure_persistent_session_ready_async(...)`, not a generic future-looking async world API.
 2. macOS and WSL should each expose backend-local async readiness wrappers that reuse the same internal setup/verification steps as the sync wrapper.
-3. `PlatformWorldContext` remains the sync compatibility carrier. The new async path can be implemented as a free helper plus backend dispatch rather than an async closure stored inside the context.
+3. `PlatformWorldContext` remains the sync compatibility carrier, but Phase 1 must deliberately preserve a backend-owned async-ready access path. A free helper is fine only if the platform-world layer exposes enough information to reach the real backend adapter without rebuilding readiness logic in shell code.
 
 ### DRY guardrails
 
@@ -230,10 +236,11 @@ Actions:
 1. Introduce one shell-facing async helper for persistent-session startup. Its job is to:
    - preserve the existing Linux readiness behavior,
    - detect or reuse the platform world context for macOS,
-   - dispatch to the concrete backend async adapter,
+   - reach a backend-owned async-ready adapter through an explicit platform-world seam,
    - and return only when readiness is sufficient to open the transport.
-2. Keep `PlatformWorldContext` usable by existing sync callers. Do not change its current `ensure_ready` contract.
-3. Freeze the shell-to-backend async contract before parallel backend work starts. This is the merge point every other lane depends on.
+2. Because `PlatformWorldContext` currently stores only `Arc<dyn WorldBackend>` plus sync `ensure_ready`, Phase 1 must add the missing async-ready access path explicitly. Acceptable implementations include an additional async callback or a typed platform carrier, but not shell-side duplication of backend logic.
+3. Keep `PlatformWorldContext` usable by existing sync callers. Do not change its current `ensure_ready` contract.
+4. Freeze the shell-to-backend async contract before parallel backend work starts. This is the merge point every other lane depends on.
 
 Exit criteria:
 
@@ -250,7 +257,7 @@ Files:
 Actions:
 
 1. Keep `ensure_vm_running()` and `ensure_forwarding()` as shared sync-safe setup steps.
-2. Extract the capabilities verification portion of `ensure_agent_ready()` into an async helper that can be awaited directly after client construction.
+2. Extract the capabilities verification portion of `ensure_agent_ready()` into an async helper that can be awaited directly after client construction, while preserving current Lima semantics. This slice does not add a new timeout or retry policy to macOS.
 3. Keep `ensure_agent_ready()` as the sync wrapper used by `ensure_session(...)`.
 4. Add a dedicated async readiness wrapper for persistent-session startup that reuses the same setup and verification rules.
 5. Harden `block_on_compat(...)` so accidental future misuse returns a controlled error with context instead of a runtime panic.
@@ -290,7 +297,7 @@ Files:
 
 Actions:
 
-1. Split WSL capabilities verification and warm-retry logic into shared async internals plus a sync wrapper.
+1. Split WSL capabilities verification and warm-retry logic into shared async internals plus a sync wrapper, preserving the existing WSL warm-and-retry behavior rather than introducing a new cross-platform policy.
 2. Harden `block_on(...)` the same way macOS is hardened.
 3. Do not add a Windows persistent-session shell caller in this slice.
 4. Document in code comments and docs that this is backend-local parity work for future async callers, not shipped Windows persistent-session support.
@@ -422,8 +429,9 @@ USER FLOW COVERAGE
 
 | Target | Test requirement | Type |
 | --- | --- | --- |
-| [`crates/shell/tests/repl_world_first_routing_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs) | Add a current-thread REPL startup regression that executes the persistent-session startup path without panic. | integration |
-| [`world_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) tests | Cover async readiness success, readiness error propagation, and socket-override bypass. | focused unit/integration |
+| shell-side current-thread test near [`world_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) or an adjacent focused shell test | Add a no-override current-thread regression that exercises the path which previously called `ctx.ensure_ready()` and proves startup now returns success or a normal error without panic. | focused unit/integration |
+| [`crates/shell/tests/repl_world_first_routing_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs) | Preserve explicit `SUBSTRATE_WORLD_SOCKET` override bypass regression coverage only. This harness is valid for override-path behavior, not for reproducing the original panic. | integration |
+| [`world_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) tests | Cover async readiness success, readiness error propagation, and any shell-side helper behavior needed to prove the caller-shape split. | focused unit/integration |
 | [`world-mac-lima/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs) tests | Use the existing `session_setup_override` seam to prove sync and async adapters share readiness rules. | crate unit |
 | [`world-windows-wsl/src/tests.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/tests.rs) | Cover async-parity helper behavior and sync-wrapper preservation. | crate unit |
 | [`routing/world.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/world.rs) and [`world_ops.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs) | Add sync regression coverage that proves unchanged success and fail-closed behavior. | integration |
@@ -432,13 +440,15 @@ USER FLOW COVERAGE
 
 The macOS REPL panic is a regression against an existing command surface. That makes the no-panic REPL startup test mandatory. No defer, no follow-up issue, no "manual smoke is enough."
 
+The override-backed REPL harness is not sufficient by itself for this regression because `SUBSTRATE_WORLD_SOCKET` bypasses platform detection and the sync readiness bridge. The no-panic regression must execute a no-override path that would have crossed `ctx.ensure_ready()` before this slice.
+
 ## Failure Modes Registry
 
 | Failure mode | Where it happens | Required handling | Test requirement | Critical gap if missing |
 | --- | --- | --- | --- | --- |
 | Tokio current-thread panic | macOS REPL startup | Eliminate by moving async caller off sync bridge | REPL startup regression | Yes |
 | VM starts but forwarding is absent | macOS async adapter | Return fail-closed readiness error | macOS adapter test | Yes |
-| Capabilities probe hangs or fails | macOS + WSL adapters | Return normal error with context, no panic | adapter timeout/failure tests | Yes |
+| Capabilities probe hangs or fails | macOS + WSL adapters | Return normal error with context, no panic, while preserving existing per-backend retry/timeout semantics | adapter timeout/failure tests | Yes |
 | Explicit socket override accidentally triggers platform bootstrap | macOS startup override path | Preserve short-circuit bypass | override regression test | Yes |
 | Sync bootstrap silently starts using async path | `routing/world.rs` or `world_ops.rs` | Keep sync callers on `ensure_ready` | sync regression tests | Yes |
 | Future Windows async caller repeats the same trap | WSL backend | Land async-parity internals and harden sync bridge | WSL parity tests | No, but document if partially deferred |
