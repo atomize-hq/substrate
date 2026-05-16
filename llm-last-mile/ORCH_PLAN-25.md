@@ -2,16 +2,19 @@
 
 Live workspace branch: `feat/host-orchestrator-durable-session`  
 Authoritative execution branch for this run: `feat/host-orchestrator-durable-session`  
-Plan source: [PLAN-25.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-25.md)  
-Style references: [ORCH_PLAN-20.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/ORCH_PLAN-20.md), [ORCH_PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/ORCH_PLAN-22.md)  
-Packet index: [README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md)  
-Truth anchors: [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md), [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md), [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md)  
+Plan source: [PLAN-25.md](/home/spenser/__Active_code/substrate/llm-last-mile/PLAN-25.md)  
+Style references: [ORCH_PLAN-20.md](/home/spenser/__Active_code/substrate/llm-last-mile/ORCH_PLAN-20.md), [ORCH_PLAN-22.md](/home/spenser/__Active_code/substrate/llm-last-mile/ORCH_PLAN-22.md)  
+Packet index: [README.md](/home/spenser/__Active_code/substrate/llm-last-mile/README.md)  
+Truth anchors: [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/home/spenser/__Active_code/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md), [AGENT_ORCHESTRATION_GAP_MATRIX.md](/home/spenser/__Active_code/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md), [docs/USAGE.md](/home/spenser/__Active_code/substrate/docs/USAGE.md)  
+Current root controllers: [PLAN.md](/home/spenser/__Active_code/substrate/PLAN.md), [ORCH_PLAN.md](/home/spenser/__Active_code/substrate/ORCH_PLAN.md)  
 Execution type: fresh orchestration controller for durable host-session closeout, parent-frozen public contract, parent-only gates and integration, one real code lane, one real docs lane, one late cleanup lane  
-Live root: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`  
-Worktree root: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-25`  
+Live root: `/home/spenser/__Active_code/substrate`  
+Worktree root: `/home/spenser/__Active_code/.worktrees/substrate-plan-25`  
 Worker model: `GPT-5.4` with `reasoning_effort=high`  
 Initial concurrent worker cap: `2`  
 Total lanes across the full run: `3`
+
+Post-landing drift note: `PLAN-25` landed at `995e273c` on 2026-05-14 and this controller landed at `8d0367cb` on 2026-05-15. Since then the repo root planning docs moved to slice-26 async persistent-session bootstrap readiness; execute this controller against current HEAD, but do not fold slice-26 work into the `L1` / `L2` / `L3` scope.
 
 ## Summary
 
@@ -35,7 +38,7 @@ The orchestration job is to walk that frozen contract to completion without reop
 
 Real concurrency is capped at `2` at launch, not `3`, because there is only one real code hotspot:
 
-1. [crates/shell/tests/agent_public_control_surface_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) is a single ownership hotspot and must not be split across workers.
+1. [crates/shell/tests/agent_public_control_surface_v1.rs](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) is a single ownership hotspot and must not be split across workers.
 2. The docs lane is real and independent.
 3. The inbox-comment cleanup lane is real but cannot start until code and docs converge, because it may touch runtime comment surfaces near the same contract seams and depends on the final wording chosen by the merged tree.
 
@@ -58,8 +61,8 @@ Frozen run shape:
 
 These are run-stopping invariants, not preferences.
 
-1. The authoritative integration checkout remains `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate` on `feat/host-orchestrator-durable-session`.
-2. The parent agent is the only integrator, the only approval authority, and the only writer of `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/**`.
+1. The authoritative integration checkout remains `/home/spenser/__Active_code/substrate` on `feat/host-orchestrator-durable-session`.
+2. The parent agent is the only integrator, the only approval authority, and the only writer of `/home/spenser/__Active_code/substrate/.runs/plan-25/**`.
 3. The public contract is frozen exactly to:
    - `substrate agent start --backend <backend_id> --prompt ... --json` for root prompt-taking.
    - `substrate agent turn --session <orchestration_session_id> --backend <backend_id> --prompt ... --json` for same-session prompt-taking follow-up.
@@ -91,9 +94,9 @@ These are run-stopping invariants, not preferences.
 15. No lane may edit `PLAN-25.md` or this controller during execution.
 16. If the frozen public contract, the narrow inbox contract, the single-owner hotspot rule, or the final validation wall becomes disputed, the run stops and the parent writes `blocked.json`.
 
-Stop the run, write `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/blocked.json`, and do not advance if any of these occur:
+Stop the run, write `/home/spenser/__Active_code/substrate/.runs/plan-25/blocked.json`, and do not advance if any of these occur:
 
-1. A worker needs a second concurrent code lane touching [agent_public_control_surface_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs).
+1. A worker needs a second concurrent code lane touching [agent_public_control_surface_v1.rs](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs).
 2. `L1` requires a broad runtime refactor instead of a tiny test-exposed fix.
 3. `L2` can only make the docs truthful by inventing a public inbox surface or rewriting the recovery contract.
 4. `L3` needs to make semantic runtime changes instead of comment tightening.
@@ -105,7 +108,7 @@ Stop the run, write `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/
 
 `blocked.json` is parent-written only, exactly once, at the moment the parent decides the run cannot advance.
 
-Required fields in `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/blocked.json`:
+Required fields in `/home/spenser/__Active_code/substrate/.runs/plan-25/blocked.json`:
 
 - `run_id`
 - `authoritative_branch`
@@ -125,13 +128,13 @@ Required fields in `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.
 
 Fresh worktree root:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-25`
+- `/home/spenser/__Active_code/.worktrees/substrate-plan-25`
 
 Worker worktrees:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-25/lifecycle-qa-hardening`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-25/truth-doc-convergence`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-25/inbox-scope-comment-tightening`
+- `/home/spenser/__Active_code/.worktrees/substrate-plan-25/lifecycle-qa-hardening`
+- `/home/spenser/__Active_code/.worktrees/substrate-plan-25/truth-doc-convergence`
+- `/home/spenser/__Active_code/.worktrees/substrate-plan-25/inbox-scope-comment-tightening`
 
 Worker branches:
 
@@ -142,26 +145,26 @@ Worker branches:
 Exact setup commands:
 
 ```bash
-mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-25
+mkdir -p /home/spenser/__Active_code/.worktrees/substrate-plan-25
 
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-25/lifecycle-qa-hardening \
+git worktree add /home/spenser/__Active_code/.worktrees/substrate-plan-25/lifecycle-qa-hardening \
   -b codex/feat-host-orchestrator-durable-session-m25-lifecycle-qa-hardening \
   feat/host-orchestrator-durable-session
 
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-25/truth-doc-convergence \
+git worktree add /home/spenser/__Active_code/.worktrees/substrate-plan-25/truth-doc-convergence \
   -b codex/feat-host-orchestrator-durable-session-m25-truth-doc-convergence \
   feat/host-orchestrator-durable-session
 
-git worktree add /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-plan-25/inbox-scope-comment-tightening \
+git worktree add /home/spenser/__Active_code/.worktrees/substrate-plan-25/inbox-scope-comment-tightening \
   -b codex/feat-host-orchestrator-durable-session-m25-inbox-scope-comment-tightening \
   feat/host-orchestrator-durable-session
 ```
 
-No separate parent integration worktree is introduced. The parent integrates only on `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`.
+No separate parent integration worktree is introduced. The parent integrates only on `/home/spenser/__Active_code/substrate`.
 
 ## Parent-Owned Run-State Surface
 
-Canonical parent-owned state under `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/`:
+Canonical parent-owned state under `/home/spenser/__Active_code/substrate/.runs/plan-25/`:
 
 - `run-state.json`
 - `tasks.json`
@@ -176,17 +179,17 @@ Canonical parent-owned state under `/Users/spensermcconnell/__Active_Code/atomiz
 
 Required per-task artifact roots:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-p1-parent-contract-freeze-and-run-init/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-g1-window-a-launch-gate/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-l1-lifecycle-qa-hardening/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-l2-truth-doc-convergence/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-g2-window-a-integration-gate/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-p2-parent-window-a-integration/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-g3-cleanup-launch-gate/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-l3-inbox-scope-comment-tightening/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-g4-validation-wall-gate/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-p3-parent-validation-wall/`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-p4-parent-closeout-phase/`
+- `/home/spenser/__Active_code/substrate/.runs/task-m25-p1-parent-contract-freeze-and-run-init/`
+- `/home/spenser/__Active_code/substrate/.runs/task-m25-g1-window-a-launch-gate/`
+- `/home/spenser/__Active_code/substrate/.runs/task-m25-l1-lifecycle-qa-hardening/`
+- `/home/spenser/__Active_code/substrate/.runs/task-m25-l2-truth-doc-convergence/`
+- `/home/spenser/__Active_code/substrate/.runs/task-m25-g2-window-a-integration-gate/`
+- `/home/spenser/__Active_code/substrate/.runs/task-m25-p2-parent-window-a-integration/`
+- `/home/spenser/__Active_code/substrate/.runs/task-m25-g3-cleanup-launch-gate/`
+- `/home/spenser/__Active_code/substrate/.runs/task-m25-l3-inbox-scope-comment-tightening/`
+- `/home/spenser/__Active_code/substrate/.runs/task-m25-g4-validation-wall-gate/`
+- `/home/spenser/__Active_code/substrate/.runs/task-m25-p3-parent-validation-wall/`
+- `/home/spenser/__Active_code/substrate/.runs/task-m25-p4-parent-closeout-phase/`
 
 Each task directory must contain:
 
@@ -258,7 +261,7 @@ Concurrency rules:
 1. Worker cap is exactly `2` until `g2` completes.
 2. Only `L1` and `L2` may start in parallel.
 3. `L3` waits for accepted and integrated `L1` plus `L2`.
-4. No second code lane is authorized around [agent_public_control_surface_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs). That file is one hotspot and splitting it would create artificial parallelism, merge noise, and contract drift risk.
+4. No second code lane is authorized around [agent_public_control_surface_v1.rs](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs). That file is one hotspot and splitting it would create artificial parallelism, merge noise, and contract drift risk.
 5. The docs lane is independent enough to start immediately because the public contract is already frozen. It may not change that contract.
 6. The cleanup lane is deliberately late because its runtime comment surfaces may overlap the same contract seams `L1` uses, and it depends on the final merged wording from both code and docs truth.
 
@@ -297,15 +300,15 @@ Quarantine rules:
 
 | Lane | Allowed files | Forbidden touch surfaces |
 | --- | --- | --- |
-| `L1` / lifecycle QA hardening | [crates/shell/tests/agent_public_control_surface_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs), `crates/shell/tests/support/**` only if directly required by that suite, [crates/shell/src/execution/agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) only for a tiny test-exposed lifecycle/status fix, [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) only for a tiny test-exposed lifecycle/status fix | every other Rust file, `docs/**`, repo-root truth docs, `llm-last-mile/**`, `.runs/**` |
-| `L2` / truth-doc convergence | [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md), [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md), [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md), [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md), [llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md) | every Rust file, every test file, `PLAN-25.md`, `ORCH_PLAN-25.md`, `.runs/**` |
-| `L3` / inbox-scope comment tightening | [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) comments only, [crates/shell/src/execution/agent_dev_support.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs) comments only, [crates/shell/src/execution/agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) comments only if needed around the `turn` / `reattach` / `stop` split | every test file, every doc file, all run-state and validation artifacts under `.runs/**`, semantic Rust changes |
+| `L1` / lifecycle QA hardening | [crates/shell/tests/agent_public_control_surface_v1.rs](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs), `crates/shell/tests/support/**` only if directly required by that suite, [crates/shell/src/execution/agents_cmd.rs](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agents_cmd.rs) only for a tiny test-exposed lifecycle/status fix, [crates/shell/src/execution/agent_runtime/state_store.rs](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) only for a tiny test-exposed lifecycle/status fix | every other Rust file, `docs/**`, repo-root truth docs, `llm-last-mile/**`, `.runs/**` |
+| `L2` / truth-doc convergence | [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/home/spenser/__Active_code/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md), [AGENT_ORCHESTRATION_GAP_MATRIX.md](/home/spenser/__Active_code/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md), [docs/USAGE.md](/home/spenser/__Active_code/substrate/docs/USAGE.md), [llm-last-mile/README.md](/home/spenser/__Active_code/substrate/llm-last-mile/README.md), [llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md](/home/spenser/__Active_code/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md) | every Rust file, every test file, `PLAN-25.md`, `ORCH_PLAN-25.md`, `.runs/**` |
+| `L3` / inbox-scope comment tightening | [crates/shell/src/execution/agent_runtime/state_store.rs](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) comments only, [crates/shell/src/execution/agent_dev_support.rs](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_dev_support.rs) comments only, [crates/shell/src/execution/agents_cmd.rs](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agents_cmd.rs) comments only if needed around the `turn` / `reattach` / `stop` split | every test file, every doc file, all run-state and validation artifacts under `.runs/**`, semantic Rust changes |
 
 ### Kickoff Initialization Order
 
 The parent initializes the run in this exact order:
 
-1. Create `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/`, `.runs/plan-25/sentinels/`, `.runs/plan-25/quarantine/`, and every `.runs/task-m25-*/` directory.
+1. Create `/home/spenser/__Active_code/substrate/.runs/plan-25/`, `.runs/plan-25/sentinels/`, `.runs/plan-25/quarantine/`, and every `.runs/task-m25-*/` directory.
 2. Create `task.json`, `commands.txt`, and `summary.md` in every task directory.
 3. Create `gate-checklist.md` and `gate-result.json` in every gate task directory.
 4. Create placeholder `worker-report.md`, `worker-output.patch`, and `evidence-manifest.json` in every worker task directory so a later parent-authored `noop` record can reuse the same artifact contract if a worker is never launched.
@@ -313,7 +316,7 @@ The parent initializes the run in this exact order:
 6. Write `run-state.json` with `current_phase: "kickoff"`, `worker_cap: 2`, `authoritative_branch: "feat/host-orchestrator-durable-session"`, every task in `pending`, and empty `accepted`, `rejected`, `quarantined`, and `blocked` arrays.
 7. Write `contract-freeze.json`, `lane-ownership.json`, `merge-order.json`, and `validation-wall.md`.
 8. Freeze the exact public contract and narrow inbox contract in `contract-freeze.json`.
-9. Freeze the rule that [agent_public_control_surface_v1.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) belongs to `L1` alone.
+9. Freeze the rule that [agent_public_control_surface_v1.rs](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) belongs to `L1` alone.
 10. Freeze the host-only manual validation sequence and the automated-only status of `awaiting_attention` and detached-world fail-closed checks.
 11. Seed all worktrees from the exact same post-`p1` tree.
 12. Record the authoritative branch, worktree paths, lane ownership, and retry budget in `session-log.md`.
@@ -338,7 +341,7 @@ Acceptance:
 - all parent-owned run-state artifacts exist,
 - lane ownership is explicit,
 - merge order is explicit,
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/sentinels/task-m25-p1-parent-contract-freeze-and-run-init.ok` exists.
+- `/home/spenser/__Active_code/substrate/.runs/plan-25/sentinels/task-m25-p1-parent-contract-freeze-and-run-init.ok` exists.
 
 #### `task/m25-g1-window-a-launch-gate`
 
@@ -364,7 +367,7 @@ Checks:
 Acceptance:
 
 - only `L1` and `L2` are authorized to start,
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/sentinels/task-m25-g1-window-a-launch-gate.ok` exists.
+- `/home/spenser/__Active_code/substrate/.runs/plan-25/sentinels/task-m25-g1-window-a-launch-gate.ok` exists.
 
 #### `task/m25-g2-window-a-integration-gate`
 
@@ -387,7 +390,7 @@ Acceptance:
 
 - each Window A lane is marked `accepted`, `rejected`, or `quarantined`,
 - any required `L2` replay is decided here,
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/sentinels/task-m25-g2-window-a-integration-gate.ok` exists.
+- `/home/spenser/__Active_code/substrate/.runs/plan-25/sentinels/task-m25-g2-window-a-integration-gate.ok` exists.
 
 #### `task/m25-p2-parent-window-a-integration`
 
@@ -413,7 +416,7 @@ Acceptance:
 
 - docs truth and lifecycle/status proof coexist on one merged tree,
 - targeted shell control and state-store coverage are green,
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/sentinels/task-m25-p2-parent-window-a-integration.ok` exists.
+- `/home/spenser/__Active_code/substrate/.runs/plan-25/sentinels/task-m25-p2-parent-window-a-integration.ok` exists.
 
 #### `task/m25-g3-cleanup-launch-gate`
 
@@ -423,7 +426,7 @@ Checks:
 
 1. `p2` is accepted.
 2. The parent decides whether comment tightening is actually needed.
-3. If no comment drift exists, the parent does not launch a worker. Instead, the parent writes a `noop` record into `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/task-m25-l3-inbox-scope-comment-tightening/`:
+3. If no comment drift exists, the parent does not launch a worker. Instead, the parent writes a `noop` record into `/home/spenser/__Active_code/substrate/.runs/task-m25-l3-inbox-scope-comment-tightening/`:
    - `summary.md` with the `noop` rationale,
    - `worker-report.md` marked parent-authored `noop`,
    - empty `worker-output.patch`,
@@ -435,7 +438,7 @@ Checks:
 Acceptance:
 
 - `L3` is either launched narrowly or marked `noop`,
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/sentinels/task-m25-g3-cleanup-launch-gate.ok` exists.
+- `/home/spenser/__Active_code/substrate/.runs/plan-25/sentinels/task-m25-g3-cleanup-launch-gate.ok` exists.
 
 #### `task/m25-g4-validation-wall-gate`
 
@@ -451,7 +454,7 @@ Checks:
 Acceptance:
 
 - the final wall can run once on the fully merged tree,
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/sentinels/task-m25-g4-validation-wall-gate.ok` exists.
+- `/home/spenser/__Active_code/substrate/.runs/plan-25/sentinels/task-m25-g4-validation-wall-gate.ok` exists.
 
 #### `task/m25-p3-parent-validation-wall`
 
@@ -475,7 +478,7 @@ Acceptance:
 
 - automated wall is green on the final merged tree,
 - manual host-only smoke evidence is recorded,
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/sentinels/task-m25-p3-parent-validation-wall.ok` exists.
+- `/home/spenser/__Active_code/substrate/.runs/plan-25/sentinels/task-m25-p3-parent-validation-wall.ok` exists.
 
 #### `task/m25-p4-parent-closeout-phase`
 
@@ -492,7 +495,7 @@ Acceptance:
 
 - terminal run state is written,
 - accepted scope matches `PLAN-25`,
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-25/sentinels/task-m25-p4-parent-closeout-phase.ok` exists.
+- `/home/spenser/__Active_code/substrate/.runs/plan-25/sentinels/task-m25-p4-parent-closeout-phase.ok` exists.
 
 ## Context-Control Rules
 
@@ -596,7 +599,7 @@ The run is complete only when every item below is true:
 
 1. The live branch `feat/host-orchestrator-durable-session` already contains the intended durable-session model; this run is closeout and contract hardening, not architectural expansion.
 2. The existing shell control suite can absorb one more lifecycle/status regression without needing a new harness.
-3. Any production runtime fix exposed by `L1` will be narrow enough to fit inside [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs) or [state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) without reopening the product model.
+3. Any production runtime fix exposed by `L1` will be narrow enough to fit inside [agents_cmd.rs](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agents_cmd.rs) or [state_store.rs](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) without reopening the product model.
 4. Repo truth can be made consistent without editing `PLAN-25.md` or this controller.
 5. The parent has a usable host backend available for the manual smoke path.
 6. If the parent discovers the docs cannot be made truthful without inventing new product behavior, the correct action is to block the run rather than widen scope.

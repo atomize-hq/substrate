@@ -1,12 +1,15 @@
 # PLAN-25: Durable Host Session Closeout, Inbox Contract Honesty, And QA Hardening
 
-Source SOW: [25-host-durable-session-closeout-and-qa-hardening.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md)  
-Truth anchors: [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md:184), [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md:79), [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:105), [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md:61)  
-Adjacent landed slices: [PLAN-22.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-22.md), [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md), [24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)  
+Source SOW: [25-host-durable-session-closeout-and-qa-hardening.md](/home/spenser/__Active_code/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md)  
+Truth anchors: [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/home/spenser/__Active_code/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md:184), [AGENT_ORCHESTRATION_GAP_MATRIX.md](/home/spenser/__Active_code/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md:79), [docs/USAGE.md](/home/spenser/__Active_code/substrate/docs/USAGE.md:105), [llm-last-mile/README.md](/home/spenser/__Active_code/substrate/llm-last-mile/README.md:61)  
+Adjacent landed slices: [PLAN-22.md](/home/spenser/__Active_code/substrate/llm-last-mile/PLAN-22.md), [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/home/spenser/__Active_code/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md), [24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/home/spenser/__Active_code/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)  
+Post-landing follow-on: [26-async-persistent-session-bootstrap-readiness.md](/home/spenser/__Active_code/substrate/llm-last-mile/26-async-persistent-session-bootstrap-readiness.md), [PLAN.md](/home/spenser/__Active_code/substrate/PLAN.md), [ORCH_PLAN.md](/home/spenser/__Active_code/substrate/ORCH_PLAN.md)  
 Branch: `feat/host-orchestrator-durable-session`  
 Base branch: `main`  
 Plan type: closeout pass  
-Status: execution-ready planning pass on 2026-05-14
+Status: execution-ready planning pass on 2026-05-14; references refreshed against HEAD on 2026-05-16
+
+Post-landing drift note: root planning moved to slice-26 async persistent-session bootstrap readiness after this plan landed. Keep `PLAN-25` scoped to durable host-session closeout and treat slice 26 as adjacent follow-on work, not part of this closeout pass.
 
 ## Objective
 
@@ -88,14 +91,14 @@ Anything in that list is a separate slice. This plan explicitly does not smuggle
 
 | Sub-problem | Existing code | Decision |
 | --- | --- | --- |
-| Public parked-session follow-up | [`run_turn(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:505) | Reuse. `turn` is already the public prompt-taking follow-up verb. |
-| Public attached-owner recovery | [`run_reattach(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:565) | Reuse. `reattach` already exists and stays public in this slice. |
-| Public closeout | [`run_stop(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:667) | Reuse. `stop` remains the canonical closeout path for attached and parked host sessions. |
-| Authoritative parked-session read path | [`build_status_report(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:1333), [`list_status_sessions_for_agent(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:630), [`status_visible_participants(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:66) | Reuse and harden. Do not add a second status model. |
-| Detached host continuity classification | [`classify_public_session_posture(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2191), [`valid_detached_host_continuity_posture(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2216) | Reuse exactly. This is the public continuity contract. |
-| Durable inbox persistence and posture math | [`persist_inbox_item(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1039), [`apply_pending_inbox_count(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1726) | Reuse. Narrow the claims, not the implementation. |
-| Dev-support runtime alert ingress | [`persist_runtime_alert_for_dev_support(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs:11) | Reuse and document honestly. Do not present this as a public product surface. |
-| Existing lifecycle proof points | [`public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1231), [`public_stop_cleanly_closes_same_durable_session_after_reattach()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1631), [`public_start_persists_detached_session_when_hidden_owner_helper_exits()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1880), [`detached_pending_inbox_normalizes_to_awaiting_attention()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1980), [`public_turn_fail_closed_taxonomy_is_explicit_for_missing_backend_unknown_session_and_parent_slot_errors(...)`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2363), [`public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_detached_rejection()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2492), [`public_turn_routes_linux_world_member_follow_up_through_typed_submit_path()`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2689) | Reuse. Add a cohesive closeout wall rather than inventing new semantics. |
+| Public parked-session follow-up | [`run_turn(...)`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agents_cmd.rs:505) | Reuse. `turn` is already the public prompt-taking follow-up verb. |
+| Public attached-owner recovery | [`run_reattach(...)`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agents_cmd.rs:565) | Reuse. `reattach` already exists and stays public in this slice. |
+| Public closeout | [`run_stop(...)`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agents_cmd.rs:667) | Reuse. `stop` remains the canonical closeout path for attached and parked host sessions. |
+| Authoritative parked-session read path | [`build_status_report(...)`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agents_cmd.rs:1333), [`list_status_sessions_for_agent(...)`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:630), [`status_visible_participants(...)`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:66) | Reuse and harden. Do not add a second status model. |
+| Detached host continuity classification | [`classify_public_session_posture(...)`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2191), [`valid_detached_host_continuity_posture(...)`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2216) | Reuse exactly. This is the public continuity contract. |
+| Durable inbox persistence and posture math | [`persist_inbox_item(...)`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1039), [`apply_pending_inbox_count(...)`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1726) | Reuse. Narrow the claims, not the implementation. |
+| Dev-support runtime alert ingress | [`persist_runtime_alert_for_dev_support(...)`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_dev_support.rs:11) | Reuse and document honestly. Do not present this as a public product surface. |
+| Existing lifecycle proof points | [`public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state()`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1231), [`public_stop_cleanly_closes_same_durable_session_after_reattach()`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1631), [`public_start_persists_detached_session_when_hidden_owner_helper_exits()`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1880), [`detached_pending_inbox_normalizes_to_awaiting_attention()`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:1980), [`public_turn_fail_closed_taxonomy_is_explicit_for_missing_backend_unknown_session_and_parent_slot_errors(...)`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2363), [`public_turn_fail_closed_taxonomy_is_explicit_for_world_linkage_ambiguity_and_detached_rejection()`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2492), [`public_turn_routes_linux_world_member_follow_up_through_typed_submit_path()`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs:2689) | Reuse. Add a cohesive closeout wall rather than inventing new semantics. |
 
 ### Exact remaining gap
 
@@ -184,11 +187,11 @@ Anything smaller leaves contradictions behind. Anything bigger expands scope int
 
 This slice should build on the already-landed seams, not introduce parallel ones:
 
-1. extend [`agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs), do not add a new integration harness,
+1. extend [`agent_public_control_surface_v1.rs`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs), do not add a new integration harness,
 2. keep the authoritative `status` path in `agents_cmd.rs` plus `state_store.rs`,
 3. keep posture classification in `classify_public_session_posture(...)`,
 4. keep inbox semantics where they are and document them correctly,
-5. keep docs aligned to [`docs/USAGE.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md:105) as the operator contract source.
+5. keep docs aligned to [`docs/USAGE.md`](/home/spenser/__Active_code/substrate/docs/USAGE.md:105) as the operator contract source.
 
 ### 0C. Complexity check
 
@@ -345,9 +348,9 @@ If any touched production file already has nearby contract comments or ASCII dia
 
 Recommended comment targets if production code changes are needed:
 
-1. [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:505), around the `turn` / `reattach` / `stop` split,
-2. [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2191), around detached continuity and public posture classification,
-3. [`agent_dev_support.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs:11), around dev-support-only inbox ingress.
+1. [`agents_cmd.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agents_cmd.rs:505), around the `turn` / `reattach` / `stop` split,
+2. [`state_store.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2191), around detached continuity and public posture classification,
+3. [`agent_dev_support.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_dev_support.rs:11), around dev-support-only inbox ingress.
 
 ## Test Review
 
@@ -357,7 +360,7 @@ This is a Rust workspace. The relevant proof wall for this slice is `cargo test`
 
 Primary suites:
 
-1. [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
+1. [`crates/shell/tests/agent_public_control_surface_v1.rs`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
 2. targeted `state_store.rs` tests for detached continuity and inbox posture math
 
 ### Code path coverage
@@ -436,9 +439,9 @@ OPERATOR FLOW COVERAGE
 
 | Area | File | Required assertions |
 | --- | --- | --- |
-| Same-session lifecycle closeout | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | parked `start` -> `status` -> parked `turn` -> `status` -> `reattach` -> `stop` on one orchestration-session id |
-| Parked status authority | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | parked rows show live-runtime `posture`, `attached_participant_id`, and `pending_inbox_count`, not trace-fallback nulls |
-| Attention-needed status authority | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | `awaiting_attention` rows show the same live-runtime fields |
+| Same-session lifecycle closeout | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | parked `start` -> `status` -> parked `turn` -> `status` -> `reattach` -> `stop` on one orchestration-session id |
+| Parked status authority | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | parked rows show live-runtime `posture`, `attached_participant_id`, and `pending_inbox_count`, not trace-fallback nulls |
+| Attention-needed status authority | [`crates/shell/tests/agent_public_control_surface_v1.rs`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs) | `awaiting_attention` rows show the same live-runtime fields |
 | Detached-world non-regression | existing detached-world tests in `agent_public_control_surface_v1.rs` | detached-world follow-up still fails closed and still points operators to `reattach` |
 | Inbox posture math | existing `state_store.rs` tests | keep pending-count and posture invariants green, add nothing that implies new product semantics |
 
@@ -505,11 +508,11 @@ Critical-gap rule for this plan:
 
 Files:
 
-1. [`HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md)
-2. [`AGENT_ORCHESTRATION_GAP_MATRIX.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
-3. [`docs/USAGE.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md)
-4. [`llm-last-mile/README.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md)
-5. [`llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md)
+1. [`HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`](/home/spenser/__Active_code/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md)
+2. [`AGENT_ORCHESTRATION_GAP_MATRIX.md`](/home/spenser/__Active_code/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
+3. [`docs/USAGE.md`](/home/spenser/__Active_code/substrate/docs/USAGE.md)
+4. [`llm-last-mile/README.md`](/home/spenser/__Active_code/substrate/llm-last-mile/README.md)
+5. [`llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md`](/home/spenser/__Active_code/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md)
 
 Deliver:
 
@@ -523,7 +526,7 @@ Done means the repo has one story again before any new test work lands.
 
 Files:
 
-1. [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
+1. [`crates/shell/tests/agent_public_control_surface_v1.rs`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
 
 Deliver:
 
@@ -538,7 +541,7 @@ Done means the operator story is proven in one place instead of scattered across
 
 Files:
 
-1. [`crates/shell/tests/agent_public_control_surface_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
+1. [`crates/shell/tests/agent_public_control_surface_v1.rs`](/home/spenser/__Active_code/substrate/crates/shell/tests/agent_public_control_surface_v1.rs)
 2. production files in `crates/shell/src/execution/` only if the new assertions expose a real mismatch
 
 Deliver:
@@ -553,8 +556,8 @@ Done means `status` is hardened as a real operator seam.
 
 Files:
 
-1. [`crates/shell/src/execution/agent_dev_support.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_dev_support.rs)
-2. [`crates/shell/src/execution/agent_runtime/state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+1. [`crates/shell/src/execution/agent_dev_support.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_dev_support.rs)
+2. [`crates/shell/src/execution/agent_runtime/state_store.rs`](/home/spenser/__Active_code/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
 
 Deliver:
 
@@ -568,7 +571,7 @@ Done means code comments cannot be read as promising a public inbox feature that
 
 Files:
 
-1. [`llm-last-mile/PLAN-25.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/PLAN-25.md)
+1. [`llm-last-mile/PLAN-25.md`](/home/spenser/__Active_code/substrate/llm-last-mile/PLAN-25.md)
 
 Deliver:
 
