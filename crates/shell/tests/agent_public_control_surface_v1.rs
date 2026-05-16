@@ -264,6 +264,26 @@ fn write_fake_codex_script_exit_after_startup_prompt(dir: &Path) -> PathBuf {
     path
 }
 
+fn write_fake_codex_script_turn_once_then_reattach_loop(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-turn-once-reattach-loop.sh");
+    let count_path = dir.join("fake-codex-turn-once-reattach-loop.count");
+    let detach_ready_path = dir.join("fake-codex-turn-once-reattach-loop.detach-ready");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\nDETACH_READY='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  rm -f \"$DETACH_READY\"\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-bootstrap\"}}\\r\\n'\n  while [ ! -f \"$DETACH_READY\" ]; do sleep 0.1; done\n  exit 0\nfi\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nprintf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\nprintf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nif [ \"$count\" -eq 2 ]; then\n  : > \"$DETACH_READY\"\n  exit 0\nfi\ntrap 'exit 0' INT TERM\nwhile :; do sleep 1; done\n",
+        count_path.display(),
+        dir.display(),
+        detach_ready_path.display()
+    );
+    fs::write(&path, body).expect("write turn-once then reattach-loop fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("turn-once then reattach-loop fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms)
+        .expect("set turn-once then reattach-loop fake codex permissions");
+    path
+}
+
 fn write_fake_codex_script_clean_bootstrap_then_prompt_resume(dir: &Path) -> PathBuf {
     let path = dir.join("fake-codex-clean-bootstrap-then-prompt-resume.sh");
     let count_path = dir.join("fake-codex-clean-bootstrap-then-prompt-resume.count");
@@ -329,6 +349,32 @@ fn find_ndjson_record<'a>(records: &'a [Value], kind: &str) -> &'a Value {
         .iter()
         .find(|record| record.get("kind").and_then(Value::as_str) == Some(kind))
         .unwrap_or_else(|| panic!("missing NDJSON record kind={kind}: {records:?}"))
+}
+
+fn status_sessions(json: &Value) -> &[Value] {
+    json["sessions"]
+        .as_array()
+        .map(Vec::as_slice)
+        .expect("sessions should be an array")
+}
+
+fn find_status_session_by_orchestration_session_id<'a>(
+    sessions: &'a [Value],
+    orchestration_session_id: &str,
+) -> &'a Value {
+    sessions
+        .iter()
+        .find(|session| {
+            session
+                .get("orchestration_session_id")
+                .and_then(Value::as_str)
+                == Some(orchestration_session_id)
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "missing status row orchestration_session_id={orchestration_session_id}: {sessions:?}"
+            )
+        })
 }
 
 fn stderr_text(output: &Output) -> String {
@@ -1839,6 +1885,249 @@ fn public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_
 
 #[test]
 #[serial]
+fn public_same_session_parked_status_turn_reattach_and_stop_stay_on_one_orchestration_session_id() {
+    let fixture = AgentControlFixture::new_with_fake_codex(
+        write_fake_codex_script_turn_once_then_reattach_loop,
+    );
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    let orchestration_session_id = "sess_turn_reattach_stop";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        orchestration_session_id,
+        "ash_turn_source",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_turn_source",
+        "codex",
+        orchestration_session_id,
+        "running",
+        false,
+        Some("uaa-turn-reattach-1"),
+        None,
+        ts,
+    );
+
+    let parked_status_output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        parked_status_output.status.success(),
+        "parked status must succeed before same-session follow-up control flow: {parked_status_output:?}"
+    );
+    let parked_status_json = parse_json_output(&parked_status_output);
+    let parked_status_row = find_status_session_by_orchestration_session_id(
+        status_sessions(&parked_status_json),
+        orchestration_session_id,
+    );
+    assert_eq!(
+        parked_status_row.get("source_kind").and_then(Value::as_str),
+        Some("live_runtime")
+    );
+    assert_eq!(
+        parked_status_row.get("posture").and_then(Value::as_str),
+        Some("parked_resumable")
+    );
+    assert!(
+        parked_status_row
+            .get("attached_participant_id")
+            .is_some_and(Value::is_null),
+        "parked status rows must preserve detached ownership as explicit null: {parked_status_row}"
+    );
+    assert_eq!(
+        parked_status_row
+            .get("pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(0)
+    );
+
+    let turn_output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        orchestration_session_id,
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "resume parked host turn and exit",
+        "--json",
+    ]);
+    assert!(
+        turn_output.status.success(),
+        "parked turn should succeed before reattach on the same durable session: {turn_output:?}"
+    );
+    let turn_records = parse_ndjson_output(&turn_output);
+    let turn_accepted = find_ndjson_record(&turn_records, "accepted");
+    let turn_json = find_ndjson_record(&turn_records, "completed");
+    assert_eq!(
+        turn_records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "parked same-session turn must stream acceptance before completion: {turn_records:?}"
+    );
+    assert_eq!(
+        turn_accepted.get("scope").and_then(Value::as_str),
+        Some("host")
+    );
+    assert_eq!(
+        turn_json.get("action").and_then(Value::as_str),
+        Some("turn")
+    );
+    assert_eq!(
+        turn_json
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id)
+    );
+    assert_eq!(
+        turn_json.get("backend_id").and_then(Value::as_str),
+        Some("cli:codex")
+    );
+    assert_eq!(
+        turn_json.get("session_posture").and_then(Value::as_str),
+        Some("active")
+    );
+    assert_eq!(
+        turn_json.get("state").and_then(Value::as_str),
+        Some("active")
+    );
+    assert!(
+        turn_json.get("source_orchestration_session_id").is_none(),
+        "turn must remain on the selected orchestration session id: {turn_json}"
+    );
+    assert_empty_warnings(turn_json);
+
+    let turned_participant_id = turn_json["participant_id"]
+        .as_str()
+        .expect("turned participant id")
+        .to_string();
+    let turned_participant =
+        fixture.load_participant(orchestration_session_id, &turned_participant_id);
+    assert_eq!(
+        turned_participant
+            .get("resumed_from_participant_id")
+            .and_then(Value::as_str),
+        Some("ash_turn_source")
+    );
+
+    let reparked_session = wait_for_session_posture(
+        &fixture,
+        orchestration_session_id,
+        "parked_resumable",
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        reparked_session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str),
+        Some(turned_participant_id.as_str())
+    );
+    assert!(reparked_session
+        .get("attached_participant_id")
+        .is_none_or(Value::is_null));
+    assert_eq!(
+        reparked_session
+            .get("pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(0)
+    );
+
+    let reattach_output = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        reattach_output.status.success(),
+        "reattach should recover the same durable session after the follow-up turn exits: {reattach_output:?}"
+    );
+    let reattach_json = parse_json_output(&reattach_output);
+    let reattached_participant_id = reattach_json["participant_id"]
+        .as_str()
+        .expect("reattach participant id")
+        .to_string();
+    let resumed_owner_pid = wait_for_successor_owner_pid(
+        &fixture,
+        orchestration_session_id,
+        &turned_participant_id,
+        Duration::from_secs(5),
+    );
+    let reattached_session = wait_for_session_posture(
+        &fixture,
+        orchestration_session_id,
+        "active_attached",
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        reattached_session
+            .get("attached_participant_id")
+            .and_then(Value::as_str),
+        Some(reattached_participant_id.as_str())
+    );
+    assert!(pid_is_alive(resumed_owner_pid));
+    assert!(
+        wait_for_path(
+            &stop_transport_path(
+                &fixture,
+                orchestration_session_id,
+                &reattached_participant_id,
+            ),
+            Duration::from_secs(5),
+        ),
+        "reattach must restore the private stop transport before the same-session stop"
+    );
+
+    let stop_output = fixture.run(&[
+        "agent",
+        "stop",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        stop_output.status.success(),
+        "stop should close the same orchestration session after parked turn plus reattach: {stop_output:?}"
+    );
+    let stop_json = parse_json_output(&stop_output);
+    assert_eq!(
+        stop_json.get("action").and_then(Value::as_str),
+        Some("stop")
+    );
+    assert_eq!(
+        stop_json
+            .get("orchestration_session_id")
+            .and_then(Value::as_str),
+        Some(orchestration_session_id)
+    );
+    assert_eq!(
+        stop_json.get("state").and_then(Value::as_str),
+        Some("stopped")
+    );
+
+    let stopped_session = fixture.load_orchestration_session(orchestration_session_id);
+    assert_eq!(
+        stopped_session.get("state").and_then(Value::as_str),
+        Some("stopped")
+    );
+    assert_eq!(
+        stopped_session.get("posture").and_then(Value::as_str),
+        Some("terminal")
+    );
+    assert!(
+        wait_for_pid_exit(resumed_owner_pid, Duration::from_secs(5)),
+        "same-session stop should leave no live reattached owner helper"
+    );
+}
+
+#[test]
+#[serial]
 fn public_start_rejects_bootstrap_only_split_prompt_flow() {
     let fixture = AgentControlFixture::new_with_fake_codex(
         write_fake_codex_script_clean_bootstrap_then_prompt_resume,
@@ -2080,6 +2369,39 @@ fn detached_pending_inbox_normalizes_to_awaiting_attention() {
             .and_then(Value::as_bool),
         Some(false),
         "detached awaiting-attention normalization must keep the authoritative host participant detached"
+    );
+
+    let status_output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        status_output.status.success(),
+        "status must keep awaiting-attention durable rows visible after detached normalization: {status_output:?}"
+    );
+    let status_json = parse_json_output(&status_output);
+    let attention_status_row = find_status_session_by_orchestration_session_id(
+        status_sessions(&status_json),
+        &orchestration_session_id,
+    );
+    assert_eq!(
+        attention_status_row
+            .get("source_kind")
+            .and_then(Value::as_str),
+        Some("live_runtime")
+    );
+    assert_eq!(
+        attention_status_row.get("posture").and_then(Value::as_str),
+        Some("awaiting_attention")
+    );
+    assert!(
+        attention_status_row
+            .get("attached_participant_id")
+            .is_some_and(Value::is_null),
+        "awaiting-attention rows must preserve detached ownership as explicit null: {attention_status_row}"
+    );
+    assert_eq!(
+        attention_status_row
+            .get("pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(1)
     );
 }
 
