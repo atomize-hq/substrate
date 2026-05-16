@@ -78,6 +78,10 @@ The original packet stops before public control-plane productization. The follow
   - Parent-frozen execution controller for the `PLAN-22` rollout on the authoritative shared-owner/member-runtime parity branch.
 - [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](./23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)
   - Landed lifecycle correction: durable host orchestration sessions now survive clean attached-client exit, retain session-local inbox work under `sessions/<session>/inbox/`, let `status` surface `parked_resumable` and `awaiting_attention`, treat successful `reattach` as durable attached truth for that exact session, keep `stop` as the canonical closeout path for attached or parked durable sessions, and reserve non-routable meaning for `terminal` only.
+- [24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](./24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)
+  - Hardening follow-on: host bootstrap and detach parking now preserve the exact durable-session fields that later `turn`, `reattach`, `stop`, and `status --json` rely on.
+- [25-host-durable-session-closeout-and-qa-hardening.md](./25-host-durable-session-closeout-and-qa-hardening.md)
+  - Truth-convergence and QA-hardening follow-on: freeze `turn` as prompt-taking follow-up on the same durable session, `reattach` as attached-owner recovery only, `stop` as durable closeout for attached and parked host sessions, `status --json` as the authoritative parked-session read surface, detached-world follow-up as fail-closed until `reattach`, and inbox behavior as narrow retained state rather than a public inbox workflow.
 
 ## Non-Goals in This Packet
 

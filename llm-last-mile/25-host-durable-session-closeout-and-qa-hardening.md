@@ -1,25 +1,32 @@
-# SOW: Host Durable Session Closeout And Inbox Resume Contract
+# SOW: Host Durable Session Closeout And QA Hardening
 
-Status: remaining-work draft. This SOW closes the next narrow slice after [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md) and [24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md). It is anchored to [ADR-0047 — Host Orchestrator Durable Session and Parked-Resumable Ownership](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md), [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md), and [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md).
+Status: truth-aligned remaining-work draft. This SOW closes the next narrow slice after [23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md) and [24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md). It is anchored to [ADR-0047 — Host Orchestrator Durable Session and Parked-Resumable Ownership](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md), [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md), and [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md).
 
-This is not a redesign slice. The durable session model already exists. Public verbs already exist. Parked sessions already persist. `substrate agent status` already projects the key durable-session fields. Canonical inbox item storage already exists. What remains is to close the operational contract around parked-session recovery and retained work.
+This is not a redesign slice. The durable session model already exists. The public verbs already exist. Parked sessions already persist. `substrate agent status --json` already projects the key durable-session fields. Canonical inbox item storage already exists. The remaining work is to regression-proof the already chosen contract and keep docs, tests, and operator guidance aligned to it.
+
+## Frozen Public Contract
+
+This slice assumes and preserves the following contract:
+
+1. `substrate agent start --backend <backend_id> --prompt ...` creates or binds the durable host orchestration session and uses the user prompt as the true initial backend prompt.
+2. `substrate agent turn --session <orchestration_session_id> --backend <backend_id> --prompt ...` is prompt-taking follow-up on that same durable session.
+3. `substrate agent reattach --session <orchestration_session_id>` is attached-owner recovery only for that same durable session.
+4. `substrate agent stop --session <orchestration_session_id>` is the canonical closeout path for attached and parked durable host sessions.
+5. `substrate agent status --json` is the authoritative parked-session read surface for live-runtime `posture`, `attached_participant_id`, and `pending_inbox_count`.
+6. Detached-world follow-up stays fail-closed until `reattach` restores an active host owner.
+7. Durable inbox behavior stays narrow: persistence exists, posture normalization into `awaiting_attention` exists, internal ack/dismiss support exists, and dev-support/test ingress exists, but no public inbox command surface or automatic resume-from-inbox workflow is shipped.
 
 ## Objective
 
-Finish the durable host-session model by closing the remaining contract ambiguity around:
-
-- whether `reattach` is truly needed as a public verb,
-- how `stop` behaves for valid parked sessions,
-- what the minimum real inbox contract is today,
-- and how parked world-originated work resumes the same orchestration session.
+Finish the durable host-session closeout slice by making the frozen contract above regression-proof in code, tests, and docs.
 
 This slice is done only when all of the following are true:
 
-1. The repo chooses one explicit public recovery contract for parked sessions.
-2. `stop` works correctly for the same durable session whether it is `active_attached`, `parked_resumable`, or `awaiting_attention`.
-3. The already-landed `status` projection is treated as a regression-proofing seam, not an open feature seam.
-4. The repo stops implying that persisted inbox scaffolding automatically means a complete runtime resume mechanism.
-5. The supported path for parked retained work is explicit in code, tests, and docs.
+1. The repo stops describing parked-session recovery semantics as open design.
+2. `stop` keeps working correctly for the same durable session whether it is `active_attached`, `parked_resumable`, or `awaiting_attention`.
+3. The already-landed `status` projection is treated as a hardening seam, not an open feature seam.
+4. Detached-world follow-up continues to fail closed until `reattach` restores an active host owner.
+5. The repo stops implying that persisted inbox scaffolding means a public inbox workflow or automatic runtime resume mechanism.
 
 ## Already Landed And Assumed
 
@@ -33,20 +40,9 @@ This SOW assumes the following are already true and are not being redesigned her
 - Detached posture classification already comes from persisted session plus participant truth through [classify_public_session_posture(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2191) and [valid_detached_host_continuity_posture(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:2216).
 - Session-local inbox persistence already exists through [persist_inbox_item(...)](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs:1039), along with load/list/ack/dismiss support and posture updates.
 
-## What Is Actually Still Open
-
-The remaining gap is not “build status” and it is not “invent a new durability model.” The remaining gap is that the repo still leaves too much room for interpretation in the parked-session control story.
-
-The open questions are:
-
-1. Is `reattach` a real long-term public verb, or should recovery collapse onto `turn`?
-2. Is `stop` fully correct for detached but still-valid parked sessions?
-3. Is the inbox merely durable scaffolding plus posture input, or is there a supported production resume path for inbox-originated work?
-4. What is the exact current-state rule for world-originated work that arrives while the host orchestrator is parked?
-
 ## Current Repo Truth
 
-### `status` is mostly closed
+### `status` is closed as a product contract
 
 This slice must not describe `status` as a primary missing feature.
 
@@ -62,59 +58,40 @@ The remaining work on `status` is only:
 - prove parked sessions stay correctly visible as control and readiness code evolves,
 - and keep docs accurate about what those fields do and do not mean.
 
-### Inbox persistence is real, but inbox resume semantics are not fully closed
+### Inbox persistence is real and intentionally narrow
 
 What is clearly real today:
 
 - canonical inbox item persistence under the session root,
 - `pending_inbox_count` as durable state,
-- posture normalization from parked to attention-needed when pending work exists,
-- and tests/dev-support helpers proving those mechanics exist.
+- posture normalization from parked to `awaiting_attention` when pending work exists,
+- internal ack/dismiss support for retained items,
+- and dev-support/test helpers proving those mechanics exist.
 
-What does not yet look fully closed:
+What this slice must keep explicit:
 
-- which production runtime paths create inbox items,
-- which inbox item kinds are actually supported today,
-- whether inbox work only surfaces retained attention state or can directly resume execution,
-- and whether any operator-facing consume/resolve path beyond tests/dev support is already meant to be part of the supported v1 contract.
+- no public inbox command surface is shipped,
+- no public inbox-driven automatic resume path is shipped,
+- and docs must not imply broader productization than the code currently implements.
 
-This slice must close that wording gap. It does not have to build a broad inbox UX. It does have to stop the repo from implying a richer mechanism than the code actually implements.
+### Detached-world follow-up remains fail-closed
 
-## Required Product Decision
+The current supported rule is narrow:
 
-This slice must explicitly choose one parked-session recovery model and then align code, tests, and docs to it.
+- detached host recovery uses `reattach`,
+- host prompt-taking follow-up uses `turn`,
+- and detached-world follow-up remains fail-closed until `reattach` restores an active host owner.
 
-### Option A: `reattach` stays public
-
-`reattach` remains a real public operator action with a distinct meaning:
-
-- restore an attached host owner loop without submitting a prompt,
-- re-establish attached ownership truth for the same durable session,
-- and remain separate from prompt-taking `turn`.
-
-If this option is chosen, `reattach` must have strong success semantics. It cannot report success if the helper briefly wakes and the session immediately reparks or never converges to real `active_attached` truth.
-
-### Option B: public recovery collapses onto `turn`
-
-`turn` becomes the only meaningful public parked-session resume action:
-
-- the parked session remains durable and visible,
-- prompt-taking follow-up occurs through `turn`,
-- and any attachment restoration is treated as an internal implementation detail rather than a public lifecycle verb.
-
-If this option is chosen, `reattach` must be demoted or removed from the public contract, and detached-world follow-up guidance must stop implying that users need a distinct attach step unless there is still a concrete supported case for it.
-
-This SOW does not assume which option is correct. It requires the repo to choose one and make the rest of the system consistent with that choice.
+This slice must preserve that fail-closed rule rather than soften it.
 
 ## In Scope
 
-- choose and freeze the public parked-session recovery contract,
-- harden `reattach` if it remains public,
-- or demote/remove `reattach` cleanly if recovery intentionally collapses onto `turn`,
-- make `stop` fully correct for valid parked sessions,
-- freeze the minimum supported inbox contract,
-- prove the resume contract for world-originated work against parked sessions,
-- and regression-proof the already-landed `status` projection.
+- keep the `turn` versus `reattach` contract frozen and documented truthfully,
+- harden `reattach` so success means real durable attached truth for the named session,
+- keep `stop` first-class for valid parked sessions,
+- regression-proof the already-landed `status` projection,
+- keep detached-world follow-up fail-closed until `reattach`,
+- and freeze the minimum supported inbox contract to persistence, posture normalization, internal ack/dismiss, and dev-support/test ingress only.
 
 ## Out Of Scope
 
@@ -124,13 +101,16 @@ This slice does not include:
 - new root selector forms,
 - public world-root `start`,
 - a broad new inbox UX,
+- a public inbox command surface,
+- automatic resume from inbox items,
+- detached-world follow-up without `reattach`,
 - durable inbox schema redesign,
 - a daemon/router redesign,
 - or another durable-session model rewrite.
 
 ## Concrete Work Breakdown
 
-### 1. Freeze The Parked-Session Recovery Contract
+### 1. Keep the public parked-session contract frozen
 
 Primary anchors:
 
@@ -140,11 +120,11 @@ Primary anchors:
 
 Required outcome:
 
-- one exact current-state recovery contract is chosen,
-- the contract says whether `reattach` is required, optional, or obsolete,
-- and operator guidance matches the implemented behavior instead of a hoped-for future behavior.
+- docs and operator guidance consistently say `turn` is prompt-taking follow-up on the same durable session,
+- `reattach` remains attached-owner recovery only,
+- and no packet or truth doc reopens that contract as a product-design choice.
 
-### 2. If `reattach` stays, it must restore real attached ownership
+### 2. `reattach` success must mean attached truth is actually restored
 
 Primary anchors:
 
@@ -158,14 +138,7 @@ Required outcome:
 - the same orchestration session remains the winning session before and after reattach,
 - and immediate follow-up `status`, `turn`, and `stop` work against that same session without requiring a second recovery step.
 
-Failure discipline:
-
-- if the helper only briefly wakes,
-- if ownership truth does not converge,
-- or if the session immediately reparks in a way that violates the chosen contract,
-- `reattach` must fail rather than claim success.
-
-### 3. Durable `stop` must be first-class for parked sessions
+### 3. Durable `stop` must remain first-class for parked sessions
 
 Primary anchors:
 
@@ -179,7 +152,7 @@ Required outcome:
 - the detached parked path does not require a currently live attached-owner PID when durable truth already says the session is valid,
 - and the durable parent session closes terminally under the same orchestration session id.
 
-### 4. Freeze The Minimum Real Inbox Contract
+### 4. Keep the inbox contract narrow
 
 Primary anchors:
 
@@ -189,16 +162,11 @@ Primary anchors:
 
 Required outcome:
 
-- the repo explicitly states which runtime paths create inbox items today,
-- the repo explicitly states which inbox item kinds are actually supported today,
-- the repo explicitly states whether pending inbox work only produces `awaiting_attention` or can also directly resume execution,
-- and the repo explicitly states what consumes or resolves the retained work under the chosen contract.
+- the repo explicitly states that shipped inbox behavior is limited to persistence, posture normalization, internal ack/dismiss support, and dev-support/test ingress,
+- no doc implies a public inbox command surface,
+- and no doc implies automatic resume or public workflow productization from inbox items.
 
-Non-goal:
-
-- this does not require a polished inbox command surface unless that is the minimal thing needed to make the supported contract real.
-
-### 5. Prove The Parked World-Originated Resume Contract
+### 5. Keep detached-world follow-up fail-closed until `reattach`
 
 Primary anchors:
 
@@ -208,15 +176,9 @@ Primary anchors:
 
 Required outcome:
 
-- the repo proves one supported current-state rule for work that arrives while the orchestrator is parked.
-
-At minimum, the rule must answer:
-
-- does parked retained work require explicit `turn`,
-- does some class of retained work still require explicit `reattach`,
-- or is any automatic resume path actually supported today?
-
-This slice must not leave those answers implied.
+- the repo keeps one explicit current-state rule for detached-world follow-up,
+- that rule stays fail-closed until `reattach` restores an active host owner,
+- and no doc softens that rule into implicit resume or auto-reattach semantics.
 
 ### 6. Treat `status` as hardening, not greenfield
 
@@ -240,11 +202,12 @@ Required scenarios:
 - parked `start` -> `status --json` still shows the same orchestration session as parked,
 - parked `start` -> `turn` -> parked again stays on the same orchestration session id,
 - parked session with pending inbox work -> `status --json` shows `awaiting_attention`,
-- if `reattach` remains public: parked session -> `reattach` succeeds only when durable `active_attached` truth is actually restored,
-- if `reattach` remains public: a successful `reattach` leaves immediate `turn` and `stop` usable against the same session,
+- parked session -> `reattach` succeeds only when durable `active_attached` truth is actually restored,
+- a successful `reattach` leaves immediate `turn` and `stop` usable against the same session,
 - parked session -> `stop` succeeds without a live attached-owner plane,
 - awaiting-attention parked session -> `stop` also succeeds,
-- and parked retained work remains visible and recoverable under the chosen contract.
+- detached-world follow-up stays fail-closed until `reattach`,
+- and parked retained inbox state does not imply a public inbox workflow or automatic resume path.
 
 ### Store-level coverage in [state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
 
@@ -259,7 +222,7 @@ Required scenarios:
 
 Required scenarios:
 
-- detached parking normalization preserves the exact fields later recovery depends on,
+- detached parking normalization preserves the exact fields later `turn`, `reattach`, `stop`, and `status` depend on,
 - pending inbox escalation keeps the same session in `awaiting_attention` without invalidation,
 - and closeout paths do not regress parked durable sessions back into attached-live-only assumptions.
 
@@ -268,18 +231,18 @@ Required scenarios:
 Required scenarios:
 
 - at least one supported non-test runtime path proves how a real inbox item is created for a parked session,
-- the supported consumption or resolution path for that item kind is explicit,
-- and tests do not rely only on dev-support helpers to imply a production resume story if one does not exist.
+- that proof stays limited to persistence and posture normalization unless broader public behavior is intentionally shipped in a later slice,
+- and tests do not use dev-support helpers to imply a public inbox workflow or automatic runtime resume story that does not exist.
 
 ## Acceptance Criteria
 
-- the repo chooses one explicit public parked-session recovery contract.
-- if `reattach` remains public, `reattach` success always corresponds to real durable `active_attached` truth for the same orchestration session.
-- if `reattach` is demoted or removed, the replacement recovery contract is implemented and documented consistently across code, tests, and user docs.
+- the repo keeps one explicit public parked-session recovery contract: `turn` for prompt-taking follow-up and `reattach` for attached-owner recovery.
+- `reattach` success always corresponds to real durable `active_attached` truth for the same orchestration session.
 - `stop` works for valid parked host sessions without requiring a live attached owner process.
 - the already-landed `status` projection remains authoritative and non-regressive for parked sessions.
-- the minimum supported inbox contract is explicit and matches what the code actually implements.
-- the parked-session world-originated resume contract is explicit and regression-proven rather than implied.
+- detached-world follow-up stays fail-closed until `reattach` restores an active host owner.
+- the minimum supported inbox contract is explicit and limited to persistence, posture normalization, internal ack/dismiss support, and dev-support/test ingress.
+- docs and tests stop implying a public inbox workflow, automatic inbox-driven resume, or any detached-world follow-up path that bypasses `reattach`.
 
 ## Validation Expectations
 
@@ -290,8 +253,9 @@ Required scenarios:
   - parked `start`,
   - parked `status`,
   - parked `turn`,
+  - parked `reattach`,
   - parked `stop`,
-  - and, if retained, parked `reattach`.
+  - and detached-world fail-closed follow-up before and after `reattach`.
 
 ## Docs And Truth Sync
 
@@ -299,15 +263,17 @@ When this slice is closed, the truth docs must stop advertising uncertainty that
 
 At minimum:
 
-- update [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md) to reflect the chosen parked-session recovery contract,
+- update [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md) to reflect the frozen parked-session recovery contract,
 - update [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md) so its remaining-gap wording reflects the true post-closeout state,
-- and update [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md) so operator guidance matches the chosen semantics for parked recovery, `stop`, and retained parked-session work.
+- and update [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md) so operator guidance matches the frozen semantics for parked recovery, `stop`, detached-world fail-closed behavior, and narrow inbox state.
 
 ## Done Shape
 
 This slice is complete when the repo no longer hand-waves any of these points:
 
-- whether `reattach` is truly needed,
-- how parked retained work actually resumes,
-- whether parked durable sessions stop cleanly,
-- and what inbox behavior is truly supported today versus only persisted as scaffolding.
+- `turn` is prompt-taking follow-up on the same durable session,
+- `reattach` is attached-owner recovery only,
+- `stop` is the canonical closeout path for attached and parked durable host sessions,
+- `status --json` is the authoritative parked-session read surface,
+- detached-world follow-up stays fail-closed until `reattach`,
+- and inbox behavior is documented as narrow retained state rather than as a public inbox product or automatic resume mechanism.

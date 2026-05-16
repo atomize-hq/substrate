@@ -114,11 +114,15 @@ substrate agent stop --session <orchestration_session_id> --json
 
 - `substrate agent start` is the canonical public root prompt-taking surface and remains host-only in v1.
 - `substrate agent turn` is the canonical public follow-up surface and requires the exact pair `(--session <orchestration_session_id>, --backend <backend_id>)`.
+- `substrate agent reattach` is attached-owner recovery only for the same durable session; it does not submit a prompt.
+- `substrate agent stop` is the canonical closeout path for attached and parked durable host sessions.
+- `substrate agent status --json` is the authoritative parked-session read surface for live-runtime `posture`, `attached_participant_id`, and `pending_inbox_count`.
 - Public follow-up never falls back to `participant_id`, legacy `session_handle_id`, `active_session_handle_id`, or `internal.uaa_session_id`; those selector shapes fail closed.
 - There is still no default-agent routing and there is still no public world-root `start`.
 - On Linux, exact world-member follow-up reuses the retained member slot and submits through the typed `/v1/member_turn/stream` path.
 - Detached host recovery stays on `substrate agent reattach --session <orchestration_session_id>`.
 - Detached world follow-up fails closed until `reattach` restores an active host owner.
+- Durable inbox behavior is intentionally narrow: persistence exists, pending work can normalize posture into `awaiting_attention`, internal ack/dismiss plus dev-support/test ingress exist, and no public inbox command surface or automatic resume-from-inbox workflow is shipped.
 - `substrate -c`, `--command`, and piped stdin remain shell execution surfaces rather than agent-prompt aliases.
 
 ## PTY Support

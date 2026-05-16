@@ -9,7 +9,7 @@ This document records the intended behavior for the Substrate host orchestrator 
 - [llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md](/home/spenser/__Active_code/substrate/llm-last-mile/23-host-orchestrator-durable-session-and-parked-resumable-ownership.md)
 - [llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/home/spenser/__Active_code/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md)
 
-This document is not a design brainstorm. It is a truth record of intended behavior and the currently known unfinished gaps.
+This document is not a design brainstorm. It is a truth record of intended behavior and the frozen public contract for the currently shipped durable host-session model.
 
 ## Core Model
 
@@ -191,71 +191,26 @@ A parked session is still supposed to be visible as a real durable orchestration
 
 ## Durable Inbox Expectations
 
-The durable inbox is intended to be the Substrate-owned retained surface for orchestration-relevant events while no host client is attached.
+The durable inbox is a narrow retained state surface, not a broad public product workflow.
 
-That includes:
+The shipped contract is:
 
-- approvals
-- completion notices
-- follow-up messages
-- runtime alerts
-- other orchestration-relevant retained work
+- inbox items can persist durably under the session root while no host client is attached
+- pending inbox work can normalize posture from `parked_resumable` to `awaiting_attention`
+- internal ack and dismiss support exists for retained items
+- dev-support and test ingress exist for exercising that retained state
+- no public inbox command surface is shipped
+- no public inbox-driven automatic resume workflow is shipped
 
-If no host client is attached, those events are still supposed to land durably and remain actionable later.
+## Frozen Public Contract
 
-## Current Unfinished Gaps
+The current public durable-session contract is:
 
-Based on the current validated behavior, the following are still unfinished:
-
-### 1. `reattach` is not fully landed
-
-Current observed behavior:
-
-- `reattach` can return success
-- but the session can still immediately end up parked again
-- the resumed participant can quickly show detached / non-retained diagnostics
-- attached ownership is not yet reliably restored in the persisted runtime truth
-
-What still needs to be true:
-
-- if `reattach` succeeds, attached ownership must actually be restored
-- a successful `reattach` must not merely mean "a helper briefly ran and then reparks immediately"
-
-### 2. `stop` is not fully landed for the durable parked-session model
-
-Current observed behavior:
-
-- `stop` is still tied too closely to the currently attached owner-control plane
-- parked or stale-attached sessions can fail stop resolution instead of stopping cleanly
-
-What still needs to be true:
-
-- `stop` must work for the durable orchestration session model
-- it must not require the old attached-live-only model in order to stop a still-valid active session
-
-### 3. `status` projection is not fully landed
-
-Current observed behavior:
-
-- parked sessions can disappear from `agent status --json`
-
-What still needs to be true:
-
-- parked sessions must remain visible as durable active orchestration sessions
-- status projection must be based on authoritative session truth, not only on attached-live participant truth
-
-### 4. Parked durability for world-agent responsibility is not fully proven operationally
-
-Current observed behavior proves some important parts:
-
-- `start` now uses the user prompt as the true initial backend prompt
-- a successful start can park the session instead of invalidating it
-- `turn` can resume that parked session
-
-What is not yet fully proven / landed:
-
-- that the parked durable session is fully functioning as the live Substrate-owned orchestrator authority for ongoing world-agent responsibilities in the stronger sense described above
-- especially while `reattach`, `stop`, and `status` still do not match the intended model
+- `substrate agent turn --session ... --backend ... --prompt ...` is prompt-taking follow-up on the same durable orchestration session
+- `substrate agent reattach --session ...` is attached-owner recovery only for that same durable orchestration session
+- `substrate agent stop --session ...` is the canonical closeout path for attached and parked durable host sessions
+- `substrate agent status --json` is the authoritative parked-session read surface for live-runtime durable-session posture truth
+- detached-world follow-up remains fail-closed until `reattach` restores an active host owner
 
 ## Intended Acceptance Shape
 
@@ -269,7 +224,8 @@ The intended final shape is:
 6. `reattach` restores actual attached host ownership for that same durable session without submitting a prompt.
 7. `stop` cleanly stops that same durable session.
 8. `status` shows that same durable session even while parked.
-9. Durable inbox items continue to land and remain actionable while no host client is attached.
+9. Durable inbox state remains narrow: persistence exists, `awaiting_attention` posture normalization exists, internal ack/dismiss support exists, and no public inbox workflow is implied.
+10. Detached-world follow-up remains fail-closed until `reattach` restores an active host owner.
 
 ## Non-Negotiable Truths
 
@@ -285,3 +241,5 @@ The following are the key truths this repository still needs to honor:
 - `reattach` must actually restore attachment if it reports success
 - `stop` must be the real closeout path for the durable orchestration session
 - `status` must represent the durable parked session truth
+- detached-world follow-up must stay fail-closed until `reattach` restores an active host owner
+- durable inbox wording must stay narrow and must not imply a public inbox product surface or automatic resume path
