@@ -500,24 +500,10 @@ pub(crate) fn run_async_repl(config: &ShellConfig) -> Result<i32> {
             }
         };
         let (prepared_runtime, mut dormant_host_bootstrap) = match resolved_host_bootstrap {
-            Some(resolved) if should_eager_bootstrap_host_orchestrator(&resolved) => {
-                let prepared = match prepare_host_orchestrator_runtime_from_resolved(resolved) {
-                    Ok(prepared) => prepared,
-                    Err(failure) => {
-                        agent_printer.print(failure.message.clone());
-                        write_best_effort_stderr_line(&failure.message);
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                        return Ok(failure.exit_code);
-                    }
-                };
-                (Some(prepared), None)
-            }
             Some(resolved) => (None, Some(resolved)),
             None => (None, None),
         };
-        let mut startup_context = prepared_runtime
-            .as_ref()
-            .map(|prepared| prepared.startup_context.clone());
+        let mut startup_context = None;
 
         let mut world_session = if !shared_config.no_world {
             let requested = std::env::current_dir()
@@ -1746,26 +1732,6 @@ impl StartupPromptBackchannel {
             data: serde_json::to_value(event).unwrap_or_default(),
         });
     }
-}
-
-const AGENT_API_NO_TURN_SESSION_START_V1: &str = "agent_api.session.start.no_turn.v1";
-
-fn runtime_supports_no_turn_session_start(
-    gateway: &agent_api::AgentWrapperGateway,
-    agent_kind: &agent_api::AgentWrapperKind,
-) -> bool {
-    gateway
-        .backend(agent_kind)
-        .map(|backend| {
-            backend
-                .capabilities()
-                .contains(AGENT_API_NO_TURN_SESSION_START_V1)
-        })
-        .unwrap_or(false)
-}
-
-fn should_eager_bootstrap_host_orchestrator(resolved: &ResolvedHostOrchestratorBootstrap) -> bool {
-    runtime_supports_no_turn_session_start(&resolved.gateway, &resolved.agent_kind)
 }
 
 // The REPL retains live UAA runtime ownership via the cancel handle plus the two

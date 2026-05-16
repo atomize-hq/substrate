@@ -79,8 +79,6 @@ What is wrong with the current public start shape:
   in ../crates/shell/src/execution/cli.rs:456.
 - The current public start path launches a detached hidden owner-helper with stdin, stdout,
   and stderr all set to null in ../crates/shell/src/execution/agents_cmd.rs:231.
-- The runtime already distinguishes backends that support no-turn retained startup through
-  agent_api.session.start.no_turn.v1 in ../crates/shell/src/repl/async_repl.rs:1683.
 - The current retained-owner runtime also has an internal synthetic bootstrap prompt used
   to establish long-lived control ownership in runtime_bootstrap_prompt(...) at ../crates/
   shell/src/repl/async_repl.rs:1758.
@@ -323,17 +321,18 @@ Later calls remain subject to fresh reachability, policy, posture, and state-sto
   - later turn --session ... --backend ..., reattach, fork, and stop remain subject to
     fresh reachability, policy, and posture checks and may fail closed
 
-### Capability constraint from current repo truth
+### Startup prompt constraint from current repo truth
 
-The repo already distinguishes runtimes that support no-turn retained startup via
-agent_api.session.start.no_turn.v1 in ../crates/shell/src/repl/async_repl.rs:1683.
+The repo already has an honest prompt-ownership rule in the REPL path: the first explicit
+operator prompt must ride the launch-time initial exec prompt instead of being hidden behind
+an internal bootstrap composition.
 
 This slice must respect that distinction:
 
-- when the selected backend supports no-turn retained startup, start --backend may prefer
-  leaving the new session active after the inaugural turn completes,
-- when the backend does not support that capability, this slice may still succeed, but it
-  must not claim that the resulting session will remain live-owned beyond completion,
+- start --backend must not rewrite the first visible operator prompt into a bootstrap-plus-
+  visible composed payload,
+- it must not claim that the resulting session will remain live-owned beyond completion unless
+  that state is actually proven and surfaced,
 - the actual resulting session_posture must be surfaced explicitly in the terminal output
   contract.
 

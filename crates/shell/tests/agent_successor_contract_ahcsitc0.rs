@@ -710,14 +710,26 @@ fn write_orchestration_session_impl(
 ) {
     write_orchestration_session_with_manifest_options(
         fixture,
-        agent_id,
-        orchestration_session_id,
-        active_session_handle_id,
-        state,
-        ts,
-        world_binding,
+        OrchestrationSessionManifestSpec {
+            agent_id,
+            orchestration_session_id,
+            active_session_handle_id,
+            state,
+            ts,
+            world_binding,
+        },
         OrchestrationSessionManifestOptions::default(),
     );
+}
+
+#[derive(Clone, Copy)]
+struct OrchestrationSessionManifestSpec<'a> {
+    agent_id: &'a str,
+    orchestration_session_id: &'a str,
+    active_session_handle_id: Option<&'a str>,
+    state: &'a str,
+    ts: &'a str,
+    world_binding: Option<(&'a str, u64)>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -732,26 +744,12 @@ struct OrchestrationSessionManifestOptions<'a> {
 
 fn write_orchestration_session_with_manifest_options(
     fixture: &AgentSuccessorFixture,
-    agent_id: &str,
-    orchestration_session_id: &str,
-    active_session_handle_id: Option<&str>,
-    state: &str,
-    ts: &str,
-    world_binding: Option<(&str, u64)>,
+    spec: OrchestrationSessionManifestSpec<'_>,
     options: OrchestrationSessionManifestOptions<'_>,
 ) {
     write_json_file(
-        &canonical_orchestration_session_path(fixture, orchestration_session_id),
-        &orchestration_session_manifest_with_options(
-            fixture,
-            agent_id,
-            orchestration_session_id,
-            active_session_handle_id,
-            state,
-            ts,
-            world_binding,
-            options,
-        ),
+        &canonical_orchestration_session_path(fixture, spec.orchestration_session_id),
+        &orchestration_session_manifest_with_options(fixture, spec, options),
     );
 }
 
@@ -768,47 +766,42 @@ fn write_flat_orchestration_session_compatibility(
         &flat_orchestration_session_path(fixture, orchestration_session_id),
         &orchestration_session_manifest(
             fixture,
-            agent_id,
-            orchestration_session_id,
-            active_session_handle_id,
-            state,
-            ts,
-            world_binding,
+            OrchestrationSessionManifestSpec {
+                agent_id,
+                orchestration_session_id,
+                active_session_handle_id,
+                state,
+                ts,
+                world_binding,
+            },
         ),
     );
 }
 
 fn orchestration_session_manifest(
     fixture: &AgentSuccessorFixture,
-    agent_id: &str,
-    orchestration_session_id: &str,
-    active_session_handle_id: Option<&str>,
-    state: &str,
-    ts: &str,
-    world_binding: Option<(&str, u64)>,
+    spec: OrchestrationSessionManifestSpec<'_>,
 ) -> Value {
     orchestration_session_manifest_with_options(
         fixture,
-        agent_id,
-        orchestration_session_id,
-        active_session_handle_id,
-        state,
-        ts,
-        world_binding,
+        spec,
         OrchestrationSessionManifestOptions::default(),
     )
 }
 
 fn orchestration_session_manifest_with_options(
     fixture: &AgentSuccessorFixture,
-    agent_id: &str,
-    orchestration_session_id: &str,
-    active_session_handle_id: Option<&str>,
-    state: &str,
-    ts: &str,
-    world_binding: Option<(&str, u64)>,
+    spec: OrchestrationSessionManifestSpec<'_>,
     options: OrchestrationSessionManifestOptions<'_>,
 ) -> Value {
+    let OrchestrationSessionManifestSpec {
+        agent_id,
+        orchestration_session_id,
+        active_session_handle_id,
+        state,
+        ts,
+        world_binding,
+    } = spec;
     let (world_id, world_generation) = match world_binding {
         Some((world_id, world_generation)) => (json!(world_id), json!(world_generation)),
         None => (Value::Null, Value::Null),
@@ -2648,12 +2641,14 @@ fn agent_status_json_surfaces_parked_resumable_fields_from_parent_session_truth(
     );
     write_orchestration_session_with_manifest_options(
         &fixture,
-        "claude_code",
-        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fba",
-        Some("ash_parked_detached"),
-        "active",
-        "2026-04-05T00:00:02Z",
-        None,
+        OrchestrationSessionManifestSpec {
+            agent_id: "claude_code",
+            orchestration_session_id: "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fba",
+            active_session_handle_id: Some("ash_parked_detached"),
+            state: "active",
+            ts: "2026-04-05T00:00:02Z",
+            world_binding: None,
+        },
         OrchestrationSessionManifestOptions {
             posture: Some("parked_resumable"),
             attached_participant_id: Some(None),
@@ -2711,12 +2706,14 @@ fn agent_status_json_surfaces_awaiting_attention_fields_from_parent_session_trut
     );
     write_orchestration_session_with_manifest_options(
         &fixture,
-        "claude_code",
-        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbb",
-        Some("ash_attention_detached"),
-        "active",
-        "2026-04-05T00:00:03Z",
-        None,
+        OrchestrationSessionManifestSpec {
+            agent_id: "claude_code",
+            orchestration_session_id: "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fbb",
+            active_session_handle_id: Some("ash_attention_detached"),
+            state: "active",
+            ts: "2026-04-05T00:00:03Z",
+            world_binding: None,
+        },
         OrchestrationSessionManifestOptions {
             posture: Some("awaiting_attention"),
             attached_participant_id: Some(None),

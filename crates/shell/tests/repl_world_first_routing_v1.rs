@@ -493,22 +493,30 @@ fn write_fake_codex_script(temp: &Path) -> PathBuf {
     path
 }
 
-#[cfg(target_os = "linux")]
-fn write_fake_codex_script_with_invocation_log_and_output(temp: &Path) -> (PathBuf, PathBuf) {
-    let path = temp.join("fake-codex-with-log.sh");
-    let count_path = temp.join("fake-codex-with-log.count");
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn write_fake_codex_script_with_invocation_log_and_stdio_capture(
+    temp: &Path,
+) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
+    let path = temp.join("fake-codex-with-stdio-capture.sh");
+    let count_path = temp.join("fake-codex-with-stdio-capture.count");
+    let args_dir = temp.join("fake-codex-captured-args");
+    let stdin_dir = temp.join("fake-codex-captured-stdin");
+    fs::create_dir_all(&args_dir).expect("create fake codex args dir");
+    fs::create_dir_all(&stdin_dir).expect("create fake codex stdin dir");
     let body = format!(
-        "#!/bin/sh\nSTATE_FILE='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\ntrap 'exit 0' INT TERM\nprintf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\nwhile :; do sleep 1; done\n",
-        count_path.display()
+        "#!/bin/sh\nSTATE_FILE='{}'\nARGS_DIR='{}'\nSTDIN_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$ARGS_DIR/$count.args\"\ncat > \"$STDIN_DIR/$count.stdin\"\ntrap 'exit 0' INT TERM\nprintf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\nwhile :; do sleep 1; done\n",
+        count_path.display(),
+        args_dir.display(),
+        stdin_dir.display()
     );
-    fs::write(&path, body).expect("write fake codex script with invocation log");
+    fs::write(&path, body).expect("write fake codex script with stdio capture");
     let mut perms = fs::metadata(&path)
         .expect("fake codex metadata")
         .permissions();
     use std::os::unix::fs::PermissionsExt;
     perms.set_mode(0o755);
     fs::set_permissions(&path, perms).expect("set fake codex permissions");
-    (path, count_path)
+    (path, count_path, args_dir, stdin_dir)
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -525,7 +533,7 @@ fn write_fake_claude_script(temp: &Path) -> PathBuf {
     path
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn write_fake_claude_script_first_session_then_exit(temp: &Path) -> PathBuf {
     let path = temp.join("fake-claude-first-session-then-exit.sh");
     let state_path = temp.join("fake-claude-first-session-then-exit.count");
@@ -541,6 +549,52 @@ fn write_fake_claude_script_first_session_then_exit(temp: &Path) -> PathBuf {
     perms.set_mode(0o755);
     fs::set_permissions(&path, perms).expect("set fake claude first-session-then-exit permissions");
     path
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn write_host_orchestrator_runtime_world_config(
+    home_substrate: &Path,
+    fake_codex: &Path,
+    on_drift: &str,
+) {
+    fs::create_dir_all(home_substrate.join("agents")).expect("create agents dir");
+    let config = format!(
+        r#"world:
+  enabled: true
+  anchor_mode: workspace
+  anchor_path: ''
+  caged: false
+  net:
+    filter: false
+policy:
+  mode: observe
+sync:
+  auto_sync: false
+  direction: from_world
+  conflict_policy: prefer_host
+  exclude: []
+agents:
+  enabled: true
+  hub:
+    orchestrator_agent_id: codex
+    world_restart:
+      on_drift: {on_drift}
+"#
+    );
+    fs::write(home_substrate.join("config.yaml"), config).expect("write config.yaml");
+    fs::write(
+        home_substrate.join("policy.yaml"),
+        "id: test-global-policy\nname: Test Global Policy\nworld_fs:\n  host_visible: true\n  fail_closed:\n    routing: true\n  write:\n    enabled: true\nnet_allowed: []\ncmd_allowed: []\ncmd_denied: []\ncmd_isolated: []\nrequire_approval: false\nallow_shell_operators: true\nlimits:\n  max_memory_mb: null\n  max_cpu_percent: null\n  max_runtime_ms: null\n  max_egress_bytes: null\nmetadata: {}\nagents:\n  allowed_backends:\n    - cli:codex\n",
+    )
+    .expect("write agent runtime policy");
+    fs::write(
+        home_substrate.join("agents/codex.yaml"),
+        format!(
+            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            fake_codex.display()
+        ),
+    )
+    .expect("write codex agent file");
 }
 
 #[cfg(target_os = "linux")]
@@ -575,7 +629,7 @@ fn write_fake_codex_script_without_session_handle(temp: &Path) -> PathBuf {
     path
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn read_invocation_count(path: &Path) -> usize {
     fs::read_to_string(path)
         .ok()
@@ -628,6 +682,23 @@ fn load_single_orchestration_session_id(substrate_home: &Path) -> String {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn sessions_dir(substrate_home: &Path) -> PathBuf {
     substrate_home.join("run/agent-hub/sessions")
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn has_any_persisted_orchestration_session(substrate_home: &Path) -> bool {
+    let sessions_dir = sessions_dir(substrate_home);
+    fs::read_dir(&sessions_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .map(|entry| entry.path())
+        .any(|path| {
+            if path.is_dir() {
+                path.join("session.json").is_file()
+            } else {
+                path.extension().and_then(|ext| ext.to_str()) == Some("json")
+            }
+        })
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -873,6 +944,44 @@ fn participant_is_authoritative_live(manifest: &Value) -> bool {
         && manifest
             .pointer("/internal/terminal_observed_at")
             .is_none_or(Value::is_null)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn has_any_authoritative_live_host_participant(substrate_home: &Path) -> bool {
+    fs::read_dir(flat_participants_dir(substrate_home))
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .map(|path| {
+            serde_json::from_str::<Value>(&fs::read_to_string(path).expect("read participant file"))
+                .expect("parse participant file")
+        })
+        .any(|manifest| {
+            manifest.get("role").and_then(Value::as_str) == Some("orchestrator")
+                && manifest.pointer("/execution/scope").and_then(Value::as_str) == Some("host")
+                && participant_is_authoritative_live(&manifest)
+        })
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn assert_no_persisted_host_orchestrator_state_for_interval(
+    substrate_home: &Path,
+    interval: Duration,
+) {
+    let deadline = Instant::now() + interval;
+    while Instant::now() < deadline {
+        assert!(
+            !has_any_persisted_orchestration_session(substrate_home),
+            "orchestration session must remain absent before the first targeted host turn"
+        );
+        assert!(
+            !has_any_authoritative_live_host_participant(substrate_home),
+            "authoritative-live host participant must remain absent before the first targeted host turn"
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -1725,7 +1834,7 @@ fn c3_first_start_shared_world_attach_create_is_owner_bound() {
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 #[serial]
 fn c3_host_orchestrator_remains_dormant_until_first_targeted_turn() {
@@ -1738,9 +1847,9 @@ fn c3_host_orchestrator_remains_dormant_until_first_targeted_turn() {
     fs::create_dir_all(&substrate_home).expect("create substrate home");
     fs::write(home.join(".substrate/trace.jsonl"), "").expect("seed trace");
     write_profile(&project);
-    let (fake_codex, invocation_count_path) =
-        write_fake_codex_script_with_invocation_log_and_output(temp.path());
-    write_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "auto_restart");
+    let (fake_codex, invocation_count_path, captured_args_dir, captured_stdin_dir) =
+        write_fake_codex_script_with_invocation_log_and_stdio_capture(temp.path());
+    write_host_orchestrator_runtime_world_config(&substrate_home, &fake_codex, "auto_restart");
 
     let sock_temp = short_socket_dir("sub-c3ws-host-dormant-target-");
     let sock = sock_temp.path().join("world.sock");
@@ -1766,6 +1875,10 @@ fn c3_host_orchestrator_remains_dormant_until_first_targeted_turn() {
         0,
         "orchestrator backend must not be invoked before the first explicit targeted turn; output:\n{out_before_target}"
     );
+    assert_no_persisted_host_orchestrator_state_for_interval(
+        &substrate_home,
+        Duration::from_millis(150),
+    );
 
     repl.send_line("::cli:codex launch on demand");
     repl.wait_for_output(
@@ -1777,6 +1890,43 @@ fn c3_host_orchestrator_remains_dormant_until_first_targeted_turn() {
         read_invocation_count(&invocation_count_path),
         1,
         "first explicit targeted turn should launch the retained host runtime exactly once"
+    );
+    let orchestration_session_id = load_single_orchestration_session_id(&substrate_home);
+    let live_participants = authoritative_live_participant_manifests_for_session(
+        &substrate_home,
+        &orchestration_session_id,
+    );
+    let live_host = live_participants
+        .iter()
+        .filter(|manifest| manifest.get("role").and_then(Value::as_str) == Some("orchestrator"))
+        .filter(|manifest| {
+            manifest.pointer("/execution/scope").and_then(Value::as_str) == Some("host")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        live_host.len(),
+        1,
+        "first targeted host turn must materialize exactly one authoritative-live host participant: {live_participants:?}"
+    );
+    let first_args =
+        fs::read_to_string(captured_args_dir.join("1.args")).expect("read first captured args");
+    assert!(
+        first_args.lines().any(|line| line == "exec"),
+        "first targeted host launch must use the initial exec path: {first_args:?}"
+    );
+    let first_stdin =
+        fs::read_to_string(captured_stdin_dir.join("1.stdin")).expect("read first captured stdin");
+    assert!(
+        first_stdin.contains("launch on demand"),
+        "first targeted host launch must consume the user prompt as stdin: {first_stdin:?}"
+    );
+    assert!(
+        !first_stdin.contains("Enter persistent Substrate host orchestrator mode."),
+        "first targeted host launch must not consume the hidden bootstrap prompt: {first_stdin:?}"
+    );
+    assert!(
+        !first_stdin.contains("First visible operator request:"),
+        "first targeted host launch must not compose bootstrap and visible prompt text: {first_stdin:?}"
     );
 
     repl.send_line("exit");
@@ -2411,7 +2561,7 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
     let (_code, _out) = repl.shutdown_graceful(Duration::from_secs(3));
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 #[serial]
 fn c3_targeted_host_turn_resumes_active_orchestrator_backend() {
