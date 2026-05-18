@@ -66,6 +66,10 @@ const START_DETACH_NORMALIZATION_TIMEOUT: Duration = Duration::from_secs(10);
 const START_DETACH_NORMALIZATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
 #[cfg(unix)]
 const START_ATTACHED_GRACE_TIMEOUT: Duration = Duration::from_millis(250);
+#[cfg(unix)]
+const TURN_DETACH_NORMALIZATION_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(unix)]
+const TURN_DETACH_NORMALIZATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
     match &cmd.action {
@@ -515,12 +519,15 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
     let orchestration_session_id = target.session.orchestration_session_id.clone();
     let backend_id = target.participant.handle.backend_id.clone();
 
-    match target.session_posture {
-        PublicSessionPosture::Active => {}
+    let resumed_receipt = match target.session_posture {
+        PublicSessionPosture::Active => None,
         PublicSessionPosture::DetachedReattachable => match target.target_kind {
             PublicTurnTargetKind::Host => {
-                let plan =
-                    build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Resume)?;
+                let plan = build_successor_launch_plan(
+                    cli,
+                    &args.session,
+                    OwnerHelperMode::ResumeOneTurn,
+                )?;
                 if plan.descriptor.backend_id != backend_id {
                     anyhow::bail!(config_model::user_error(format!(
                         "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
@@ -528,7 +535,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
                         args.backend
                     )));
                 }
-                let _ = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+                Some(launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?)
             }
             PublicTurnTargetKind::World => {
                 anyhow::bail!(config_model::user_error(format!(
@@ -546,7 +553,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
                 args.backend
             )));
         }
-    }
+    };
 
     run_public_prompt_command(
         PublicPromptCommandRequest {
@@ -559,7 +566,19 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
         cli.world,
         cli.no_world,
     )
-    .map_err(normalize_public_prompt_error)
+    .map_err(normalize_public_prompt_error)?;
+
+    #[cfg(unix)]
+    if let Some(receipt) = resumed_receipt.as_ref() {
+        wait_for_resumed_public_turn_detach(
+            &store,
+            &receipt.orchestration_session_id,
+            &receipt.participant_id,
+        )
+        .map_err(runtime_start_error)?;
+    }
+
+    Ok(())
 }
 
 fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
@@ -853,7 +872,7 @@ fn build_successor_launch_plan(
 ) -> Result<HiddenOwnerHelperLaunchPlan> {
     let store = AgentRuntimeStateStore::new()?;
     let action = match mode {
-        OwnerHelperMode::Resume => PublicControlAction::Resume,
+        OwnerHelperMode::Resume | OwnerHelperMode::ResumeOneTurn => PublicControlAction::Resume,
         OwnerHelperMode::Fork => PublicControlAction::Fork,
         OwnerHelperMode::Start => anyhow::bail!("invalid successor launch mode"),
     };
@@ -898,6 +917,61 @@ fn build_successor_launch_plan(
         source_orchestration_session_id: (mode == OwnerHelperMode::Fork)
             .then(|| target.session.orchestration_session_id.clone()),
     })
+}
+
+#[cfg(unix)]
+fn wait_for_resumed_public_turn_detach(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    resumed_participant_id: &str,
+) -> Result<()> {
+    let started_at = std::time::Instant::now();
+    loop {
+        if store
+            .resumed_public_turn_detach_posture(orchestration_session_id, resumed_participant_id)?
+            .is_some()
+        {
+            return Ok(());
+        }
+
+        let Some(record) = store.load_session(orchestration_session_id)? else {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} disappeared before the resumed public turn could detach cleanly",
+                orchestration_session_id
+            );
+        };
+        if record.session.state.is_terminal()
+            || record.session.posture == OrchestrationSessionPosture::Terminal
+        {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} became terminal before resumed participant {} could repark",
+                orchestration_session_id,
+                resumed_participant_id
+            );
+        }
+        if record
+            .session
+            .active_participant_id()
+            .is_some_and(|participant_id| participant_id != resumed_participant_id)
+        {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} reassigned active ownership to {} before resumed participant {} could repark",
+                orchestration_session_id,
+                record.session.active_participant_id().unwrap_or_default(),
+                resumed_participant_id
+            );
+        }
+
+        if started_at.elapsed() >= TURN_DETACH_NORMALIZATION_TIMEOUT {
+            anyhow::bail!(
+                "owner_unreachable: timed out waiting for orchestration session {} resumed participant {} to converge back to detached durable continuity",
+                orchestration_session_id,
+                resumed_participant_id
+            );
+        }
+
+        thread::sleep(TURN_DETACH_NORMALIZATION_POLL_INTERVAL);
+    }
 }
 
 fn descriptor_from_participant(

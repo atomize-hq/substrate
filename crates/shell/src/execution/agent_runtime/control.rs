@@ -57,6 +57,7 @@ const STARTUP_PROMPT_STREAM_ACCEPT_TIMEOUT: Duration = Duration::from_secs(10);
 pub(crate) enum OwnerHelperMode {
     Start,
     Resume,
+    ResumeOneTurn,
     Fork,
 }
 
@@ -66,6 +67,7 @@ impl OwnerHelperMode {
         match self {
             Self::Start => "start",
             Self::Resume => "resume",
+            Self::ResumeOneTurn => "resume_one_turn",
             Self::Fork => "fork",
         }
     }
@@ -138,6 +140,7 @@ pub(crate) struct PromptSubmitRuntime {
     pub manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
     pub store: AgentRuntimeStateStore,
     pub uaa_session_handle_id: String,
+    pub park_after_turn_tx: Option<mpsc::UnboundedSender<()>>,
 }
 
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
@@ -271,7 +274,10 @@ impl HiddenOwnerHelperLaunchPlan {
     }
 
     pub(crate) fn requires_internal_session_id(&self) -> bool {
-        matches!(self.mode, OwnerHelperMode::Resume | OwnerHelperMode::Fork)
+        matches!(
+            self.mode,
+            OwnerHelperMode::Resume | OwnerHelperMode::ResumeOneTurn | OwnerHelperMode::Fork
+        )
     }
 }
 
@@ -1017,6 +1023,7 @@ pub(crate) fn prompt_runtime_from_parts(
     manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
     store: AgentRuntimeStateStore,
     uaa_session_handle_id: String,
+    park_after_turn_tx: Option<mpsc::UnboundedSender<()>>,
 ) -> PromptSubmitRuntime {
     PromptSubmitRuntime {
         descriptor,
@@ -1024,6 +1031,7 @@ pub(crate) fn prompt_runtime_from_parts(
         manifest,
         store,
         uaa_session_handle_id,
+        park_after_turn_tx,
     }
 }
 
@@ -1826,6 +1834,7 @@ async fn stream_private_prompt_request(
                 state,
                 warnings,
             });
+            request_helper_park_after_turn(runtime, request.action);
         }
         Err(err) => {
             let _ = request.envelope_tx.send(failed_prompt_envelope(
@@ -1833,9 +1842,19 @@ async fn stream_private_prompt_request(
                 "owner_unreachable",
                 err.to_string(),
             ));
+            request_helper_park_after_turn(runtime, request.action);
         }
     }
     Ok(())
+}
+
+fn request_helper_park_after_turn(runtime: &PromptSubmitRuntime, action: PublicPromptAction) {
+    if action != PublicPromptAction::Turn {
+        return;
+    }
+    if let Some(park_after_turn_tx) = runtime.park_after_turn_tx.as_ref() {
+        let _ = park_after_turn_tx.send(());
+    }
 }
 
 fn event_to_public_prompt_envelope(event: SubmittedPromptStreamEvent) -> PublicPromptEnvelope {
@@ -2257,6 +2276,7 @@ mod tests {
     fn owner_helper_modes_remain_internal_and_exact() {
         assert_eq!(OwnerHelperMode::Start.as_str(), "start");
         assert_eq!(OwnerHelperMode::Resume.as_str(), "resume");
+        assert_eq!(OwnerHelperMode::ResumeOneTurn.as_str(), "resume_one_turn");
         assert_eq!(OwnerHelperMode::Fork.as_str(), "fork");
     }
 

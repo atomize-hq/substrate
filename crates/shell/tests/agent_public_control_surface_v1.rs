@@ -264,23 +264,20 @@ fn write_fake_codex_script_exit_after_startup_prompt(dir: &Path) -> PathBuf {
     path
 }
 
-fn write_fake_codex_script_turn_once_then_reattach_loop(dir: &Path) -> PathBuf {
-    let path = dir.join("fake-codex-turn-once-reattach-loop.sh");
-    let count_path = dir.join("fake-codex-turn-once-reattach-loop.count");
-    let detach_ready_path = dir.join("fake-codex-turn-once-reattach-loop.detach-ready");
+fn write_fake_codex_script_turn_requires_helper_cancel_after_prompt(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-turn-requires-helper-cancel.sh");
+    let count_path = dir.join("fake-codex-turn-requires-helper-cancel.count");
     let body = format!(
-        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\nDETACH_READY='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  rm -f \"$DETACH_READY\"\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-bootstrap\"}}\\r\\n'\n  while [ ! -f \"$DETACH_READY\" ]; do sleep 0.1; done\n  exit 0\nfi\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nprintf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\nprintf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nif [ \"$count\" -eq 2 ]; then\n  : > \"$DETACH_READY\"\n  exit 0\nfi\ntrap 'exit 0' INT TERM\nwhile :; do sleep 1; done\n",
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-bootstrap\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nif [ \"$count\" -eq 2 ]; then\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\n  exit 0\nfi\ntrap 'exit 0' INT TERM\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nwhile :; do sleep 1; done\n",
         count_path.display(),
         dir.display(),
-        detach_ready_path.display()
     );
-    fs::write(&path, body).expect("write turn-once then reattach-loop fake codex script");
+    fs::write(&path, body).expect("write helper-cancel fake codex script");
     let mut perms = fs::metadata(&path)
-        .expect("turn-once then reattach-loop fake codex metadata")
+        .expect("helper-cancel fake codex metadata")
         .permissions();
     perms.set_mode(0o755);
-    fs::set_permissions(&path, perms)
-        .expect("set turn-once then reattach-loop fake codex permissions");
+    fs::set_permissions(&path, perms).expect("set helper-cancel fake codex permissions");
     path
 }
 
@@ -1887,7 +1884,7 @@ fn public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_
 #[serial]
 fn public_same_session_parked_status_turn_reattach_and_stop_stay_on_one_orchestration_session_id() {
     let fixture = AgentControlFixture::new_with_fake_codex(
-        write_fake_codex_script_turn_once_then_reattach_loop,
+        write_fake_codex_script_turn_requires_helper_cancel_after_prompt,
     );
     fixture.init_workspace();
     fixture.write_runtime_inventory(false);
@@ -1971,6 +1968,19 @@ fn public_same_session_parked_status_turn_reattach_and_stop_stay_on_one_orchestr
         "parked same-session turn must stream acceptance before completion: {turn_records:?}"
     );
     assert_eq!(
+        turn_records
+            .iter()
+            .filter(|record| {
+                matches!(
+                    record.get("kind").and_then(Value::as_str),
+                    Some("completed" | "failed")
+                )
+            })
+            .count(),
+        1,
+        "same-session public turn must emit exactly one terminal envelope after accepted: {turn_records:?}"
+    );
+    assert_eq!(
         turn_accepted.get("scope").and_then(Value::as_str),
         Some("host")
     );
@@ -2032,6 +2042,32 @@ fn public_same_session_parked_status_turn_reattach_and_stop_stay_on_one_orchestr
         .is_none_or(Value::is_null));
     assert_eq!(
         reparked_session
+            .get("pending_inbox_count")
+            .and_then(Value::as_u64),
+        Some(0)
+    );
+    let reparked_status_output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        reparked_status_output.status.success(),
+        "status should reflect detached durable truth immediately after same-session turn repark: {reparked_status_output:?}"
+    );
+    let reparked_status_json = parse_json_output(&reparked_status_output);
+    let reparked_status_row = find_status_session_by_orchestration_session_id(
+        status_sessions(&reparked_status_json),
+        orchestration_session_id,
+    );
+    assert_eq!(
+        reparked_status_row.get("posture").and_then(Value::as_str),
+        Some("parked_resumable")
+    );
+    assert!(
+        reparked_status_row
+            .get("attached_participant_id")
+            .is_some_and(Value::is_null),
+        "status must report the detached parked participant as explicit null after turn: {reparked_status_row}"
+    );
+    assert_eq!(
+        reparked_status_row
             .get("pending_inbox_count")
             .and_then(Value::as_u64),
         Some(0)

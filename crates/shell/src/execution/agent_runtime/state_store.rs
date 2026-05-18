@@ -962,6 +962,49 @@ impl AgentRuntimeStateStore {
         Ok(HiddenOwnerHelperLaunchReadiness::Pending)
     }
 
+    pub(crate) fn resumed_public_turn_detach_posture(
+        &self,
+        orchestration_session_id: &str,
+        participant_id: &str,
+    ) -> Result<Option<OrchestrationSessionPosture>> {
+        let Some(record) = self.load_session(orchestration_session_id)? else {
+            return Ok(None);
+        };
+        if record.session.state != OrchestrationSessionState::Active {
+            return Ok(None);
+        }
+        if record.session.active_participant_id() != Some(participant_id) {
+            return Ok(None);
+        }
+
+        let Some(participant) = record
+            .participants
+            .iter()
+            .find(|participant| participant.participant_id() == participant_id)
+        else {
+            return Ok(None);
+        };
+
+        let Some(posture) =
+            valid_detached_host_continuity_posture(&record.session, participant, true)
+        else {
+            return Ok(None);
+        };
+
+        if record.participants.iter().any(|candidate| {
+            candidate.participant_id() != participant_id
+                && candidate.matches_public_parent_linkage(&record.session)
+                && candidate.is_host_orchestrator()
+                && candidate.attached_client_present()
+                && candidate.is_authoritative_live()
+                && owner_process_is_alive(candidate)
+        }) {
+            return Ok(None);
+        }
+
+        Ok(Some(posture))
+    }
+
     pub(crate) fn startup_prompt_replay_state(
         &self,
         orchestration_session_id: &str,
