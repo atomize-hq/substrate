@@ -662,7 +662,7 @@ pub(crate) fn wait_for_hidden_owner_helper_readiness(
             plan.requires_internal_session_id(),
         )?;
         let startup_prompt_ready = if plan.mode == OwnerHelperMode::Start {
-            start_launch_startup_prompt_is_terminal(store, plan)?
+            start_launch_startup_prompt_is_accepted_or_terminal(store, plan)?
         } else {
             true
         };
@@ -772,6 +772,21 @@ pub(crate) fn reconcile_hidden_owner_helper_start_timeout(
     }
 
     Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureUnchanged)
+}
+
+fn start_launch_startup_prompt_is_accepted_or_terminal(
+    store: &AgentRuntimeStateStore,
+    plan: &HiddenOwnerHelperLaunchPlan,
+) -> Result<bool> {
+    if plan.startup_prompt.is_none() {
+        return Ok(true);
+    }
+
+    Ok(matches!(
+        store
+            .startup_prompt_replay_state(plan.orchestration_session_id(), plan.participant_id(),)?,
+        super::StartupPromptReplayState::AcceptedOrTerminal
+    ))
 }
 
 fn start_launch_startup_prompt_is_terminal(
@@ -2690,6 +2705,55 @@ mod tests {
                     OrchestrationSessionPosture::ParkedResumable
                 )
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn helper_readiness_does_not_wait_for_startup_prompt_terminalization_once_attached_live() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let mut participant = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+                &descriptor,
+                "sess_start_ready_attached".to_string(),
+                "ash_start_ready_attached".to_string(),
+                "lease_start_ready_attached".to_string(),
+            )
+            .expect("orchestrator participant");
+            participant.transition_state(AgentRuntimeSessionState::Ready);
+            participant.set_uaa_session_id("uaa_session");
+            participant.mark_runtime_ownership_retained();
+
+            let mut orchestration = OrchestrationSessionRecord::new(
+                "sess_start_ready_attached".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &participant,
+            );
+            orchestration.transition_state(OrchestrationSessionState::Active);
+            orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
+            orchestration.initialize_startup_prompt(participant.handle.participant_id.clone());
+            orchestration.mark_startup_prompt_accepted(participant.handle.participant_id.as_str());
+
+            store
+                .persist_orchestration_session(&orchestration)
+                .expect("persist orchestration");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            super::wait_for_hidden_owner_helper_readiness(
+                store,
+                &test_plan("sess_start_ready_attached", "ash_start_ready_attached"),
+            )
+            .expect("attached live readiness should not wait for startup prompt completion");
         });
     }
 

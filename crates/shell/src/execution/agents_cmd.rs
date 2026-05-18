@@ -394,7 +394,12 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
 
         let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
         match run_hidden_owner_helper_startup_prompt_stream(startup_listener, args.json) {
-            Ok(()) => Ok(()),
+            Ok(()) => wait_for_start_prompt_completion_normalization(
+                &store,
+                &receipt.orchestration_session_id,
+                &receipt.participant_id,
+            )
+            .map_err(runtime_start_error),
             Err(err)
                 if recoverable_detached_start_retry(
                     &receipt.orchestration_session_id,
@@ -413,9 +418,16 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
                     prompt_text: prompt.prompt_text,
                     stream_path: retry_listener.path().to_path_buf(),
                 });
-                let _ = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+                let retry_receipt =
+                    launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
                 run_hidden_owner_helper_startup_prompt_stream(retry_listener, args.json)
-                    .map_err(normalize_public_prompt_error)
+                    .map_err(normalize_public_prompt_error)?;
+                wait_for_start_prompt_completion_normalization(
+                    &store,
+                    &retry_receipt.orchestration_session_id,
+                    &retry_receipt.participant_id,
+                )
+                .map_err(runtime_start_error)
             }
             Err(err) => Err(normalize_public_prompt_error(err)),
         }
@@ -487,6 +499,48 @@ fn stabilize_hidden_owner_helper_start_return(
                 "timed out waiting for detached start normalization for orchestration session {} after hidden owner-helper {} exited ({snapshot_summary})",
                 plan.orchestration_session_id(),
                 child.id(),
+            );
+        }
+
+        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
+    }
+}
+
+#[cfg(unix)]
+fn wait_for_start_prompt_completion_normalization(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<()> {
+    let normalization_started_at = std::time::Instant::now();
+    loop {
+        if matches!(
+            store.classify_hidden_owner_helper_launch_readiness(
+                orchestration_session_id,
+                participant_id,
+                true,
+            )?,
+            HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
+        ) {
+            return Ok(());
+        }
+
+        if normalization_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
+            let snapshot_summary = store
+                .load_orchestration_session(orchestration_session_id)?
+                .map(|session| {
+                    format!(
+                        "state={:?}, posture={:?}, attached_participant_id={:?}, shell_owner_pid={}",
+                        session.state,
+                        session.posture,
+                        session.attached_participant_id,
+                        session.shell_owner_pid,
+                    )
+                })
+                .unwrap_or_else(|| "session_missing".to_string());
+            anyhow::bail!(
+                "timed out waiting for detached start normalization after startup prompt completion for orchestration session {} ({snapshot_summary})",
+                orchestration_session_id,
             );
         }
 
