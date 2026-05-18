@@ -132,6 +132,14 @@ pub(crate) enum HiddenOwnerHelperLaunchReadiness {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum HiddenOwnerHelperLaunchContinuity {
+    Pending,
+    AttachedLive,
+    DetachedReconciled(OrchestrationSessionPosture),
+    StaleAttachedTruth,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum StartupPromptReplayState {
     NotTracked,
     PendingAcceptance,
@@ -919,14 +927,40 @@ impl AgentRuntimeStateStore {
         participant_id: &str,
         require_internal_session_id: bool,
     ) -> Result<HiddenOwnerHelperLaunchReadiness> {
+        Ok(
+            match self.classify_hidden_owner_helper_launch_continuity(
+                orchestration_session_id,
+                participant_id,
+                require_internal_session_id,
+            )? {
+                HiddenOwnerHelperLaunchContinuity::AttachedLive => {
+                    HiddenOwnerHelperLaunchReadiness::ReadyAttached
+                }
+                HiddenOwnerHelperLaunchContinuity::DetachedReconciled(posture) => {
+                    HiddenOwnerHelperLaunchReadiness::ReadyDetached(posture)
+                }
+                HiddenOwnerHelperLaunchContinuity::Pending
+                | HiddenOwnerHelperLaunchContinuity::StaleAttachedTruth => {
+                    HiddenOwnerHelperLaunchReadiness::Pending
+                }
+            },
+        )
+    }
+
+    pub(crate) fn classify_hidden_owner_helper_launch_continuity(
+        &self,
+        orchestration_session_id: &str,
+        participant_id: &str,
+        require_internal_session_id: bool,
+    ) -> Result<HiddenOwnerHelperLaunchContinuity> {
         let Some(record) = self.load_session(orchestration_session_id)? else {
-            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
+            return Ok(HiddenOwnerHelperLaunchContinuity::Pending);
         };
         if record.session.state != OrchestrationSessionState::Active {
-            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
+            return Ok(HiddenOwnerHelperLaunchContinuity::Pending);
         }
         if record.session.active_participant_id() != Some(participant_id) {
-            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
+            return Ok(HiddenOwnerHelperLaunchContinuity::Pending);
         }
 
         let Some(participant) = record
@@ -934,13 +968,13 @@ impl AgentRuntimeStateStore {
             .iter()
             .find(|participant| participant.participant_id() == participant_id)
         else {
-            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
+            return Ok(HiddenOwnerHelperLaunchContinuity::Pending);
         };
         if !participant.matches_public_parent_linkage(&record.session) {
-            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
+            return Ok(HiddenOwnerHelperLaunchContinuity::Pending);
         }
         if require_internal_session_id && participant.internal_uaa_session_id().is_none() {
-            return Ok(HiddenOwnerHelperLaunchReadiness::Pending);
+            return Ok(HiddenOwnerHelperLaunchContinuity::Pending);
         }
 
         let attached_live = session_attached_to_participant(&record.session, participant)
@@ -948,7 +982,7 @@ impl AgentRuntimeStateStore {
             && participant.is_authoritative_live()
             && owner_process_is_alive(participant);
         if attached_live {
-            return Ok(HiddenOwnerHelperLaunchReadiness::ReadyAttached);
+            return Ok(HiddenOwnerHelperLaunchContinuity::AttachedLive);
         }
 
         if let Some(posture) = valid_detached_host_continuity_posture(
@@ -956,10 +990,21 @@ impl AgentRuntimeStateStore {
             participant,
             require_internal_session_id,
         ) {
-            return Ok(HiddenOwnerHelperLaunchReadiness::ReadyDetached(posture));
+            return Ok(HiddenOwnerHelperLaunchContinuity::DetachedReconciled(
+                posture,
+            ));
         }
 
-        Ok(HiddenOwnerHelperLaunchReadiness::Pending)
+        if recoverable_stale_host_attachment(
+            &record,
+            &record.session,
+            participant,
+            require_internal_session_id,
+        ) {
+            return Ok(HiddenOwnerHelperLaunchContinuity::StaleAttachedTruth);
+        }
+
+        Ok(HiddenOwnerHelperLaunchContinuity::Pending)
     }
 
     pub(crate) fn resumed_public_turn_detach_posture(
@@ -3519,6 +3564,20 @@ mod tests {
                 ))
                 .expect("persist pending inbox item");
 
+            let continuity = store
+                .classify_hidden_owner_helper_launch_continuity(
+                    "sess_ready_attention",
+                    "ash_detached",
+                    true,
+                )
+                .expect("classify continuity");
+            assert_eq!(
+                continuity,
+                HiddenOwnerHelperLaunchContinuity::DetachedReconciled(
+                    OrchestrationSessionPosture::AwaitingAttention,
+                )
+            );
+
             let readiness = store
                 .classify_hidden_owner_helper_launch_readiness(
                     "sess_ready_attention",
@@ -3561,6 +3620,43 @@ mod tests {
                 .load_session("sess_bad_detached")
                 .expect_err("invalid detached posture must fail closed during load");
             assert!(loaded.to_string().contains("invalid session record"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn hidden_owner_helper_launch_continuity_reports_stale_attached_truth_separately() {
+        with_store(|store| {
+            let mut participant = live_orchestrator("codex", "sess_stale_attached", "ash_stale");
+            participant.internal.shell_owner_pid = 999_999_999;
+            let parent = active_parent(&participant);
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let continuity = store
+                .classify_hidden_owner_helper_launch_continuity(
+                    "sess_stale_attached",
+                    "ash_stale",
+                    true,
+                )
+                .expect("classify continuity");
+            assert_eq!(
+                continuity,
+                HiddenOwnerHelperLaunchContinuity::StaleAttachedTruth
+            );
+
+            let readiness = store
+                .classify_hidden_owner_helper_launch_readiness(
+                    "sess_stale_attached",
+                    "ash_stale",
+                    true,
+                )
+                .expect("classify readiness");
+            assert_eq!(readiness, HiddenOwnerHelperLaunchReadiness::Pending);
         });
     }
 

@@ -329,6 +329,23 @@ fn write_fake_codex_script_with_delayed_prompt_completion(dir: &Path) -> PathBuf
     path
 }
 
+fn write_fake_codex_script_with_slow_startup_prompt_completion(dir: &Path) -> PathBuf {
+    let path = dir.join("fake-codex-slow-startup-prompt-completion.sh");
+    let count_path = dir.join("fake-codex-slow-startup-prompt-completion.count");
+    let body = format!(
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  printf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  sleep 11\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\",\"item_id\":\"msg-1\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"slow startup prompt success\"}}}}\\r\\n'\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\n  exit 0\nfi\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nprintf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\nprintf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nexit 0\n",
+        count_path.display(),
+        dir.display()
+    );
+    fs::write(&path, body).expect("write slow-startup fake codex script");
+    let mut perms = fs::metadata(&path)
+        .expect("slow-startup fake codex metadata")
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&path, perms).expect("set slow-startup fake codex permissions");
+    path
+}
+
 fn parse_json_output(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON")
 }
@@ -2164,7 +2181,7 @@ fn public_same_session_parked_status_turn_reattach_and_stop_stay_on_one_orchestr
 
 #[test]
 #[serial]
-fn public_start_rejects_bootstrap_only_split_prompt_flow() {
+fn public_start_split_bootstrap_retry_timeout_emits_single_terminal_failure() {
     let fixture = AgentControlFixture::new_with_fake_codex(
         write_fake_codex_script_clean_bootstrap_then_prompt_resume,
     );
@@ -2182,21 +2199,107 @@ fn public_start_rejects_bootstrap_only_split_prompt_flow() {
     ]);
     assert_eq!(
         start_output.status.code(),
-        Some(2),
-        "public start prompt must fail closed when the backend only performs bootstrap and defers the visible prompt to a later launch: {start_output:?}"
+        Some(1),
+        "split bootstrap start must surface the accepted-then-terminal failure contract when readiness reconciliation times out: {start_output:?}"
+    );
+    let records = parse_ndjson_output(&start_output);
+    assert_eq!(
+        records
+            .first()
+            .and_then(|record| record.get("kind"))
+            .and_then(Value::as_str),
+        Some("accepted"),
+        "split bootstrap retry timeout must preserve the accepted envelope before terminal failure: {records:?}"
+    );
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| {
+                matches!(
+                    record.get("kind").and_then(Value::as_str),
+                    Some("completed" | "failed")
+                )
+            })
+            .count(),
+        1,
+        "split bootstrap retry timeout must emit exactly one terminal envelope after accepted: {records:?}"
+    );
+    let failed = find_ndjson_record(&records, "failed");
+    assert_eq!(failed.get("terminal").and_then(Value::as_bool), Some(true));
+    assert_eq!(failed.get("stage").and_then(Value::as_str), Some("runtime"));
+    assert!(
+        failed
+            .get("error_code")
+            .and_then(Value::as_str)
+            .is_some_and(|code| code == "owner_unreachable"),
+        "split bootstrap retry timeout must keep the startup-stream owner_unreachable classifier: {failed}"
     );
     assert!(
-        start_output.stdout.is_empty(),
-        "split bootstrap start should fail before emitting a public prompt stream envelope: {start_output:?}"
+        failed
+            .get("message")
+            .and_then(Value::as_str)
+            .is_some_and(|message| {
+                message.contains("startup prompt stream ended before terminal completion")
+            }),
+        "split bootstrap retry timeout must explain the terminalized startup prompt stream failure: {failed}"
+    );
+    assert!(
+        records
+            .iter()
+            .all(|record| record.get("kind").and_then(Value::as_str) != Some("completed")),
+        "split bootstrap retry timeout must not also emit completed: {records:?}"
+    );
+    let orchestration_session_id = records
+        .iter()
+        .find_map(|record| {
+            record
+                .get("orchestration_session_id")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .expect("split bootstrap accepted session id");
+    let reconciled_session = wait_for_session_posture(
+        &fixture,
+        &orchestration_session_id,
+        "parked_resumable",
+        Duration::from_secs(5),
+    );
+    assert_eq!(
+        reconciled_session.get("state").and_then(Value::as_str),
+        Some("active"),
+        "readiness timeout must reconcile the failed start onto detached live session truth"
+    );
+    assert_ne!(
+        reconciled_session.get("posture").and_then(Value::as_str),
+        Some("active_attached"),
+        "failed start must not leave behind stale active_attached posture"
+    );
+    assert_eq!(
+        reconciled_session
+            .pointer("/startup_prompt/state")
+            .and_then(Value::as_str),
+        Some("failed"),
+        "readiness-timeout fallback failure must terminalize startup prompt tracking"
+    );
+    assert_eq!(
+        reconciled_session
+            .pointer("/startup_prompt/participant_id")
+            .and_then(Value::as_str),
+        reconciled_session
+            .get("active_session_handle_id")
+            .and_then(Value::as_str),
+        "terminalized startup prompt must remain pinned to the failed authoritative participant"
+    );
+    assert!(
+        reconciled_session
+            .get("attached_participant_id")
+            .is_none_or(Value::is_null),
+        "readiness-timeout reconciliation must clear attached ownership once the helper detaches: {reconciled_session}"
     );
     let stderr = stderr_text(&start_output);
     assert!(
-        stderr.contains("runtime_start_failed"),
-        "split bootstrap start must preserve runtime_start_failed taxonomy: {start_output:?}"
-    );
-    assert!(
-        stderr.contains("timed out waiting for authoritative owner-helper readiness"),
-        "split bootstrap start should fail because attached truth never materialized for the startup exec: {start_output:?}"
+        stderr.contains("startup prompt stream ended before terminal completion"),
+        "split bootstrap retry timeout stderr should match the terminal failed envelope message: {start_output:?}"
     );
 }
 
@@ -2478,6 +2581,74 @@ fn public_start_reports_runtime_start_failed_for_missing_bootstrap_handle() {
             || stderr.contains("missing an active participant")
             || stderr.contains("owner_unreachable"),
         "broken bootstrap failure should explain the missing ownership/bootstrap continuity: {start_output:?}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_start_survives_slow_startup_prompt_completion_after_bootstrap_readiness() {
+    let fixture = AgentControlFixture::new_with_fake_codex(
+        write_fake_codex_script_with_slow_startup_prompt_completion,
+    );
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let start_output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "hello from slow startup prompt",
+        "--json",
+    ]);
+    assert!(
+        start_output.status.success(),
+        "slow startup prompt completion must not trip the helper readiness timeout once bootstrap continuity is established: {start_output:?}"
+    );
+    let records = parse_ndjson_output(&start_output);
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| record.get("kind").and_then(Value::as_str) == Some("accepted"))
+            .count(),
+        1,
+        "slow startup prompt completion must still emit exactly one accepted envelope: {records:?}"
+    );
+    assert_eq!(
+        records
+            .iter()
+            .filter(|record| {
+                matches!(
+                    record.get("kind").and_then(Value::as_str),
+                    Some("completed" | "failed")
+                )
+            })
+            .count(),
+        1,
+        "slow startup prompt completion must still emit exactly one terminal envelope: {records:?}"
+    );
+    let completed = find_ndjson_record(&records, "completed");
+    let orchestration_session_id = completed["orchestration_session_id"]
+        .as_str()
+        .expect("slow start session id");
+    let persisted_session = fixture.load_orchestration_session(orchestration_session_id);
+    assert_eq!(
+        persisted_session
+            .pointer("/startup_prompt/state")
+            .and_then(Value::as_str),
+        Some("completed"),
+        "slow startup prompt completion must persist completed startup prompt state"
+    );
+    assert_eq!(
+        persisted_session.get("state").and_then(Value::as_str),
+        Some("active"),
+        "slow startup prompt completion must still produce a live durable session"
+    );
+    assert_eq!(
+        persisted_session.get("posture").and_then(Value::as_str),
+        Some("parked_resumable"),
+        "slow startup prompt completion must still return a parked host session"
     );
 }
 

@@ -42,7 +42,9 @@ use substrate_common::agent_events::{AgentEvent, MessageEventKind};
 pub(crate) const AGENT_API_SESSION_RESUME_V1: &str = "agent_api.session.resume.v1";
 pub(crate) const AGENT_API_TURN_LIFECYCLE_V1: &str = "agent_api.turn.lifecycle.v1";
 pub(crate) const HIDDEN_OWNER_HELPER_SUBCOMMAND: &str = "__owner-helper";
-const OWNER_HELPER_READY_TIMEOUT: Duration = Duration::from_secs(10);
+const OWNER_HELPER_READY_TIMEOUT_ERROR_PREFIX: &str =
+    "timed out waiting for authoritative owner-helper readiness for orchestration session ";
+const OWNER_HELPER_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const OWNER_HELPER_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 #[cfg(unix)]
 const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
@@ -676,12 +678,100 @@ pub(crate) fn wait_for_hidden_owner_helper_readiness(
         }
         if started_at.elapsed() >= OWNER_HELPER_READY_TIMEOUT {
             anyhow::bail!(
-                "timed out waiting for authoritative owner-helper readiness for orchestration session {}",
+                "{}{}",
+                OWNER_HELPER_READY_TIMEOUT_ERROR_PREFIX,
                 plan.orchestration_session_id(),
             );
         }
         thread::sleep(OWNER_HELPER_READY_POLL_INTERVAL);
     }
+}
+
+pub(crate) fn hidden_owner_helper_readiness_timed_out(err: &anyhow::Error) -> bool {
+    err.to_string()
+        .starts_with(OWNER_HELPER_READY_TIMEOUT_ERROR_PREFIX)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum HiddenOwnerHelperStartTimeoutReconciliation {
+    Success,
+    FailureMarkedTerminal,
+    FailureUnchanged,
+}
+
+pub(crate) fn reconcile_hidden_owner_helper_start_timeout(
+    store: &AgentRuntimeStateStore,
+    plan: &HiddenOwnerHelperLaunchPlan,
+) -> Result<HiddenOwnerHelperStartTimeoutReconciliation> {
+    if plan.mode != OwnerHelperMode::Start {
+        return Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureUnchanged);
+    }
+
+    if start_launch_startup_prompt_is_terminal(store, plan)? {
+        match store.classify_hidden_owner_helper_launch_readiness(
+            plan.orchestration_session_id(),
+            plan.participant_id(),
+            plan.requires_internal_session_id(),
+        )? {
+            super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyAttached
+            | super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(_) => {
+                return Ok(HiddenOwnerHelperStartTimeoutReconciliation::Success);
+            }
+            super::state_store::HiddenOwnerHelperLaunchReadiness::Pending => {}
+        }
+    }
+
+    let Some(session) = store.load_orchestration_session(plan.orchestration_session_id())? else {
+        return Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureUnchanged);
+    };
+    let Some(participant) = store.load_participant(plan.participant_id())? else {
+        return Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureUnchanged);
+    };
+
+    if startup_prompt_is_terminal_for_participant(&session, plan.participant_id()) {
+        if let Some((next_session, next_participant)) = build_detached_start_reconciliation(
+            &session,
+            &participant,
+            plan.requires_internal_session_id(),
+        ) {
+            if next_session != session {
+                store.persist_orchestration_session(&next_session)?;
+            }
+            if next_participant != participant {
+                store.persist_participant(&next_participant)?;
+            }
+
+            match store.classify_hidden_owner_helper_launch_readiness(
+                plan.orchestration_session_id(),
+                plan.participant_id(),
+                plan.requires_internal_session_id(),
+            )? {
+                super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyAttached
+                | super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(_) => {
+                    return Ok(HiddenOwnerHelperStartTimeoutReconciliation::Success);
+                }
+                super::state_store::HiddenOwnerHelperLaunchReadiness::Pending => {}
+            }
+        }
+    }
+
+    if should_mark_start_timeout_terminal_failure(&session, &participant, plan.participant_id()) {
+        let reason = format!(
+            "hidden owner-helper readiness timed out during start for orchestration session {}",
+            plan.orchestration_session_id(),
+        );
+        let mut failed_session = session;
+        let mut failed_participant = participant;
+        persist_start_timeout_terminal_failure(
+            store,
+            &mut failed_session,
+            &mut failed_participant,
+            &reason,
+        )?;
+        return Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureMarkedTerminal);
+    }
+
+    Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureUnchanged)
 }
 
 fn start_launch_startup_prompt_is_terminal(
@@ -695,15 +785,114 @@ fn start_launch_startup_prompt_is_terminal(
     let Some(session) = store.load_orchestration_session(plan.orchestration_session_id())? else {
         return Ok(false);
     };
-    Ok(matches!(
+    Ok(startup_prompt_is_terminal_for_participant(
+        &session,
+        plan.participant_id(),
+    ))
+}
+
+fn startup_prompt_is_terminal_for_participant(
+    session: &OrchestrationSessionRecord,
+    participant_id: &str,
+) -> bool {
+    matches!(
         session.startup_prompt.as_ref(),
         Some(startup_prompt)
-            if startup_prompt.participant_id == plan.participant_id()
+            if startup_prompt.participant_id == participant_id
                 && matches!(
                     startup_prompt.state,
                     StartupPromptStreamState::Completed | StartupPromptStreamState::Failed
                 )
-    ))
+    )
+}
+
+fn build_detached_start_reconciliation(
+    session: &OrchestrationSessionRecord,
+    participant: &AgentRuntimeSessionManifest,
+    require_internal_session_id: bool,
+) -> Option<(OrchestrationSessionRecord, AgentRuntimeSessionManifest)> {
+    if session.state != OrchestrationSessionState::Active {
+        return None;
+    }
+    if session.active_participant_id() != Some(participant.participant_id()) {
+        return None;
+    }
+    if !participant.matches_public_parent_linkage(session)
+        || !participant.is_host_orchestrator()
+        || !participant.handle.state.is_live()
+    {
+        return None;
+    }
+
+    let mut detached_session = session.clone();
+    let mut detached_participant = participant.clone();
+    detached_session.shell_owner_pid = 0;
+    detached_participant.release_runtime_ownership();
+    detached_participant.mark_client_detached("owner detached cleanly");
+    detached_participant.internal.shell_owner_pid = 0;
+    detached_participant.touch_heartbeat();
+    detached_session.transition_state(OrchestrationSessionState::Active);
+    if detached_session.pending_inbox_count > 0 {
+        detached_session.mark_awaiting_attention();
+    } else {
+        detached_session.mark_parked_resumable("owner detached cleanly");
+    }
+
+    super::state_store::valid_detached_host_continuity_posture(
+        &detached_session,
+        &detached_participant,
+        require_internal_session_id,
+    )?;
+    Some((detached_session, detached_participant))
+}
+
+fn should_mark_start_timeout_terminal_failure(
+    session: &OrchestrationSessionRecord,
+    participant: &AgentRuntimeSessionManifest,
+    participant_id: &str,
+) -> bool {
+    if session.state.is_terminal()
+        || !participant.handle.state.is_live()
+        || participant.participant_id() != participant_id
+        || !participant.matches_public_parent_linkage(session)
+    {
+        return false;
+    }
+
+    session.attached_participant_id() == Some(participant_id)
+        || participant.attached_client_present()
+        || matches!(
+            session.startup_prompt.as_ref(),
+            Some(startup_prompt) if startup_prompt.participant_id == participant_id
+        )
+}
+
+fn persist_start_timeout_terminal_failure(
+    store: &AgentRuntimeStateStore,
+    session: &mut OrchestrationSessionRecord,
+    participant: &mut AgentRuntimeSessionManifest,
+    reason: &str,
+) -> Result<()> {
+    session.mark_startup_prompt_failed(participant.participant_id(), reason.to_string());
+    if participant.handle.state.is_live() {
+        let next_state = if participant.internal_uaa_session_id().is_some()
+            || participant.handle.state != AgentRuntimeSessionState::Allocating
+        {
+            AgentRuntimeSessionState::Invalidated
+        } else {
+            AgentRuntimeSessionState::Failed
+        };
+        participant.transition_state(next_state);
+    }
+    participant.mark_terminal_state(reason.to_string());
+    participant.internal.last_error_bucket = Some("bootstrap_run".to_string());
+    participant.internal.last_error_message = Some(reason.to_string());
+    participant.touch_heartbeat();
+    if !session.state.is_terminal() {
+        session.transition_state(OrchestrationSessionState::Failed);
+    }
+    session.mark_terminal(reason.to_string());
+    persist_runtime_snapshots(store, session, participant)
 }
 
 pub(crate) fn private_stop_request_channel(
@@ -2255,22 +2444,75 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
 mod tests {
     use super::{
         apply_runtime_stop_closeout, handle_private_prompt_connection,
-        private_prompt_request_channel, validate_public_prompt_command_request, LoadedPublicPrompt,
-        OwnerHelperMode, PrivateStopOutcome, PublicPromptAction, PublicPromptCommandRequest,
-        PublicPromptEnvelope, PURE_AGENT_PROTOCOL,
+        private_prompt_request_channel, reconcile_hidden_owner_helper_start_timeout,
+        validate_public_prompt_command_request, HiddenOwnerHelperLaunchPlan,
+        HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
+        HiddenOwnerHelperStartTimeoutReconciliation, HiddenOwnerHelperStartupPromptPlan,
+        LoadedPublicPrompt, OwnerHelperMode, PrivateStopOutcome, PublicPromptAction,
+        PublicPromptCommandRequest, PublicPromptEnvelope, ResolvedRuntimeBackendKind,
+        ResolvedRuntimeDescriptor, PURE_AGENT_PROTOCOL,
     };
     use crate::execution::agent_runtime::{
         mapping::AgentRuntimeBackendKind,
-        orchestration_session::{OrchestrationSessionRecord, OrchestrationSessionState},
+        orchestration_session::{
+            OrchestrationSessionPosture, OrchestrationSessionRecord, OrchestrationSessionState,
+            StartupPromptStreamState,
+        },
         session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionState},
         validator::RuntimeSelectionDescriptor,
+        AgentRuntimeStateStore,
     };
     use crate::execution::config_model::AgentExecutionScope;
     use std::path::PathBuf;
+    use tempfile::TempDir;
     #[cfg(unix)]
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     #[cfg(unix)]
     use tokio::net::UnixStream;
+
+    fn with_store(test: impl FnOnce(&AgentRuntimeStateStore)) {
+        let temp = TempDir::new().expect("tempdir");
+        std::env::set_var("SUBSTRATE_HOME", temp.path());
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        test(&store);
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    fn test_plan(
+        orchestration_session_id: &str,
+        participant_id: &str,
+    ) -> HiddenOwnerHelperLaunchPlan {
+        HiddenOwnerHelperLaunchPlan {
+            mode: OwnerHelperMode::Start,
+            descriptor: ResolvedRuntimeDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: ResolvedRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: "/usr/bin/codex".to_string(),
+            },
+            session: HiddenOwnerHelperSessionPlan {
+                orchestration_session_id: orchestration_session_id.to_string(),
+                shell_trace_session_id: "trace_session".to_string(),
+                workspace_root: "/workspace".to_string(),
+                world_id: None,
+                world_generation: None,
+            },
+            participant: HiddenOwnerHelperParticipantPlan {
+                participant_id: participant_id.to_string(),
+                lease_token: format!("lease_{participant_id}"),
+                run_id: "run_start".to_string(),
+                resumed_from_participant_id: None,
+                internal_uaa_session_id: None,
+            },
+            startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
+                prompt_text: "hello".to_string(),
+                stream_path: PathBuf::from("/tmp/startup.sock"),
+            }),
+            source_orchestration_session_id: None,
+        }
+    }
 
     #[test]
     fn owner_helper_modes_remain_internal_and_exact() {
@@ -2368,6 +2610,169 @@ mod tests {
         assert!(backend_err
             .to_string()
             .contains("missing_backend: public turn actions require --backend <backend_id>"));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn start_timeout_reconciliation_parks_stale_attached_truth_into_detached_success() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let mut participant = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+                &descriptor,
+                "sess_start_timeout_success".to_string(),
+                "ash_start_timeout_success".to_string(),
+                "lease_start_timeout_success".to_string(),
+            )
+            .expect("orchestrator participant");
+            participant.transition_state(AgentRuntimeSessionState::Ready);
+            participant.set_uaa_session_id("uaa_session");
+
+            let mut orchestration = OrchestrationSessionRecord::new(
+                "sess_start_timeout_success".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &participant,
+            );
+            orchestration.transition_state(OrchestrationSessionState::Active);
+            orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
+            orchestration.initialize_startup_prompt(participant.handle.participant_id.clone());
+            orchestration.mark_startup_prompt_completed(
+                participant.handle.participant_id.as_str(),
+                "success",
+            );
+            participant.mark_client_detached("owner detached cleanly");
+
+            store
+                .persist_orchestration_session(&orchestration)
+                .expect("persist orchestration");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let reconciliation = reconcile_hidden_owner_helper_start_timeout(
+                store,
+                &test_plan("sess_start_timeout_success", "ash_start_timeout_success"),
+            )
+            .expect("reconcile timeout");
+            assert_eq!(
+                reconciliation,
+                HiddenOwnerHelperStartTimeoutReconciliation::Success
+            );
+
+            let persisted = store
+                .load_orchestration_session("sess_start_timeout_success")
+                .expect("load orchestration")
+                .expect("orchestration exists");
+            assert_eq!(persisted.state, OrchestrationSessionState::Active);
+            assert_eq!(
+                persisted.posture,
+                OrchestrationSessionPosture::ParkedResumable
+            );
+            assert_eq!(persisted.attached_participant_id(), None);
+
+            let readiness = store
+                .classify_hidden_owner_helper_launch_readiness(
+                    "sess_start_timeout_success",
+                    "ash_start_timeout_success",
+                    false,
+                )
+                .expect("classify readiness");
+            assert_eq!(
+                readiness,
+                crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(
+                    OrchestrationSessionPosture::ParkedResumable
+                )
+            );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn start_timeout_reconciliation_marks_terminal_failure_when_startup_prompt_is_not_terminal() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let mut participant = AgentRuntimeParticipantRecord::new_orchestrator_participant(
+                &descriptor,
+                "sess_start_timeout_failure".to_string(),
+                "ash_start_timeout_failure".to_string(),
+                "lease_start_timeout_failure".to_string(),
+            )
+            .expect("orchestrator participant");
+            participant.transition_state(AgentRuntimeSessionState::Ready);
+            participant.set_uaa_session_id("uaa_session");
+
+            let mut orchestration = OrchestrationSessionRecord::new(
+                "sess_start_timeout_failure".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &participant,
+            );
+            orchestration.transition_state(OrchestrationSessionState::Active);
+            orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
+            orchestration.initialize_startup_prompt(participant.handle.participant_id.clone());
+            orchestration.mark_startup_prompt_accepted(participant.handle.participant_id.as_str());
+            participant.mark_client_detached("owner detached cleanly");
+
+            store
+                .persist_orchestration_session(&orchestration)
+                .expect("persist orchestration");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let reconciliation = reconcile_hidden_owner_helper_start_timeout(
+                store,
+                &test_plan("sess_start_timeout_failure", "ash_start_timeout_failure"),
+            )
+            .expect("reconcile timeout");
+            assert_eq!(
+                reconciliation,
+                HiddenOwnerHelperStartTimeoutReconciliation::FailureMarkedTerminal
+            );
+
+            let persisted = store
+                .load_orchestration_session("sess_start_timeout_failure")
+                .expect("load orchestration")
+                .expect("orchestration exists");
+            assert_eq!(persisted.state, OrchestrationSessionState::Failed);
+            assert_eq!(persisted.posture, OrchestrationSessionPosture::Terminal);
+            assert_eq!(persisted.attached_participant_id(), None);
+            assert_eq!(
+                persisted.startup_prompt_state(),
+                Some(StartupPromptStreamState::Failed)
+            );
+
+            let persisted_participant = store
+                .load_participant("ash_start_timeout_failure")
+                .expect("load participant")
+                .expect("participant exists");
+            assert_eq!(
+                persisted_participant.handle.state,
+                AgentRuntimeSessionState::Invalidated
+            );
+            assert!(persisted_participant
+                .internal
+                .terminal_observed_at
+                .is_some());
+            assert_eq!(
+                persisted_participant.internal.last_error_bucket.as_deref(),
+                Some("bootstrap_run")
+            );
+        });
     }
 
     #[cfg(unix)]

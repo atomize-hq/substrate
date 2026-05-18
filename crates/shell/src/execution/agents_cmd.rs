@@ -5,15 +5,16 @@ use crate::execution::agent_inventory::{
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::request_private_stop;
 use crate::execution::agent_runtime::control::{
-    load_hidden_owner_helper_launch_plan, load_public_prompt_source,
-    persist_hidden_owner_helper_launch_plan, persist_runtime_stop_closeout,
-    private_stop_transport_path, public_prompt_rendered_exit_code,
-    remove_hidden_owner_helper_launch_plan, run_public_prompt_command,
-    wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
+    hidden_owner_helper_readiness_timed_out, load_hidden_owner_helper_launch_plan,
+    load_public_prompt_source, persist_hidden_owner_helper_launch_plan,
+    persist_runtime_stop_closeout, private_stop_transport_path, public_prompt_rendered_exit_code,
+    reconcile_hidden_owner_helper_start_timeout, remove_hidden_owner_helper_launch_plan,
+    run_public_prompt_command, wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
     HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
-    HiddenOwnerHelperStartupPromptPlan, OwnerHelperMode, PublicPromptAction,
-    PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
-    ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor, HIDDEN_OWNER_HELPER_SUBCOMMAND,
+    HiddenOwnerHelperStartTimeoutReconciliation, HiddenOwnerHelperStartupPromptPlan,
+    OwnerHelperMode, PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput,
+    PublicSessionPosture, ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
+    HIDDEN_OWNER_HELPER_SUBCOMMAND,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::{
@@ -289,10 +290,41 @@ pub(crate) fn launch_hidden_owner_helper(
         )
     })?;
     if let Err(err) = wait_for_hidden_owner_helper_readiness(&store, plan) {
-        let _ = child.kill();
-        let _ = child.wait();
-        let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
-        return Err(err);
+        let reconciled = if plan.mode == OwnerHelperMode::Start
+            && hidden_owner_helper_readiness_timed_out(&err)
+        {
+            Some(reconcile_hidden_owner_helper_start_timeout(&store, plan))
+        } else {
+            None
+        };
+        match reconciled {
+            Some(Ok(HiddenOwnerHelperStartTimeoutReconciliation::Success)) => {}
+            Some(Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureMarkedTerminal)) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
+                return Err(anyhow::anyhow!(
+                    "{}; persisted terminal startup failure for orchestration session {}",
+                    err,
+                    plan.orchestration_session_id(),
+                ));
+            }
+            Some(Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureUnchanged)) | None => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
+                return Err(err);
+            }
+            Some(Err(reconcile_err)) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
+                return Err(anyhow::anyhow!(
+                    "{}; additionally failed to reconcile persisted startup state: {reconcile_err:#}",
+                    err
+                ));
+            }
+        }
     }
     #[cfg(unix)]
     if let Err(err) = stabilize_hidden_owner_helper_start_return(&store, plan, &mut child) {

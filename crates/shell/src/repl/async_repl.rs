@@ -1977,6 +1977,24 @@ fn startup_prompt_failed_envelope(message: impl Into<String>) -> PublicPromptEnv
     }
 }
 
+fn terminalize_startup_prompt_failure(
+    orchestration_session: &mut OrchestrationSessionRecord,
+    manifest: &AgentRuntimeSessionManifest,
+    message: impl Into<String>,
+) -> Option<String> {
+    if !matches!(
+        orchestration_session.startup_prompt_state(),
+        Some(StartupPromptStreamState::PendingAcceptance | StartupPromptStreamState::Accepted)
+    ) {
+        return None;
+    }
+
+    let message = message.into();
+    orchestration_session
+        .mark_startup_prompt_failed(manifest.handle.participant_id.as_str(), message.clone());
+    Some(message)
+}
+
 fn runtime_stopping_message(role: &str, uaa_session_handle_id: &str) -> String {
     if role == MEMBER_ROLE {
         format!(
@@ -2831,6 +2849,11 @@ fn persist_hidden_owner_helper_stop_failure(
         manifest_guard.mark_terminal_state(reason.clone());
         manifest_guard.internal.last_error_bucket = Some("runtime_shutdown".to_string());
         manifest_guard.internal.last_error_message = Some(reason.clone());
+        let _ = terminalize_startup_prompt_failure(
+            &mut orchestration_guard,
+            &manifest_guard,
+            reason.clone(),
+        );
         if runtime_controls_parent_session(&manifest_guard.handle.role) {
             orchestration_guard.transition_state(OrchestrationSessionState::Failed);
             orchestration_guard.mark_terminal(reason);
@@ -3221,6 +3244,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
 
         let mut publish_events = Vec::new();
         let mut startup_failure: Option<String> = None;
+        let mut startup_backchannel_failure: Option<String> = None;
         let (orchestration_snapshot, manifest_snapshot) = {
             let mut orchestration_guard = event_orchestration_session
                 .lock()
@@ -3303,6 +3327,27 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                     publish_events.push(event);
                 }
             }
+            if startup_backchannel_for_events.is_some() {
+                startup_backchannel_failure = match orchestration_guard.startup_prompt_state() {
+                    Some(StartupPromptStreamState::PendingAcceptance) => {
+                        terminalize_startup_prompt_failure(
+                            &mut orchestration_guard,
+                            &manifest_guard,
+                            startup_failure.clone().unwrap_or_else(|| {
+                                "startup prompt stream closed before acceptance".to_string()
+                            }),
+                        )
+                    }
+                    Some(StartupPromptStreamState::Accepted) => terminalize_startup_prompt_failure(
+                        &mut orchestration_guard,
+                        &manifest_guard,
+                        startup_failure.clone().unwrap_or_else(|| {
+                            "startup prompt stream ended before terminal completion".to_string()
+                        }),
+                    ),
+                    _ => None,
+                };
+            }
             (orchestration_guard.clone(), manifest_guard.clone())
         };
         let _ =
@@ -3311,25 +3356,8 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             let _ = publish_agent_event(event);
         }
         if let Some(backchannel) = startup_backchannel_for_events.as_ref() {
-            let startup_state = orchestration_snapshot.startup_prompt_state();
-            if matches!(
-                startup_state,
-                Some(StartupPromptStreamState::PendingAcceptance)
-            ) {
-                backchannel.send(startup_prompt_failed_envelope(
-                    startup_failure.clone().unwrap_or_else(|| {
-                        "startup prompt stream closed before acceptance".to_string()
-                    }),
-                ));
-            } else if !matches!(
-                startup_state,
-                Some(StartupPromptStreamState::Completed | StartupPromptStreamState::Failed)
-            ) {
-                backchannel.send(startup_prompt_failed_envelope(
-                    startup_failure.clone().unwrap_or_else(|| {
-                        "startup prompt stream ended before terminal completion".to_string()
-                    }),
-                ));
+            if let Some(message) = startup_backchannel_failure {
+                backchannel.send(startup_prompt_failed_envelope(message));
             }
         }
         if let Some(message) = startup_failure {
@@ -3354,6 +3382,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         let shutdown_requested = shutdown_for_completion.load(Ordering::SeqCst);
         let mut startup_failure: Option<String> = None;
         let mut publish_events = Vec::new();
+        let mut startup_backchannel_failure: Option<String> = None;
 
         let (orchestration_snapshot, manifest_snapshot) = {
             let mut orchestration_guard = completion_orchestration_session
@@ -3553,6 +3582,16 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                     }
                 }
             }
+            if startup_backchannel_for_completion.is_some() {
+                startup_backchannel_failure = terminalize_startup_prompt_failure(
+                    &mut orchestration_guard,
+                    &manifest_guard,
+                    startup_failure.clone().unwrap_or_else(|| {
+                        "startup prompt completion did not reach a terminal turn outcome"
+                            .to_string()
+                    }),
+                );
+            }
 
             (orchestration_guard.clone(), manifest_guard.clone())
         };
@@ -3566,17 +3605,8 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             let _ = publish_agent_event(event);
         }
         if let Some(backchannel) = startup_backchannel_for_completion.as_ref() {
-            let startup_state = orchestration_snapshot.startup_prompt_state();
-            if !matches!(
-                startup_state,
-                Some(StartupPromptStreamState::Completed | StartupPromptStreamState::Failed)
-            ) {
-                backchannel.send(startup_prompt_failed_envelope(
-                    startup_failure.clone().unwrap_or_else(|| {
-                        "startup prompt completion did not reach a terminal turn outcome"
-                            .to_string()
-                    }),
-                ));
+            if let Some(message) = startup_backchannel_failure {
+                backchannel.send(startup_prompt_failed_envelope(message));
             }
         }
         if let Some(message) = startup_failure {
@@ -7628,6 +7658,8 @@ mod tests {
         acquire_event_test_guard, clear_agent_event_sender, init_event_channel,
     };
     use crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture;
+    #[cfg(unix)]
+    use crate::execution::config_model::AgentExecutionScope;
     use crate::execution::ShellMode;
     use crate::execution::WorldRootSettings;
     use std::cell::Cell;
@@ -7890,6 +7922,96 @@ mod tests {
         assert!(err.is_none());
         assert_eq!(detect_calls.get(), REEDLINE_CTRLD_TERMINAL_LOSS_RECHECKS);
         assert_eq!(sleep_calls.get(), REEDLINE_CTRLD_TERMINAL_LOSS_RECHECKS - 1);
+    }
+
+    #[cfg(unix)]
+    fn test_runtime_selection_descriptor() -> RuntimeSelectionDescriptor {
+        RuntimeSelectionDescriptor {
+            agent_id: "codex".to_string(),
+            backend_id: "cli:codex".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            protocol: PURE_AGENT_PROTOCOL.to_string(),
+            execution_scope: AgentExecutionScope::Host,
+            binary_path: PathBuf::from("/bin/sh"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn terminalize_startup_prompt_failure_marks_accepted_prompt_failed() {
+        let descriptor = test_runtime_selection_descriptor();
+        let manifest = AgentRuntimeSessionManifest::new(
+            &descriptor,
+            "orch-test".to_string(),
+            "ash_test".to_string(),
+            "lease-test".to_string(),
+        );
+        let mut session = OrchestrationSessionRecord::new(
+            "orch-test".to_string(),
+            "shell-test".to_string(),
+            "/tmp".to_string(),
+            &manifest,
+        );
+        session.initialize_startup_prompt(manifest.handle.participant_id.clone());
+        session.mark_startup_prompt_accepted(manifest.handle.participant_id.as_str());
+
+        let message = terminalize_startup_prompt_failure(
+            &mut session,
+            &manifest,
+            "startup prompt stream ended before terminal completion",
+        )
+        .expect("accepted startup prompt should be terminalized");
+
+        assert_eq!(
+            message,
+            "startup prompt stream ended before terminal completion"
+        );
+        let record = session
+            .startup_prompt
+            .as_ref()
+            .expect("startup prompt should remain present");
+        assert_eq!(record.state, StartupPromptStreamState::Failed);
+        assert!(record.accepted_at.is_some());
+        assert!(record.terminal_at.is_some());
+        assert_eq!(
+            record.error_message.as_deref(),
+            Some("startup prompt stream ended before terminal completion")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn terminalize_startup_prompt_failure_leaves_completed_prompt_unchanged() {
+        let descriptor = test_runtime_selection_descriptor();
+        let manifest = AgentRuntimeSessionManifest::new(
+            &descriptor,
+            "orch-test".to_string(),
+            "ash_test".to_string(),
+            "lease-test".to_string(),
+        );
+        let mut session = OrchestrationSessionRecord::new(
+            "orch-test".to_string(),
+            "shell-test".to_string(),
+            "/tmp".to_string(),
+            &manifest,
+        );
+        session.initialize_startup_prompt(manifest.handle.participant_id.clone());
+        session.mark_startup_prompt_completed(manifest.handle.participant_id.as_str(), "success");
+
+        let result = terminalize_startup_prompt_failure(
+            &mut session,
+            &manifest,
+            "startup prompt completion did not reach a terminal turn outcome",
+        );
+
+        assert!(result.is_none());
+        let record = session
+            .startup_prompt
+            .as_ref()
+            .expect("startup prompt should remain present");
+        assert_eq!(record.state, StartupPromptStreamState::Completed);
+        assert_eq!(record.turn_outcome.as_deref(), Some("success"));
+        assert!(record.error_message.is_none());
     }
 
     struct CurrentDirGuard {
