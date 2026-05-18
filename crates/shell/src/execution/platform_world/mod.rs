@@ -12,9 +12,13 @@ use crate::execution::policy_snapshot::bootstrap_world_spec;
 #[cfg(not(target_os = "windows"))]
 use crate::execution::settings;
 use agent_api_types::SharedWorldOwnerSpec;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+use anyhow::Context;
 use anyhow::Result;
 use std::fmt;
+use std::future::Future;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use world_api::WorldBackend;
@@ -54,7 +58,13 @@ pub struct PlatformWorldContext {
     #[allow(dead_code)]
     pub socket_path: PathBuf,
     pub ensure_ready: Box<dyn Fn() -> anyhow::Result<()> + Send + Sync>,
+    #[allow(dead_code)]
+    pub ensure_persistent_session_ready_async: Box<PersistentSessionReadyFn>,
 }
+
+pub type PersistentSessionReadyFuture =
+    Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'static>>;
+pub type PersistentSessionReadyFn = dyn Fn() -> PersistentSessionReadyFuture + Send + Sync;
 
 static GLOBAL_CTX: OnceLock<Arc<PlatformWorldContext>> = OnceLock::new();
 
@@ -123,6 +133,11 @@ pub fn get_context() -> Option<Arc<PlatformWorldContext>> {
     GLOBAL_CTX.get().cloned()
 }
 
+#[allow(dead_code)]
+pub async fn ensure_persistent_session_ready_async(ctx: &PlatformWorldContext) -> Result<()> {
+    (ctx.ensure_persistent_session_ready_async.as_ref())().await
+}
+
 #[cfg(target_os = "macos")]
 pub fn detect() -> Result<PlatformWorldContext> {
     use world_mac_lima::MacLimaBackend;
@@ -148,6 +163,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
 
     let backend = Arc::new(MacLimaBackend::new()?);
     let ensure_ready_backend = backend.clone();
+    let ensure_persistent_session_ready_async_backend = backend.clone();
     let ensure_ready = Box::new(move || {
         use world_api::WorldBackend as _;
         let spec = bootstrap_world_spec(
@@ -156,12 +172,18 @@ pub fn detect() -> Result<PlatformWorldContext> {
         );
         ensure_ready_backend.ensure_session(&spec).map(|_| ())
     });
+    let ensure_persistent_session_ready_async = Box::new(move || {
+        let backend = ensure_persistent_session_ready_async_backend.clone();
+        Box::pin(async move { backend.ensure_persistent_session_ready_async().await })
+            as PersistentSessionReadyFuture
+    });
 
     Ok(PlatformWorldContext {
         backend,
         transport,
         socket_path: default_sock,
         ensure_ready,
+        ensure_persistent_session_ready_async,
     })
 }
 
@@ -173,12 +195,28 @@ pub fn detect() -> Result<PlatformWorldContext> {
 
     let backend = Arc::new(LinuxLocalBackend::new());
     let ensure_ready_backend = backend.clone();
+    let ensure_persistent_session_ready_async_backend = backend.clone();
     let ensure_ready = Box::new(move || {
         let spec = bootstrap_world_spec(
             settings::world_root_from_env().path,
             substrate_broker::world_fs_mode(),
         );
         ensure_ready_backend.ensure_session(&spec).map(|_| ())
+    });
+    let ensure_persistent_session_ready_async = Box::new(move || {
+        let backend = ensure_persistent_session_ready_async_backend.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                use world_api::WorldBackend as _;
+                let spec = bootstrap_world_spec(
+                    settings::world_root_from_env().path,
+                    substrate_broker::world_fs_mode(),
+                );
+                backend.ensure_session(&spec).map(|_| ())
+            })
+            .await
+            .context("persistent-session readiness join failure")?
+        }) as PersistentSessionReadyFuture
     });
 
     // Native Linux agent socket path
@@ -190,6 +228,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
         transport,
         socket_path: sock,
         ensure_ready,
+        ensure_persistent_session_ready_async,
     })
 }
 

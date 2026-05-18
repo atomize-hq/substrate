@@ -271,22 +271,40 @@ impl MacLimaBackend {
         Ok(())
     }
 
-    fn ensure_agent_ready(&self) -> Result<()> {
+    fn ensure_session_setup(&self) -> Result<()> {
         #[cfg(test)]
         if let Some(override_impl) = &self.session_setup_override {
-            return override_impl.ensure_ready();
+            return override_impl.ensure_setup();
         }
 
         self.ensure_vm_running()?;
         self.ensure_forwarding()?;
+        Ok(())
+    }
+
+    async fn verify_agent_ready(&self) -> Result<()> {
+        #[cfg(test)]
+        if let Some(override_impl) = &self.session_setup_override {
+            return override_impl.verify_ready();
+        }
 
         let client = self.build_agent_client()?;
-        let caps = self
-            .block_on_compat(async { client.capabilities().await })
+        let caps = client
+            .capabilities()
+            .await
             .context("Failed to verify agent connectivity")?;
 
         tracing::info!("Agent connectivity verified: {:?}", caps);
         Ok(())
+    }
+
+    pub async fn ensure_persistent_session_ready_async(&self) -> Result<()> {
+        self.ensure_session_setup()?;
+        self.verify_agent_ready().await
+    }
+
+    fn ensure_agent_ready(&self) -> Result<()> {
+        self.block_on_compat(self.ensure_persistent_session_ready_async())
     }
 
     fn shared_world_id(&self, orchestration_session_id: &str, world_generation: u64) -> String {
@@ -630,7 +648,8 @@ fn convert_member_runtime_backend_kind(
 
 #[cfg(test)]
 pub(crate) trait SessionSetupMock: Send + Sync {
-    fn ensure_ready(&self) -> Result<()>;
+    fn ensure_setup(&self) -> Result<()>;
+    fn verify_ready(&self) -> Result<()>;
 }
 
 #[cfg(test)]
@@ -651,20 +670,27 @@ mod tests {
     use std::sync::Arc;
 
     struct AlwaysReadySessionSetup {
-        calls: AtomicUsize,
+        setup_calls: AtomicUsize,
+        verify_calls: AtomicUsize,
     }
 
     impl AlwaysReadySessionSetup {
         fn new() -> Self {
             Self {
-                calls: AtomicUsize::new(0),
+                setup_calls: AtomicUsize::new(0),
+                verify_calls: AtomicUsize::new(0),
             }
         }
     }
 
     impl SessionSetupMock for AlwaysReadySessionSetup {
-        fn ensure_ready(&self) -> Result<()> {
-            self.calls.fetch_add(1, Ordering::SeqCst);
+        fn ensure_setup(&self) -> Result<()> {
+            self.setup_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn verify_ready(&self) -> Result<()> {
+            self.verify_calls.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
     }
@@ -853,7 +879,24 @@ mod tests {
         assert_eq!(binding.world_generation, 1);
         assert_eq!(binding.binding_state, SharedWorldBindingState::Active);
         assert_ne!(binding.world_id, attached.id);
-        assert_eq!(session_setup.calls.load(Ordering::SeqCst), 2);
+        assert_eq!(session_setup.setup_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(session_setup.verify_calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn ensure_persistent_session_ready_async_runs_setup_and_verify() {
+        let _env_guard = crate::test_util::lock_env();
+        let session_setup = Arc::new(AlwaysReadySessionSetup::new());
+        let backend =
+            MacLimaBackend::with_session_setup_mock(session_setup.clone()).expect("backend");
+        let runtime = MacLimaBackend::new_runtime().expect("runtime");
+
+        runtime
+            .block_on(backend.ensure_persistent_session_ready_async())
+            .expect("async readiness");
+
+        assert_eq!(session_setup.setup_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(session_setup.verify_calls.load(Ordering::SeqCst), 1);
     }
 
     #[test]
