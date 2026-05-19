@@ -5,8 +5,8 @@ mod support;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command as StdCommand;
-use support::{substrate_shell_driver, temp_dir};
-use tempfile::TempDir;
+use support::substrate_shell_driver;
+use tempfile::{Builder, TempDir};
 
 struct WorkspaceCheckpointFixture {
     _temp: TempDir,
@@ -17,7 +17,10 @@ struct WorkspaceCheckpointFixture {
 
 impl WorkspaceCheckpointFixture {
     fn new() -> Self {
-        let temp = temp_dir("substrate-workspace-checkpoint-");
+        let temp = Builder::new()
+            .prefix("substrate-workspace-checkpoint-")
+            .tempdir_in("/tmp")
+            .expect("failed to allocate ws6 temp dir");
         let home = temp.path().join("home");
         fs::create_dir_all(&home).expect("create HOME fixture");
         let substrate_home = temp.path().join("substrate-home");

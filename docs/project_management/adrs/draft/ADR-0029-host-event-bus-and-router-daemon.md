@@ -18,6 +18,8 @@
 - Trace/event foundations:
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
+- Host orchestration session compatibility:
+  - `docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md`
 - FS path semantics & allow/deny matching:
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 - Config/policy layering model:
@@ -158,6 +160,11 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
 - The workflow router uses durable JSONL queues under `SUBSTRATE_HOME/workflow/`:
   - `inbox.jsonl` stores **requests** (durable “intent to act”).
   - `work_queue.jsonl` stores **actions** derived from requests after routing/policy evaluation.
+- Compatibility boundary:
+  - These workflow-router queues are not the same store as the orchestration-session-local inbox defined by ADR-0047.
+  - `workflow/inbox.jsonl` and `workflow/work_queue.jsonl` are router-owned request/action queues scoped to routing and execution policy.
+  - ADR-0047 inbox items are session-local durable retained events scoped to one host orchestration session.
+  - The stores have different identities and lifecycles, but they MUST use compatible correlation/join vocabulary so a routed request, workflow run, and session-local host-attention item can be joined without heuristic reconstruction.
 - Processing semantics:
   - Handling is at-least-once; duplicate processing MUST be bounded via dedupe keys.
   - Each request/action MUST have a stable idempotency key derived from:

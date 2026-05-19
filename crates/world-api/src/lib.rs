@@ -9,11 +9,100 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// Reuse semantics for a world allocation request.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldReuseMode {
+    /// Use the legacy compatibility lookup rules for generic reusable worlds.
+    #[default]
+    GenericCompatible,
+    /// Use the explicit shared-world ownership contract.
+    SharedOrchestration(SharedWorldOwnerSpec),
+}
+
+impl WorldReuseMode {
+    pub fn shared_owner(&self) -> Option<&SharedWorldOwnerSpec> {
+        match self {
+            Self::GenericCompatible => None,
+            Self::SharedOrchestration(owner) => Some(owner),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SharedWorldOwnerSpec {
+    pub orchestration_session_id: String,
+    pub action: SharedWorldOwnerAction,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SharedWorldOwnerAction {
+    AttachOrCreate,
+    ReplaceExpectedGeneration {
+        expected_generation: u64,
+        reason: String,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SharedWorldBindingState {
+    Active,
+    Replacing,
+    Replaced,
+    Abandoned,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SharedWorldBindingSnapshot {
+    pub orchestration_session_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub binding_state: SharedWorldBindingState,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MemberRuntimeBackendKindV1 {
+    Codex,
+    ClaudeCode,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResolvedMemberRuntimeDescriptorV1 {
+    pub backend_kind: MemberRuntimeBackendKindV1,
+    pub binary_path: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MemberDispatchRequestV1 {
+    pub schema_version: u32,
+    pub orchestration_session_id: String,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_participant_id: Option<String>,
+    pub backend_id: String,
+    pub protocol: String,
+    pub run_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_prompt: Option<String>,
+    pub resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
+}
+
 /// Configuration for a world execution environment.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WorldSpec {
     /// Whether to reuse an existing session world.
     pub reuse_session: bool,
+    /// Whether to use generic compatibility reuse or explicit shared-world ownership.
+    #[serde(default)]
+    pub reuse_mode: WorldReuseMode,
     /// Whether to isolate network access.
     pub isolate_network: bool,
     /// Resource limits for the world.
@@ -35,6 +124,7 @@ impl Default for WorldSpec {
     fn default() -> Self {
         Self {
             reuse_session: true,
+            reuse_mode: WorldReuseMode::GenericCompatible,
             isolate_network: true,
             limits: ResourceLimits::default(),
             enable_preload: false,
@@ -74,6 +164,9 @@ impl Default for ResourceLimits {
 pub struct WorldHandle {
     /// Unique identifier for this world instance.
     pub id: String,
+    /// Authoritative shared-world binding proof when explicit owner mode is active.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_binding: Option<SharedWorldBindingSnapshot>,
 }
 
 /// Request to execute a command in a world.
@@ -90,6 +183,12 @@ pub struct ExecRequest {
     /// Optional span identifier to correlate fs_diff and telemetry
     #[serde(skip_serializing_if = "Option::is_none")]
     pub span_id: Option<String>,
+    /// Optional shared-world ownership intent for orchestration-aware backends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_world: Option<SharedWorldOwnerSpec>,
+    /// Optional member dispatch payload for orchestration-aware backends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member_dispatch: Option<MemberDispatchRequestV1>,
 }
 
 /// Result of command execution.
@@ -183,6 +282,7 @@ mod tests {
     fn test_world_spec_default() {
         let spec = WorldSpec::default();
         assert!(spec.reuse_session);
+        assert_eq!(spec.reuse_mode, WorldReuseMode::GenericCompatible);
         assert!(spec.isolate_network);
         assert!(!spec.enable_preload);
         assert!(spec.allowed_domains.contains(&"github.com".to_string()));
@@ -209,5 +309,107 @@ mod tests {
             Backend::WindowsWSL2 => (),
             _ => panic!("Unexpected default backend"),
         }
+    }
+
+    #[test]
+    fn shared_world_contract_round_trips_with_canonical_shape() {
+        let mode = WorldReuseMode::SharedOrchestration(SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_123".into(),
+            action: SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                expected_generation: 7,
+                reason: "restart".into(),
+            },
+        });
+        let json = serde_json::to_string(&mode).expect("serialize reuse mode");
+        assert_eq!(
+            json,
+            r#"{"shared_orchestration":{"orchestration_session_id":"orch_123","action":{"replace_expected_generation":{"expected_generation":7,"reason":"restart"}}}}"#
+        );
+
+        let binding = SharedWorldBindingSnapshot {
+            orchestration_session_id: "orch_123".into(),
+            world_id: "wld_123".into(),
+            world_generation: 8,
+            binding_state: SharedWorldBindingState::Active,
+        };
+        let binding_json = serde_json::to_string(&binding).expect("serialize binding");
+        assert_eq!(
+            binding_json,
+            r#"{"orchestration_session_id":"orch_123","world_id":"wld_123","world_generation":8,"binding_state":"active"}"#
+        );
+
+        let spec = WorldSpec {
+            reuse_mode: mode.clone(),
+            ..WorldSpec::default()
+        };
+        let decoded: WorldSpec =
+            serde_json::from_str(&serde_json::to_string(&spec).expect("serialize spec"))
+                .expect("deserialize spec");
+        assert_eq!(decoded.reuse_mode, mode);
+
+        let handle = WorldHandle {
+            id: "wld_123".into(),
+            shared_binding: Some(binding.clone()),
+        };
+        let handle_back: WorldHandle =
+            serde_json::from_str(&serde_json::to_string(&handle).expect("serialize handle"))
+                .expect("deserialize handle");
+        assert_eq!(
+            handle_back
+                .shared_binding
+                .expect("shared binding should deserialize"),
+            binding
+        );
+
+        let exec_request = ExecRequest {
+            cmd: "echo hi".into(),
+            cwd: PathBuf::from("/tmp"),
+            env: HashMap::new(),
+            pty: false,
+            span_id: Some("spn_123".into()),
+            shared_world: Some(SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_123".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }),
+            member_dispatch: Some(MemberDispatchRequestV1 {
+                schema_version: 1,
+                orchestration_session_id: "orch_123".into(),
+                participant_id: "participant_123".into(),
+                orchestrator_participant_id: "participant_root".into(),
+                parent_participant_id: Some("participant_parent".into()),
+                resumed_from_participant_id: None,
+                backend_id: "backend_123".into(),
+                protocol: "stdio".into(),
+                run_id: "run_123".into(),
+                world_id: "wld_123".into(),
+                world_generation: 8,
+                initial_prompt: Some("Continue".into()),
+                resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                    backend_kind: MemberRuntimeBackendKindV1::Codex,
+                    binary_path: "/usr/bin/env".into(),
+                },
+            }),
+        };
+        let exec_back: ExecRequest = serde_json::from_str(
+            &serde_json::to_string(&exec_request).expect("serialize exec request"),
+        )
+        .expect("deserialize exec request");
+        assert_eq!(
+            exec_back
+                .shared_world
+                .expect("shared world should deserialize"),
+            SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_123".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }
+        );
+        assert_eq!(
+            exec_back
+                .member_dispatch
+                .expect("member dispatch should deserialize"),
+            exec_request
+                .member_dispatch
+                .expect("original member dispatch should exist")
+        );
     }
 }

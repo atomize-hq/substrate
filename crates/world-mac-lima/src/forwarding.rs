@@ -313,7 +313,24 @@ fn create_ssh_uds_forwarding(vm_name: &str) -> Result<ForwardingHandle> {
         std::thread::sleep(Duration::from_millis(500));
     }
 
-    // Best-effort: if ssh is still running but socket never appeared, capture any stderr already emitted.
+    // Timed out waiting for the forwarded socket to become healthy. Terminate the ssh helper before
+    // draining stderr so we do not block forever on an otherwise-live tunnel process.
+    match child.try_wait() {
+        Ok(None) => {
+            if let Err(err) = child.kill() {
+                warn!("Failed to kill timed out SSH forwarding process: {err}");
+            }
+            if let Err(err) = child.wait() {
+                warn!("Failed to wait on timed out SSH forwarding process: {err}");
+            }
+        }
+        Ok(Some(_)) => {}
+        Err(err) => {
+            warn!("Failed to poll timed out SSH forwarding process: {err}");
+        }
+    }
+
+    // Best-effort: capture any stderr now that the child has terminated.
     if let Some(mut stderr) = child.stderr.take() {
         use std::io::Read as _;
         let _ = stderr.read_to_string(&mut stderr_buf);

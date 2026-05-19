@@ -11,6 +11,12 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
+use substrate_common::{
+    GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
+    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+};
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 use world_agent::WorldAgentService;
@@ -120,11 +126,79 @@ fn service_or_skip() -> Option<WorldAgentService> {
     }
 }
 
+fn gateway_auth_bundle_check_snippet() -> &'static str {
+    r#"if [ -z "${SUBSTRATE_LLM_AUTH_BUNDLE_FD:-}" ]; then
+  echo "missing gateway auth bundle fd env" >&2
+  exit 65
+fi
+
+python3 - "$config" <<'PY'
+import json
+import os
+import pathlib
+import sys
+
+config = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+for forbidden in (
+    "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
+    "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+    "SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY",
+    "OPENAI_API_KEY",
+):
+    if os.environ.get(forbidden):
+        raise SystemExit("forbidden secret env present: " + forbidden)
+
+fd_raw = os.environ["SUBSTRATE_LLM_AUTH_BUNDLE_FD"]
+with os.fdopen(int(fd_raw), "rb") as handle:
+    payload = handle.read()
+bundle = json.loads(payload)
+backend = bundle.get("backend_id")
+fields = bundle.get("fields") or {}
+
+if 'api_key = "$OPENAI_API_KEY"' in config:
+    if backend != "api:openai":
+        raise SystemExit("unexpected backend_id: " + repr(backend))
+    if "SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY" not in fields:
+        raise SystemExit("missing OpenAI API key field")
+else:
+    if backend != "cli:codex":
+        raise SystemExit("unexpected backend_id: " + repr(backend))
+    if "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN" not in fields:
+        raise SystemExit("missing Codex access token field")
+PY
+"#
+}
+
+fn auth_bundle_snapshot_path(temp_dir: &TempDir, launch: u32) -> PathBuf {
+    temp_dir
+        .path()
+        .join("auth-bundles")
+        .join(format!("{launch}.json"))
+}
+
+fn wait_for_auth_bundle_snapshot(temp_dir: &TempDir, launch: u32) -> GatewayAuthBundleV1 {
+    let path = auth_bundle_snapshot_path(temp_dir, launch);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if let Ok(raw) = fs::read(&path) {
+            return serde_json::from_slice(&raw)
+                .unwrap_or_else(|err| panic!("invalid {}: {err}", path.display()));
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for {}",
+            path.display()
+        );
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
 fn fake_gateway_binary(temp_dir: &TempDir) -> PathBuf {
     let path = temp_dir.path().join("fake-gateway.sh");
     fs::write(
         &path,
-        r#"#!/bin/sh
+        format!(
+            r#"#!/bin/sh
 set -eu
 config=""
 while [ "$#" -gt 0 ]; do
@@ -147,15 +221,7 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if grep -q 'api_key = "\$OPENAI_API_KEY"' "$config"; then
-  if [ -z "${OPENAI_API_KEY:-}" ]; then
-    echo "missing OpenAI API key env" >&2
-    exit 65
-  fi
-elif [ -z "${SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}" ]; then
-  echo "missing Codex access token env" >&2
-  exit 65
-fi
+{bundle_check}
 
 port="$(python3 - "$config" <<'PY'
 import re
@@ -173,6 +239,8 @@ mkdir -p "$root"
 printf 'ok' >"$root/health"
 exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 "#,
+            bundle_check = gateway_auth_bundle_check_snippet(),
+        ),
     )
     .unwrap();
     let mut perms = fs::metadata(&path).unwrap().permissions();
@@ -253,15 +321,7 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if grep -q 'api_key = "\$OPENAI_API_KEY"' "$config"; then
-  if [ -z "${{OPENAI_API_KEY:-}}" ]; then
-    echo "missing OpenAI API key env" >&2
-    exit 65
-  fi
-elif [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
-  echo "missing Codex access token env" >&2
-  exit 65
-fi
+{bundle_check}
 
 port="$(python3 - "$config" <<'PY'
 import re
@@ -276,6 +336,7 @@ PY
 
 exec python3 "{server_path}" "$port"
 "#,
+            bundle_check = gateway_auth_bundle_check_snippet(),
             server_path = server_path.display(),
         ),
     )
@@ -315,15 +376,7 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if grep -q 'api_key = "\$OPENAI_API_KEY"' "$config"; then
-  if [ -z "${{OPENAI_API_KEY:-}}" ]; then
-    echo "missing OpenAI API key env" >&2
-    exit 65
-  fi
-elif [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
-  echo "missing Codex access token env" >&2
-  exit 65
-fi
+{bundle_check}
 
 printf '%s\n' "$$" >"{pid_path}"
 port="$(python3 - "$config" <<'PY'
@@ -343,6 +396,7 @@ mkdir -p "$root"
 printf 'ok' >"$root/health"
 exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 "#,
+            bundle_check = gateway_auth_bundle_check_snippet(),
             pid_path = pid_path.display(),
             delay_s = delay_ms as f64 / 1000.0,
         ),
@@ -361,6 +415,7 @@ fn tracking_gateway_binary(
 ) -> (PathBuf, PathBuf, PathBuf) {
     let path = temp_dir.path().join(format!("{name}-tracking-gateway.sh"));
     let pid_dir = temp_dir.path().join(format!("{name}-pids"));
+    let bundle_dir = temp_dir.path().join("auth-bundles");
     let launch_count_path = temp_dir.path().join(format!("{name}-launch-count.txt"));
     fs::write(
         &path,
@@ -388,13 +443,8 @@ if [ -z "$config" ]; then
   exit 64
 fi
 
-if grep -q 'api_key = "\$OPENAI_API_KEY"' "$config"; then
-  if [ -z "${{OPENAI_API_KEY:-}}" ]; then
-    echo "missing OpenAI API key env" >&2
-    exit 65
-  fi
-elif [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
-  echo "missing Codex access token env" >&2
+if [ -z "${{SUBSTRATE_LLM_AUTH_BUNDLE_FD:-}}" ]; then
+  echo "missing gateway auth bundle fd env" >&2
   exit 65
 fi
 
@@ -410,6 +460,46 @@ PY
 )"
 mkdir -p "{pid_dir}"
 printf '%s\n' "$$" >"{pid_dir}/$launch.pid"
+
+python3 - "$config" "$launch" "{bundle_dir}" <<'PY'
+import json
+import os
+import pathlib
+import sys
+
+config = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')
+launch = sys.argv[2]
+bundle_dir = pathlib.Path(sys.argv[3])
+bundle_dir.mkdir(parents=True, exist_ok=True)
+
+for forbidden in (
+    "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID",
+    "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN",
+    "SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY",
+    "OPENAI_API_KEY",
+):
+    if os.environ.get(forbidden):
+        raise SystemExit("forbidden secret env present: " + forbidden)
+
+fd_raw = os.environ["SUBSTRATE_LLM_AUTH_BUNDLE_FD"]
+with os.fdopen(int(fd_raw), "rb") as handle:
+    payload = handle.read()
+bundle = json.loads(payload)
+fields = bundle.get("fields") or {{}}
+
+if 'api_key = "$OPENAI_API_KEY"' in config:
+    if bundle.get("backend_id") != "api:openai":
+        raise SystemExit("unexpected backend_id")
+    if "SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY" not in fields:
+        raise SystemExit("missing OpenAI API key field")
+else:
+    if bundle.get("backend_id") != "cli:codex":
+        raise SystemExit("unexpected backend_id")
+    if "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN" not in fields:
+        raise SystemExit("missing Codex access token field")
+
+(bundle_dir / (launch + ".json")).write_bytes(payload)
+PY
 
 port="$(python3 - "$config" <<'PY'
 import re
@@ -428,6 +518,7 @@ mkdir -p "$root"
 printf 'ok' >"$root/health"
 exec python3 -m http.server "$port" --bind 127.0.0.1 --directory "$root"
 "#,
+            bundle_dir = bundle_dir.display(),
             launch_count_path = launch_count_path.display(),
             pid_dir = pid_dir.display(),
             delay_s = delay_ms as f64 / 1000.0,
@@ -472,18 +563,11 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
-if grep -q 'api_key = "\$OPENAI_API_KEY"' "$config"; then
-  if [ -z "${{OPENAI_API_KEY:-}}" ]; then
-    echo "missing OpenAI API key env" >&2
-    exit 65
-  fi
-elif [ -z "${{SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN:-}}" ]; then
-  echo "missing Codex access token env" >&2
-  exit 65
-fi
+{bundle_check}
 printf '%s\n' "$$" >"{pid_path}"
 sleep 30
 "#,
+            bundle_check = gateway_auth_bundle_check_snippet(),
             pid_path = pid_path.display(),
         ),
     )
@@ -668,6 +752,27 @@ async fn gateway_sync_makes_status_available_and_is_idempotent() {
     );
     assert_eq!(read_launch_count(&launch_count_path), 1);
     assert_eq!(first_pid, wait_for_pid(&pid_dir, 1));
+    assert_eq!(
+        wait_for_auth_bundle_snapshot(&temp_dir, 1),
+        GatewayAuthBundleV1 {
+            schema_version: 1,
+            backend_id: GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX.to_string(),
+            fields: std::collections::HashMap::from([
+                (
+                    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID.to_string(),
+                    "acct_test".to_string(),
+                ),
+                (
+                    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN.to_string(),
+                    "header.payload.signature".to_string(),
+                ),
+            ]),
+        }
+    );
+    assert!(
+        !auth_bundle_snapshot_path(&temp_dir, 2).exists(),
+        "idempotent sync should not relaunch or reread the auth bundle"
+    );
 }
 
 #[tokio::test]
@@ -708,6 +813,21 @@ async fn gateway_openai_sync_makes_status_available_and_is_idempotent() {
     assert_eq!(second_sync.status, GatewayStatusV1::Available);
     assert_eq!(read_launch_count(&launch_count_path), 1);
     assert_eq!(first_pid, wait_for_pid(&pid_dir, 1));
+    assert_eq!(
+        wait_for_auth_bundle_snapshot(&temp_dir, 1),
+        GatewayAuthBundleV1 {
+            schema_version: 1,
+            backend_id: GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI.to_string(),
+            fields: std::collections::HashMap::from([(
+                SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY.to_string(),
+                "sk-openai-proof".to_string(),
+            )]),
+        }
+    );
+    assert!(
+        !auth_bundle_snapshot_path(&temp_dir, 2).exists(),
+        "idempotent sync should not relaunch or reread the auth bundle"
+    );
 }
 
 #[tokio::test]
@@ -771,6 +891,80 @@ async fn gateway_restart_recycles_the_runtime() {
 }
 
 #[tokio::test]
+async fn gateway_restart_uses_fresh_codex_bundle_after_rotation() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = TempDir::new().unwrap();
+    let (binary, pid_dir, launch_count_path) =
+        tracking_gateway_binary(&temp_dir, "codex-rotation", 0);
+    let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
+    let Some(service) = service_or_skip() else {
+        return;
+    };
+    let mut request = gateway_request(temp_dir.path());
+    request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+        backend_id: REGRESSION_FLOOR_BACKEND_ID.to_string(),
+        cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+            account_id: Some("acct_first".to_string()),
+            access_token: "token-first".to_string(),
+        }),
+        api_env: None,
+    });
+
+    service
+        .gateway_sync(request.clone())
+        .await
+        .expect("initial gateway sync");
+    let initial_pid = wait_for_pid(&pid_dir, 1);
+    let first_bundle = wait_for_auth_bundle_snapshot(&temp_dir, 1);
+    assert_eq!(
+        first_bundle
+            .fields
+            .get("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"),
+        Some(&"acct_first".to_string())
+    );
+    assert_eq!(
+        first_bundle
+            .fields
+            .get(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN),
+        Some(&"token-first".to_string())
+    );
+
+    request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+        backend_id: REGRESSION_FLOOR_BACKEND_ID.to_string(),
+        cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+            account_id: Some("acct_second".to_string()),
+            access_token: "token-second".to_string(),
+        }),
+        api_env: None,
+    });
+
+    let restart_response = service
+        .gateway_restart(request)
+        .await
+        .expect("gateway restart");
+    assert_eq!(restart_response.status, GatewayStatusV1::Available);
+
+    let restarted_pid = wait_for_pid(&pid_dir, 2);
+    let second_bundle = wait_for_auth_bundle_snapshot(&temp_dir, 2);
+    assert_ne!(initial_pid, restarted_pid);
+    assert_eq!(read_launch_count(&launch_count_path), 2);
+    assert_process_exited(initial_pid);
+    assert_eq!(
+        second_bundle
+            .fields
+            .get("SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"),
+        Some(&"acct_second".to_string())
+    );
+    assert_eq!(
+        second_bundle
+            .fields
+            .get(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN),
+        Some(&"token-second".to_string())
+    );
+    assert_ne!(first_bundle, second_bundle);
+}
+
+#[tokio::test]
 async fn gateway_openai_restart_recycles_the_runtime() {
     let _env_lock = ENV_LOCK.lock().await;
     let temp_dir = TempDir::new().unwrap();
@@ -798,6 +992,72 @@ async fn gateway_openai_restart_recycles_the_runtime() {
     assert_ne!(initial_pid, restarted_pid);
     assert_eq!(read_launch_count(&launch_count_path), 2);
     assert_process_exited(initial_pid);
+}
+
+#[tokio::test]
+async fn gateway_openai_restart_uses_fresh_bundle_after_rotation() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let temp_dir = TempDir::new().unwrap();
+    let (binary, pid_dir, launch_count_path) =
+        tracking_gateway_binary(&temp_dir, "openai-rotation", 0);
+    let _binary_guard = EnvGuard::set("SUBSTRATE_GATEWAY_BINARY", binary);
+    let Some(service) = service_or_skip() else {
+        return;
+    };
+    let mut request = gateway_request_for_backend(temp_dir.path(), FIRST_ADDITIONAL_BACKEND_ID);
+    request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+        backend_id: FIRST_ADDITIONAL_BACKEND_ID.to_string(),
+        cli_codex: None,
+        api_env: Some(GatewayApiEnvIntegratedAuthV1 {
+            env: std::collections::HashMap::from([(
+                "OPENAI_API_KEY".to_string(),
+                "sk-openai-first".to_string(),
+            )]),
+        }),
+    });
+
+    service
+        .gateway_sync(request.clone())
+        .await
+        .expect("initial gateway sync");
+    let initial_pid = wait_for_pid(&pid_dir, 1);
+    let first_bundle = wait_for_auth_bundle_snapshot(&temp_dir, 1);
+    assert_eq!(
+        first_bundle
+            .fields
+            .get(SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY),
+        Some(&"sk-openai-first".to_string())
+    );
+
+    request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+        backend_id: FIRST_ADDITIONAL_BACKEND_ID.to_string(),
+        cli_codex: None,
+        api_env: Some(GatewayApiEnvIntegratedAuthV1 {
+            env: std::collections::HashMap::from([(
+                "OPENAI_API_KEY".to_string(),
+                "sk-openai-second".to_string(),
+            )]),
+        }),
+    });
+
+    let restart_response = service
+        .gateway_restart(request)
+        .await
+        .expect("gateway restart");
+    assert_eq!(restart_response.status, GatewayStatusV1::Available);
+
+    let restarted_pid = wait_for_pid(&pid_dir, 2);
+    let second_bundle = wait_for_auth_bundle_snapshot(&temp_dir, 2);
+    assert_ne!(initial_pid, restarted_pid);
+    assert_eq!(read_launch_count(&launch_count_path), 2);
+    assert_process_exited(initial_pid);
+    assert_eq!(
+        second_bundle
+            .fields
+            .get(SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY),
+        Some(&"sk-openai-second".to_string())
+    );
+    assert_ne!(first_bundle, second_bundle);
 }
 
 #[tokio::test]

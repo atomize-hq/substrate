@@ -4,11 +4,11 @@ use crate::execution::settings;
 #[cfg(test)]
 use crate::execution::world_env_guard;
 use agent_api_client::{AgentClient, Transport};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use substrate_broker::world_fs_mode;
-use world_api::{WorldBackend, WorldSpec};
+use world_api::{SharedWorldOwnerSpec, WorldBackend, WorldSpec};
 use world_windows_wsl::WindowsWslBackend;
 
 struct WindowsContext {
@@ -54,10 +54,14 @@ fn socket_path_from_transport(transport: &Transport) -> PathBuf {
 }
 
 pub fn ensure_world_ready_with_state(no_world: bool) -> Result<Option<String>> {
-    ensure_world_ready_impl(no_world, get_backend)
+    ensure_world_ready_impl(no_world, None, get_backend)
 }
 
-fn ensure_world_ready_impl<F>(no_world: bool, backend_provider: F) -> Result<Option<String>>
+fn ensure_world_ready_impl<F>(
+    no_world: bool,
+    shared_world: Option<&SharedWorldOwnerSpec>,
+    backend_provider: F,
+) -> Result<Option<String>>
 where
     F: FnOnce() -> Result<Arc<dyn WorldBackend>>,
 {
@@ -68,16 +72,18 @@ where
     #[cfg(test)]
     let _env_guard = world_env_guard();
 
-    let backend = backend_provider()?;
-    let spec = bootstrap_world_spec();
-    match backend.ensure_session(&spec) {
-        Ok(handle) => {
-            std::env::set_var("SUBSTRATE_WORLD", "enabled");
-            std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
-            Ok(Some(handle.id))
+    super::with_supported_shared_world_request(shared_world, "windows world bootstrap", || {
+        let backend = backend_provider()?;
+        let spec = bootstrap_world_spec();
+        match backend.ensure_session(&spec) {
+            Ok(handle) => {
+                std::env::set_var("SUBSTRATE_WORLD", "enabled");
+                std::env::set_var("SUBSTRATE_WORLD_ID", &handle.id);
+                Ok(Some(handle.id))
+            }
+            Err(_err) => Ok(None),
         }
-        Err(_err) => Ok(None),
-    }
+    })
 }
 
 pub fn get_backend() -> Result<Arc<dyn WorldBackend>> {
@@ -95,9 +101,21 @@ pub fn detect() -> Result<PlatformWorldContext> {
     let transport = to_world_transport(&transport_config);
     let socket_path = socket_path_from_transport(&transport_config);
     let ensure_backend = ctx.backend_trait.clone();
+    let ensure_persistent_session_ready_async_backend = ctx.backend_trait.clone();
     let ensure_ready = Box::new(move || {
         let spec = bootstrap_world_spec();
         ensure_backend.ensure_session(&spec).map(|_| ())
+    });
+    let ensure_persistent_session_ready_async = Box::new(move || {
+        let backend = ensure_persistent_session_ready_async_backend.clone();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                let spec = bootstrap_world_spec();
+                backend.ensure_session(&spec).map(|_| ())
+            })
+            .await
+            .context("persistent-session readiness join failure")?
+        }) as super::PersistentSessionReadyFuture
     });
 
     Ok(PlatformWorldContext {
@@ -105,6 +123,7 @@ pub fn detect() -> Result<PlatformWorldContext> {
         transport,
         socket_path,
         ensure_ready,
+        ensure_persistent_session_ready_async,
     })
 }
 
@@ -165,7 +184,10 @@ mod tests {
     impl StubBackend {
         fn new(id: &str, ensure_calls: Arc<AtomicUsize>) -> Self {
             Self {
-                handle: WorldHandle { id: id.to_string() },
+                handle: WorldHandle {
+                    id: id.to_string(),
+                    shared_binding: None,
+                },
                 ensure_calls,
             }
         }
@@ -199,7 +221,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_test", calls.clone()));
 
-        let result = ensure_world_ready_impl(false, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(false, None, || Ok(backend.clone())).unwrap();
         assert_eq!(result.as_deref(), Some("wld_test"));
         assert_eq!(std::env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
         assert_eq!(std::env::var("SUBSTRATE_WORLD_ID").unwrap(), "wld_test");
@@ -218,7 +240,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_forced", calls.clone()));
 
-        let result = ensure_world_ready_impl(false, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(false, None, || Ok(backend.clone())).unwrap();
         assert_eq!(result.as_deref(), Some("wld_forced"));
         assert_eq!(std::env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
         assert_eq!(std::env::var("SUBSTRATE_WORLD_ID").unwrap(), "wld_forced");
@@ -237,7 +259,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_test", calls.clone()));
 
-        let result = ensure_world_ready_impl(true, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(true, None, || Ok(backend.clone())).unwrap();
         assert!(result.is_none());
         assert_eq!(calls.load(Ordering::SeqCst), 0);
 

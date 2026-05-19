@@ -4,24 +4,42 @@
 
 Draft
 
+Last updated: 2026-05-19
+
 ## Purpose / outcome
 
-Unify the macOS Lima guest `substrate-world-agent` service and socket definitions behind one authoritative source so the hardened sandbox, socket-activation contract, and environment are consistent across VM creation, repair, and diagnostics.
+Unify the macOS Lima guest `substrate-world-agent` service and socket
+definitions behind one authoritative source so the hardened sandbox,
+socket-activation contract, and environment are consistent across VM creation,
+repair, and diagnostics.
 
 ## Why this milestone exists
 
 Today the repo defines guest units in at least two places:
 
-- [scripts/mac/lima/substrate.yaml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/mac/lima/substrate.yaml)
-- [scripts/mac/lima-warm.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/mac/lima-warm.sh)
+- `scripts/mac/lima/substrate.yaml`
+- `scripts/mac/lima-warm.sh`
 
 Those copies are already divergent in capability sets and environment lines. Hardening work cannot be trusted if the initial VM profile and the repair path can recreate different sandboxes. This milestone exists to make the guest unit definition a single hardening authority and to align it with the reduced listener and mount contract established in milestones 2.1 and 2.2.
+
+Current repo truth also means the unit contract has to account for more than
+the socket alone:
+
+- managed gateway runtime artifacts already live under
+  `/run/substrate/substrate-gateway-runtime/`
+- gateway lifecycle smoke coverage already exists
+- integrated auth handoff already exists
+
+So the unified service sandbox must preserve the supported gateway lifecycle
+surface while tightening listener, mount, and writable-path posture.
 
 ## In-scope
 
 - Define one authoritative source for the guest service and socket unit contents.
 - Eliminate hardening-critical drift across provisioning and repair paths.
 - Reconcile sandbox settings such as `ProtectHome`, `ReadWritePaths`, capabilities, runtime directories, and environment variables with the Phase 2 hardening goals.
+- Reconcile those settings with the already-landed managed gateway runtime
+  surface under `/run/substrate/substrate-gateway-runtime/`.
 - Update doctor and documentation references so operators know which unit definition is authoritative.
 
 ## Out-of-scope
@@ -39,7 +57,16 @@ Those copies are already divergent in capability sets and environment lines. Har
   - service group and runtime directory settings
   - capability bounding and ambient capabilities
   - writable guest paths
-- Use the same generated unit content for create, repair, doctor expectations, and doc examples.
+- Use the same generated unit content for create, repair, doctor expectations,
+  gateway lifecycle expectations, and doc examples.
+
+The unified contract must explicitly encode:
+
+- no default guest TCP listener injection for the hardened path
+- writable/runtime paths required for `/run/substrate.sock` and
+  `/run/substrate/substrate-gateway-runtime/`
+- only the minimum environment needed for supported world-agent and managed
+  gateway operation
 
 ## Dependencies / sequencing
 
@@ -53,16 +80,20 @@ Those copies are already divergent in capability sets and environment lines. Har
 
 ## Concrete repo surfaces and file pointers
 
-- [scripts/mac/lima/substrate.yaml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/mac/lima/substrate.yaml)
+- `scripts/mac/lima/substrate.yaml`
   - bootstraps guest package install and unit files during VM creation
-- [scripts/mac/lima-warm.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/mac/lima-warm.sh)
+- `scripts/mac/lima-warm.sh`
   - currently rewrites the service and socket units during warm/repair
   - currently injects hardening-relevant environment and capability settings
-- [scripts/mac/lima-doctor.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/mac/lima-doctor.sh)
+- `crates/world-agent/src/gateway_runtime.rs`
+  - authoritative runtime-artifact expectations for `/run/substrate/substrate-gateway-runtime/`
+- `scripts/mac/lima-doctor.sh`
   - should verify the unified unit contract rather than loosely checking partial state
-- [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
+- `scripts/mac/smoke.sh`
+  - should keep proving gateway lifecycle against the unified service contract
+- `docs/WORLD.md`
   - references guest unit behavior and operator verification
-- [docs/cross-platform/mac_world_setup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/mac_world_setup.md)
+- `docs/cross-platform/mac_world_setup.md`
   - currently includes manual service enable/start flows that must match the unified definition
 
 ## Deliverables
@@ -76,14 +107,19 @@ Those copies are already divergent in capability sets and environment lines. Har
 
 - There is exactly one authoritative macOS guest unit definition path for `substrate-world-agent.service` and `substrate-world-agent.socket`.
 - Hardening-critical settings are identical whether the guest is freshly created or repaired.
-- Doctor and troubleshooting guidance point to the unified unit contract instead of to whichever path happened to run last.
+- Doctor, gateway lifecycle, and troubleshooting guidance point to the unified
+  unit contract instead of to whichever path happened to run last.
 - A reviewer can explain the guest service sandbox from one source file or generator rather than diffing two handwritten unit bodies.
 
 ## Validation / evidence plan
 
 - Produce a side-by-side diff of the current YAML-embedded unit and warm-script unit as the baseline evidence.
 - Define a rendered-unit verification step for macOS doctor or smoke coverage.
-- Re-run `scripts/mac/lima-warm.sh`, `scripts/mac/lima-doctor.sh`, and `scripts/mac/smoke.sh` after unification to prove the created and repaired VM paths converge.
+- Re-run `scripts/mac/lima-warm.sh`, `scripts/mac/lima-doctor.sh`, and
+  `scripts/mac/smoke.sh` after unification to prove the created and repaired VM
+  paths converge.
+- Re-run `substrate world gateway sync|status|restart` and confirm the managed
+  runtime artifacts and support path stay healthy after unit unification.
 - Review doc examples to ensure any pasted unit snippets or systemctl guidance match the unified contract.
 
 ## Risks / open questions

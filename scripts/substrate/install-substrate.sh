@@ -65,6 +65,13 @@ fatal() {
   exit 1
 }
 
+fatal_with_code() {
+  local code="$1"
+  shift
+  printf '[%s][ERROR] %s\n' "${INSTALLER_NAME}" "$*" >&2
+  exit "${code}"
+}
+
 print_usage() {
   cat <<'EOF'
 Substrate Installer
@@ -1002,6 +1009,57 @@ resolve_package_for_command() {
   esac
 }
 
+resolve_package_for_runtime_library() {
+  local library="$1"
+
+  case "${PKG_MANAGER}" in
+    apt-get)
+      case "${library}" in
+        libseccomp) echo "libseccomp2" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    dnf|yum)
+      case "${library}" in
+        libseccomp) echo "libseccomp" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    pacman)
+      case "${library}" in
+        libseccomp) echo "libseccomp" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    zypper)
+      case "${library}" in
+        libseccomp) echo "libseccomp2" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+seccomp_runtime_available() {
+  if command -v ldconfig >/dev/null 2>&1; then
+    if ldconfig -p 2>/dev/null | grep -Eq 'libseccomp\.so(\.2)?([[:space:]]|$)'; then
+      return 0
+    fi
+  fi
+
+  if compgen -G '/lib*/libseccomp.so*' >/dev/null; then
+    return 0
+  fi
+  if compgen -G '/usr/lib*/libseccomp.so*' >/dev/null; then
+    return 0
+  fi
+
+  return 1
+}
+
 install_packages() {
   local packages=()
   packages=("$@")
@@ -1105,6 +1163,78 @@ ensure_linux_packages_for_commands() {
   fi
 }
 
+ensure_linux_packages_for_runtime_libraries() {
+  local libraries=("$@")
+  local missing_libraries=()
+  local library=""
+
+  for library in "${libraries[@]}"; do
+    case "${library}" in
+      libseccomp)
+        if ! seccomp_runtime_available; then
+          missing_libraries+=("${library}")
+        fi
+        ;;
+      *)
+        warn "No runtime library probe implemented for '${library}'; please install it manually if required."
+        ;;
+    esac
+  done
+
+  if [[ ${#missing_libraries[@]} -eq 0 ]]; then
+    return
+  fi
+
+  if ! detect_package_manager; then
+    fail_no_supported_pkg_manager "${missing_libraries[@]}"
+  fi
+
+  initialize_sudo
+  maybe_emit_package_manager_decision_line
+
+  declare -A pkg_set=()
+  local pkg_list pkg
+  for library in "${missing_libraries[@]}"; do
+    pkg_list="$(resolve_package_for_runtime_library "${library}")"
+    if [[ -z "${pkg_list}" ]]; then
+      warn "No package mapping for runtime library '${library}' under ${PKG_MANAGER}; please install it manually."
+      continue
+    fi
+    for pkg in ${pkg_list}; do
+      pkg_set["${pkg}"]=1
+    done
+  done
+
+  if [[ ${#pkg_set[@]} -eq 0 ]]; then
+    return
+  fi
+
+  local packages=()
+  for pkg in "${!pkg_set[@]}"; do
+    packages+=("${pkg}")
+  done
+
+  install_packages "${packages[@]}"
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    return
+  fi
+
+  local remaining=()
+  for library in "${missing_libraries[@]}"; do
+    case "${library}" in
+      libseccomp)
+        if ! seccomp_runtime_available; then
+          remaining+=("${library}")
+        fi
+        ;;
+    esac
+  done
+  if [[ ${#remaining[@]} -gt 0 ]]; then
+    fatal "Unable to install required runtime libraries: ${remaining[*]}. Install them manually and re-run."
+  fi
+}
+
 compute_file_sha256() {
   local file="$1"
   if command -v sha256sum >/dev/null 2>&1; then
@@ -1161,6 +1291,14 @@ detect_platform() {
       fatal "Unsupported operating system: ${uname_s}"
       ;;
   esac
+}
+
+ensure_supported_linux_world_posture() {
+  if [[ "${PLATFORM}" != "linux" || "${IS_WSL}" -ne 1 || "${NO_WORLD}" -eq 1 ]]; then
+    return
+  fi
+
+  fatal_with_code 4 "WSL world provisioning is intentionally fail-closed in this slice because the WSL helper path is not aligned with the Linux/macOS placement contract. Re-run with --no-world for a CLI-only install inside WSL, or use a supported Linux host-native or macOS Lima world backend."
 }
 
 parse_args() {
@@ -1522,6 +1660,7 @@ ensure_linux_prereqs() {
 
   if [[ "${NO_WORLD}" -eq 0 ]]; then
     ensure_linux_packages_for_commands systemctl fuse-overlayfs nft ip
+    ensure_linux_packages_for_runtime_libraries libseccomp
     require_cmd systemctl
     require_cmd fuse-overlayfs
     require_cmd nft
@@ -1989,8 +2128,8 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=${home_path} /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_SYS_PTRACE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_SYS_PTRACE
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 
 [Install]
 WantedBy=multi-user.target
@@ -2373,6 +2512,7 @@ main() {
   normalize_prefix
   initialize_metadata_paths
   detect_platform
+  ensure_supported_linux_world_posture
   prepare_tmpdir
 
   case "${PLATFORM}" in

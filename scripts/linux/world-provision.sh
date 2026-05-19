@@ -28,6 +28,10 @@ GATEWAY_PROOF_ELIGIBLE=0
 GATEWAY_PROOF_AUTH_MODE=""
 declare -a GATEWAY_PROOF_SKIP_REASONS=()
 
+is_wsl_host() {
+    grep -qi microsoft /proc/version 2>/dev/null
+}
+
 show_cmd() {
     printf '[dry-run]'
     for arg in "$@"; do
@@ -468,6 +472,14 @@ if [[ ${EUID} -eq 0 ]]; then
     exit 1
 fi
 
+if is_wsl_host; then
+    cat >&2 <<'MSG'
+ERROR: WSL world provisioning is intentionally fail-closed in this slice because the WSL helper path is not aligned with the Linux/macOS placement contract.
+Re-run this helper on a Linux host-native install, or use --no-world / CLI-only flows inside WSL.
+MSG
+    exit 4
+fi
+
 INVOKING_USER="$(detect_invoking_user)"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -526,6 +538,7 @@ fi
 if [[ -z "${INVOKING_HOME}" ]]; then
     INVOKING_HOME="$(dirname "${SUBSTRATE_HOME_FOR_AGENT}")"
 fi
+SUBSTRATE_HOME_RW_PATH="${SUBSTRATE_HOME_FOR_AGENT}"
 
 NETFILTER_ENV_LINE=""
 if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
@@ -560,7 +573,7 @@ StandardError=journal
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
+ReadWritePaths=${SUBSTRATE_HOME_RW_PATH} /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 
@@ -594,6 +607,7 @@ sudo_cmd install -Dm0755 "${GATEWAY_BIN_PATH}" /usr/local/bin/substrate-gateway
 echo "==> Ensuring runtime directories exist"
 sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" /run/substrate
 sudo_cmd install -d -m0750 /var/lib/substrate
+sudo_cmd install -d -m0755 "${SUBSTRATE_HOME_RW_PATH}"
 
 echo "==> Writing systemd units to ${SERVICE_PATH} and ${SOCKET_PATH}"
 install_unit "${SERVICE_PATH}" "${SERVICE_UNIT_CONTENT}"

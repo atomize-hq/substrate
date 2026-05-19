@@ -564,6 +564,152 @@ detect_platform_metadata() {
   return 1
 }
 
+resolve_package_for_runtime_library() {
+  local library="$1"
+
+  case "${PKG_MANAGER}" in
+    apt-get)
+      case "${library}" in
+        libseccomp) echo "libseccomp2" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    dnf|yum)
+      case "${library}" in
+        libseccomp) echo "libseccomp" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    pacman)
+      case "${library}" in
+        libseccomp) echo "libseccomp" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    zypper)
+      case "${library}" in
+        libseccomp) echo "libseccomp2" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+seccomp_runtime_available() {
+  if command -v ldconfig >/dev/null 2>&1; then
+    if ldconfig -p 2>/dev/null | grep -Eq 'libseccomp\.so(\.2)?([[:space:]]|$)'; then
+      return 0
+    fi
+  fi
+
+  if compgen -G '/lib*/libseccomp.so*' >/dev/null; then
+    return 0
+  fi
+  if compgen -G '/usr/lib*/libseccomp.so*' >/dev/null; then
+    return 0
+  fi
+
+  return 1
+}
+
+install_packages() {
+  local packages=("$@")
+  if [[ ${#packages[@]} -eq 0 ]]; then
+    return
+  fi
+
+  log "Installing packages: ${packages[*]}"
+  case "${PKG_MANAGER}" in
+    apt-get)
+      run_privileged apt-get update
+      run_privileged apt-get install -y "${packages[@]}"
+      ;;
+    dnf)
+      run_privileged dnf install -y "${packages[@]}"
+      ;;
+    yum)
+      run_privileged yum install -y "${packages[@]}"
+      ;;
+    pacman)
+      run_privileged pacman -Sy --noconfirm --needed "${packages[@]}"
+      ;;
+    zypper)
+      run_privileged zypper --non-interactive install "${packages[@]}"
+      ;;
+    *)
+      fatal "Unsupported package manager '${PKG_MANAGER}'. Install required runtime libraries manually and re-run."
+      ;;
+  esac
+}
+
+ensure_linux_runtime_libraries() {
+  local libraries=("$@")
+  local missing=()
+  local library=""
+
+  if [[ "${IS_LINUX}" -ne 1 || "${WORLD_ENABLED}" -ne 1 ]]; then
+    return
+  fi
+
+  for library in "${libraries[@]}"; do
+    case "${library}" in
+      libseccomp)
+        if ! seccomp_runtime_available; then
+          missing+=("${library}")
+        fi
+        ;;
+      *)
+        warn "No runtime library probe implemented for '${library}'; install it manually if required."
+        ;;
+    esac
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    return
+  fi
+
+  if ! detect_platform_metadata; then
+    fatal "Unable to detect a supported package manager for runtime library installation. Install ${missing[*]} manually and re-run."
+  fi
+
+  declare -A pkg_set=()
+  local pkg_list pkg
+  for library in "${missing[@]}"; do
+    pkg_list="$(resolve_package_for_runtime_library "${library}")"
+    if [[ -z "${pkg_list}" ]]; then
+      fatal "No package mapping for runtime library '${library}' under ${PKG_MANAGER}. Install it manually and re-run."
+    fi
+    for pkg in ${pkg_list}; do
+      pkg_set["${pkg}"]=1
+    done
+  done
+
+  local packages=()
+  for pkg in "${!pkg_set[@]}"; do
+    packages+=("${pkg}")
+  done
+
+  install_packages "${packages[@]}"
+
+  local remaining=()
+  for library in "${missing[@]}"; do
+    case "${library}" in
+      libseccomp)
+        if ! seccomp_runtime_available; then
+          remaining+=("${library}")
+        fi
+        ;;
+    esac
+  done
+
+  if [[ ${#remaining[@]} -gt 0 ]]; then
+    fatal "Unable to install required runtime libraries: ${remaining[*]}. Install them manually and re-run."
+  fi
+}
+
 write_host_state_metadata() {
   if [[ "${IS_LINUX}" -ne 1 ]]; then
     return
@@ -1096,16 +1242,16 @@ cache_linux_binary_from_lima() {
 }
 
 verify_prefix_linux_bundle() {
-  local missing=0
+  local missing_status=0
   local binary path
   for binary in substrate world-agent substrate-gateway; do
     path="${BIN_DIR}/linux/${binary}"
     if ! is_linux_elf "${path}"; then
       warn "Expected cached Linux ${binary} at ${path}, but it is missing or not a Linux ELF."
-      missing=1
+      missing_status=1
     fi
   done
-  return "${missing}"
+  return "${missing_status}"
 }
 
 stage_dev_world_runtime_bundle() {
@@ -1254,6 +1400,7 @@ VERSION_LABEL="dev"
 ENABLE_WORLD_NETFILTER=0
 IS_LINUX=0
 IS_MAC=0
+IS_WSL=0
 HOST_STATE_PATH=""
 HOST_STATE_GROUP_EXISTED=""
 HOST_STATE_GROUP_CREATED=0
@@ -1267,6 +1414,9 @@ PKG_MANAGER=""
 PKG_MANAGER_SOURCE=""
 if [[ "$(uname -s)" == "Linux" ]]; then
   IS_LINUX=1
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    IS_WSL=1
+  fi
 fi
 if [[ "$(uname -s)" == "Darwin" ]]; then
   IS_MAC=1
@@ -1334,6 +1484,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "${IS_WSL}" -eq 1 && "${WORLD_ENABLED}" -eq 1 ]]; then
+  printf '[%s][ERROR] %s\n' "${SCRIPT_NAME}" "WSL world provisioning is intentionally fail-closed in this slice because the WSL helper path is not aligned with the Linux/macOS placement contract. Re-run with --no-world for a CLI-only dev install inside WSL." >&2
+  exit 4
+fi
 
 HOST_STATE_PATH="${PREFIX%/}/install_state.json"
 
@@ -1464,6 +1619,7 @@ fi
 stage_dev_world_runtime_bundle "${PREFIX}" "${REPO_ROOT}" "${TARGET_DIR}"
 
 if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
+  ensure_linux_runtime_libraries libseccomp
   if [[ ${EUID} -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
     log "Caching sudo credentials for world provisioning (you may be prompted)..."
     if ! sudo -v; then
@@ -1473,7 +1629,7 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
       write_env_sh_script "${WORLD_ENABLED}"
       write_manager_env_script "${WORLD_ENABLED}"
       warn "Unable to cache sudo credentials; world-agent service not provisioned."
-      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable --home \"${PREFIX}\"` to flip it back on."
+      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run 'substrate world enable --home \"${PREFIX}\"' to flip it back on."
     fi
   fi
   if [[ "${WORLD_ENABLED}" -eq 0 ]]; then
@@ -1494,7 +1650,7 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
 	      write_env_sh_script "${WORLD_ENABLED}"
       write_manager_env_script "${WORLD_ENABLED}"
       warn "world-provision script reported an error; rerun ${PROVISION_SCRIPT} manually to enable the world-agent service."
-      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable --home \"${PREFIX}\"` to flip it back on."
+      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run 'substrate world enable --home \"${PREFIX}\"' to flip it back on."
     fi
   else
     WORLD_PROVISION_FAILED=1

@@ -70,15 +70,18 @@ pub(crate) fn restore_env(key: &str, previous: Option<String>) {
 
 pub(crate) struct DirGuard {
     original: PathBuf,
+    _env_guard: ReentrantMutexGuard<'static, ()>,
     _lock: ReentrantMutexGuard<'static, ()>,
 }
 
 impl DirGuard {
     pub(crate) fn new() -> Self {
+        let env_guard = world_env_guard();
         let lock = cwd_lock().lock();
         let original = env::current_dir().expect("capture cwd");
         Self {
             original,
+            _env_guard: env_guard,
             _lock: lock,
         }
     }

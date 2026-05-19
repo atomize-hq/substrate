@@ -9,11 +9,23 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::env;
 use std::fs;
+#[cfg(unix)]
+use std::io::{Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::fd::IntoRawFd;
 use std::path::PathBuf;
+#[cfg(unix)]
+use substrate_common::{
+    GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
+    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+    SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+};
 use substrate_gateway::auth::CodexAuthSource;
 use substrate_gateway::core::{
     GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage,
 };
+#[cfg(unix)]
+use substrate_gateway::launch::GatewayMode;
 use substrate_gateway::models::{ContentBlock, MessageContent};
 use substrate_gateway::providers::error::ProviderError;
 use substrate_gateway::providers::{GatewayProvider, ProviderRegistry};
@@ -21,6 +33,8 @@ use substrate_gateway::server::openai_conformance_test_support::{
     read_json_fixture, response_text, response_text_response, ConformanceHarness, FixtureNamespace,
     StubProvider,
 };
+#[cfg(unix)]
+use substrate_gateway::server::IntegratedGatewayAuthContext;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
 
@@ -320,6 +334,37 @@ impl Drop for EnvVarGuard {
         match self.original.as_deref() {
             Some(value) => env::set_var(self.key, value),
             None => env::remove_var(self.key),
+        }
+    }
+}
+
+#[cfg(unix)]
+struct GatewayAuthBundleFdGuard {
+    original: Option<String>,
+}
+
+#[cfg(unix)]
+impl GatewayAuthBundleFdGuard {
+    fn install(bundle: GatewayAuthBundleV1) -> Self {
+        let mut file = tempfile::tempfile().expect("create auth bundle tempfile");
+        serde_json::to_writer(&mut file, &bundle).expect("serialize auth bundle");
+        file.flush().expect("flush auth bundle");
+        file.seek(SeekFrom::Start(0))
+            .expect("rewind auth bundle tempfile");
+        let raw_fd = file.into_raw_fd();
+
+        let original = env::var(SUBSTRATE_LLM_AUTH_BUNDLE_FD).ok();
+        env::set_var(SUBSTRATE_LLM_AUTH_BUNDLE_FD, raw_fd.to_string());
+        Self { original }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for GatewayAuthBundleFdGuard {
+    fn drop(&mut self) {
+        match self.original.as_deref() {
+            Some(value) => env::set_var(SUBSTRATE_LLM_AUTH_BUNDLE_FD, value),
+            None => env::remove_var(SUBSTRATE_LLM_AUTH_BUNDLE_FD),
         }
     }
 }
@@ -948,50 +993,85 @@ async fn provider_auth_failure_maps_to_shared_auth_envelope() {
     assert_provider_error_shape(&json, "auth", "Authentication failed");
 }
 
+#[cfg(unix)]
 #[tokio::test]
-async fn integrated_codex_env_handoff_succeeds_without_local_auth_files_at_route_boundary() {
+async fn integrated_gateway_startup_reads_cli_codex_bundle_once_from_pointer_env() {
     let _guard = ENV_LOCK.lock().await;
-    let mut server = Server::new_async().await;
-    let access_token = codex_access_token("acct_env_jwt");
-    let upstream = server
-        .mock("POST", "/backend-api/codex/responses")
-        .match_header("authorization", format!("Bearer {}", access_token).as_str())
-        .match_header("chatgpt-account-id", "acct_env_explicit")
-        .match_header("content-type", "application/json")
-        .with_status(200)
-        .with_header("content-type", "text/event-stream")
-        .with_body(codex_sync_sse_body("Integrated auth route proof"))
-        .create_async()
-        .await;
+    let _openai = EnvVarGuard::unset("OPENAI_API_KEY");
+    let _account_id = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
+    let _access_token = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
+    let _bundle = GatewayAuthBundleFdGuard::install(GatewayAuthBundleV1 {
+        schema_version: 1,
+        backend_id: GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX.to_string(),
+        fields: std::collections::HashMap::from([
+            (
+                SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID.to_string(),
+                "acct_bundle_explicit".to_string(),
+            ),
+            (
+                SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN.to_string(),
+                codex_access_token("acct_bundle_jwt"),
+            ),
+        ]),
+    });
 
-    let bad_home = TempDir::new().unwrap();
-    let bad_home_path = bad_home.path().join("home-as-file");
-    fs::write(&bad_home_path, "not a directory").unwrap();
+    let context = IntegratedGatewayAuthContext::from_launch_mode(GatewayMode::InWorld)
+        .expect("read cli:codex auth bundle")
+        .expect("in-world startup should produce integrated auth context");
+    match context {
+        IntegratedGatewayAuthContext::CliCodex(handoff) => {
+            let expected_access_token = codex_access_token("acct_bundle_jwt");
+            assert_eq!(handoff.account_id.as_deref(), Some("acct_bundle_explicit"));
+            assert_eq!(
+                handoff.access_token.expose_secret(),
+                expected_access_token.as_str()
+            );
+        }
+        other => panic!("unexpected integrated auth context: {other:?}"),
+    }
 
-    let _home = EnvVarGuard::set("HOME", bad_home_path.display().to_string());
-    let _account_id = EnvVarGuard::set(
-        SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
-        "acct_env_explicit",
+    assert!(
+        env::var(SUBSTRATE_LLM_AUTH_BUNDLE_FD).is_err(),
+        "pointer env should be consumed on first read"
     );
-    let _access_token = EnvVarGuard::set(
-        SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
-        access_token,
-    );
 
-    let harness = build_codex_oauth_provider_harness(
-        &server.url(),
-        "codex-mini-latest",
-        CodexAuthSource::Integrated,
-    );
-    let response = harness
-        .invoke_responses(HeaderMap::new(), responses_sync_request())
-        .await;
+    let err = IntegratedGatewayAuthContext::from_launch_mode(GatewayMode::InWorld)
+        .expect_err("second read should fail after pointer env is consumed");
+    assert!(err.to_string().contains("missing pointer env"));
+}
 
-    let status = response.status();
-    let body = response_text(response).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(body.contains("Integrated auth route proof"));
-    upstream.assert_async().await;
+#[cfg(unix)]
+#[tokio::test]
+async fn integrated_gateway_startup_reads_openai_bundle_without_secret_env_fallback() {
+    let _guard = ENV_LOCK.lock().await;
+    let _openai = EnvVarGuard::unset("OPENAI_API_KEY");
+    let _bundle = GatewayAuthBundleFdGuard::install(GatewayAuthBundleV1 {
+        schema_version: 1,
+        backend_id: GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI.to_string(),
+        fields: std::collections::HashMap::from([(
+            SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY.to_string(),
+            "sk-openai-bundle".to_string(),
+        )]),
+    });
+
+    let context = IntegratedGatewayAuthContext::from_launch_mode(GatewayMode::InWorld)
+        .expect("read api:openai auth bundle")
+        .expect("in-world startup should produce integrated auth context");
+    match context {
+        IntegratedGatewayAuthContext::ApiOpenAI { api_key } => {
+            assert_eq!(api_key, "sk-openai-bundle");
+        }
+        other => panic!("unexpected integrated auth context: {other:?}"),
+    }
+
+    assert!(
+        env::var("OPENAI_API_KEY").is_err(),
+        "integrated startup should not require OPENAI_API_KEY in process env"
+    );
+    assert!(
+        env::var(SUBSTRATE_LLM_AUTH_BUNDLE_FD).is_err(),
+        "pointer env should be consumed on first read"
+    );
 }
 
 #[tokio::test]

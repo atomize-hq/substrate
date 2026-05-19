@@ -2,14 +2,45 @@ use crate::execution::agent_inventory::{
     discover_agent_files, load_effective_agent_inventory, validate_agent_file,
     AgentInventoryEntryV1,
 };
+#[cfg(unix)]
+use crate::execution::agent_runtime::control::request_private_stop;
+use crate::execution::agent_runtime::control::{
+    hidden_owner_helper_readiness_timed_out, load_hidden_owner_helper_launch_plan,
+    load_public_prompt_source, persist_hidden_owner_helper_launch_plan,
+    persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
+    reconcile_hidden_owner_helper_start_timeout, remove_hidden_owner_helper_launch_plan,
+    run_public_prompt_command, wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
+    HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
+    HiddenOwnerHelperStartTimeoutReconciliation, OwnerHelperMode, PublicPromptAction,
+    PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
+    ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor, HIDDEN_OWNER_HELPER_SUBCOMMAND,
+};
+#[cfg(unix)]
+use crate::execution::agent_runtime::control::{
+    private_stop_transport_path, register_hidden_owner_helper_startup_prompt_listener,
+    run_hidden_owner_helper_startup_prompt_stream, HiddenOwnerHelperStartupPromptPlan,
+};
+use crate::execution::agent_runtime::orchestration_session::{
+    OrchestrationSessionPosture, OrchestrationSessionRecord,
+};
+#[cfg(unix)]
+use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
+use crate::execution::agent_runtime::validator::{
+    exact_backend_selection_error_exit_code, member_selection_error_exit_code,
+    validate_exact_backend_selection, validate_member_selection,
+};
+#[cfg(unix)]
+use crate::execution::agent_runtime::StartupPromptReplayState;
 use crate::execution::agent_runtime::{
     runtime_realizability_error_exit_code, validate_orchestrator_selection,
-    validate_runtime_realizability, AgentRuntimeSessionManifest, AgentRuntimeStateStore,
-    MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
+    validate_runtime_realizability, AgentRuntimeParticipantRecord, AgentRuntimeSessionRecord,
+    AgentRuntimeStateStore, PublicControlAction, PublicTurnTargetKind, MEMBER_ROLE, NESTED_ROUTER,
+    ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
-    AgentAction, AgentCmd, AgentDoctorArgs, AgentScopeArg, AgentToolboxAction, AgentToolboxCmd,
-    AgentToolboxViewArgs, AgentViewArgs, AgentsAction, AgentsCmd, Cli,
+    AgentAction, AgentCmd, AgentDoctorArgs, AgentOwnerHelperArgs, AgentScopeArg,
+    AgentSessionControlArgs, AgentStartArgs, AgentToolboxAction, AgentToolboxCmd,
+    AgentToolboxViewArgs, AgentTurnArgs, AgentViewArgs, AgentsAction, AgentsCmd, Cli,
 };
 use crate::execution::config_model::{
     self, AgentExecutionScope, AgentToolboxBindTransport, CliConfigOverrides, SubstrateConfig,
@@ -22,11 +53,26 @@ use std::env;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 use substrate_broker::Policy;
 use substrate_common::paths as substrate_paths;
 use substrate_common::{AgentEvent, PlacementExecution};
+#[cfg(unix)]
+use tokio::runtime::Builder as TokioRuntimeBuilder;
+use uuid::Uuid;
 const TOOLBOX_VERSION: u32 = 1;
+#[cfg(unix)]
+const START_DETACH_NORMALIZATION_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(unix)]
+const START_DETACH_NORMALIZATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
+#[cfg(unix)]
+const START_ATTACHED_GRACE_TIMEOUT: Duration = Duration::from_millis(250);
+#[cfg(unix)]
+const TURN_DETACH_NORMALIZATION_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(unix)]
+const TURN_DETACH_NORMALIZATION_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
     match &cmd.action {
@@ -63,7 +109,70 @@ pub(crate) fn handle_agent_command(cmd: &AgentCmd, cli: &Cli) -> i32 {
                 1
             }
         },
+        AgentAction::Start(args) => render_public_prompt_command_result(run_start(args, cli)),
+        AgentAction::Turn(args) => render_public_prompt_command_result(run_turn(args, cli)),
+        AgentAction::Reattach(args) => match run_reattach(args, cli) {
+            Ok(()) => 0,
+            Err(err) if config_model::is_user_error(&err) => {
+                eprintln!("{err}");
+                2
+            }
+            Err(err) => {
+                eprintln!("{err:#}");
+                1
+            }
+        },
+        AgentAction::Fork(args) => match run_fork(args, cli) {
+            Ok(()) => 0,
+            Err(err) if config_model::is_user_error(&err) => {
+                eprintln!("{err}");
+                2
+            }
+            Err(err) => {
+                eprintln!("{err:#}");
+                1
+            }
+        },
+        AgentAction::Stop(args) => match run_stop(args, cli) {
+            Ok(()) => 0,
+            Err(err) if config_model::is_user_error(&err) => {
+                eprintln!("{err}");
+                2
+            }
+            Err(err) => {
+                eprintln!("{err:#}");
+                1
+            }
+        },
+        AgentAction::OwnerHelper(args) => match run_owner_helper(args) {
+            Ok(code) => code,
+            Err(err) if config_model::is_user_error(&err) => {
+                eprintln!("{err}");
+                2
+            }
+            Err(err) => {
+                eprintln!("{err:#}");
+                1
+            }
+        },
         AgentAction::Toolbox(cmd) => handle_agent_toolbox_command(cmd, cli),
+    }
+}
+
+fn render_public_prompt_command_result(result: Result<()>) -> i32 {
+    match result {
+        Ok(()) => 0,
+        Err(err) => {
+            if let Some(code) = public_prompt_rendered_exit_code(&err) {
+                return code;
+            }
+            if config_model::is_user_error(&err) {
+                eprintln!("{err}");
+                return 2;
+            }
+            eprintln!("{err:#}");
+            1
+        }
     }
 }
 
@@ -136,6 +245,939 @@ fn run_doctor(args: &AgentDoctorArgs, cli: &Cli) -> Result<i32> {
     let exit_code = doctor_exit_code(&report);
     render_doctor_report(&report, args.json)?;
     Ok(exit_code)
+}
+
+fn run_owner_helper(args: &AgentOwnerHelperArgs) -> Result<i32> {
+    let plan = load_hidden_owner_helper_launch_plan(&args.plan_file)?;
+    remove_hidden_owner_helper_launch_plan(&args.plan_file)?;
+    crate::repl::async_repl::run_hidden_owner_helper(plan)
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub(crate) struct HiddenOwnerHelperLaunchReceipt {
+    pub helper_pid: u32,
+    pub orchestration_session_id: String,
+    pub participant_id: String,
+    pub backend_id: String,
+}
+
+#[allow(dead_code)]
+pub(crate) fn launch_hidden_owner_helper(
+    plan: &HiddenOwnerHelperLaunchPlan,
+    cli: &Cli,
+) -> Result<HiddenOwnerHelperLaunchReceipt> {
+    let store = AgentRuntimeStateStore::new()?;
+    let plan_path = persist_hidden_owner_helper_launch_plan(&store, plan)?;
+    let exe = env::current_exe()
+        .context("failed to resolve current substrate executable for hidden owner-helper launch")?;
+    let mut command = Command::new(exe);
+    if cli.world {
+        command.arg("--world");
+    } else if cli.no_world {
+        command.arg("--no-world");
+    }
+    command
+        .args(["agent", HIDDEN_OWNER_HELPER_SUBCOMMAND, "--plan-file"])
+        .arg(&plan_path)
+        .current_dir(&plan.session.workspace_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    let mut child = command.spawn().with_context(|| {
+        format!(
+            "failed to spawn hidden owner-helper for orchestration session {}",
+            plan.session.orchestration_session_id
+        )
+    })?;
+    if let Err(err) = wait_for_hidden_owner_helper_readiness(&store, plan) {
+        let reconciled = if plan.mode == OwnerHelperMode::Start
+            && hidden_owner_helper_readiness_timed_out(&err)
+        {
+            Some(reconcile_hidden_owner_helper_start_timeout(&store, plan))
+        } else {
+            None
+        };
+        match reconciled {
+            Some(Ok(HiddenOwnerHelperStartTimeoutReconciliation::Success)) => {}
+            Some(Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureMarkedTerminal)) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
+                return Err(anyhow::anyhow!(
+                    "{}; persisted terminal startup failure for orchestration session {}",
+                    err,
+                    plan.orchestration_session_id(),
+                ));
+            }
+            Some(Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureUnchanged)) | None => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
+                return Err(err);
+            }
+            Some(Err(reconcile_err)) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
+                return Err(anyhow::anyhow!(
+                    "{}; additionally failed to reconcile persisted startup state: {reconcile_err:#}",
+                    err
+                ));
+            }
+        }
+    }
+    #[cfg(unix)]
+    if let Err(err) = stabilize_hidden_owner_helper_start_return(&store, plan, &mut child) {
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = remove_hidden_owner_helper_launch_plan(&plan_path);
+        return Err(err);
+    }
+
+    Ok(HiddenOwnerHelperLaunchReceipt {
+        helper_pid: child.id(),
+        orchestration_session_id: plan.session.orchestration_session_id.clone(),
+        participant_id: plan.participant.participant_id.clone(),
+        backend_id: plan.descriptor.backend_id.clone(),
+    })
+}
+
+const AGENT_CONTROL_STOP_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+const AGENT_CONTROL_STOP_WAIT_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+#[derive(Serialize)]
+struct AgentControlResultJson<'a> {
+    action: &'a str,
+    orchestration_session_id: &'a str,
+    backend_id: &'a str,
+    scope: &'a str,
+    state: &'a str,
+    warnings: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    participant_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_orchestration_session_id: Option<&'a str>,
+}
+
+fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
+    let prompt = load_public_prompt_source(&PublicPromptInput {
+        prompt: args.prompt_source.prompt.clone(),
+        prompt_file: args.prompt_source.prompt_file.clone(),
+    })
+    .map_err(normalize_public_prompt_error)?;
+    let context = resolve_command_context(cli)?;
+    let store = AgentRuntimeStateStore::new()?;
+    let plan = build_start_launch_plan(args, &context)?;
+
+    #[cfg(not(unix))]
+    {
+        let _ = store;
+        let _ = plan;
+        let _ = prompt;
+        anyhow::bail!(config_model::user_error(
+            "unsupported_platform_or_posture: public start prompt streaming requires a Unix launch-time backchannel"
+        ));
+    }
+
+    #[cfg(unix)]
+    {
+        let mut plan = plan;
+        let startup_listener = register_hidden_owner_helper_startup_prompt_listener(
+            &store,
+            plan.orchestration_session_id(),
+            plan.participant_id(),
+        )
+        .map_err(runtime_start_error)?;
+        plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
+            prompt_text: prompt.prompt_text.clone(),
+            stream_path: startup_listener.path().to_path_buf(),
+        });
+
+        let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+        match run_hidden_owner_helper_startup_prompt_stream(startup_listener, args.json) {
+            Ok(()) => wait_for_start_prompt_completion_normalization(
+                &store,
+                &receipt.orchestration_session_id,
+                &receipt.participant_id,
+            )
+            .map_err(runtime_start_error),
+            Err(err)
+                if recoverable_detached_start_retry(
+                    &receipt.orchestration_session_id,
+                    &receipt.participant_id,
+                    receipt.helper_pid,
+                    &err,
+                )? =>
+            {
+                let retry_listener = register_hidden_owner_helper_startup_prompt_listener(
+                    &store,
+                    plan.orchestration_session_id(),
+                    plan.participant_id(),
+                )
+                .map_err(runtime_start_error)?;
+                plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
+                    prompt_text: prompt.prompt_text,
+                    stream_path: retry_listener.path().to_path_buf(),
+                });
+                let retry_receipt =
+                    launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+                run_hidden_owner_helper_startup_prompt_stream(retry_listener, args.json)
+                    .map_err(normalize_public_prompt_error)?;
+                wait_for_start_prompt_completion_normalization(
+                    &store,
+                    &retry_receipt.orchestration_session_id,
+                    &retry_receipt.participant_id,
+                )
+                .map_err(runtime_start_error)
+            }
+            Err(err) => Err(normalize_public_prompt_error(err)),
+        }
+    }
+}
+
+#[cfg(unix)]
+fn stabilize_hidden_owner_helper_start_return(
+    store: &AgentRuntimeStateStore,
+    plan: &HiddenOwnerHelperLaunchPlan,
+    child: &mut std::process::Child,
+) -> Result<()> {
+    if plan.mode != OwnerHelperMode::Start {
+        return Ok(());
+    }
+
+    let grace_started_at = std::time::Instant::now();
+    loop {
+        if matches!(
+            store.classify_hidden_owner_helper_launch_readiness(
+                plan.orchestration_session_id(),
+                plan.participant_id(),
+                plan.requires_internal_session_id(),
+            )?,
+            HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
+        ) {
+            return Ok(());
+        }
+        if child
+            .try_wait()
+            .context("failed to poll hidden owner-helper exit status")?
+            .is_some()
+        {
+            break;
+        }
+        if grace_started_at.elapsed() >= START_ATTACHED_GRACE_TIMEOUT {
+            return Ok(());
+        }
+        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
+    }
+
+    let normalization_started_at = std::time::Instant::now();
+    loop {
+        if matches!(
+            store.classify_hidden_owner_helper_launch_readiness(
+                plan.orchestration_session_id(),
+                plan.participant_id(),
+                plan.requires_internal_session_id(),
+            )?,
+            HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
+        ) {
+            return Ok(());
+        }
+
+        if normalization_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
+            let snapshot_summary = store
+                .load_orchestration_session(plan.orchestration_session_id())?
+                .map(|session| {
+                    format!(
+                        "state={:?}, posture={:?}, attached_participant_id={:?}, shell_owner_pid={}",
+                        session.state,
+                        session.posture,
+                        session.attached_participant_id,
+                        session.shell_owner_pid,
+                    )
+                })
+                .unwrap_or_else(|| "session_missing".to_string());
+            anyhow::bail!(
+                "timed out waiting for detached start normalization for orchestration session {} after hidden owner-helper {} exited ({snapshot_summary})",
+                plan.orchestration_session_id(),
+                child.id(),
+            );
+        }
+
+        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
+    }
+}
+
+#[cfg(unix)]
+fn wait_for_start_prompt_completion_normalization(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<()> {
+    let normalization_started_at = std::time::Instant::now();
+    let mut attached_grace_started_at: Option<std::time::Instant> = None;
+    loop {
+        match store.classify_hidden_owner_helper_launch_readiness(
+            orchestration_session_id,
+            participant_id,
+            true,
+        )? {
+            HiddenOwnerHelperLaunchReadiness::ReadyDetached(_) => return Ok(()),
+            HiddenOwnerHelperLaunchReadiness::ReadyAttached => {
+                let grace_started_at =
+                    attached_grace_started_at.get_or_insert_with(std::time::Instant::now);
+                if grace_started_at.elapsed() >= START_ATTACHED_GRACE_TIMEOUT {
+                    return Ok(());
+                }
+            }
+            HiddenOwnerHelperLaunchReadiness::Pending => {
+                attached_grace_started_at = None;
+            }
+        }
+
+        if normalization_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
+            let snapshot_summary = store
+                .load_orchestration_session(orchestration_session_id)?
+                .map(|session| {
+                    format!(
+                        "state={:?}, posture={:?}, attached_participant_id={:?}, shell_owner_pid={}",
+                        session.state,
+                        session.posture,
+                        session.attached_participant_id,
+                        session.shell_owner_pid,
+                    )
+                })
+                .unwrap_or_else(|| "session_missing".to_string());
+            anyhow::bail!(
+                "timed out waiting for detached start normalization after startup prompt completion for orchestration session {} ({snapshot_summary})",
+                orchestration_session_id,
+            );
+        }
+
+        thread::sleep(START_DETACH_NORMALIZATION_POLL_INTERVAL);
+    }
+}
+
+#[cfg(unix)]
+fn recoverable_detached_start_retry(
+    orchestration_session_id: &str,
+    participant_id: &str,
+    helper_pid: u32,
+    err: &anyhow::Error,
+) -> Result<bool> {
+    if public_prompt_rendered_exit_code(err).is_some() {
+        return Ok(false);
+    }
+
+    let message = err.to_string();
+    let prompt_transport_failed = message.contains("startup prompt stream")
+        || message.starts_with("stream_bridge_failed:")
+        || message.contains("hidden owner-helper startup prompt stream ended");
+    if !prompt_transport_failed {
+        return Ok(false);
+    }
+
+    let store = AgentRuntimeStateStore::new()?;
+    let replay_state =
+        store.startup_prompt_replay_state(orchestration_session_id, participant_id)?;
+    if !replay_state.replay_safe() {
+        return Ok(false);
+    }
+    #[cfg(unix)]
+    if pid_is_alive(helper_pid) {
+        return Ok(false);
+    }
+    Ok(matches!(
+        replay_state,
+        StartupPromptReplayState::NotTracked | StartupPromptReplayState::PendingAcceptance
+    ))
+}
+
+#[cfg(unix)]
+fn pid_is_alive(pid: u32) -> bool {
+    let rc = unsafe { libc::kill(pid as libc::pid_t, 0) };
+    rc == 0
+        || matches!(
+            std::io::Error::last_os_error().raw_os_error(),
+            Some(libc::EPERM)
+        )
+}
+
+fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
+    let prompt = load_public_prompt_source(&PublicPromptInput {
+        prompt: args.prompt_source.prompt.clone(),
+        prompt_file: args.prompt_source.prompt_file.clone(),
+    })
+    .map_err(normalize_public_prompt_error)?;
+    let store = AgentRuntimeStateStore::new()?;
+    let target = store
+        .resolve_public_turn_target(&args.session, &args.backend)
+        .map_err(|err| config_model::user_error(err.to_string()))?;
+    let orchestration_session_id = target.session.orchestration_session_id.clone();
+    let backend_id = target.participant.handle.backend_id.clone();
+
+    let resumed_receipt = match target.session_posture {
+        PublicSessionPosture::Active => None,
+        PublicSessionPosture::DetachedReattachable => match target.target_kind {
+            PublicTurnTargetKind::Host => {
+                let plan = build_successor_launch_plan(
+                    cli,
+                    &args.session,
+                    OwnerHelperMode::ResumeOneTurn,
+                )?;
+                if plan.descriptor.backend_id != backend_id {
+                    anyhow::bail!(config_model::user_error(format!(
+                        "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
+                        args.session,
+                        args.backend
+                    )));
+                }
+                Some(launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?)
+            }
+            PublicTurnTargetKind::World => {
+                anyhow::bail!(config_model::user_error(format!(
+                    "unsupported_platform_or_posture: orchestration session {} backend {} is detached and cannot be recovered through the retained world-member seam without an active host owner; run `substrate agent reattach --session {}` first",
+                    args.session,
+                    args.backend,
+                    args.session
+                )));
+            }
+        },
+        PublicSessionPosture::Terminal => {
+            anyhow::bail!(config_model::user_error(format!(
+                "owner_unreachable: orchestration session {} backend {} is terminal and cannot accept follow-up turns",
+                args.session,
+                args.backend
+            )));
+        }
+    };
+    #[cfg(not(unix))]
+    let _ = &resumed_receipt;
+
+    run_public_prompt_command(
+        PublicPromptCommandRequest {
+            action: PublicPromptAction::Turn,
+            orchestration_session_id: Some(orchestration_session_id),
+            backend_id,
+            prompt,
+            json: args.json,
+        },
+        cli.world,
+        cli.no_world,
+    )
+    .map_err(normalize_public_prompt_error)?;
+
+    #[cfg(unix)]
+    if let Some(receipt) = resumed_receipt.as_ref() {
+        wait_for_resumed_public_turn_detach(
+            &store,
+            &receipt.orchestration_session_id,
+            &receipt.participant_id,
+        )
+        .map_err(runtime_start_error)?;
+    }
+
+    Ok(())
+}
+
+fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
+    let plan = build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Resume)?;
+    let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+    if receipt.orchestration_session_id != args.session {
+        anyhow::bail!(runtime_start_error(anyhow::anyhow!(
+            "hidden owner-helper resumed orchestration session {} instead of requested session {}",
+            receipt.orchestration_session_id,
+            args.session
+        )));
+    }
+
+    let store = AgentRuntimeStateStore::new()?;
+    let target = store
+        .resolve_public_control_target(&receipt.orchestration_session_id, PublicControlAction::Stop)
+        .map_err(runtime_start_error)?;
+    if target.session_posture != PublicSessionPosture::Active
+        || target.active_participant.handle.participant_id != receipt.participant_id
+    {
+        anyhow::bail!(runtime_start_error(anyhow::anyhow!(
+            "orchestration session {} did not reach durable active_attached ownership after reattach",
+            receipt.orchestration_session_id
+        )));
+    }
+
+    render_agent_control_result(
+        args.json,
+        &AgentControlResultJson {
+            action: "reattach",
+            orchestration_session_id: &receipt.orchestration_session_id,
+            backend_id: &receipt.backend_id,
+            scope: "host",
+            state: "active",
+            warnings: Vec::new(),
+            participant_id: Some(&receipt.participant_id),
+            source_orchestration_session_id: None,
+        },
+    )
+}
+
+fn normalize_public_prompt_error(err: anyhow::Error) -> anyhow::Error {
+    if config_model::is_user_error(&err) || public_prompt_rendered_exit_code(&err).is_some() {
+        return err;
+    }
+
+    let message = err.to_string();
+    const USER_PREFIXES: &[&str] = &[
+        "missing_backend:",
+        "unknown_backend:",
+        "ambiguous_backend:",
+        "missing_prompt_source:",
+        "malformed_prompt_source:",
+        "empty_prompt:",
+        "unknown_session:",
+        "noncanonical_session_selector:",
+        "backend_not_in_session:",
+        "ambiguous_backend_slot:",
+        "missing_active_parent:",
+        "stale_linkage:",
+        "missing_internal_session_id:",
+        "session_already_owned:",
+        "owner_unreachable:",
+        "unsupported_platform_or_posture:",
+        "policy_disallow:",
+        "stream_bridge_failed:",
+        "runtime_start_failed:",
+    ];
+
+    if USER_PREFIXES
+        .iter()
+        .any(|prefix| message.starts_with(prefix))
+    {
+        return config_model::user_error(message);
+    }
+
+    err
+}
+
+fn runtime_start_error(err: anyhow::Error) -> anyhow::Error {
+    if config_model::is_user_error(&err) {
+        return err;
+    }
+    config_model::user_error(format!("runtime_start_failed: {err}"))
+}
+
+fn run_fork(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
+    let plan = build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Fork)?;
+    let receipt = launch_hidden_owner_helper(&plan, cli)?;
+    render_agent_control_result(
+        args.json,
+        &AgentControlResultJson {
+            action: "fork",
+            orchestration_session_id: &receipt.orchestration_session_id,
+            backend_id: &receipt.backend_id,
+            scope: "host",
+            state: "active",
+            warnings: Vec::new(),
+            participant_id: Some(&receipt.participant_id),
+            source_orchestration_session_id: plan.source_orchestration_session_id.as_deref(),
+        },
+    )
+}
+
+fn run_stop(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
+    let store = AgentRuntimeStateStore::new()?;
+    let target = store
+        .resolve_public_control_target(&args.session, PublicControlAction::Stop)
+        .map_err(|err| config_model::user_error(err.to_string()))?;
+    let participant_id = target.active_participant.handle.participant_id.clone();
+    let backend_id = target.active_participant.handle.backend_id.clone();
+    let orchestration_session_id = target.session.orchestration_session_id.clone();
+
+    if target.session_posture == PublicSessionPosture::DetachedReattachable {
+        let mut session = target.session.clone();
+        let mut manifest = target.active_participant.clone();
+        persist_runtime_stop_closeout(&store, &mut session, &mut manifest)
+            .context("failed to persist detached durable stop closeout")?;
+
+        let final_state =
+            wait_for_terminal_session_state(&store, orchestration_session_id.as_str())?
+                .ok_or_else(|| {
+                    config_model::user_error(format!(
+                        "owner_unreachable: timed out waiting for orchestration session {} to reach a terminal state",
+                        orchestration_session_id
+                    ))
+                })?;
+        return render_agent_control_result(
+            args.json,
+            &AgentControlResultJson {
+                action: "stop",
+                orchestration_session_id: orchestration_session_id.as_str(),
+                backend_id: &backend_id,
+                scope: "host",
+                state: final_state.as_str(),
+                warnings: Vec::new(),
+                participant_id: Some(&participant_id),
+                source_orchestration_session_id: None,
+            },
+        );
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = store;
+        let _ = target;
+        anyhow::bail!(config_model::user_error(
+            "unsupported_platform_or_posture: public stop requires a Unix private owner transport"
+        ));
+    }
+
+    #[cfg(unix)]
+    {
+        let transport_path = private_stop_transport_path(
+            &store,
+            orchestration_session_id.as_str(),
+            participant_id.as_str(),
+        );
+        let rt = TokioRuntimeBuilder::new_current_thread()
+            .enable_all()
+            .build()
+            .context("failed to initialize stop transport runtime")?;
+        let outcome = rt
+            .block_on(async { request_private_stop(&transport_path).await })
+            .map_err(|err| config_model::user_error(format!("owner_unreachable: {err}")))?;
+        match outcome {
+            crate::execution::agent_runtime::control::PrivateStopOutcome::Accepted
+            | crate::execution::agent_runtime::control::PrivateStopOutcome::AlreadyTerminal => {}
+            crate::execution::agent_runtime::control::PrivateStopOutcome::OwnerUnreachable => {
+                anyhow::bail!(config_model::user_error(format!(
+                    "owner_unreachable: orchestration session {} no longer has a reachable live owner",
+                    args.session
+                )));
+            }
+            crate::execution::agent_runtime::control::PrivateStopOutcome::ProtocolError => {
+                anyhow::bail!(config_model::user_error(format!(
+                    "owner_unreachable: private owner transport for orchestration session {} returned a protocol error",
+                    args.session
+                )));
+            }
+        }
+
+        let final_state = wait_for_terminal_session_state(&store, &args.session)?.ok_or_else(|| {
+            config_model::user_error(format!(
+                "owner_unreachable: timed out waiting for orchestration session {} to reach a terminal state",
+                args.session
+            ))
+        })?;
+        render_agent_control_result(
+            args.json,
+            &AgentControlResultJson {
+                action: "stop",
+                orchestration_session_id: &args.session,
+                backend_id: &backend_id,
+                scope: "host",
+                state: final_state.as_str(),
+                warnings: Vec::new(),
+                participant_id: Some(&participant_id),
+                source_orchestration_session_id: None,
+            },
+        )
+    }
+}
+
+fn build_start_launch_plan(
+    args: &AgentStartArgs,
+    context: &AgentCommandContext,
+) -> Result<HiddenOwnerHelperLaunchPlan> {
+    let backend_id = args.backend.trim();
+    if backend_id.is_empty() {
+        anyhow::bail!(config_model::user_error(
+            "unknown_backend: public start requires --backend <backend_id>"
+        ));
+    }
+
+    let descriptor = match validate_exact_backend_selection(
+        &context.effective_config,
+        &context.inventory,
+        AgentExecutionScope::Host,
+        backend_id,
+    ) {
+        Ok(Some(descriptor)) => descriptor,
+        Ok(None) => {
+            if validate_exact_backend_selection(
+                &context.effective_config,
+                &context.inventory,
+                AgentExecutionScope::World,
+                backend_id,
+            )
+            .ok()
+            .flatten()
+            .is_some()
+            {
+                anyhow::bail!(config_model::user_error(format!(
+                    "unsupported_platform_or_posture: backend '{}' resolves only to a world-scoped runtime; public root start is host-only in v1",
+                    backend_id
+                )));
+            }
+            anyhow::bail!(config_model::user_error(format!(
+                "unknown_backend: no exact host-scoped backend match found for '{}'",
+                backend_id
+            )));
+        }
+        Err(err) => {
+            let prefix = if err.reason.contains("ambiguous exact backend selection") {
+                "ambiguous_backend"
+            } else {
+                "unknown_backend"
+            };
+            let _ = exact_backend_selection_error_exit_code(&err);
+            anyhow::bail!(config_model::user_error(format!(
+                "{prefix}: {}",
+                err.reason
+            )));
+        }
+    };
+    if !backend_allowed(&context.base_policy, &descriptor.backend_id) {
+        anyhow::bail!(config_model::user_error(format!(
+            "policy_disallow: selected orchestrator backend '{}' is not allowlisted by effective policy agents.allowed_backends",
+            descriptor.backend_id
+        )));
+    }
+
+    let orchestration_session_id = Uuid::now_v7().to_string();
+    Ok(HiddenOwnerHelperLaunchPlan {
+        mode: OwnerHelperMode::Start,
+        descriptor: (&descriptor).into(),
+        session: HiddenOwnerHelperSessionPlan {
+            orchestration_session_id,
+            shell_trace_session_id: Uuid::now_v7().to_string(),
+            workspace_root: current_dir().display().to_string(),
+            world_id: None,
+            world_generation: None,
+        },
+        participant: HiddenOwnerHelperParticipantPlan {
+            participant_id: format!("ash_{}", Uuid::now_v7()),
+            lease_token: Uuid::now_v7().to_string(),
+            run_id: Uuid::now_v7().to_string(),
+            resumed_from_participant_id: None,
+            internal_uaa_session_id: None,
+        },
+        startup_prompt: None,
+        source_orchestration_session_id: None,
+    })
+}
+
+fn build_successor_launch_plan(
+    _cli: &Cli,
+    orchestration_session_id: &str,
+    mode: OwnerHelperMode,
+) -> Result<HiddenOwnerHelperLaunchPlan> {
+    let store = AgentRuntimeStateStore::new()?;
+    let action = match mode {
+        OwnerHelperMode::Resume | OwnerHelperMode::ResumeOneTurn => PublicControlAction::Resume,
+        OwnerHelperMode::Fork => PublicControlAction::Fork,
+        OwnerHelperMode::Start => anyhow::bail!("invalid successor launch mode"),
+    };
+    let target = store
+        .resolve_public_control_target(orchestration_session_id, action)
+        .map_err(|err| config_model::user_error(err.to_string()))?;
+    let descriptor = descriptor_from_participant(&target.active_participant)?;
+    let target_session_id = if mode == OwnerHelperMode::Fork {
+        Uuid::now_v7().to_string()
+    } else {
+        target.session.orchestration_session_id.clone()
+    };
+    let trace_session_id = if mode == OwnerHelperMode::Fork {
+        Uuid::now_v7().to_string()
+    } else {
+        target.session.shell_trace_session_id.clone()
+    };
+
+    Ok(HiddenOwnerHelperLaunchPlan {
+        mode,
+        descriptor,
+        session: HiddenOwnerHelperSessionPlan {
+            orchestration_session_id: target_session_id,
+            shell_trace_session_id: trace_session_id,
+            workspace_root: target.session.workspace_root.clone(),
+            world_id: target.session.world_id.clone(),
+            world_generation: target.session.world_generation,
+        },
+        participant: HiddenOwnerHelperParticipantPlan {
+            participant_id: format!("ash_{}", Uuid::now_v7()),
+            lease_token: Uuid::now_v7().to_string(),
+            run_id: Uuid::now_v7().to_string(),
+            resumed_from_participant_id: Some(
+                target.active_participant.handle.participant_id.clone(),
+            ),
+            internal_uaa_session_id: target
+                .active_participant
+                .internal_uaa_session_id()
+                .map(ToOwned::to_owned),
+        },
+        startup_prompt: None,
+        source_orchestration_session_id: (mode == OwnerHelperMode::Fork)
+            .then(|| target.session.orchestration_session_id.clone()),
+    })
+}
+
+#[cfg(unix)]
+fn wait_for_resumed_public_turn_detach(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    resumed_participant_id: &str,
+) -> Result<()> {
+    let started_at = std::time::Instant::now();
+    loop {
+        if store
+            .resumed_public_turn_detach_posture(orchestration_session_id, resumed_participant_id)?
+            .is_some()
+        {
+            return Ok(());
+        }
+
+        let Some(record) = store.load_session(orchestration_session_id)? else {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} disappeared before the resumed public turn could detach cleanly",
+                orchestration_session_id
+            );
+        };
+        if record.session.state.is_terminal()
+            || record.session.posture == OrchestrationSessionPosture::Terminal
+        {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} became terminal before resumed participant {} could repark",
+                orchestration_session_id,
+                resumed_participant_id
+            );
+        }
+        if record
+            .session
+            .active_participant_id()
+            .is_some_and(|participant_id| participant_id != resumed_participant_id)
+        {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} reassigned active ownership to {} before resumed participant {} could repark",
+                orchestration_session_id,
+                record.session.active_participant_id().unwrap_or_default(),
+                resumed_participant_id
+            );
+        }
+
+        if started_at.elapsed() >= TURN_DETACH_NORMALIZATION_TIMEOUT {
+            anyhow::bail!(
+                "owner_unreachable: timed out waiting for orchestration session {} resumed participant {} to converge back to detached durable continuity",
+                orchestration_session_id,
+                resumed_participant_id
+            );
+        }
+
+        thread::sleep(TURN_DETACH_NORMALIZATION_POLL_INTERVAL);
+    }
+}
+
+fn descriptor_from_participant(
+    participant: &AgentRuntimeParticipantRecord,
+) -> Result<ResolvedRuntimeDescriptor> {
+    let backend_kind = match participant.internal.resolved_agent_kind.as_str() {
+        "codex" => ResolvedRuntimeBackendKind::Codex,
+        "claude_code" => ResolvedRuntimeBackendKind::ClaudeCode,
+        other => {
+            anyhow::bail!(config_model::user_error(format!(
+                "unsupported_platform_or_posture: unsupported hidden owner-helper backend kind '{}'",
+                other
+            )));
+        }
+    };
+    Ok(ResolvedRuntimeDescriptor {
+        agent_id: participant.handle.agent_id.clone(),
+        backend_id: participant.handle.backend_id.clone(),
+        backend_kind,
+        protocol: participant.handle.protocol.clone(),
+        execution_scope: participant.handle.execution.scope,
+        binary_path: participant.internal.resolved_binary_path.clone(),
+    })
+}
+
+fn wait_for_terminal_session_state(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+) -> Result<Option<OrchestrationSessionStateLabel>> {
+    let started_at = std::time::Instant::now();
+    loop {
+        if let Some(state) = terminal_session_state(store, orchestration_session_id)? {
+            return Ok(Some(state));
+        }
+        if started_at.elapsed() >= AGENT_CONTROL_STOP_WAIT_TIMEOUT {
+            return Ok(None);
+        }
+        thread::sleep(AGENT_CONTROL_STOP_WAIT_POLL_INTERVAL);
+    }
+}
+
+fn terminal_session_state(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+) -> Result<Option<OrchestrationSessionStateLabel>> {
+    Ok(store
+        .list_sessions()?
+        .into_iter()
+        .find(|record| record.session.orchestration_session_id == orchestration_session_id)
+        .and_then(|record| {
+            OrchestrationSessionStateLabel::from_session_state(&record.session.state)
+        }))
+}
+
+#[derive(Clone, Copy)]
+enum OrchestrationSessionStateLabel {
+    Stopped,
+    Invalidated,
+    Failed,
+}
+
+impl OrchestrationSessionStateLabel {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Stopped => "stopped",
+            Self::Invalidated => "invalidated",
+            Self::Failed => "failed",
+        }
+    }
+
+    fn from_session_state(
+        state: &crate::execution::agent_runtime::OrchestrationSessionState,
+    ) -> Option<Self> {
+        match state {
+            crate::execution::agent_runtime::OrchestrationSessionState::Stopped => {
+                Some(Self::Stopped)
+            }
+            crate::execution::agent_runtime::OrchestrationSessionState::Invalidated => {
+                Some(Self::Invalidated)
+            }
+            crate::execution::agent_runtime::OrchestrationSessionState::Failed => {
+                Some(Self::Failed)
+            }
+            _ => None,
+        }
+    }
+}
+
+fn render_agent_control_result(json_mode: bool, result: &AgentControlResultJson<'_>) -> Result<()> {
+    if json_mode {
+        println!("{}", serde_json::to_string_pretty(result)?);
+        return Ok(());
+    }
+
+    let mut line = format!(
+        "{} {} [{}] -> {}",
+        result.action, result.orchestration_session_id, result.backend_id, result.state
+    );
+    if let Some(participant_id) = result.participant_id {
+        line.push_str(&format!(" participant={participant_id}"));
+    }
+    if let Some(source) = result.source_orchestration_session_id {
+        line.push_str(&format!(" source={source}"));
+    }
+    println!("{line}");
+    Ok(())
 }
 
 struct AgentCommandContext {
@@ -324,13 +1366,19 @@ fn render_list_report(report: &ListReportJson<'_>, json_mode: bool) -> Result<()
 #[derive(Clone, Serialize)]
 struct StatusSessionJson {
     orchestration_session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    participant_id: Option<String>,
     agent_id: String,
+    source_kind: &'static str,
     backend_id: String,
     client: String,
     router: String,
     protocol: String,
     execution: ExecutionScopeJson<'static>,
     role: Option<String>,
+    posture: Option<String>,
+    attached_participant_id: Option<String>,
+    pending_inbox_count: Option<u64>,
     last_event_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     world_id: Option<String>,
@@ -341,6 +1389,8 @@ struct StatusSessionJson {
 #[derive(Clone, Serialize)]
 struct NestedParentJson {
     orchestration_session_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    participant_id: Option<String>,
     agent_id: String,
 }
 
@@ -362,6 +1412,7 @@ struct StatusReportJson<'a> {
     scope_filter: &'a str,
     role_filter: Option<&'a str>,
     orchestrator_agent_id: String,
+    warnings: Vec<String>,
     sessions: Vec<StatusSessionJson>,
     nested_llm_records: Vec<NestedLlmRecordJson>,
 }
@@ -375,13 +1426,37 @@ struct SessionProjection {
 
 #[derive(Clone)]
 struct SessionProjectionSource {
-    orchestration_session_id: String,
-    agent_id: String,
-    run_id: String,
+    identity: StatusIdentityKey,
+    run_id: Option<String>,
     ts: DateTime<Utc>,
     is_world_scoped: bool,
     has_top_level_world_id: bool,
     has_top_level_world_generation: bool,
+}
+
+#[derive(Clone)]
+struct SelectedParentRun {
+    participant_id: Option<String>,
+    run_id: String,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct StatusIdentityKey {
+    orchestration_session_id: String,
+    agent_id: String,
+    execution_scope: &'static str,
+    participant_id: Option<String>,
+}
+
+impl StatusIdentityKey {
+    fn coarse(&self) -> Self {
+        Self {
+            orchestration_session_id: self.orchestration_session_id.clone(),
+            agent_id: self.agent_id.clone(),
+            execution_scope: self.execution_scope,
+            participant_id: None,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -397,10 +1472,10 @@ struct NestedProjection {
 
 #[derive(Clone)]
 struct NestedProjectionSource {
-    orchestration_session_id: String,
-    agent_id: String,
+    parent_identity: StatusIdentityKey,
     run_id: String,
     parent_run_id: Option<String>,
+    parent_participant_id: Option<String>,
 }
 
 fn build_status_report<'a>(
@@ -421,16 +1496,23 @@ fn build_status_report<'a>(
             scope_filter: args.scope.as_str(),
             role_filter,
             orchestrator_agent_id,
+            warnings: Vec::new(),
             sessions: Vec::new(),
             nested_llm_records: Vec::new(),
         });
     }
 
     let events = read_trace_agent_events()?;
-    let live_manifests = AgentRuntimeStateStore::new()?.list_live_manifests()?;
-    let mut sessions = BTreeMap::<(String, String), SessionProjection>::new();
+    let state_store = AgentRuntimeStateStore::new()?;
+    let status_sessions = state_store.list_status_sessions_for_agent(&orchestrator_agent_id)?;
+    let mut warnings = status_sessions
+        .iter()
+        .flat_map(|session| session.warnings.iter().cloned())
+        .collect::<BTreeSet<_>>();
+    let mut sessions = BTreeMap::<StatusIdentityKey, SessionProjection>::new();
     let mut nested = BTreeMap::<(String, String, String), NestedProjection>::new();
-    let mut historical_parent_runs = BTreeMap::<(String, String), BTreeSet<String>>::new();
+    let mut historical_parent_runs_exact = BTreeMap::<StatusIdentityKey, BTreeSet<String>>::new();
+    let mut historical_parent_runs_coarse = BTreeMap::<StatusIdentityKey, BTreeSet<String>>::new();
 
     for event in events {
         let Some(entry) = context.inventory.get(&event.agent_id) else {
@@ -451,20 +1533,25 @@ fn build_status_report<'a>(
             &context.effective_config,
         );
 
-        if let Some(session_key) = pure_session_key(&event) {
-            historical_parent_runs
-                .entry(session_key.clone())
+        if let Some(identity) = pure_session_key(&event, scope) {
+            historical_parent_runs_exact
+                .entry(identity.clone())
                 .or_default()
                 .insert(event.run_id.clone());
-            let orchestration_session_id = session_key.0.clone();
+            historical_parent_runs_coarse
+                .entry(identity.coarse())
+                .or_default()
+                .insert(event.run_id.clone());
             let world_id = event.world_id.clone();
             let world_generation = event.world_generation;
 
             let projection = SessionProjection {
                 last_event_ts: event.ts,
                 session: StatusSessionJson {
-                    orchestration_session_id: orchestration_session_id.clone(),
+                    orchestration_session_id: identity.orchestration_session_id.clone(),
+                    participant_id: identity.participant_id.clone(),
                     agent_id: entry.file.id.clone(),
+                    source_kind: "trace_fallback",
                     backend_id: entry.derived_backend_id(),
                     client: entry.file.id.clone(),
                     router: PURE_AGENT_ROUTER.to_string(),
@@ -473,6 +1560,9 @@ fn build_status_report<'a>(
                         scope: scope.as_str(),
                     },
                     role: role.map(ToOwned::to_owned),
+                    posture: None,
+                    attached_participant_id: None,
+                    pending_inbox_count: None,
                     last_event_at: event.ts.to_rfc3339(),
                     world_id: if scope == AgentExecutionScope::World {
                         world_id.clone()
@@ -486,9 +1576,8 @@ fn build_status_report<'a>(
                     },
                 },
                 source: SessionProjectionSource {
-                    orchestration_session_id,
-                    agent_id: entry.file.id.clone(),
-                    run_id: event.run_id.clone(),
+                    identity: identity.clone(),
+                    run_id: Some(event.run_id.clone()),
                     ts: event.ts,
                     is_world_scoped: scope == AgentExecutionScope::World,
                     has_top_level_world_id: world_id.is_some(),
@@ -496,16 +1585,16 @@ fn build_status_report<'a>(
                 },
             };
 
-            let should_replace = match sessions.get(&session_key) {
+            let should_replace = match sessions.get(&identity) {
                 Some(existing) => projection.last_event_ts >= existing.last_event_ts,
                 None => true,
             };
             if should_replace {
-                sessions.insert(session_key, projection);
+                sessions.insert(identity, projection);
             }
         }
 
-        if let Some(projection) = nested_projection(&event, entry) {
+        if let Some(projection) = nested_projection(&event, entry, scope) {
             nested.insert(projection.sort_key.clone(), projection);
         }
     }
@@ -526,9 +1615,9 @@ fn build_status_report<'a>(
         {
             return Err(config_model::user_error(format!(
                 "malformed world identity on newest selected world-scoped pure-agent status event: agent_id={} orchestration_session_id={} run_id={} ts={} requires top-level world_id and world_generation",
-                projection.source.agent_id,
-                projection.source.orchestration_session_id,
-                projection.source.run_id,
+                projection.source.identity.agent_id,
+                projection.source.identity.orchestration_session_id,
+                projection.source.run_id.as_deref().unwrap_or("<missing>"),
                 projection.source.ts.to_rfc3339(),
             )));
         }
@@ -536,37 +1625,131 @@ fn build_status_report<'a>(
         filtered_session_projections.push(projection);
     }
 
-    let selected_parent_runs: BTreeMap<(String, String), String> = filtered_session_projections
+    let mut selected_session_projections = Vec::new();
+    for status_session in &status_sessions {
+        for projection in live_session_status_projections(status_session) {
+            if !matches_scope(
+                scope_from_label(projection.session.execution.scope),
+                args.scope,
+            ) || !matches_role(projection.session.role.as_deref(), role_filter)
+            {
+                continue;
+            }
+            selected_session_projections.push(projection);
+        }
+    }
+
+    let live_fallback_suppression_exact = selected_session_projections
         .iter()
-        .map(|projection| {
-            (
-                (
-                    projection.source.orchestration_session_id.clone(),
-                    projection.source.agent_id.clone(),
-                ),
-                projection.source.run_id.clone(),
-            )
+        .map(session_fallback_suppression_key)
+        .collect::<BTreeSet<_>>();
+    let live_fallback_suppression_coarse = live_fallback_suppression_exact
+        .iter()
+        .map(StatusIdentityKey::coarse)
+        .collect::<BTreeSet<_>>();
+    let invalidated_fallback_suppression_exact = state_store
+        .list_invalidated_participants_across_sources()?
+        .into_iter()
+        .filter(|participant| {
+            participant.handle.role == MEMBER_ROLE
+                && participant.handle.execution.scope == AgentExecutionScope::World
         })
-        .collect();
+        .map(participant_fallback_suppression_key)
+        .collect::<BTreeSet<_>>();
+    let invalidated_fallback_suppression_coarse = invalidated_fallback_suppression_exact
+        .iter()
+        .map(StatusIdentityKey::coarse)
+        .collect::<BTreeSet<_>>();
+    let coarse_trace_identities = filtered_session_projections
+        .iter()
+        .filter(|projection| projection.source.identity.participant_id.is_none())
+        .map(|projection| projection.source.identity.coarse())
+        .collect::<BTreeSet<_>>();
+    for coarse_identity in coarse_trace_identities {
+        let participant_scoped_count = filtered_session_projections
+            .iter()
+            .filter(|projection| projection.source.identity.coarse() == coarse_identity)
+            .filter(|projection| projection.source.identity.participant_id.is_some())
+            .count();
+        if participant_scoped_count > 0 {
+            warnings.insert(format!(
+                "Status fallback for agent {} in orchestration session {} includes participant-less trace rows, so fallback selection remains coarse until participant-scoped records are available.",
+                coarse_identity.agent_id,
+                coarse_identity.orchestration_session_id,
+            ));
+        }
+    }
+    selected_session_projections.extend(filtered_session_projections.into_iter().filter(
+        |projection| {
+            let suppression_key = session_fallback_suppression_key(projection);
+            if suppression_key.participant_id.is_some() {
+                !live_fallback_suppression_exact.contains(&suppression_key)
+                    && !invalidated_fallback_suppression_exact.contains(&suppression_key)
+            } else {
+                let coarse_key = suppression_key.coarse();
+                !live_fallback_suppression_coarse.contains(&coarse_key)
+                    && !invalidated_fallback_suppression_coarse.contains(&coarse_key)
+            }
+        },
+    ));
+
+    let mut selected_parent_runs_exact =
+        BTreeMap::<StatusIdentityKey, Vec<SelectedParentRun>>::new();
+    let mut selected_parent_runs_coarse =
+        BTreeMap::<StatusIdentityKey, Vec<SelectedParentRun>>::new();
+    for projection in &selected_session_projections {
+        let Some(run_id) = projection.source.run_id.as_ref() else {
+            continue;
+        };
+        let selected_parent_run = SelectedParentRun {
+            participant_id: projection.source.identity.participant_id.clone(),
+            run_id: run_id.clone(),
+        };
+        selected_parent_runs_exact
+            .entry(projection.source.identity.clone())
+            .or_default()
+            .push(selected_parent_run.clone());
+        selected_parent_runs_coarse
+            .entry(projection.source.identity.coarse())
+            .or_default()
+            .push(selected_parent_run);
+    }
 
     let mut filtered_nested = Vec::new();
     for projection in nested.into_values() {
-        let parent_key = (
-            projection.source.orchestration_session_id.clone(),
-            projection.source.agent_id.clone(),
+        let selected_parent_runs = selected_parent_run_candidates(
+            &projection,
+            &selected_parent_runs_exact,
+            &selected_parent_runs_coarse,
         );
-        let Some(selected_parent_run_id) = selected_parent_runs.get(&parent_key) else {
+        if selected_parent_runs.is_empty() {
             continue;
-        };
+        }
+        if projection.source.parent_participant_id.is_none()
+            && selected_parent_runs
+                .iter()
+                .filter_map(|candidate| candidate.participant_id.as_deref())
+                .collect::<BTreeSet<_>>()
+                .len()
+                > 1
+        {
+            warnings.insert(format!(
+                "Nested status correlation for agent {} in orchestration session {} is using coarse parent matching because parent_participant_id is absent.",
+                projection.source.parent_identity.agent_id,
+                projection.source.parent_identity.orchestration_session_id,
+            ));
+        }
         let parent_run_id = projection.source.parent_run_id.as_deref();
-        let parent_run_matches_selected = parent_run_id == Some(selected_parent_run_id.as_str());
-        if parent_run_matches_selected {
+        if let Some(selected_parent_run) = selected_parent_runs
+            .iter()
+            .find(|candidate| parent_run_id == Some(candidate.run_id.as_str()))
+        {
             let missing_fields = missing_required_nested_fields(&projection);
             if !missing_fields.is_empty() {
                 return Err(config_model::user_error(format!(
                     "malformed nested tuple on selected status surface: agent_id={} orchestration_session_id={} run_id={} missing_fields={} requires provider and auth_authority on selected nested substrate_gateway status rows",
-                    projection.source.agent_id,
-                    projection.source.orchestration_session_id,
+                    projection.source.parent_identity.agent_id,
+                    projection.source.parent_identity.orchestration_session_id,
                     projection.source.run_id,
                     missing_fields.join(","),
                 )));
@@ -574,8 +1757,13 @@ fn build_status_report<'a>(
 
             filtered_nested.push(NestedLlmRecordJson {
                 parent: NestedParentJson {
-                    orchestration_session_id: projection.source.orchestration_session_id.clone(),
-                    agent_id: projection.source.agent_id.clone(),
+                    orchestration_session_id: projection
+                        .source
+                        .parent_identity
+                        .orchestration_session_id
+                        .clone(),
+                    participant_id: selected_parent_run.participant_id.clone(),
+                    agent_id: projection.source.parent_identity.agent_id.clone(),
                 },
                 run_id: projection.source.run_id.clone(),
                 backend_id: projection.backend_id,
@@ -593,57 +1781,40 @@ fn build_status_report<'a>(
         }
 
         let invalid_parent_run_id = format_invalid_parent_run_id(parent_run_id);
-        let historical_match = parent_run_id.is_some_and(|candidate| {
-            historical_parent_runs
-                .get(&parent_key)
-                .is_some_and(|runs| runs.contains(candidate))
-        });
+        let historical_match = historical_parent_run_matches(
+            &projection.source.parent_identity,
+            parent_run_id,
+            &historical_parent_runs_exact,
+            &historical_parent_runs_coarse,
+        );
         if historical_match {
             continue;
         }
 
         return Err(config_model::user_error(format!(
             "malformed nested parent correlation on selected status surface: agent_id={} orchestration_session_id={} run_id={} parent_run_id={} requires parent_run_id to match the winning selected pure-agent run or a known historical pure-agent run for the same session",
-            projection.source.agent_id,
-            projection.source.orchestration_session_id,
+            projection.source.parent_identity.agent_id,
+            projection.source.parent_identity.orchestration_session_id,
             projection.source.run_id,
             invalid_parent_run_id,
         )));
     }
 
-    let mut live_sessions_by_agent = BTreeMap::<String, (DateTime<Utc>, StatusSessionJson)>::new();
-    for manifest in live_manifests {
-        let session = live_manifest_status_session(&manifest);
-        if !matches_scope(scope_from_label(session.execution.scope), args.scope)
-            || !matches_role(session.role.as_deref(), role_filter)
-        {
-            continue;
-        }
-        let last_status_at = manifest.last_status_at();
-        let should_replace = match live_sessions_by_agent.get(&session.agent_id) {
-            Some((existing_ts, _)) => last_status_at >= *existing_ts,
-            None => true,
-        };
-        if should_replace {
-            live_sessions_by_agent.insert(session.agent_id.clone(), (last_status_at, session));
-        }
-    }
-    let live_agent_ids: BTreeSet<String> = live_sessions_by_agent.keys().cloned().collect();
-    let mut filtered_sessions: Vec<StatusSessionJson> = live_sessions_by_agent
-        .into_values()
-        .map(|(_, session)| session)
+    let mut filtered_sessions: Vec<StatusSessionJson> = selected_session_projections
+        .into_iter()
+        .map(|projection| projection.session)
         .collect();
-    for projection in filtered_session_projections {
-        if live_agent_ids.contains(&projection.session.agent_id) {
-            continue;
-        }
-        filtered_sessions.push(projection.session);
-    }
     filtered_sessions.sort_by(|left, right| {
-        left.agent_id.cmp(&right.agent_id).then(
-            left.orchestration_session_id
-                .cmp(&right.orchestration_session_id),
-        )
+        left.orchestration_session_id
+            .cmp(&right.orchestration_session_id)
+            .then(
+                left.participant_id
+                    .as_deref()
+                    .unwrap_or("")
+                    .cmp(right.participant_id.as_deref().unwrap_or("")),
+            )
+            .then(left.agent_id.cmp(&right.agent_id))
+            .then(left.source_kind.cmp(right.source_kind))
     });
 
     Ok(StatusReportJson {
@@ -651,6 +1822,7 @@ fn build_status_report<'a>(
         scope_filter: args.scope.as_str(),
         role_filter,
         orchestrator_agent_id,
+        warnings: warnings.into_iter().collect(),
         sessions: filtered_sessions,
         nested_llm_records: filtered_nested,
     })
@@ -668,6 +1840,12 @@ fn render_status_report(report: &StatusReportJson<'_>, json_mode: bool) -> Resul
     if let Some(role_filter) = report.role_filter {
         println!("role_filter: {role_filter}");
     }
+    if !report.warnings.is_empty() {
+        println!("warnings:");
+        for warning in &report.warnings {
+            println!("  - {warning}");
+        }
+    }
 
     println!();
     println!("orchestrator");
@@ -681,13 +1859,33 @@ fn render_status_report(report: &StatusReportJson<'_>, json_mode: bool) -> Resul
                 "orchestration_session_id={}",
                 session.orchestration_session_id
             ),
+            format!(
+                "participant_id={}",
+                session.participant_id.as_deref().unwrap_or("")
+            ),
             format!("agent_id={}", session.agent_id),
+            format!("source_kind={}", session.source_kind),
             format!("backend_id={}", session.backend_id),
             format!("client={}", session.client),
             format!("router={}", session.router),
             format!("protocol={}", session.protocol),
             format!("execution.scope={}", session.execution.scope),
             format!("role={}", session.role.as_deref().unwrap_or("")),
+            format!(
+                "posture={}",
+                human_status_option_str(session.posture.as_deref(), session.source_kind)
+            ),
+            format!(
+                "attached_participant_id={}",
+                human_status_option_str(
+                    session.attached_participant_id.as_deref(),
+                    session.source_kind
+                )
+            ),
+            format!(
+                "pending_inbox_count={}",
+                human_status_option_u64(session.pending_inbox_count, session.source_kind)
+            ),
             format!("last_event_at={}", session.last_event_at),
         ];
         if let (Some(world_id), Some(world_generation)) =
@@ -704,8 +1902,9 @@ fn render_status_report(report: &StatusReportJson<'_>, json_mode: bool) -> Resul
         println!("nested_llm_records");
         for record in &report.nested_llm_records {
             println!(
-                "  parent.orchestration_session_id={} | parent.agent_id={} | run_id={} | backend_id={} | client={} | router={} | provider={} | auth_authority={} | protocol={}",
+                "  parent.orchestration_session_id={} | parent.participant_id={} | parent.agent_id={} | run_id={} | backend_id={} | client={} | router={} | provider={} | auth_authority={} | protocol={}",
                 record.parent.orchestration_session_id,
+                record.parent.participant_id.as_deref().unwrap_or(""),
                 record.parent.agent_id,
                 record.run_id,
                 record.backend_id,
@@ -802,6 +2001,12 @@ struct ToolboxEligibilityJson {
 }
 
 #[derive(Clone, Serialize)]
+struct ToolboxActiveWorldBindingJson {
+    world_id: String,
+    world_generation: u64,
+}
+
+#[derive(Clone, Serialize)]
 struct ToolboxStatusReportJson<'a> {
     toolbox_enabled: bool,
     toolbox_version: u32,
@@ -811,6 +2016,8 @@ struct ToolboxStatusReportJson<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     endpoint_template: Option<String>,
     active_orchestration_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    active_world_binding: Option<ToolboxActiveWorldBindingJson>,
     eligibility: ToolboxEligibilityJson,
     #[serde(skip_serializing_if = "Option::is_none")]
     orchestrator: Option<ToolboxOrchestratorJson<'a>>,
@@ -837,6 +2044,7 @@ fn build_toolbox_status_report<'a>(
             endpoint: None,
             endpoint_template: None,
             active_orchestration_session_id: None,
+            active_world_binding: None,
             eligibility: ToolboxEligibilityJson {
                 state: "disabled".to_string(),
                 reason: Some("agents are disabled by effective config".to_string()),
@@ -863,6 +2071,7 @@ fn build_toolbox_status_report<'a>(
             endpoint: None,
             endpoint_template: None,
             active_orchestration_session_id: None,
+            active_world_binding: None,
             eligibility: ToolboxEligibilityJson {
                 state: "disabled".to_string(),
                 reason: Some("agents.toolbox.enabled is false in the effective config".to_string()),
@@ -879,6 +2088,7 @@ fn build_toolbox_status_report<'a>(
             endpoint: None,
             endpoint_template: None,
             active_orchestration_session_id: None,
+            active_world_binding: None,
             eligibility: ToolboxEligibilityJson {
                 state: "denied".to_string(),
                 reason: Some(format!(
@@ -898,6 +2108,7 @@ fn build_toolbox_status_report<'a>(
             endpoint: None,
             endpoint_template: None,
             active_orchestration_session_id: None,
+            active_world_binding: None,
             eligibility: ToolboxEligibilityJson {
                 state: "unsupported".to_string(),
                 reason: Some(
@@ -909,19 +2120,23 @@ fn build_toolbox_status_report<'a>(
         }),
         AgentToolboxBindTransport::Uds => {
             let endpoint_template = Some(toolbox_uds_endpoint_template()?);
-            let latest_session =
-                AgentRuntimeStateStore::new()?.find_live_orchestrator(&orchestrator.file.id)?;
+            let latest_session = AgentRuntimeStateStore::new()?
+                .resolve_single_live_session_for_agent(&orchestrator.file.id)
+                .map_err(|err| config_model::user_error(err.to_string()))?;
 
             match latest_session {
-                Some(session) => Ok(ToolboxStatusReportJson {
+                Some(session_record) => Ok(ToolboxStatusReportJson {
                     toolbox_enabled: true,
                     toolbox_version: TOOLBOX_VERSION,
                     transport,
-                    endpoint: Some(toolbox_uds_endpoint(&session.handle.orchestration_session_id)?),
+                    endpoint: Some(toolbox_uds_endpoint(
+                        session_record.orchestration_session_id(),
+                    )?),
                     endpoint_template,
                     active_orchestration_session_id: Some(
-                        session.handle.orchestration_session_id,
+                        session_record.orchestration_session_id().to_string(),
                     ),
+                    active_world_binding: toolbox_active_world_binding(&session_record.session),
                     eligibility: ToolboxEligibilityJson {
                         state: "allowed".to_string(),
                         reason: None,
@@ -935,10 +2150,11 @@ fn build_toolbox_status_report<'a>(
                     endpoint: None,
                     endpoint_template,
                     active_orchestration_session_id: None,
+                    active_world_binding: None,
                     eligibility: ToolboxEligibilityJson {
                         state: "dependency_unavailable".to_string(),
                         reason: Some(
-                            "no active pure-agent orchestrator session found in authoritative live manifests for the selected orchestrator"
+                            "no live host-scoped orchestrator participant found for the selected orchestrator"
                                 .to_string(),
                         ),
                     },
@@ -977,6 +2193,12 @@ fn render_toolbox_status_report(
     if let Some(endpoint_template) = &report.endpoint_template {
         println!("endpoint_template: {endpoint_template}");
     }
+    if let Some(binding) = &report.active_world_binding {
+        println!(
+            "active_world_binding: world_id={} | world_generation={}",
+            binding.world_id, binding.world_generation
+        );
+    }
     if let Some(orchestrator) = &report.orchestrator {
         println!(
             "orchestrator: agent_id={} | backend_id={} | role={} | execution.scope={}",
@@ -988,6 +2210,21 @@ fn render_toolbox_status_report(
     }
 
     Ok(())
+}
+
+fn toolbox_active_world_binding(
+    session: &crate::execution::agent_runtime::OrchestrationSessionRecord,
+) -> Option<ToolboxActiveWorldBindingJson> {
+    let world_id = session.world_id.as_ref()?;
+    let world_generation = session.world_generation?;
+    if world_id.trim().is_empty() {
+        return None;
+    }
+
+    Some(ToolboxActiveWorldBindingJson {
+        world_id: world_id.clone(),
+        world_generation,
+    })
 }
 
 fn build_toolbox_env_report(report: &ToolboxStatusReportJson<'_>) -> Result<ToolboxEnvReportJson> {
@@ -1050,6 +2287,99 @@ fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
+fn live_participant_status_projection(
+    session: &OrchestrationSessionRecord,
+    participant: &AgentRuntimeParticipantRecord,
+) -> SessionProjection {
+    SessionProjection {
+        last_event_ts: participant.last_status_at(),
+        session: StatusSessionJson {
+            orchestration_session_id: participant.handle.orchestration_session_id.clone(),
+            participant_id: Some(participant.handle.participant_id.clone()),
+            agent_id: participant.handle.agent_id.clone(),
+            source_kind: "live_runtime",
+            backend_id: participant.handle.backend_id.clone(),
+            client: participant.handle.agent_id.clone(),
+            router: PURE_AGENT_ROUTER.to_string(),
+            protocol: participant.handle.protocol.clone(),
+            execution: ExecutionScopeJson {
+                scope: match participant.handle.execution.scope {
+                    AgentExecutionScope::Host => "host",
+                    AgentExecutionScope::World => "world",
+                },
+            },
+            role: Some(participant.handle.role.clone()),
+            posture: Some(orchestration_session_posture_label(session.posture).to_string()),
+            attached_participant_id: session.attached_participant_id.clone(),
+            pending_inbox_count: Some(session.pending_inbox_count),
+            last_event_at: participant.last_status_at().to_rfc3339(),
+            world_id: participant.handle.world_id.clone(),
+            world_generation: participant.handle.world_generation,
+        },
+        source: SessionProjectionSource {
+            identity: StatusIdentityKey {
+                orchestration_session_id: participant.handle.orchestration_session_id.clone(),
+                agent_id: participant.handle.agent_id.clone(),
+                execution_scope: execution_scope_label(participant.handle.execution.scope),
+                participant_id: Some(participant.handle.participant_id.clone()),
+            },
+            run_id: participant.internal.latest_run_id.clone(),
+            ts: participant.last_status_at(),
+            is_world_scoped: participant.handle.execution.scope == AgentExecutionScope::World,
+            has_top_level_world_id: participant.handle.world_id.is_some(),
+            has_top_level_world_generation: participant.handle.world_generation.is_some(),
+        },
+    }
+}
+
+fn live_session_status_projections(session: &AgentRuntimeSessionRecord) -> Vec<SessionProjection> {
+    session
+        .status_visible_participants()
+        .into_iter()
+        .map(|participant| live_participant_status_projection(&session.session, &participant))
+        .collect()
+}
+
+fn orchestration_session_posture_label(posture: OrchestrationSessionPosture) -> &'static str {
+    match posture {
+        OrchestrationSessionPosture::ActiveAttached => "active_attached",
+        OrchestrationSessionPosture::ParkedResumable => "parked_resumable",
+        OrchestrationSessionPosture::AwaitingAttention => "awaiting_attention",
+        OrchestrationSessionPosture::Terminal => "terminal",
+    }
+}
+
+fn human_status_option_str(value: Option<&str>, source_kind: &str) -> String {
+    match value {
+        Some(value) => value.to_string(),
+        None if source_kind == "trace_fallback" => "<unknown>".to_string(),
+        None => "<none>".to_string(),
+    }
+}
+
+fn human_status_option_u64(value: Option<u64>, source_kind: &str) -> String {
+    match value {
+        Some(value) => value.to_string(),
+        None if source_kind == "trace_fallback" => "<unknown>".to_string(),
+        None => "<none>".to_string(),
+    }
+}
+
+fn session_fallback_suppression_key(projection: &SessionProjection) -> StatusIdentityKey {
+    projection.source.identity.clone()
+}
+
+fn participant_fallback_suppression_key(
+    participant: AgentRuntimeParticipantRecord,
+) -> StatusIdentityKey {
+    StatusIdentityKey {
+        orchestration_session_id: participant.handle.orchestration_session_id,
+        agent_id: participant.handle.agent_id,
+        execution_scope: execution_scope_label(participant.handle.execution.scope),
+        participant_id: Some(participant.handle.participant_id),
+    }
+}
+
 fn read_trace_agent_events() -> Result<Vec<AgentEvent>> {
     let trace_path = trace_log_path()?;
     let file = match File::open(&trace_path) {
@@ -1096,20 +2426,23 @@ fn trace_log_path() -> Result<PathBuf> {
     Ok(substrate_paths::substrate_home()?.join("trace.jsonl"))
 }
 
-fn pure_session_key(event: &AgentEvent) -> Option<(String, String)> {
+fn pure_session_key(event: &AgentEvent, scope: AgentExecutionScope) -> Option<StatusIdentityKey> {
     let tuple = event.identity_tuple.as_ref()?;
     if tuple.router != PURE_AGENT_ROUTER || tuple.protocol != PURE_AGENT_PROTOCOL {
         return None;
     }
-    Some((
-        event.orchestration_session_id.clone(),
-        event.agent_id.clone(),
-    ))
+    Some(StatusIdentityKey {
+        orchestration_session_id: event.orchestration_session_id.clone(),
+        agent_id: event.agent_id.clone(),
+        execution_scope: execution_scope_label(scope),
+        participant_id: event.participant_id.clone(),
+    })
 }
 
 fn nested_projection(
     event: &AgentEvent,
     entry: &AgentInventoryEntryV1,
+    scope: AgentExecutionScope,
 ) -> Option<NestedProjection> {
     let tuple = event.identity_tuple.as_ref()?;
     if tuple.router != NESTED_ROUTER {
@@ -1124,10 +2457,15 @@ fn nested_projection(
     Some(NestedProjection {
         sort_key,
         source: NestedProjectionSource {
-            orchestration_session_id: event.orchestration_session_id.clone(),
-            agent_id: event.agent_id.clone(),
+            parent_identity: StatusIdentityKey {
+                orchestration_session_id: event.orchestration_session_id.clone(),
+                agent_id: event.agent_id.clone(),
+                execution_scope: execution_scope_label(scope),
+                participant_id: event.parent_participant_id.clone(),
+            },
             run_id: event.run_id.clone(),
             parent_run_id: event.parent_run_id.clone(),
+            parent_participant_id: event.parent_participant_id.clone(),
         },
         backend_id: entry.derived_backend_id(),
         client: event.agent_id.clone(),
@@ -1153,6 +2491,44 @@ fn format_invalid_parent_run_id(parent_run_id: Option<&str>) -> String {
         Some("") => "<empty>".to_string(),
         Some(value) => value.to_string(),
         None => "<missing>".to_string(),
+    }
+}
+
+fn selected_parent_run_candidates<'a>(
+    projection: &NestedProjection,
+    exact: &'a BTreeMap<StatusIdentityKey, Vec<SelectedParentRun>>,
+    coarse: &'a BTreeMap<StatusIdentityKey, Vec<SelectedParentRun>>,
+) -> Vec<&'a SelectedParentRun> {
+    if let Some(selected) = exact.get(&projection.source.parent_identity) {
+        return selected.iter().collect();
+    }
+
+    coarse
+        .get(&projection.source.parent_identity.coarse())
+        .map(|selected| selected.iter().collect())
+        .unwrap_or_default()
+}
+
+fn historical_parent_run_matches(
+    parent_identity: &StatusIdentityKey,
+    parent_run_id: Option<&str>,
+    exact: &BTreeMap<StatusIdentityKey, BTreeSet<String>>,
+    coarse: &BTreeMap<StatusIdentityKey, BTreeSet<String>>,
+) -> bool {
+    parent_run_id.is_some_and(|candidate| {
+        exact
+            .get(parent_identity)
+            .is_some_and(|runs| runs.contains(candidate))
+            || coarse
+                .get(&parent_identity.coarse())
+                .is_some_and(|runs| runs.contains(candidate))
+    })
+}
+
+fn execution_scope_label(scope: AgentExecutionScope) -> &'static str {
+    match scope {
+        AgentExecutionScope::Host => "host",
+        AgentExecutionScope::World => "world",
     }
 }
 
@@ -1228,16 +2604,6 @@ fn backend_allowed(policy: &Policy, backend_id: &str) -> bool {
         .any(|allowed| allowed == backend_id)
 }
 
-fn enabled_world_member_exists(
-    inventory: &BTreeMap<String, AgentInventoryEntryV1>,
-    effective_config: &SubstrateConfig,
-) -> bool {
-    inventory.values().any(|entry| {
-        entry.file.config.enabled
-            && entry.effective_scope(effective_config) == AgentExecutionScope::World
-    })
-}
-
 #[derive(Serialize)]
 struct DoctorOrchestratorJson<'a> {
     agent_id: String,
@@ -1263,6 +2629,8 @@ struct DoctorReportJson<'a> {
     world_boundary_exit_code: Option<i32>,
     #[serde(skip)]
     runtime_realizability_exit_code: Option<i32>,
+    #[serde(skip)]
+    member_selection_exit_code: Option<i32>,
 }
 
 enum RequiredWorldBoundaryState {
@@ -1349,6 +2717,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 checks,
                 world_boundary_exit_code: None,
                 runtime_realizability_exit_code: None,
+                member_selection_exit_code: None,
             });
         }
     };
@@ -1381,12 +2750,80 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 checks,
                 world_boundary_exit_code: None,
                 runtime_realizability_exit_code: Some(exit_code),
+                member_selection_exit_code: None,
             });
         }
     };
     let _ = runtime_descriptor;
 
-    if let Some(reason) = policy_allowlist_failure(&effective_config, &inventory, &base_policy) {
+    match validate_passive_participant_store() {
+        Ok(()) => {
+            checks.push(DoctorCheckJson {
+                check: "participant_store".to_string(),
+                status: "pass".to_string(),
+                reason: None,
+            });
+        }
+        Err(err) => {
+            checks.push(DoctorCheckJson {
+                check: "participant_store".to_string(),
+                status: "fail".to_string(),
+                reason: Some(err.to_string()),
+            });
+            return Ok(DoctorReportJson {
+                healthy: false,
+                fail_closed: true,
+                orchestrator: Some(orchestrator),
+                checks,
+                world_boundary_exit_code: None,
+                runtime_realizability_exit_code: None,
+                member_selection_exit_code: None,
+            });
+        }
+    }
+
+    let selected_member = match validate_member_selection(&effective_config, &inventory) {
+        Ok(Some(descriptor)) => {
+            checks.push(DoctorCheckJson {
+                check: "member_selection".to_string(),
+                status: "pass".to_string(),
+                reason: None,
+            });
+            Some(descriptor)
+        }
+        Ok(None) => {
+            checks.push(DoctorCheckJson {
+                check: "member_selection".to_string(),
+                status: "not_applicable".to_string(),
+                reason: None,
+            });
+            None
+        }
+        Err(err) => {
+            let exit_code = member_selection_error_exit_code(&err);
+            checks.push(DoctorCheckJson {
+                check: "member_selection".to_string(),
+                status: "fail".to_string(),
+                reason: Some(err.reason),
+            });
+            return Ok(DoctorReportJson {
+                healthy: false,
+                fail_closed: true,
+                orchestrator: Some(orchestrator),
+                checks,
+                world_boundary_exit_code: None,
+                runtime_realizability_exit_code: None,
+                member_selection_exit_code: Some(exit_code),
+            });
+        }
+    };
+
+    if let Some(reason) = policy_allowlist_failure(
+        &effective_config,
+        &inventory,
+        &base_policy,
+        selected_member.as_ref(),
+    ) {
         checks.push(DoctorCheckJson {
             check: "policy_allowlist".to_string(),
             status: "fail".to_string(),
@@ -1399,6 +2836,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
             checks,
             world_boundary_exit_code: None,
             runtime_realizability_exit_code: None,
+            member_selection_exit_code: None,
         });
     }
     checks.push(DoctorCheckJson {
@@ -1407,7 +2845,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
         reason: None,
     });
 
-    if enabled_world_member_exists(&inventory, &effective_config) {
+    if selected_member.is_some() {
         if !effective_config.world.enabled {
             checks.push(DoctorCheckJson {
                 check: "world_boundary".to_string(),
@@ -1424,6 +2862,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                 checks,
                 world_boundary_exit_code: Some(3),
                 runtime_realizability_exit_code: None,
+                member_selection_exit_code: None,
             });
         }
 
@@ -1448,6 +2887,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
                     checks,
                     world_boundary_exit_code: Some(exit_code),
                     runtime_realizability_exit_code: None,
+                    member_selection_exit_code: None,
                 });
             }
         }
@@ -1466,6 +2906,7 @@ fn build_doctor_report(cli: &Cli) -> Result<DoctorReportJson<'static>> {
         checks,
         world_boundary_exit_code: None,
         runtime_realizability_exit_code: None,
+        member_selection_exit_code: None,
     })
 }
 
@@ -1485,6 +2926,7 @@ fn failed_doctor_report(
         }],
         world_boundary_exit_code: None,
         runtime_realizability_exit_code: None,
+        member_selection_exit_code: None,
     }
 }
 
@@ -1623,6 +3065,9 @@ fn policy_allowlist_failure(
     effective_config: &SubstrateConfig,
     inventory: &BTreeMap<String, AgentInventoryEntryV1>,
     base_policy: &Policy,
+    selected_member: Option<
+        &crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor,
+    >,
 ) -> Option<String> {
     let orchestrator = validate_orchestrator_selection(effective_config, inventory).ok()?;
     let orchestrator_backend_id = orchestrator.derived_backend_id();
@@ -1633,17 +3078,11 @@ fn policy_allowlist_failure(
         ));
     }
 
-    for entry in inventory.values() {
-        if !entry.file.config.enabled
-            || entry.effective_scope(effective_config) != AgentExecutionScope::World
-        {
-            continue;
-        }
-        let backend_id = entry.derived_backend_id();
-        if !backend_allowed(base_policy, &backend_id) {
+    if let Some(selected_member) = selected_member {
+        if !backend_allowed(base_policy, &selected_member.backend_id) {
             return Some(format!(
                 "required world-scoped member backend '{}' is not allowlisted by effective policy agents.allowed_backends",
-                backend_id
+                selected_member.backend_id
             ));
         }
     }
@@ -1669,30 +3108,16 @@ fn doctor_exit_code(report: &DoctorReportJson<'_>) -> i32 {
         "policy_allowlist" => 5,
         "world_boundary" => report.world_boundary_exit_code.unwrap_or(3),
         "runtime_realizability" => report.runtime_realizability_exit_code.unwrap_or(2),
-        "inventory_scan" | "orchestrator_selection" => 2,
+        "member_selection" => report.member_selection_exit_code.unwrap_or(2),
+        "inventory_scan" | "orchestrator_selection" | "participant_store" => 2,
         _ => 1,
     }
 }
 
-fn live_manifest_status_session(manifest: &AgentRuntimeSessionManifest) -> StatusSessionJson {
-    StatusSessionJson {
-        orchestration_session_id: manifest.handle.orchestration_session_id.clone(),
-        agent_id: manifest.handle.agent_id.clone(),
-        backend_id: manifest.handle.backend_id.clone(),
-        client: manifest.handle.agent_id.clone(),
-        router: PURE_AGENT_ROUTER.to_string(),
-        protocol: manifest.handle.protocol.clone(),
-        execution: ExecutionScopeJson {
-            scope: match manifest.handle.execution.scope {
-                AgentExecutionScope::Host => "host",
-                AgentExecutionScope::World => "world",
-            },
-        },
-        role: Some(manifest.handle.role.clone()),
-        last_event_at: manifest.last_status_at().to_rfc3339(),
-        world_id: manifest.handle.world_id.clone(),
-        world_generation: manifest.handle.world_generation,
-    }
+fn validate_passive_participant_store() -> Result<()> {
+    let state_store = AgentRuntimeStateStore::new()?;
+    state_store.list_participants()?;
+    Ok(())
 }
 
 fn render_doctor_report(report: &DoctorReportJson<'_>, json_mode: bool) -> Result<()> {

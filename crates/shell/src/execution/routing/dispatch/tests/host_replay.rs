@@ -56,6 +56,7 @@ fn async_repl_host_commands_record_replay_context() {
             "printf async-repl-host > repl-host.log",
             "async-repl-host",
             Arc::new(AtomicI32::new(0)),
+            None,
         )
         .expect("execute async repl command");
 

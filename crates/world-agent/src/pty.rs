@@ -7,13 +7,14 @@ use crate::request_routing::resolve_snapshot_routing;
 use crate::service::WorldAgentService;
 #[cfg(target_os = "linux")]
 use crate::service::{
-    apply_full_isolation_helper_env, is_full_isolation, resolve_landlock_allowlist_paths,
-    resolve_project_dir, resolve_project_write_allowlist_prefixes, WORLD_FS_MODE_ENV,
+    apply_full_isolation_helper_env, build_world_spec, is_full_isolation,
+    resolve_landlock_allowlist_paths, resolve_project_dir,
+    resolve_project_write_allowlist_prefixes, resolve_shared_world_binding, WORLD_FS_MODE_ENV,
     WORLD_FS_WRITE_ALLOWLIST_ENV,
 };
 #[cfg(target_os = "linux")]
 use agent_api_types::PolicyResolutionModeV1;
-use agent_api_types::{PolicySnapshotV3, WorldNetworkRoutingV1};
+use agent_api_types::{PolicySnapshotV3, SharedWorldOwnerSpec, WorldNetworkRoutingV1};
 use axum::extract::ws::{Message, WebSocket};
 #[cfg(target_os = "linux")]
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
@@ -109,12 +110,14 @@ pub enum ClientMessage {
     #[serde(rename = "start")]
     Start {
         cmd: String,
-        cwd: PathBuf,
-        env: HashMap<String, String>,
+        cwd: Box<PathBuf>,
+        env: Box<HashMap<String, String>>,
         #[serde(default)]
         policy_snapshot: Box<Option<PolicySnapshotV3>>,
         #[serde(default)]
-        world_network: Option<WorldNetworkRoutingV1>,
+        shared_world: Box<Option<SharedWorldOwnerSpec>>,
+        #[serde(default)]
+        world_network: Box<Option<WorldNetworkRoutingV1>>,
         span_id: Option<String>,
         cols: u16,
         rows: u16,
@@ -167,6 +170,8 @@ enum PersistentClientMessage {
         env: HashMap<String, String>,
         policy_snapshot: Box<PolicySnapshotV3>,
         #[serde(default)]
+        shared_world: Option<SharedWorldOwnerSpec>,
+        #[serde(default)]
         world_network: Option<WorldNetworkRoutingV1>,
         cols: u16,
         rows: u16,
@@ -208,6 +213,8 @@ enum PersistentServerMessage {
         world_id: String,
         cwd: PathBuf,
         protocol_version: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        shared_world: Option<world_api::SharedWorldBindingSnapshot>,
     },
     #[cfg(target_os = "linux")]
     Stdout { data_b64: String },
@@ -799,6 +806,7 @@ async fn handle_persistent_session(
             cwd,
             env,
             policy_snapshot,
+            shared_world,
             world_network,
             cols,
             rows,
@@ -807,6 +815,7 @@ async fn handle_persistent_session(
             cwd,
             env,
             policy_snapshot,
+            shared_world,
             world_network,
             cols,
             rows,
@@ -846,6 +855,7 @@ async fn handle_persistent_session(
         requested_cwd,
         mut session_env,
         policy_snapshot,
+        shared_world,
         world_network,
         cols,
         rows,
@@ -956,6 +966,7 @@ async fn handle_persistent_session(
         &session_env,
         &ready_cwd,
         &policy_snapshot,
+        shared_world.as_ref(),
         world_network.as_ref(),
     ) {
         Ok(world) => world,
@@ -995,6 +1006,7 @@ async fn handle_persistent_session(
             world_id: world.world_id.clone(),
             cwd: ready_cwd.clone(),
             protocol_version: 1,
+            shared_world: world.shared_world.clone(),
         })
         .is_err()
     {
@@ -1190,6 +1202,7 @@ async fn handle_persistent_session(
 
                                 let world_handle = world_api::WorldHandle {
                                     id: world.world_id.clone(),
+                                    shared_binding: None,
                                 };
                                 if let Err(e) =
                                     service.refresh_session_network_filter(&world_handle)
@@ -1447,6 +1460,7 @@ struct PersistentWorldContext {
     isolate_network: bool,
     netns_name: Option<String>,
     cgroup_path: Option<PathBuf>,
+    shared_world: Option<world_api::SharedWorldBindingSnapshot>,
     base_env: HashMap<String, String>,
 }
 
@@ -1560,10 +1574,9 @@ fn prepare_persistent_world_context(
     session_env: &HashMap<String, String>,
     ready_cwd: &std::path::Path,
     policy_snapshot: &PolicySnapshotV3,
+    shared_world: Option<&SharedWorldOwnerSpec>,
     world_network: Option<&WorldNetworkRoutingV1>,
 ) -> Result<PersistentWorldContext, String> {
-    use world_api::{ResourceLimits, WorldSpec};
-
     let project_dir =
         resolve_project_dir(Some(session_env), Some(ready_cwd)).map_err(|e| e.to_string())?;
 
@@ -1578,22 +1591,22 @@ fn prepare_persistent_world_context(
         isolate_network,
     );
 
-    let spec = WorldSpec {
-        reuse_session: true,
-        isolate_network,
-        limits: ResourceLimits::default(),
-        enable_preload: false,
-        allowed_domains: resolved.world_network.allowed_domains.clone(),
-        project_dir: project_dir.clone(),
-        always_isolate: true,
+    let spec = build_world_spec(
+        project_dir.clone(),
+        true,
         fs_mode,
-    };
+        isolate_network,
+        resolved.world_network.allowed_domains.clone(),
+        shared_world,
+    );
 
     let (world, merged_dir) = service.ensure_session_overlay_root(&spec).map_err(|e| {
         service.record_last_netfilter_failure_for_error(isolate_network, &e);
         format!("Failed to prepare world overlay: {e}")
     })?;
     service.clear_last_netfilter_failure_on_success(isolate_network);
+    let shared_world = resolve_shared_world_binding(shared_world, &world)
+        .map_err(|e| format!("Failed to validate shared world proof: {e}"))?;
 
     let ns_name = format!("substrate-{}", world.id);
     let ns_path = format!("/var/run/netns/{ns_name}");
@@ -1632,6 +1645,7 @@ fn prepare_persistent_world_context(
         isolate_network,
         netns_name,
         cgroup_path,
+        shared_world,
         base_env,
     })
 }
@@ -2256,12 +2270,16 @@ async fn handle_legacy_start(
             cwd,
             env,
             policy_snapshot,
+            shared_world,
             world_network,
             span_id,
             cols,
             rows,
         }) => {
-            let mut env = env;
+            let cwd = *cwd;
+            let mut env = *env;
+            let shared_world = *shared_world;
+            let world_network = *world_network;
             ensure_xdg_dirs(&mut env);
             let policy_snapshot = *policy_snapshot;
             info!(
@@ -2277,6 +2295,7 @@ async fn handle_legacy_start(
                 cwd,
                 env,
                 policy_snapshot,
+                shared_world,
                 world_network,
                 span_id,
                 cols,
@@ -2305,7 +2324,8 @@ async fn handle_legacy_start(
         }
     };
 
-    let (cmd, cwd, env_map, policy_snapshot, _world_network, _span_id, cols, rows) = start_msg;
+    let (cmd, cwd, env_map, policy_snapshot, shared_world, _world_network, _span_id, cols, rows) =
+        start_msg;
     #[cfg(not(target_os = "linux"))]
     let _policy_snapshot = policy_snapshot;
     #[cfg(target_os = "linux")]
@@ -2351,7 +2371,18 @@ async fn handle_legacy_start(
     let fs_strategy_meta: Option<world::overlayfs::WorldFsStrategyMeta>;
     #[cfg(target_os = "linux")]
     {
-        use world_api::{ResourceLimits, WorldSpec};
+        if shared_world.is_some() {
+            let _ = send_ws_message(
+                &tx,
+                &ServerMessage::Error {
+                    message: "Legacy PTY start does not support shared_world; use start_session"
+                        .to_string(),
+                },
+            )
+            .await;
+            return;
+        }
+
         let project_dir = match resolve_project_dir(Some(&env), Some(&cwd)) {
             Ok(dir) => dir,
             Err(err) => {
@@ -2457,16 +2488,14 @@ async fn handle_legacy_start(
             }
         }
 
-        let spec = WorldSpec {
-            reuse_session: true,
-            isolate_network,
-            limits: ResourceLimits::default(),
-            enable_preload: false,
-            allowed_domains,
-            project_dir: project_dir.clone(),
-            always_isolate: true,
+        let spec = build_world_spec(
+            project_dir.clone(),
+            true,
             fs_mode,
-        };
+            isolate_network,
+            allowed_domains,
+            None,
+        );
 
         let merged_dir: PathBuf;
         match service.ensure_session_overlay_root(&spec) {
@@ -2863,10 +2892,11 @@ mod tests {
     fn test_client_message_start_serialization() {
         let msg = ClientMessage::Start {
             cmd: "echo hi".into(),
-            cwd: std::env::current_dir().unwrap(),
-            env: HashMap::new(),
+            cwd: Box::new(std::env::current_dir().unwrap()),
+            env: Box::new(HashMap::new()),
             policy_snapshot: Box::new(None),
-            world_network: None,
+            shared_world: Box::new(None),
+            world_network: Box::new(None),
             span_id: Some("spn_test".into()),
             cols: 80,
             rows: 24,

@@ -89,7 +89,10 @@ fn wfgadax1_fail_closed_routing_true_world_disabled_hard_errors_exit_2() {
 
 #[test]
 fn wfgadax1_runtime_routing_fail_closed_missing_socket_maps_to_exit_3() {
-    let temp = temp_dir("substrate-wfgadax1-world-missing-");
+    let temp = Builder::new()
+        .prefix("substrate-wfgadax1-world-missing-")
+        .tempdir_in("/tmp")
+        .expect("create missing-socket tempdir");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     fs::create_dir_all(home.join(".substrate")).expect("create SUBSTRATE_HOME");

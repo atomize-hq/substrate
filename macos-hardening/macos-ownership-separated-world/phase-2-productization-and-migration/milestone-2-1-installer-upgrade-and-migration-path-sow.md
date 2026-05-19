@@ -4,7 +4,7 @@ Status: Draft
 
 Phase: 2 - Productization and Migration
 
-Last updated: 2026-04-28
+Last updated: 2026-05-19
 
 ## Purpose / Outcome
 
@@ -19,6 +19,10 @@ machines.
 The current macOS lifecycle is same-user by construction:
 
 - `scripts/substrate/install-substrate.sh` provisions Lima as the invoking user
+- `scripts/substrate/world-enable.sh` reuses the same-user installer
+  provisioning helpers
+- `scripts/substrate/dev-install-substrate.sh` stages guest binaries and writes
+  same-user world metadata
 - `scripts/substrate/uninstall-substrate.sh` deletes the user-owned Lima VM
 - `scripts/substrate/dev-uninstall-substrate.sh` assumes user-owned helper
   state
@@ -39,6 +43,7 @@ the host-side lifecycle around the new owner model.
 - installer/uninstaller metadata needed to distinguish legacy, migrated, and
   native ownership-separated states
 - operator documentation updates for install, upgrade, migration, and uninstall
+- lifecycle integration for the already-landed gateway/runtime surfaces
 
 ## Out of Scope
 
@@ -56,12 +61,14 @@ ownership:
 1. Detect whether the machine is a clean install, an ownership-separated
    upgrade, or a same-user Lima migration candidate.
 2. Materialize or verify the dedicated host owner and private control-plane
-   state required by Phase 1.
+   state required by phase 1.
 3. Migrate only the artifacts that are safe and necessary to preserve. Do not
    carry forward same-user-owned control-plane material as trusted state.
 4. Write explicit install metadata so upgrade and uninstall paths know whether
    the host is legacy, migrated, or natively ownership-separated.
 5. Expose one documented rollback posture for interrupted or failed migration.
+6. Ensure the normal lifecycle path still lands with working world and gateway
+   operator surfaces.
 
 The uninstall path must understand the new metadata and clean up the new owner
 model without guessing based on same-user Lima conventions.
@@ -74,8 +81,8 @@ Depends on:
   - phase 2 milestone 2.2 mount minimization and ingress contract
   - phase 3 milestone 3.1 Substrate-managed diagnostics and lifecycle
   - phase 3 milestone 3.2 breakglass reclassification and doc cutover
-- Phase 1 host ownership separation
-- a stable macOS control-plane registration mechanism produced as a Phase 1
+- phase 1 host ownership separation
+- a stable macOS control-plane registration mechanism produced as a phase 1
   prototype closeout artifact, with this milestone owning its install, upgrade,
   and migration integration into the shipped macOS lifecycle
 - a stable normal-path transport endpoint that no longer treats user-owned
@@ -83,37 +90,42 @@ Depends on:
 
 Sequences before:
 
-- Milestone 2.2, because doctor/status/supportability must report the actual
+- milestone 2.2, because doctor/status/supportability must report the actual
   lifecycle state this milestone defines
-- Milestone 2.3, because the GA matrix depends on install, migration, and
+- milestone 2.3, because the GA matrix depends on install, migration, and
   uninstall behaviors being fixed first
 
 ## Concrete Repo Surfaces and File Pointers
 
 Primary surfaces:
 
+- `scripts/substrate/world-enable.sh`
+- `scripts/substrate/dev-install-substrate.sh`
 - `scripts/substrate/install-substrate.sh`
 - `scripts/substrate/install.sh`
+- `scripts/substrate/dev-uninstall-substrate.sh`
 - `scripts/substrate/uninstall-substrate.sh`
 - `scripts/substrate/uninstall.sh`
-- `scripts/substrate/dev-uninstall-substrate.sh`
 - `scripts/mac/lima-warm.sh`
-- `docs/INSTALLATION.md`
-- `docs/UNINSTALL.md`
-- `docs/WORLD.md`
-- `docs/cross-platform/mac_world_setup.md`
+- `../../../docs/INSTALLATION.md`
+- `../../../docs/UNINSTALL.md`
+- `../../../docs/WORLD.md`
+- `../../../docs/cross-platform/mac_world_setup.md`
 
 State and runtime surfaces likely affected:
 
 - `scripts/mac/lima/substrate.yaml`
 - `scripts/mac/lima/substrate-dev.yaml`
 - `crates/shell/src/execution/platform/macos.rs`
+- `crates/shell/src/builtins/world_gateway.rs`
+- `crates/world-agent/src/gateway_runtime.rs`
 
 Legacy-state evidence to account for:
 
 - user-owned `~/.lima`
 - user-owned `~/.substrate`
 - same-user forwarded endpoints described in current docs and scripts
+- same-user guest binary staging and verification for `substrate-gateway`
 
 ## Deliverables
 
@@ -121,7 +133,7 @@ Legacy-state evidence to account for:
 - a macOS upgrade contract for already-migrated hosts
 - a same-user Lima migration contract with explicit preserve/recreate/discard
   rules for existing host and guest artifacts
-- a shipped lifecycle integration plan for the Phase 1 control-plane
+- a shipped lifecycle integration plan for the phase 1 control-plane
   registration mechanism, including clean install bootstrap, upgrade handling,
   and uninstall cleanup expectations
 - installer metadata schema updates needed to encode ownership model and
@@ -143,6 +155,9 @@ Legacy-state evidence to account for:
   guest `systemctl`, or guest `curl`.
 - The install flow records enough metadata for downstream doctor/status surfaces
   to distinguish clean, upgraded, migrated, and partially failed states.
+- The post-install normal path leaves `substrate host doctor`,
+  `substrate world doctor`, `substrate health`, and
+  `substrate world gateway status --json` working through the new owner model.
 
 ## Validation / Evidence Plan
 
@@ -151,12 +166,16 @@ Legacy-state evidence to account for:
 - Capture migration transcripts from a machine preloaded with the current
   same-user Lima install path.
 - Capture rerun evidence showing idempotent install and upgrade behavior.
-- Capture uninstall transcripts for both migrated and clean ownership-separated
-  hosts.
+- Capture uninstall transcripts for both migrated and clean
+  ownership-separated hosts.
 - Capture post-install and post-migration readiness with:
   - `substrate host doctor --json`
   - `substrate world doctor --json`
   - `substrate health --json`
+  - `substrate world gateway status --json`
+- Capture at least one gateway lifecycle round trip after install:
+  - `substrate world gateway sync`
+  - `substrate world gateway restart`
 - Update `docs/INSTALLATION.md`, `docs/UNINSTALL.md`, `docs/WORLD.md`, and
   `docs/cross-platform/mac_world_setup.md` so the documented contract matches
   the transcripts above.

@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 function Write-Info($Message) { Write-Host "[INFO] $Message" -ForegroundColor Cyan }
 function Write-Warn($Message) { Write-Host "[WARN] $Message" -ForegroundColor Yellow }
-function Write-ErrorAndExit($Message) { Write-Host "[FAIL] $Message" -ForegroundColor Red; exit 1 }
+function Write-ErrorAndExit($Message, [int]$Code = 1) { Write-Host "[FAIL] $Message" -ForegroundColor Red; exit $Code }
 
 function Convert-ToWslPathFragment {
     param([string]$Path)
@@ -90,6 +90,7 @@ Write-Info "Starting wsl-warm for distro '$DistroName'"
 
 $projectPath = Resolve-Path $ProjectPath | Select-Object -ExpandProperty Path
 Write-Info "Project path: $projectPath"
+Write-ErrorAndExit "WSL world provisioning is intentionally fail-closed in this slice because the WSL helper path is not aligned with the Linux/macOS placement contract for SUBSTRATE_HOME placement, socket/group ownership, and runtime artifact access. Use Linux host-native provisioning, macOS Lima provisioning, or a CLI-only WSL install with --no-world instead." 4
 
 $projectHasCargo = Test-Path (Join-Path $projectPath 'Cargo.toml')
 $packagedWorldAgent = Join-Path $projectPath 'bin\\linux\\world-agent'

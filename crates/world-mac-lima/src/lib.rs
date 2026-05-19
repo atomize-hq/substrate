@@ -6,16 +6,20 @@
 
 use agent_api_client::AgentClient;
 use agent_api_types::{
-    ExecuteRequest, ExecuteResponse, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
-    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
-    WorldFsMode,
+    ExecuteRequest, ExecuteResponse, MemberDispatchRequestV1,
+    MemberRuntimeBackendKindV1 as AgentMemberRuntimeBackendKindV1, PolicySnapshotV3,
+    PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
+    PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1, WorldFsMode,
 };
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::PathBuf;
 use substrate_common::FsDiff;
 use tokio::runtime::Runtime;
-use world_api::{ExecRequest, ExecResult, WorldBackend, WorldHandle, WorldSpec};
+use world_api::{
+    ExecRequest, ExecResult, SharedWorldBindingSnapshot, SharedWorldBindingState,
+    SharedWorldOwnerAction, WorldBackend, WorldHandle, WorldSpec,
+};
 
 pub mod forwarding;
 mod limactl;
@@ -34,7 +38,11 @@ pub struct MacLimaBackend {
     runtime: Option<Runtime>,
     forwarding: std::sync::Mutex<Option<ForwardingHandle>>,
     session_cache: std::sync::Mutex<Option<WorldHandle>>,
+    shared_owner_cache: std::sync::Mutex<std::collections::HashMap<String, WorldHandle>>,
+    shared_owner_mutex: std::sync::Mutex<()>,
     fs_mode: std::sync::Mutex<WorldFsMode>,
+    #[cfg(test)]
+    session_setup_override: Option<std::sync::Arc<dyn SessionSetupMock>>,
 }
 
 impl MacLimaBackend {
@@ -59,7 +67,11 @@ impl MacLimaBackend {
             runtime: Some(runtime),
             forwarding: std::sync::Mutex::new(None),
             session_cache: std::sync::Mutex::new(None),
+            shared_owner_cache: std::sync::Mutex::new(std::collections::HashMap::new()),
+            shared_owner_mutex: std::sync::Mutex::new(()),
             fs_mode: std::sync::Mutex::new(WorldFsMode::Writable),
+            #[cfg(test)]
+            session_setup_override: None,
         })
     }
 
@@ -90,6 +102,15 @@ impl MacLimaBackend {
     pub fn new_with_vm_name(vm_name: String) -> Result<Self> {
         let mut backend = Self::new()?;
         backend.vm_name = vm_name;
+        Ok(backend)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_session_setup_mock(
+        session_setup_override: std::sync::Arc<dyn SessionSetupMock>,
+    ) -> Result<Self> {
+        let mut backend = Self::new()?;
+        backend.session_setup_override = Some(session_setup_override);
         Ok(backend)
     }
 
@@ -250,6 +271,126 @@ impl MacLimaBackend {
         Ok(())
     }
 
+    fn ensure_session_setup(&self) -> Result<()> {
+        #[cfg(test)]
+        if let Some(override_impl) = &self.session_setup_override {
+            return override_impl.ensure_setup();
+        }
+
+        self.ensure_vm_running()?;
+        self.ensure_forwarding()?;
+        Ok(())
+    }
+
+    async fn verify_agent_ready(&self) -> Result<()> {
+        #[cfg(test)]
+        if let Some(override_impl) = &self.session_setup_override {
+            return override_impl.verify_ready();
+        }
+
+        let client = self.build_agent_client()?;
+        let caps = client
+            .capabilities()
+            .await
+            .context("Failed to verify agent connectivity")?;
+
+        tracing::info!("Agent connectivity verified: {:?}", caps);
+        Ok(())
+    }
+
+    pub async fn ensure_persistent_session_ready_async(&self) -> Result<()> {
+        self.ensure_session_setup()?;
+        self.verify_agent_ready().await
+    }
+
+    fn ensure_agent_ready(&self) -> Result<()> {
+        self.block_on_compat(self.ensure_persistent_session_ready_async())
+    }
+
+    fn shared_world_id(&self, orchestration_session_id: &str, world_generation: u64) -> String {
+        format!(
+            "vm:{}:{}:{}",
+            self.vm_name, orchestration_session_id, world_generation
+        )
+    }
+
+    fn ensure_shared_owner_session(
+        &self,
+        owner: &world_api::SharedWorldOwnerSpec,
+    ) -> Result<WorldHandle> {
+        let _guard = self
+            .shared_owner_mutex
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+        let mut cache = self
+            .shared_owner_cache
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Lock poisoned: {}", e))?;
+
+        match &owner.action {
+            SharedWorldOwnerAction::AttachOrCreate => {
+                if let Some(handle) = cache.get(&owner.orchestration_session_id) {
+                    return Ok(handle.clone());
+                }
+
+                let world_id = self.shared_world_id(&owner.orchestration_session_id, 0);
+                let handle = WorldHandle {
+                    id: world_id.clone(),
+                    shared_binding: Some(SharedWorldBindingSnapshot {
+                        orchestration_session_id: owner.orchestration_session_id.clone(),
+                        world_id,
+                        world_generation: 0,
+                        binding_state: SharedWorldBindingState::Active,
+                    }),
+                };
+                cache.insert(owner.orchestration_session_id.clone(), handle.clone());
+                Ok(handle)
+            }
+            SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                expected_generation,
+                reason: _,
+            } => {
+                let current = cache
+                    .get(&owner.orchestration_session_id)
+                    .cloned()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "no active shared world found for orchestration session {}",
+                            owner.orchestration_session_id
+                        )
+                    })?;
+                let current_generation = current
+                    .shared_binding
+                    .as_ref()
+                    .map(|binding| binding.world_generation)
+                    .ok_or_else(|| anyhow::anyhow!("active shared world missing binding proof"))?;
+                if current_generation != *expected_generation {
+                    anyhow::bail!(
+                        "shared world generation conflict for {}: expected {}, found {}",
+                        owner.orchestration_session_id,
+                        expected_generation,
+                        current_generation
+                    );
+                }
+
+                let next_generation = expected_generation + 1;
+                let world_id =
+                    self.shared_world_id(&owner.orchestration_session_id, next_generation);
+                let handle = WorldHandle {
+                    id: world_id.clone(),
+                    shared_binding: Some(SharedWorldBindingSnapshot {
+                        orchestration_session_id: owner.orchestration_session_id.clone(),
+                        world_id,
+                        world_generation: next_generation,
+                        binding_state: SharedWorldBindingState::Active,
+                    }),
+                };
+                cache.insert(owner.orchestration_session_id.clone(), handle.clone());
+                Ok(handle)
+            }
+        }
+    }
+
     fn get_agent_endpoint(&self) -> Result<agent_api_client::Transport> {
         let forwarding = self
             .forwarding
@@ -307,8 +448,10 @@ impl MacLimaBackend {
             agent_id: "world-mac-lima".to_string(),
             budget: None,
             policy_snapshot,
+            shared_world: req.shared_world.clone(),
             world_network: None,
             world_fs_mode: Some(fs_mode),
+            member_dispatch: req.member_dispatch.as_ref().map(convert_member_dispatch),
         }
     }
 
@@ -385,10 +528,13 @@ impl Drop for MacLimaBackend {
 
 impl WorldBackend for MacLimaBackend {
     fn ensure_session(&self, spec: &WorldSpec) -> Result<WorldHandle> {
-        self.ensure_vm_running()?;
-        self.ensure_forwarding()?;
+        self.ensure_agent_ready()?;
 
         self.store_fs_mode(spec.fs_mode)?;
+
+        if let Some(owner) = spec.reuse_mode.shared_owner() {
+            return self.ensure_shared_owner_session(owner);
+        }
 
         // Cache session if requested
         if spec.reuse_session {
@@ -402,18 +548,13 @@ impl WorldBackend for MacLimaBackend {
             }
         }
 
-        // Verify connectivity via agent client
-        let client = self.build_agent_client()?;
-        let caps = self
-            .block_on_compat(async { client.capabilities().await })
-            .context("Failed to verify agent connectivity")?;
-
-        tracing::info!("Agent connectivity verified: {:?}", caps);
-
         // Generate world ID
         let world_id = format!("vm:{}", self.vm_name);
 
-        let handle = WorldHandle { id: world_id };
+        let handle = WorldHandle {
+            id: world_id.clone(),
+            shared_binding: None,
+        };
 
         if spec.reuse_session {
             let mut cache = self
@@ -469,6 +610,48 @@ impl WorldBackend for MacLimaBackend {
     }
 }
 
+fn convert_member_dispatch(
+    dispatch: &world_api::MemberDispatchRequestV1,
+) -> MemberDispatchRequestV1 {
+    MemberDispatchRequestV1 {
+        schema_version: dispatch.schema_version,
+        orchestration_session_id: dispatch.orchestration_session_id.clone(),
+        participant_id: dispatch.participant_id.clone(),
+        orchestrator_participant_id: dispatch.orchestrator_participant_id.clone(),
+        parent_participant_id: dispatch.parent_participant_id.clone(),
+        resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
+        backend_id: dispatch.backend_id.clone(),
+        protocol: dispatch.protocol.clone(),
+        run_id: dispatch.run_id.clone(),
+        world_id: dispatch.world_id.clone(),
+        world_generation: dispatch.world_generation,
+        initial_prompt: dispatch.initial_prompt.clone(),
+        resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+            backend_kind: convert_member_runtime_backend_kind(
+                dispatch.resolved_runtime.backend_kind.clone(),
+            ),
+            binary_path: dispatch.resolved_runtime.binary_path.clone(),
+        },
+    }
+}
+
+fn convert_member_runtime_backend_kind(
+    backend_kind: world_api::MemberRuntimeBackendKindV1,
+) -> AgentMemberRuntimeBackendKindV1 {
+    match backend_kind {
+        world_api::MemberRuntimeBackendKindV1::Codex => AgentMemberRuntimeBackendKindV1::Codex,
+        world_api::MemberRuntimeBackendKindV1::ClaudeCode => {
+            AgentMemberRuntimeBackendKindV1::ClaudeCode
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) trait SessionSetupMock: Send + Sync {
+    fn ensure_setup(&self) -> Result<()>;
+    fn verify_ready(&self) -> Result<()>;
+}
+
 #[cfg(test)]
 mod test_util {
     use std::sync::{LazyLock, Mutex, MutexGuard};
@@ -483,6 +666,34 @@ mod test_util {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    struct AlwaysReadySessionSetup {
+        setup_calls: AtomicUsize,
+        verify_calls: AtomicUsize,
+    }
+
+    impl AlwaysReadySessionSetup {
+        fn new() -> Self {
+            Self {
+                setup_calls: AtomicUsize::new(0),
+                verify_calls: AtomicUsize::new(0),
+            }
+        }
+    }
+
+    impl SessionSetupMock for AlwaysReadySessionSetup {
+        fn ensure_setup(&self) -> Result<()> {
+            self.setup_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn verify_ready(&self) -> Result<()> {
+            self.verify_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }
+    }
 
     #[test]
     fn test_backend_creation() {
@@ -561,6 +772,28 @@ mod tests {
                 env: std::collections::HashMap::new(),
                 pty: false,
                 span_id: None,
+                shared_world: Some(world_api::SharedWorldOwnerSpec {
+                    orchestration_session_id: "orch_123".to_string(),
+                    action: world_api::SharedWorldOwnerAction::AttachOrCreate,
+                }),
+                member_dispatch: Some(world_api::MemberDispatchRequestV1 {
+                    schema_version: 1,
+                    orchestration_session_id: "orch_123".to_string(),
+                    participant_id: "participant_123".to_string(),
+                    orchestrator_participant_id: "participant_root".to_string(),
+                    parent_participant_id: None,
+                    resumed_from_participant_id: None,
+                    backend_id: "backend_123".to_string(),
+                    protocol: "stdio".to_string(),
+                    run_id: "run_123".to_string(),
+                    world_id: "wld_123".to_string(),
+                    world_generation: 0,
+                    initial_prompt: Some("prompt".to_string()),
+                    resolved_runtime: world_api::ResolvedMemberRuntimeDescriptorV1 {
+                        backend_kind: world_api::MemberRuntimeBackendKindV1::Codex,
+                        binary_path: "/usr/bin/env".to_string(),
+                    },
+                }),
             };
             let fs_mode = backend.effective_fs_mode().expect("fs_mode");
             let agent_req = backend.convert_exec_request(&req, fs_mode);
@@ -569,11 +802,130 @@ mod tests {
                 Some(WorldFsMode::ReadOnly),
                 "mac backend should pass through env-derived fs mode"
             );
+            assert_eq!(agent_req.shared_world, req.shared_world);
+            assert_eq!(
+                agent_req.member_dispatch.as_ref().map(|dispatch| (
+                    dispatch.orchestration_session_id.as_str(),
+                    dispatch.participant_id.as_str(),
+                    dispatch.orchestrator_participant_id.as_str(),
+                    dispatch.backend_id.as_str(),
+                    dispatch.world_id.as_str(),
+                    dispatch.world_generation,
+                )),
+                Some((
+                    "orch_123",
+                    "participant_123",
+                    "participant_root",
+                    "backend_123",
+                    "wld_123",
+                    0,
+                ))
+            );
         }
 
         match prev {
             Some(value) => std::env::set_var("SUBSTRATE_WORLD_FS_MODE", value),
             None => std::env::remove_var("SUBSTRATE_WORLD_FS_MODE"),
         }
+    }
+
+    #[test]
+    fn ensure_session_owner_mode_sets_authoritative_shared_binding() {
+        let _env_guard = crate::test_util::lock_env();
+        let session_setup = Arc::new(AlwaysReadySessionSetup::new());
+        let backend =
+            MacLimaBackend::with_session_setup_mock(session_setup.clone()).expect("backend");
+
+        let attach = WorldSpec {
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(
+                world_api::SharedWorldOwnerSpec {
+                    orchestration_session_id: "orch_123".to_string(),
+                    action: world_api::SharedWorldOwnerAction::AttachOrCreate,
+                },
+            ),
+            ..WorldSpec::default()
+        };
+        let attached = backend
+            .ensure_session(&attach)
+            .expect("attach/create session");
+        let attached_binding = attached.shared_binding.expect("attach/create binding");
+        assert_eq!(attached_binding.orchestration_session_id, "orch_123");
+        assert_eq!(attached_binding.world_id, attached.id);
+        assert_eq!(attached_binding.world_generation, 0);
+        assert_eq!(
+            attached_binding.binding_state,
+            SharedWorldBindingState::Active
+        );
+
+        let replace = WorldSpec {
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(
+                world_api::SharedWorldOwnerSpec {
+                    orchestration_session_id: "orch_123".to_string(),
+                    action: world_api::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                        expected_generation: attached_binding.world_generation,
+                        reason: "restart".to_string(),
+                    },
+                },
+            ),
+            ..WorldSpec::default()
+        };
+
+        let replaced = backend
+            .ensure_session(&replace)
+            .expect("replacement session");
+        let binding = replaced.shared_binding.expect("replacement shared binding");
+        assert_eq!(binding.orchestration_session_id, "orch_123");
+        assert_eq!(binding.world_id, replaced.id);
+        assert_eq!(binding.world_generation, 1);
+        assert_eq!(binding.binding_state, SharedWorldBindingState::Active);
+        assert_ne!(binding.world_id, attached.id);
+        assert_eq!(session_setup.setup_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(session_setup.verify_calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn ensure_persistent_session_ready_async_runs_setup_and_verify() {
+        let _env_guard = crate::test_util::lock_env();
+        let session_setup = Arc::new(AlwaysReadySessionSetup::new());
+        let backend =
+            MacLimaBackend::with_session_setup_mock(session_setup.clone()).expect("backend");
+        let runtime = MacLimaBackend::new_runtime().expect("runtime");
+
+        runtime
+            .block_on(backend.ensure_persistent_session_ready_async())
+            .expect("async readiness");
+
+        assert_eq!(session_setup.setup_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(session_setup.verify_calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn ensure_session_owner_mode_replace_requires_existing_generation() {
+        let _env_guard = crate::test_util::lock_env();
+        let backend =
+            MacLimaBackend::with_session_setup_mock(Arc::new(AlwaysReadySessionSetup::new()))
+                .expect("backend");
+
+        let replace = WorldSpec {
+            reuse_mode: world_api::WorldReuseMode::SharedOrchestration(
+                world_api::SharedWorldOwnerSpec {
+                    orchestration_session_id: "orch_123".to_string(),
+                    action: world_api::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                        expected_generation: 4,
+                        reason: "restart".to_string(),
+                    },
+                },
+            ),
+            ..WorldSpec::default()
+        };
+
+        let err = backend
+            .ensure_session(&replace)
+            .expect_err("replace should fail closed");
+        assert!(
+            err.to_string()
+                .contains("no active shared world found for orchestration session orch_123"),
+            "unexpected error: {err:#}"
+        );
     }
 }

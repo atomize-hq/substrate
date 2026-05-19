@@ -107,17 +107,12 @@ pub(crate) struct SubstrateConfig {
     pub agents: AgentsConfig,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ReplExitCwdMode {
+    #[default]
     Entered,
     LastWorld,
-}
-
-impl Default for ReplExitCwdMode {
-    fn default() -> Self {
-        Self::Entered
-    }
 }
 
 impl ReplExitCwdMode {
@@ -187,17 +182,12 @@ pub(crate) struct LlmGatewayConfig {
     pub mode: LlmGatewayMode,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum LlmGatewayMode {
+    #[default]
     InWorld,
     HostOnly,
-}
-
-impl Default for LlmGatewayMode {
-    fn default() -> Self {
-        Self::InWorld
-    }
 }
 
 impl LlmGatewayMode {
@@ -262,17 +252,12 @@ pub(crate) struct WorldDepsConfig {
     pub builtins: WorldDepsBuiltinsMode,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorldDepsInventoryMode {
+    #[default]
     Merged,
     WorkspaceOnly,
-}
-
-impl Default for WorldDepsInventoryMode {
-    fn default() -> Self {
-        Self::Merged
-    }
 }
 
 impl WorldDepsInventoryMode {
@@ -285,17 +270,12 @@ impl WorldDepsInventoryMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorldDepsBuiltinsMode {
+    #[default]
     Enabled,
     Disabled,
-}
-
-impl Default for WorldDepsBuiltinsMode {
-    fn default() -> Self {
-        Self::Enabled
-    }
 }
 
 impl WorldDepsBuiltinsMode {
@@ -308,18 +288,13 @@ impl WorldDepsBuiltinsMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum PolicyMode {
     Disabled,
+    #[default]
     Observe,
     Enforce,
-}
-
-impl Default for PolicyMode {
-    fn default() -> Self {
-        Self::Observe
-    }
 }
 
 impl PolicyMode {
@@ -347,18 +322,13 @@ pub(crate) struct PolicyConfig {
     pub mode: PolicyMode,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum SyncDirection {
+    #[default]
     FromWorld,
     FromHost,
     Both,
-}
-
-impl Default for SyncDirection {
-    fn default() -> Self {
-        Self::FromWorld
-    }
 }
 
 impl SyncDirection {
@@ -372,18 +342,13 @@ impl SyncDirection {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum SyncConflictPolicy {
+    #[default]
     PreferHost,
     PreferWorld,
     Abort,
-}
-
-impl Default for SyncConflictPolicy {
-    fn default() -> Self {
-        Self::PreferHost
-    }
 }
 
 impl SyncConflictPolicy {
@@ -428,17 +393,12 @@ pub(crate) struct AgentDefaultsExecutionConfig {
     pub scope: AgentExecutionScope,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum AgentExecutionScope {
     Host,
+    #[default]
     World,
-}
-
-impl Default for AgentExecutionScope {
-    fn default() -> Self {
-        Self::World
-    }
 }
 
 impl AgentExecutionScope {
@@ -457,17 +417,12 @@ pub(crate) struct AgentDefaultsCliConfig {
     pub mode: AgentCliMode,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum AgentCliMode {
+    #[default]
     Persistent,
     PerRequest,
-}
-
-impl Default for AgentCliMode {
-    fn default() -> Self {
-        Self::Persistent
-    }
 }
 
 impl AgentCliMode {
@@ -493,17 +448,12 @@ pub(crate) struct AgentToolboxBindConfig {
     pub transport: AgentToolboxBindTransport,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum AgentToolboxBindTransport {
+    #[default]
     Uds,
     Tcp,
-}
-
-impl Default for AgentToolboxBindTransport {
-    fn default() -> Self {
-        Self::Uds
-    }
 }
 
 impl AgentToolboxBindTransport {
@@ -529,17 +479,12 @@ pub(crate) struct AgentHubWorldRestartConfig {
     pub on_drift: WorldRestartOnDriftMode,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum WorldRestartOnDriftMode {
+    #[default]
     AutoRestart,
     FailClosed,
-}
-
-impl Default for WorldRestartOnDriftMode {
-    fn default() -> Self {
-        Self::AutoRestart
-    }
 }
 
 impl WorldRestartOnDriftMode {

@@ -6,6 +6,10 @@
 //! - docs/project_management/next/world-first-repl-persistent-pty/requirements_traceability.md
 
 use serde_json::json;
+use world_api::{
+    SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerAction,
+    SharedWorldOwnerSpec,
+};
 
 use crate::execution::repl_persistent_session::{
     PersistentSessionClientCore, PersistentSessionProtocolError,
@@ -19,6 +23,17 @@ fn ready_frame(protocol_version: u32) -> serde_json::Value {
         "cwd": "/",
         "protocol_version": protocol_version,
     })
+}
+
+fn ready_frame_with_shared_world(
+    protocol_version: u32,
+    shared_world: Option<SharedWorldBindingSnapshot>,
+) -> serde_json::Value {
+    let mut frame = ready_frame(protocol_version);
+    if let Some(shared_world) = shared_world {
+        frame["shared_world"] = serde_json::to_value(shared_world).expect("serialize shared_world");
+    }
+    frame
 }
 
 fn exit_frame(code: i32) -> serde_json::Value {
@@ -178,4 +193,68 @@ fn ready_empty_world_id_is_fatal_protocol_error() {
         }))
         .expect_err("ready.world_id must be non-empty");
     assert!(err.is_fatal(), "empty world_id must be fatal: {err:#}");
+}
+
+#[test]
+fn ready_missing_shared_world_for_explicit_owner_request_is_fatal() {
+    let mut client = PersistentSessionClientCore::new();
+    client.note_start_session_sent_with_shared_world(Some(SharedWorldOwnerSpec {
+        orchestration_session_id: "orch-test".to_string(),
+        action: SharedWorldOwnerAction::AttachOrCreate,
+    }));
+
+    let err = client
+        .on_server_frame(ready_frame_with_shared_world(1, None))
+        .expect_err("explicit owner-bound start_session must require echoed proof");
+    assert!(
+        err.is_fatal(),
+        "missing shared_world must be fatal: {err:#}"
+    );
+}
+
+#[test]
+fn ready_unexpected_shared_world_for_generic_request_is_fatal() {
+    let mut client = PersistentSessionClientCore::new();
+    client.note_start_session_sent();
+
+    let err = client
+        .on_server_frame(ready_frame_with_shared_world(
+            1,
+            Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: "orch-test".to_string(),
+                world_id: "wld_test".to_string(),
+                world_generation: 0,
+                binding_state: SharedWorldBindingState::Active,
+            }),
+        ))
+        .expect_err("generic start_session must reject unexpected shared_world proof");
+    assert!(
+        err.is_fatal(),
+        "unexpected shared_world must be fatal: {err:#}"
+    );
+}
+
+#[test]
+fn ready_replace_expected_generation_requires_advanced_generation() {
+    let mut client = PersistentSessionClientCore::new();
+    client.note_start_session_sent_with_shared_world(Some(SharedWorldOwnerSpec {
+        orchestration_session_id: "orch-test".to_string(),
+        action: SharedWorldOwnerAction::ReplaceExpectedGeneration {
+            expected_generation: 4,
+            reason: "restart".to_string(),
+        },
+    }));
+
+    let err = client
+        .on_server_frame(ready_frame_with_shared_world(
+            1,
+            Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: "orch-test".to_string(),
+                world_id: "wld_test".to_string(),
+                world_generation: 4,
+                binding_state: SharedWorldBindingState::Active,
+            }),
+        ))
+        .expect_err("replace requests must reject stale echoed generations");
+    assert!(err.is_fatal(), "stale generation must be fatal: {err:#}");
 }

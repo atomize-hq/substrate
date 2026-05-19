@@ -85,6 +85,116 @@ fn parent_run_id_omits_by_field_absence_when_unset() {
 }
 
 #[test]
+fn participant_id_roundtrips_when_present() {
+    let mut value = minimal_valid_envelope_json();
+    value
+        .as_object_mut()
+        .expect("envelope object")
+        .insert("participant_id".to_string(), json!("ash_0195f8f1"));
+
+    let event: AgentEvent = serde_json::from_value(value).expect("deserialize AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert_eq!(
+        roundtrip.get("participant_id").and_then(Value::as_str),
+        Some("ash_0195f8f1"),
+        "expected participant_id to survive roundtrip; got: {roundtrip}"
+    );
+}
+
+#[test]
+fn participant_id_omits_when_unset() {
+    let event: AgentEvent =
+        serde_json::from_value(minimal_valid_envelope_json()).expect("deserialize AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert!(
+        roundtrip.get("participant_id").is_none(),
+        "expected participant_id to omit when unset; got: {roundtrip}"
+    );
+    assert!(
+        !roundtrip.to_string().contains("\"participant_id\":null"),
+        "participant_id must not serialize as null when unset: {roundtrip}"
+    );
+}
+
+#[test]
+fn parent_participant_id_roundtrips_when_present() {
+    let mut value = minimal_valid_envelope_json();
+    value
+        .as_object_mut()
+        .expect("envelope object")
+        .insert("parent_participant_id".to_string(), json!("ash_parent"));
+
+    let event: AgentEvent = serde_json::from_value(value).expect("deserialize AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert_eq!(
+        roundtrip
+            .get("parent_participant_id")
+            .and_then(Value::as_str),
+        Some("ash_parent"),
+        "expected parent_participant_id to survive roundtrip; got: {roundtrip}"
+    );
+}
+
+#[test]
+fn parent_participant_id_omits_when_unset() {
+    let event: AgentEvent =
+        serde_json::from_value(minimal_valid_envelope_json()).expect("deserialize AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert!(
+        roundtrip.get("parent_participant_id").is_none(),
+        "expected parent_participant_id to omit when unset; got: {roundtrip}"
+    );
+    assert!(
+        !roundtrip
+            .to_string()
+            .contains("\"parent_participant_id\":null"),
+        "parent_participant_id must not serialize as null when unset: {roundtrip}"
+    );
+}
+
+#[test]
+fn resumed_from_participant_id_roundtrips_when_present() {
+    let mut value = minimal_valid_envelope_json();
+    value.as_object_mut().expect("envelope object").insert(
+        "resumed_from_participant_id".to_string(),
+        json!("ash_previous"),
+    );
+
+    let event: AgentEvent = serde_json::from_value(value).expect("deserialize AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert_eq!(
+        roundtrip
+            .get("resumed_from_participant_id")
+            .and_then(Value::as_str),
+        Some("ash_previous"),
+        "expected resumed_from_participant_id to survive roundtrip; got: {roundtrip}"
+    );
+}
+
+#[test]
+fn resumed_from_participant_id_omits_when_unset() {
+    let event: AgentEvent =
+        serde_json::from_value(minimal_valid_envelope_json()).expect("deserialize AgentEvent");
+    let roundtrip = serde_json::to_value(&event).expect("serialize AgentEvent");
+
+    assert!(
+        roundtrip.get("resumed_from_participant_id").is_none(),
+        "expected resumed_from_participant_id to omit when unset; got: {roundtrip}"
+    );
+    assert!(
+        !roundtrip
+            .to_string()
+            .contains("\"resumed_from_participant_id\":null"),
+        "resumed_from_participant_id must not serialize as null when unset: {roundtrip}"
+    );
+}
+
+#[test]
 fn safe_channel_roundtrips() {
     let mut value = minimal_valid_envelope_json();
     value

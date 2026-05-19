@@ -81,14 +81,49 @@ Operator-visible identity rules on these surfaces:
 - `backend_id` always renders as `<kind>:<agent_id>`.
 - Pure-agent list rows omit `provider`, `auth_authority`, `world_id`, and `world_generation`.
 - Pure-agent status rows omit `provider` and `auth_authority`.
+- Pure-agent `source_kind=live_runtime` status rows carry authoritative `posture`, `attached_participant_id`, and `pending_inbox_count` from the session-root parent record.
+- Pure-agent `source_kind=trace_fallback` status rows keep `posture`, `attached_participant_id`, and `pending_inbox_count` as explicit `null` in `--json`; human-readable output marks those fields as `<unknown>`.
 - `world_id` and `world_generation` render only for world-scoped pure-agent session rows.
 - Nested gateway-backed status rows stay separate from pure-agent rows and are the only rows that publish `provider` and `auth_authority`.
 - Nested gateway-backed status rows depend on valid trace-side `parent_run_id` correlation; stale historical nested rows are ignored, and malformed selected-surface rows fail closed.
 - `substrate agent doctor` now includes a `runtime_realizability` check after `orchestrator_selection`. For the selected orchestrator, it fail-closes on unsupported `config.kind`, unsupported `cli.mode`, unsupported shell-owned backend mapping, or an unresolved `config.cli.binary`.
 - `substrate agent toolbox status` is a pre-runtime introspection surface: it projects the effective toolbox posture, the selected orchestrator identity, and either the active per-session UDS endpoint or the deterministic endpoint template when no orchestrator session is active yet.
-- `substrate agent toolbox env` emits `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` and `SUBSTRATE_AGENT_TOOLBOX_VERSION` only when a current pure-agent orchestrator session is present; otherwise it fails closed with a specific exit code.
+- `substrate agent toolbox env` emits `SUBSTRATE_AGENT_TOOLBOX_ENDPOINT` and `SUBSTRATE_AGENT_TOOLBOX_VERSION` only when a current live host-scoped orchestrator session is present; otherwise it fails closed with exit `3`.
 
-When the async REPL owns a shell-scoped orchestrator session, live session discovery is backed by persisted manifests under `~/.substrate/run/agent-hub/handles/`. `substrate agent status` and `substrate agent toolbox ...` prefer those live manifests before falling back to trace-derived session discovery.
+When the async REPL owns a shell-scoped orchestrator session, live session discovery is backed by the store-owned session root:
+- `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/session.json`
+- `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/<participant_id>.json`
+
+`substrate agent status` and `substrate agent toolbox ...` resolve live state from those session records first. Those canonical session-root parent plus participant records are the live-state authority boundary for live-runtime pure-agent rows.
+
+`~/.substrate/run/agent-hub/sessions/<orchestration_session_id>.json` and `~/.substrate/run/agent-hub/participants/*.json` remain flat compatibility bridge input/output only during the cutover. Legacy `~/.substrate/run/agent-hub/handles/*.json` remains compatibility input only and is last-resort compatibility input only. None of those files outrank the canonical session-root records.
+
+Trace is historical fallback only for `substrate agent status` gaps after live-state filtering. It can still contribute `source_kind=trace_fallback` pure-agent rows and trace-correlated `nested_llm_records`, but it never authorizes live posture truth for the three durable-session fields and never authorizes current-session toolbox state or `substrate agent toolbox env`.
+
+### Public Session Control
+
+The public prompt-taking and control surface is intentionally narrow:
+
+```bash
+substrate agent start --backend <backend_id> --prompt "hello" --json
+substrate agent turn --session <orchestration_session_id> --backend <backend_id> --prompt "next" --json
+substrate agent reattach --session <orchestration_session_id> --json
+substrate agent fork --session <orchestration_session_id> --json
+substrate agent stop --session <orchestration_session_id> --json
+```
+
+- `substrate agent start` is the canonical public root prompt-taking surface and remains host-only in v1.
+- `substrate agent turn` is the canonical public follow-up surface and requires the exact pair `(--session <orchestration_session_id>, --backend <backend_id>)`.
+- `substrate agent reattach` is attached-owner recovery only for the same durable session; it does not submit a prompt.
+- `substrate agent stop` is the canonical closeout path for attached and parked durable host sessions.
+- `substrate agent status --json` is the authoritative parked-session read surface for live-runtime `posture`, `attached_participant_id`, and `pending_inbox_count`.
+- Public follow-up never falls back to `participant_id`, legacy `session_handle_id`, `active_session_handle_id`, or `internal.uaa_session_id`; those selector shapes fail closed.
+- There is still no default-agent routing and there is still no public world-root `start`.
+- On Linux, exact world-member follow-up reuses the retained member slot and submits through the typed `/v1/member_turn/stream` path.
+- Detached host recovery stays on `substrate agent reattach --session <orchestration_session_id>`.
+- Detached world follow-up fails closed until `reattach` restores an active host owner.
+- Durable inbox behavior is intentionally narrow: persistence exists, pending work can normalize posture into `awaiting_attention`, internal ack/dismiss plus dev-support/test ingress exist, and no public inbox command surface or automatic resume-from-inbox workflow is shipped.
+- `substrate -c`, `--command`, and piped stdin remain shell execution surfaces rather than agent-prompt aliases.
 
 ## PTY Support
 

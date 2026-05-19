@@ -302,6 +302,28 @@ Keep concise, actionable, and security-focused.
 
 
 ## Hardening / Quality
+- **P1 – Revisit and likely retire the remaining hidden `runtime_bootstrap_prompt(...)` host-orchestrator bootstrap path**
+  - Context: public prompt-taking flows no longer use the hidden bootstrap prompt.
+    - Public `substrate agent start` loads the caller’s `--prompt` into `plan.startup_prompt.prompt_text` in `crates/shell/src/execution/agents_cmd.rs`, then launches the owner-helper with `InitialExecPromptPlan::StartupPrompt { prompt, .. }` in `crates/shell/src/repl/async_repl.rs`.
+    - Public `substrate agent turn` sends the caller’s follow-up prompt text through the private owner transport via `run_public_prompt_command()` / `request_private_prompt_stream()` / `submit_host_prompt_turn()` in `crates/shell/src/execution/agent_runtime/control.rs`.
+    - The strongest in-repo proof today is `crates/shell/tests/agent_public_control_surface_v1.rs::public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state`, which captures the fake backend stdin and asserts invocation 1 contains `"hello from start"` and invocation 2 contains `"hello from turn"`, while the startup invocation is `exec` rather than `resume`.
+  - Remaining hidden path: `runtime_bootstrap_prompt(...)` is still reachable when `start_host_orchestrator_runtime_with_prepared_prompt(...)` is called with `initial_prompt == None` in `crates/shell/src/repl/async_repl.rs`.
+    - This still happens in the normal async REPL host-orchestrator bootstrap path via `start_host_orchestrator_runtime_with_prepared(...)` / `start_host_orchestrator_runtime(...)`.
+    - It is therefore not dead code and still injects an internal hidden prompt on non-public REPL bootstrap, even though the public agent-control paths have been de-bootstrapified.
+  - Why revisit soon:
+    - The codebase now has two materially different startup semantics:
+      - public agent-control start/turn = operator prompt text is the real prompt,
+      - legacy/internal REPL bootstrap = hidden bootstrap prompt when no explicit initial prompt is provided.
+    - This split is easy for humans and future agents to misread, especially when tracing regressions around startup ordering, ownership establishment, or prompt provenance.
+    - Keeping the hidden path around may be correct for now, but it should be a deliberate contract, not accidental drift.
+  - Work:
+    - Confirm whether the REPL still needs `runtime_bootstrap_prompt(...)` at all, or whether it should move to the same explicit-prompt model as public agent control.
+    - If it must remain, document the contract clearly in `docs/USAGE.md` / `docs/WORLD.md` / agent-control docs: which entrypoints still synthesize a hidden bootstrap prompt, and why.
+    - If it can be removed, delete the fallback branch in `start_host_orchestrator_runtime_with_prepared_prompt(...)` and update tests to prove there is no hidden prompt injection anywhere on host public-control paths or REPL startup.
+    - Add or tighten regression coverage around prompt provenance so future changes cannot silently reintroduce bootstrap-composed prompts into public `agent start` / `agent turn`.
+  - Acceptance:
+    - Future readers can answer, from docs and tests, whether any shipped entrypoint still uses a hidden bootstrap prompt.
+    - Either the hidden fallback is removed, or it remains with explicit documentation and tests proving its exact reachability boundary.
 - Document backend divergence
   - Clarify why shell uses world-agent and replay uses LinuxLocalBackend; outline future convergence plan.
 - Redaction hardening for “command body” tracing (preexec + future trace surfaces)

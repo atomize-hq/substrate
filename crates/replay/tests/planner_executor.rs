@@ -84,10 +84,9 @@ fn latest_replay_strategy(trace_path: &PathBuf) -> Option<Value> {
         .ok()?
         .lines()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
-        .filter(|value| {
+        .rfind(|value| {
             value.get("event_type").and_then(|value| value.as_str()) == Some("replay_strategy")
         })
-        .next_back()
 }
 
 #[tokio::test]

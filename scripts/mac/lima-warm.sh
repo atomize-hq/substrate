@@ -4,6 +4,7 @@ set -euo pipefail
 VM_NAME="${LIMA_VM_NAME:-substrate}"
 PROFILE="${LIMA_PROFILE_PATH:-scripts/mac/lima/substrate.yaml}"
 PROJECT_PATH=""
+PROJECT_PATH_EXPLICIT=0
 CHECK_ONLY=0
 BUILD_PROFILE="${LIMA_BUILD_PROFILE:-release}"
 LAYOUT_SENTINEL="/etc/substrate-lima-layout"
@@ -50,6 +51,7 @@ while [[ $# -gt 0 ]]; do
         *)
             if [[ -z "${PROJECT_PATH}" ]]; then
                 PROJECT_PATH="$1"
+                PROJECT_PATH_EXPLICIT=1
             else
                 fatal "Unexpected argument: $1"
             fi
@@ -62,6 +64,30 @@ if [[ -z "${PROJECT_PATH}" ]]; then
     PROJECT_PATH="$(pwd)"
 fi
 PROJECT_PATH="$(cd "${PROJECT_PATH}" && pwd)"
+
+resolve_default_worktree_path() {
+    if [[ "${PROJECT_PATH_EXPLICIT}" -eq 1 ]]; then
+        return
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+        return
+    fi
+
+    local git_dir common_dir primary_worktree
+    git_dir="$(git -C "${PROJECT_PATH}" rev-parse --git-dir 2>/dev/null || true)"
+    common_dir="$(git -C "${PROJECT_PATH}" rev-parse --git-common-dir 2>/dev/null || true)"
+    if [[ -z "${git_dir}" || -z "${common_dir}" || "${git_dir}" == "${common_dir}" ]]; then
+        return
+    fi
+
+    primary_worktree="$(git -C "${PROJECT_PATH}" worktree list --porcelain 2>/dev/null | awk '/^worktree / { print substr($0, 10); exit }')"
+    if [[ -n "${primary_worktree}" && -d "${primary_worktree}" && "${primary_worktree}" != "${PROJECT_PATH}" ]]; then
+        log "Detected linked worktree; defaulting Lima mount path to primary checkout ${primary_worktree}"
+        PROJECT_PATH="${primary_worktree}"
+    fi
+}
+
+resolve_default_worktree_path
 
 require_cmd() {
     local name="$1"
@@ -637,6 +663,7 @@ EOF
 }
 
 write_systemd_units() {
+    local guest_substrate_home="$1"
     local enable_netfilter="${SUBSTRATE_WORLD_NETFILTER_ENABLE:-0}"
     case "${enable_netfilter}" in
         1|true|yes|TRUE|YES)
@@ -646,7 +673,7 @@ write_systemd_units() {
             log "Writing guest systemd unit without WORLD_NETFILTER_ENABLE=1"
             ;;
     esac
-    limactl shell "${VM_NAME}" env SUBSTRATE_WORLD_NETFILTER_ENABLE="${enable_netfilter}" bash <<'EOF'
+    limactl shell "${VM_NAME}" env SUBSTRATE_WORLD_NETFILTER_ENABLE="${enable_netfilter}" SUBSTRATE_GUEST_HOME="${guest_substrate_home}" bash <<'EOF'
 set -euo pipefail
 
 netfilter_env=""
@@ -670,6 +697,7 @@ RestartSec=5
 Environment=RUST_LOG=info
 Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
+Environment=SUBSTRATE_HOME=${SUBSTRATE_GUEST_HOME}
 ${netfilter_env}
 Group=substrate
 UMask=0027
@@ -683,7 +711,7 @@ StandardError=journal
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
+ReadWritePaths=${SUBSTRATE_GUEST_HOME} /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 
@@ -712,8 +740,10 @@ EOF
 }
 
 enable_socket_activation() {
-    limactl shell "${VM_NAME}" bash <<'EOF'
+    local guest_substrate_home="$1"
+    limactl shell "${VM_NAME}" env SUBSTRATE_GUEST_HOME="${guest_substrate_home}" bash <<'EOF'
 set -euo pipefail
+sudo install -d -m0755 "${SUBSTRATE_GUEST_HOME}"
 sudo install -d -m0750 /var/lib/substrate
 sudo install -d -m0750 -o root -g substrate /run/substrate
 sudo systemctl daemon-reload
@@ -762,15 +792,22 @@ linger_guidance() {
 configure_guest() {
     ensure_repo_mount
     local vm_user
+    local vm_home
+    local guest_substrate_home
     vm_user="$(limactl shell "${VM_NAME}" id -un | tr -d '\r')"
     if [[ -z "${vm_user}" ]]; then
         fatal "Unable to determine Lima guest user."
     fi
+    vm_home="$(limactl shell "${VM_NAME}" getent passwd "${vm_user}" | cut -d: -f6 | tr -d '\r')"
+    if [[ -z "${vm_home}" ]]; then
+        vm_home="/home/${vm_user}"
+    fi
+    guest_substrate_home="${vm_home}/.substrate"
     ensure_substrate_group "${vm_user}"
     install_guest_binaries
     verify_guest_binaries
-    write_systemd_units
-    enable_socket_activation
+    write_systemd_units "${guest_substrate_home}"
+    enable_socket_activation "${guest_substrate_home}"
     socket_summary
     write_layout_sentinel
     linger_guidance "${vm_user}"
@@ -786,3 +823,4 @@ ensure_vm_ready
 configure_guest
 
 log "Lima world backend '${VM_NAME}' is ready. Verify with: limactl shell ${VM_NAME} sudo systemctl status substrate-world-agent.socket"
+log "Optional orchestration parity proof: scripts/mac/orchestration-smoke.sh"

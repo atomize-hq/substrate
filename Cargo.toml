@@ -58,9 +58,10 @@ members = [
     "crates/broker", "crates/trace",
     # "crates/trace",   # TODO: Implement after broker
     "crates/telemetry-lib",
-    "crates/replay", "crates/substrate-graph", "crates/forwarder", "crates/world-windows-wsl",
+    "crates/replay", "crates/forwarder", "crates/world-windows-wsl",
     "tools/version-bump",
 ]
+exclude = ["crates/substrate-graph"]
 
 [workspace.dependencies]
 anyhow = "1.0"

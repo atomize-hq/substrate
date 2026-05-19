@@ -59,7 +59,13 @@ Phase 8 introduces/locks additional cross-feature correlation fields (e.g., `orc
 Operator note (non-negotiable):
 - Do not rely on heuristic joins. Prefer explicit join keys (`session_id`, `orchestration_session_id`, `run_id`, explicit cause refs) as defined in ADR-0028/Phase 8 contracts.
 - Trace is safe-by-default: do not mirror raw third-party JSONL/NDJSON agent logs into `trace.jsonl` by default. Treat raw wrapper logs and any payloads that may contain secrets as per-session artifacts, and apply redaction/caps rules per ADR-0028 and the Phase 8 secrets rubric.
-- Live shell-owned orchestrator session ownership is persisted separately from trace under `~/.substrate/run/agent-hub/handles/*.json`. Those manifests reflect a REPL-owned session only while the shell still retains the attached UAA control boundary (cancel ownership plus active event/completion observation). Trace remains the canonical historical event log; the live manifests only provide cross-invocation session discovery and precedence for current-session status/toolbox surfaces.
+- Live shell-owned orchestrator session ownership is persisted separately from trace under `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/session.json` plus `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>/participants/<participant_id>.json`. Those canonical session-root records are the live-state authority boundary for agent-hub operator surfaces.
+- `~/.substrate/run/agent-hub/sessions/<orchestration_session_id>.json` plus `~/.substrate/run/agent-hub/participants/*.json` remain flat compatibility bridge input/output only during the cutover. They may fill torn-root gaps on read, but they do not outrank canonical session-root records and must not be treated as live-state authority.
+- Legacy `~/.substrate/run/agent-hub/handles/*.json` remains legacy compatibility input only and is last-resort compatibility input only. Handle files never authorize live state when canonical or flat compatibility session records exist.
+- The child participant record is authoritative-live only while the shell still retains the attached UAA control boundary, and production status/toolbox discovery must resolve through the parent record plus the live runtime participant snapshot instead of treating flat compatibility files or legacy handle files as truth.
+- Invalidated participant tombstones in canonical or flat compatibility participant records beat stale trace fallback rows for live-state selection. If no replacement participant has been persisted yet for the same `(orchestration_session_id, agent_id, execution.scope)` tuple, the selected live surface omits that tuple instead of resurfacing stale liveness from trace.
+- Runtime participant lineage persists under `resumed_from_participant_id`; any `resumed_from_session_handle_id` input is compatibility-only aliasing on read.
+- Trace remains the canonical historical event log and historical fallback for `substrate agent status` gaps only. Trace never authorizes current-session toolbox state or `substrate agent toolbox env`.
 
 ### Command Span Schema (`command_start` / `command_complete`)
 
@@ -150,6 +156,12 @@ These are canonical cross-feature correlation identifiers. Details and required/
 - `backend_id`: backend identifier in `<kind>:<name>` form (e.g., `cli:codex`, `api:openai`) when a specific backend is involved.
 - `world_id`: world boundary identity; required on in-world telemetry families (e.g., `world_process_*`) and any record that describes an in-world boundary/session.
 
+Emission rule:
+- `AgentEvent` keeps backward-compatible additive lineage fields: `participant_id`, `parent_participant_id`, and `resumed_from_participant_id`.
+- Runtime-owned producers must emit a real `orchestration_session_id` or suppress the agent-event row entirely; they must not synthesize a process-global fallback id.
+- Shell-owned command-completion and stream emitters follow the same real-id-or-suppress rule for orchestration-scoped `agent_event` rows. They may append the row only when live orchestration context already carries the authoritative `orchestration_session_id`; they must not backfill from `session_id`, PID lookup, synthetic run correlation, or any other heuristic.
+- Legacy trace rows may omit `participant_id`, `parent_participant_id`, and `resumed_from_participant_id`; consumers that ignore these additive fields continue to work unchanged.
+
 ### Agent Identity-Tuple Fields
 
 Agent-hub successor telemetry keeps adapter identity separate from semantic identity:
@@ -162,7 +174,12 @@ Agent-hub successor telemetry keeps adapter identity separate from semantic iden
 - `auth_authority`: nested gateway-backed auth authority only; pure-agent records omit it.
 - `parent_run_id`: nested gateway-backed trace correlation only; points at the parent pure-agent `run_id`.
 - `world_id`: world boundary identifier for world-scoped pure-agent records and in-world telemetry families.
-- `world_generation`: generation counter for the active world-scoped pure-agent session or world-backed execution.
+- `world_generation`: generation counter for the active world-scoped pure-agent session or world-backed execution when an authoritative shared-world binding proof exists.
+
+Boundary note:
+- The trace can carry `orchestration_session_id`, `world_id`, and `world_generation` for explicit shared-owner world executions, but trace remains historical audit output only.
+- Projection of the active shared-world binding into shell-owned runtime state remains PLAN-04.
+- Replacement/invalidation semantics for prior generations remain PLAN-05; consumers must not infer global invalidation from trace fields alone.
 
 `uaa.agent.session` is currently a Substrate-local normalized protocol-family id, not an automatic claim of upstream Unified Agent API wire or API compatibility. In the current repo, pure-agent records are stamped with that label by [agent_events.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/common/src/agent_events.rs:17), and `substrate agent status` / orchestrator-selection logic consumes the same label in [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:25).
 
@@ -173,6 +190,8 @@ The shell-owned UAA runtime translates external `agent_api` wrapper events into 
 - `auth_authority` omitted
 
 Bootstrap and lifecycle rows for the first host orchestrator caller path are emitted through the same canonical `agent_event` family; raw wrapper output stays outside `trace.jsonl`.
+
+Runtime-owned shell rows follow the same rule. Host stream chunks, shell command-completion events, and world-restart alerts emit orchestration-scoped `agent_event` rows only when a live parent orchestration session exists and supplies the real `orchestration_session_id`; otherwise stdout/stderr, `command_*` trace spans, and operator-facing terminal messaging continue without appending an orchestration-scoped `agent_event` row. Suppression here is additive only: missing orchestration context suppresses the shell-owned `agent_event` row, but it does not authorize heuristic recovery or synthetic correlation.
 
 Operator-facing omission rules:
 - Pure-agent records keep `client`, `router`, and `protocol`, and omit `provider` plus `auth_authority`.
@@ -247,6 +266,10 @@ These fields may appear on non-span records even when command spans remain uncha
 ### World Lifecycle Alerts (Agent Hub; Phase 8)
 
 Agent Hub emits structured alert events to make world session reuse and restart behavior operator-verifiable. These alerts are appended to `trace.jsonl` as structured agent events (not command spans).
+
+Current scope boundary:
+- These alerts are observational trace records, not the authoritative live-state registry for shared-world bindings.
+- A `world_generation` value in trace or on an alert does not by itself define replacement/invalidation semantics for prior-generation participants; that contract remains PLAN-05.
 
 Key machine-detectable alert codes:
 - `data.code="world_restarted"`: emitted when the hub auto-restarts the world (e.g., due to world-relevant drift).

@@ -112,6 +112,9 @@ CODEX_PROFILE ?=
 CODEX_MODEL ?=
 CODEX_JSONL ?= 0
 EMIT_JSON ?= 0
+PROVING_RUN_FACTS ?=
+PROVING_RUN_HUMAN_INPUTS ?=
+PROVING_RUN_CLOSEOUT_OUTPUT ?= proving-run-closeout.json
 
 .PHONY: planning-validate
 planning-validate:
@@ -244,6 +247,14 @@ pm-pre-planning-from-adr:
 	else \
 	  $(MAKE) pm-pre-planning-research FEATURE_DIR="$$feature_dir" START_AT="$(START_AT)" POLL_S="$(POLL_S)" CODEX_PROFILE="$(CODEX_PROFILE)" CODEX_MODEL="$(CODEX_MODEL)" CODEX_JSONL="$(CODEX_JSONL)"; \
 	fi
+
+.PHONY: pm-prepare-proving-run-closeout
+pm-prepare-proving-run-closeout:
+	@if [ -z "$(PROVING_RUN_FACTS)" ]; then echo "ERROR: set PROVING_RUN_FACTS=<path-to-lifecycle-facts.json>"; exit 2; fi
+	@set -euo pipefail; \
+	cmd="python3 docs/project_management/system/scripts/execution/prepare_proving_run_closeout.py --facts \"$(PROVING_RUN_FACTS)\" --output \"$(PROVING_RUN_CLOSEOUT_OUTPUT)\""; \
+	if [ -n "$(PROVING_RUN_HUMAN_INPUTS)" ]; then cmd="$$cmd --human-inputs \"$(PROVING_RUN_HUMAN_INPUTS)\""; fi; \
+	eval "$$cmd"
 
 .PHONY: pm-fse-pre-planning-from-adr
 pm-fse-pre-planning-from-adr:

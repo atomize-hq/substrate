@@ -52,6 +52,7 @@ pub(crate) fn collect_world_telemetry(span_id: &str) -> (Vec<String>, Option<FsD
     if let Ok(backend) = world_backend_factory::factory() {
         let handle = world_api::WorldHandle {
             id: world_id.clone(),
+            shared_binding: None,
         };
 
         let fs_diff = match backend.fs_diff(&handle, span_id) {

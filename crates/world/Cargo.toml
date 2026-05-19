@@ -30,7 +30,6 @@ linux-raw-sys = { version = "0.4.15", features = ["landlock"] }
 [target.'cfg(all(target_os = "linux", not(target_env = "musl")))'.dependencies]
 nix = { version = "0.27", features = ["mount", "sched", "fs", "user"] }
 prctl = "1"
-libseccomp = "0.3"
 which = "6"
 
 [target.'cfg(all(target_os = "linux", target_env = "musl"))'.dependencies]

@@ -6,15 +6,27 @@ use std::collections::{HashMap, HashSet};
 pub mod agent_events;
 pub mod agent_identity;
 pub mod fs_diff;
+pub mod gateway_auth_bundle;
 pub mod identity;
 pub mod manager_manifest;
 pub mod paths;
+pub mod seccomp;
 pub mod settings;
 pub mod world_exec_guard;
 
 pub use agent_events::{AgentEvent, AgentEventKind};
 pub use agent_identity::derive_agent_backend_id;
 pub use fs_diff::FsDiff;
+pub use gateway_auth_bundle::{
+    allowed_gateway_auth_fields, gateway_auth_bundle_schema_version, required_gateway_auth_fields,
+    validate_gateway_auth_bundle, GatewayAuthBundleV1, API_OPENAI_GATEWAY_AUTH_ALLOWED_FIELDS,
+    API_OPENAI_GATEWAY_AUTH_REQUIRED_FIELDS, CLI_CODEX_GATEWAY_AUTH_ALLOWED_FIELDS,
+    CLI_CODEX_GATEWAY_AUTH_REQUIRED_FIELDS, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
+    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, GATEWAY_AUTH_BUNDLE_SCHEMA_VERSION,
+    SUBSTRATE_LLM_AUTH_BUNDLE_FD, SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+};
 pub use identity::{
     validate_identity_tuple_and_placement_posture, IdentityTuple, PlacementExecution,
     PlacementPosture,
@@ -179,6 +191,17 @@ impl Default for ProcessTelemetry {
 pub mod prelude {
     pub use crate::agent_events::{AgentEvent, AgentEventKind};
     pub use crate::fs_diff::FsDiff;
+    pub use crate::gateway_auth_bundle::{
+        allowed_gateway_auth_fields, gateway_auth_bundle_schema_version,
+        required_gateway_auth_fields, validate_gateway_auth_bundle, GatewayAuthBundleV1,
+        API_OPENAI_GATEWAY_AUTH_ALLOWED_FIELDS, API_OPENAI_GATEWAY_AUTH_REQUIRED_FIELDS,
+        CLI_CODEX_GATEWAY_AUTH_ALLOWED_FIELDS, CLI_CODEX_GATEWAY_AUTH_REQUIRED_FIELDS,
+        GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI, GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX,
+        GATEWAY_AUTH_BUNDLE_SCHEMA_VERSION, SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+        SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+        SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+        SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+    };
     pub use crate::log_schema;
     pub use crate::manager_manifest::{
         DetectSpec, GuestSpec, InitSpec, InstallClass, InstallSpec, ManagerManifest, ManagerSpec,

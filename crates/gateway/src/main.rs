@@ -49,6 +49,8 @@ async fn start_foreground(
     config: cli::AppConfig,
     launch: GatewayLaunchContract,
 ) -> anyhow::Result<()> {
+    let integrated_auth = server::IntegratedGatewayAuthContext::from_launch_mode(launch.mode)?;
+
     // Write PID file
     if let Err(e) = pid::write_pid() {
         eprintln!("Warning: Failed to write PID file: {}", e);
@@ -77,7 +79,7 @@ async fn start_foreground(
     println!();
     println!("Press Ctrl+C to stop");
 
-    let result = server::start_server(config, launch).await;
+    let result = server::start_server(config, launch, integrated_auth).await;
     let _ = pid::cleanup_pid();
     result
 }
@@ -121,7 +123,7 @@ fn resolve_launch_and_config(
         cli::AppConfig::default_path,
         auth::token_store::TokenStore::default_path,
     )?;
-    let config = cli::AppConfig::from_file(&launch.config_path)?;
+    let config = cli::AppConfig::parse_file_without_env_resolution(&launch.config_path)?;
     Ok((launch, config))
 }
 

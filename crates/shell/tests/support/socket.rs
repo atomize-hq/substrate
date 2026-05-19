@@ -996,6 +996,20 @@ fn record_execute_request(records: &Arc<Mutex<Vec<JsonValue>>>, request: &HttpRe
     }
 }
 
+pub fn decode_recorded_execute_requests(
+    records: &Arc<Mutex<Vec<JsonValue>>>,
+) -> anyhow::Result<Vec<agent_api_types::ExecuteRequest>> {
+    let guard = records
+        .lock()
+        .map_err(|_| anyhow::anyhow!("recorded execute request mutex poisoned"))?;
+    guard
+        .iter()
+        .cloned()
+        .map(serde_json::from_value)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| anyhow::anyhow!("invalid recorded execute request: {err}"))
+}
+
 fn read_http_request(stream: &mut UnixStream) -> std::io::Result<HttpRequest> {
     let mut buf = Vec::new();
     let mut tmp = [0u8; 4096];
@@ -1103,6 +1117,18 @@ struct ExecuteRequestStub {
     cmd: String,
     cwd: Option<String>,
     env: Option<std::collections::HashMap<String, String>>,
+    #[serde(default)]
+    member_dispatch: Option<agent_api_types::MemberDispatchRequestV1>,
+}
+
+fn assert_member_dispatch_capture(
+    dispatch: &agent_api_types::MemberDispatchRequestV1,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        Path::new(&dispatch.resolved_runtime.binary_path).is_absolute(),
+        "captured member dispatch binary_path must remain absolute"
+    );
+    Ok(())
 }
 
 fn handle_host_execute(request: &HttpRequest, scopes: &[String]) -> anyhow::Result<String> {
@@ -1141,6 +1167,15 @@ struct HostCommandOutput {
 
 fn run_host_command(request: &ExecuteRequestStub) -> anyhow::Result<HostCommandOutput> {
     use std::process::Command;
+
+    if let Some(dispatch) = request.member_dispatch.as_ref() {
+        assert_member_dispatch_capture(dispatch)?;
+        return Ok(HostCommandOutput {
+            exit: 0,
+            stdout: Vec::new(),
+            stderr: Vec::new(),
+        });
+    }
 
     let mut cmd = Command::new("bash");
     cmd.arg("-c").arg(&request.cmd);

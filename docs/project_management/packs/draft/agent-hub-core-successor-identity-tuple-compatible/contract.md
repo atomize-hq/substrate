@@ -24,7 +24,7 @@ Authoritative inputs:
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md` remains authoritative for config and policy file families, precedence, and the deny-by-default allowlist posture.
 - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md` remains authoritative for the existing key families `agents.hub.orchestrator_agent_id`, `agents.hub.world_restart.on_drift`, `agents.allowed_backends`, and `llm.allowed_backends`.
 - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md` remains authoritative for the normalized meanings of `client`, `router`, `provider`, `auth_authority`, and `protocol`.
-- The future `agent-hub-session-protocol-spec.md` remains authoritative for capability-descriptor and session-handle schemas. `C-01` only fixes the command-surface projection of those schemas.
+- The future `agent-hub-session-protocol-spec.md` remains authoritative for capability-descriptor and session participant schemas. `C-01` only fixes the command-surface projection of those schemas.
 - The future `policy-spec.md` remains authoritative for ordered deny evaluation.
 - The future `telemetry-spec.md` remains authoritative for structured event and trace field placement.
 - If any later feature-local document conflicts with `C-01` on operator command behavior, `C-01` wins.
@@ -161,8 +161,8 @@ JSON rules:
 
 #### Behavior
 
-- `substrate agent status` reports the live successor view for the current process.
-- It returns the selected orchestrator identity plus every active pure-agent session row that survives the requested filters.
+- `substrate agent status` reports the selected successor status surface for the current process.
+- It returns the selected orchestrator identity plus every selected pure-agent session row that survives the requested filters after live-runtime-first selection and trace fallback for gaps.
 - It renders nested gateway-backed LLM activity as separate correlated rows.
 
 #### Human-readable sections
@@ -175,19 +175,29 @@ Human-readable status output renders:
 Pure-agent session render rules:
 - Each session row renders these fields in this order:
   1. `orchestration_session_id`
-  2. `agent_id`
-  3. `backend_id`
-  4. `client`
-  5. `router`
-  6. `protocol`
-  7. `execution.scope`
-  8. `role`
-  9. `last_event_at`
-  10. `world_id`
-  11. `world_generation`
+  2. `participant_id`
+  3. `agent_id`
+  4. `source_kind`
+  5. `backend_id`
+  6. `client`
+  7. `router`
+  8. `protocol`
+  9. `execution.scope`
+  10. `role`
+  11. `posture`
+  12. `attached_participant_id`
+  13. `pending_inbox_count`
+  14. `last_event_at`
+  15. `world_id`
+  16. `world_generation`
 - `client` renders exactly as the executing session's `agent_id`.
 - `router` renders `agent_hub`.
 - `protocol` renders `uaa.agent.session`.
+- `participant_id` renders the canonical child identity for the live participant row.
+- `source_kind` renders `live_runtime` or `trace_fallback`.
+- `posture`, `attached_participant_id`, and `pending_inbox_count` render authoritative live session-root values only on `source_kind=live_runtime` pure-agent rows.
+- Human-readable `source_kind=trace_fallback` rows render `posture=<unknown>`, `attached_participant_id=<unknown>`, and `pending_inbox_count=<unknown>`.
+- Human-readable `source_kind=live_runtime` rows render `attached_participant_id=<none>` when the authoritative parent session has no current attachment.
 - `world_id` and `world_generation` render only when `execution.scope=world`.
 - Host-scoped rows omit `world_id` and `world_generation`.
 - Pure-agent session rows omit `provider` and `auth_authority`.
@@ -195,14 +205,15 @@ Pure-agent session render rules:
 Nested LLM render rules:
 - Each nested row renders:
   1. `parent.orchestration_session_id`
-  2. `parent.agent_id`
-  3. `run_id`
-  4. `backend_id`
-  5. `client`
-  6. `router`
-  7. `provider`
-  8. `auth_authority`
-  9. `protocol`
+  2. `parent.participant_id`
+  3. `parent.agent_id`
+  4. `run_id`
+  5. `backend_id`
+  6. `client`
+  7. `router`
+  8. `provider`
+  9. `auth_authority`
+  10. `protocol`
 - `router` renders `substrate_gateway`.
 - `client` renders the parent agent session's `agent_id`.
 - `run_id` renders the nested request correlation id.
@@ -220,7 +231,9 @@ Nested LLM render rules:
   "sessions": [
     {
       "orchestration_session_id": "sess_001",
+      "participant_id": "ash_001",
       "agent_id": "codex",
+      "source_kind": "live_runtime",
       "backend_id": "cli:codex",
       "client": "codex",
       "router": "agent_hub",
@@ -229,6 +242,9 @@ Nested LLM render rules:
         "scope": "world"
       },
       "role": null,
+      "posture": "active_attached",
+      "attached_participant_id": "ash_orch_001",
+      "pending_inbox_count": 0,
       "last_event_at": "2026-04-24T18:30:00Z",
       "world_id": "world-17",
       "world_generation": 3
@@ -238,6 +254,7 @@ Nested LLM render rules:
     {
       "parent": {
         "orchestration_session_id": "sess_001",
+        "participant_id": "ash_001",
         "agent_id": "codex"
       },
       "run_id": "run_nested_001",
@@ -254,11 +271,16 @@ Nested LLM render rules:
 
 JSON rules:
 - `orchestrator_agent_id` is the selected inventory id, not the derived `backend_id`.
+- Each pure-agent session object includes `participant_id` as the canonical child identity.
+- Each pure-agent session object includes `source_kind`.
 - Each pure-agent session object includes `client`, `router`, and `protocol`.
 - Each pure-agent session object omits `provider` and `auth_authority`.
+- Each pure-agent `source_kind=live_runtime` session object includes authoritative `posture`, `attached_participant_id`, and `pending_inbox_count` from the session-root parent record.
+- Each pure-agent `source_kind=trace_fallback` session object renders `posture`, `attached_participant_id`, and `pending_inbox_count` as explicit `null`.
 - `world_id` and `world_generation` are both present or both absent.
 - `world_generation` is an integer that starts at `0` for a fresh world allocation and increments by `1` on each hub-driven restart of that orchestration session's world.
 - Each nested record includes `run_id` as the nested request correlation id.
+- Each nested record includes `parent.participant_id`.
 - Each nested record includes `provider` and `auth_authority`.
 - Each nested record omits `world_id` and `world_generation`.
 

@@ -245,6 +245,10 @@ Unknown keys and extra tables are preserved for future expansion.
 - `substrate world enable` overwrites `install:` after provisioning succeeds and repairs malformed metadata.
 - Legacy installs that still have `config.json` are read automatically, but new writes use `config.yaml`.
 - The generated `~/.substrate/manager_env.sh` exports derived `SUBSTRATE_*` state so shims and subprocesses observe a consistent view of the effective config.
+- Supported Linux/macOS provisioning helpers also wire `SUBSTRATE_HOME` into the
+  `substrate-world-agent` systemd unit and keep that exact path writable via
+  `ReadWritePaths`. WSL helper scripts are intentionally fail-closed in this slice
+  and do not claim that placement contract yet.
 
 ### World filesystem mode
 

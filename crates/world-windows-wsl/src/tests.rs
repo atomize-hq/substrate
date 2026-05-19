@@ -75,6 +75,7 @@ impl AgentApiMock for MockAgent {
                 stderr_b64: BASE64_STANDARD.encode(b""),
                 scopes_used: vec![],
                 fs_diff: None,
+                shared_world: None,
                 process_telemetry: ProcessTelemetry::not_supported_platform(),
             })
         })
@@ -136,6 +137,28 @@ fn ensure_session_runs_warm_on_failure() {
 }
 
 #[test]
+fn ensure_ready_runs_warm_on_failure() {
+    let (backend, agent, warm_invocations) = test_backend_with_agent();
+    agent.push_capabilities(Err(anyhow!("pipe missing")));
+    agent.push_capabilities(Ok(json!({"ok": true})));
+
+    backend.ensure_ready().expect("ready after warm");
+    assert_eq!(warm_invocations.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn ensure_persistent_session_ready_runs_warm_on_failure() {
+    let (backend, agent, warm_invocations) = test_backend_with_agent();
+    agent.push_capabilities(Err(anyhow!("pipe missing")));
+    agent.push_capabilities(Ok(json!({"ok": true})));
+
+    backend
+        .ensure_persistent_session_ready()
+        .expect("persistent session ready after warm");
+    assert_eq!(warm_invocations.load(Ordering::SeqCst), 1);
+}
+
+#[test]
 fn exec_routes_to_agent() {
     let (backend, agent, _) = test_backend_with_agent();
     agent.push_capabilities(Ok(json!({})));
@@ -149,6 +172,7 @@ fn exec_routes_to_agent() {
             writes: vec![PathBuf::from("/mnt/c/repo/new.txt")],
             ..Default::default()
         }),
+        shared_world: None,
         process_telemetry: ProcessTelemetry::not_supported_platform(),
     }));
 
@@ -160,6 +184,8 @@ fn exec_routes_to_agent() {
         env: std::iter::once(("KEY".to_string(), "VALUE".to_string())).collect(),
         pty: false,
         span_id: Some("span-123".to_string()),
+        shared_world: None,
+        member_dispatch: None,
     };
 
     let result = backend.exec(&world, req.clone()).expect("exec result");

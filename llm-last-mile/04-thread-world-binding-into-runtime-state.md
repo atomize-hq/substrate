@@ -2,26 +2,33 @@
 
 ## Objective
 
-Make the shell-owned agent runtime state authoritative for world binding by persisting the active
-`world_id` and `world_generation` in live runtime state, not only in trace/event records.
+Make the shell-owned agent runtime state authoritative for the live projection of shared-world
+binding by persisting the active `world_id` and `world_generation` in live runtime state, not only
+in trace/event records.
 
 This prerequisite is complete when the runtime manifest/state store tracks the currently bound
-world identity across initial startup, drift-triggered restarts, and fail-closed
+world identity across initial startup, backend-accepted generation changes, and fail-closed
 restart-required cases, and when downstream live-state consumers can trust the persisted runtime
-record instead of reconstructing world binding from trace history.
+record instead of reconstructing world binding from trace history or shell-local inference.
 
 ## Why This Exists
 
-The repo already has two parallel truths:
+`PLAN-03` establishes the missing authority seam. Linux shared-world ownership and
+`world_generation` now come from the world-api/Linux backend/world-agent contract, not from a
+shell-local invention path.
+
+This slice starts after that contract exists. The repo still has two truths that need to be
+joined:
 
 - Live runtime authority for orchestrator session ownership:
   - `crates/shell/src/execution/agent_runtime/session.rs`
   - `crates/shell/src/execution/agent_runtime/state_store.rs`
   - `crates/shell/src/execution/agents_cmd.rs`
-- World identity authority for the active shared world:
+- Backend-authoritative shared-world binding that now arrives through shell-visible transport:
   - in-memory `WorldSession` state in `crates/shell/src/repl/async_repl.rs`
   - persistent-session ready frames in `crates/shell/src/execution/repl_persistent_session.rs`
-  - trace/event records written via `crates/shell/src/execution/agent_events.rs` and
+  - non-PTY execute responses and trace/event records written via
+    `crates/shell/src/execution/agent_events.rs` and
     `crates/shell/src/execution/routing/telemetry.rs`
 
 Today those truths are not joined. The runtime manifest schema already has top-level
@@ -40,16 +47,17 @@ Today those truths are not joined. The runtime manifest schema already has top-l
 - `AgentRuntimeStateStore::persist_manifest(...)` writes the full manifest JSON, but the lease
   sidecar in `persist_lease(...)` does not currently include world binding.
 
-### World binding source of truth
+### Authoritative world-binding ingress
 
 - `WorldSession` in `crates/shell/src/repl/async_repl.rs` carries:
   - `world_id`
   - `world_generation`
   - restart sequencing
-- `open_world_session(...)` gets `ready.world_id` from the persistent-session protocol.
-- `start_world_session(...)` seeds `world_generation: 0`.
-- `restart_world_session(...)` increments `world_generation` and emits a `world_restarted`
-  alert.
+- `open_world_session(...)` gets the ready-frame binding from the persistent-session protocol.
+- `start_world_session(...)` and `restart_world_session(...)` already sit on the path where the
+  shell learns the backend-authoritative binding snapshot.
+- In this slice, `WorldSession` is the shell ingress for that snapshot. It is not the place that
+  defines shared-world owner authority or generic Linux reuse rules.
 - `handle_detected_world_drift(...)` emits `world_restart_required` alerts in fail-closed mode.
 
 ### Status and authorization surfaces
@@ -83,8 +91,9 @@ Today those truths are not joined. The runtime manifest schema already has top-l
 1. `AgentRuntimeSessionManifest` has world-binding fields but no mutation API, so runtime state
    cannot reflect the active world even though the schema allows it.
 
-2. The only durable place that tracks world generation changes today is trace/event history.
-   `WorldSession` knows the active generation in memory, but live runtime manifests do not.
+2. Even after `PLAN-03`, the only durable shell-visible place that tracks authoritative world
+   generation changes is still trace/event history. `WorldSession` knows the active generation in
+   memory, but live runtime manifests do not.
 
 3. Drift restart alerts (`world_restarted`, `world_restart_required`) publish top-level
    world identity, but they do not synchronize the runtime manifest before or with the event.
@@ -105,10 +114,11 @@ This prerequisite is limited to the shell runtime state path.
 
 ### In scope
 
-- Persisting active world binding into the shell runtime manifest and lease store.
+- Persisting the active backend-authoritative world binding into the shell runtime manifest and
+  lease store.
 - Seeding that binding from the active `WorldSession` at orchestrator runtime startup.
-- Updating that binding when the world restarts and when a fail-closed restart-required posture
-  is detected.
+- Updating that projection when the backend advances the shared-world generation and when a
+  fail-closed restart-required posture is detected.
 - Making runtime event producers consume the persisted binding so runtime state and emitted
   events stay aligned.
 - Preserving current `agent status` and toolbox live-authority behavior while upgrading the
@@ -117,6 +127,8 @@ This prerequisite is limited to the shell runtime state path.
 ### Out of scope
 
 - Relaxing host-only orchestrator selection.
+- Defining the shared-world owner tuple, generic Linux world reuse behavior, or backend allocation
+  rules already owned by `PLAN-03`.
 - Adding a general multi-member live registry or `/v1/agents` service.
 - Changing `substrate world gateway status --json` or the gateway status schema contracts.
 - Redefining whether host-scoped selected orchestrator rows should display world binding in
@@ -156,15 +168,15 @@ Required changes:
 - Thread the current `WorldSession` binding into `start_host_orchestrator_runtime(...)`.
   - `run_async_repl(...)` already starts the world session before starting the host orchestrator
     runtime; use that ordering.
-- Seed the newly created runtime manifest with the active world binding before the runtime is
-  considered ready/live.
+- Seed the newly created runtime manifest with the active authoritative world binding before the
+  runtime is considered ready/live.
 - Persist the bound manifest before emitting runtime events that should reflect live world
   attachment.
 
 Recommended implementation approach:
 
-- Introduce a small helper in `async_repl.rs` that applies the `WorldSession` binding to the
-  in-memory manifest and persists it through `AgentRuntimeStateStore`.
+- Introduce a small helper in `async_repl.rs` that applies the `WorldSession` binding snapshot to
+  the in-memory manifest and persists it through `AgentRuntimeStateStore`.
 - Use that helper:
   - once during initial orchestrator runtime bootstrap if `world_session.is_some()`
   - again after any world-session replacement caused by `restart_world_session(...)`
@@ -179,18 +191,20 @@ Primary file:
 
 Required changes:
 
-- Synchronize runtime manifest state whenever `WorldSession` changes.
+- Synchronize runtime manifest state whenever the shell receives a new authoritative
+  `WorldSession` binding.
 - The ordering requirement is important:
   - update manifest binding
   - persist manifest
   - then emit the corresponding alert/event
-- Ensure `world_generation` remains consistent with existing REPL semantics:
-  - startup generation: `0`
-  - each restart: `previous + 1`
+- Ensure `world_generation` remains consistent with backend-authoritative restart semantics:
+  - initial shared-world allocation returns the first authoritative generation
+  - each replacement persists the next generation the backend accepted
 
 Specific seams to touch:
 
 - `start_world_session(...)`
+- `open_world_session(...)`
 - `restart_world_session(...)`
 - `handle_detected_world_drift(...)`
 - any call sites that replace `world_session` after drift handling
@@ -207,7 +221,7 @@ Primary files:
 Required changes:
 
 - Runtime-originated pure-agent events should derive world binding from the runtime manifest once
-  it is available, not from ad hoc call-site copies.
+  it is available, not from ad hoc call-site copies or shell-side regeneration.
 - World lifecycle alerts should remain top-level-field compatible with the existing trace/event
   contract, but the persisted runtime state must be updated first.
 - No event schema expansion is required for this prerequisite; use the existing top-level
@@ -288,8 +302,8 @@ as the consistency model.
 - A live runtime manifest under `~/.substrate/run/agent-hub/handles/*.json` persists the active
   `world_id` and `world_generation` whenever the REPL has an active world session.
 - The paired `*.lease` file also includes the same world-binding fields.
-- On world restart, the live manifest updates from the old binding to the new binding with the
-  incremented generation.
+- On world restart, the live manifest updates from the old binding to the new
+  backend-authoritative binding with the incremented generation.
 - On fail-closed restart-required drift, the manifest still records the current authoritative
   binding instead of dropping back to `None`.
 
@@ -404,6 +418,6 @@ that owns:
 
 ## Deliverable
 
-Implement the runtime-state plumbing so that world binding is persisted in live shell runtime
-state and remains aligned with event emission, while preserving the current host-scoped selected
-orchestrator status contract.
+Implement the runtime-state plumbing so that the backend-authoritative shared-world binding is
+persisted in live shell runtime state and remains aligned with event emission, while preserving the
+current host-scoped selected orchestrator status contract.
