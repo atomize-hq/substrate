@@ -1242,16 +1242,16 @@ cache_linux_binary_from_lima() {
 }
 
 verify_prefix_linux_bundle() {
-  local missing=0
+  local missing_status=0
   local binary path
   for binary in substrate world-agent substrate-gateway; do
     path="${BIN_DIR}/linux/${binary}"
     if ! is_linux_elf "${path}"; then
       warn "Expected cached Linux ${binary} at ${path}, but it is missing or not a Linux ELF."
-      missing=1
+      missing_status=1
     fi
   done
-  return "${missing}"
+  return "${missing_status}"
 }
 
 stage_dev_world_runtime_bundle() {
@@ -1629,7 +1629,7 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
       write_env_sh_script "${WORLD_ENABLED}"
       write_manager_env_script "${WORLD_ENABLED}"
       warn "Unable to cache sudo credentials; world-agent service not provisioned."
-      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable --home \"${PREFIX}\"` to flip it back on."
+      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run 'substrate world enable --home \"${PREFIX}\"' to flip it back on."
     fi
   fi
   if [[ "${WORLD_ENABLED}" -eq 0 ]]; then
@@ -1650,7 +1650,7 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
 	      write_env_sh_script "${WORLD_ENABLED}"
       write_manager_env_script "${WORLD_ENABLED}"
       warn "world-provision script reported an error; rerun ${PROVISION_SCRIPT} manually to enable the world-agent service."
-      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable --home \"${PREFIX}\"` to flip it back on."
+      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run 'substrate world enable --home \"${PREFIX}\"' to flip it back on."
     fi
   else
     WORLD_PROVISION_FAILED=1
