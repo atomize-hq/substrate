@@ -4379,7 +4379,7 @@ fn prepare_member_runtime_startup_for_descriptor(
     })
 }
 
-#[cfg(unix)]
+#[cfg(all(test, unix))]
 async fn start_member_runtime_with_prepared(
     prepared: Option<PreparedAgentRuntime>,
     agent_printer: &ReplPrinter,

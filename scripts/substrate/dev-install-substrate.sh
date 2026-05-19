@@ -564,6 +564,152 @@ detect_platform_metadata() {
   return 1
 }
 
+resolve_package_for_runtime_library() {
+  local library="$1"
+
+  case "${PKG_MANAGER}" in
+    apt-get)
+      case "${library}" in
+        libseccomp) echo "libseccomp2" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    dnf|yum)
+      case "${library}" in
+        libseccomp) echo "libseccomp" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    pacman)
+      case "${library}" in
+        libseccomp) echo "libseccomp" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    zypper)
+      case "${library}" in
+        libseccomp) echo "libseccomp2" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+seccomp_runtime_available() {
+  if command -v ldconfig >/dev/null 2>&1; then
+    if ldconfig -p 2>/dev/null | grep -Eq 'libseccomp\.so(\.2)?([[:space:]]|$)'; then
+      return 0
+    fi
+  fi
+
+  if compgen -G '/lib*/libseccomp.so*' >/dev/null; then
+    return 0
+  fi
+  if compgen -G '/usr/lib*/libseccomp.so*' >/dev/null; then
+    return 0
+  fi
+
+  return 1
+}
+
+install_packages() {
+  local packages=("$@")
+  if [[ ${#packages[@]} -eq 0 ]]; then
+    return
+  fi
+
+  log "Installing packages: ${packages[*]}"
+  case "${PKG_MANAGER}" in
+    apt-get)
+      run_privileged apt-get update
+      run_privileged apt-get install -y "${packages[@]}"
+      ;;
+    dnf)
+      run_privileged dnf install -y "${packages[@]}"
+      ;;
+    yum)
+      run_privileged yum install -y "${packages[@]}"
+      ;;
+    pacman)
+      run_privileged pacman -Sy --noconfirm --needed "${packages[@]}"
+      ;;
+    zypper)
+      run_privileged zypper --non-interactive install "${packages[@]}"
+      ;;
+    *)
+      fatal "Unsupported package manager '${PKG_MANAGER}'. Install required runtime libraries manually and re-run."
+      ;;
+  esac
+}
+
+ensure_linux_runtime_libraries() {
+  local libraries=("$@")
+  local missing=()
+  local library=""
+
+  if [[ "${IS_LINUX}" -ne 1 || "${WORLD_ENABLED}" -ne 1 ]]; then
+    return
+  fi
+
+  for library in "${libraries[@]}"; do
+    case "${library}" in
+      libseccomp)
+        if ! seccomp_runtime_available; then
+          missing+=("${library}")
+        fi
+        ;;
+      *)
+        warn "No runtime library probe implemented for '${library}'; install it manually if required."
+        ;;
+    esac
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    return
+  fi
+
+  if ! detect_platform_metadata; then
+    fatal "Unable to detect a supported package manager for runtime library installation. Install ${missing[*]} manually and re-run."
+  fi
+
+  declare -A pkg_set=()
+  local pkg_list pkg
+  for library in "${missing[@]}"; do
+    pkg_list="$(resolve_package_for_runtime_library "${library}")"
+    if [[ -z "${pkg_list}" ]]; then
+      fatal "No package mapping for runtime library '${library}' under ${PKG_MANAGER}. Install it manually and re-run."
+    fi
+    for pkg in ${pkg_list}; do
+      pkg_set["${pkg}"]=1
+    done
+  done
+
+  local packages=()
+  for pkg in "${!pkg_set[@]}"; do
+    packages+=("${pkg}")
+  done
+
+  install_packages "${packages[@]}"
+
+  local remaining=()
+  for library in "${missing[@]}"; do
+    case "${library}" in
+      libseccomp)
+        if ! seccomp_runtime_available; then
+          remaining+=("${library}")
+        fi
+        ;;
+    esac
+  done
+
+  if [[ ${#remaining[@]} -gt 0 ]]; then
+    fatal "Unable to install required runtime libraries: ${remaining[*]}. Install them manually and re-run."
+  fi
+}
+
 write_host_state_metadata() {
   if [[ "${IS_LINUX}" -ne 1 ]]; then
     return
@@ -1473,6 +1619,7 @@ fi
 stage_dev_world_runtime_bundle "${PREFIX}" "${REPO_ROOT}" "${TARGET_DIR}"
 
 if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
+  ensure_linux_runtime_libraries libseccomp
   if [[ ${EUID} -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
     log "Caching sudo credentials for world provisioning (you may be prompted)..."
     if ! sudo -v; then

@@ -642,7 +642,7 @@ impl Serialize for SortedMap<'_> {
         S: serde::Serializer,
     {
         let mut entries: Vec<_> = self.0.iter().collect();
-        entries.sort_by(|(a_key, _), (b_key, _)| a_key.cmp(b_key));
+        entries.sort_by_key(|(key, _)| *key);
 
         let mut map = serializer.serialize_map(Some(entries.len()))?;
         for (key, value) in entries {

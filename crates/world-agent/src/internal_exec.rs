@@ -1065,36 +1065,23 @@ fn drop_caps_for_deny_enforcement(plan: &enforcement_plan::EnforcementPlanV1) ->
 
     #[cfg(all(target_os = "linux", not(target_env = "musl")))]
     fn install_strict_deny_seccomp() -> Result<()> {
-        use libseccomp::{ScmpAction, ScmpFilterContext, ScmpSyscall};
-
-        let mut ctx = ScmpFilterContext::new_filter(ScmpAction::Allow)
-            .map_err(|e| anyhow::anyhow!("seccomp init failed: {e}"))?;
-
-        let syscalls = [
-            "mount",
-            "umount2",
-            "pivot_root",
-            "open_tree",
-            "move_mount",
-            "fsopen",
-            "fsmount",
-            "fspick",
+        let rules = [
+            substrate_common::seccomp::SeccompRule::errno("mount", libc::EPERM),
+            substrate_common::seccomp::SeccompRule::errno("umount2", libc::EPERM),
+            substrate_common::seccomp::SeccompRule::errno("pivot_root", libc::EPERM),
+            substrate_common::seccomp::SeccompRule::errno("open_tree", libc::EPERM),
+            substrate_common::seccomp::SeccompRule::errno("move_mount", libc::EPERM),
+            substrate_common::seccomp::SeccompRule::errno("fsopen", libc::EPERM),
+            substrate_common::seccomp::SeccompRule::errno("fsmount", libc::EPERM),
+            substrate_common::seccomp::SeccompRule::errno("fspick", libc::EPERM),
         ];
 
-        for name in syscalls {
-            let syscall = match ScmpSyscall::from_name(name) {
-                Ok(v) => v,
-                Err(_) => continue, // syscall not present on this kernel/arch (N/A)
-            };
-
-            ctx.add_rule(ScmpAction::Errno(libc::EPERM), syscall)
-                .map_err(|e| anyhow::anyhow!("seccomp add_rule({name}) failed: {e}"))?;
+        match substrate_common::seccomp::install_allow_filter(&rules)? {
+            substrate_common::seccomp::SeccompInstallStatus::Installed => Ok(()),
+            substrate_common::seccomp::SeccompInstallStatus::Unavailable(reason) => {
+                anyhow::bail!("strict deny enforcement requires seccomp, but {reason}")
+            }
         }
-
-        ctx.load()
-            .map_err(|e| anyhow::anyhow!("seccomp load failed: {e}"))?;
-
-        Ok(())
     }
 
     #[cfg(all(target_os = "linux", target_env = "musl"))]

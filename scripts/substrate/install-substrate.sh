@@ -1009,6 +1009,57 @@ resolve_package_for_command() {
   esac
 }
 
+resolve_package_for_runtime_library() {
+  local library="$1"
+
+  case "${PKG_MANAGER}" in
+    apt-get)
+      case "${library}" in
+        libseccomp) echo "libseccomp2" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    dnf|yum)
+      case "${library}" in
+        libseccomp) echo "libseccomp" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    pacman)
+      case "${library}" in
+        libseccomp) echo "libseccomp" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    zypper)
+      case "${library}" in
+        libseccomp) echo "libseccomp2" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+seccomp_runtime_available() {
+  if command -v ldconfig >/dev/null 2>&1; then
+    if ldconfig -p 2>/dev/null | grep -Eq 'libseccomp\.so(\.2)?([[:space:]]|$)'; then
+      return 0
+    fi
+  fi
+
+  if compgen -G '/lib*/libseccomp.so*' >/dev/null; then
+    return 0
+  fi
+  if compgen -G '/usr/lib*/libseccomp.so*' >/dev/null; then
+    return 0
+  fi
+
+  return 1
+}
+
 install_packages() {
   local packages=()
   packages=("$@")
@@ -1109,6 +1160,78 @@ ensure_linux_packages_for_commands() {
   done
   if [[ ${#remaining[@]} -gt 0 ]]; then
     fatal "Unable to install required commands: ${remaining[*]}. Install them manually and re-run."
+  fi
+}
+
+ensure_linux_packages_for_runtime_libraries() {
+  local libraries=("$@")
+  local missing_libraries=()
+  local library=""
+
+  for library in "${libraries[@]}"; do
+    case "${library}" in
+      libseccomp)
+        if ! seccomp_runtime_available; then
+          missing_libraries+=("${library}")
+        fi
+        ;;
+      *)
+        warn "No runtime library probe implemented for '${library}'; please install it manually if required."
+        ;;
+    esac
+  done
+
+  if [[ ${#missing_libraries[@]} -eq 0 ]]; then
+    return
+  fi
+
+  if ! detect_package_manager; then
+    fail_no_supported_pkg_manager "${missing_libraries[@]}"
+  fi
+
+  initialize_sudo
+  maybe_emit_package_manager_decision_line
+
+  declare -A pkg_set=()
+  local pkg_list pkg
+  for library in "${missing_libraries[@]}"; do
+    pkg_list="$(resolve_package_for_runtime_library "${library}")"
+    if [[ -z "${pkg_list}" ]]; then
+      warn "No package mapping for runtime library '${library}' under ${PKG_MANAGER}; please install it manually."
+      continue
+    fi
+    for pkg in ${pkg_list}; do
+      pkg_set["${pkg}"]=1
+    done
+  done
+
+  if [[ ${#pkg_set[@]} -eq 0 ]]; then
+    return
+  fi
+
+  local packages=()
+  for pkg in "${!pkg_set[@]}"; do
+    packages+=("${pkg}")
+  done
+
+  install_packages "${packages[@]}"
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    return
+  fi
+
+  local remaining=()
+  for library in "${missing_libraries[@]}"; do
+    case "${library}" in
+      libseccomp)
+        if ! seccomp_runtime_available; then
+          remaining+=("${library}")
+        fi
+        ;;
+    esac
+  done
+  if [[ ${#remaining[@]} -gt 0 ]]; then
+    fatal "Unable to install required runtime libraries: ${remaining[*]}. Install them manually and re-run."
   fi
 }
 
@@ -1537,6 +1660,7 @@ ensure_linux_prereqs() {
 
   if [[ "${NO_WORLD}" -eq 0 ]]; then
     ensure_linux_packages_for_commands systemctl fuse-overlayfs nft ip
+    ensure_linux_packages_for_runtime_libraries libseccomp
     require_cmd systemctl
     require_cmd fuse-overlayfs
     require_cmd nft

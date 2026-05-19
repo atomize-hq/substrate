@@ -1402,7 +1402,7 @@ impl AgentRuntimeStateStore {
             }
         }
 
-        sessions.sort_by(|left, right| left.last_active_at.cmp(&right.last_active_at));
+        sessions.sort_by_key(|session| session.last_active_at);
         Ok(sessions)
     }
 
