@@ -29,9 +29,11 @@ use axum::{
 };
 use chrono::Local;
 use futures::stream::TryStreamExt;
+use std::env;
+#[cfg(unix)]
+use std::io::Read;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::{env, io::Read};
 use substrate_common::{
     GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
     GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, SUBSTRATE_LLM_AUTH_BUNDLE_FD,

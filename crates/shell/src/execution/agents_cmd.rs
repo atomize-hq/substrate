@@ -7,19 +7,18 @@ use crate::execution::agent_runtime::control::request_private_stop;
 use crate::execution::agent_runtime::control::{
     hidden_owner_helper_readiness_timed_out, load_hidden_owner_helper_launch_plan,
     load_public_prompt_source, persist_hidden_owner_helper_launch_plan,
-    persist_runtime_stop_closeout, private_stop_transport_path, public_prompt_rendered_exit_code,
+    persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
     reconcile_hidden_owner_helper_start_timeout, remove_hidden_owner_helper_launch_plan,
     run_public_prompt_command, wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
     HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
-    HiddenOwnerHelperStartTimeoutReconciliation, HiddenOwnerHelperStartupPromptPlan,
-    OwnerHelperMode, PublicPromptAction, PublicPromptCommandRequest, PublicPromptInput,
-    PublicSessionPosture, ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
-    HIDDEN_OWNER_HELPER_SUBCOMMAND,
+    HiddenOwnerHelperStartTimeoutReconciliation, OwnerHelperMode, PublicPromptAction,
+    PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
+    ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor, HIDDEN_OWNER_HELPER_SUBCOMMAND,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::{
-    register_hidden_owner_helper_startup_prompt_listener,
-    run_hidden_owner_helper_startup_prompt_stream,
+    private_stop_transport_path, register_hidden_owner_helper_startup_prompt_listener,
+    run_hidden_owner_helper_startup_prompt_stream, HiddenOwnerHelperStartupPromptPlan,
 };
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, OrchestrationSessionRecord,
@@ -30,11 +29,13 @@ use crate::execution::agent_runtime::validator::{
     exact_backend_selection_error_exit_code, member_selection_error_exit_code,
     validate_exact_backend_selection, validate_member_selection,
 };
+#[cfg(unix)]
+use crate::execution::agent_runtime::StartupPromptReplayState;
 use crate::execution::agent_runtime::{
     runtime_realizability_error_exit_code, validate_orchestrator_selection,
     validate_runtime_realizability, AgentRuntimeParticipantRecord, AgentRuntimeSessionRecord,
-    AgentRuntimeStateStore, PublicControlAction, PublicTurnTargetKind, StartupPromptReplayState,
-    MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
+    AgentRuntimeStateStore, PublicControlAction, PublicTurnTargetKind, MEMBER_ROLE, NESTED_ROUTER,
+    ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDoctorArgs, AgentOwnerHelperArgs, AgentScopeArg,
@@ -58,6 +59,7 @@ use std::time::Duration;
 use substrate_broker::Policy;
 use substrate_common::paths as substrate_paths;
 use substrate_common::{AgentEvent, PlacementExecution};
+#[cfg(unix)]
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 use uuid::Uuid;
 const TOOLBOX_VERSION: u32 = 1;
@@ -367,7 +369,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     .map_err(normalize_public_prompt_error)?;
     let context = resolve_command_context(cli)?;
     let store = AgentRuntimeStateStore::new()?;
-    let mut plan = build_start_launch_plan(args, &context)?;
+    let plan = build_start_launch_plan(args, &context)?;
 
     #[cfg(not(unix))]
     {
@@ -381,6 +383,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
 
     #[cfg(unix)]
     {
+        let mut plan = plan;
         let startup_listener = register_hidden_owner_helper_startup_prompt_listener(
             &store,
             plan.orchestration_session_id(),
@@ -556,6 +559,7 @@ fn wait_for_start_prompt_completion_normalization(
     }
 }
 
+#[cfg(unix)]
 fn recoverable_detached_start_retry(
     orchestration_session_id: &str,
     participant_id: &str,
@@ -648,6 +652,8 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
             )));
         }
     };
+    #[cfg(not(unix))]
+    let _ = &resumed_receipt;
 
     run_public_prompt_command(
         PublicPromptCommandRequest {

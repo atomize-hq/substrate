@@ -109,9 +109,12 @@ pub fn detect() -> Result<PlatformWorldContext> {
     let ensure_persistent_session_ready_async = Box::new(move || {
         let backend = ensure_persistent_session_ready_async_backend.clone();
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || backend.ensure_persistent_session_ready())
-                .await
-                .context("persistent-session readiness join failure")?
+            tokio::task::spawn_blocking(move || {
+                let spec = bootstrap_world_spec();
+                backend.ensure_session(&spec).map(|_| ())
+            })
+            .await
+            .context("persistent-session readiness join failure")?
         }) as super::PersistentSessionReadyFuture
     });
 
@@ -218,7 +221,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_test", calls.clone()));
 
-        let result = ensure_world_ready_impl(false, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(false, None, || Ok(backend.clone())).unwrap();
         assert_eq!(result.as_deref(), Some("wld_test"));
         assert_eq!(std::env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
         assert_eq!(std::env::var("SUBSTRATE_WORLD_ID").unwrap(), "wld_test");
@@ -237,7 +240,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_forced", calls.clone()));
 
-        let result = ensure_world_ready_impl(false, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(false, None, || Ok(backend.clone())).unwrap();
         assert_eq!(result.as_deref(), Some("wld_forced"));
         assert_eq!(std::env::var("SUBSTRATE_WORLD").unwrap(), "enabled");
         assert_eq!(std::env::var("SUBSTRATE_WORLD_ID").unwrap(), "wld_forced");
@@ -256,7 +259,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let backend = Arc::new(StubBackend::new("wld_test", calls.clone()));
 
-        let result = ensure_world_ready_impl(true, || Ok(backend.clone())).unwrap();
+        let result = ensure_world_ready_impl(true, None, || Ok(backend.clone())).unwrap();
         assert!(result.is_none());
         assert_eq!(calls.load(Ordering::SeqCst), 0);
 

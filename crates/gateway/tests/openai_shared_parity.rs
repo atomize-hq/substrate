@@ -9,9 +9,12 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::env;
 use std::fs;
+#[cfg(unix)]
 use std::io::{Seek, SeekFrom, Write};
+#[cfg(unix)]
 use std::os::fd::IntoRawFd;
 use std::path::PathBuf;
+#[cfg(unix)]
 use substrate_common::{
     GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
     GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, SUBSTRATE_LLM_AUTH_BUNDLE_FD,
@@ -21,6 +24,7 @@ use substrate_gateway::auth::CodexAuthSource;
 use substrate_gateway::core::{
     GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage,
 };
+#[cfg(unix)]
 use substrate_gateway::launch::GatewayMode;
 use substrate_gateway::models::{ContentBlock, MessageContent};
 use substrate_gateway::providers::error::ProviderError;
@@ -29,6 +33,7 @@ use substrate_gateway::server::openai_conformance_test_support::{
     read_json_fixture, response_text, response_text_response, ConformanceHarness, FixtureNamespace,
     StubProvider,
 };
+#[cfg(unix)]
 use substrate_gateway::server::IntegratedGatewayAuthContext;
 use tempfile::TempDir;
 use tokio::sync::Mutex;
@@ -333,10 +338,12 @@ impl Drop for EnvVarGuard {
     }
 }
 
+#[cfg(unix)]
 struct GatewayAuthBundleFdGuard {
     original: Option<String>,
 }
 
+#[cfg(unix)]
 impl GatewayAuthBundleFdGuard {
     fn install(bundle: GatewayAuthBundleV1) -> Self {
         let mut file = tempfile::tempfile().expect("create auth bundle tempfile");
@@ -352,6 +359,7 @@ impl GatewayAuthBundleFdGuard {
     }
 }
 
+#[cfg(unix)]
 impl Drop for GatewayAuthBundleFdGuard {
     fn drop(&mut self) {
         match self.original.as_deref() {
@@ -985,6 +993,7 @@ async fn provider_auth_failure_maps_to_shared_auth_envelope() {
     assert_provider_error_shape(&json, "auth", "Authentication failed");
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn integrated_gateway_startup_reads_cli_codex_bundle_once_from_pointer_env() {
     let _guard = ENV_LOCK.lock().await;
@@ -1031,6 +1040,7 @@ async fn integrated_gateway_startup_reads_cli_codex_bundle_once_from_pointer_env
     assert!(err.to_string().contains("missing pointer env"));
 }
 
+#[cfg(unix)]
 #[tokio::test]
 async fn integrated_gateway_startup_reads_openai_bundle_without_secret_env_fallback() {
     let _guard = ENV_LOCK.lock().await;

@@ -41,6 +41,9 @@ pub struct CodexIntegratedAuthHandoff {
 
 static INTEGRATED_CODEX_AUTH_HANDOFF: Lazy<RwLock<Option<CodexIntegratedAuthHandoff>>> =
     Lazy::new(|| RwLock::new(None));
+#[cfg(test)]
+static INTEGRATED_CODEX_AUTH_TEST_LOCK: Lazy<tokio::sync::Mutex<()>> =
+    Lazy::new(|| tokio::sync::Mutex::new(()));
 
 impl CodexIntegratedAuthHandoff {
     pub fn new(account_id: Option<String>, access_token: SecretString) -> Self {
@@ -105,6 +108,11 @@ fn integrated_codex_auth_handoff() -> Result<Option<CodexIntegratedAuthHandoff>>
         .read()
         .map(|guard| guard.clone())
         .map_err(|_| anyhow!("integrated Codex auth handoff lock poisoned"))
+}
+
+#[cfg(test)]
+pub(crate) fn integrated_codex_auth_test_lock() -> &'static tokio::sync::Mutex<()> {
+    &INTEGRATED_CODEX_AUTH_TEST_LOCK
 }
 
 #[cfg(test)]
@@ -241,11 +249,7 @@ mod tests {
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use secrecy::ExposeSecret;
     use std::fs;
-    use std::sync::Mutex;
     use tempfile::TempDir;
-
-    static ENV_LOCK: once_cell::sync::Lazy<Mutex<()>> =
-        once_cell::sync::Lazy::new(|| Mutex::new(()));
 
     fn codex_access_token(account_id: &str) -> SecretString {
         let payload = serde_json::json!({
@@ -338,7 +342,7 @@ mod tests {
 
     #[test]
     fn integrated_source_uses_canonical_field_names() {
-        let _env_lock_guard = ENV_LOCK.lock().unwrap();
+        let _env_lock_guard = integrated_codex_auth_test_lock().blocking_lock();
         let _handoff_guard = InstalledHandoffGuard::set(Some(
             CodexIntegratedAuthHandoff::from_fields(&HashMap::from([
                 (
@@ -361,7 +365,7 @@ mod tests {
 
     #[test]
     fn from_env_reads_canonical_cli_codex_field_names() {
-        let _env_lock_guard = ENV_LOCK.lock().unwrap();
+        let _env_lock_guard = integrated_codex_auth_test_lock().blocking_lock();
         let _account_id_guard = EnvGuard::set(
             SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
             "acct_env_explicit",
@@ -407,7 +411,7 @@ mod tests {
 
     #[test]
     fn integrated_source_requires_substrate_handoff() {
-        let _env_lock_guard = ENV_LOCK.lock().unwrap();
+        let _env_lock_guard = integrated_codex_auth_test_lock().blocking_lock();
         let _handoff_guard = InstalledHandoffGuard::set(None);
 
         let err = CodexAuthSource::Integrated.resolve().unwrap_err();
@@ -420,7 +424,7 @@ mod tests {
 
     #[test]
     fn integrated_source_does_not_read_local_auth_files() {
-        let _env_lock_guard = ENV_LOCK.lock().unwrap();
+        let _env_lock_guard = integrated_codex_auth_test_lock().blocking_lock();
         let _handoff_guard = InstalledHandoffGuard::set(None);
 
         let temp_dir = TempDir::new().unwrap();

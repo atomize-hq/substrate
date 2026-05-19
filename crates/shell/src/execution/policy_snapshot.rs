@@ -199,6 +199,7 @@ pub(crate) fn world_spec_for_network_policy(
 ) -> WorldSpec {
     WorldSpec {
         reuse_session: true,
+        reuse_mode: WorldReuseMode::GenericCompatible,
         isolate_network: network_policy.isolate_network,
         limits: ResourceLimits::default(),
         enable_preload: false,

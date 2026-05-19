@@ -110,14 +110,14 @@ pub enum ClientMessage {
     #[serde(rename = "start")]
     Start {
         cmd: String,
-        cwd: PathBuf,
-        env: HashMap<String, String>,
+        cwd: Box<PathBuf>,
+        env: Box<HashMap<String, String>>,
         #[serde(default)]
         policy_snapshot: Box<Option<PolicySnapshotV3>>,
         #[serde(default)]
-        shared_world: Option<SharedWorldOwnerSpec>,
+        shared_world: Box<Option<SharedWorldOwnerSpec>>,
         #[serde(default)]
-        world_network: Option<WorldNetworkRoutingV1>,
+        world_network: Box<Option<WorldNetworkRoutingV1>>,
         span_id: Option<String>,
         cols: u16,
         rows: u16,
@@ -2276,7 +2276,10 @@ async fn handle_legacy_start(
             cols,
             rows,
         }) => {
-            let mut env = env;
+            let cwd = *cwd;
+            let mut env = *env;
+            let shared_world = *shared_world;
+            let world_network = *world_network;
             ensure_xdg_dirs(&mut env);
             let policy_snapshot = *policy_snapshot;
             info!(
@@ -2889,11 +2892,11 @@ mod tests {
     fn test_client_message_start_serialization() {
         let msg = ClientMessage::Start {
             cmd: "echo hi".into(),
-            cwd: std::env::current_dir().unwrap(),
-            env: HashMap::new(),
+            cwd: Box::new(std::env::current_dir().unwrap()),
+            env: Box::new(HashMap::new()),
             policy_snapshot: Box::new(None),
-            shared_world: None,
-            world_network: None,
+            shared_world: Box::new(None),
+            world_network: Box::new(None),
             span_id: Some("spn_test".into()),
             cols: 80,
             rows: 24,

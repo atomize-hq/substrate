@@ -56,11 +56,11 @@ use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
     exact_backend_selection_error_exit_code, validate_exact_backend_selection,
 };
-#[cfg(any(test, target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::validator::{
     member_selection_error_exit_code, validate_member_selection,
 };
-#[cfg(any(test, target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::AgentRuntimeParticipantWorldBinding;
 use crate::execution::agent_runtime::{
     backend_allowed, build_gateway_for_descriptor, runtime_realizability_error_exit_code,
@@ -85,7 +85,7 @@ use crate::execution::{
     ShellConfig, PTY_ACTIVE,
 };
 use crate::repl::editor;
-#[cfg(any(test, target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use substrate_broker::Policy;
 use substrate_broker::{detect_profile, world_fs_policy};
 use substrate_common::agent_events::{AgentEvent, MessageEventKind};
@@ -1645,7 +1645,7 @@ struct RuntimeOrchestrationContext {
     store: AgentRuntimeStateStore,
     orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
     effective_config: crate::execution::config_model::SubstrateConfig,
-    #[cfg(any(test, target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     base_policy: Policy,
     inventory: BTreeMap<String, AgentInventoryEntryV1>,
 }
@@ -1685,7 +1685,7 @@ struct ResolvedHostOrchestratorBootstrap {
     agent_kind: agent_api::AgentWrapperKind,
     state_store: AgentRuntimeStateStore,
     effective_config: crate::execution::config_model::SubstrateConfig,
-    #[cfg(any(test, target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     base_policy: Policy,
     inventory: BTreeMap<String, AgentInventoryEntryV1>,
 }
@@ -2116,7 +2116,7 @@ fn prepare_host_orchestrator_runtime_from_resolved(
         agent_kind,
         state_store,
         effective_config,
-        #[cfg(any(test, target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         base_policy,
         inventory,
     } = resolved;
@@ -2157,7 +2157,7 @@ fn prepare_host_orchestrator_runtime_from_resolved(
             store: state_store,
             orchestration_session,
             effective_config,
-            #[cfg(any(test, target_os = "linux", target_os = "macos"))]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             base_policy,
             inventory,
         },
@@ -2249,7 +2249,7 @@ fn resolve_host_orchestrator_bootstrap(
         agent_kind,
         state_store,
         effective_config,
-        #[cfg(any(test, target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         base_policy,
         inventory,
     }))
@@ -2425,7 +2425,7 @@ fn prepare_hidden_owner_helper_runtime(
         agent_kind: _validated_agent_kind,
         state_store,
         effective_config,
-        #[cfg(any(test, target_os = "linux", target_os = "macos"))]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         base_policy,
         inventory,
     } = resolved;
@@ -2473,7 +2473,7 @@ fn prepare_hidden_owner_helper_runtime(
             store: state_store,
             orchestration_session,
             effective_config,
-            #[cfg(any(test, target_os = "linux", target_os = "macos"))]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             base_policy,
             inventory,
         },
@@ -3928,7 +3928,7 @@ fn runtime_prompt_submit_runtime(
     )
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn select_member_runtime_descriptor(
     startup_context: &RuntimeOrchestrationContext,
 ) -> std::result::Result<Option<RuntimeSelectionDescriptor>, RuntimeBootstrapFailure> {
@@ -4164,7 +4164,7 @@ async fn dispatch_targeted_follow_up_turn(
     Ok(TargetedTurnDispatchStatus::Submitted)
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn ensure_member_backend_allowed(
     startup_context: &RuntimeOrchestrationContext,
     descriptor: &RuntimeSelectionDescriptor,
@@ -4182,7 +4182,7 @@ fn ensure_member_backend_allowed(
     }
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn resolve_live_member_parent(
     startup_context: &RuntimeOrchestrationContext,
 ) -> std::result::Result<AgentRuntimeParticipantRecord, RuntimeBootstrapFailure> {
@@ -4215,7 +4215,7 @@ fn resolve_live_member_parent(
     Ok(parent_participant)
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn authoritative_member_world_binding(
     startup_context: &RuntimeOrchestrationContext,
     world_binding: &PersistedWorldBinding,
@@ -4257,7 +4257,7 @@ fn authoritative_member_world_binding(
     })
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn live_member_for_generation(
     startup_context: &RuntimeOrchestrationContext,
     descriptor: &RuntimeSelectionDescriptor,
@@ -4295,7 +4295,7 @@ fn live_member_for_generation(
     }
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn prepare_member_runtime_startup_for_descriptor(
     startup_context: &RuntimeOrchestrationContext,
     descriptor: RuntimeSelectionDescriptor,
@@ -4379,7 +4379,7 @@ fn prepare_member_runtime_startup_for_descriptor(
     })
 }
 
-#[cfg(test)]
+#[cfg(unix)]
 async fn start_member_runtime_with_prepared(
     prepared: Option<PreparedAgentRuntime>,
     agent_printer: &ReplPrinter,
@@ -7657,17 +7657,23 @@ mod tests {
     use crate::execution::agent_events::{
         acquire_event_test_guard, clear_agent_event_sender, init_event_channel,
     };
+    #[cfg(unix)]
     use crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture;
     #[cfg(unix)]
     use crate::execution::config_model::AgentExecutionScope;
+    #[cfg(unix)]
     use crate::execution::ShellMode;
+    #[cfg(unix)]
     use crate::execution::WorldRootSettings;
     use std::cell::Cell;
     #[cfg(unix)]
     use std::cell::RefCell;
+    #[cfg(unix)]
     use std::collections::HashMap;
+    #[cfg(unix)]
     use std::fs;
     use substrate_common::agent_events::AgentEventKind;
+    #[cfg(unix)]
     use tempfile::TempDir;
 
     #[cfg(unix)]
@@ -8014,10 +8020,12 @@ mod tests {
         assert!(record.error_message.is_none());
     }
 
+    #[cfg(unix)]
     struct CurrentDirGuard {
         original: PathBuf,
     }
 
+    #[cfg(unix)]
     impl CurrentDirGuard {
         fn change_to(path: &Path) -> Self {
             let original = std::env::current_dir().expect("current dir should resolve");
@@ -8026,6 +8034,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     impl Drop for CurrentDirGuard {
         fn drop(&mut self) {
             let _ = std::env::set_current_dir(&self.original);

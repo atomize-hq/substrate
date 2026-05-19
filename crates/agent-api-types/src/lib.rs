@@ -2501,8 +2501,16 @@ mod tests {
         assert_eq!(back, req);
     }
 
+    fn test_absolute_binary_path() -> String {
+        std::env::current_exe()
+            .expect("current_exe")
+            .to_string_lossy()
+            .into_owned()
+    }
+
     #[test]
     fn execute_request_member_dispatch_round_trip() {
+        let binary_path = test_absolute_binary_path();
         let snapshot = PolicySnapshotV3 {
             schema_version: 3,
             net_allowed: Vec::new(),
@@ -2548,7 +2556,7 @@ mod tests {
                 initial_prompt: Some("first turn".into()),
                 resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
                     backend_kind: MemberRuntimeBackendKindV1::Codex,
-                    binary_path: "/usr/bin/codex".into(),
+                    binary_path: binary_path.clone(),
                 },
             }),
         };
@@ -2575,7 +2583,7 @@ mod tests {
                 initial_prompt: Some("first turn".into()),
                 resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
                     backend_kind: MemberRuntimeBackendKindV1::Codex,
-                    binary_path: "/usr/bin/codex".into(),
+                    binary_path,
                 },
             })
         );
@@ -2678,6 +2686,7 @@ mod tests {
 
     #[test]
     fn execute_request_rejects_member_dispatch_with_non_empty_cmd_at_boundary() {
+        let binary_path = test_absolute_binary_path();
         let err = serde_json::from_value::<ExecuteRequest>(serde_json::json!({
             "cmd": "echo hi",
             "cwd": "/tmp",
@@ -2709,7 +2718,7 @@ mod tests {
                 "world_generation": 7,
                 "resolved_runtime": {
                     "backend_kind": "codex",
-                    "binary_path": "/usr/bin/codex"
+                    "binary_path": binary_path
                 }
             }
         }))
@@ -2724,6 +2733,7 @@ mod tests {
 
     #[test]
     fn execute_request_rejects_member_dispatch_with_pty_at_boundary() {
+        let binary_path = test_absolute_binary_path();
         let err = serde_json::from_value::<ExecuteRequest>(serde_json::json!({
             "cmd": "",
             "cwd": "/tmp",
@@ -2755,7 +2765,7 @@ mod tests {
                 "world_generation": 7,
                 "resolved_runtime": {
                     "backend_kind": "codex",
-                    "binary_path": "/usr/bin/codex"
+                    "binary_path": binary_path
                 }
             }
         }))
@@ -2770,6 +2780,7 @@ mod tests {
 
     #[test]
     fn member_dispatch_rejects_self_referential_lineage() {
+        let binary_path = test_absolute_binary_path();
         let err = serde_json::from_value::<MemberDispatchRequestV1>(serde_json::json!({
             "schema_version": 1,
             "orchestration_session_id": "orch_123",
@@ -2782,7 +2793,7 @@ mod tests {
             "world_generation": 7,
             "resolved_runtime": {
                 "backend_kind": "codex",
-                "binary_path": "/usr/bin/codex"
+                "binary_path": binary_path
             }
         }))
         .expect_err("self-referential lineage should fail");
