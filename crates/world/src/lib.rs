@@ -620,8 +620,7 @@ mod tests {
         std::fs::create_dir_all(&root_dir).unwrap();
         std::fs::create_dir_all(&project_dir).unwrap();
         std::fs::create_dir_all(&cgroup_path).unwrap();
-        let metadata_dir = root_dir.join("wld_recovered");
-        std::fs::create_dir_all(&metadata_dir).unwrap();
+        std::fs::create_dir_all(root_dir.join("wld_recovered")).unwrap();
 
         let spec = WorldSpec {
             reuse_session: true,
@@ -633,20 +632,17 @@ mod tests {
             ..WorldSpec::default()
         };
         std::fs::write(
-            metadata_dir.join("session.json"),
-            format!(
-                r#"{{
-  "world_id": "wld_recovered",
-  "project_dir": "{}",
-  "isolate_network": false,
-  "always_isolate": false,
-  "allowed_domains": ["example.com"],
-  "cgroup_path": "{}",
-  "started_at_unix_millis": 5000
-}}"#,
-                project_dir.display(),
-                cgroup_path.display()
-            ),
+            root_dir.join("wld_recovered").join("session.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "world_id": "wld_recovered",
+                "project_dir": project_dir,
+                "isolate_network": false,
+                "always_isolate": false,
+                "allowed_domains": ["example.com"],
+                "cgroup_path": cgroup_path,
+                "started_at_unix_millis": 5000,
+            }))
+            .unwrap(),
         )
         .unwrap();
 

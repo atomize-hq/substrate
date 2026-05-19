@@ -3651,7 +3651,8 @@ impl super::GatewayProvider for OpenAIProvider {
 mod tests {
     use super::*;
     use crate::auth::codex_auth_context::{
-        CodexAccountIdSource, CodexAuthMode, CodexIntegratedAuthHandoff, InstalledHandoffGuard,
+        integrated_codex_auth_test_lock, CodexAccountIdSource, CodexAuthMode,
+        CodexIntegratedAuthHandoff, InstalledHandoffGuard,
     };
     use crate::auth::CodexAuthSource;
     use crate::models::SystemPrompt;
@@ -3660,10 +3661,6 @@ mod tests {
     use secrecy::SecretString;
     use serde::Deserialize;
     use std::env;
-    use tokio::sync::Mutex;
-
-    static ENV_LOCK: once_cell::sync::Lazy<Mutex<()>> =
-        once_cell::sync::Lazy::new(|| Mutex::new(()));
 
     #[derive(Debug, Deserialize)]
     struct FixtureFile {
@@ -3828,7 +3825,7 @@ mod tests {
 
     #[test]
     fn codex_auth_resolution_uses_startup_owned_integrated_handoff() {
-        let _guard = ENV_LOCK.blocking_lock();
+        let _guard = integrated_codex_auth_test_lock().blocking_lock();
         let _handoff_guard = InstalledHandoffGuard::set(Some(CodexIntegratedAuthHandoff::new(
             Some("acct_handoff_explicit".to_string()),
             SecretString::new(codex_access_token("acct_handoff_jwt")),
@@ -4857,7 +4854,7 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn send_message_validates_codex_route_before_resolving_integrated_auth() {
-        let _guard = ENV_LOCK.lock().await;
+        let _guard = integrated_codex_auth_test_lock().lock().await;
         let provider = test_oauth_provider();
         let original_account_id = env::var_os(
             crate::auth::codex_auth_context::SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,

@@ -10,6 +10,7 @@ pub mod gateway_auth_bundle;
 pub mod identity;
 pub mod manager_manifest;
 pub mod paths;
+pub mod seccomp;
 pub mod settings;
 pub mod world_exec_guard;
 

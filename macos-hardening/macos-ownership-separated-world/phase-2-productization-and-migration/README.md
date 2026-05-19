@@ -4,12 +4,12 @@ Status: Draft
 
 Owner: macOS world backend / installer / operator UX
 
-Last updated: 2026-04-28
+Last updated: 2026-05-19
 
 ## Purpose / Outcome
 
 Phase 2 turns the ownership-separated macOS world design into a shippable
-operator workflow. The outcome is not “a secure architecture sketch,” but a
+operator workflow. The outcome is not "a secure architecture sketch," but a
 macOS release path that can install, upgrade, migrate, diagnose, support, and
 validate the ownership-separated backend without telling normal operators to use
 direct `limactl shell`, direct guest `systemctl`, or direct guest `curl`.
@@ -20,6 +20,7 @@ At the end of this phase, a supported macOS user should be able to:
 - upgrade from an older ownership-separated release
 - migrate from the current same-user Lima model
 - inspect health and status from canonical Substrate CLI surfaces
+- use the existing gateway lifecycle/status surface through the new owner model
 - collect support evidence and perform bounded repair
 - remove Substrate cleanly
 - prove GA readiness through a published validation matrix
@@ -37,6 +38,8 @@ The current repo still assumes same-user Lima operations in several places:
 - doctor and smoke scripts prove readiness by shelling into the guest directly
 - macOS status reporting is fragmented across shell code, helper scripts, and
   doc-only troubleshooting instructions
+- the current gateway lifecycle surface is real and useful, but it still
+  depends on the same same-user Lima ownership model that phase 1 is replacing
 
 If those surfaces are not rewritten, the product still behaves like a developer
 tooling prototype even if the runtime boundary becomes stronger underneath.
@@ -46,11 +49,12 @@ tooling prototype even if the runtime boundary becomes stronger underneath.
 - macOS install, upgrade, migration, rollback, and uninstall workflows for the
   ownership-separated backend
 - migration from same-user Lima state into the new control-plane owner model
-- canonical doctor and status surfaces for host, world, and support workflows
+- canonical doctor and status surfaces for host, world, gateway, and support
+  workflows
 - operator-facing supportability flows: log collection, repair guidance, state
   reporting, and breakglass boundaries
-- a GA validation matrix covering install lifecycle, runtime lifecycle, and
-  failure-mode evidence
+- a GA validation matrix covering install lifecycle, runtime lifecycle, gateway
+  lifecycle, and failure-mode evidence
 - documentation updates required to make the new path the default operator
   contract
 
@@ -70,8 +74,10 @@ Phase 2 standardizes around one operator contract:
 1. Host lifecycle is owned by Substrate-managed install and runtime surfaces,
    not by user-owned Lima state.
 2. CLI status and doctor commands are the primary support interface.
-3. Docs, smoke coverage, and uninstall behavior follow the same contract.
-4. Direct guest access becomes breakglass-only, explicitly segregated from the
+3. The current gateway lifecycle command family stays intact and is consumed as
+   a durable contract, not reinvented by local planning docs.
+4. Docs, smoke coverage, and uninstall behavior follow the same contract.
+5. Direct guest access becomes breakglass-only, explicitly segregated from the
    normal install and support path.
 
 The implementation threads through existing repo surfaces rather than inventing
@@ -82,6 +88,8 @@ parallel tooling:
   contract followers rather than contract owners
 - CLI doctor/status behavior remains rooted in
   `crates/shell/src/execution/platform/macos.rs`
+- gateway lifecycle/status behavior remains rooted in
+  `crates/shell/src/builtins/world_gateway.rs` plus the durable contract docs
 - operator docs remain rooted in `docs/INSTALLATION.md`, `docs/UNINSTALL.md`,
   `docs/WORLD.md`, and `docs/cross-platform/mac_world_setup.md`
 
@@ -90,8 +98,8 @@ parallel tooling:
 Hard dependencies:
 
 - The same-user hardening track should already have converged the transport,
-  mount, and operator vocabulary so migration into ownership separation does not
-  inherit ambiguous same-user workflows.
+  mount, gateway runtime parity, and operator vocabulary so migration into
+  ownership separation does not inherit ambiguous same-user workflows.
 - More concretely, phase 2 assumes the same-user track has completed:
   - phase 2 milestone 2.2 mount minimization and ingress contract
   - phase 3 milestone 3.1 Substrate-managed diagnostics and lifecycle
@@ -101,7 +109,7 @@ Hard dependencies:
 - The normal-path transport contract must already stop exposing same-user
   forwarded endpoints as the security boundary.
 
-Execution order inside Phase 2:
+Execution order inside phase 2:
 
 1. Milestone 2.1 defines how the product gets onto the machine and how legacy
    same-user installs are migrated safely.
@@ -115,17 +123,23 @@ Execution order inside Phase 2:
 
 Primary implementation and contract surfaces for this phase:
 
+- `scripts/substrate/world-enable.sh`
+- `scripts/substrate/dev-install-substrate.sh`
 - `scripts/substrate/install-substrate.sh`
-- `scripts/substrate/uninstall-substrate.sh`
 - `scripts/substrate/dev-uninstall-substrate.sh`
+- `scripts/substrate/uninstall-substrate.sh`
 - `scripts/mac/lima-warm.sh`
 - `scripts/mac/lima-doctor.sh`
 - `scripts/mac/smoke.sh`
 - `crates/shell/src/execution/platform/macos.rs`
-- `docs/INSTALLATION.md`
-- `docs/UNINSTALL.md`
-- `docs/WORLD.md`
-- `docs/cross-platform/mac_world_setup.md`
+- `crates/shell/src/builtins/world_gateway.rs`
+- `../../../docs/INSTALLATION.md`
+- `../../../docs/UNINSTALL.md`
+- `../../../docs/WORLD.md`
+- `../../../docs/contracts/substrate-gateway-operator-contract.md`
+- `../../../docs/contracts/substrate-gateway-status-schema.md`
+- `../../../docs/contracts/substrate-gateway-policy-evaluation.md`
+- `../../../docs/cross-platform/mac_world_setup.md`
 
 Secondary reference surfaces likely touched by downstream execution:
 
@@ -136,6 +150,7 @@ Secondary reference surfaces likely touched by downstream execution:
 - `crates/world-mac-lima/src/lib.rs`
 - `crates/world-mac-lima/src/forwarding.rs`
 - `crates/world-mac-lima/src/transport.rs`
+- `crates/world-agent/src/gateway_runtime.rs`
 
 ## Milestones
 
@@ -165,29 +180,33 @@ validation matrix, evidence packaging, and release-blocking criteria.
 - one phase overview that fixes the productization scope and sequence
 - three milestone SOWs with concrete repo surfaces, deliverables, and gates
 - an explicit migration story from same-user Lima to ownership-separated macOS
-- an explicit operator contract that replaces direct guest workflows
+- an explicit operator contract that replaces direct guest workflows without
+  destabilizing current CLI surfaces
 - a GA evidence plan that can be executed and audited before release
 
 ## Acceptance Criteria
 
 - The phase docs describe one consistent normal-path operator contract across
-  install, health checks, troubleshooting, and uninstall.
+  install, health checks, troubleshooting, uninstall, and gateway lifecycle.
 - Same-user Lima migration is treated as a first-class lifecycle path, not a
   footnote.
 - Each milestone names concrete repo surfaces instead of generic workstreams.
 - Phase sequencing is explicit enough that execution can proceed milestone by
   milestone without reopening the scope question.
+- `docs/WORLD.md` is treated as descriptive evidence and the durable gateway
+  contracts under `docs/contracts/` remain the owner lines for operator/status
+  semantics.
 - The phase does not rely on direct guest access as part of the normal support
   posture.
 
 ## Validation / Evidence Plan
 
 - Use the repo-backed evidence in
-  `thoughts/shared/research/2026-04-28-macos-lima-parity-lockdown.md` as the
-  baseline problem statement.
+  [the research note](../../research/2026-04-28-macos-lima-parity-lockdown.md)
+  as the baseline problem statement.
 - For milestone closeout, require install/uninstall transcripts, doctor/status
-  JSON, smoke artifacts, and doc diffs from the concrete repo surfaces named in
-  each SOW.
+  JSON, gateway lifecycle JSON, smoke artifacts, and doc diffs from the
+  concrete repo surfaces named in each SOW.
 - Treat migration from an existing same-user Lima installation as mandatory
   evidence, not optional beta validation.
 - Treat reboot, relogin, re-upgrade, and uninstall cleanup as mandatory

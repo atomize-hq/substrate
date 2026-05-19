@@ -4,13 +4,27 @@
 
 Draft
 
+Last updated: 2026-05-19
+
 ## Purpose / outcome
 
 Replace the current broad Lima mount posture with a named ingress contract that states exactly which host inputs the guest may consume for normal operation, how they are mounted, and which flows must move to explicit Substrate-owned copying, syncing, or breakglass procedures.
 
 ## Why this milestone exists
 
-The current Lima profile in [scripts/mac/lima/substrate.yaml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/mac/lima/substrate.yaml) mounts all of `$HOME` read-only and mounts the active project at `/src` read-write. That is convenient for bootstrapping, but it overexposes host content and leaves the real runtime contract underspecified. The same-user model already cannot replicate Linux ownership boundaries; broad host mounts make that limitation materially worse.
+The current Lima profile in `scripts/mac/lima/substrate.yaml` mounts all of
+`$HOME` read-only and mounts the active project at `/src` read-write. That is
+convenient for bootstrapping, but it overexposes host content and leaves the
+real runtime contract underspecified. The same-user model already cannot
+replicate Linux ownership boundaries; broad host mounts make that limitation
+materially worse.
+
+The repo has also outgrown one of the old justifications for broad home
+visibility: managed gateway auth handoff now exists. Gateway lifecycle requests
+already carry integrated auth payloads, and managed runtime artifacts already
+live under `/run/substrate/substrate-gateway-runtime/`. Hardening should not
+continue to rely on broad guest visibility into host home directories for normal
+gateway operation.
 
 This milestone exists to shrink what the guest can see and to name the remaining required ingress paths instead of hiding them behind a full-home mount.
 
@@ -19,6 +33,8 @@ This milestone exists to shrink what the guest can see and to name the remaining
 - Define the normal-operation ingress contract for the macOS Lima guest.
 - Decide which host inputs remain mounted, which become copied or synchronized by Substrate-owned flows, and which are only available via breakglass.
 - Narrow the default Lima profile mounts accordingly.
+- Preserve already-landed shared-world/orchestration and gateway lifecycle
+  support while narrowing ingress.
 - Update docs and validation to reflect the new ingress model.
 
 ## Out-of-scope
@@ -39,7 +55,19 @@ This milestone exists to shrink what the guest can see and to name the remaining
   - direct mount
   - Substrate-managed copy/sync
   - no default ingress
-- Encode the result in the Lima profile and in the surrounding docs so the hardening stance is inspectable.
+- Encode the result in the Lima profile and in the surrounding docs so the
+  hardening stance is inspectable.
+
+Specific ingress guidance for current repo truth:
+
+- Gateway auth should prefer request-provided integrated auth handoff over broad
+  host-home visibility.
+- Managed gateway lifecycle/status and runtime artifacts under
+  `/run/substrate/substrate-gateway-runtime/` are supported surfaces that must
+  keep working after mount minimization.
+- Host-side `SUBSTRATE_WORLD_SOCKET` override use is not a normal ingress model;
+  it is advanced/test/breakglass and should not drive the supported mount
+  contract.
 
 ## Dependencies / sequencing
 
@@ -50,20 +78,24 @@ This milestone exists to shrink what the guest can see and to name the remaining
 
 ## Concrete repo surfaces and file pointers
 
-- [scripts/mac/lima/substrate.yaml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/mac/lima/substrate.yaml)
+- `scripts/mac/lima/substrate.yaml`
   - current home and project mount definitions
   - likely primary place where mount minimization is expressed
-- [scripts/mac/lima-warm.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/mac/lima-warm.sh)
+- `scripts/mac/lima-warm.sh`
   - currently assumes `/src` exists and that the mounted repo can be built or copied from inside the guest
   - contains sentinel logic that detects whether the intended host checkout is mounted
-- [scripts/mac/smoke.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/mac/smoke.sh)
+- `scripts/mac/smoke.sh`
   - depends on the mounted repo and may expose additional ingress assumptions
-- [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
+- `crates/shell/src/builtins/world_gateway.rs`
+  - already constructs integrated auth handoff and managed gateway lifecycle requests
+- `crates/world-agent/src/gateway_runtime.rs`
+  - owns managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/`
+- `docs/WORLD.md`
   - currently states that `/src` mirrors the active checkout
   - should be tightened to describe only the allowed ingress
-- [docs/cross-platform/mac_world_setup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/mac_world_setup.md)
+- `docs/cross-platform/mac_world_setup.md`
   - currently documents the full-home mount as part of normal setup
-- [crates/world-agent/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/lib.rs)
+- `crates/world-agent/src/lib.rs`
   - not a mount definition point, but a useful anchor for separating transport hardening from guest-visible filesystem scope
 
 ## Deliverables
@@ -77,7 +109,10 @@ This milestone exists to shrink what the guest can see and to name the remaining
 
 - The hardened macOS plan no longer depends on mounting all of `$HOME` by default.
 - Every remaining default host mount is justified by a named runtime need and file pointer.
-- Flows that still need broader host visibility are explicitly categorized as future Substrate-owned sync work or breakglass operations.
+- Flows that still need broader host visibility are explicitly categorized as
+  future Substrate-owned sync work or breakglass operations.
+- Managed gateway auth and runtime do not depend on broad guest visibility into
+  host home directories for the supported path.
 - A reviewer can tell which guest-visible host paths remain after hardening without reading the Lima profile line-by-line.
 
 ## Validation / evidence plan
@@ -85,6 +120,9 @@ This milestone exists to shrink what the guest can see and to name the remaining
 - Produce a before/after mount inventory from `scripts/mac/lima/substrate.yaml`.
 - Run `scripts/mac/lima-warm.sh --check-only` and a standard warm path to prove the narrowed mounts still support the intended happy path.
 - Run `scripts/mac/smoke.sh` to identify any hidden assumptions about `$HOME`, auth locations, or tool caches.
+- Run `substrate world gateway sync` and `substrate world gateway status --json`
+  after mount minimization to confirm integrated auth handoff and managed
+  runtime artifacts still work without broad `$HOME` ingress.
 - Review docs for commands that still imply “the guest can see my host home directory” and either remove or reclassify them.
 
 ## Risks / open questions

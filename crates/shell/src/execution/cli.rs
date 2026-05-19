@@ -415,11 +415,12 @@ pub struct PublicPromptArgs {
     pub prompt_file: Option<PathBuf>,
 }
 
-#[derive(Copy, Clone, Debug, ValueEnum, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, ValueEnum, PartialEq, Eq)]
 #[value(rename_all = "snake_case")]
 pub enum AgentScopeArg {
     Host,
     World,
+    #[default]
     Any,
 }
 
@@ -430,12 +431,6 @@ impl AgentScopeArg {
             Self::World => "world",
             Self::Any => "any",
         }
-    }
-}
-
-impl Default for AgentScopeArg {
-    fn default() -> Self {
-        Self::Any
     }
 }
 

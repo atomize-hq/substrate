@@ -8,7 +8,9 @@ until it matches the Linux-first placement contract.
 ## Supported Platforms
 
 - **Linux**: systemd-based distributions with `sudo`, `curl`, `tar`, and `jq`
-  available. The world backend runs via the `substrate-world-agent.service` +
+  available. When world provisioning is enabled, the installer also provisions
+  the host `libseccomp` runtime package needed for seccomp-backed hardening. The
+  world backend runs via the `substrate-world-agent.service` +
   `substrate-world-agent.socket` units.
 - **macOS 14+ (arm64)**: requires Apple Virtualization Framework and Lima (the
   installer verifies both).

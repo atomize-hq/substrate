@@ -282,31 +282,21 @@ impl LinuxIsolation {
 
     #[cfg(all(target_os = "linux", not(target_env = "musl")))]
     fn apply_seccomp_baseline(&self) -> Result<()> {
-        // Baseline seccomp using libseccomp: default allow; log risky syscalls
-        use libseccomp::{ScmpAction, ScmpFilterContext, ScmpSyscall};
-
-        let mut ctx = ScmpFilterContext::new_filter(ScmpAction::Allow)
-            .map_err(|e| anyhow::anyhow!("seccomp init failed: {}", e))?;
-
-        // Mark dangerous syscalls to be logged (kernel must support SCMP_ACT_LOG)
         let dangerous = [
-            "mount",
-            "umount2",
-            "pivot_root",
-            "keyctl",
-            "perf_event_open",
-            "bpf",
+            substrate_common::seccomp::SeccompRule::log("mount"),
+            substrate_common::seccomp::SeccompRule::log("umount2"),
+            substrate_common::seccomp::SeccompRule::log("pivot_root"),
+            substrate_common::seccomp::SeccompRule::log("keyctl"),
+            substrate_common::seccomp::SeccompRule::log("perf_event_open"),
+            substrate_common::seccomp::SeccompRule::log("bpf"),
         ];
 
-        for name in dangerous {
-            if let Ok(num) = ScmpSyscall::from_name(name) {
-                ctx.add_rule(ScmpAction::Log, num)
-                    .map_err(|e| anyhow::anyhow!("seccomp add_rule failed: {}", e))?;
+        match substrate_common::seccomp::install_allow_filter(&dangerous)? {
+            substrate_common::seccomp::SeccompInstallStatus::Installed => {}
+            substrate_common::seccomp::SeccompInstallStatus::Unavailable(reason) => {
+                tracing::warn!("seccomp baseline skipped: {reason}");
             }
         }
-
-        ctx.load()
-            .map_err(|e| anyhow::anyhow!("seccomp load failed: {}", e))?;
         Ok(())
     }
 

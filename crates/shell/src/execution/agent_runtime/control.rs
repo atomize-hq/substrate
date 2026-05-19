@@ -1,5 +1,7 @@
 use std::fs;
-use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::io::Write;
+use std::io::{self, Read};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener as StdUnixListener;
 use std::path::{Path, PathBuf};
@@ -26,6 +28,7 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
+#[cfg(unix)]
 use crate::execution::agent_events::format_event_line;
 use crate::execution::agent_runtime::orchestration_session::StartupPromptStreamState;
 #[cfg(target_os = "linux")]
@@ -48,7 +51,9 @@ const OWNER_HELPER_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const OWNER_HELPER_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 #[cfg(unix)]
 const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
+#[cfg(unix)]
 const PRIVATE_PROMPT_READY_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(unix)]
 const PRIVATE_PROMPT_READY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 #[cfg(unix)]
 const STARTUP_PROMPT_STREAM_ACCEPT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -83,6 +88,7 @@ pub(crate) enum PublicPromptAction {
 }
 
 impl PublicPromptAction {
+    #[cfg(unix)]
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Start => "start",
@@ -100,6 +106,7 @@ pub(crate) enum PublicSessionPosture {
 }
 
 impl PublicSessionPosture {
+    #[cfg(unix)]
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -1083,6 +1090,7 @@ pub(crate) fn persist_runtime_stop_closeout(
     persist_runtime_snapshots(store, orchestration_session, manifest)
 }
 
+#[cfg(unix)]
 pub(crate) fn private_stop_transport_path(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -1203,6 +1211,7 @@ pub(crate) fn private_prompt_request_channel(
     mpsc::unbounded_channel()
 }
 
+#[cfg(unix)]
 pub(crate) fn private_prompt_transport_path(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -2101,6 +2110,7 @@ fn turn_outcome_label(exit_code: i32) -> &'static str {
     }
 }
 
+#[cfg(unix)]
 fn completed_exit_code(turn_outcome: &str) -> i32 {
     match turn_outcome {
         "success" => 0,
@@ -2372,10 +2382,12 @@ fn translate_prompt_wrapper_event(
     event
 }
 
+#[cfg(unix)]
 struct PublicPromptRenderer {
     json: bool,
 }
 
+#[cfg(unix)]
 impl PublicPromptRenderer {
     fn new(json: bool) -> Self {
         Self { json }
@@ -2448,6 +2460,7 @@ impl PublicPromptRenderer {
     }
 }
 
+#[cfg(unix)]
 fn prompt_event_text(data: &serde_json::Value) -> String {
     data.get("text")
         .and_then(serde_json::Value::as_str)
@@ -2458,14 +2471,17 @@ fn prompt_event_text(data: &serde_json::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_runtime_stop_closeout, handle_private_prompt_connection,
-        private_prompt_request_channel, reconcile_hidden_owner_helper_start_timeout,
+        apply_runtime_stop_closeout, reconcile_hidden_owner_helper_start_timeout,
         validate_public_prompt_command_request, HiddenOwnerHelperLaunchPlan,
         HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
         HiddenOwnerHelperStartTimeoutReconciliation, HiddenOwnerHelperStartupPromptPlan,
         LoadedPublicPrompt, OwnerHelperMode, PrivateStopOutcome, PublicPromptAction,
-        PublicPromptCommandRequest, PublicPromptEnvelope, ResolvedRuntimeBackendKind,
-        ResolvedRuntimeDescriptor, PURE_AGENT_PROTOCOL,
+        PublicPromptCommandRequest, ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
+        PURE_AGENT_PROTOCOL,
+    };
+    #[cfg(unix)]
+    use super::{
+        handle_private_prompt_connection, private_prompt_request_channel, PublicPromptEnvelope,
     };
     use crate::execution::agent_runtime::{
         mapping::AgentRuntimeBackendKind,

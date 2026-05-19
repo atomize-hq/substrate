@@ -4,12 +4,12 @@ Status: Draft
 
 Phase: 2 - Productization and Migration
 
-Last updated: 2026-04-28
+Last updated: 2026-05-19
 
 ## Purpose / Outcome
 
-Deliver the canonical macOS operator surfaces for the ownership-separated world:
-health, lifecycle status, support evidence, repair guidance, and bounded
+Deliver the canonical macOS operator surfaces for the ownership-separated
+world: health, lifecycle status, support evidence, repair guidance, and bounded
 breakglass. After this milestone, normal macOS support work should be possible
 through Substrate-owned commands and docs rather than direct guest entry.
 
@@ -18,6 +18,7 @@ through Substrate-owned commands and docs rather than direct guest entry.
 Today’s macOS support posture is split across:
 
 - `crates/shell/src/execution/platform/macos.rs` doctor logic
+- `crates/shell/src/builtins/world_gateway.rs` gateway lifecycle/status logic
 - `scripts/mac/lima-doctor.sh` guest-shell-based checks
 - `scripts/mac/smoke.sh` as the main proof harness
 - `docs/WORLD.md` and `docs/cross-platform/mac_world_setup.md` troubleshooting
@@ -25,9 +26,9 @@ Today’s macOS support posture is split across:
   and `limactl shell`
 
 That is acceptable for a same-user prototype, but not for a product whose core
-claim is host-side ownership separation. Operators need one authoritative status
-story that explains whether the new owner, transport, world agent, broker path,
-migration state, and runtime health are correct.
+claim is host-side ownership separation. Operators need one authoritative
+status story that explains whether the new owner, transport, world agent,
+gateway path, migration state, and runtime health are correct.
 
 ## In Scope
 
@@ -48,8 +49,8 @@ migration state, and runtime health are correct.
 
 ## Architectural Approach
 
-This milestone makes the CLI the contract owner and demotes helper scripts to
-followers:
+This milestone makes the CLI and durable contract docs the owner lines, and
+demotes helper scripts to followers:
 
 1. `substrate host doctor --json` reports host prerequisites, owner-model
    state, lifecycle state, and broker reachability.
@@ -57,13 +58,14 @@ followers:
    readiness through the supported broker path.
 3. `substrate health --json` summarizes operator actionability and must explain
    whether the problem is install state, owner state, transport state, world
-   state, or migration state.
-4. A dedicated lifecycle/status surface is added for macOS ownership-separated
-   deployments. If implemented as `substrate world status --json`, it becomes
-   the machine-readable contract for support tooling. If the team chooses not to
-   add a new subcommand, the equivalent schema must still exist in a canonical
-   CLI JSON output.
-5. `scripts/mac/lima-doctor.sh` becomes a support-engineering or breakglass
+   state, gateway state, or migration state.
+4. `substrate world gateway status --json` remains the authoritative
+   machine-readable gateway wiring surface. This milestone must consume that
+   contract, not replace it.
+5. If macOS-specific lifecycle state needs additive JSON beyond the existing
+   gateway status envelope, it should live in the appropriate doctor/health or
+   separate CLI surface without redefining the gateway contract.
+6. `scripts/mac/lima-doctor.sh` becomes a support-engineering or breakglass
    helper, not the primary operator entrypoint.
 
 ## Dependencies / Sequencing
@@ -74,12 +76,12 @@ Depends on:
   - phase 2 milestone 2.2 mount minimization and ingress contract
   - phase 3 milestone 3.1 Substrate-managed diagnostics and lifecycle
   - phase 3 milestone 3.2 breakglass reclassification and doc cutover
-- Milestone 2.1 install and migration state definitions
-- Phase 1 host ownership separation and broker architecture
+- milestone 2.1 install and migration state definitions
+- phase 1 host ownership separation and broker architecture
 
 Sequences before:
 
-- Milestone 2.3, because the GA matrix needs stable status semantics and
+- milestone 2.3, because the GA matrix needs stable status semantics and
   support evidence surfaces
 
 ## Concrete Repo Surfaces and File Pointers
@@ -87,18 +89,23 @@ Sequences before:
 Primary surfaces:
 
 - `crates/shell/src/execution/platform/macos.rs`
+- `crates/shell/src/builtins/world_gateway.rs`
 - `scripts/mac/lima-doctor.sh`
 - `scripts/mac/smoke.sh`
-- `docs/WORLD.md`
-- `docs/cross-platform/mac_world_setup.md`
-- `docs/INSTALLATION.md`
-- `docs/UNINSTALL.md`
+- `../../../docs/WORLD.md`
+- `../../../docs/cross-platform/mac_world_setup.md`
+- `../../../docs/INSTALLATION.md`
+- `../../../docs/UNINSTALL.md`
+- `../../../docs/contracts/substrate-gateway-operator-contract.md`
+- `../../../docs/contracts/substrate-gateway-status-schema.md`
+- `../../../docs/contracts/substrate-gateway-policy-evaluation.md`
 
 Related implementation surfaces likely touched by downstream execution:
 
 - `crates/world-mac-lima/src/lib.rs`
 - `crates/world-mac-lima/src/forwarding.rs`
 - `crates/world-mac-lima/src/transport.rs`
+- `crates/world-agent/src/gateway_runtime.rs`
 - `scripts/mac/lima-warm.sh`
 
 ## Deliverables
@@ -120,15 +127,20 @@ Related implementation surfaces likely touched by downstream execution:
 ## Acceptance Criteria
 
 - A supported operator can determine install state, owner-model state, broker
-  state, and world readiness without using direct guest commands.
+  state, gateway state, and world readiness without using direct guest
+  commands.
 - CLI JSON output distinguishes at least these macOS states:
   clean ownership-separated install, migrated install, partial migration,
-  unavailable world backend, and breakglass-required failure.
+  unavailable world backend, unavailable gateway component, and
+  breakglass-required failure.
 - Human-readable doctor/health output explains next actions concretely instead
   of only reporting that a check failed.
 - `scripts/mac/lima-doctor.sh` no longer defines the normal support contract.
 - The published docs clearly separate normal-path support commands from
   breakglass-only procedures.
+- Managed gateway runtime artifact paths under
+  `/run/substrate/substrate-gateway-runtime/` are surfaced as part of the
+  supported operator story when lifecycle failures reference them.
 
 ## Validation / Evidence Plan
 
@@ -139,21 +151,23 @@ Related implementation surfaces likely touched by downstream execution:
   - broken broker path
   - broken world-agent path
   - incomplete migration state
-- Expand `scripts/mac/smoke.sh` evidence to assert the new doctor/status schema
-  and human-readable remediation posture.
-- If a standalone status surface is introduced, capture its JSON output in the
-  same scenarios above and document it in `docs/WORLD.md`.
+- Capture `substrate world gateway status --json` in the same scenarios above,
+  plus after `substrate world gateway sync` and `restart`.
+- Expand `scripts/mac/smoke.sh` evidence to assert the doctor/status schema and
+  human-readable remediation posture.
 - Compare the new CLI outputs against the legacy `scripts/mac/lima-doctor.sh`
   checks to ensure the script is no longer the only place where critical macOS
   health signals exist.
+- Treat `docs/WORLD.md` as descriptive context only; validate gateway lifecycle
+  meaning against the durable contract docs under `docs/contracts/`.
 
 ## Risks / Open Questions
 
 - Where should ownership and migration state live in the CLI schema so it is
   stable enough for support automation but does not duplicate existing doctor
   payloads awkwardly?
-- How much breakglass detail should be exposed in normal operator docs before it
-  starts undermining the product boundary?
+- How much breakglass detail should be exposed in normal operator docs before
+  it starts undermining the product boundary?
 - If helper scripts remain for deep support, how do we keep them from drifting
   away from the CLI contract again?
 - What is the minimum viable support bundle for macOS incidents without

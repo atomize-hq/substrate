@@ -12,7 +12,7 @@ use crate::execution::policy_snapshot::bootstrap_world_spec;
 #[cfg(not(target_os = "windows"))]
 use crate::execution::settings;
 use agent_api_types::SharedWorldOwnerSpec;
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::Result;
 use std::fmt;
@@ -106,6 +106,7 @@ fn validate_shared_owner_request_support(
     }
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) fn reject_non_linux_shared_owner_request(
     request: Option<&SharedWorldOwnerSpec>,
     operation: &str,

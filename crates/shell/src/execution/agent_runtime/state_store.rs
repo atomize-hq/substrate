@@ -147,6 +147,7 @@ pub(crate) enum StartupPromptReplayState {
 }
 
 impl StartupPromptReplayState {
+    #[cfg(unix)]
     pub(crate) fn replay_safe(self) -> bool {
         matches!(self, Self::NotTracked | Self::PendingAcceptance)
     }
@@ -1007,6 +1008,7 @@ impl AgentRuntimeStateStore {
         Ok(HiddenOwnerHelperLaunchContinuity::Pending)
     }
 
+    #[cfg(unix)]
     pub(crate) fn resumed_public_turn_detach_posture(
         &self,
         orchestration_session_id: &str,
@@ -1400,7 +1402,7 @@ impl AgentRuntimeStateStore {
             }
         }
 
-        sessions.sort_by(|left, right| left.last_active_at.cmp(&right.last_active_at));
+        sessions.sort_by_key(|session| session.last_active_at);
         Ok(sessions)
     }
 
