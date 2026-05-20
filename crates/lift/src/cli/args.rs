@@ -5,6 +5,7 @@ use crate::error::LiftError;
 #[derive(Debug, Parser)]
 #[command(
     name = "lift",
+    bin_name = "lift",
     version,
     about = "Deterministic code-intelligence engine CLI scaffold"
 )]

@@ -76,16 +76,14 @@ fn file_backed_profile_resolves_relative_topology_refs() {
 
     assert_eq!(boundary.header.id.as_str(), "acme/boundaries");
     assert_eq!(component.header.id.as_str(), "acme/components");
-    assert!(boundary
-        .header
-        .origin
-        .display()
-        .ends_with("fixtures/pack/valid/topology/boundary-taxonomy.json"));
-    assert!(component
-        .header
-        .origin
-        .display()
-        .ends_with("fixtures/pack/valid/topology/component-map.json"));
+    assert_eq!(
+        boundary.header.origin.display(),
+        boundary_fixture_display_path()
+    );
+    assert_eq!(
+        component.header.origin.display(),
+        component_fixture_display_path()
+    );
 }
 
 #[test]
@@ -208,7 +206,7 @@ fn topology_resolution_surfaces_filesystem_errors_from_try_exists() {
     let dir = unique_temp_dir("topology-io-error");
     let path = dir.join("io-error.toml");
     let blocking_segment = dir.join("topology");
-    let expected_ref_path = blocking_segment.join("component-map.json");
+    let expected_ref_path = dir.join("topology/component-map.json");
 
     fs::write(
         &path,
@@ -333,4 +331,24 @@ impl Drop for CwdGuard {
 
 fn crate_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
+}
+
+fn boundary_fixture_display_path() -> String {
+    crate_root()
+        .join("fixtures/pack/valid/profile_file_backed.toml")
+        .parent()
+        .expect("fixture parent should exist")
+        .join("topology/boundary-taxonomy.json")
+        .display()
+        .to_string()
+}
+
+fn component_fixture_display_path() -> String {
+    crate_root()
+        .join("fixtures/pack/valid/profile_file_backed.toml")
+        .parent()
+        .expect("fixture parent should exist")
+        .join("topology/component-map.json")
+        .display()
+        .to_string()
 }

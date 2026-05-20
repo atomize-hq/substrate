@@ -1,4 +1,5 @@
 #![allow(unused_crate_dependencies)]
+#![cfg(unix)]
 
 use std::fs;
 use std::path::{Path, PathBuf};

@@ -33,6 +33,7 @@ fn snapshot_materializes_inventory_and_blob_store_for_regular_files() {
     let fixture = copy_fixture_tree("fixtures/repo/trees/basic_worktree", "repo-snapshot-basic");
     let snapshot = repo_support::materialize(fixture.path(), default_snapshot_options());
     let paths = inventory_paths(&snapshot);
+    let expected_bytes = fs::read(fixture.path().join("src/lib.rs")).expect("fixture bytes");
 
     assert_eq!(snapshot.inventory.len(), snapshot.blob_store.len());
     assert_eq!(snapshot.inventory.len() as u64, snapshot.stats.file_count);
@@ -42,7 +43,7 @@ fn snapshot_materializes_inventory_and_blob_store_for_regular_files() {
         snapshot
             .read_bytes(&crate::kernel::RepoPath::parse("src/lib.rs").expect("path"))
             .expect("blob bytes should exist"),
-        b"pub fn fixture_value() -> &'static str {\n    \"fixture\"\n}\n"
+        expected_bytes
     );
 }
 

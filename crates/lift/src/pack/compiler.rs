@@ -3456,10 +3456,16 @@ fn resolve_file_source_from_base(
     match path.try_exists() {
         Ok(true) => {}
         Ok(false) => {
+            if let Some(reason) = blocked_file_reference_reason(base, &path) {
+                return Err(PackError::Io {
+                    origin: path.display().to_string(),
+                    reason,
+                });
+            }
             return Err(unknown_file_reference_by_pack(
                 referring_pack,
                 relative_path,
-            ))
+            ));
         }
         Err(error) => {
             return Err(PackError::Io {
@@ -3470,6 +3476,30 @@ fn resolve_file_source_from_base(
     }
 
     Ok(PackSource::File { path, format_hint })
+}
+
+fn blocked_file_reference_reason(base: &Path, path: &Path) -> Option<String> {
+    let parent = path.parent()?;
+    let relative_parent = parent.strip_prefix(base).ok()?;
+    let mut probe = base.to_path_buf();
+
+    for component in relative_parent.components() {
+        probe.push(component.as_os_str());
+        match fs::metadata(&probe) {
+            Ok(metadata) => {
+                if !metadata.is_dir() {
+                    return Some(format!(
+                        "path component is not a directory: {}",
+                        probe.display()
+                    ));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+            Err(error) => return Some(error.to_string()),
+        }
+    }
+
+    None
 }
 
 fn resolve_bundle_ref_source(
