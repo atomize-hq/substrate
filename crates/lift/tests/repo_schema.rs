@@ -398,15 +398,15 @@ fn manifest_ordering_matches_runtime_ordering() {
     let (_base_root, _head_root, base_snapshot, head_snapshot) =
         repo_support::materialize_basic_worktree_pair(
             "repo-diff-schema-ordering",
-            |_| {},
+            |base| {
+                repo_support::write_file(&base.join("target/cache.txt"), b"cached");
+            },
             |head| {
                 repo_support::write_file(&head.join("docs/new.txt"), b"new");
                 repo_support::write_file(
                     &head.join("src/lib.rs"),
                     b"pub fn fixture_value() -> &'static str {\n    \"ordered\"\n}\n",
                 );
-                std::fs::remove_file(head.join("target/cache.txt"))
-                    .expect("target/cache.txt should be removable");
             },
         );
     let diff = repo::build_diff(&base_snapshot, &head_snapshot);

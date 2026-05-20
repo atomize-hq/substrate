@@ -563,7 +563,6 @@ impl AgentRuntimeStateStore {
                 || participant.handle.role != MEMBER_ROLE
                 || participant.handle.execution.scope != AgentExecutionScope::World
                 || !participant.is_authoritative_live()
-                || !owner_process_is_alive(&participant)
             {
                 continue;
             }
@@ -3208,6 +3207,42 @@ mod tests {
 
             assert_eq!(first, vec!["ash_member_old"]);
             assert!(second.is_empty(), "second sweep must be a no-op");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn invalidate_stale_world_members_for_session_does_not_require_live_owner_pid() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("claude_code", "sess_live", "ash_orchestrator");
+            let mut stale_member =
+                live_member("codex", "sess_live", "ash_member_old", "ash_orchestrator");
+            stale_member.internal.shell_owner_pid = 999_999_999;
+
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+            store
+                .persist_participant(&stale_member)
+                .expect("persist stale member");
+
+            let invalidated = store
+                .invalidate_stale_world_members_for_session("sess_live", 3)
+                .expect("invalidate stale members");
+
+            assert_eq!(invalidated, vec!["ash_member_old"]);
+            let stale_member = store
+                .load_participant("ash_member_old")
+                .expect("load stale member")
+                .expect("stale member exists");
+            assert_eq!(
+                stale_member.handle.state,
+                AgentRuntimeSessionState::Invalidated
+            );
+            assert_eq!(
+                stale_member.internal.termination_reason.as_deref(),
+                Some("world generation invalidated by replacement binding")
+            );
         });
     }
 

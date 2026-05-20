@@ -262,7 +262,7 @@ mod tests {
             help: Some("fix it".to_owned()),
         };
 
-        let mut diagnostics = vec![info, warning, error.clone()];
+        let mut diagnostics = [info, warning, error.clone()];
         diagnostics.sort();
 
         assert_eq!(diagnostics[0], error);

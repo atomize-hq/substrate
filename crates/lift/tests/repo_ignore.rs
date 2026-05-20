@@ -53,6 +53,7 @@ fn explicit_glob_exclusion_still_composes_on_top_of_typed_policy() {
         "fixtures/repo/trees/well_known_excludes",
         "repo-ignore-explicit",
     );
+    write_file(&fixture.path().join("target/cache.txt"), b"cached");
     let mut options = default_snapshot_options();
     options.well_known_excludes = vec![repo::WellKnownExclude::RustTarget];
     options.exclude_globs = vec!["dist".to_owned()];
@@ -72,6 +73,8 @@ fn common_cache_and_vendor_dirs_are_not_implicitly_excluded() {
         "fixtures/repo/trees/well_known_excludes",
         "repo-ignore-defaults",
     );
+    write_file(&fixture.path().join("__pycache__/module.pyc"), b"pyc");
+    write_file(&fixture.path().join("target/cache.txt"), b"cached");
     let snapshot = repo_support::materialize(fixture.path(), default_snapshot_options());
     let paths = inventory_paths(&snapshot);
 
@@ -91,6 +94,8 @@ fn typed_well_known_excludes_remove_only_the_selected_canonical_directories() {
         "fixtures/repo/trees/well_known_excludes",
         "repo-ignore-well-known",
     );
+    write_file(&fixture.path().join("__pycache__/module.pyc"), b"pyc");
+    write_file(&fixture.path().join("target/cache.txt"), b"cached");
     let mut options = default_snapshot_options();
     options.well_known_excludes = vec![
         repo::WellKnownExclude::RustTarget,

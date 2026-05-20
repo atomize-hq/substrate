@@ -476,14 +476,12 @@ fn transform_gateway_response_to_openai_response(
 
     for block in &gateway_response.content {
         match block {
-            ContentBlock::Known(KnownContentBlock::Text { text, .. }) => {
-                if !text.is_empty() {
-                    pending_text_parts.push(OpenAIResponsesOutputContentPart {
-                        r#type: "output_text".to_string(),
-                        text: text.clone(),
-                        annotations: Vec::new(),
-                    });
-                }
+            ContentBlock::Known(KnownContentBlock::Text { text, .. }) if !text.is_empty() => {
+                pending_text_parts.push(OpenAIResponsesOutputContentPart {
+                    r#type: "output_text".to_string(),
+                    text: text.clone(),
+                    annotations: Vec::new(),
+                });
             }
             ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input }) => {
                 flush_pending_text(&mut output, &mut pending_text_parts);

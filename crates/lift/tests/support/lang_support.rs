@@ -139,7 +139,7 @@ impl TomlCollector {
 
     fn walk_table(&mut self, prefix: &[String], table: &toml::map::Map<String, Value>) {
         let mut entries = table.iter().collect::<Vec<_>>();
-        entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+        entries.sort_by_key(|(left, _)| *left);
 
         for (key, value) in entries {
             let mut path = prefix.to_vec();

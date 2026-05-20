@@ -61,11 +61,11 @@ fn base_exhausted_first_marks_remaining_entries_as_added() {
 fn head_exhausted_first_marks_remaining_entries_as_removed() {
     let (_base_root, _head_root, base_snapshot, head_snapshot) = materialize_basic_worktree_pair(
         "repo-diff-head-exhausted",
-        |_| {},
+        |base| {
+            write_file(&base.join("target/cache.txt"), b"cached");
+        },
         |head| {
             fs::remove_file(head.join("src/lib.rs")).expect("src/lib.rs should be removable");
-            fs::remove_file(head.join("target/cache.txt"))
-                .expect("target/cache.txt should be removable");
         },
     );
 
@@ -178,15 +178,15 @@ fn rename_shaped_change_is_removed_plus_added() {
 fn diff_entry_path_order_matches_lexical_repo_path_order() {
     let (_base_root, _head_root, base_snapshot, head_snapshot) = materialize_basic_worktree_pair(
         "repo-diff-lexical-order",
-        |_| {},
+        |base| {
+            write_file(&base.join("target/cache.txt"), b"cached");
+        },
         |head| {
             write_file(&head.join("docs/new.txt"), b"new");
             write_file(
                 &head.join("src/lib.rs"),
                 b"pub fn fixture_value() -> &'static str {\n    \"ordered\"\n}\n",
             );
-            fs::remove_file(head.join("target/cache.txt"))
-                .expect("target/cache.txt should be removable");
             write_file(&head.join("zeta/final.txt"), b"final");
         },
     );
