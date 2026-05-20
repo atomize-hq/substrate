@@ -32,6 +32,58 @@ Environment variables and advanced configuration options for Substrate.
 | `SUBSTRATE_PTY_DEBUG` | Enable PTY debug logging | *none* | `1` |
 | `SUBSTRATE_PTY_PIPELINE_LAST` | PTY for last pipeline segment | *none* | `1` |
 
+## Agent Hub Configuration
+
+Agent Hub successor routing is configured through the normal Substrate config and policy files.
+
+Config keys:
+- `agents.hub.orchestrator_agent_id` selects the canonical host-scoped orchestrator agent for `substrate agent status` and `substrate agent doctor`.
+- Agent inventory entries continue to define each agent's adapter kind and execution posture; the derived `backend_id` remains `<kind>:<agent_id>`.
+- The shell-owned v1 runtime only realizes selected orchestrators with `config.kind=cli`, `protocol=uaa.agent.session`, and `cli.mode=persistent`.
+- The first realized shell-owned UAA backends are `cli:codex` and `cli:claude_code`. Other inventory items may still validate and list successfully, but they are not runtime-realizable on the selected orchestrator path in v1.
+- `config.cli.binary` for the selected orchestrator must resolve on the host during `substrate agent doctor` and async REPL bootstrap.
+
+Policy keys:
+- `agents.allowed_backends` remains the allowlist for derived agent adapter ids such as `cli:codex` or `api:openai`.
+- Existing `agents.allowed_backends` entries stay valid across the successor `substrate agent ...` command surface because the policy token is still the derived `backend_id`, not `client`, `router`, `protocol`, `provider`, or `auth_authority`.
+
+Minimal example:
+
+```yaml
+agents:
+  hub:
+    orchestrator_agent_id: claude_code
+```
+
+```yaml
+version: 1
+id: claude_code
+config:
+  kind: cli
+  protocol: uaa.agent.session
+  execution:
+    scope: host
+  cli:
+    binary: claude
+    mode: persistent
+  capabilities:
+    session_start: true
+    session_resume: true
+    session_fork: true
+    session_stop: true
+    status_snapshot: true
+    event_stream: true
+    llm: true
+    mcp_client: true
+```
+
+```yaml
+agents:
+  allowed_backends:
+    - cli:claude_code
+    - cli:codex
+```
+
 ## Manager Manifest & Init
 
 | Variable | Purpose | Default | Example |
@@ -193,6 +245,10 @@ Unknown keys and extra tables are preserved for future expansion.
 - `substrate world enable` overwrites `install:` after provisioning succeeds and repairs malformed metadata.
 - Legacy installs that still have `config.json` are read automatically, but new writes use `config.yaml`.
 - The generated `~/.substrate/manager_env.sh` exports derived `SUBSTRATE_*` state so shims and subprocesses observe a consistent view of the effective config.
+- Supported Linux/macOS provisioning helpers also wire `SUBSTRATE_HOME` into the
+  `substrate-world-agent` systemd unit and keep that exact path writable via
+  `ReadWritePaths`. WSL helper scripts are intentionally fail-closed in this slice
+  and do not claim that placement contract yet.
 
 ### World filesystem mode
 

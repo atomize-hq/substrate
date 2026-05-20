@@ -7,13 +7,13 @@ use agent_api_types::{
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde_json::Value as JsonValue;
-use substrate_common::agent_events::AgentEventKind;
 use substrate_common::FsDiff;
 use tokio::runtime::Runtime;
 
 // Telemetry stream handling
 #[test]
-fn consume_agent_stream_buffer_emits_agent_events() {
+#[serial_test::serial]
+fn consume_agent_stream_buffer_without_context_suppresses_agent_events() {
     let _guard = agent_events::acquire_event_test_guard();
     let rt = Runtime::new().expect("runtime");
     rt.block_on(async {
@@ -55,15 +55,10 @@ fn consume_agent_stream_buffer_emits_agent_events() {
         )
         .expect("consume stream");
 
-        let stdout_event = rx.recv().await.expect("stdout event");
-        assert_eq!(stdout_event.kind, AgentEventKind::PtyData);
-        assert_eq!(stdout_event.data["chunk"], "hello");
-        assert_eq!(stdout_event.data["stream"], "stdout");
-
-        let stderr_event = rx.recv().await.expect("stderr event");
-        assert_eq!(stderr_event.kind, AgentEventKind::PtyData);
-        assert_eq!(stderr_event.data["chunk"], "oops");
-        assert_eq!(stderr_event.data["stream"], "stderr");
+        assert!(
+            rx.try_recv().is_err(),
+            "no-context stream parsing must not synthesize orchestration-scoped agent events"
+        );
 
         assert_eq!(exit_code, Some(0));
         assert_eq!(scopes_used, vec!["scope:a".to_string()]);

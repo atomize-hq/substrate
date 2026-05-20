@@ -175,6 +175,7 @@ impl PtyRepl {
         cmd.env_remove("SUBSTRATE_WORLD_ID");
         cmd.env_remove("CI");
         cmd.env_remove("GITHUB_ACTIONS");
+        cmd.env("SUBSTRATE_FORCE_REEDLINE", "1");
         cmd.env("SHELL", "/bin/bash");
         cmd.arg("--shim-skip");
 

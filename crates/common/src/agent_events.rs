@@ -1,11 +1,22 @@
 use std::fmt;
+use std::io;
 use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::json;
+
+use crate::identity::{
+    validate_identity_tuple_and_placement_posture, IdentityTuple, PlacementExecution,
+    PlacementPosture,
+};
 
 pub const AGENT_EVENT_CHANNEL_MAX_BYTES: usize = 64;
+const PURE_AGENT_ROUTER: &str = "agent_hub";
+// Substrate-local normalized protocol-family id for current pure-agent records.
+// This label is not, by itself, a claim of upstream UAA wire/API compatibility.
+const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
 
 /// Canonical set of agent event categories.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -59,6 +70,7 @@ impl From<MessageEventKind> for AgentEventKind {
 
 /// Structured envelope for asynchronous agent updates.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(try_from = "AgentEventDef")]
 pub struct AgentEvent {
     pub ts: DateTime<Utc>,
     pub kind: AgentEventKind,
@@ -68,6 +80,14 @@ pub struct AgentEvent {
     pub agent_id: String,
     pub orchestration_session_id: String,
     pub run_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_participant_id: Option<String>,
 
     // Attribution + correlation (optional)
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -78,6 +98,8 @@ pub struct AgentEvent {
     pub role: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_generation: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cmd_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -91,21 +113,65 @@ pub struct AgentEvent {
     )]
     pub channel: Option<String>,
 
-    // Tuple-compatible metadata (optional; semantics delegated to later ADRs)
+    // Tuple-compatible metadata (optional)
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub client: Option<String>,
+    pub identity_tuple: Option<IdentityTuple>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub router: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub auth_authority: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub protocol: Option<String>,
+    pub placement_posture: Option<PlacementPosture>,
 
     // Legacy field (v1 producers should omit)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct AgentEventDef {
+    ts: DateTime<Utc>,
+    kind: AgentEventKind,
+    data: serde_json::Value,
+    agent_id: String,
+    orchestration_session_id: String,
+    run_id: String,
+    #[serde(default)]
+    parent_run_id: Option<String>,
+    #[serde(default)]
+    participant_id: Option<String>,
+    #[serde(default)]
+    parent_participant_id: Option<String>,
+    #[serde(default)]
+    resumed_from_participant_id: Option<String>,
+    #[serde(default)]
+    backend_id: Option<String>,
+    #[serde(default)]
+    thread_id: Option<String>,
+    #[serde(default)]
+    role: Option<String>,
+    #[serde(default)]
+    world_id: Option<String>,
+    #[serde(default)]
+    world_generation: Option<u64>,
+    #[serde(default)]
+    cmd_id: Option<String>,
+    #[serde(default)]
+    span_id: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_sanitized_channel")]
+    channel: Option<String>,
+    #[serde(default)]
+    client: Option<String>,
+    #[serde(default)]
+    router: Option<String>,
+    #[serde(default)]
+    protocol: Option<String>,
+    #[serde(default)]
+    provider: Option<String>,
+    #[serde(default)]
+    auth_authority: Option<String>,
+    #[serde(default)]
+    identity_tuple: Option<IdentityTuple>,
+    #[serde(default)]
+    placement_posture: Option<PlacementPosture>,
+    #[serde(default)]
+    project: Option<String>,
 }
 
 impl AgentEvent {
@@ -144,19 +210,21 @@ impl AgentEvent {
             kind,
             orchestration_session_id: orchestration_session_id.into(),
             run_id: run_id.into(),
+            parent_run_id: None,
+            participant_id: None,
+            parent_participant_id: None,
+            resumed_from_participant_id: None,
             data,
             backend_id: None,
             thread_id: None,
             role: None,
             world_id: None,
+            world_generation: None,
             cmd_id: None,
             span_id: None,
             channel: None,
-            client: None,
-            router: None,
-            provider: None,
-            auth_authority: None,
-            protocol: None,
+            identity_tuple: None,
+            placement_posture: None,
             project: None,
         };
         let channel = event.channel.take();
@@ -219,6 +287,116 @@ impl AgentEvent {
                 "chunk": chunk.into(),
             }),
         )
+    }
+
+    pub fn validate_identity_contract(&self) -> Result<(), String> {
+        validate_identity_tuple_and_placement_posture(
+            self.identity_tuple.as_ref(),
+            self.placement_posture.as_ref(),
+        )
+    }
+
+    pub fn set_pure_agent_telemetry_identity(&mut self, client: impl Into<String>) {
+        if self.identity_tuple.is_none() {
+            self.identity_tuple = Some(IdentityTuple {
+                client: client.into(),
+                router: PURE_AGENT_ROUTER.to_string(),
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                provider: None,
+                auth_authority: None,
+            });
+        }
+
+        if self.placement_posture.is_none() {
+            self.placement_posture = Some(PlacementPosture {
+                execution: if self.world_id.is_some() {
+                    PlacementExecution::InWorld
+                } else {
+                    PlacementExecution::HostOnly
+                },
+                host_to_world_bridge: None,
+            });
+        }
+    }
+
+    pub fn to_trace_record(&self) -> Result<serde_json::Value, serde_json::Error> {
+        let mut entry = serde_json::to_value(self)?;
+        let Some(obj) = entry.as_object_mut() else {
+            return Err(serde_json::Error::io(io::Error::other(
+                "agent event must serialize as a JSON object",
+            )));
+        };
+
+        if let Some(tuple) = self.identity_tuple.as_ref() {
+            obj.insert("client".to_string(), json!(tuple.client));
+            obj.insert("router".to_string(), json!(tuple.router));
+            obj.insert("protocol".to_string(), json!(tuple.protocol));
+
+            match tuple.provider.as_deref() {
+                Some(provider) => {
+                    obj.insert("provider".to_string(), json!(provider));
+                }
+                None => {
+                    obj.remove("provider");
+                }
+            }
+
+            match tuple.auth_authority.as_deref() {
+                Some(auth_authority) => {
+                    obj.insert("auth_authority".to_string(), json!(auth_authority));
+                }
+                None => {
+                    obj.remove("auth_authority");
+                }
+            }
+        }
+
+        Ok(entry)
+    }
+}
+
+impl TryFrom<AgentEventDef> for AgentEvent {
+    type Error = String;
+
+    fn try_from(value: AgentEventDef) -> Result<Self, Self::Error> {
+        let identity_tuple = value.identity_tuple.or_else(|| {
+            let client = value.client?;
+            let router = value.router?;
+            let protocol = value.protocol?;
+            Some(IdentityTuple {
+                client,
+                router,
+                protocol,
+                provider: value.provider,
+                auth_authority: value.auth_authority,
+            })
+        });
+
+        let event = Self {
+            ts: value.ts,
+            kind: value.kind,
+            data: value.data,
+            agent_id: value.agent_id,
+            orchestration_session_id: value.orchestration_session_id,
+            run_id: value.run_id,
+            parent_run_id: value.parent_run_id,
+            participant_id: value.participant_id,
+            parent_participant_id: value.parent_participant_id,
+            resumed_from_participant_id: value.resumed_from_participant_id,
+            backend_id: value.backend_id,
+            thread_id: value.thread_id,
+            role: value.role,
+            world_id: value.world_id,
+            world_generation: value.world_generation,
+            cmd_id: value.cmd_id,
+            span_id: value.span_id,
+            channel: value.channel,
+            identity_tuple,
+            placement_posture: value.placement_posture,
+            project: value.project,
+        };
+        event.validate_identity_contract()?;
+        Ok(event)
     }
 }
 

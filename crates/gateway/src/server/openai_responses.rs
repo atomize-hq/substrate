@@ -28,6 +28,20 @@ use super::{
 };
 
 const OPENAI_PUBLIC_RESPONSES_METADATA_KEY: &str = "openai_public_responses";
+const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
+const OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY: &str = "openai_responses_reasoning_effort";
+const OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY: &str = "openai_responses_reasoning_summary";
+const OPENAI_RESPONSES_INCLUDE_METADATA_KEY: &str = "openai_responses_include";
+const OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY: &str = "openai_responses_text_verbosity";
+const OPENAI_RESPONSES_EXPLICIT_MAX_OUTPUT_TOKENS_METADATA_KEY: &str =
+    "openai_responses_explicit_max_output_tokens";
+const OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY: &str = "openai_responses_input_metadata";
+const OPENAI_RESPONSES_TRUNCATION_METADATA_KEY: &str = "openai_responses_truncation";
+const OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY: &str =
+    "openai_responses_previous_response_id";
+const OPENAI_RESPONSES_USER_METADATA_KEY: &str = "openai_responses_user";
+const OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY: &str = "openai_responses_stream_options";
+const OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY: &str = "openai_responses_service_tier";
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -43,7 +57,13 @@ struct OpenAIResponsesRequest {
     #[serde(default)]
     text: Option<OpenAIResponsesText>,
     #[serde(default)]
+    include: Option<Vec<String>>,
+    #[serde(default)]
+    reasoning: Option<OpenAIResponsesReasoning>,
+    #[serde(default)]
     max_output_tokens: Option<u32>,
+    #[serde(default)]
+    metadata: Option<HashMap<String, serde_json::Value>>,
     #[serde(default)]
     temperature: Option<f32>,
     #[serde(default)]
@@ -51,9 +71,17 @@ struct OpenAIResponsesRequest {
     #[serde(default)]
     stop: Option<Vec<String>>,
     #[serde(default)]
+    truncation: Option<serde_json::Value>,
+    #[serde(default)]
+    previous_response_id: Option<String>,
+    #[serde(default)]
+    user: Option<String>,
+    #[serde(default)]
     stream: Option<bool>,
     #[serde(default)]
     stream_options: Option<OpenAIResponsesStreamOptions>,
+    #[serde(default)]
+    service_tier: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +96,8 @@ enum OpenAIResponsesInput {
 enum OpenAIResponsesInputItem {
     #[serde(rename = "message")]
     Message(OpenAIResponsesMessageItem),
+    #[serde(rename = "function_call")]
+    FunctionCall(OpenAIResponsesFunctionCallItem),
     #[serde(rename = "function_call_output")]
     FunctionCallOutput(OpenAIResponsesFunctionCallOutputItem),
 }
@@ -98,6 +128,13 @@ struct OpenAIResponsesFunctionCallOutputItem {
 }
 
 #[derive(Debug, Deserialize)]
+struct OpenAIResponsesFunctionCallItem {
+    call_id: String,
+    name: String,
+    arguments: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct OpenAIResponsesTool {
     #[serde(rename = "type")]
     r#type: String,
@@ -113,28 +150,31 @@ struct OpenAIResponsesToolFunction {
     parameters: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 enum OpenAIResponsesToolChoice {
     String(String),
     Object(OpenAIResponsesToolChoiceObject),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct OpenAIResponsesToolChoiceObject {
     #[serde(rename = "type")]
     r#type: String,
     function: OpenAIResponsesToolChoiceFunction,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct OpenAIResponsesToolChoiceFunction {
     name: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAIResponsesText {
+    #[serde(default)]
     format: Option<OpenAIResponsesTextFormat>,
+    #[serde(default)]
+    verbosity: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -144,6 +184,13 @@ struct OpenAIResponsesTextFormat {
 }
 
 #[derive(Debug, Deserialize)]
+struct OpenAIResponsesReasoning {
+    effort: String,
+    #[serde(default)]
+    summary: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 struct OpenAIResponsesStreamOptions {
     #[allow(dead_code)]
     #[serde(default)]
@@ -196,9 +243,11 @@ fn transform_openai_to_gateway_request(
     openai_req: OpenAIResponsesRequest,
 ) -> Result<GatewayRequest, String> {
     reject_known_unsupported_request_state(&openai_req)?;
+    let allows_previous_response_continuation = openai_req.previous_response_id.is_some();
 
     let (tools, tool_names) = parse_function_tools(openai_req.tools.as_ref())?;
-    let tools = apply_tool_choice(tools, &tool_names, openai_req.tool_choice.as_ref())?;
+    let tool_choice = openai_req.tool_choice.as_ref();
+    let tools = apply_tool_choice(tools, &tool_names, tool_choice)?;
 
     let mut messages = Vec::new();
 
@@ -210,6 +259,8 @@ fn transform_openai_to_gateway_request(
             });
         }
         OpenAIResponsesInput::Items(items) => {
+            let mut prior_function_call_ids = HashSet::new();
+
             for item in items {
                 match item {
                     OpenAIResponsesInputItem::Message(message) => {
@@ -224,10 +275,43 @@ fn transform_openai_to_gateway_request(
                             other => return Err(format!("Unsupported message role: {other}")),
                         }
                     }
+                    OpenAIResponsesInputItem::FunctionCall(function_call) => {
+                        let call_id = function_call.call_id.trim();
+                        if call_id.is_empty() {
+                            return Err("function_call.call_id must not be empty".to_string());
+                        }
+                        let name = function_call.name.trim();
+                        if name.is_empty() {
+                            return Err("function_call.name must not be empty".to_string());
+                        }
+
+                        let arguments =
+                            parse_responses_function_call_arguments(&function_call.arguments)?;
+                        prior_function_call_ids.insert(call_id.to_string());
+
+                        messages.push(Message {
+                            role: "assistant".to_string(),
+                            content: MessageContent::Blocks(vec![ContentBlock::Known(
+                                KnownContentBlock::ToolUse {
+                                    id: call_id.to_string(),
+                                    name: name.to_string(),
+                                    input: arguments,
+                                },
+                            )]),
+                        });
+                    }
                     OpenAIResponsesInputItem::FunctionCallOutput(function_call_output) => {
                         if function_call_output.call_id.trim().is_empty() {
                             return Err(
                                 "function_call_output.call_id must not be empty".to_string()
+                            );
+                        }
+                        if !prior_function_call_ids.contains(function_call_output.call_id.trim())
+                            && !allows_previous_response_continuation
+                        {
+                            return Err(
+                                "function_call_output.call_id must reference a prior function_call item"
+                                    .to_string(),
                             );
                         }
 
@@ -259,12 +343,102 @@ fn transform_openai_to_gateway_request(
             serde_json::Value::Bool(parallel_tool_calls),
         );
     }
+    if let Some(tool_choice) = tool_choice {
+        metadata.insert(
+            OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY.to_string(),
+            serde_json::to_value(tool_choice).map_err(|err| err.to_string())?,
+        );
+    }
+    if let Some(max_output_tokens) = openai_req.max_output_tokens {
+        metadata.insert(
+            OPENAI_RESPONSES_EXPLICIT_MAX_OUTPUT_TOKENS_METADATA_KEY.to_string(),
+            serde_json::Value::from(max_output_tokens),
+        );
+    }
+    if let Some(request_metadata) = &openai_req.metadata {
+        metadata.insert(
+            OPENAI_RESPONSES_INPUT_METADATA_METADATA_KEY.to_string(),
+            serde_json::to_value(request_metadata).map_err(|err| err.to_string())?,
+        );
+    }
+    if let Some(truncation) = &openai_req.truncation {
+        metadata.insert(
+            OPENAI_RESPONSES_TRUNCATION_METADATA_KEY.to_string(),
+            truncation.clone(),
+        );
+    }
+    if let Some(previous_response_id) = &openai_req.previous_response_id {
+        metadata.insert(
+            OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY.to_string(),
+            serde_json::Value::String(previous_response_id.clone()),
+        );
+    }
+    if let Some(user) = &openai_req.user {
+        metadata.insert(
+            OPENAI_RESPONSES_USER_METADATA_KEY.to_string(),
+            serde_json::Value::String(user.clone()),
+        );
+    }
+    if let Some(stream_options) = &openai_req.stream_options {
+        metadata.insert(
+            OPENAI_RESPONSES_STREAM_OPTIONS_METADATA_KEY.to_string(),
+            serde_json::to_value(stream_options).map_err(|err| err.to_string())?,
+        );
+    }
+    if let Some(service_tier) = &openai_req.service_tier {
+        metadata.insert(
+            OPENAI_RESPONSES_SERVICE_TIER_METADATA_KEY.to_string(),
+            service_tier.clone(),
+        );
+    }
+    if let Some(reasoning) = &openai_req.reasoning {
+        metadata.insert(
+            OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY.to_string(),
+            serde_json::Value::String(reasoning.effort.clone()),
+        );
+        if let Some(summary) = &reasoning.summary {
+            metadata.insert(
+                OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY.to_string(),
+                serde_json::Value::String(summary.clone()),
+            );
+        }
+    }
+    if let Some(include) = &openai_req.include {
+        metadata.insert(
+            OPENAI_RESPONSES_INCLUDE_METADATA_KEY.to_string(),
+            serde_json::Value::Array(
+                include
+                    .iter()
+                    .cloned()
+                    .map(serde_json::Value::String)
+                    .collect(),
+            ),
+        );
+    }
+    if let Some(text) = &openai_req.text {
+        if let Some(verbosity) = &text.verbosity {
+            metadata.insert(
+                OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY.to_string(),
+                serde_json::Value::String(verbosity.clone()),
+            );
+        }
+    }
 
     Ok(GatewayRequest {
         model: openai_req.model,
         messages,
         max_output_tokens: openai_req.max_output_tokens.unwrap_or(4096),
-        reasoning: None,
+        reasoning: openai_req
+            .reasoning
+            .as_ref()
+            .map(|reasoning| crate::core::ReasoningConfig {
+                r#type: if reasoning.effort == "none" {
+                    "disabled".to_string()
+                } else {
+                    "enabled".to_string()
+                },
+                budget_tokens: None,
+            }),
         temperature: openai_req.temperature,
         top_p: openai_req.top_p,
         top_k: None,
@@ -1203,6 +1377,11 @@ fn responses_message_content_to_message_content(
     }
 }
 
+fn parse_responses_function_call_arguments(arguments: &str) -> Result<serde_json::Value, String> {
+    serde_json::from_str(arguments)
+        .map_err(|_| "function_call.arguments must be a JSON string".to_string())
+}
+
 fn image_source_from_url(image_url: &str) -> Result<ImageSource, String> {
     if image_url.starts_with("data:") {
         if let Some(comma_idx) = image_url.find(',') {
@@ -1244,6 +1423,7 @@ mod tests {
     use super::*;
     use crate::cli::ModelMapping;
     use crate::providers::ProviderRegistry;
+    use crate::providers::{OpenAIProvider, OpenAIProviderConfig, OpenAITransport};
     use crate::server::openai_conformance_test_support::{
         read_json_fixture, response_text_response as response_text,
         response_with_text_and_tool as response_with_tool_and_thinking, ConformanceHarness,
@@ -1287,7 +1467,7 @@ mod tests {
     }
 
     #[test]
-    fn message_items_and_function_call_outputs_map_into_the_normalized_core() {
+    fn message_items_function_calls_and_outputs_map_into_the_normalized_core() {
         let request: OpenAIResponsesRequest = serde_json::from_value(json!({
             "model": "gpt-test",
             "input": [
@@ -1317,6 +1497,12 @@ mod tests {
                     ]
                 },
                 {
+                    "type": "function_call",
+                    "call_id": "call_123",
+                    "name": "lookup",
+                    "arguments": "{\"query\":\"question\"}"
+                },
+                {
                     "type": "function_call_output",
                     "call_id": "call_123",
                     "output": "tool-output"
@@ -1327,7 +1513,7 @@ mod tests {
 
         let gateway_request = transform_openai_to_gateway_request(request).unwrap();
         assert!(gateway_request.system.is_none());
-        assert_eq!(gateway_request.messages.len(), 4);
+        assert_eq!(gateway_request.messages.len(), 5);
 
         assert_eq!(gateway_request.messages[0].role, "system");
         match &gateway_request.messages[0].content {
@@ -1371,9 +1557,22 @@ mod tests {
             _ => panic!("expected blocks"),
         }
 
-        assert_eq!(gateway_request.messages[3].role, "user");
+        assert_eq!(gateway_request.messages[3].role, "assistant");
         assert!(matches!(
             gateway_request.messages[3].content,
+            MessageContent::Blocks(ref blocks)
+                if matches!(
+                    &blocks[0],
+                    ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input })
+                    if id == "call_123"
+                        && name == "lookup"
+                        && input == &serde_json::json!({"query":"question"})
+                )
+        ));
+
+        assert_eq!(gateway_request.messages[4].role, "user");
+        assert!(matches!(
+            gateway_request.messages[4].content,
             MessageContent::Blocks(ref blocks)
                 if matches!(
                     &blocks[0],
@@ -1381,6 +1580,99 @@ mod tests {
                     if tool_use_id == "call_123" && matches!(content, ToolResultContent::Text(text) if text == "tool-output")
                 )
         ));
+    }
+
+    #[test]
+    fn invalid_function_call_call_id_is_rejected() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "",
+                    "name": "lookup",
+                    "arguments": "{}"
+                }
+            ]
+        }))
+        .unwrap();
+
+        let err = transform_openai_to_gateway_request(request).unwrap_err();
+        assert_eq!(err, "function_call.call_id must not be empty");
+    }
+
+    #[test]
+    fn invalid_function_call_name_is_rejected() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_123",
+                    "name": "",
+                    "arguments": "{}"
+                }
+            ]
+        }))
+        .unwrap();
+
+        let err = transform_openai_to_gateway_request(request).unwrap_err();
+        assert_eq!(err, "function_call.name must not be empty");
+    }
+
+    #[test]
+    fn invalid_function_call_arguments_are_rejected() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "input": [
+                {
+                    "type": "function_call",
+                    "call_id": "call_123",
+                    "name": "lookup",
+                    "arguments": "not-json"
+                }
+            ]
+        }))
+        .unwrap();
+
+        let err = transform_openai_to_gateway_request(request).unwrap_err();
+        assert_eq!(err, "function_call.arguments must be a JSON string");
+    }
+
+    #[test]
+    fn previous_response_id_allows_function_call_output_without_same_request_function_call() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "previous_response_id": "resp_prev_123",
+            "input": [
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_123",
+                    "output": "tool-output"
+                }
+            ]
+        }))
+        .unwrap();
+
+        let gateway_request = transform_openai_to_gateway_request(request).unwrap();
+        assert_eq!(gateway_request.messages.len(), 1);
+        assert_eq!(gateway_request.messages[0].role, "user");
+        assert!(matches!(
+            gateway_request.messages[0].content,
+            MessageContent::Blocks(ref blocks)
+                if matches!(
+                    &blocks[0],
+                    ContentBlock::Known(KnownContentBlock::ToolResult { tool_use_id, content, .. })
+                    if tool_use_id == "call_123"
+                        && matches!(content, ToolResultContent::Text(text) if text == "tool-output")
+                )
+        ));
+        assert_eq!(
+            gateway_request.metadata.as_ref().and_then(
+                |metadata| metadata.get(OPENAI_RESPONSES_PREVIOUS_RESPONSE_ID_METADATA_KEY)
+            ),
+            Some(&json!("resp_prev_123"))
+        );
     }
 
     #[test]
@@ -1413,6 +1705,90 @@ mod tests {
         }))
         .unwrap();
         assert!(transform_openai_to_gateway_request(rejected).is_err());
+    }
+
+    #[test]
+    fn generic_public_responses_controls_remain_accepted_at_ingress() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "input": "hello",
+            "max_output_tokens": 128,
+            "temperature": 0.2,
+            "top_p": 0.8,
+            "stop": ["halt"],
+            "stream_options": { "include_obfuscation": true },
+            "tools": [
+                { "type": "function", "function": { "name": "lookup", "parameters": {"type":"object"} } }
+            ],
+            "tool_choice": {"type":"function","function":{"name":"lookup"}}
+        }))
+        .unwrap();
+
+        let gateway_request = transform_openai_to_gateway_request(request).unwrap();
+        assert_eq!(gateway_request.max_output_tokens, 128);
+        assert_eq!(gateway_request.temperature, Some(0.2));
+        assert_eq!(gateway_request.top_p, Some(0.8));
+        assert_eq!(
+            gateway_request.stop_sequences,
+            Some(vec!["halt".to_string()])
+        );
+        assert_eq!(gateway_request.tools.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn public_responses_passthrough_controls_survive_ingress_and_provider_serialization() {
+        let request: OpenAIResponsesRequest = serde_json::from_value(json!({
+            "model": "gpt-test",
+            "input": "hello",
+            "metadata": {
+                "client": "sdk",
+                "request_id": "req_123"
+            },
+            "truncation": "auto",
+            "previous_response_id": "resp_prev_123",
+            "user": "user_123",
+            "stream_options": { "include_obfuscation": true },
+            "service_tier": "priority"
+        }))
+        .unwrap();
+
+        let gateway_request = transform_openai_to_gateway_request(request).unwrap();
+        let provider = OpenAIProvider::with_transport(
+            OpenAITransport::OpenAI,
+            OpenAIProviderConfig {
+                name: "test-openai".to_string(),
+                api_key: String::new(),
+                base_url: "https://example.invalid/v1".to_string(),
+                models: Vec::new(),
+                custom_headers: Vec::new(),
+                oauth_provider: None,
+                token_store: None,
+                codex_auth_source: None,
+            },
+        );
+
+        let serialized = serde_json::to_value(
+            provider
+                .transform_to_responses_request(&gateway_request)
+                .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            serialized["metadata"],
+            json!({
+                "client": "sdk",
+                "request_id": "req_123"
+            })
+        );
+        assert_eq!(serialized["truncation"], json!("auto"));
+        assert_eq!(serialized["previous_response_id"], json!("resp_prev_123"));
+        assert_eq!(serialized["user"], json!("user_123"));
+        assert_eq!(
+            serialized["stream_options"],
+            json!({ "include_obfuscation": true })
+        );
+        assert_eq!(serialized["service_tier"], json!("priority"));
     }
 
     #[test]
@@ -1526,6 +1902,8 @@ mod tests {
     struct ToolLoopRequestFixture {
         request: serde_json::Value,
         expected_tool_use_id: String,
+        expected_tool_name: String,
+        expected_arguments: serde_json::Value,
         expected_output: String,
     }
 
@@ -1705,6 +2083,17 @@ mod tests {
         let request: OpenAIResponsesRequest = serde_json::from_value(fixture.request).unwrap();
         let gateway_request = transform_openai_to_gateway_request(request).unwrap();
 
+        assert!(matches!(
+            gateway_request.messages[1].content,
+            MessageContent::Blocks(ref blocks)
+                if matches!(
+                    &blocks[0],
+                    ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input })
+                    if id == &fixture.expected_tool_use_id
+                        && name == &fixture.expected_tool_name
+                        && input == &fixture.expected_arguments
+                )
+        ));
         assert!(matches!(
             gateway_request.messages.last().unwrap().content,
             MessageContent::Blocks(ref blocks)

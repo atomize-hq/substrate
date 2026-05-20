@@ -177,6 +177,7 @@ Notes:
 - `~/.substrate-gateway/config.toml` is the default local config path
 - the checked-in example is a local bootstrap artifact, not the final deployment contract
 - public model labels should stay capability-oriented even when backend mappings are concrete
+- integrated in-world launches should hand off config and token-store paths explicitly via `SUBSTRATE_LLM_GATEWAY_MODE=in_world` plus the `SUBSTRATE_LLM_GATEWAY_*` launch env vars instead of relying on these local defaults
 
 ### 3. Start the gateway
 

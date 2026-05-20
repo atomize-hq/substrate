@@ -112,7 +112,19 @@ Live streams emit a semantic Responses event flow including:
 - `response.output_item.done`
 - `response.completed`
 
-When reasoning is enabled and `include = ["reasoning.encrypted_content"]`, the stream also emits reasoning output items with encrypted payloads before the final answer item.
+For this ADR, reasoning is enabled on this route only when `reasoning.effort` is present and its
+value is not `"none"`.
+
+When reasoning is enabled and `include = ["reasoning.encrypted_content"]`, the stream also emits
+reasoning output items with encrypted payloads before the final answer item.
+
+`reasoning.summary` does not enable reasoning by itself on this route; it only refines upstream
+reasoning behavior when the enabled predicate above is already true.
+
+This `reasoning.summary` gate is a route-local gateway normalization and validation rule for the
+ChatGPT Codex transport. Official OpenAI Responses documentation grounds encrypted reasoning items
+and stateless `include = ["reasoning.encrypted_content"]` behavior, but does not by itself define
+this exact `reasoning.summary` predicate for this route.
 
 For this route, streamed tool-call argument assembly depends on the Responses function-call argument event family (`response.function_call_arguments.delta` / `response.function_call_arguments.done`) that the gateway already treats as part of the supported semantic event surface.
 
@@ -171,7 +183,7 @@ For Substrate-managed in-world deployment, `ChatGPT-Account-ID` MUST come from t
 Integrated-mode owner line:
 
 - Substrate owns policy-gated host credential reads, auth-state resolution, and host-to-world delivery for the auth material required by this route
-- the gateway consumes a resolved auth context for the selected ChatGPT Codex OAuth provider route
+- gateway bootstrap selects integrated versus standalone auth mode before provider construction, and the gateway consumes the selected auth context for the selected ChatGPT Codex OAuth provider route
 - the provider request builder injects `ChatGPT-Account-ID` from that resolved auth context; it does not define the authoritative ownership of account identity for integrated mode
 - integrated-mode account-id resolution order is:
   1. explicit `account_id` from the Substrate-delivered auth context
@@ -269,10 +281,18 @@ Remaining supported-control matrix for this route:
 
 - `reasoning.effort` is `pass`
   - allowed values: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`
+  - route-local enabled predicate: reasoning is enabled only when this field is present and not
+    equal to `"none"`
   - any other value is `reject`
 - `reasoning.summary` is `pass`
   - allowed values: `auto`, `concise`, `detailed`, `none`
   - `none` means the gateway omits the upstream summary field rather than sending a non-standard value
+  - any non-`none` summary value is legal only when `reasoning.effort` is present and not equal to
+    `"none"`
+  - this enabled-gate for non-`none` summaries is a route-local gateway policy for the Codex route,
+    not a claimed public OpenAI Responses invariant
+  - `reasoning.summary` alone does not enable reasoning, reasoning-item assembly, or public
+    reasoning output on this route
   - any other value is `reject`
 - `parallel_tool_calls` is `pass`
   - allowed values: `true`, `false`
@@ -285,7 +305,16 @@ Remaining supported-control matrix for this route:
   - any other value is `reject`
 - `include` is `pass` with restriction
   - allowed values are `[]` and `["reasoning.encrypted_content"]`
+  - `["reasoning.encrypted_content"]` is legal only when `reasoning.effort` is present and not
+    equal to `"none"`
+  - `include = ["reasoning.encrypted_content"]` is the only predicate that intentionally requests
+    encrypted reasoning items on this route
   - any other include entry, duplicate entry, or mixed include set is `reject` unless a later route-specific ADR revalidates it
+- `stream_options` is `reject`
+  - no `stream_options` member is part of the verified-supported ChatGPT Codex subset for this route
+  - public Responses `stream_options.include_obfuscation` does not have a verified Codex-route equivalent with the same caller-visible semantics
+  - the gateway MUST reject `stream_options` on this route rather than silently stripping, ignoring, or degrading it
+  - future route-specific ADRs MAY widen this only by naming the accepted member(s), the preserved semantics, and the verification coverage
 
 `tool_choice` compatibility matrix for this route:
 
@@ -370,9 +399,25 @@ Specifically, it MUST assemble output from:
 - `response.output_text.done`
 - `response.function_call_arguments.delta`
 - `response.function_call_arguments.done`
-- reasoning items when intentionally requested
+- reasoning items only when `reasoning.effort` is present and not `"none"` and
+  `include = ["reasoning.encrypted_content"]`
 
 `response.completed` remains the terminal lifecycle event and usage source, but MUST NOT be assumed to contain the full assembled `output` payload.
+
+Route-local reasoning visibility rule:
+
+- encrypted reasoning items are internal transport state only on this route
+- the gateway MUST NOT convert encrypted reasoning items into public OpenAI-visible reasoning text,
+  public `thinking` blocks, public `message.content` parts, or public annotations on this route
+- `reasoning.summary` does not widen that visibility rule; it is request-shaping state only unless a
+  later route-specific ADR explicitly permits a public reasoning-summary surface
+
+Grounding note:
+
+- official OpenAI Responses docs validate encrypted reasoning items, stateless `store = false`
+  operation, and `include = ["reasoning.encrypted_content"]` as public API behavior
+- this ADR's stricter `reasoning.summary` acceptance predicate remains a route-local Codex transport
+  policy derived from gateway normalization goals and route verification scope
 
 ### 8. Keep public ingress surfaces thin over the normalized core
 
@@ -384,6 +429,61 @@ Public ingress does not change:
 
 All of them continue to normalize into the shared internal request model first.
 Only the provider-side upstream transport changes when the routed provider is ChatGPT Codex OAuth.
+
+## Contract-Ready Gap List
+
+This ADR is directionally correct, but it is not clean seam-extraction input until the remaining
+route-contract ownership work below is completed.
+
+- a dedicated gateway-owned canonical contract note under `crates/gateway/docs/foundation/` is
+  authored and linked from this ADR as the normative source for the ChatGPT Codex route's
+  stream/tool-loop behavior
+- that contract freezes the route-specific semantic-stream assembly rules, including the event
+  families that are authoritative for output assembly and the rule that `response.completed` is a
+  terminal lifecycle/usage event rather than the assembled-answer source of truth
+- that contract freezes the `function_call` / `function_call_output` continuation contract for this
+  route, including authoritative normalized provenance requirements for any synthesized
+  `function_call`
+- that contract states the route-specific reasoning visibility rule so encrypted/internal reasoning
+  remains non-public unless a later explicit decision widens exposure
+- that contract names the verification surfaces that own implementation proof for this route,
+  including the provider adapter, normalized models, and deterministic fixtures/regressions
+- a dedicated Substrate-owned auth-handoff contract note is authored and linked from this ADR as
+  the normative source for integrated-mode host preflight, host-to-world secret delivery, and
+  gateway consumption of ChatGPT Codex auth material
+- that auth-handoff contract freezes the integrated-mode handoff posture already selected by the
+  surrounding ADRs and standards:
+  - host-side Substrate credential preflight remains policy-gated and authoritative
+  - current v1 host-to-world delivery may place the closed `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_*`
+    auth values directly in the in-world gateway/manager process environment
+  - the preferred additive direction remains a secret-channel payload with an inherited one-time
+    FD/pipe auth bundle so secret values do not live in the in-world process environment by default
+- that auth-handoff contract freezes the closed `cli:codex` auth field set and names the canonical
+  auth field identifiers carried through the handoff artifact:
+  - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID`
+  - `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN`
+- that auth-handoff contract freezes integrated-mode vs standalone-mode selection and the ownership
+  split for extraction, validation, delivery, and request injection, so the gateway consumes the
+  delivered auth material but does not become the owner of host credential reads or trust-boundary
+  decisions
+- that auth-handoff contract names the verification surfaces that prove the handoff boundary,
+  including host-side preparation, world/backend delivery, gateway auth-context resolution, and the
+  provider request builder that injects `ChatGPT-Account-ID`
+
+Downstream seam planning implication:
+
+- any seam planning pack that treats this ADR as implementation input MUST include explicit
+  responsibility to write, review, and finalize that dedicated route contract before implementation
+  slices that depend on Codex-route stream assembly, continuation synthesis, or reasoning-handling
+  behavior are considered ready
+- any seam planning pack that treats this ADR as implementation input MUST include explicit
+  responsibility to write, review, and finalize the dedicated auth-handoff contract before
+  implementation slices that depend on integrated-mode ChatGPT Codex auth delivery, account-id
+  resolution, or provider-header injection behavior are considered ready
+- seam extraction and slice planning MUST treat route-contract finalization as a required planning
+  deliverable, not as incidental cleanup during implementation or closeout
+- seam extraction and slice planning MUST treat auth-handoff-contract finalization as a required
+  planning deliverable, not as incidental cleanup during implementation or closeout
 
 ## Consequences
 
@@ -416,6 +516,20 @@ Negative:
 
 ## Verification Boundary
 
+Extractor-readiness prerequisite:
+
+- this ADR is not extractor-ready on its own until the dedicated foundation-level ChatGPT Codex
+  route contract described in the gap list above exists and is adopted as a named verification
+  surface
+- this ADR is not extractor-ready on its own until the dedicated Substrate-owned auth-handoff
+  contract described in the gap list above exists and is adopted as a named verification surface
+- downstream seam planning packs that consume this ADR MUST carry an explicit contract-definition
+  responsibility for writing and finalizing that route contract before implementation slices are
+  promoted
+- downstream seam planning packs that consume this ADR MUST carry an explicit contract-definition
+  responsibility for writing and finalizing that auth-handoff contract before implementation slices
+  are promoted
+
 This ADR is complete when:
 
 1. OAuth-backed ChatGPT Codex sync and streaming both target `/backend-api/codex/responses`
@@ -430,6 +544,12 @@ This ADR is complete when:
    - no caller-visible control is silently stripped or degraded on the Codex route without an explicit compatibility rule
    - public gateway image inputs remain supported on the Codex route through typed `message` items with upstream `image_url` content items
    - `reasoning.effort`, `reasoning.summary`, `parallel_tool_calls`, `text.format.type`, `text.verbosity`, and `include` follow the route-specific compatibility matrix and reject unverified values
+   - reasoning is enabled on this route only when `reasoning.effort` is present and not `"none"`
+   - non-`none` `reasoning.summary` is rejected unless reasoning is enabled on this route, as a
+     route-local Codex validation rule rather than a claimed public OpenAI Responses invariant
+   - `include = ["reasoning.encrypted_content"]` is rejected unless reasoning is enabled on this route
+   - encrypted reasoning items are assembled only under that exact predicate and never surface as public OpenAI-visible reasoning output on this route
+   - `stream_options` is rejected deterministically on the Codex route unless a later route-specific ADR explicitly adds a verified equivalent
    - flat function tool serialization
    - conversational turns on the Codex route serialize as typed `message` items rather than bare message objects
    - `function_call` + `function_call_output` continuation threading

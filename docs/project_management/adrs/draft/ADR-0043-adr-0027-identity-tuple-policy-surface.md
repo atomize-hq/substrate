@@ -17,10 +17,12 @@ This ADR is a minimal additive follow-on to ADR-0027. It keeps the existing file
 
 - Semantic model:
   - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md`
+  - `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md`
 - Config/policy foundation:
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/contract.md`
-  - `docs/project_management/packs/active/llm_and_agent_config_policy_surface/SCHEMA.md`
+  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md`
+  - `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md`
 - Expected planning-pack outputs:
   - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/plan.md`
   - `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json`
@@ -41,7 +43,7 @@ This ADR is a minimal additive follow-on to ADR-0027. It keeps the existing file
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: cdbcd3b47a2dcc20fdce2662742614eb1a8484429895bd7d7052405de93b8cba
+ADR_BODY_SHA256: ab38102c3d0c2de20c9a6ae9236523c865e18cb9b3966725e2e4f93b9c422452
 ### Changes (operator-facing)
 - Add tuple-axis policy constraints without creating a new config system
   - Existing: `llm.allowed_backends` and `agents.allowed_backends` gate backend ids, but they do not let operators state router, provider, protocol, or auth-authority constraints independently.
@@ -90,7 +92,8 @@ ADR_BODY_SHA256: cdbcd3b47a2dcc20fdce2662742614eb1a8484429895bd7d7052405de93b8cb
 - Existing config/policy commands remain the operator surface:
   - `substrate config ...`
   - `substrate policy ...`
-- Existing `--explain` and effective-view behavior SHOULD surface the new tuple-axis keys alongside the existing backend allowlists.
+- `substrate policy current show --explain` is the authoritative merged inspection surface for `llm.constraints.*`.
+- `substrate config show --explain` remains the config-root inspection surface and does not own tuple-policy provenance.
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (unless explicitly overridden here)
   - This ADR introduces no new exit codes.
@@ -254,7 +257,8 @@ ADR_BODY_SHA256: cdbcd3b47a2dcc20fdce2662742614eb1a8484429895bd7d7052405de93b8cb
   - fail-closed behavior with empty backend allowlists and empty tuple-axis constraints
   - precedence between backend/adapter allowlists and tuple-axis constraints
 - Integration tests:
-  - `substrate config show --explain` and `substrate policy current show --explain` surface tuple-axis keys and provenance
+  - `substrate policy current show --explain` surfaces tuple-axis keys and provenance as the authoritative merged tuple-policy view
+  - `substrate config show --explain` remains config-root inspection only and does not become the authoritative tuple-policy provenance surface
   - denied router/provider/protocol/auth-authority combinations produce clear operator explanations
 
 ### Manual validation

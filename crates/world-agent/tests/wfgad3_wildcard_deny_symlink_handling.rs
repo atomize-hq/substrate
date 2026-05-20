@@ -100,8 +100,10 @@ fn execute_non_pty(
         agent_id: "wfgad3-test".to_string(),
         budget: None,
         policy_snapshot,
+        shared_world: None,
         world_network: None,
         world_fs_mode: None,
+        member_dispatch: None,
     };
 
     let rt = Runtime::new().expect("runtime");

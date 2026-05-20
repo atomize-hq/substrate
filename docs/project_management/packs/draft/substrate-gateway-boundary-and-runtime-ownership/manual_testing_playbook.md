@@ -22,6 +22,8 @@ Check:
 - The playbook treats `substrate world gateway sync`, `substrate world gateway status`, `substrate world gateway restart`, and `substrate world gateway status --json` as one operator surface.
 - The human-readable status entrypoint is described only as a presentation surface and not as a separate contract owner.
 - Exit behavior is checked only as a consequence of the operator command contract, not as a new local rule.
+- Transitional lifecycle windows (startup, restart, ready-timeout, connection-refused handoff gaps) are checked as transient runtime failures with exit `3`, not as unavailable.
+- Exit `4` is checked only for actual absent component outcomes, such as an explicit runtime `unavailable` result or a missing required gateway/world listener.
 - No other doc in this feature pack claims ownership of the operator command family.
 
 Pass condition:
@@ -61,6 +63,7 @@ Check:
 - The playbook treats shell and world-agent runtime interaction as a typed boundary, not raw probing or log scraping.
 - Linux, macOS, and Windows are checked as one operator-facing lifecycle/status contract with permitted hidden transport divergence only.
 - Provisioning and warm-flow mechanics are treated as evidence surfaces, not as the operator contract itself.
+- Start/restart windows are validated as transient runtime failures in the operator surface even if the hidden transport symptom is a temporary connect failure.
 - The playbook does not turn platform-specific transport detail into a second runtime contract.
 
 Pass condition:
@@ -86,6 +89,7 @@ Check for stale or archived wording before calling the playbook complete.
 - Search for wording that implies a second owner for command, status, policy, or runtime surfaces.
 - Search for wording that treats `status --json` as anything other than the machine-readable authority for gateway wiring discovery.
 - Search for wording that collapses fail-closed behavior, dependency unavailability, and policy denial into one bucket.
+- Search for wording that labels startup or restart windows as exit `4` unavailable instead of exit `3` transient runtime failure.
 - Search for wording that turns platform transport detail into a second operator-facing contract.
 
 Accept only if:

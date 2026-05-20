@@ -1,0 +1,11 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "temperature": 0.2
+  },
+  "expected_error_contains": "temperature is not supported on the Codex route",
+  "expected_status": 502,
+  "expected_error_class": "route",
+  "expected_error_message": "Route selection failed"
+}

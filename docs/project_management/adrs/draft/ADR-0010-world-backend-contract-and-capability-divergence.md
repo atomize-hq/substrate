@@ -15,6 +15,14 @@
 - World architecture + doctor: `docs/WORLD.md`
 - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - ADR standard/template: `docs/project_management/system/standards/adr/ADR_STANDARD_AND_TEMPLATE.md`
+- Secrets delivery channel rubric: `docs/project_management/system/standards/shared/SECRETS_DELIVERY_CHANNEL_RUBRIC.md`
+- LLM + agent config/policy surface: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
+- Gateway boundary and runtime ownership: `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
+- Gateway backend adapter contract: `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+- Gateway operator contract: `docs/contracts/substrate-gateway-operator-contract.md`
+- Gateway policy evaluation contract: `docs/contracts/substrate-gateway-policy-evaluation.md`
+- Gateway runtime and platform parity contract: `docs/contracts/substrate-gateway-runtime-parity.md`
+- Phase 8 cross-cutting secret/auth registry: `docs/project_management/packs/PHASE_8_CROSS_CUTTING_DECISION_REGISTRY.md`
 
 ## Executive Summary (Operator)
 
@@ -45,6 +53,7 @@ ADR_BODY_SHA256: <intentionally omitted while Status=Proposed>
 - Designing or implementing a new backend (Docker/Podman, guest-rootfs, etc.).
 - Changing policy schema/keys (unless explicitly required by a later draft).
 - Defining a universal package-manager abstraction (apt/dnf/pacman); this ADR is about backend contracts, not tool provisioning.
+- Redefining the Substrate-owned host-to-world secret delivery contract for in-world gateway or engine auth; that remains governed by ADR-0027, the gateway contracts, the shared secrets-delivery rubric, and the Phase 8 secret/auth registry.
 
 ## User Contract (Authoritative; Proposed)
 
@@ -97,6 +106,7 @@ Each executed command span SHOULD include:
 6) **Provisioning invariants**
 - Runtime sync/install MUST NOT mutate OS packages.
 - OS-level package mutation MUST route through an explicit provisioning entry point (and be unsupported when it would mutate the host OS on platforms where the world backend runs on the host).
+- If a backend participates in host-to-world delivery of auth material for an in-world gateway/engine, it MUST treat that delivery as a Substrate-owned secret-channel concern and stay aligned with the shared FD/pipe-vs-env rubric and the canonical `SUBSTRATE_LLM_BACKEND_AUTH_*` field-name family referenced above.
 
 7) **Validation hooks**
 - Each backend has a smoke script that asserts:
@@ -120,4 +130,3 @@ Each executed command span SHOULD include:
 
 ## Decision Summary
 - None yet (proposal). A Draft should introduce a decision register if multiple non-trivial A/B choices are needed (field naming, minimum capability set, schema versioning strategy).
-

@@ -4,8 +4,9 @@ use std::str::FromStr;
 
 /// Selects whether a world filesystem should be writable (overlay/copy-diff)
 /// or mounted read-only.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum WorldFsMode {
+    #[default]
     Writable,
     ReadOnly,
 }
@@ -22,12 +23,6 @@ impl WorldFsMode {
     /// Parse a world fs mode string (case-insensitive).
     pub fn parse(value: &str) -> Option<Self> {
         value.parse().ok()
-    }
-}
-
-impl Default for WorldFsMode {
-    fn default() -> Self {
-        Self::Writable
     }
 }
 

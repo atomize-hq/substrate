@@ -56,7 +56,7 @@
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: b8d8795cb2845c107fd4298604de8619bdba2224bc4e80140b8861fb93373b16
+ADR_BODY_SHA256: 36c3baa794d0878fae02ffa4dfa7bb9dbeed355c4aa7e4a0a554df7dd1164435
 ### Changes (operator-facing)
 - LLM + agent behavior is configured and governed via the existing config/policy files (new keys only)
   - Existing: There is no repo-wide, stable config/policy surface for LLM gateway routing, CLI agent backends, or agent role selection, which invites ad-hoc files/env vars and inconsistent enforcement boundaries.
@@ -352,8 +352,8 @@ This `workflow.router` namespace is unrelated to the LLM identity-tuple field `r
   - config schema validation for new keys (unknown keys rejected; invalid enums rejected)
   - policy schema validation for new keys (unknown keys rejected; lists parse as lists)
 - Integration tests:
-  - `substrate config show --explain` includes the new keys and provenance
-  - `substrate policy current show --explain` includes the new keys and provenance
+  - `substrate policy current show --explain` includes tuple-policy keys and provenance as the authoritative merged policy surface
+  - `substrate config show --explain` remains config-root inspection only and does not become the authoritative tuple-policy provenance surface
   - fail-closed behavior: with defaults (config disabled + allowlists empty), LLM/agent entrypoints refuse to run (exact behavior defined in the feature ADRs)
 
 ### Manual validation

@@ -1,0 +1,43 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "stream": true
+  },
+  "provider_stream_chunks": [
+    "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_stream_usage\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"primary-actual\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":0,\"output_tokens\":0}}}\n\n",
+    "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Usage text.\"}}\n\n",
+    "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":7,\"output_tokens\":2}}\n\n",
+    "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+  ],
+  "required_events": [
+    "response.created",
+    "response.output_item.added",
+    "response.content_part.added",
+    "response.output_text.delta",
+    "response.output_text.done",
+    "response.content_part.done",
+    "response.output_item.done",
+    "response.completed"
+  ],
+  "expected": {
+    "status": "completed",
+    "item_types": [
+      "message"
+    ],
+    "texts": [
+      "Usage text."
+    ],
+    "call_ids": [],
+    "usage": {
+      "input_tokens": 7,
+      "output_tokens": 2,
+      "total_tokens": 9
+    }
+  },
+  "forbidden_fragments": [
+    "event: content_block_",
+    "\"type\":\"message_delta\"",
+    "\"event_kind\":\"tool_intent\""
+  ]
+}

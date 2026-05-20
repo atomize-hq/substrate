@@ -29,6 +29,7 @@ contracts_consumed:
 open_remediations:
   - REM-002
 ---
+
 ### S2 - Lock the adopted schema subset and fail-closed capability rules
 
 #### Goal
@@ -41,7 +42,7 @@ Define one bounded schema inventory for adapter-visible protocol data so later i
 - basis authorities:
   - `../../governance/seam-1-closeout.md`
   - `../../pre-planning/workstream_triage.md`
-  - Universal Agent API evidence referenced by ADR-0041
+  - Unified Agent API evidence referenced by ADR-0041
 
 #### S2.T1 - Pin the adopted capability and extension-key subset
 
@@ -58,18 +59,19 @@ Define one bounded schema inventory for adapter-visible protocol data so later i
   - unsupported capabilities fail closed
   - no provider-specific identity leaks back into the stable backend-id surface
 - **Test notes**:
-  - compare the subset against the Universal Agent API evidence set and current gateway assumptions
+  - compare the subset against the Unified Agent API evidence set and current gateway assumptions
 
 Checklist:
+
 - Implement:
   - record the supported capability and extension-key inventory in `../../gateway-backend-adapter-schema-spec.md`
   - keep `docs/contracts/substrate-gateway-backend-adapter-schema.md` as the durable owner of the adopted subset
   - record the fail-closed rules for unsupported requests
 - Test:
   - verify every supported item is named explicitly against:
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/capabilities.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/capabilities.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/session_selectors.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/tests/capabilities.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/tests/capabilities.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/session_selectors.rs`
 - Validate:
   - confirm downstream consumers can distinguish supported versus rejected schema features
 
@@ -91,17 +93,18 @@ Checklist:
   - compare wording against the seam review bundle and the current gateway boundary docs
 
 Checklist:
+
 - Implement:
   - write the concrete payload, error, and session-handle subset
   - record omission rules and additive constraints
   - keep bounded adapter error detail limited to the adopted safe UAA error classes and safe reserved messages
 - Test:
   - verify every field family has one owner and one bounded purpose against:
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/session_handle.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/session_handle.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c1_codex_exec_policy.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c5_claude_add_dirs_runtime_rejection.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c3_explicit_cancellation.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c3_explicit_cancellation_claude_code.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/tests/session_handle.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/tests/session_handle.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c1_codex_exec_policy.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c5_claude_add_dirs_runtime_rejection.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c3_explicit_cancellation.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c3_explicit_cancellation_claude_code.rs`
 - Validate:
   - confirm `REM-002` can resolve without leaking policy or operator state into the schema

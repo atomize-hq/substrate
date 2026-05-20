@@ -43,7 +43,7 @@ The committed operator contract that downstream slices should treat as live sour
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: f912ab8be5245a70ba603bc6547c3b62e05c59492af2c7c9d27c3d898f664a50
+ADR_BODY_SHA256: 8c69b5599428dc1e6d1d488999e3bfb8a35485187cbef0da67cdb52ebb958a4f
 
 ### Changes (operator-facing)
 - Clarify the runtime boundary between Substrate and `substrate-gateway`
@@ -87,9 +87,19 @@ ADR_BODY_SHA256: f912ab8be5245a70ba603bc6547c3b62e05c59492af2c7c9d27c3d898f664a5
   - `substrate world gateway status`: Substrate reports gateway availability, policy posture, and client wiring in a Substrate-owned format.
   - `substrate world gateway restart`: Substrate restarts the gateway as an explicit lifecycle operation, including secret rotation flows.
   - `substrate world gateway status --json`: structured Substrate-owned status output; the authoritative operator surface for gateway wiring.
+- Lifecycle binding rules:
+  - When Substrate policy/runtime requires a real world boundary, lifecycle control binds to a real reusable world/session identity.
+  - When lifecycle is allowed without world-backed isolation for the gateway runtime, Substrate may bind lifecycle to a stable synthetic runtime identity derived from the effective binding inputs instead of requiring reusable session-world persistence.
+  - Non-isolated gateway lifecycle must not fail solely because reusable session-world metadata cannot be created or recovered.
+- Launch contract rule:
+  - Substrate-owned gateway lifecycle orchestration must invoke `substrate-gateway` using the gateway CLI contract rather than a bespoke argv shape.
+  - In particular, global gateway CLI flags (such as `--config`) must be positioned where the gateway CLI expects them, before the selected subcommand.
+  - Substrate-owned gateway readiness detection must use the managed gateway HTTP health contract (`GET /health` returning HTTP `200`) and must not depend on connection semantics the managed gateway HTTP server is not required to honor (for example requiring a half-closed client socket before responding).
 - Client wiring contract:
   - `substrate world gateway status --json` is the authoritative Substrate-owned wiring surface and MUST include non-secret `client_wiring.*` fields for the gateway endpoints Substrate wants operators and in-world clients to use.
   - Human-readable wiring output MAY be abbreviated by default, but `substrate world gateway status` MUST remain the stable operator entrypoint for discovering gateway wiring.
+  - When Substrate emits concrete managed gateway artifact paths (for example runtime `stdout.log` / `stderr.log` locations under `/run/substrate/substrate-gateway-runtime/...`) in lifecycle failures, those diagnostics remain part of the Substrate-owned operator surface.
+  - `substrate world gateway status` is observational only; `sync` and `restart` are the lifecycle entrypoints that wait for the managed gateway to satisfy the readiness probe.
   - Stable non-secret wiring env var names remain:
     - `SUBSTRATE_LLM_OPENAI_BASE_URL`
     - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`
@@ -99,6 +109,9 @@ ADR_BODY_SHA256: f912ab8be5245a70ba603bc6547c3b62e05c59492af2c7c9d27c3d898f664a5
 - Secret delivery contract boundary:
   - This ADR intentionally preserves only the ownership rule that Substrate owns policy-gated host secret sourcing and host-to-world secret delivery for integrated operation.
   - Exact secret transport mechanics, canonical auth field naming, and compatibility-path details remain governed by ADR-0027 and the referenced gateway secret-delivery/decision docs rather than being redefined here.
+- Managed diagnostic artifact boundary:
+  - When Substrate-managed lifecycle persists gateway runtime artifacts on the host, those artifacts must be readable through the same managed host authorization boundary Substrate uses for the world-agent socket rather than being left as root-only implementation details.
+  - On Linux that authorization boundary is the `substrate` group; provisioning and runtime file creation must preserve group-readable diagnostics without making them world-readable.
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (unless explicitly overridden here)
   - `0`: success
@@ -241,6 +254,9 @@ ADR_BODY_SHA256: f912ab8be5245a70ba603bc6547c3b62e05c59492af2c7c9d27c3d898f664a5
 - Existing operator workflows remain valid, but their ownership is now explicit:
   - Substrate-owned surfaces remain the source of truth for integrated use.
   - gateway-local standalone conveniences remain gateway implementation concerns.
+- Lifecycle implementation notes that must remain aligned with this ADR:
+  - Non-isolated lifecycle recovery may use a stable synthetic runtime identity rather than a persisted session-world id.
+  - Gateway bootstrap failures caused only by launcher argv-shape mismatch are implementation bugs in the Substrate-owned lifecycle layer, not evidence that gateway-local config/admin surfaces belong in the Substrate contract.
 
 ## Decision Summary
 - Decision Register entries (if applicable):

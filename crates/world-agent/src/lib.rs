@@ -1,9 +1,13 @@
 //! World agent library for execution inside worlds/VMs.
 
 mod enforcement_plan;
+#[cfg(target_os = "linux")]
+mod gateway_runtime;
 pub mod gc;
 pub mod handlers;
 pub mod internal_exec;
+#[cfg(target_os = "linux")]
+mod member_runtime;
 pub mod pty;
 mod request_routing;
 pub mod service;
@@ -264,6 +268,7 @@ fn build_router(service: WorldAgentService) -> Router {
         .route("/v1/gateway/sync", post(handlers::gateway_sync))
         .route("/v1/gateway/restart", post(handlers::gateway_restart))
         .route("/v1/execute/stream", post(handlers::execute_stream))
+        .route("/v1/member_turn/stream", post(handlers::member_turn_stream))
         .route("/v1/stream", get(handlers::stream))
         .route("/v1/trace/:span_id", get(handlers::get_trace))
         .route("/v1/request_scopes", post(handlers::request_scopes))

@@ -32,6 +32,7 @@ open_remediations:
   - REM-002
   - REM-003
 ---
+
 ### S00 - Define the `C-03` and `C-04` contract baseline
 
 #### Goal
@@ -68,6 +69,7 @@ Make the owned protocol/schema bundle concrete enough that downstream seams can 
   - doc review against ADR-0017, ADR-0028, `../../governance/seam-1-closeout.md`, and `review.md`
 
 Checklist:
+
 - Implement:
   - author the deterministic dispatch-lifecycle baseline in `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
   - mirror the execution baseline and owner checklist in `../../gateway-backend-adapter-protocol-spec.md`
@@ -75,15 +77,15 @@ Checklist:
 - Test:
   - compare the lifecycle against the published `SEAM-1` handoff and current ADR basis
   - keep the backend-harness owner-line regression coverage aligned in:
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/backend_contract.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/backend_contract.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/tests/backend_contract.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/tests/backend_contract.rs`
 - Validate:
   - confirm downstream parity work can consume `C-03` without reopening selection-boundary ownership
 
 #### S00.T2 - Create the canonical `C-04` schema subset baseline
 
 - **Outcome**:
-  - the seam-owned schema surfaces state the exact adopted Universal Agent API subset for capability advertisement, extension keys, request/response payloads, bounded adapter errors, and session-handle facets.
+  - the seam-owned schema surfaces state the exact adopted Unified Agent API subset for capability advertisement, extension keys, request/response payloads, bounded adapter errors, and session-handle facets.
 - **Files**:
   - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
   - `../../gateway-backend-adapter-schema-spec.md`
@@ -100,16 +102,17 @@ Checklist:
   - owner-line review against `REM-002` and the current pre-planning workstream packet
 
 Checklist:
+
 - Implement:
   - record the adopted schema subset and omission rules in `docs/contracts/substrate-gateway-backend-adapter-schema.md`
   - mirror the exact adopted capability ids, extension keys, bounded error shape, and session-handle facet in `../../gateway-backend-adapter-schema-spec.md`
 - Test:
-  - compare the proposed subset against the Universal Agent API evidence set and current gateway docs
+  - compare the proposed subset against the Unified Agent API evidence set and current gateway docs
   - keep the capability and session-handle regression coverage aligned in:
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/capabilities.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/capabilities.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/session_handle.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/session_handle.rs`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/session_selectors.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/tests/capabilities.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/tests/capabilities.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/tests/session_handle.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/tests/session_handle.rs`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/session_selectors.rs`
 - Validate:
   - confirm `SEAM-3` can consume the schema without inventing new protocol ambiguity

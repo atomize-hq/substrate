@@ -27,6 +27,7 @@
   - Trace + event foundations: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
   - Output routing + attribution: `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
   - Router daemon (workflow triggers, queues, cross-workspace): `docs/project_management/adrs/draft/ADR-0029-host-event-bus-and-router-daemon.md`
+  - Host orchestration durable session and inbox contract: `docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md`
   - Config/policy surface (no new roots): `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
 
 ## Executive Summary (Operator)
@@ -164,6 +165,7 @@ ADR_BODY_SHA256: 0e7a75f2761d8bab7aa43ea95c05e6ab5eed4da516d7c1fdcce7c489a0e305f
     - human-readable streaming progress,
     - workflow result summary (success/failure and per-node statuses),
     - trace spans written to `~/.substrate/trace.jsonl` (default path) with graph linkage.
+    - when a workflow run or node produces host-attention, approval, completion, or follow-up work for an active host orchestration session, that outcome must be representable as an ADR-0047-compatible session-local inbox item rather than a workflow-only side artifact.
 
 ## Sequencing / Dependencies
 - Sequencing entry: this ADR must add a `workflow-engine` entry to `docs/project_management/packs/sequencing.json` before it can be marked `Accepted`.
@@ -171,6 +173,7 @@ ADR_BODY_SHA256: 0e7a75f2761d8bab7aa43ea95c05e6ab5eed4da516d7c1fdcce7c489a0e305f
 - Dependencies:
   - Reuse existing Agent API request/response + streaming frame model (`crates/agent-api-*`) for tool/script execution nodes.
   - Reuse `substrate-trace` for span persistence and replay association.
+  - Any workflow correlation fields that surface outside the workflow runtime (`workflow_id`, `workflow_run_id`, `workflow_node_id`, and adjacent cause/join keys) must remain additive and joinable with ADR-0047 session-local inbox items and ADR-0029 router records.
 
 ## Security / Safety Posture
 - Fail-closed rules:

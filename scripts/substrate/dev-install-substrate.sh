@@ -564,6 +564,152 @@ detect_platform_metadata() {
   return 1
 }
 
+resolve_package_for_runtime_library() {
+  local library="$1"
+
+  case "${PKG_MANAGER}" in
+    apt-get)
+      case "${library}" in
+        libseccomp) echo "libseccomp2" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    dnf|yum)
+      case "${library}" in
+        libseccomp) echo "libseccomp" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    pacman)
+      case "${library}" in
+        libseccomp) echo "libseccomp" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    zypper)
+      case "${library}" in
+        libseccomp) echo "libseccomp2" ;;
+        *) echo "" ;;
+      esac
+      ;;
+    *)
+      echo ""
+      ;;
+  esac
+}
+
+seccomp_runtime_available() {
+  if command -v ldconfig >/dev/null 2>&1; then
+    if ldconfig -p 2>/dev/null | grep -Eq 'libseccomp\.so(\.2)?([[:space:]]|$)'; then
+      return 0
+    fi
+  fi
+
+  if compgen -G '/lib*/libseccomp.so*' >/dev/null; then
+    return 0
+  fi
+  if compgen -G '/usr/lib*/libseccomp.so*' >/dev/null; then
+    return 0
+  fi
+
+  return 1
+}
+
+install_packages() {
+  local packages=("$@")
+  if [[ ${#packages[@]} -eq 0 ]]; then
+    return
+  fi
+
+  log "Installing packages: ${packages[*]}"
+  case "${PKG_MANAGER}" in
+    apt-get)
+      run_privileged apt-get update
+      run_privileged apt-get install -y "${packages[@]}"
+      ;;
+    dnf)
+      run_privileged dnf install -y "${packages[@]}"
+      ;;
+    yum)
+      run_privileged yum install -y "${packages[@]}"
+      ;;
+    pacman)
+      run_privileged pacman -Sy --noconfirm --needed "${packages[@]}"
+      ;;
+    zypper)
+      run_privileged zypper --non-interactive install "${packages[@]}"
+      ;;
+    *)
+      fatal "Unsupported package manager '${PKG_MANAGER}'. Install required runtime libraries manually and re-run."
+      ;;
+  esac
+}
+
+ensure_linux_runtime_libraries() {
+  local libraries=("$@")
+  local missing=()
+  local library=""
+
+  if [[ "${IS_LINUX}" -ne 1 || "${WORLD_ENABLED}" -ne 1 ]]; then
+    return
+  fi
+
+  for library in "${libraries[@]}"; do
+    case "${library}" in
+      libseccomp)
+        if ! seccomp_runtime_available; then
+          missing+=("${library}")
+        fi
+        ;;
+      *)
+        warn "No runtime library probe implemented for '${library}'; install it manually if required."
+        ;;
+    esac
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    return
+  fi
+
+  if ! detect_platform_metadata; then
+    fatal "Unable to detect a supported package manager for runtime library installation. Install ${missing[*]} manually and re-run."
+  fi
+
+  declare -A pkg_set=()
+  local pkg_list pkg
+  for library in "${missing[@]}"; do
+    pkg_list="$(resolve_package_for_runtime_library "${library}")"
+    if [[ -z "${pkg_list}" ]]; then
+      fatal "No package mapping for runtime library '${library}' under ${PKG_MANAGER}. Install it manually and re-run."
+    fi
+    for pkg in ${pkg_list}; do
+      pkg_set["${pkg}"]=1
+    done
+  done
+
+  local packages=()
+  for pkg in "${!pkg_set[@]}"; do
+    packages+=("${pkg}")
+  done
+
+  install_packages "${packages[@]}"
+
+  local remaining=()
+  for library in "${missing[@]}"; do
+    case "${library}" in
+      libseccomp)
+        if ! seccomp_runtime_available; then
+          remaining+=("${library}")
+        fi
+        ;;
+    esac
+  done
+
+  if [[ ${#remaining[@]} -gt 0 ]]; then
+    fatal "Unable to install required runtime libraries: ${remaining[*]}. Install them manually and re-run."
+  fi
+}
+
 write_host_state_metadata() {
   if [[ "${IS_LINUX}" -ne 1 ]]; then
     return
@@ -761,12 +907,17 @@ ensure_socket_group_alignment() {
     return
   fi
   if ! command -v systemctl >/dev/null 2>&1; then
-    warn "systemctl not found; verify /run/substrate.sock is root:substrate 0660 after provisioning."
+    warn "systemctl not found; verify /run/substrate.sock is root:substrate 0660 and /run/substrate is root:substrate 0750 after provisioning."
     return
   fi
   local socket_unit="/etc/systemd/system/substrate-world-agent.socket"
+  local service_unit="/etc/systemd/system/substrate-world-agent.service"
   if [[ ! -f "${socket_unit}" ]]; then
     warn "Socket unit missing at ${socket_unit}; rerun scripts/linux/world-provision.sh to install it."
+    return
+  fi
+  if [[ ! -f "${service_unit}" ]]; then
+    warn "Service unit missing at ${service_unit}; rerun scripts/linux/world-provision.sh to install it."
     return
   fi
   if grep -q '^SocketGroup=substrate' "${socket_unit}"; then
@@ -778,14 +929,60 @@ ensure_socket_group_alignment() {
       return
     fi
   fi
+  if grep -q '^Group=substrate$' "${service_unit}" && grep -q '^UMask=0027$' "${service_unit}"; then
+    log "substrate-world-agent.service already sets Group=substrate and UMask=0027."
+  else
+    log "Updating ${service_unit} to enforce Group=substrate and UMask=0027 (sudo may prompt)..."
+    if ! run_privileged python3 - "${service_unit}" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+lines = path.read_text(encoding="utf-8").splitlines()
+service_idx = next((i for i, line in enumerate(lines) if line.strip() == "[Service]"), None)
+if service_idx is None:
+    raise SystemExit("missing [Service] section")
+
+group_idx = next((i for i, line in enumerate(lines) if line.startswith("Group=")), None)
+umask_idx = next((i for i, line in enumerate(lines) if line.startswith("UMask=")), None)
+if group_idx is not None:
+    lines[group_idx] = "Group=substrate"
+else:
+    insert_at = next(
+        (i + 1 for i, line in enumerate(lines[service_idx + 1:], start=service_idx + 1)
+         if line.startswith("Environment=") or line.startswith("RestartSec=")),
+        service_idx + 1,
+    )
+    while insert_at < len(lines) and (
+        lines[insert_at].startswith("Environment=") or lines[insert_at].startswith("RestartSec=")
+    ):
+        insert_at += 1
+    lines.insert(insert_at, "Group=substrate")
+    if umask_idx is not None and umask_idx >= insert_at:
+        umask_idx += 1
+
+if umask_idx is not None:
+    lines[umask_idx] = "UMask=0027"
+else:
+    group_idx = next(i for i, line in enumerate(lines) if line == "Group=substrate")
+    lines.insert(group_idx + 1, "UMask=0027")
+
+path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+    then
+      warn "Failed to update ${service_unit}; edit it manually so it contains Group=substrate and UMask=0027, then rerun 'sudo systemctl daemon-reload'."
+      return
+    fi
+  fi
 
   log "Restarting world-agent units to apply socket ownership (sudo may prompt)..."
   run_privileged systemctl stop substrate-world-agent.service substrate-world-agent.socket || true
+  run_privileged install -d -m0750 -o root -g substrate /run/substrate || true
   run_privileged rm -f /run/substrate.sock || true
   run_privileged systemctl daemon-reload || true
   run_privileged systemctl start substrate-world-agent.socket || true
   run_privileged systemctl start substrate-world-agent.service || true
-  log "Reloaded socket/service units so /run/substrate.sock is recreated as root:substrate 0660."
+  log "Reloaded socket/service units so /run/substrate is root:substrate 0750 and /run/substrate.sock is recreated as root:substrate 0660."
 }
 
 ensure_world_enable_helper_bridge() {
@@ -842,6 +1039,31 @@ find_linux_world_agent_elf() {
   fi
   printf '%s\n' "${candidate}"
   return 0
+}
+
+find_linux_substrate_gateway() {
+  local root="$1"
+  local target_dir="$2"
+  local candidates=(
+    "${root}/bin/linux/substrate-gateway"
+    "${root}/bin/substrate-gateway-linux"
+    "${root}/bin/substrate-gateway"
+    "${root}/target/x86_64-unknown-linux-gnu/${target_dir}/substrate-gateway"
+    "${root}/target/aarch64-unknown-linux-gnu/${target_dir}/substrate-gateway"
+    "${root}/target/${target_dir}/substrate-gateway"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -x "${candidate}" ]]; then
+      local file_type
+      file_type="$(file -b "${candidate}" 2>/dev/null || true)"
+      if [[ -z "${file_type}" ]] || echo "${file_type}" | grep -qi "ELF"; then
+        printf '%s\n' "${candidate}"
+        return 0
+      fi
+    fi
+  done
+  return 1
 }
 
 is_linux_elf() {
@@ -983,7 +1205,8 @@ clear_managed_prefix_linux_binary_cache() {
   while IFS= read -r cached_path; do
     case "${cached_path}" in
       "${BIN_DIR}/linux/substrate"|\
-      "${BIN_DIR}/linux/world-agent")
+      "${BIN_DIR}/linux/world-agent"|\
+      "${BIN_DIR}/linux/substrate-gateway")
         if [[ -f "${cached_path}" && ! -L "${cached_path}" ]]; then
           rm -f "${cached_path}"
           log "Removed cached Linux guest binary ${cached_path}"
@@ -1019,16 +1242,16 @@ cache_linux_binary_from_lima() {
 }
 
 verify_prefix_linux_bundle() {
-  local missing=0
+  local missing_status=0
   local binary path
-  for binary in substrate world-agent; do
+  for binary in substrate world-agent substrate-gateway; do
     path="${BIN_DIR}/linux/${binary}"
     if ! is_linux_elf "${path}"; then
       warn "Expected cached Linux ${binary} at ${path}, but it is missing or not a Linux ELF."
-      missing=1
+      missing_status=1
     fi
   done
-  return "${missing}"
+  return "${missing_status}"
 }
 
 stage_dev_world_runtime_bundle() {
@@ -1071,6 +1294,14 @@ stage_dev_world_runtime_bundle() {
   else
     warn "Linux world-agent not available; leaving ${bin_linux_dir}/world-agent unchanged."
   fi
+
+  local linux_gateway
+  linux_gateway="$(find_linux_substrate_gateway "${repo_root}" "${target_dir}")" || true
+  if [[ -n "${linux_gateway:-}" ]]; then
+    stage_managed_bundle_symlink "${linux_gateway}" "${bin_linux_dir}/substrate-gateway" "${repo_root}" "${MANAGED_MAC_LINUX_BINARIES_PATH}" "Linux substrate-gateway"
+  else
+    warn "Linux substrate-gateway not available; leaving ${bin_linux_dir}/substrate-gateway unchanged."
+  fi
 }
 
 cleanup_legacy_world_enable_helper_bridge() {
@@ -1098,7 +1329,7 @@ ensure_release_bin_bridge() {
   local src_root="${target_root%/}/${profile_dir}"
   local dest_bin="${target_root%/}/bin"
   mkdir -p "${dest_bin}" "${dest_bin}/linux"
-  local -a binaries=("substrate" "substrate-shim" "substrate-forwarder" "host-proxy" "world-agent")
+  local -a binaries=("substrate" "substrate-shim" "substrate-forwarder" "host-proxy" "world-agent" "substrate-gateway")
   for binary in "${binaries[@]}"; do
     local src="${src_root}/${binary}"
     local dest="${dest_bin}/${binary}"
@@ -1107,6 +1338,8 @@ ensure_release_bin_bridge() {
       if [[ "${binary}" == "world-agent" ]]; then
         ln -sfn "${src}" "${dest_bin}/linux/world-agent"
         ln -sfn "${src}" "${dest_bin}/world-agent-linux"
+      elif [[ "${binary}" == "substrate-gateway" ]]; then
+        ln -sfn "${src}" "${dest_bin}/linux/substrate-gateway"
       fi
     fi
     local src_exe="${src}.exe"
@@ -1167,6 +1400,7 @@ VERSION_LABEL="dev"
 ENABLE_WORLD_NETFILTER=0
 IS_LINUX=0
 IS_MAC=0
+IS_WSL=0
 HOST_STATE_PATH=""
 HOST_STATE_GROUP_EXISTED=""
 HOST_STATE_GROUP_CREATED=0
@@ -1180,6 +1414,9 @@ PKG_MANAGER=""
 PKG_MANAGER_SOURCE=""
 if [[ "$(uname -s)" == "Linux" ]]; then
   IS_LINUX=1
+  if grep -qi microsoft /proc/version 2>/dev/null; then
+    IS_WSL=1
+  fi
 fi
 if [[ "$(uname -s)" == "Darwin" ]]; then
   IS_MAC=1
@@ -1248,6 +1485,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "${IS_WSL}" -eq 1 && "${WORLD_ENABLED}" -eq 1 ]]; then
+  printf '[%s][ERROR] %s\n' "${SCRIPT_NAME}" "WSL world provisioning is intentionally fail-closed in this slice because the WSL helper path is not aligned with the Linux/macOS placement contract. Re-run with --no-world for a CLI-only dev install inside WSL." >&2
+  exit 4
+fi
+
 HOST_STATE_PATH="${PREFIX%/}/install_state.json"
 
 case "${PROFILE}" in
@@ -1272,7 +1514,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${REPO_ROOT}"
 
 TARGET_DIR="${PROFILE}"
-BUILD_FLAGS=(build --bin substrate --bin substrate-shim)
+BUILD_FLAGS=(build -p substrate --bin substrate --bin substrate-shim -p substrate-gateway --bin substrate-gateway)
 if [[ "${PROFILE}" == "release" ]]; then
   BUILD_FLAGS+=(--release)
 fi
@@ -1352,7 +1594,7 @@ else
   shim_note="Shims were not deployed (--no-shims). Binaries are available under ${BIN_DIR}."
 fi
 
-for binary in substrate substrate-shim substrate-forwarder host-proxy world-agent; do
+for binary in substrate substrate-shim substrate-forwarder host-proxy world-agent substrate-gateway; do
   src="${REPO_ROOT}/target/${TARGET_DIR}/${binary}"
   if [[ -x "${src}" ]]; then
     stage_managed_bundle_symlink "${src}" "${BIN_DIR}/${binary}" "${REPO_ROOT}" "" "host binary ${binary}"
@@ -1377,6 +1619,7 @@ fi
 stage_dev_world_runtime_bundle "${PREFIX}" "${REPO_ROOT}" "${TARGET_DIR}"
 
 if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
+  ensure_linux_runtime_libraries libseccomp
   if [[ ${EUID} -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
     log "Caching sudo credentials for world provisioning (you may be prompted)..."
     if ! sudo -v; then
@@ -1386,7 +1629,7 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
       write_env_sh_script "${WORLD_ENABLED}"
       write_manager_env_script "${WORLD_ENABLED}"
       warn "Unable to cache sudo credentials; world-agent service not provisioned."
-      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable --home \"${PREFIX}\"` to flip it back on."
+      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run 'substrate world enable --home \"${PREFIX}\"' to flip it back on."
     fi
   fi
   if [[ "${WORLD_ENABLED}" -eq 0 ]]; then
@@ -1407,7 +1650,7 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
 	      write_env_sh_script "${WORLD_ENABLED}"
       write_manager_env_script "${WORLD_ENABLED}"
       warn "world-provision script reported an error; rerun ${PROVISION_SCRIPT} manually to enable the world-agent service."
-      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run `substrate world enable --home \"${PREFIX}\"` to flip it back on."
+      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run 'substrate world enable --home \"${PREFIX}\"' to flip it back on."
     fi
   else
     WORLD_PROVISION_FAILED=1
@@ -1429,143 +1672,20 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   if [[ ! -x "${LIMA_WARM}" ]]; then
     fatal "Expected Lima warm helper at ${LIMA_WARM}"
   fi
+  lima_warm_env=(LIMA_BUILD_PROFILE="${PROFILE}")
   if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
-    (cd "${REPO_ROOT}" && SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1 SUBSTRATE_WORLD_NETFILTER_ENABLE=1 "${LIMA_WARM}" "${REPO_ROOT}")
-  else
-    (cd "${REPO_ROOT}" && SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1 "${LIMA_WARM}" "${REPO_ROOT}")
+    lima_warm_env+=(SUBSTRATE_WORLD_NETFILTER_ENABLE=1)
   fi
-
-  build_flag=""
-  target_dir="debug"
-  if [[ "${PROFILE}" == "release" ]]; then
-    build_flag="--release"
-    target_dir="release"
-  fi
-
-  linux_agent="$(find_linux_world_agent "${REPO_ROOT}" "${TARGET_DIR}")" || true
-  need_build_agent=0
-  if [[ -z "${linux_agent:-}" ]]; then
-    log "Linux world-agent binary not found under ${REPO_ROOT}/target/${TARGET_DIR}; building inside Lima."
-    need_build_agent=1
-  else
-    file_type="$(file -b "${linux_agent}" 2>/dev/null || true)"
-    if ! echo "${file_type}" | grep -q "ELF"; then
-      log "Host world-agent candidate is not a Linux ELF; building inside Lima instead..."
-      linux_agent=""
-      need_build_agent=1
-    else
-      log "Linux world-agent install source: ${linux_agent}"
-    fi
-  fi
-
-  lima_target_dir="/tmp/substrate-dev-target"
-  log "Building Linux substrate inside Lima (target=${target_dir}; agent_build=${need_build_agent})..."
-  if ! limactl shell substrate env BUILD_FLAG="${build_flag}" TARGET_DIR="${target_dir}" BUILD_AGENT="${need_build_agent}" CARGO_TARGET_DIR="${lima_target_dir}" bash <<'LIMA_BUILD_AGENT'; then
-set -euo pipefail
-
-ensure_cargo() {
-  if command -v cargo >/dev/null 2>&1; then
-    return 0
-  fi
-  fix_dns() {
-    if getent hosts ports.ubuntu.com >/dev/null 2>&1; then
-      return 0
-    fi
-    echo "[dev-install-substrate] DNS resolution failed in Lima; applying fallback resolv.conf (1.1.1.1 / 8.8.8.8)..." >&2
-    local SUDO_CMD="sudo"
-    if sudo -n true 2>/dev/null; then
-      SUDO_CMD="sudo -n"
-    fi
-    $SUDO_CMD sh -c "printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf" || true
-    $SUDO_CMD systemctl restart dnsmasq 2>/dev/null || true
-    $SUDO_CMD systemctl restart systemd-resolved 2>/dev/null || true
-    getent hosts ports.ubuntu.com >/dev/null 2>&1
-  }
-
-  echo "[dev-install-substrate] cargo not found inside Lima VM; attempting apt install (rustc cargo)..." >&2
-  local SUDO="sudo"
-  if sudo -n true 2>/dev/null; then
-    SUDO="sudo -n"
-  fi
-  fix_dns || true
-  if $SUDO apt-get update && $SUDO apt-get install -y rustc cargo; then
-    return 0
-  fi
-  echo "[dev-install-substrate] apt install failed; trying rustup via curl (IPv4, retries)..." >&2
-  fix_dns || true
-  if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; then
-    # shellcheck disable=SC1090
-    source "$HOME/.cargo/env"
-    return 0
-  fi
-  return 1
-}
-
-if ! ensure_cargo; then
-  echo "[dev-install-substrate][ERROR] Unable to install cargo inside Lima VM; install Rust manually (apt/rustup) or rerun with --no-world." >&2
-  exit 1
-fi
-# Prefer a modern toolchain via rustup to satisfy lockfile version requirements.
-if ! command -v rustup >/dev/null 2>&1; then
-  echo "[dev-install-substrate] Installing rustup (stable toolchain)..." >&2
-  if curl -4 --connect-timeout 10 --retry 3 --retry-delay 1 --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal; then
-    :
-  else
-    echo "[dev-install-substrate][WARN] rustup installation failed; falling back to system cargo (may be too old)" >&2
-  fi
-fi
-# shellcheck disable=SC1090
-source "$HOME/.cargo/env" 2>/dev/null || true
-cargo_cmd="$(command -v cargo || true)"
-if command -v rustup >/dev/null 2>&1; then
-  rustup toolchain install stable --profile minimal >/dev/null 2>&1 || true
-  rustup default stable >/dev/null 2>&1 || true
-  cargo_cmd="$HOME/.cargo/bin/cargo"
-fi
-if [[ -z "${cargo_cmd}" ]]; then
-  echo "[dev-install-substrate][ERROR] cargo still unavailable after toolchain setup." >&2
-  exit 1
-fi
-cd /src
-"${cargo_cmd}" build --bin substrate ${BUILD_FLAG}
-if [[ "${BUILD_AGENT}" == "1" ]]; then
-  "${cargo_cmd}" build -p world-agent ${BUILD_FLAG}
-fi
-LIMA_BUILD_AGENT
-    fatal "Failed to build Linux binaries inside Lima VM; ensure rustup/apt is available or rerun with --no-world."
-  fi
-
-  vm_substrate="${lima_target_dir}/${target_dir}/substrate"
-  log "Installing Linux substrate CLI inside Lima..."
-  limactl shell substrate sudo install -Dm0755 "${vm_substrate}" /usr/local/bin/substrate
-  limactl shell substrate bash -lc 'set -euo pipefail; sudo install -d /usr/local/bin; sudo tee /usr/local/bin/world >/dev/null <<'"'"'EOF'"'"'
-#!/usr/bin/env bash
-exec substrate world "$@"
-EOF
-sudo chmod 755 /usr/local/bin/world'
-
-  if [[ "${need_build_agent}" -eq 1 ]]; then
-    linux_agent="${lima_target_dir}/${target_dir}/world-agent"
-  fi
-
-  log "Installing Linux world-agent inside Lima..."
-  if [[ -n "${linux_agent:-}" && "${need_build_agent}" -eq 1 ]]; then
-    limactl shell substrate sudo install -m0755 "${linux_agent}" /usr/local/bin/substrate-world-agent
-  else
-    limactl copy "${linux_agent}" substrate:/tmp/world-agent
-    limactl shell substrate sudo install -m0755 /tmp/world-agent /usr/local/bin/substrate-world-agent
-    limactl shell substrate sudo rm -f /tmp/world-agent
-  fi
-  limactl shell substrate sudo systemctl daemon-reload
-  limactl shell substrate sudo systemctl enable substrate-world-agent.service
-  limactl shell substrate sudo systemctl enable --now substrate-world-agent.socket
-  limactl shell substrate sudo systemctl restart substrate-world-agent.service
+  (cd "${REPO_ROOT}" && env "${lima_warm_env[@]}" "${LIMA_WARM}" "${REPO_ROOT}")
 
   cache_ok=1
   if ! cache_linux_binary_from_lima /usr/local/bin/substrate "${BIN_DIR}/linux/substrate" "substrate CLI"; then
     cache_ok=0
   fi
   if ! cache_linux_binary_from_lima /usr/local/bin/substrate-world-agent "${BIN_DIR}/linux/world-agent" "world-agent"; then
+    cache_ok=0
+  fi
+  if ! cache_linux_binary_from_lima /usr/local/bin/substrate-gateway "${BIN_DIR}/linux/substrate-gateway" "substrate-gateway"; then
     cache_ok=0
   fi
 

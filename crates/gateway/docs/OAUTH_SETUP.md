@@ -123,6 +123,56 @@ Tokens are stored in JSON format at `~/.substrate-gateway/oauth_tokens.json`:
 
 File permissions are automatically set to `0600` (owner read/write only) for security.
 
+### ChatGPT Codex handoff note
+
+For integrated ChatGPT Codex deployments, the gateway does not treat local token files as the trust boundary for account identity. The authoritative handoff contract is documented in [`docs/contracts/chatgpt-codex-auth-handoff-contract.md`](contracts/chatgpt-codex-auth-handoff-contract.md).
+
+Standalone local token material, including `~/.substrate-gateway/oauth_tokens.json`, remains a compatibility path only. It is useful for gateway-local OAuth operation, but it must not be read as proof of the integrated Substrate-owned auth boundary.
+
+For the Codex route, account resolution follows a strict order:
+
+1. In integrated mode, use `SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID` first.
+2. If that field is absent, fall back to the `chatgpt_account_id` claim inside the same Substrate-delivered OAuth access token.
+3. In standalone mode, use explicit `account_id` from local Codex auth state first, then the same JWT fallback rule.
+
+The JWT claim path is bounded compatibility fallback only. It does not redefine ownership, and the gateway must fail before any upstream Codex request when neither explicit nor JWT-derived `account_id` can be resolved.
+
+Mode selection for the Codex route is explicit and happens at gateway bootstrap, not inside the provider fallback path. Current bootstrap may carry the effective `llm.gateway.mode` posture through `SUBSTRATE_LLM_GATEWAY_MODE=in_world|host_only`:
+
+- `in_world` selects the integrated Substrate-delivered auth source
+- `host_only` selects the standalone local compatibility source
+- integrated mode never falls back to `~/.codex/auth.json` when the Substrate handoff is missing or incomplete
+
+For maintenance purposes, keep the Codex auth owner line explicit:
+
+- integrated mode consumes Substrate-delivered auth context first
+- explicit `account_id` remains authoritative over JWT-derived fallback
+- JWT-derived account identity is bounded compatibility fallback only
+- unresolved account identity must fail before any upstream request is sent
+- integrated mode must not require direct reads of host-local auth files inside the gateway runtime
+
+Codex auth or route drift should be revalidated against:
+
+- [`chatgpt-codex-auth-handoff-contract.md`](contracts/chatgpt-codex-auth-handoff-contract.md)
+- [`chatgpt-codex-route-contract.md`](contracts/chatgpt-codex-route-contract.md)
+- [`chatgpt-codex-conformance-and-drift-guard.md`](contracts/chatgpt-codex-conformance-and-drift-guard.md)
+
+The maintenance evidence anchors for that revalidation are:
+
+- `crates/gateway/src/providers/openai.rs`
+- `crates/gateway/tests/openai_responses_conformance.rs`
+- `crates/gateway/tests/openai_shared_parity.rs`
+- `crates/gateway/src/server/openai_conformance_test_support.rs`
+- `crates/gateway/tests/fixtures/openai_responses/codex-*.json`
+- this guide and `docs/OAUTH_TESTING.md`
+
+Treat the Codex auth guidance as stale and reopen route-specific review when any of the following drift materially:
+
+- Substrate auth-bundle delivery posture, secret-channel semantics, or integrated owner-line assumptions change
+- auth field identifiers, `account_id` precedence rules, or JWT fallback constraints change
+- the Codex route header contract or pre-upstream auth failure posture changes
+- local OAuth or token-storage guidance starts implying integrated trust-boundary authority
+
 ## HTTP Endpoints
 
 The gateway exposes these OAuth HTTP endpoints directly:

@@ -1,0 +1,16 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": [
+      {
+        "type": "function_call_output",
+        "call_id": "",
+        "output": "{\"ok\":true}"
+      }
+    ]
+  },
+  "expected_error_contains": "function_call_output.call_id must not be empty",
+  "expected_status": 400,
+  "expected_error_class": "route",
+  "expected_error_message": "Route selection failed"
+}

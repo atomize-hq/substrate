@@ -24,14 +24,18 @@ Constraints (non-negotiable):
 Inputs (must read end-to-end):
 - `<FEATURE_DIR>/quality_gate_report.md` (the most recent review pass and all findings)
 - The feature’s planning pack:
+  - `spec_manifest.md`
   - `decision_register.md`, `impact_map.md`, `plan.md`, `tasks.json`, `session_log.md`
   - all specs in the feature/track
-  - `manual_testing_playbook.md` and feature `smoke/*` scripts (if present)
+  - `manual_testing_playbook.md`
+  - feature `smoke/*` scripts when `tasks.json` `meta.behavior_platforms_required` is non-empty or the quality gate findings say smoke coverage is required
 - ADR(s) referenced by the pack
 - `docs/project_management/packs/sequencing.json`
 - Standards (read end-to-end):
   - `docs/project_management/system/standards/planning/PLANNING_RESEARCH_AND_ALIGNMENT_STANDARD.md`
+  - `docs/project_management/system/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
   - `docs/project_management/system/standards/planning/PLANNING_LINT_CHECKLIST.md`
+  - `docs/project_management/system/standards/planning/PLANNING_WORK_LIFT_ADVISORY.md`
   - `docs/project_management/system/templates/planning_pack/PLANNING_GATE_REPORT_TEMPLATE.md`
   - `docs/project_management/system/prompts/planning/quality_gate_reviewer.md`
   - `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
@@ -58,11 +62,12 @@ Remediation workflow (required):
      - Platform scopes are explicit and non-overlapping:
        - `meta.behavior_platforms_required` (smoke-required platforms),
        - `meta.ci_parity_platforms_required` (compile/CI parity platforms).
+     - If `meta.behavior_platforms_required` is non-empty, the pack must include concrete feature smoke scripts under `<FEATURE_DIR>/smoke/` for each required behavior platform, and `manual_testing_playbook.md` must reference each required script explicitly.
      - Integration task model matches schema version:
        - Schema v2/v3: per-slice platform-fix (`X-integ-core`, `X-integ-<platform>`, `X-integ` for every slice).
        - Schema v4+: boundary-only platform-fix:
-         - `ci_checkpoint_plan.md` exists,
-         - `tasks.json` `meta.checkpoint_boundaries` matches `ci_checkpoint_plan.md` checkpoint group endings,
+         - `pre-planning/ci_checkpoint_plan.md` exists,
+         - `tasks.json` `meta.checkpoint_boundaries` matches `pre-planning/ci_checkpoint_plan.md` checkpoint group endings,
          - only boundary slices define `*-integ-core` / `*-integ-<platform>` tasks; normal slices use only `X-integ`.
          - checkpoint ops tasks exist and are wired:
            - `CPk-ci-checkpoint` depends on the checkpoint boundary slice’s `*-integ-core`,
@@ -75,6 +80,8 @@ Remediation workflow (required):
    - Run:
      - `make planning-lint FEATURE_DIR="$FEATURE_DIR"`
      - (optional; strict packs) `PM_LIFT_ADVISORY=1 make planning-lint FEATURE_DIR="$FEATURE_DIR"`
+     - (recommended; strict packs) `make pm-lift-pack PACK="$FEATURE_DIR"`
+     - (recommended; strict packs) `make pm-lift-pack PACK="$FEATURE_DIR" EMIT_JSON=1`
      - `make planning-validate FEATURE_DIR="$FEATURE_DIR"`
      - `jq -e . "$FEATURE_DIR/tasks.json" >/dev/null`
      - `jq -e . docs/project_management/packs/sequencing.json >/dev/null`

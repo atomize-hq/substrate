@@ -2,13 +2,15 @@
 
 #[cfg(target_os = "linux")]
 use agent_api_types::ExecuteStreamFrame;
+#[cfg(not(target_os = "linux"))]
+use agent_api_types::GatewayStatusV1;
 #[cfg(any(target_os = "linux", test))]
 use agent_api_types::PendingDiffBucketV1;
 #[cfg(target_os = "linux")]
 use agent_api_types::WorldFsEntryTypeV1;
 use agent_api_types::{
     Budget, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
-    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, GatewayStatusV1,
+    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, MemberTurnSubmitRequestV1,
     PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
     PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, ProcessTelemetry,
     WorldFsReadRequestV1, WorldFsReadResponseV1, WorldNetworkRoutingV1,
@@ -49,9 +51,23 @@ use tokio::task;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 #[cfg(target_os = "linux")]
 use world::stream::{install_stream_sink, StreamKind, StreamSink};
-use world_api::{WorldBackend, WorldHandle, WorldSpec};
+use world_api::{
+    MemberDispatchRequestV1 as BackendMemberDispatchRequestV1,
+    MemberRuntimeBackendKindV1 as BackendMemberRuntimeBackendKindV1,
+    ResolvedMemberRuntimeDescriptorV1 as BackendResolvedMemberRuntimeDescriptorV1,
+    SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerSpec, WorldBackend,
+    WorldHandle, WorldReuseMode, WorldSpec,
+};
 
 use crate::enforcement_plan;
+#[cfg(target_os = "linux")]
+use crate::gateway_runtime::{
+    resolve_gateway_backend_binding, unavailable_response as gateway_unavailable_response_impl,
+    GatewayControlSettings, GatewayRuntimeFailure, GatewayRuntimeManager,
+    GatewayRuntimeStartContext, LinuxWorldPlacementContext,
+};
+#[cfg(target_os = "linux")]
+use crate::member_runtime::MemberRuntimeManager;
 use crate::request_routing::resolve_snapshot_routing;
 
 pub(crate) const ANCHOR_MODE_ENV: &str = "SUBSTRATE_ANCHOR_MODE";
@@ -157,6 +173,13 @@ fn resolve_landlock_helper_src() -> Option<String> {
         }
     }
 
+    #[cfg(test)]
+    if let Some(exe) = exe.as_ref() {
+        if exe.is_file() {
+            return Some(exe.display().to_string());
+        }
+    }
+
     let exe = exe?;
     resolve_landlock_helper_src_from_exe(&exe).map(|p| p.display().to_string())
 }
@@ -167,6 +190,10 @@ pub struct WorldAgentService {
     backend: Arc<dyn WorldBackend>,
     #[cfg(target_os = "linux")]
     linux_backend: Arc<world::LinuxLocalBackend>,
+    #[cfg(target_os = "linux")]
+    gateway_runtime: Arc<GatewayRuntimeManager>,
+    #[cfg(target_os = "linux")]
+    member_runtime: Arc<MemberRuntimeManager>,
     #[cfg(target_os = "linux")]
     pending_diff_origin: Arc<RwLock<HashMap<String, PendingDiffOriginTracker>>>,
     #[allow(dead_code)]
@@ -236,6 +263,8 @@ impl WorldAgentService {
             Ok(Self {
                 backend,
                 linux_backend,
+                gateway_runtime: Arc::new(GatewayRuntimeManager::new()),
+                member_runtime: Arc::new(MemberRuntimeManager::new()),
                 pending_diff_origin: Arc::new(RwLock::new(HashMap::new())),
                 worlds: Arc::new(RwLock::new(HashMap::new())),
                 budgets: Arc::new(RwLock::new(HashMap::new())),
@@ -399,6 +428,7 @@ impl WorldAgentService {
     pub(crate) fn note_pty_pending_diff(&self, world_id: &str) {
         let world = WorldHandle {
             id: world_id.to_string(),
+            shared_binding: None,
         };
         let (_started_at, diff) = match self.linux_backend.pending_diff(&world) {
             Ok(v) => v,
@@ -419,6 +449,13 @@ impl WorldAgentService {
 
     /// Execute a command with budget tracking.
     pub async fn execute(&self, req: ExecuteRequest) -> Result<ExecuteResponse> {
+        if req.member_dispatch.is_some() {
+            return Err(BadRequestError::new(
+                "member_dispatch requires POST /v1/execute/stream".to_string(),
+            )
+            .into());
+        }
+
         // Validate agent_id
         if req.agent_id.is_empty() {
             anyhow::bail!("agent_id is required for API calls");
@@ -473,21 +510,8 @@ impl WorldAgentService {
         let host_visible = !isolation_full;
         let empty_env: HashMap<String, String> = HashMap::new();
         let guard_env = req.env.as_ref().unwrap_or(&empty_env);
-        if let Some(deny) =
-            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible)
-        {
-            let span_id = format!("spn_{}", uuid::Uuid::now_v7());
-            let message = crate::world_exec_guard::deny_message(&deny);
-            return Ok(ExecuteResponse {
-                exit: 5,
-                span_id,
-                stdout_b64: BASE64.encode(b""),
-                stderr_b64: BASE64.encode(message.as_bytes()),
-                scopes_used: Vec::new(),
-                fs_diff: None,
-                process_telemetry: ProcessTelemetry::default(),
-            });
-        }
+        let guard_deny =
+            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible);
 
         // Create world spec from request
         let spec = build_world_spec(
@@ -496,6 +520,7 @@ impl WorldAgentService {
             fs_mode,
             isolate_network,
             allowed_domains,
+            req.shared_world.as_ref(),
         );
 
         // Ensure world exists
@@ -507,6 +532,22 @@ impl WorldAgentService {
                 return Err(anyhow::anyhow!("Failed to ensure session world"));
             }
         };
+        let shared_world = resolve_shared_world_binding(req.shared_world.as_ref(), &world)?;
+
+        if let Some(deny) = guard_deny {
+            let span_id = format!("spn_{}", uuid::Uuid::now_v7());
+            let message = crate::world_exec_guard::deny_message(&deny);
+            return Ok(ExecuteResponse {
+                exit: 5,
+                span_id,
+                stdout_b64: BASE64.encode(b""),
+                stderr_b64: BASE64.encode(message.as_bytes()),
+                scopes_used: Vec::new(),
+                fs_diff: None,
+                shared_world,
+                process_telemetry: ProcessTelemetry::default(),
+            });
+        }
 
         // Prepare execution request
         let mut env_map = req.env.unwrap_or_default();
@@ -541,6 +582,11 @@ impl WorldAgentService {
             env: env_map,
             pty: req.pty,
             span_id: None,
+            shared_world: req.shared_world.clone(),
+            member_dispatch: req
+                .member_dispatch
+                .as_ref()
+                .map(convert_member_dispatch_request),
         };
 
         // Execute command
@@ -577,6 +623,7 @@ impl WorldAgentService {
             stderr_b64: BASE64.encode(result.stderr),
             scopes_used: result.scopes_used,
             fs_diff: result.fs_diff,
+            shared_world,
             process_telemetry: result.process_telemetry,
         })
     }
@@ -612,6 +659,7 @@ impl WorldAgentService {
                 fs_mode,
                 isolate_network,
                 allowed_domains,
+                None,
             );
 
             let world = match self.backend.ensure_session(&spec) {
@@ -719,6 +767,7 @@ impl WorldAgentService {
                 fs_mode,
                 isolate_network,
                 allowed_domains,
+                None,
             );
 
             let world = match self.backend.ensure_session(&spec) {
@@ -797,6 +846,7 @@ impl WorldAgentService {
                 fs_mode,
                 isolate_network,
                 allowed_domains,
+                None,
             );
 
             let world = match self.backend.ensure_session(&spec) {
@@ -937,6 +987,7 @@ impl WorldAgentService {
                 fs_mode,
                 isolate_network,
                 allowed_domains,
+                None,
             );
 
             let world = match self.backend.ensure_session(&spec) {
@@ -1018,25 +1069,109 @@ impl WorldAgentService {
     /// Return the typed gateway lifecycle/status surface.
     pub async fn gateway_status(
         &self,
-        _req: GatewayLifecycleRequestV1,
+        req: GatewayLifecycleRequestV1,
     ) -> Result<GatewayLifecycleResponseV1> {
-        Ok(Self::gateway_unavailable_response())
+        #[cfg(target_os = "linux")]
+        {
+            let prepared = self.prepare_gateway_runtime_request(&req)?;
+            let Some(binding) = self
+                .resolve_gateway_runtime_binding(
+                    prepared,
+                    GatewayRuntimeBindingMode::ExistingSessionOnly,
+                )
+                .map_err(gateway_runtime_error)?
+            else {
+                return Self::attach_gateway_request_metadata(
+                    Self::gateway_unavailable_response(),
+                    &req,
+                );
+            };
+
+            let response = self
+                .gateway_runtime
+                .status(
+                    &binding.runtime_id,
+                    binding.start_context.binding.backend_id,
+                )
+                .await
+                .map_err(gateway_runtime_error)?;
+
+            Self::attach_gateway_request_metadata(response, &req)
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            Self::attach_gateway_request_metadata(Self::gateway_unavailable_response(), &req)
+        }
     }
 
     /// Return the typed gateway lifecycle sync surface.
     pub async fn gateway_sync(
         &self,
-        _req: GatewayLifecycleRequestV1,
+        req: GatewayLifecycleRequestV1,
     ) -> Result<GatewayLifecycleResponseV1> {
-        Ok(Self::gateway_unavailable_response())
+        #[cfg(target_os = "linux")]
+        {
+            let prepared = self.prepare_gateway_runtime_request(&req)?;
+            let Some(binding) = self
+                .resolve_gateway_runtime_binding(prepared, GatewayRuntimeBindingMode::EnsureSession)
+                .map_err(gateway_runtime_error)?
+            else {
+                return Self::attach_gateway_request_metadata(
+                    Self::gateway_unavailable_response(),
+                    &req,
+                );
+            };
+
+            let response = self
+                .gateway_runtime
+                .sync(binding.start_context)
+                .await
+                .map_err(gateway_runtime_error)?;
+
+            Self::attach_gateway_request_metadata(response, &req)
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            Self::attach_gateway_request_metadata(Self::gateway_unavailable_response(), &req)
+        }
     }
 
     /// Return the typed gateway lifecycle restart surface.
     pub async fn gateway_restart(
         &self,
-        _req: GatewayLifecycleRequestV1,
+        req: GatewayLifecycleRequestV1,
     ) -> Result<GatewayLifecycleResponseV1> {
-        Ok(Self::gateway_unavailable_response())
+        #[cfg(target_os = "linux")]
+        {
+            let prepared = self.prepare_gateway_runtime_request(&req)?;
+            let Some(binding) = self
+                .resolve_gateway_runtime_binding(
+                    prepared,
+                    GatewayRuntimeBindingMode::ExistingSessionOnly,
+                )
+                .map_err(gateway_runtime_error)?
+            else {
+                return Self::attach_gateway_request_metadata(
+                    Self::gateway_unavailable_response(),
+                    &req,
+                );
+            };
+
+            let response = self
+                .gateway_runtime
+                .restart(binding.start_context)
+                .await
+                .map_err(gateway_runtime_error)?;
+
+            Self::attach_gateway_request_metadata(response, &req)
+        }
+
+        #[cfg(not(target_os = "linux"))]
+        {
+            Self::attach_gateway_request_metadata(Self::gateway_unavailable_response(), &req)
+        }
     }
 
     /// Execute a command and stream incremental output frames via NDJSON.
@@ -1089,12 +1224,70 @@ impl WorldAgentService {
         self.record_doctor_request_context(policy_resolution_mode, isolate_network);
         let always_isolate = should_always_isolate(&req);
 
+        let shared_owner_spec = requested_shared_world_owner_spec(&req);
+
+        let spec = build_world_spec(
+            project_dir.clone(),
+            always_isolate,
+            fs_mode,
+            isolate_network,
+            allowed_domains,
+            shared_owner_spec.as_ref(),
+        );
+
+        let world = match self.backend.ensure_session(&spec) {
+            Ok(w) => w,
+            Err(e) => {
+                self.record_last_netfilter_failure_for_error(isolate_network, &e);
+                tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
+                anyhow::bail!("Failed to ensure session world");
+            }
+        };
+        let shared_world = resolve_shared_world_binding(shared_owner_spec.as_ref(), &world)?;
+
+        if let Some(dispatch) = req.member_dispatch.clone() {
+            let placement = self.resolve_authoritative_member_placement_context(
+                &dispatch,
+                world,
+                shared_world.as_ref(),
+                &project_dir,
+                &cwd,
+                isolation_full,
+            )?;
+            let env_map = build_member_runtime_launch_env(
+                req.env.clone().unwrap_or_default(),
+                MemberRuntimeLaunchEnvContext {
+                    placement_root: &placement.placement_root,
+                    isolation_full,
+                    write_allowlist_prefixes: &write_allowlist_prefixes,
+                    landlock_discover_paths: &landlock_discover_paths,
+                    landlock_read_paths: &landlock_read_paths,
+                    landlock_write_paths: &landlock_write_paths,
+                    enforcement_plan_b64: enforcement_plan_b64.as_deref(),
+                },
+            );
+            let span_id = format!("spn_{}", uuid::Uuid::now_v7());
+            let launch_placement = placement.launch_placement();
+            return self
+                .member_runtime
+                .launch(
+                    req.agent_id.clone(),
+                    env_map,
+                    span_id,
+                    dispatch,
+                    placement.binding,
+                    launch_placement,
+                )
+                .await;
+        }
+
         let host_visible = !isolation_full;
         let empty_env: HashMap<String, String> = HashMap::new();
         let guard_env = req.env.as_ref().unwrap_or(&empty_env);
-        if let Some(deny) =
-            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible)
-        {
+        let guard_deny =
+            crate::world_exec_guard::check_command(&req.cmd, &cwd, guard_env, host_visible);
+
+        if let Some(deny) = guard_deny {
             let span_id = format!("spn_{}", uuid::Uuid::now_v7());
             let message = crate::world_exec_guard::deny_message(&deny);
             let frames = vec![
@@ -1127,23 +1320,6 @@ impl WorldAgentService {
                 .map_err(|e| anyhow!("failed to build stream response: {e}"))?;
             return Ok(response);
         }
-
-        let spec = build_world_spec(
-            project_dir,
-            always_isolate,
-            fs_mode,
-            isolate_network,
-            allowed_domains,
-        );
-
-        let world = match self.backend.ensure_session(&spec) {
-            Ok(w) => w,
-            Err(e) => {
-                self.record_last_netfilter_failure_for_error(isolate_network, &e);
-                tracing::error!(error = %e, error_debug = ?e, "ensure_session failed");
-                anyhow::bail!("Failed to ensure session world");
-            }
-        };
 
         let mut exec_req = world_api::ExecRequest {
             cmd: req.cmd.clone(),
@@ -1178,6 +1354,11 @@ impl WorldAgentService {
             },
             pty: false,
             span_id: None,
+            shared_world: shared_owner_spec.clone(),
+            member_dispatch: req
+                .member_dispatch
+                .as_ref()
+                .map(convert_member_dispatch_request),
         };
 
         let span_id = format!("spn_{}", uuid::Uuid::now_v7());
@@ -1193,6 +1374,7 @@ impl WorldAgentService {
         #[cfg(target_os = "linux")]
         let service = self.clone();
         let agent_id = req.agent_id.clone();
+        let shared_world_for_events = shared_world.clone();
         let span_id_for_cleanup = span_id.clone();
         task::spawn_blocking(move || {
             let sink = Arc::new(StreamingSink::new(tx.clone()));
@@ -1223,20 +1405,32 @@ impl WorldAgentService {
                                 ts: chrono::Utc::now(),
                                 agent_id: agent_id.clone(),
                                 kind: AgentEventKind::Status,
-                                orchestration_session_id: span_id.clone(),
+                                orchestration_session_id: shared_world_for_events
+                                    .as_ref()
+                                    .map(|binding| binding.orchestration_session_id.clone())
+                                    .unwrap_or_else(|| span_id.clone()),
                                 run_id: span_id.clone(),
+                                parent_run_id: None,
+                                participant_id: None,
+                                parent_participant_id: None,
+                                resumed_from_participant_id: None,
                                 backend_id: None,
                                 thread_id: None,
                                 role: None,
-                                world_id: Some(world.id.clone()),
+                                world_id: Some(
+                                    shared_world_for_events
+                                        .as_ref()
+                                        .map(|binding| binding.world_id.clone())
+                                        .unwrap_or_else(|| world.id.clone()),
+                                ),
+                                world_generation: shared_world_for_events
+                                    .as_ref()
+                                    .map(|binding| binding.world_generation),
                                 cmd_id: None,
                                 span_id: Some(span_id.clone()),
                                 channel: None,
-                                client: None,
-                                router: None,
-                                provider: None,
-                                auth_authority: None,
-                                protocol: None,
+                                identity_tuple: None,
+                                placement_posture: None,
                                 project: None,
                                 data: serde_json::json!({
                                     "world_fs_strategy_primary": primary.as_str(),
@@ -1288,12 +1482,40 @@ impl WorldAgentService {
     }
 
     #[cfg(target_os = "linux")]
+    pub async fn submit_member_turn_stream(
+        &self,
+        req: MemberTurnSubmitRequestV1,
+    ) -> Result<Response> {
+        req.validate().map_err(BadRequestError::new)?;
+        self.member_runtime.submit_turn(req).await
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub async fn submit_member_turn_stream(
+        &self,
+        _req: MemberTurnSubmitRequestV1,
+    ) -> Result<Response> {
+        anyhow::bail!("World member turn submission is only supported on Linux");
+    }
+
+    #[cfg(target_os = "linux")]
     pub async fn execute_cancel(
         &self,
         req: ExecuteCancelRequestV1,
     ) -> Result<ExecuteCancelResponseV1> {
         if req.span_id.trim().is_empty() {
             return Err(BadRequestError::new("span_id is required".to_string()).into());
+        }
+
+        let delivered = self
+            .member_runtime
+            .cancel(&req.span_id, &req.sig)
+            .with_context(|| format!("failed to cancel member runtime span {}", req.span_id))?;
+        if delivered {
+            return Ok(ExecuteCancelResponseV1 {
+                schema_version: 1,
+                delivered: true,
+            });
         }
 
         let mut delivered = false;
@@ -1339,12 +1561,435 @@ impl WorldAgentService {
         }))
     }
 
+    #[cfg(target_os = "linux")]
+    fn prepare_gateway_runtime_request(
+        &self,
+        req: &GatewayLifecycleRequestV1,
+    ) -> Result<PreparedGatewayRuntimeRequest> {
+        req.validate_identity_contract()
+            .map_err(|err| anyhow!("gateway_invalid_integration: {err}"))?;
+        let cwd = req
+            .cwd
+            .as_ref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let env_ref = req.env.as_ref();
+        let project_dir = resolve_project_dir(env_ref, Some(&cwd))?;
+        let (policy_resolution_mode, policy_inputs) = resolve_policy_inputs(
+            &req.policy_snapshot,
+            req.world_network.as_ref(),
+            &cwd,
+            &project_dir,
+        )?;
+        self.record_doctor_request_context(policy_resolution_mode, policy_inputs.isolate_network);
+
+        let world_spec = build_world_spec(
+            project_dir.clone(),
+            should_always_isolate_for_profile(req.profile.as_deref()),
+            policy_inputs.fs_mode,
+            policy_inputs.isolate_network,
+            policy_inputs.allowed_domains,
+            None,
+        );
+        let control =
+            GatewayControlSettings::from_request_env(env_ref).map_err(gateway_runtime_error)?;
+        let selected_backend = control.default_backend.clone();
+        let integrated_auth = match req.integrated_auth.as_ref() {
+            Some(payload) => {
+                payload
+                    .validate_for_selected_backend(&selected_backend)
+                    .map_err(|message| {
+                        gateway_runtime_error(GatewayRuntimeFailure::invalid_integration(message))
+                    })?;
+                Some(payload.clone())
+            }
+            None => None,
+        };
+
+        Ok(PreparedGatewayRuntimeRequest {
+            project_dir,
+            world_spec,
+            selected_backend,
+            integrated_auth,
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    fn resolve_authoritative_member_placement_context(
+        &self,
+        dispatch: &agent_api_types::MemberDispatchRequestV1,
+        world: WorldHandle,
+        authoritative_binding: Option<&SharedWorldBindingSnapshot>,
+        project_dir: &Path,
+        cwd: &Path,
+        isolation_full: bool,
+    ) -> Result<AuthoritativeMemberPlacementContext> {
+        let binding = validate_member_dispatch_binding(dispatch, &world, authoritative_binding)?;
+        let cgroup_path = self
+            .session_cgroup_path(&world)
+            .with_context(|| format!("failed to resolve session cgroup for world {}", world.id))?;
+        let placement_root = if isolation_full {
+            self.linux_backend
+                .ensure_overlay_root(&world)
+                .with_context(|| format!("failed to resolve overlay root for world {}", world.id))?
+        } else {
+            project_dir.to_path_buf()
+        };
+        let effective_cwd =
+            resolve_member_runtime_effective_cwd(project_dir, &placement_root, cwd)?;
+
+        Ok(AuthoritativeMemberPlacementContext {
+            world,
+            binding,
+            placement_root,
+            effective_cwd,
+            cgroup_path,
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    fn resolve_gateway_runtime_binding(
+        &self,
+        prepared: PreparedGatewayRuntimeRequest,
+        mode: GatewayRuntimeBindingMode,
+    ) -> std::result::Result<Option<ResolvedGatewayRuntimeBinding>, GatewayRuntimeFailure> {
+        let Some(binding) = resolve_gateway_backend_binding(&prepared.selected_backend) else {
+            return Ok(None);
+        };
+
+        if !prepared.world_spec.isolate_network {
+            return Ok(Some(ResolvedGatewayRuntimeBinding::non_isolated(
+                prepared, binding,
+            )));
+        }
+
+        let maybe_world = match mode {
+            GatewayRuntimeBindingMode::EnsureSession => Some(
+                self.backend
+                    .ensure_session(&prepared.world_spec)
+                    .map_err(|err| {
+                        self.record_last_netfilter_failure_for_error(
+                            prepared.world_spec.isolate_network,
+                            &err,
+                        );
+                        GatewayRuntimeFailure::transient(format!(
+                            "failed to ensure session world: {}",
+                            err
+                        ))
+                    })?,
+            ),
+            GatewayRuntimeBindingMode::ExistingSessionOnly => self
+                .linux_backend
+                .find_compatible_session(&prepared.world_spec)
+                .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?,
+        };
+
+        let Some(world) = maybe_world else {
+            return Ok(None);
+        };
+        let cgroup_path = self
+            .session_cgroup_path(&world)
+            .map_err(|err| GatewayRuntimeFailure::transient(err.to_string()))?;
+        let runtime_id = isolated_gateway_runtime_id(&world.id, binding.backend_id);
+
+        Ok(Some(ResolvedGatewayRuntimeBinding {
+            runtime_id: runtime_id.clone(),
+            start_context: GatewayRuntimeStartContext {
+                world_id: runtime_id,
+                project_dir: prepared.project_dir,
+                cgroup_path,
+                require_cgroup_attach: true,
+                binding,
+                integrated_auth: prepared.integrated_auth,
+            },
+        }))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn gateway_runtime_pid_for_test(
+        &self,
+        req: &GatewayLifecycleRequestV1,
+    ) -> Result<Option<u32>> {
+        let prepared = self.prepare_gateway_runtime_request(req)?;
+        let Some(binding) = self
+            .resolve_gateway_runtime_binding(
+                prepared,
+                GatewayRuntimeBindingMode::ExistingSessionOnly,
+            )
+            .map_err(gateway_runtime_error)?
+        else {
+            return Ok(None);
+        };
+        Ok(self.gateway_runtime.pid_for_world(&binding.runtime_id))
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn forget_gateway_runtime_for_test(&self, req: &GatewayLifecycleRequestV1) -> Result<()> {
+        let prepared = self.prepare_gateway_runtime_request(req)?;
+        let Some(binding) = self
+            .resolve_gateway_runtime_binding(
+                prepared,
+                GatewayRuntimeBindingMode::ExistingSessionOnly,
+            )
+            .map_err(gateway_runtime_error)?
+        else {
+            return Ok(());
+        };
+        self.gateway_runtime
+            .forget_runtime_for_test(&binding.runtime_id);
+        Ok(())
+    }
+
     fn gateway_unavailable_response() -> GatewayLifecycleResponseV1 {
-        GatewayLifecycleResponseV1 {
-            status: GatewayStatusV1::Unavailable,
-            client_wiring: None,
+        #[cfg(target_os = "linux")]
+        {
+            gateway_unavailable_response_impl()
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            GatewayLifecycleResponseV1 {
+                status: GatewayStatusV1::Unavailable,
+                client_wiring: None,
+                identity_tuple: None,
+                placement_posture: None,
+            }
         }
     }
+
+    fn attach_gateway_request_metadata(
+        mut response: GatewayLifecycleResponseV1,
+        req: &GatewayLifecycleRequestV1,
+    ) -> Result<GatewayLifecycleResponseV1> {
+        if response.identity_tuple.is_none() {
+            response.identity_tuple = req.identity_tuple.clone();
+        }
+        if response.placement_posture.is_none() {
+            response.placement_posture = req.placement_posture.clone();
+        }
+        response
+            .validate_identity_contract()
+            .map_err(|err| anyhow!("gateway_invalid_integration: {err}"))?;
+        Ok(response)
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+struct PreparedGatewayRuntimeRequest {
+    project_dir: PathBuf,
+    world_spec: WorldSpec,
+    selected_backend: String,
+    integrated_auth: Option<agent_api_types::GatewayIntegratedAuthPayloadV1>,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone)]
+struct AuthoritativeMemberPlacementContext {
+    #[allow(dead_code)]
+    world: WorldHandle,
+    binding: SharedWorldBindingSnapshot,
+    placement_root: PathBuf,
+    effective_cwd: PathBuf,
+    cgroup_path: PathBuf,
+}
+
+#[cfg(target_os = "linux")]
+impl AuthoritativeMemberPlacementContext {
+    fn launch_placement(&self) -> LinuxWorldPlacementContext {
+        LinuxWorldPlacementContext {
+            working_dir: self.effective_cwd.clone(),
+            cgroup_path: self.cgroup_path.clone(),
+            require_cgroup_attach: true,
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+enum GatewayRuntimeBindingMode {
+    EnsureSession,
+    ExistingSessionOnly,
+}
+
+#[cfg(target_os = "linux")]
+struct ResolvedGatewayRuntimeBinding {
+    runtime_id: String,
+    start_context: GatewayRuntimeStartContext,
+}
+
+#[cfg(target_os = "linux")]
+impl ResolvedGatewayRuntimeBinding {
+    fn non_isolated(
+        prepared: PreparedGatewayRuntimeRequest,
+        binding: &'static crate::gateway_runtime::GatewayBackendBinding,
+    ) -> Self {
+        let runtime_id = non_isolated_gateway_runtime_id(
+            &prepared.project_dir,
+            &prepared.world_spec,
+            binding.backend_id,
+        );
+        Self {
+            runtime_id: runtime_id.clone(),
+            start_context: GatewayRuntimeStartContext {
+                world_id: runtime_id,
+                project_dir: prepared.project_dir,
+                cgroup_path: PathBuf::from("/nonexistent"),
+                require_cgroup_attach: false,
+                binding,
+                integrated_auth: prepared.integrated_auth,
+            },
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn non_isolated_gateway_runtime_id(
+    project_dir: &Path,
+    world_spec: &WorldSpec,
+    backend_id: &str,
+) -> String {
+    let canonical_project_dir = std::fs::canonicalize(project_dir)
+        .unwrap_or_else(|_| project_dir.to_path_buf())
+        .to_string_lossy()
+        .replace('\\', "/");
+    let mut allowed_domains = world_spec.allowed_domains.clone();
+    allowed_domains.sort();
+    allowed_domains.dedup();
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"project_dir\0");
+    hasher.update(canonical_project_dir.as_bytes());
+    hasher.update(b"\0isolate_network\0");
+    hasher.update(if world_spec.isolate_network {
+        b"1"
+    } else {
+        b"0"
+    });
+    hasher.update(b"\0always_isolate\0");
+    hasher.update(if world_spec.always_isolate {
+        b"1"
+    } else {
+        b"0"
+    });
+    hasher.update(b"\0allowed_domains\0");
+    for domain in allowed_domains {
+        hasher.update(domain.as_bytes());
+        hasher.update(b"\n");
+    }
+    hasher.update(b"\0backend_id\0");
+    hasher.update(backend_id.as_bytes());
+
+    let digest = hasher.finalize();
+    let mut encoded = String::with_capacity(16);
+    for byte in digest.iter().take(8) {
+        encoded.push_str(&format!("{byte:02x}"));
+    }
+    format!("gwrt_{encoded}")
+}
+
+#[cfg(target_os = "linux")]
+fn isolated_gateway_runtime_id(world_id: &str, backend_id: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"world_id\0");
+    hasher.update(world_id.as_bytes());
+    hasher.update(b"\0backend_id\0");
+    hasher.update(backend_id.as_bytes());
+
+    let digest = hasher.finalize();
+    let mut encoded = String::with_capacity(16);
+    for byte in digest.iter().take(8) {
+        encoded.push_str(&format!("{byte:02x}"));
+    }
+    format!("gwrt_{encoded}")
+}
+
+#[cfg(target_os = "linux")]
+fn gateway_runtime_error(err: GatewayRuntimeFailure) -> anyhow::Error {
+    anyhow!(err.to_string())
+}
+
+#[cfg(target_os = "linux")]
+struct MemberRuntimeLaunchEnvContext<'a> {
+    placement_root: &'a Path,
+    isolation_full: bool,
+    write_allowlist_prefixes: &'a [String],
+    landlock_discover_paths: &'a [String],
+    landlock_read_paths: &'a [String],
+    landlock_write_paths: &'a [String],
+    enforcement_plan_b64: Option<&'a str>,
+}
+
+#[cfg(target_os = "linux")]
+fn build_member_runtime_launch_env(
+    mut env_map: HashMap<String, String>,
+    ctx: MemberRuntimeLaunchEnvContext<'_>,
+) -> HashMap<String, String> {
+    env_map.insert(
+        WORLD_PROJECT_DIR_OVERRIDE_ENV.to_string(),
+        ctx.placement_root.display().to_string(),
+    );
+    env_map.insert(
+        WORLD_FS_ISOLATION_ENV.to_string(),
+        if ctx.isolation_full {
+            "full".to_string()
+        } else {
+            "workspace".to_string()
+        },
+    );
+    if ctx.isolation_full && !ctx.write_allowlist_prefixes.is_empty() {
+        env_map.insert(
+            WORLD_FS_WRITE_ALLOWLIST_ENV.to_string(),
+            ctx.write_allowlist_prefixes.join("\n"),
+        );
+    }
+
+    let landlock_supported = world::landlock::detect_support().supported;
+    if ctx.isolation_full {
+        apply_full_isolation_helper_env(
+            &mut env_map,
+            landlock_supported,
+            ctx.landlock_discover_paths,
+            ctx.landlock_read_paths,
+            ctx.landlock_write_paths,
+            ctx.enforcement_plan_b64,
+        );
+    }
+
+    env_map
+}
+
+#[cfg(target_os = "linux")]
+fn resolve_member_runtime_effective_cwd(
+    project_dir: &Path,
+    placement_root: &Path,
+    requested_cwd: &Path,
+) -> Result<PathBuf> {
+    let requested_cwd =
+        std::fs::canonicalize(requested_cwd).unwrap_or_else(|_| requested_cwd.to_path_buf());
+    let project_dir =
+        std::fs::canonicalize(project_dir).unwrap_or_else(|_| project_dir.to_path_buf());
+
+    if requested_cwd == project_dir {
+        return Ok(placement_root.to_path_buf());
+    }
+
+    let relative = requested_cwd.strip_prefix(&project_dir).map_err(|_| {
+        anyhow!(
+            "member runtime cwd {} is outside the authoritative project root {}",
+            requested_cwd.display(),
+            project_dir.display()
+        )
+    })?;
+    let effective_cwd = placement_root.join(relative);
+    if !effective_cwd.is_dir() {
+        anyhow::bail!(
+            "member runtime cwd {} is missing from authoritative placement root {}",
+            requested_cwd.display(),
+            placement_root.display()
+        );
+    }
+
+    Ok(effective_cwd)
 }
 
 #[cfg(test)]
@@ -1417,6 +2062,313 @@ mod pending_diff_id_tests {
             WorldAgentService::pending_diff_id_for_diff(&d2),
             "diff_id must not change when FsDiff reclassifies a path between writes and mods"
         );
+    }
+}
+
+#[cfg(all(target_os = "linux", test))]
+mod gateway_runtime_binding_tests {
+    use super::*;
+    use agent_api_types::{
+        GatewayApiEnvIntegratedAuthV1, GatewayCliCodexIntegratedAuthV1,
+        GatewayIntegratedAuthPayloadV1, PolicySnapshotV3, PolicySnapshotWorldFsFailClosedV3,
+        PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldNetworkRoutingV1,
+    };
+    use serde_json::json;
+    use tempfile::TempDir;
+
+    fn minimal_policy_snapshot() -> PolicySnapshotV3 {
+        PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: Vec::new(),
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: None,
+                read: None,
+                write: PolicySnapshotWorldFsWriteV3::default(),
+            },
+        }
+    }
+
+    fn gateway_request(cwd: &Path) -> GatewayLifecycleRequestV1 {
+        GatewayLifecycleRequestV1 {
+            profile: None,
+            cwd: Some(cwd.display().to_string()),
+            env: None,
+            agent_id: "gateway-binding-test".to_string(),
+            policy_snapshot: minimal_policy_snapshot(),
+            world_network: Some(WorldNetworkRoutingV1 {
+                isolate_network: false,
+                allowed_domains: Vec::new(),
+            }),
+            integrated_auth: Some(GatewayIntegratedAuthPayloadV1 {
+                backend_id: "cli:codex".to_string(),
+                cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                    account_id: Some("acct_test".to_string()),
+                    access_token: "header.payload.signature".to_string(),
+                }),
+                api_env: None,
+            }),
+            identity_tuple: None,
+            placement_posture: None,
+        }
+    }
+
+    fn gateway_request_with_backend(cwd: &Path, backend_id: &str) -> GatewayLifecycleRequestV1 {
+        let mut request = gateway_request(cwd);
+        let mut env = HashMap::new();
+        env.insert(
+            "SUBSTRATE_LLM_DEFAULT_BACKEND".to_string(),
+            backend_id.to_string(),
+        );
+        request.env = Some(env);
+        request
+    }
+
+    #[test]
+    fn request_preparation_rejects_integrated_auth_for_different_backend() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+        let mut request = gateway_request_with_backend(temp_dir.path(), "cli:codex");
+        let mut env = HashMap::new();
+        env.insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
+        request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+            backend_id: "api:openai".to_string(),
+            cli_codex: None,
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
+        });
+
+        let err = service
+            .prepare_gateway_runtime_request(&request)
+            .expect_err("mismatched auth payload should fail");
+        assert!(
+            err.to_string().contains("does not match selected backend"),
+            "unexpected error: {err:#}"
+        );
+    }
+
+    #[test]
+    fn non_isolated_runtime_id_is_stable_for_equivalent_specs() {
+        let project_dir = PathBuf::from("/tmp/project");
+        let mut world_spec = build_world_spec(
+            project_dir.clone(),
+            false,
+            WorldFsMode::Writable,
+            false,
+            vec!["b.example.com".to_string(), "a.example.com".to_string()],
+            None,
+        );
+        let first = non_isolated_gateway_runtime_id(&project_dir, &world_spec, "cli:codex");
+        world_spec.allowed_domains.reverse();
+        let second = non_isolated_gateway_runtime_id(&project_dir, &world_spec, "cli:codex");
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn non_isolated_runtime_id_changes_with_binding_inputs() {
+        let project_dir = PathBuf::from("/tmp/project");
+        let base = build_world_spec(
+            project_dir.clone(),
+            false,
+            WorldFsMode::Writable,
+            false,
+            vec!["example.com".to_string()],
+            None,
+        );
+        let changed_project =
+            non_isolated_gateway_runtime_id(Path::new("/tmp/other"), &base, "cli:codex");
+        let changed_always_isolate = non_isolated_gateway_runtime_id(
+            &project_dir,
+            &build_world_spec(
+                project_dir.clone(),
+                true,
+                WorldFsMode::Writable,
+                false,
+                vec!["example.com".to_string()],
+                None,
+            ),
+            "cli:codex",
+        );
+        let changed_domains = non_isolated_gateway_runtime_id(
+            &project_dir,
+            &build_world_spec(
+                project_dir.clone(),
+                false,
+                WorldFsMode::Writable,
+                false,
+                vec!["other.example.com".to_string()],
+                None,
+            ),
+            "cli:codex",
+        );
+        let changed_backend = non_isolated_gateway_runtime_id(&project_dir, &base, "api:openai");
+        let base_id = non_isolated_gateway_runtime_id(&project_dir, &base, "cli:codex");
+        assert_ne!(base_id, changed_project);
+        assert_ne!(base_id, changed_always_isolate);
+        assert_ne!(base_id, changed_domains);
+        assert_ne!(base_id, changed_backend);
+    }
+
+    #[test]
+    fn request_preparation_accepts_valid_cli_codex() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+
+        service
+            .prepare_gateway_runtime_request(&gateway_request(temp_dir.path()))
+            .expect("valid cli:codex payload should prepare");
+    }
+
+    #[test]
+    fn non_isolated_binding_uses_synthetic_runtime_key() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+        let prepared = service
+            .prepare_gateway_runtime_request(&gateway_request(temp_dir.path()))
+            .expect("prepared request");
+        let binding = service
+            .resolve_gateway_runtime_binding(
+                prepared,
+                GatewayRuntimeBindingMode::ExistingSessionOnly,
+            )
+            .expect("binding resolution")
+            .expect("non-isolated binding");
+
+        assert!(binding.runtime_id.starts_with("gwrt_"));
+        assert_eq!(binding.start_context.world_id, binding.runtime_id);
+        assert!(!binding.start_context.require_cgroup_attach);
+        assert_eq!(
+            binding.start_context.cgroup_path,
+            PathBuf::from("/nonexistent")
+        );
+    }
+
+    #[test]
+    fn unbound_api_backend_returns_none_without_invalid_integration() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+        let mut request = gateway_request_with_backend(temp_dir.path(), "api:anthropic");
+        let mut env = HashMap::new();
+        env.insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
+        request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+            backend_id: "api:anthropic".to_string(),
+            cli_codex: None,
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
+        });
+        let prepared = service
+            .prepare_gateway_runtime_request(&request)
+            .expect("prepared request");
+        let binding = service
+            .resolve_gateway_runtime_binding(
+                prepared,
+                GatewayRuntimeBindingMode::ExistingSessionOnly,
+            )
+            .expect("binding resolution");
+
+        assert!(
+            binding.is_none(),
+            "unbound backends should not map to a runtime"
+        );
+    }
+
+    #[test]
+    fn isolated_binding_does_not_synthesize_runtime_without_session() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+        let mut request = gateway_request(temp_dir.path());
+        request.world_network = Some(WorldNetworkRoutingV1 {
+            isolate_network: true,
+            allowed_domains: Vec::new(),
+        });
+        let prepared = service
+            .prepare_gateway_runtime_request(&request)
+            .expect("prepared request");
+        let binding = service
+            .resolve_gateway_runtime_binding(
+                prepared,
+                GatewayRuntimeBindingMode::ExistingSessionOnly,
+            )
+            .expect("binding resolution");
+
+        assert!(binding.is_none());
+    }
+
+    #[test]
+    fn request_preparation_rejects_unknown_lifecycle_request_fields() {
+        let err = serde_json::from_value::<GatewayLifecycleRequestV1>(json!({
+            "profile": null,
+            "cwd": "/tmp",
+            "env": null,
+            "agent_id": "gateway-binding-test",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": { "enabled": true, "allow_list": ["."], "deny_list": [] }
+                }
+            },
+            "world_network": {
+                "isolate_network": false,
+                "allowed_domains": []
+            },
+            "integrated_auth": {
+                "backend_id": "cli:codex",
+                "cli_codex": {
+                    "access_token": "header.payload.signature"
+                }
+            },
+            "unexpected": true
+        }))
+        .expect_err("unknown request field should fail");
+
+        assert!(err.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn request_preparation_rejects_multi_facet_payloads() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+        let mut request = gateway_request(temp_dir.path());
+        let mut env = HashMap::new();
+        env.insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
+        request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+            backend_id: "cli:codex".to_string(),
+            cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                account_id: Some("acct_test".to_string()),
+                access_token: "header.payload.signature".to_string(),
+            }),
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
+        });
+
+        let err = service
+            .prepare_gateway_runtime_request(&request)
+            .expect_err("multi-facet payload should fail");
+        assert!(err.to_string().contains("exactly one auth facet"));
+    }
+
+    #[test]
+    fn request_preparation_rejects_blank_required_values() {
+        let temp_dir = TempDir::new().unwrap();
+        let service = WorldAgentService::new().expect("service");
+        let mut request = gateway_request(temp_dir.path());
+        request.integrated_auth = Some(GatewayIntegratedAuthPayloadV1 {
+            backend_id: "cli:codex".to_string(),
+            cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                account_id: Some("acct_test".to_string()),
+                access_token: "   ".to_string(),
+            }),
+            api_env: None,
+        });
+
+        let err = service
+            .prepare_gateway_runtime_request(&request)
+            .expect_err("blank required value should fail");
+        assert!(err.to_string().contains("empty cli_codex.access_token"));
     }
 }
 
@@ -1586,15 +2538,20 @@ fn resolve_policy_inputs(
     ))
 }
 
-fn build_world_spec(
+pub(crate) fn build_world_spec(
     project_dir: PathBuf,
     always_isolate: bool,
     fs_mode: WorldFsMode,
     isolate_network: bool,
     allowed_domains: Vec<String>,
+    shared_world: Option<&SharedWorldOwnerSpec>,
 ) -> WorldSpec {
     WorldSpec {
         reuse_session: true,
+        reuse_mode: shared_world
+            .cloned()
+            .map(WorldReuseMode::SharedOrchestration)
+            .unwrap_or(WorldReuseMode::GenericCompatible),
         isolate_network,
         limits: world_api::ResourceLimits::default(),
         enable_preload: false,
@@ -1603,6 +2560,156 @@ fn build_world_spec(
         always_isolate,
         fs_mode,
     }
+}
+
+#[cfg(target_os = "linux")]
+fn requested_shared_world_owner_spec(req: &ExecuteRequest) -> Option<SharedWorldOwnerSpec> {
+    req.shared_world.clone().or_else(|| {
+        req.member_dispatch
+            .as_ref()
+            .map(|dispatch| SharedWorldOwnerSpec {
+                orchestration_session_id: dispatch.orchestration_session_id.clone(),
+                action: world_api::SharedWorldOwnerAction::AttachOrCreate,
+            })
+    })
+}
+
+fn convert_member_dispatch_request(
+    dispatch: &agent_api_types::MemberDispatchRequestV1,
+) -> BackendMemberDispatchRequestV1 {
+    BackendMemberDispatchRequestV1 {
+        schema_version: dispatch.schema_version,
+        orchestration_session_id: dispatch.orchestration_session_id.clone(),
+        participant_id: dispatch.participant_id.clone(),
+        orchestrator_participant_id: dispatch.orchestrator_participant_id.clone(),
+        parent_participant_id: dispatch.parent_participant_id.clone(),
+        resumed_from_participant_id: dispatch.resumed_from_participant_id.clone(),
+        backend_id: dispatch.backend_id.clone(),
+        protocol: dispatch.protocol.clone(),
+        run_id: dispatch.run_id.clone(),
+        world_id: dispatch.world_id.clone(),
+        world_generation: dispatch.world_generation,
+        initial_prompt: dispatch.initial_prompt.clone(),
+        resolved_runtime: BackendResolvedMemberRuntimeDescriptorV1 {
+            backend_kind: convert_member_runtime_backend_kind(
+                dispatch.resolved_runtime.backend_kind,
+            ),
+            binary_path: dispatch.resolved_runtime.binary_path.clone(),
+        },
+    }
+}
+
+fn convert_member_runtime_backend_kind(
+    backend_kind: agent_api_types::MemberRuntimeBackendKindV1,
+) -> BackendMemberRuntimeBackendKindV1 {
+    match backend_kind {
+        agent_api_types::MemberRuntimeBackendKindV1::Codex => {
+            BackendMemberRuntimeBackendKindV1::Codex
+        }
+        agent_api_types::MemberRuntimeBackendKindV1::ClaudeCode => {
+            BackendMemberRuntimeBackendKindV1::ClaudeCode
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn validate_member_dispatch_binding(
+    dispatch: &agent_api_types::MemberDispatchRequestV1,
+    world: &WorldHandle,
+    authoritative_binding: Option<&SharedWorldBindingSnapshot>,
+) -> Result<SharedWorldBindingSnapshot> {
+    let binding = authoritative_binding
+        .cloned()
+        .or_else(|| world.shared_binding.clone())
+        .ok_or_else(|| {
+        BadRequestError::new(format!(
+            "member_dispatch requires authoritative shared world binding for orchestration session {}",
+            dispatch.orchestration_session_id
+        ))
+    })?;
+
+    if binding.orchestration_session_id != dispatch.orchestration_session_id {
+        return Err(BadRequestError::new(format!(
+            "member_dispatch.orchestration_session_id mismatch (expected {}, got {})",
+            binding.orchestration_session_id, dispatch.orchestration_session_id
+        ))
+        .into());
+    }
+    if binding.world_id != dispatch.world_id {
+        return Err(BadRequestError::new(format!(
+            "member_dispatch.world_id mismatch (expected {}, got {})",
+            binding.world_id, dispatch.world_id
+        ))
+        .into());
+    }
+    if binding.world_generation != dispatch.world_generation {
+        return Err(BadRequestError::new(format!(
+            "member_dispatch.world_generation mismatch (expected {}, got {})",
+            binding.world_generation, dispatch.world_generation
+        ))
+        .into());
+    }
+    if binding.binding_state != SharedWorldBindingState::Active {
+        return Err(BadRequestError::new(format!(
+            "member_dispatch requires active shared world binding, got {:?}",
+            binding.binding_state
+        ))
+        .into());
+    }
+    if world.id != dispatch.world_id {
+        return Err(BadRequestError::new(format!(
+            "member_dispatch.world_id mismatch (expected {}, got {})",
+            world.id, dispatch.world_id
+        ))
+        .into());
+    }
+
+    Ok(binding)
+}
+
+pub(crate) fn resolve_shared_world_binding(
+    requested: Option<&SharedWorldOwnerSpec>,
+    world: &WorldHandle,
+) -> Result<Option<SharedWorldBindingSnapshot>> {
+    let Some(owner_spec) = requested else {
+        return Ok(world.shared_binding.clone());
+    };
+
+    let binding = world.shared_binding.clone().ok_or_else(|| {
+        anyhow!(
+            "missing authoritative shared world proof for orchestration session {}",
+            owner_spec.orchestration_session_id
+        )
+    })?;
+
+    if binding.orchestration_session_id.trim().is_empty() {
+        anyhow::bail!("malformed shared world proof: orchestration_session_id is empty");
+    }
+    if binding.orchestration_session_id != owner_spec.orchestration_session_id {
+        anyhow::bail!(
+            "malformed shared world proof: orchestration_session_id mismatch (expected {}, got {})",
+            owner_spec.orchestration_session_id,
+            binding.orchestration_session_id
+        );
+    }
+    if binding.world_id.trim().is_empty() {
+        anyhow::bail!("malformed shared world proof: world_id is empty");
+    }
+    if binding.world_id != world.id {
+        anyhow::bail!(
+            "malformed shared world proof: world_id mismatch (expected {}, got {})",
+            world.id,
+            binding.world_id
+        );
+    }
+    if binding.binding_state != SharedWorldBindingState::Active {
+        anyhow::bail!(
+            "malformed shared world proof: binding_state must be active, got {:?}",
+            binding.binding_state
+        );
+    }
+
+    Ok(Some(binding))
 }
 
 pub(crate) fn apply_full_isolation_helper_env(
@@ -1922,6 +3029,7 @@ pub(crate) fn resolve_landlock_allowlist_paths(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use world_api::{SharedWorldOwnerAction, WorldHandle};
 
     #[test]
     fn landlock_helper_src_accepts_substrate_world_agent_name() {
@@ -1970,6 +3078,7 @@ mod tests {
                 display_path: None,
                 summary: None,
             }),
+            shared_world: None,
             process_telemetry: ProcessTelemetry {
                 process_events: vec![substrate_common::ProcessEvent {
                     event_type: substrate_common::ProcessEventType::WorldProcessStart,
@@ -2021,6 +3130,49 @@ mod tests {
         assert_eq!(fd.writes[0], std::path::PathBuf::from("/tmp/a.txt"));
         assert!(fd.mods.is_empty());
         assert!(fd.deletes.is_empty());
+    }
+
+    #[test]
+    fn build_world_spec_uses_shared_orchestration_reuse_mode() {
+        let owner = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_test".to_string(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+
+        let spec = build_world_spec(
+            PathBuf::from("/tmp/project"),
+            true,
+            WorldFsMode::Writable,
+            false,
+            vec!["example.com".to_string()],
+            Some(&owner),
+        );
+
+        assert_eq!(spec.reuse_mode, WorldReuseMode::SharedOrchestration(owner));
+    }
+
+    #[test]
+    fn resolve_shared_world_binding_rejects_mismatched_owner_proof() {
+        let requested = SharedWorldOwnerSpec {
+            orchestration_session_id: "orch_expected".to_string(),
+            action: SharedWorldOwnerAction::AttachOrCreate,
+        };
+        let world = WorldHandle {
+            id: "wld_test".to_string(),
+            shared_binding: Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: "orch_other".to_string(),
+                world_id: "wld_test".to_string(),
+                world_generation: 0,
+                binding_state: SharedWorldBindingState::Active,
+            }),
+        };
+
+        let err = resolve_shared_world_binding(Some(&requested), &world).expect_err("mismatch");
+        assert!(
+            err.to_string()
+                .contains("orchestration_session_id mismatch"),
+            "unexpected error: {err:#}"
+        );
     }
 
     #[test]

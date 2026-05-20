@@ -97,6 +97,20 @@ async fn recv_json(ws: &mut Ws) -> Value {
     serde_json::from_str(&text).expect("server ws message is valid JSON")
 }
 
+async fn assert_ws_closes_after_fatal(ws: &mut Ws) {
+    let msg = timeout(Duration::from_secs(2), ws.next()).await;
+    match msg {
+        Ok(None) => {}
+        Ok(Some(Ok(Message::Close(_)))) => {}
+        Ok(Some(Ok(other))) => panic!("expected ws close after fatal error, got: {other:?}"),
+        Ok(Some(Err(_))) => {
+            // Some implementations drop/reset the TCP connection without a close handshake.
+            // This still satisfies "close the WebSocket connection" semantics.
+        }
+        Err(_) => panic!("timed out waiting for ws close after fatal error"),
+    }
+}
+
 fn looks_like_missing_world_prereqs(frame: &Value) -> bool {
     if frame.get("type").and_then(Value::as_str) != Some("error") {
         return false;
@@ -412,16 +426,33 @@ async fn exec_while_busy_is_fatal_protocol_error() {
         .await
         .expect("send exec 2 while exec 1 in-flight");
 
-    let frame = recv_json(&mut ws).await;
-    if frame.get("type").and_then(Value::as_str) == Some("stdout")
-        && decode_stdout_frame(&frame)
-            .as_deref()
-            .is_some_and(stdout_indicates_missing_world_prereqs)
-    {
-        eprintln!(
-            "skipping exec-while-busy test: world prereqs missing during exec: {}",
-            String::from_utf8_lossy(&decode_stdout_frame(&frame).unwrap_or_default())
-        );
+    let mut stdout = Vec::new();
+    let frame = loop {
+        let frame = recv_json(&mut ws).await;
+        match frame.get("type").and_then(Value::as_str) {
+            Some("stdout") => {
+                let bytes = decode_stdout_frame(&frame).unwrap_or_default();
+                stdout.extend_from_slice(&bytes);
+                if stdout_indicates_missing_world_prereqs(&stdout) {
+                    eprintln!(
+                        "skipping exec-while-busy test: world prereqs missing during exec: {}",
+                        String::from_utf8_lossy(&stdout)
+                    );
+                    drop(ws);
+                    stop_server(shutdown, server).await;
+                    return;
+                }
+            }
+            Some("error") => break frame,
+            Some(other) => panic!(
+                "unexpected server frame type before fatal busy error: {other:?} frame={frame}"
+            ),
+            None => panic!("server frame missing type: {frame}"),
+        }
+    };
+
+    if looks_like_missing_world_prereqs(&frame) {
+        eprintln!("skipping exec-while-busy test: world prereqs missing during exec: {frame}");
         drop(ws);
         stop_server(shutdown, server).await;
         return;
@@ -433,6 +464,7 @@ async fn exec_while_busy_is_fatal_protocol_error() {
     );
     assert_eq!(frame.get("fatal").and_then(Value::as_bool), Some(true));
     assert_eq!(frame.get("seq").and_then(Value::as_u64), Some(2));
+    assert_ws_closes_after_fatal(&mut ws).await;
 
     drop(ws);
     stop_server(shutdown, server).await;

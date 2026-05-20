@@ -68,7 +68,7 @@ That split is still cohesive. `SEAM-1` owns the prerequisite contract truth, `SE
 - **Execution horizon**: `next`
 - **Source-plan lineage**: `SGBA-FWS-protocol_schema`, `SGBA-02`
 - **Primary value**:
-  - Turn the selected backend identity into one deterministic adapter dispatch lifecycle, one bounded Universal Agent API subset, and one explicit handoff boundary to ADR-0017 and ADR-0028.
+  - Turn the selected backend identity into one deterministic adapter dispatch lifecycle, one bounded Unified Agent API subset, and one explicit handoff boundary to ADR-0017 and ADR-0028.
 - **Primary touch surface**:
   - `gateway-backend-adapter-protocol-spec.md`
   - `gateway-backend-adapter-schema-spec.md`

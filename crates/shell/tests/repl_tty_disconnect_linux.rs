@@ -148,7 +148,6 @@ impl PtyRepl {
         cmd.env_remove("CI");
         cmd.env_remove("GITHUB_ACTIONS");
         cmd.env("SHELL", "/bin/bash");
-        cmd.arg("--shim-skip");
 
         let child = pair.slave.spawn_command(cmd).expect("spawn substrate");
 

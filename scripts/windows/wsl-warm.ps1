@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 function Write-Info($Message) { Write-Host "[INFO] $Message" -ForegroundColor Cyan }
 function Write-Warn($Message) { Write-Host "[WARN] $Message" -ForegroundColor Yellow }
-function Write-ErrorAndExit($Message) { Write-Host "[FAIL] $Message" -ForegroundColor Red; exit 1 }
+function Write-ErrorAndExit($Message, [int]$Code = 1) { Write-Host "[FAIL] $Message" -ForegroundColor Red; exit $Code }
 
 function Convert-ToWslPathFragment {
     param([string]$Path)
@@ -34,17 +34,71 @@ function Test-Truthy {
     return $normalized -in @('1', 'true', 'yes', 'y', 'on')
 }
 
+function Test-GuestExecutablePresent {
+    param(
+        [string]$DistroName,
+        [string]$Path
+    )
+
+    $quotedPath = Quote-ForBash $Path
+    & wsl -d $DistroName -- bash -lc "test -x ${quotedPath}"
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Install-GuestWorldBinaries {
+    param(
+        [string]$DistroName,
+        [string]$ProjectPathWsl,
+        [bool]$ProjectHasCargo,
+        [string]$ProjectPath
+    )
+
+    if ($ProjectHasCargo) {
+        Write-Info "Building world-agent and substrate-gateway (release) inside WSL"
+        $projectPathQuoted = Quote-ForBash $ProjectPathWsl
+        $buildScript = @"
+set -euo pipefail
+if [ -f ~/.cargo/env ]; then
+  . ~/.cargo/env
+fi
+cd $projectPathQuoted
+cargo build -p world-agent -p substrate-gateway --release
+sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-agent
+sudo install -m755 target/release/substrate-gateway /usr/local/bin/substrate-gateway
+sudo systemctl restart substrate-world-agent.service
+"@
+        $buildScript = $buildScript -replace "`r", ""
+        & wsl -d $DistroName -- bash -lc $buildScript
+        if ($LASTEXITCODE -ne 0) {
+            Write-ErrorAndExit "Failed to build/install world-agent and substrate-gateway inside WSL"
+        }
+        return
+    }
+
+    Write-Info "Installing packaged world-agent and substrate-gateway into WSL"
+    $agentFragment = Convert-ToWslPathFragment (Join-Path $ProjectPath 'bin\\linux\\world-agent')
+    $gatewayFragment = Convert-ToWslPathFragment (Join-Path $ProjectPath 'bin\\linux\\substrate-gateway')
+    $agentPath = Quote-ForBash "/mnt/c/$agentFragment"
+    $gatewayPath = Quote-ForBash "/mnt/c/$gatewayFragment"
+    & wsl -d $DistroName -- bash -lc "set -euo pipefail; sudo install -m755 ${agentPath} /usr/local/bin/substrate-world-agent; sudo install -m755 ${gatewayPath} /usr/local/bin/substrate-gateway; sudo systemctl restart substrate-world-agent.service"
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorAndExit "Failed to install packaged world-agent and substrate-gateway"
+    }
+}
+
 Write-Info "Starting wsl-warm for distro '$DistroName'"
 
 $projectPath = Resolve-Path $ProjectPath | Select-Object -ExpandProperty Path
 Write-Info "Project path: $projectPath"
+Write-ErrorAndExit "WSL world provisioning is intentionally fail-closed in this slice because the WSL helper path is not aligned with the Linux/macOS placement contract for SUBSTRATE_HOME placement, socket/group ownership, and runtime artifact access. Use Linux host-native provisioning, macOS Lima provisioning, or a CLI-only WSL install with --no-world instead." 4
 
 $projectHasCargo = Test-Path (Join-Path $projectPath 'Cargo.toml')
 $packagedWorldAgent = Join-Path $projectPath 'bin\\linux\\world-agent'
+$packagedGateway = Join-Path $projectPath 'bin\\linux\\substrate-gateway'
 $usesBundledArtifacts = -not $projectHasCargo
 
-if (-not $projectHasCargo -and -not (Test-Path $packagedWorldAgent)) {
-    Write-ErrorAndExit "Project path must contain Cargo.toml or a packaged bin\\linux\\world-agent"
+if (-not $projectHasCargo -and (-not (Test-Path $packagedWorldAgent) -or -not (Test-Path $packagedGateway))) {
+    Write-ErrorAndExit "Project path must contain Cargo.toml or packaged bin\\linux\\world-agent and bin\\linux\\substrate-gateway artifacts"
 }
 
 $cargoCandidates = @()
@@ -175,6 +229,14 @@ if (-not (Test-Path $hostProvisionPath)) {
     Write-ErrorAndExit "Provisioning script not found at $hostProvisionPath"
 }
 
+$projectPathFragment = Convert-ToWslPathFragment $projectPath
+$projectPathWsl = "/mnt/c/$projectPathFragment"
+
+$guestWorldAgentInstalled = $false
+$guestGatewayInstalled = $false
+try { $guestWorldAgentInstalled = Test-GuestExecutablePresent -DistroName $DistroName -Path '/usr/local/bin/substrate-world-agent' } catch {}
+try { $guestGatewayInstalled = Test-GuestExecutablePresent -DistroName $DistroName -Path '/usr/local/bin/substrate-gateway' } catch {}
+
 Write-Info "Preflight agent health check"
 $isHealthy = $false
 try {
@@ -189,41 +251,13 @@ if (-not $isHealthy -or $forceRebuild) {
         Write-Warn "SUBSTRATE_WSL_WARM_FORCE_REBUILD enabled; reprovisioning even though agent reports HTTP 200"
     }
     Write-Info "Updating package cache and running provision script"
-    $projectPathFragment = Convert-ToWslPathFragment $projectPath
-    $projectPathWsl = "/mnt/c/$projectPathFragment"
     $provisionScript = Quote-ForBash "$projectPathWsl/scripts/wsl/provision.sh"
     & wsl -d $DistroName -- bash -lc "set -euo pipefail; cp ${provisionScript} /tmp/provision.sh && sed -i 's/\r$//' /tmp/provision.sh && chmod +x /tmp/provision.sh && sudo /tmp/provision.sh"
     if ($LASTEXITCODE -ne 0) {
         Write-ErrorAndExit "Provision script failed"
     }
 
-    if ($projectHasCargo) {
-        # Build and install world-agent inside WSL
-        Write-Info "Building world-agent (release) inside WSL"
-        $projectPathQuoted = Quote-ForBash $projectPathWsl
-        $buildScript = @"
-set -euo pipefail
-if [ -f ~/.cargo/env ]; then
-  . ~/.cargo/env
-fi
-cd $projectPathQuoted
-cargo build -p world-agent --release
-sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-agent
-"@
-        $buildScript = $buildScript -replace "`r", ""
-        & wsl -d $DistroName -- bash -lc $buildScript
-        if ($LASTEXITCODE -ne 0) {
-            Write-ErrorAndExit "Failed to build/install world-agent inside WSL"
-        }
-    } else {
-        Write-Info "Installing packaged world-agent into WSL"
-        $agentFragment = Convert-ToWslPathFragment (Join-Path $projectPath 'bin\\linux\\world-agent')
-        $agentPath = Quote-ForBash "/mnt/c/$agentFragment"
-        & wsl -d $DistroName -- bash -lc "set -euo pipefail; sudo install -m755 ${agentPath} /usr/local/bin/substrate-world-agent"
-        if ($LASTEXITCODE -ne 0) {
-            Write-ErrorAndExit "Failed to install packaged world-agent"
-        }
-    }
+    Install-GuestWorldBinaries -DistroName $DistroName -ProjectPathWsl $projectPathWsl -ProjectHasCargo:$projectHasCargo -ProjectPath $projectPath
 
     # Ensure systemd units are enabled
     Write-Info "Ensuring substrate-world-agent service and socket are enabled"
@@ -234,29 +268,15 @@ sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-age
 } else {
     Write-Info "Agent reports HTTP 200; skipping provision/build/restart"
 
-    # CI safety: even if the agent is reachable, ensure the in-WSL world-agent binary matches the
-    # checked-out repo so transport/back-end fixes take effect on self-hosted runners.
-    $rebuildAgentOnCi = $projectHasCargo -and (Test-Truthy $env:GITHUB_ACTIONS -or Test-Truthy $env:SUBSTRATE_WSL_WARM_FORCE_AGENT_REBUILD)
-    if ($rebuildAgentOnCi) {
-        Write-Info "Rebuilding world-agent (release) inside WSL to match checked-out ref"
-        $projectPathFragment = Convert-ToWslPathFragment $projectPath
-        $projectPathWsl = "/mnt/c/$projectPathFragment"
-        $projectPathQuoted = Quote-ForBash $projectPathWsl
-        $buildScript = @"
-set -euo pipefail
-if [ -f ~/.cargo/env ]; then
-  . ~/.cargo/env
-fi
-cd $projectPathQuoted
-cargo build -p world-agent --release
-sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-agent
-sudo systemctl restart substrate-world-agent.service
-"@
-        $buildScript = $buildScript -replace "`r", ""
-        & wsl -d $DistroName -- bash -lc $buildScript
-        if ($LASTEXITCODE -ne 0) {
-            Write-ErrorAndExit "Failed to rebuild/restart world-agent inside WSL (CI)"
-        }
+    # CI safety: even if the agent is reachable, ensure the guest binaries match the checked-out
+    # ref so transport and gateway-runtime fixes take effect on self-hosted runners.
+    $rebuildGuestBinaries = (-not $guestWorldAgentInstalled) -or (-not $guestGatewayInstalled)
+    if ($projectHasCargo -and (Test-Truthy $env:GITHUB_ACTIONS -or Test-Truthy $env:SUBSTRATE_WSL_WARM_FORCE_AGENT_REBUILD -or Test-Truthy $env:SUBSTRATE_WSL_WARM_FORCE_GATEWAY_REBUILD)) {
+        $rebuildGuestBinaries = $true
+    }
+    if ($rebuildGuestBinaries) {
+        Write-Info "Refreshing guest world binaries inside WSL"
+        Install-GuestWorldBinaries -DistroName $DistroName -ProjectPathWsl $projectPathWsl -ProjectHasCargo:$projectHasCargo -ProjectPath $projectPath
     }
 }
 

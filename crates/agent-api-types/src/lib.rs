@@ -3,9 +3,16 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::path::Path;
 use substrate_common::agent_events::AgentEvent;
 pub use substrate_common::{
-    FsDiff, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry, WorldFsMode,
+    validate_identity_tuple_and_placement_posture, FsDiff, IdentityTuple, PlacementExecution,
+    PlacementPosture, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry,
+    WorldFsMode,
+};
+pub use world_api::{
+    SharedWorldBindingSnapshot, SharedWorldBindingState, SharedWorldOwnerAction,
+    SharedWorldOwnerSpec, WorldReuseMode,
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -651,7 +658,287 @@ pub struct WorldNetworkRoutingV1 {
     pub allowed_domains: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "ResolvedMemberRuntimeDescriptorDef")]
+pub struct ResolvedMemberRuntimeDescriptorV1 {
+    pub backend_kind: MemberRuntimeBackendKindV1,
+    pub binary_path: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MemberRuntimeBackendKindV1 {
+    Codex,
+    ClaudeCode,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResolvedMemberRuntimeDescriptorDef {
+    backend_kind: MemberRuntimeBackendKindV1,
+    binary_path: String,
+}
+
+impl ResolvedMemberRuntimeDescriptorV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_non_empty_request_field(
+            "member_dispatch.resolved_runtime.binary_path",
+            &self.binary_path,
+        )?;
+        if !Path::new(&self.binary_path).is_absolute() {
+            return Err(
+                "member_dispatch.resolved_runtime.binary_path must be an absolute path".to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
+impl TryFrom<ResolvedMemberRuntimeDescriptorDef> for ResolvedMemberRuntimeDescriptorV1 {
+    type Error = String;
+
+    fn try_from(value: ResolvedMemberRuntimeDescriptorDef) -> Result<Self, Self::Error> {
+        let descriptor = Self {
+            backend_kind: value.backend_kind,
+            binary_path: value.binary_path,
+        };
+        descriptor.validate()?;
+        Ok(descriptor)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "MemberDispatchRequestDef")]
+pub struct MemberDispatchRequestV1 {
+    #[serde(default = "member_dispatch_request_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub orchestration_session_id: String,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_participant_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resumed_from_participant_id: Option<String>,
+    pub backend_id: String,
+    pub protocol: String,
+    pub run_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_prompt: Option<String>,
+    pub resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MemberDispatchRequestDef {
+    #[serde(default = "member_dispatch_request_v1_default_schema_version")]
+    schema_version: u32,
+    orchestration_session_id: String,
+    participant_id: String,
+    orchestrator_participant_id: String,
+    #[serde(default)]
+    parent_participant_id: Option<String>,
+    #[serde(default)]
+    resumed_from_participant_id: Option<String>,
+    backend_id: String,
+    protocol: String,
+    run_id: String,
+    world_id: String,
+    world_generation: u64,
+    #[serde(default)]
+    initial_prompt: Option<String>,
+    resolved_runtime: ResolvedMemberRuntimeDescriptorV1,
+}
+
+fn member_dispatch_request_v1_default_schema_version() -> u32 {
+    1
+}
+
+impl MemberDispatchRequestV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported member_dispatch.schema_version: {} (expected 1)",
+                self.schema_version
+            ));
+        }
+
+        validate_non_empty_request_field(
+            "member_dispatch.orchestration_session_id",
+            &self.orchestration_session_id,
+        )?;
+        validate_non_empty_request_field("member_dispatch.participant_id", &self.participant_id)?;
+        validate_non_empty_request_field(
+            "member_dispatch.orchestrator_participant_id",
+            &self.orchestrator_participant_id,
+        )?;
+        validate_optional_non_empty_request_field(
+            "member_dispatch.parent_participant_id",
+            self.parent_participant_id.as_deref(),
+        )?;
+        validate_optional_non_empty_request_field(
+            "member_dispatch.resumed_from_participant_id",
+            self.resumed_from_participant_id.as_deref(),
+        )?;
+        validate_non_empty_request_field("member_dispatch.backend_id", &self.backend_id)?;
+        validate_non_empty_request_field("member_dispatch.protocol", &self.protocol)?;
+        validate_non_empty_request_field("member_dispatch.run_id", &self.run_id)?;
+        validate_non_empty_request_field("member_dispatch.world_id", &self.world_id)?;
+        validate_optional_non_empty_request_field(
+            "member_dispatch.initial_prompt",
+            self.initial_prompt.as_deref(),
+        )?;
+        self.resolved_runtime.validate()?;
+
+        if self.orchestrator_participant_id == self.participant_id {
+            return Err(
+                "member_dispatch.orchestrator_participant_id must not equal participant_id"
+                    .to_string(),
+            );
+        }
+
+        if self.parent_participant_id.as_deref() == Some(self.participant_id.as_str()) {
+            return Err(
+                "member_dispatch.parent_participant_id must not point to participant_id"
+                    .to_string(),
+            );
+        }
+
+        if self.resumed_from_participant_id.as_deref() == Some(self.participant_id.as_str()) {
+            return Err(
+                "member_dispatch.resumed_from_participant_id must not point to participant_id"
+                    .to_string(),
+            );
+        }
+
+        Ok(())
+    }
+}
+
+impl TryFrom<MemberDispatchRequestDef> for MemberDispatchRequestV1 {
+    type Error = String;
+
+    fn try_from(value: MemberDispatchRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            schema_version: value.schema_version,
+            orchestration_session_id: value.orchestration_session_id,
+            participant_id: value.participant_id,
+            orchestrator_participant_id: value.orchestrator_participant_id,
+            parent_participant_id: value.parent_participant_id,
+            resumed_from_participant_id: value.resumed_from_participant_id,
+            backend_id: value.backend_id,
+            protocol: value.protocol,
+            run_id: value.run_id,
+            world_id: value.world_id,
+            world_generation: value.world_generation,
+            initial_prompt: value.initial_prompt,
+            resolved_runtime: value.resolved_runtime,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "MemberTurnSubmitRequestDef")]
+pub struct MemberTurnSubmitRequestV1 {
+    #[serde(default = "member_turn_submit_request_v1_default_schema_version")]
+    pub schema_version: u32,
+    pub orchestration_session_id: String,
+    pub participant_id: String,
+    pub orchestrator_participant_id: String,
+    pub backend_id: String,
+    pub run_id: String,
+    pub world_id: String,
+    pub world_generation: u64,
+    pub prompt: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MemberTurnSubmitRequestDef {
+    #[serde(default = "member_turn_submit_request_v1_default_schema_version")]
+    schema_version: u32,
+    orchestration_session_id: String,
+    participant_id: String,
+    orchestrator_participant_id: String,
+    backend_id: String,
+    run_id: String,
+    world_id: String,
+    world_generation: u64,
+    prompt: String,
+}
+
+fn member_turn_submit_request_v1_default_schema_version() -> u32 {
+    1
+}
+
+impl MemberTurnSubmitRequestV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.schema_version != 1 {
+            return Err(format!(
+                "unsupported member_turn_submit.schema_version: {} (expected 1)",
+                self.schema_version
+            ));
+        }
+
+        validate_non_empty_request_field(
+            "member_turn_submit.orchestration_session_id",
+            &self.orchestration_session_id,
+        )?;
+        validate_non_empty_request_field(
+            "member_turn_submit.participant_id",
+            &self.participant_id,
+        )?;
+        validate_non_empty_request_field(
+            "member_turn_submit.orchestrator_participant_id",
+            &self.orchestrator_participant_id,
+        )?;
+        validate_non_empty_request_field("member_turn_submit.backend_id", &self.backend_id)?;
+        validate_gateway_backend_id_selector(self.backend_id.trim()).map_err(|_| {
+            format!(
+                "invalid member_turn_submit.backend_id '{}'; expected <kind>:<name>",
+                self.backend_id.trim()
+            )
+        })?;
+        validate_non_empty_request_field("member_turn_submit.run_id", &self.run_id)?;
+        validate_non_empty_request_field("member_turn_submit.world_id", &self.world_id)?;
+        validate_non_empty_request_field("member_turn_submit.prompt", &self.prompt)?;
+
+        if self.orchestrator_participant_id == self.participant_id {
+            return Err(
+                "member_turn_submit.orchestrator_participant_id must not equal participant_id"
+                    .to_string(),
+            );
+        }
+
+        Ok(())
+    }
+}
+
+impl TryFrom<MemberTurnSubmitRequestDef> for MemberTurnSubmitRequestV1 {
+    type Error = String;
+
+    fn try_from(value: MemberTurnSubmitRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            schema_version: value.schema_version,
+            orchestration_session_id: value.orchestration_session_id,
+            participant_id: value.participant_id,
+            orchestrator_participant_id: value.orchestrator_participant_id,
+            backend_id: value.backend_id,
+            run_id: value.run_id,
+            world_id: value.world_id,
+            world_generation: value.world_generation,
+            prompt: value.prompt,
+        };
+        request.validate()?;
+        Ok(request)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "ExecuteRequestDef")]
 pub struct ExecuteRequest {
     pub profile: Option<String>,
     pub cmd: String,
@@ -662,9 +949,88 @@ pub struct ExecuteRequest {
     pub budget: Option<Budget>,
     pub policy_snapshot: PolicySnapshotV3,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_world: Option<SharedWorldOwnerSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_network: Option<WorldNetworkRoutingV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_fs_mode: Option<WorldFsMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member_dispatch: Option<MemberDispatchRequestV1>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExecuteRequestDef {
+    profile: Option<String>,
+    cmd: String,
+    cwd: Option<String>,
+    env: Option<HashMap<String, String>>,
+    pty: bool,
+    agent_id: String,
+    budget: Option<Budget>,
+    policy_snapshot: PolicySnapshotV3,
+    #[serde(default)]
+    shared_world: Option<SharedWorldOwnerSpec>,
+    #[serde(default)]
+    world_network: Option<WorldNetworkRoutingV1>,
+    #[serde(default)]
+    world_fs_mode: Option<WorldFsMode>,
+    #[serde(default)]
+    member_dispatch: Option<MemberDispatchRequestV1>,
+}
+
+impl ExecuteRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        let cmd_is_empty = self.cmd.trim().is_empty();
+
+        match self.member_dispatch.as_ref() {
+            Some(member_dispatch) => {
+                member_dispatch.validate()?;
+                if !cmd_is_empty {
+                    return Err(
+                        "execute request member_dispatch requires cmd.trim().is_empty()"
+                            .to_string(),
+                    );
+                }
+                if self.pty {
+                    return Err("execute request member_dispatch requires pty=false".to_string());
+                }
+            }
+            None => {
+                if cmd_is_empty {
+                    return Err(
+                        "execute request process exec requires a non-empty cmd when member_dispatch is absent"
+                            .to_string(),
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl TryFrom<ExecuteRequestDef> for ExecuteRequest {
+    type Error = String;
+
+    fn try_from(value: ExecuteRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            profile: value.profile,
+            cmd: value.cmd,
+            cwd: value.cwd,
+            env: value.env,
+            pty: value.pty,
+            agent_id: value.agent_id,
+            budget: value.budget,
+            policy_snapshot: value.policy_snapshot,
+            shared_world: value.shared_world,
+            world_network: value.world_network,
+            world_fs_mode: value.world_fs_mode,
+            member_dispatch: value.member_dispatch,
+        };
+        request.validate()?;
+        Ok(request)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -676,6 +1042,8 @@ pub struct ExecuteResponse {
     pub scopes_used: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fs_diff: Option<FsDiff>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shared_world: Option<SharedWorldBindingSnapshot>,
     #[serde(flatten, default)]
     pub process_telemetry: ProcessTelemetry,
 }
@@ -728,6 +1096,23 @@ pub struct PendingDiffRecordV1 {
 
 fn pending_diff_record_v1_default_schema_version() -> u32 {
     1
+}
+
+fn validate_non_empty_request_field(field: &str, value: &str) -> Result<(), String> {
+    if value.trim().is_empty() {
+        return Err(format!("{field} must not be empty"));
+    }
+    Ok(())
+}
+
+fn validate_optional_non_empty_request_field(
+    field: &str,
+    value: Option<&str>,
+) -> Result<(), String> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    validate_non_empty_request_field(field, value)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -824,6 +1209,60 @@ fn world_fs_read_response_v1_default_schema_version() -> u32 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayCliCodexIntegratedAuthV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_id: Option<String>,
+    pub access_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayApiEnvIntegratedAuthV1 {
+    pub env: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GatewayIntegratedAuthPayloadV1 {
+    pub backend_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli_codex: Option<GatewayCliCodexIntegratedAuthV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_env: Option<GatewayApiEnvIntegratedAuthV1>,
+}
+
+impl GatewayIntegratedAuthPayloadV1 {
+    pub fn validate(&self) -> Result<(), String> {
+        validate_gateway_integrated_auth_payload(self)
+    }
+
+    pub fn validate_for_selected_backend(&self, selected_backend: &str) -> Result<(), String> {
+        validate_gateway_integrated_auth_payload_for_selected_backend(self, selected_backend)
+    }
+}
+
+pub fn validate_gateway_backend_id_selector(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    let Some((kind, name)) = trimmed.split_once(':') else {
+        return Err(format!(
+            "invalid gateway backend_id '{}'; expected <kind>:<name>",
+            trimmed
+        ));
+    };
+
+    if !matches_backend_kind(kind) || !matches_backend_name(name) || name.contains(':') {
+        return Err(format!(
+            "invalid gateway backend_id '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+            trimmed
+        ));
+    }
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "GatewayLifecycleRequestDef")]
 pub struct GatewayLifecycleRequestV1 {
     pub profile: Option<String>,
     pub cwd: Option<String>,
@@ -832,6 +1271,183 @@ pub struct GatewayLifecycleRequestV1 {
     pub policy_snapshot: PolicySnapshotV3,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub world_network: Option<WorldNetworkRoutingV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_tuple: Option<IdentityTuple>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement_posture: Option<PlacementPosture>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GatewayLifecycleRequestDef {
+    profile: Option<String>,
+    cwd: Option<String>,
+    env: Option<HashMap<String, String>>,
+    agent_id: String,
+    policy_snapshot: PolicySnapshotV3,
+    #[serde(default)]
+    world_network: Option<WorldNetworkRoutingV1>,
+    #[serde(default)]
+    integrated_auth: Option<GatewayIntegratedAuthPayloadV1>,
+    #[serde(default)]
+    identity_tuple: Option<IdentityTuple>,
+    #[serde(default)]
+    placement_posture: Option<PlacementPosture>,
+}
+
+impl GatewayLifecycleRequestV1 {
+    pub fn validate_identity_contract(&self) -> Result<(), String> {
+        validate_identity_tuple_and_placement_posture(
+            self.identity_tuple.as_ref(),
+            self.placement_posture.as_ref(),
+        )
+    }
+}
+
+impl TryFrom<GatewayLifecycleRequestDef> for GatewayLifecycleRequestV1 {
+    type Error = String;
+
+    fn try_from(value: GatewayLifecycleRequestDef) -> Result<Self, Self::Error> {
+        let request = Self {
+            profile: value.profile,
+            cwd: value.cwd,
+            env: value.env,
+            agent_id: value.agent_id,
+            policy_snapshot: value.policy_snapshot,
+            world_network: value.world_network,
+            integrated_auth: value.integrated_auth,
+            identity_tuple: value.identity_tuple,
+            placement_posture: value.placement_posture,
+        };
+        request.validate_identity_contract()?;
+        Ok(request)
+    }
+}
+
+pub fn validate_gateway_integrated_auth_payload(
+    payload: &GatewayIntegratedAuthPayloadV1,
+) -> Result<(), String> {
+    let backend_id = payload.backend_id.trim();
+    validate_gateway_backend_id_selector(backend_id).map_err(|err| {
+        if backend_id.is_empty() {
+            "request-provided integrated auth payload is missing backend_id".to_string()
+        } else {
+            err
+        }
+    })?;
+
+    let cli_codex = payload.cli_codex.as_ref();
+    let api_env = payload.api_env.as_ref();
+    let facet_count = usize::from(cli_codex.is_some()) + usize::from(api_env.is_some());
+
+    if facet_count != 1 {
+        return Err(format!(
+            "request-provided integrated auth payload must contain exactly one auth facet (found {facet_count})"
+        ));
+    }
+
+    if let Some(cli_codex) = cli_codex {
+        if backend_id != "cli:codex" {
+            return Err(format!(
+                "request-provided integrated auth payload for '{}' uses incompatible auth facet 'cli_codex'",
+                backend_id
+            ));
+        }
+
+        if cli_codex
+            .account_id
+            .as_deref()
+            .is_some_and(|value| value.trim().is_empty())
+        {
+            return Err(
+                "request-provided integrated auth payload contains empty cli_codex.account_id"
+                    .to_string(),
+            );
+        }
+
+        if cli_codex.access_token.trim().is_empty() {
+            return Err(
+                "request-provided integrated auth payload contains empty cli_codex.access_token"
+                    .to_string(),
+            );
+        }
+    }
+
+    if let Some(api_env) = api_env {
+        if !backend_id.starts_with("api:") {
+            return Err(format!(
+                "request-provided integrated auth payload for '{}' uses incompatible auth facet 'api_env'",
+                backend_id
+            ));
+        }
+
+        if api_env.env.is_empty() {
+            return Err(
+                "request-provided integrated auth payload contains empty api_env.env".to_string(),
+            );
+        }
+
+        for (name, value) in &api_env.env {
+            let trimmed_name = name.trim();
+            if trimmed_name.is_empty() {
+                return Err(
+                    "request-provided integrated auth payload contains blank api_env env name"
+                        .to_string(),
+                );
+            }
+            if trimmed_name != name
+                || trimmed_name.contains(char::is_whitespace)
+                || trimmed_name.contains('=')
+            {
+                return Err(format!(
+                    "request-provided integrated auth payload contains invalid api_env env name '{}'",
+                    name
+                ));
+            }
+            if value.trim().is_empty() {
+                return Err(format!(
+                    "request-provided integrated auth payload contains empty api_env value for '{}'",
+                    name
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn matches_backend_kind(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+fn matches_backend_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_' || byte == b'-'
+        })
+}
+
+pub fn validate_gateway_integrated_auth_payload_for_selected_backend(
+    payload: &GatewayIntegratedAuthPayloadV1,
+    selected_backend: &str,
+) -> Result<(), String> {
+    validate_gateway_integrated_auth_payload(payload)?;
+
+    let selected_backend = selected_backend.trim();
+    if payload.backend_id.trim() != selected_backend {
+        return Err(format!(
+            "request-provided integrated auth payload for '{}' does not match selected backend '{}'",
+            payload.backend_id.trim(),
+            selected_backend
+        ));
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -848,10 +1464,50 @@ pub struct GatewayClientWiringV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(try_from = "GatewayLifecycleResponseDef")]
 pub struct GatewayLifecycleResponseV1 {
     pub status: GatewayStatusV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_wiring: Option<GatewayClientWiringV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_tuple: Option<IdentityTuple>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement_posture: Option<PlacementPosture>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct GatewayLifecycleResponseDef {
+    status: GatewayStatusV1,
+    #[serde(default)]
+    client_wiring: Option<GatewayClientWiringV1>,
+    #[serde(default)]
+    identity_tuple: Option<IdentityTuple>,
+    #[serde(default)]
+    placement_posture: Option<PlacementPosture>,
+}
+
+impl GatewayLifecycleResponseV1 {
+    pub fn validate_identity_contract(&self) -> Result<(), String> {
+        validate_identity_tuple_and_placement_posture(
+            self.identity_tuple.as_ref(),
+            self.placement_posture.as_ref(),
+        )
+    }
+}
+
+impl TryFrom<GatewayLifecycleResponseDef> for GatewayLifecycleResponseV1 {
+    type Error = String;
+
+    fn try_from(value: GatewayLifecycleResponseDef) -> Result<Self, Self::Error> {
+        let response = Self {
+            status: value.status,
+            client_wiring: value.client_wiring,
+            identity_tuple: value.identity_tuple,
+            placement_posture: value.placement_posture,
+        };
+        response.validate_identity_contract()?;
+        Ok(response)
+    }
 }
 
 /// Streaming frame describing incremental execution output.
@@ -974,6 +1630,618 @@ pub enum WorldDoctorWorldFsStrategyProbeResultV1 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::path::Path;
+
+    use serde_json::{json, Value};
+
+    const LAITDP2_CLIENT: &str = "codex";
+    const LAITDP2_ROUTER: &str = "substrate_gateway";
+    const LAITDP2_PROVIDER: &str = "openai";
+    const LAITDP2_AUTH_AUTHORITY: &str = "codex_subscription";
+    const LAITDP2_PROTOCOL: &str = "openai.responses";
+
+    #[derive(Clone, Copy)]
+    struct Laitdp2PlatformCase {
+        platform: &'static str,
+        hidden_transport: &'static str,
+    }
+
+    const LAITDP2_PLATFORM_CASES: [Laitdp2PlatformCase; 3] = [
+        Laitdp2PlatformCase {
+            platform: "linux",
+            hidden_transport: "unix_socket",
+        },
+        Laitdp2PlatformCase {
+            platform: "macos",
+            hidden_transport: "lima_forwarding",
+        },
+        Laitdp2PlatformCase {
+            platform: "windows",
+            hidden_transport: "wsl_named_pipe_or_tcp",
+        },
+    ];
+
+    fn valid_cli_codex_payload() -> GatewayIntegratedAuthPayloadV1 {
+        GatewayIntegratedAuthPayloadV1 {
+            backend_id: "cli:codex".to_string(),
+            cli_codex: Some(GatewayCliCodexIntegratedAuthV1 {
+                account_id: Some("acct_test".to_string()),
+                access_token: "header.payload.signature".to_string(),
+            }),
+            api_env: None,
+        }
+    }
+
+    fn valid_api_openai_payload() -> GatewayIntegratedAuthPayloadV1 {
+        let mut env = HashMap::new();
+        env.insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
+
+        GatewayIntegratedAuthPayloadV1 {
+            backend_id: "api:openai".to_string(),
+            cli_codex: None,
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 { env }),
+        }
+    }
+
+    fn laitdp2_policy_snapshot_with_restrictive_net_allowed() -> Value {
+        json!({
+            "schema_version": 3,
+            "net_allowed": ["api.openai.com"],
+            "world_fs": {
+                "host_visible": true,
+                "fail_closed": { "routing": false },
+                "caged_required": false,
+                "write": {
+                    "enabled": true,
+                    "allow_list": ["."],
+                    "deny_list": []
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn gateway_lifecycle_request_rejects_unknown_fields() {
+        let err = serde_json::from_value::<GatewayLifecycleRequestV1>(json!({
+            "profile": null,
+            "cwd": "/tmp",
+            "env": null,
+            "agent_id": "tester",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": { "enabled": true, "allow_list": ["."], "deny_list": [] }
+                }
+            },
+            "world_network": null,
+            "integrated_auth": null,
+            "unexpected": true
+        }))
+        .expect_err("unknown request field should fail");
+
+        assert!(err.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_round_trips_canonical_identity_objects() {
+        let response = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "available",
+            "client_wiring": {
+                "openai_base_url": "http://127.0.0.1:4040",
+                "anthropic_base_url": "http://127.0.0.1:4040"
+            },
+            "identity_tuple": {
+                "client": "codex",
+                "router": "substrate_gateway",
+                "provider": "openai",
+                "auth_authority": "codex_subscription",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect("valid lifecycle response should deserialize");
+
+        let roundtrip = serde_json::to_value(&response).expect("serialize lifecycle response");
+        assert_eq!(
+            roundtrip
+                .pointer("/identity_tuple/router")
+                .and_then(Value::as_str),
+            Some("substrate_gateway")
+        );
+        assert_eq!(
+            roundtrip
+                .pointer("/placement_posture/execution")
+                .and_then(Value::as_str),
+            Some("in_world")
+        );
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_rejects_direct_provider_path_with_bridge_transport() {
+        let err = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "available",
+            "identity_tuple": {
+                "client": "codex",
+                "router": "direct_provider_path",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "host_only",
+                "host_to_world_bridge": true
+            }
+        }))
+        .expect_err("invalid routing/posture combination should fail");
+
+        assert!(err.to_string().contains("host_to_world_bridge"));
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_keeps_tuple_metadata_top_level_when_unavailable() {
+        let response = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "unavailable",
+            "identity_tuple": {
+                "client": "codex",
+                "router": "substrate_gateway",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect("unavailable lifecycle response should keep additive tuple metadata");
+
+        let roundtrip = serde_json::to_value(&response).expect("serialize lifecycle response");
+        assert_eq!(roundtrip.pointer("/status"), Some(&json!("unavailable")));
+        assert_eq!(roundtrip.pointer("/client_wiring"), None);
+        assert_eq!(
+            roundtrip.pointer("/identity_tuple/client"),
+            Some(&json!("codex"))
+        );
+        assert_eq!(
+            roundtrip.pointer("/placement_posture/execution"),
+            Some(&json!("in_world"))
+        );
+    }
+
+    #[test]
+    fn gateway_lifecycle_response_rejects_secret_like_tuple_values() {
+        let err = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+            "status": "available",
+            "identity_tuple": {
+                "client": "codex",
+                "router": "substrate_gateway",
+                "provider": "https://api.openai.com/v1",
+                "auth_authority": "~/.codex/auth.json",
+                "protocol": "openai.responses"
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect_err("secret-like tuple metadata should fail validation");
+
+        let error_text = err.to_string();
+        assert!(
+            error_text.contains("provider") || error_text.contains("auth_authority"),
+            "expected validation error to cite the rejected tuple fields, got: {error_text}"
+        );
+    }
+
+    #[test]
+    fn laitdp2_lifecycle_response_publishes_one_tuple_and_posture_meaning_across_platforms() {
+        let mut canonical_tuple = None;
+        let mut canonical_posture = None;
+
+        for case in LAITDP2_PLATFORM_CASES {
+            let response = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+                "status": "available",
+                "client_wiring": {
+                    "openai_base_url": "http://gateway.test/openai",
+                    "anthropic_base_url": "http://gateway.test/anthropic"
+                },
+                "identity_tuple": {
+                    "client": LAITDP2_CLIENT,
+                    "router": LAITDP2_ROUTER,
+                    "provider": LAITDP2_PROVIDER,
+                    "auth_authority": LAITDP2_AUTH_AUTHORITY,
+                    "protocol": LAITDP2_PROTOCOL
+                },
+                "placement_posture": {
+                    "execution": "in_world",
+                    "host_to_world_bridge": true
+                }
+            }))
+            .unwrap_or_else(|err| {
+                panic!(
+                    "{} should accept the shared tuple/posture contract despite hidden {} transport: {err}",
+                    case.platform, case.hidden_transport
+                )
+            });
+
+            let roundtrip = serde_json::to_value(response).expect("serialize lifecycle response");
+            let tuple = roundtrip
+                .pointer("/identity_tuple")
+                .cloned()
+                .expect("identity tuple is published");
+            let posture = roundtrip
+                .pointer("/placement_posture")
+                .cloned()
+                .expect("placement posture is published");
+
+            assert_eq!(
+                tuple.pointer("/client").and_then(Value::as_str),
+                Some(LAITDP2_CLIENT)
+            );
+            assert_eq!(
+                tuple.pointer("/router").and_then(Value::as_str),
+                Some(LAITDP2_ROUTER)
+            );
+            assert_eq!(
+                tuple.pointer("/provider").and_then(Value::as_str),
+                Some(LAITDP2_PROVIDER)
+            );
+            assert_eq!(
+                tuple.pointer("/auth_authority").and_then(Value::as_str),
+                Some(LAITDP2_AUTH_AUTHORITY)
+            );
+            assert_eq!(
+                tuple.pointer("/protocol").and_then(Value::as_str),
+                Some(LAITDP2_PROTOCOL)
+            );
+            assert_eq!(
+                posture.pointer("/execution").and_then(Value::as_str),
+                Some("in_world")
+            );
+            assert_eq!(
+                posture
+                    .pointer("/host_to_world_bridge")
+                    .and_then(Value::as_bool),
+                Some(true)
+            );
+
+            if let Some(expected) = canonical_tuple.as_ref() {
+                assert_eq!(
+                    &tuple, expected,
+                    "{} must not give tuple vocabulary platform-specific meaning",
+                    case.platform
+                );
+            } else {
+                canonical_tuple = Some(tuple);
+            }
+
+            if let Some(expected) = canonical_posture.as_ref() {
+                assert_eq!(
+                    &posture, expected,
+                    "{} must not give placement posture platform-specific meaning",
+                    case.platform
+                );
+            } else {
+                canonical_posture = Some(posture);
+            }
+
+            assert!(
+                roundtrip.pointer("/client_wiring/identity_tuple").is_none(),
+                "{} must keep additive tuple metadata outside client_wiring: {roundtrip}",
+                case.platform
+            );
+            assert!(
+                roundtrip
+                    .pointer("/client_wiring/placement_posture")
+                    .is_none(),
+                "{} must keep additive placement metadata outside client_wiring: {roundtrip}",
+                case.platform
+            );
+        }
+    }
+
+    #[test]
+    fn laitdp2_direct_provider_path_posture_invariants_are_platform_independent() {
+        for case in LAITDP2_PLATFORM_CASES {
+            for invalid_posture in [
+                json!({ "execution": "in_world" }),
+                json!({ "execution": "host_only", "host_to_world_bridge": true }),
+            ] {
+                let result = serde_json::from_value::<GatewayLifecycleResponseV1>(json!({
+                    "status": "available",
+                    "identity_tuple": {
+                        "client": LAITDP2_CLIENT,
+                        "router": "direct_provider_path",
+                        "protocol": LAITDP2_PROTOCOL
+                    },
+                    "placement_posture": invalid_posture
+                }));
+
+                assert!(
+                    result.is_err(),
+                    "{} must reject direct_provider_path unless execution=host_only and bridge transport is absent",
+                    case.platform
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn laitdp2_bridge_transport_does_not_rewrite_router_or_in_world_net_allowed_governance() {
+        for case in LAITDP2_PLATFORM_CASES {
+            let request = serde_json::from_value::<GatewayLifecycleRequestV1>(json!({
+                "profile": null,
+                "cwd": "/workspace",
+                "env": {},
+                "agent_id": LAITDP2_CLIENT,
+                "policy_snapshot": laitdp2_policy_snapshot_with_restrictive_net_allowed(),
+                "world_network": {
+                    "isolate_network": true,
+                    "allowed_domains": ["api.openai.com"]
+                },
+                "integrated_auth": null,
+                "identity_tuple": {
+                    "client": LAITDP2_CLIENT,
+                    "router": LAITDP2_ROUTER,
+                    "provider": LAITDP2_PROVIDER,
+                    "auth_authority": LAITDP2_AUTH_AUTHORITY,
+                    "protocol": LAITDP2_PROTOCOL
+                },
+                "placement_posture": {
+                    "execution": "in_world",
+                    "host_to_world_bridge": true
+                }
+            }))
+            .unwrap_or_else(|err| {
+                panic!(
+                    "{} should allow bridge transport only as transport detail: {err}",
+                    case.platform
+                )
+            });
+
+            let roundtrip = serde_json::to_value(request).expect("serialize lifecycle request");
+            assert_eq!(
+                roundtrip
+                    .pointer("/identity_tuple/router")
+                    .and_then(Value::as_str),
+                Some(LAITDP2_ROUTER),
+                "{} must not convert bridge transport into router identity",
+                case.platform
+            );
+            assert_eq!(
+                roundtrip
+                    .pointer("/policy_snapshot/net_allowed")
+                    .and_then(Value::as_array)
+                    .expect("net_allowed array"),
+                &[json!("api.openai.com")],
+                "{} must preserve policy net_allowed when bridge transport participates",
+                case.platform
+            );
+            assert_eq!(
+                roundtrip
+                    .pointer("/world_network/allowed_domains")
+                    .and_then(Value::as_array)
+                    .expect("allowed domains array"),
+                &[json!("api.openai.com")],
+                "{} must preserve runtime network isolation request when bridge transport participates",
+                case.platform
+            );
+        }
+    }
+
+    #[test]
+    fn laitdp2_backend_id_remains_adapter_selector_not_tuple_semantics() {
+        let request = serde_json::from_value::<GatewayLifecycleRequestV1>(json!({
+            "profile": null,
+            "cwd": "/workspace",
+            "env": {},
+            "agent_id": LAITDP2_CLIENT,
+            "policy_snapshot": laitdp2_policy_snapshot_with_restrictive_net_allowed(),
+            "world_network": null,
+            "integrated_auth": {
+                "backend_id": "cli:codex",
+                "cli_codex": {
+                    "account_id": "acct_test",
+                    "access_token": "test-token"
+                }
+            },
+            "identity_tuple": {
+                "client": LAITDP2_CLIENT,
+                "router": LAITDP2_ROUTER,
+                "provider": LAITDP2_PROVIDER,
+                "auth_authority": LAITDP2_AUTH_AUTHORITY,
+                "protocol": LAITDP2_PROTOCOL
+            },
+            "placement_posture": {
+                "execution": "in_world"
+            }
+        }))
+        .expect("backend_id selector should coexist with separate tuple semantics");
+
+        let roundtrip = serde_json::to_value(request).expect("serialize lifecycle request");
+        assert_eq!(
+            roundtrip
+                .pointer("/integrated_auth/backend_id")
+                .and_then(Value::as_str),
+            Some("cli:codex")
+        );
+        assert_eq!(
+            roundtrip
+                .pointer("/identity_tuple/client")
+                .and_then(Value::as_str),
+            Some(LAITDP2_CLIENT)
+        );
+        assert_eq!(
+            roundtrip
+                .pointer("/identity_tuple/router")
+                .and_then(Value::as_str),
+            Some(LAITDP2_ROUTER)
+        );
+        assert_eq!(
+            roundtrip
+                .pointer("/identity_tuple/auth_authority")
+                .and_then(Value::as_str),
+            Some(LAITDP2_AUTH_AUTHORITY)
+        );
+        assert!(
+            !roundtrip
+                .pointer("/identity_tuple")
+                .expect("identity tuple")
+                .to_string()
+                .contains("cli:codex"),
+            "backend_id grammar must not substitute for tuple fields: {roundtrip}"
+        );
+
+        let invalid_tuple = serde_json::from_value::<GatewayLifecycleRequestV1>(json!({
+            "profile": null,
+            "cwd": "/workspace",
+            "env": {},
+            "agent_id": LAITDP2_CLIENT,
+            "policy_snapshot": laitdp2_policy_snapshot_with_restrictive_net_allowed(),
+            "world_network": null,
+            "integrated_auth": null,
+            "identity_tuple": {
+                "client": "cli:codex",
+                "router": "direct_provider_path",
+                "protocol": LAITDP2_PROTOCOL
+            },
+            "placement_posture": {
+                "execution": "host_only"
+            }
+        }));
+        assert!(
+            invalid_tuple.is_err(),
+            "tuple fields must reject backend-id grammar so backend_id cannot become semantic identity"
+        );
+    }
+
+    #[test]
+    fn laitdp2_manual_review_playbook_names_required_evidence() {
+        let playbook_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            "../../docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/manual_testing_playbook.md",
+        );
+        let playbook =
+            fs::read_to_string(&playbook_path).expect("manual testing playbook should be readable");
+
+        for required in [
+            "One-owner-per-surface audit",
+            "Tuple meanings and wording",
+            "Machine-readable schema ownership",
+            "Policy and telemetry owner lines",
+            "Platform parity and compatibility",
+            "Claude Code pointed at `substrate_gateway`",
+            "Codex using Responses API and `~/.codex/auth.json`",
+            "Pre-provider-selection publication",
+            "Search for overloaded backend wording",
+            "Search for bridge wording that implies a second control plane",
+            "Search for status-schema drift",
+            "Search for stale active or backup references presented as current owners",
+        ] {
+            assert!(
+                playbook.contains(required),
+                "manual review playbook must include `{required}` as LAITDP2 validation evidence"
+            );
+        }
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_unknown_facet_fields() {
+        let err = serde_json::from_value::<GatewayIntegratedAuthPayloadV1>(json!({
+            "backend_id": "api:openai",
+            "api_env": {
+                "env": {
+                    "OPENAI_API_KEY": "sk-test"
+                },
+                "unexpected": true
+            }
+        }))
+        .expect_err("unknown facet field should fail");
+
+        assert!(err.to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_multi_facet_payloads() {
+        let mut payload = valid_cli_codex_payload();
+        let mut env = HashMap::new();
+        env.insert("OPENAI_API_KEY".to_string(), "sk-test".to_string());
+        payload.api_env = Some(GatewayApiEnvIntegratedAuthV1 { env });
+
+        let err = payload
+            .validate()
+            .expect_err("multi-facet payload should fail");
+        assert!(err.contains("exactly one auth facet"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_facet_backend_mismatch() {
+        let mut payload = valid_cli_codex_payload();
+        payload.backend_id = "api:openai".to_string();
+
+        let err = payload.validate().expect_err("mismatch should fail");
+        assert!(err.contains("incompatible auth facet"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_missing_facet_payloads() {
+        let payload = GatewayIntegratedAuthPayloadV1 {
+            backend_id: "api:openai".to_string(),
+            cli_codex: None,
+            api_env: None,
+        };
+
+        let err = payload
+            .validate()
+            .expect_err("missing-facet payload should fail");
+        assert!(err.contains("exactly one auth facet"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_blank_required_values() {
+        let mut payload = valid_api_openai_payload();
+        payload
+            .api_env
+            .as_mut()
+            .expect("api_env")
+            .env
+            .insert("OPENAI_API_KEY".to_string(), "   ".to_string());
+
+        let err = payload
+            .validate()
+            .expect_err("blank required value should fail");
+        assert!(err.contains("empty api_env value"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_rejects_invalid_api_env_names() {
+        let mut payload = valid_api_openai_payload();
+        payload
+            .api_env
+            .as_mut()
+            .expect("api_env")
+            .env
+            .insert("OPENAI API KEY".to_string(), "sk-test".to_string());
+
+        let err = payload
+            .validate()
+            .expect_err("invalid api env name should fail");
+        assert!(err.contains("invalid api_env env name"));
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_accepts_valid_cli_codex() {
+        valid_cli_codex_payload()
+            .validate()
+            .expect("valid cli:codex");
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_accepts_valid_api_openai() {
+        valid_api_openai_payload()
+            .validate()
+            .expect("valid api:openai");
+    }
 
     #[test]
     fn serialize_stream_frame_roundtrip() {
@@ -1076,11 +2344,16 @@ mod tests {
             agent_id: "tester".into(),
             budget: None,
             policy_snapshot: snapshot,
+            shared_world: Some(SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_123".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            }),
             world_network: Some(WorldNetworkRoutingV1 {
                 isolate_network: true,
                 allowed_domains: vec!["github.com".to_string()],
             }),
             world_fs_mode: Some(WorldFsMode::ReadOnly),
+            member_dispatch: None,
         };
 
         let json = serde_json::to_string(&req).expect("serialize request");
@@ -1094,6 +2367,13 @@ mod tests {
         );
         let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
         assert_eq!(back.world_fs_mode, Some(WorldFsMode::ReadOnly));
+        assert_eq!(
+            back.shared_world,
+            Some(SharedWorldOwnerSpec {
+                orchestration_session_id: "orch_123".into(),
+                action: SharedWorldOwnerAction::AttachOrCreate,
+            })
+        );
         assert_eq!(back.policy_snapshot.schema_version, 3);
         assert_eq!(
             back.policy_snapshot.net_allowed,
@@ -1143,8 +2423,10 @@ mod tests {
             agent_id: "tester".into(),
             budget: None,
             policy_snapshot: snapshot,
+            shared_world: None,
             world_network: None,
             world_fs_mode: None,
+            member_dispatch: None,
         };
 
         let json = serde_json::to_string(&req).expect("serialize request");
@@ -1171,6 +2453,42 @@ mod tests {
     }
 
     #[test]
+    fn execute_response_shared_world_round_trip() {
+        let response = ExecuteResponse {
+            exit: 0,
+            span_id: "spn_123".into(),
+            stdout_b64: "aGVsbG8=".into(),
+            stderr_b64: String::new(),
+            scopes_used: vec!["github.com".into()],
+            fs_diff: None,
+            shared_world: Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: "orch_123".into(),
+                world_id: "wld_123".into(),
+                world_generation: 3,
+                binding_state: SharedWorldBindingState::Active,
+            }),
+            process_telemetry: ProcessTelemetry::default(),
+        };
+
+        let json = serde_json::to_string(&response).expect("serialize response");
+        assert!(
+            json.contains("\"shared_world\""),
+            "expected shared_world to serialize"
+        );
+        let back: ExecuteResponse =
+            serde_json::from_str(&json).expect("deserialize execute response");
+        assert_eq!(
+            back.shared_world,
+            Some(SharedWorldBindingSnapshot {
+                orchestration_session_id: "orch_123".into(),
+                world_id: "wld_123".into(),
+                world_generation: 3,
+                binding_state: SharedWorldBindingState::Active,
+            })
+        );
+    }
+
+    #[test]
     fn execute_cancel_request_round_trip() {
         let req = ExecuteCancelRequestV1 {
             span_id: "spn_cancel".to_string(),
@@ -1181,6 +2499,377 @@ mod tests {
         let back: ExecuteCancelRequestV1 =
             serde_json::from_str(&json).expect("deserialize cancel request");
         assert_eq!(back, req);
+    }
+
+    fn test_absolute_binary_path() -> String {
+        std::env::current_exe()
+            .expect("current_exe")
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    #[test]
+    fn execute_request_member_dispatch_round_trip() {
+        let binary_path = test_absolute_binary_path();
+        let snapshot = PolicySnapshotV3 {
+            schema_version: 3,
+            net_allowed: Vec::new(),
+            world_fs: PolicySnapshotWorldFsV3 {
+                host_visible: true,
+                fail_closed: PolicySnapshotWorldFsFailClosedV3 { routing: false },
+                deny_enforcement: None,
+                caged_required: false,
+                discover: None,
+                read: None,
+                write: PolicySnapshotWorldFsWriteV3 {
+                    enabled: true,
+                    allow_list: vec![".".to_string()],
+                    deny_list: Vec::new(),
+                },
+            },
+        };
+
+        let req = ExecuteRequest {
+            profile: None,
+            cmd: String::new(),
+            cwd: Some("/tmp".into()),
+            env: None,
+            pty: false,
+            agent_id: "tester".into(),
+            budget: None,
+            policy_snapshot: snapshot,
+            shared_world: None,
+            world_network: None,
+            world_fs_mode: None,
+            member_dispatch: Some(MemberDispatchRequestV1 {
+                schema_version: 1,
+                orchestration_session_id: "orch_123".into(),
+                participant_id: "ash_member_123".into(),
+                orchestrator_participant_id: "ash_orch_123".into(),
+                parent_participant_id: Some("ash_parent_123".into()),
+                resumed_from_participant_id: Some("ash_old_123".into()),
+                backend_id: "cli:codex".into(),
+                protocol: "uaa.agent.session".into(),
+                run_id: "run_123".into(),
+                world_id: "world_123".into(),
+                world_generation: 7,
+                initial_prompt: Some("first turn".into()),
+                resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                    backend_kind: MemberRuntimeBackendKindV1::Codex,
+                    binary_path: binary_path.clone(),
+                },
+            }),
+        };
+
+        let json = serde_json::to_string(&req).expect("serialize request");
+        assert!(json.contains("\"member_dispatch\""));
+
+        let back: ExecuteRequest = serde_json::from_str(&json).expect("deserialize request");
+        assert!(back.cmd.is_empty());
+        assert_eq!(
+            back.member_dispatch,
+            Some(MemberDispatchRequestV1 {
+                schema_version: 1,
+                orchestration_session_id: "orch_123".into(),
+                participant_id: "ash_member_123".into(),
+                orchestrator_participant_id: "ash_orch_123".into(),
+                parent_participant_id: Some("ash_parent_123".into()),
+                resumed_from_participant_id: Some("ash_old_123".into()),
+                backend_id: "cli:codex".into(),
+                protocol: "uaa.agent.session".into(),
+                run_id: "run_123".into(),
+                world_id: "world_123".into(),
+                world_generation: 7,
+                initial_prompt: Some("first turn".into()),
+                resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
+                    backend_kind: MemberRuntimeBackendKindV1::Codex,
+                    binary_path,
+                },
+            })
+        );
+    }
+
+    #[test]
+    fn member_turn_submit_request_round_trip() {
+        let req = MemberTurnSubmitRequestV1 {
+            schema_version: 1,
+            orchestration_session_id: "orch_123".into(),
+            participant_id: "ash_member_123".into(),
+            orchestrator_participant_id: "ash_orch_123".into(),
+            backend_id: "cli:codex".into(),
+            run_id: "run_123".into(),
+            world_id: "world_123".into(),
+            world_generation: 7,
+            prompt: "summarize the failure".into(),
+        };
+
+        let json = serde_json::to_string(&req).expect("serialize member turn submit request");
+        let back: MemberTurnSubmitRequestV1 =
+            serde_json::from_str(&json).expect("deserialize member turn submit request");
+        assert_eq!(back, req);
+    }
+
+    #[test]
+    fn member_turn_submit_rejects_invalid_backend_id() {
+        let err = serde_json::from_value::<MemberTurnSubmitRequestV1>(serde_json::json!({
+            "schema_version": 1,
+            "orchestration_session_id": "orch_123",
+            "participant_id": "ash_member_123",
+            "orchestrator_participant_id": "ash_orch_123",
+            "backend_id": "codex",
+            "run_id": "run_123",
+            "world_id": "world_123",
+            "world_generation": 7,
+            "prompt": "resume"
+        }))
+        .expect_err("invalid backend id should fail");
+
+        assert!(
+            err.to_string()
+                .contains("invalid member_turn_submit.backend_id"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn member_turn_submit_rejects_empty_prompt() {
+        let err = serde_json::from_value::<MemberTurnSubmitRequestV1>(serde_json::json!({
+            "schema_version": 1,
+            "orchestration_session_id": "orch_123",
+            "participant_id": "ash_member_123",
+            "orchestrator_participant_id": "ash_orch_123",
+            "backend_id": "cli:codex",
+            "run_id": "run_123",
+            "world_id": "world_123",
+            "world_generation": 7,
+            "prompt": "   "
+        }))
+        .expect_err("blank prompt should fail");
+
+        assert!(
+            err.to_string()
+                .contains("member_turn_submit.prompt must not be empty"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn execute_request_rejects_empty_process_exec_cmd_at_boundary() {
+        let err = serde_json::from_value::<ExecuteRequest>(serde_json::json!({
+            "profile": null,
+            "cmd": "   ",
+            "cwd": "/tmp",
+            "pty": false,
+            "agent_id": "tester",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": {
+                        "enabled": true,
+                        "allow_list": ["."],
+                        "deny_list": []
+                    }
+                }
+            }
+        }))
+        .expect_err("empty process cmd should fail");
+
+        assert!(
+            err.to_string().contains("non-empty cmd"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn execute_request_rejects_member_dispatch_with_non_empty_cmd_at_boundary() {
+        let binary_path = test_absolute_binary_path();
+        let err = serde_json::from_value::<ExecuteRequest>(serde_json::json!({
+            "cmd": "echo hi",
+            "cwd": "/tmp",
+            "pty": false,
+            "agent_id": "tester",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": {
+                        "enabled": true,
+                        "allow_list": ["."],
+                        "deny_list": []
+                    }
+                }
+            },
+            "member_dispatch": {
+                "schema_version": 1,
+                "orchestration_session_id": "orch_123",
+                "participant_id": "ash_member_123",
+                "orchestrator_participant_id": "ash_orch_123",
+                "backend_id": "cli:codex",
+                "protocol": "uaa.agent.session",
+                "run_id": "run_123",
+                "world_id": "world_123",
+                "world_generation": 7,
+                "resolved_runtime": {
+                    "backend_kind": "codex",
+                    "binary_path": binary_path
+                }
+            }
+        }))
+        .expect_err("mixed cmd + member dispatch should fail");
+
+        assert!(
+            err.to_string()
+                .contains("member_dispatch requires cmd.trim().is_empty()"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn execute_request_rejects_member_dispatch_with_pty_at_boundary() {
+        let binary_path = test_absolute_binary_path();
+        let err = serde_json::from_value::<ExecuteRequest>(serde_json::json!({
+            "cmd": "",
+            "cwd": "/tmp",
+            "pty": true,
+            "agent_id": "tester",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": {
+                        "enabled": true,
+                        "allow_list": ["."],
+                        "deny_list": []
+                    }
+                }
+            },
+            "member_dispatch": {
+                "schema_version": 1,
+                "orchestration_session_id": "orch_123",
+                "participant_id": "ash_member_123",
+                "orchestrator_participant_id": "ash_orch_123",
+                "backend_id": "cli:codex",
+                "protocol": "uaa.agent.session",
+                "run_id": "run_123",
+                "world_id": "world_123",
+                "world_generation": 7,
+                "resolved_runtime": {
+                    "backend_kind": "codex",
+                    "binary_path": binary_path
+                }
+            }
+        }))
+        .expect_err("pty member dispatch should fail");
+
+        assert!(
+            err.to_string()
+                .contains("member_dispatch requires pty=false"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn member_dispatch_rejects_self_referential_lineage() {
+        let binary_path = test_absolute_binary_path();
+        let err = serde_json::from_value::<MemberDispatchRequestV1>(serde_json::json!({
+            "schema_version": 1,
+            "orchestration_session_id": "orch_123",
+            "participant_id": "ash_member_123",
+            "orchestrator_participant_id": "ash_member_123",
+            "backend_id": "cli:codex",
+            "protocol": "uaa.agent.session",
+            "run_id": "run_123",
+            "world_id": "world_123",
+            "world_generation": 7,
+            "resolved_runtime": {
+                "backend_kind": "codex",
+                "binary_path": binary_path
+            }
+        }))
+        .expect_err("self-referential lineage should fail");
+
+        assert!(
+            err.to_string()
+                .contains("orchestrator_participant_id must not equal participant_id"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn execute_request_rejects_member_dispatch_without_resolved_runtime_at_boundary() {
+        let err = serde_json::from_value::<ExecuteRequest>(serde_json::json!({
+            "cmd": "",
+            "cwd": "/tmp",
+            "pty": false,
+            "agent_id": "tester",
+            "policy_snapshot": {
+                "schema_version": 3,
+                "net_allowed": [],
+                "world_fs": {
+                    "host_visible": true,
+                    "fail_closed": { "routing": false },
+                    "caged_required": false,
+                    "write": {
+                        "enabled": true,
+                        "allow_list": ["."],
+                        "deny_list": []
+                    }
+                }
+            },
+            "member_dispatch": {
+                "schema_version": 1,
+                "orchestration_session_id": "orch_123",
+                "participant_id": "ash_member_123",
+                "orchestrator_participant_id": "ash_orch_123",
+                "backend_id": "cli:codex",
+                "protocol": "uaa.agent.session",
+                "run_id": "run_123",
+                "world_id": "world_123",
+                "world_generation": 7
+            }
+        }))
+        .expect_err("member dispatch without resolved_runtime should fail");
+
+        assert!(
+            err.to_string().contains("missing field `resolved_runtime`"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn member_dispatch_rejects_non_absolute_resolved_runtime_binary_path() {
+        let err = serde_json::from_value::<MemberDispatchRequestV1>(serde_json::json!({
+            "schema_version": 1,
+            "orchestration_session_id": "orch_123",
+            "participant_id": "ash_member_123",
+            "orchestrator_participant_id": "ash_orch_123",
+            "backend_id": "cli:codex",
+            "protocol": "uaa.agent.session",
+            "run_id": "run_123",
+            "world_id": "world_123",
+            "world_generation": 7,
+            "resolved_runtime": {
+                "backend_kind": "codex",
+                "binary_path": "codex"
+            }
+        }))
+        .expect_err("relative binary path should fail");
+
+        assert!(
+            err.to_string()
+                .contains("member_dispatch.resolved_runtime.binary_path must be an absolute path"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

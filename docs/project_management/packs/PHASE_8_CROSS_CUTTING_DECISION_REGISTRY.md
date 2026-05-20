@@ -517,7 +517,7 @@ No = not really in scope for Substrate
    Clone bits – a good blueprint if you ever want Substrate to expose an OpenAI-compatible HTTP API. For core substrate, I’d keep Claude Code integration at the CLI level and only reuse ideas/wire types.
    kodegen_claude_agent “Claude Agent SDK for Rust” – Rust bindings around Claude Code; async, strong typing; small crate (0.3.3). ~0 ~7 Crate 0.3.3 present but early-stage. https://docs.rs/kodegen_claude_agent/latest/kodegen_claude_agent/
    https://github.com/cyrup-ai/kodegen-claude-agent
-   Reference – good for protocol examples, but too early-stage to depend on. Your own Codex wrapper is already further along conceptually.
+   Reference – good for protocol examples, but too early-stage to depend on. Your own Unified Agent Wrapper is already further along conceptually.
    turboclaudeagent Interactive Agent SDK for TurboClaude; designed for in‑IDE agents with hooks, permission callbacks, interactive sessions, etc. 5 15 Crate turboclaudeagent 0.1.0. https://docs.rs/turboclaudeagent/latest/turboclaudeagent/
    https://github.com/Epistates/turboclaude
    Reference – great for ideas about IDE‑style permission gating and hooks; not something you want as a hard dependency.
@@ -529,7 +529,7 @@ No = not really in scope for Substrate
    Reference / maybe Clone bits – if you decide to reuse one Claude SDK’s types, this is the one I’d inspect first, but I’d still lean toward your own thin wrapper over the CLI.
    codex-helper Small helper library around Codex/Claude Code (providing convenience wrappers and example configs). 6 13 Crate exists (codex-helper), small and simple. https://docs.rs/crate/codex-helper/latest
    https://github.com/Latias94/codex-helper
-   Reference – useful to see how others manage Codex configs and invocation, but Substrate’s codex wrapper is more central and should stay in your control.
+   Reference – useful to see how others manage Codex configs and invocation, but Substrate’s Unified Agent Wrapper is more central and should stay in your control.
    url-preview High‑performance library for generating rich URL previews; already uses claude-code-api as a backend for LLM-based extraction. 10 33 Crate url-preview with v0.6.0 using claude-code-api. https://docs.rs/url-preview/latest/url_preview/
    https://github.com/ZhangHanDong/url-preview
    Crate – very nice candidate for a substrate-level MCP/tool that “previews URLs” for agents. Clean, self-contained.

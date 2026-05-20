@@ -158,6 +158,7 @@ pub enum SubCommands {
     Config(ConfigCmd),
     Policy(PolicyCmd),
     Workspace(WorkspaceCmd),
+    Agent(AgentCmd),
     Agents(AgentsCmd),
     Shim(ShimCmd),
     Health(HealthCmd),
@@ -393,6 +394,146 @@ pub struct PolicySetArgs {
     /// One or more dotted updates (key=value, key+=value, key-=value)
     #[arg(value_name = "UPDATE", required = true)]
     pub updates: Vec<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct AgentCmd {
+    #[command(subcommand)]
+    pub action: AgentAction,
+}
+
+#[derive(Args, Debug, Default)]
+#[group(id = "public_prompt_source", required = true, multiple = false)]
+pub struct PublicPromptArgs {
+    #[arg(long, group = "public_prompt_source", value_name = "TEXT")]
+    pub prompt: Option<String>,
+    #[arg(
+        long = "prompt-file",
+        group = "public_prompt_source",
+        value_name = "PATH"
+    )]
+    pub prompt_file: Option<PathBuf>,
+}
+
+#[derive(Copy, Clone, Debug, Default, ValueEnum, PartialEq, Eq)]
+#[value(rename_all = "snake_case")]
+pub enum AgentScopeArg {
+    Host,
+    World,
+    #[default]
+    Any,
+}
+
+impl AgentScopeArg {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::World => "world",
+            Self::Any => "any",
+        }
+    }
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentViewArgs {
+    /// Emit JSON instead of human-readable output
+    #[arg(long)]
+    pub json: bool,
+    /// Filter rows by execution scope
+    #[arg(long, value_name = "host|world|any", default_value = "any")]
+    pub scope: AgentScopeArg,
+    /// Filter rows by role label
+    #[arg(long, value_name = "ROLE")]
+    pub role: Option<String>,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentDoctorArgs {
+    /// Emit JSON instead of human-readable output
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct AgentOwnerHelperArgs {
+    #[arg(long = "plan-file", value_name = "PATH")]
+    pub plan_file: PathBuf,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentStartArgs {
+    #[arg(long = "backend", value_name = "BACKEND_ID")]
+    pub backend: String,
+    #[command(flatten)]
+    pub prompt_source: PublicPromptArgs,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentSessionControlArgs {
+    #[arg(long = "session", value_name = "ORCHESTRATION_SESSION_ID")]
+    pub session: String,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentTurnArgs {
+    #[arg(long = "session", value_name = "ORCHESTRATION_SESSION_ID")]
+    pub session: String,
+    #[arg(long = "backend", value_name = "BACKEND_ID")]
+    pub backend: String,
+    #[command(flatten)]
+    pub prompt_source: PublicPromptArgs,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct AgentToolboxCmd {
+    #[command(subcommand)]
+    pub action: AgentToolboxAction,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct AgentToolboxViewArgs {
+    /// Emit JSON instead of human-readable output
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AgentToolboxAction {
+    /// Show the current orchestration toolbox posture and projected endpoint
+    Status(AgentToolboxViewArgs),
+    /// Emit environment hints for connecting the orchestrator to the toolbox
+    Env(AgentToolboxViewArgs),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AgentAction {
+    /// List the effective agent inventory
+    List(AgentViewArgs),
+    /// Show the current pure-agent and nested gateway-backed status view
+    Status(AgentViewArgs),
+    /// Validate deterministic startability of the agent control plane
+    Doctor(AgentDoctorArgs),
+    /// Start a new host-scoped orchestration session from an exact backend id
+    Start(AgentStartArgs),
+    /// Submit a follow-up prompt to the exact backend in an orchestration session
+    Turn(AgentTurnArgs),
+    /// Reattach a retained owner loop to the exact orchestration session
+    #[command(name = "reattach", alias = "resume")]
+    Reattach(AgentSessionControlArgs),
+    /// Fork a new orchestration session from the exact orchestration session
+    Fork(AgentSessionControlArgs),
+    /// Stop the exact orchestration session through the private owner transport
+    Stop(AgentSessionControlArgs),
+    #[command(name = "__owner-helper", hide = true)]
+    OwnerHelper(AgentOwnerHelperArgs),
+    /// Inspect the internal orchestration toolbox surface
+    Toolbox(AgentToolboxCmd),
 }
 
 #[derive(Args, Debug)]

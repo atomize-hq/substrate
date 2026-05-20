@@ -105,9 +105,9 @@ impl OAuthConfig {
     ///
     /// Note: This uses Google's official Gemini CLI OAuth app credentials.
     /// The client_id and client_secret are public (as documented in Google's official CLI).
-    /// See: https://github.com/google-gemini/gemini-cli
+    /// See: <https://github.com/google-gemini/gemini-cli>
     /// "It's ok to save this in git because this is an installed application"
-    /// https://developers.google.com/identity/protocols/oauth2#installed
+    /// <https://developers.google.com/identity/protocols/oauth2#installed>
     pub fn gemini() -> Self {
         Self {
             client_id: "***".to_string(),

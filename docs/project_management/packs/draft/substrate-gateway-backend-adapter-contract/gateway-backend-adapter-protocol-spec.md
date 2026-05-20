@@ -56,7 +56,7 @@ The standalone gateway remains the owner of:
 
 ## Repository Topology Note
 
-The current authority set is split across the standalone gateway repo and the Universal Agent API
+The current authority set is split across the standalone gateway repo and the Unified Agent API
 repo cited by ADR-0041. Moving the gateway into the Substrate monorepo later, or vendoring it via
 submodule, does not change protocol ownership by itself. Repo packaging stays implementation
 topology, not contract truth.
@@ -73,10 +73,10 @@ topology, not contract truth.
 
 These are planning and verification anchors only. They describe where later implementation must align with `C-03`; they do not widen this slice into implementation work.
 
-- `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/lib.rs`
-- `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/session_selectors.rs`
-- `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/harness.rs`
-- `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/harness.rs`
+- `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/lib.rs`
+- `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/session_selectors.rs`
+- `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/harness.rs`
+- `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/harness.rs`
 - `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/src/structured_events.rs`
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs`
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-client/src/lib.rs`
@@ -89,18 +89,18 @@ The protocol baseline is only considered landed when the following verification 
 aligned:
 
 - `codex_backend_routes_through_harness_and_does_not_reintroduce_orchestration_primitives`
-  in `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/backend_contract.rs`
+  in `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/tests/backend_contract.rs`
 - `claude_backend_routes_through_harness_and_does_not_reintroduce_orchestration_primitives`
-  in `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/backend_contract.rs`
+  in `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/tests/backend_contract.rs`
 - `resume_v1_invalid_cases_rejected_with_pinned_messages` and
   `fork_v1_invalid_cases_rejected_with_pinned_messages`
-  in `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/session_selectors.rs`
+  in `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/session_selectors.rs`
 - event-order and safe-error regression coverage in:
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c1_codex_exec_policy.rs`
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c1_codex_stream_exec_adapter.rs`
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c5_claude_add_dirs_runtime_rejection.rs`
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c3_explicit_cancellation.rs`
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c3_explicit_cancellation_claude_code.rs`
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c1_codex_exec_policy.rs`
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c1_codex_stream_exec_adapter.rs`
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c5_claude_add_dirs_runtime_rejection.rs`
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c3_explicit_cancellation.rs`
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c3_explicit_cancellation_claude_code.rs`
 
 Pass/fail conditions:
 

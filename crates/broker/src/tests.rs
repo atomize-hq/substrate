@@ -112,6 +112,12 @@ fn effective_policy_display_json_v3(policy: &Policy) -> serde_json::Value {
             },
             "require_approval": policy.llm_require_approval,
             "allowed_backends": &policy.llm_allowed_backends,
+            "constraints": {
+                "routers": &policy.llm_constraints_routers,
+                "providers": &policy.llm_constraints_providers,
+                "protocols": &policy.llm_constraints_protocols,
+                "auth_authorities": &policy.llm_constraints_auth_authorities,
+            },
             "secrets": {
                 "env_allowed": &policy.llm_secrets_env_allowed,
             },
@@ -863,6 +869,7 @@ world_fs:
 }
 
 mod c0_policy_patch_only_broker_effective_resolution {
+    use crate::{validate_dotted_id, validate_snake_case_id};
     use serial_test::serial;
     use std::ffi::OsString;
     use std::path::{Path, PathBuf};
@@ -953,6 +960,32 @@ mod c0_policy_patch_only_broker_effective_resolution {
             .prefix(prefix)
             .tempdir_in(base)
             .expect("failed to allocate integration test temp dir")
+    }
+
+    fn repo_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .expect("canonicalize repo root")
+    }
+
+    fn read_repo_file(relative: &str) -> String {
+        std::fs::read_to_string(repo_root().join(relative))
+            .unwrap_or_else(|err| panic!("read {relative}: {err}"))
+    }
+
+    fn read_repo_json(relative: &str) -> serde_json::Value {
+        serde_json::from_str(&read_repo_file(relative))
+            .unwrap_or_else(|err| panic!("parse {relative} as JSON: {err}"))
+    }
+
+    fn task_by_id<'a>(tasks_json: &'a serde_json::Value, id: &str) -> &'a serde_json::Value {
+        tasks_json["tasks"]
+            .as_array()
+            .unwrap_or_else(|| panic!("tasks.json missing tasks array: {tasks_json}"))
+            .iter()
+            .find(|task| task.get("id").and_then(|value| value.as_str()) == Some(id))
+            .unwrap_or_else(|| panic!("tasks.json missing task {id}"))
     }
 
     struct Fixture {
@@ -1144,6 +1177,108 @@ world_fs:
     }
 
     #[test]
+    fn c0_itps0_contract_doc_locks_authoritative_surface_exit_codes_and_deny_patterns() {
+        let contract = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/contract.md",
+        );
+
+        for needle in [
+            "`substrate policy current show --explain` is the authoritative merged inspection surface for `llm.constraints.*`.",
+            "tuple-policy publication reuses the existing `identity_tuple` and `placement_posture` field family",
+            "tuple-policy schema invalidity maps to `2`",
+            "tuple-axis mismatch denial maps to `5`",
+            "effective gateway routing authority 'substrate_gateway' is not allowlisted by llm.constraints.routers",
+            "effective gateway protocol '<protocol>' is not allowlisted by llm.constraints.protocols",
+            "effective gateway provider '<provider>' is not allowlisted by llm.constraints.providers",
+            "effective gateway auth authority '<auth_authority>' is not allowlisted by llm.constraints.auth_authorities",
+        ] {
+            assert!(
+                contract.contains(needle),
+                "expected ITPS0 contract to contain {needle:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn c0_itps0_schema_doc_locks_owned_keys_defaults_replace_semantics_and_client_omission() {
+        let schema = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tuple-policy-schema-spec.md",
+        );
+
+        for needle in [
+            "`llm.constraints.routers`",
+            "`llm.constraints.providers`",
+            "`llm.constraints.protocols`",
+            "`llm.constraints.auth_authorities`",
+            "workspace patch replaces the same global key",
+            "Effective meaning of `[]`:\n- unconstrained on that axis",
+            "`client` is not a standalone policy key in v1.",
+            "- `llm.constraints.clients`",
+        ] {
+            assert!(
+                schema.contains(needle),
+                "expected ITPS0 schema spec to contain {needle:?}"
+            );
+        }
+        assert!(
+            !schema.contains("| `llm.constraints.clients` |"),
+            "schema spec must not introduce llm.constraints.clients as a canonical key"
+        );
+    }
+
+    #[test]
+    fn c0_itps0_schema_examples_match_snake_case_and_dotted_id_validators() {
+        for value in [
+            "substrate_gateway",
+            "openai",
+            "azure_openai",
+            "codex_subscription",
+            "openai_api_key",
+        ] {
+            validate_snake_case_id(value)
+                .unwrap_or_else(|err| panic!("expected valid snake_case id {value:?}: {err}"));
+        }
+        for value in [
+            "Substrate_Gateway",
+            "openai-responses",
+            "_openai",
+            "openai__api",
+            "openai_",
+        ] {
+            let err = validate_snake_case_id(value)
+                .expect_err("expected invalid snake_case example to fail");
+            assert!(
+                err.contains("expected lowercase snake_case id"),
+                "unexpected snake_case validation error for {value:?}: {err}"
+            );
+        }
+
+        for value in [
+            "openai.responses",
+            "openai.chat_completions",
+            "anthropic.messages",
+            "uaa.agent_session",
+        ] {
+            validate_dotted_id(value)
+                .unwrap_or_else(|err| panic!("expected valid dotted id {value:?}: {err}"));
+        }
+        for value in [
+            "openai",
+            "OpenAI.responses",
+            "openai..responses",
+            "openai.responses_v1.",
+            "openai.responses-v1",
+        ] {
+            let err =
+                validate_dotted_id(value).expect_err("expected invalid dotted-id example to fail");
+            assert!(
+                err.contains("expected lowercase dotted id"),
+                "unexpected dotted-id validation error for {value:?}: {err}"
+            );
+        }
+    }
+
+    #[test]
     #[serial]
     fn c0_policy_global_and_workspace_set_accepts_lacp0_keys() {
         let fixture = Fixture::new();
@@ -1224,6 +1359,276 @@ world_fs:
                 .pointer("/workflow/router/allowed_workflow_ids/0")
                 .and_then(|v| v.as_str()),
             Some("workflow-workspace")
+        );
+    }
+
+    #[test]
+    fn c1_itps1_policy_spec_locks_runtime_order_fail_early_rules_and_failure_buckets() {
+        let policy_spec = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/policy-spec.md",
+        );
+
+        for needle in [
+            "1. Validate gateway lifecycle config:",
+            "2. Resolve the selected backend inventory entry and apply `llm.allowed_backends` before tuple derivation begins.",
+            "4. Apply tuple-axis narrowing in this exact order:",
+            "- `llm.constraints.routers`",
+            "- `llm.constraints.protocols`",
+            "- `llm.constraints.providers`",
+            "- `llm.constraints.auth_authorities`",
+            "- blocked env auth is a policy denial",
+            "- partial env auth is invalid integration",
+            "- If the selected backend id is absent from `llm.allowed_backends`, evaluation stops before tuple-axis narrowing.",
+            "\"<backend_id> is not allowlisted by effective policy llm.allowed_backends\"",
+            "\"effective gateway routing authority '<value>' is not allowlisted by llm.constraints.routers\"",
+            "\"effective gateway protocol '<value>' is not allowlisted by llm.constraints.protocols\"",
+            "\"effective gateway provider is unresolved while llm.constraints.providers is constrained\"",
+            "\"effective gateway provider '<value>' is not allowlisted by llm.constraints.providers\"",
+            "\"effective gateway auth authority is unresolved while llm.constraints.auth_authorities is constrained\"",
+            "\"effective gateway auth authority '<value>' is not allowlisted by llm.constraints.auth_authorities\"",
+            "- the required world or gateway socket is missing",
+            "- connection refused",
+            "- timeout",
+            "- `substrate policy current show --explain` is the authoritative merged inspection surface for `llm.constraints.*`.",
+            "- Explain output for tuple-aware denials must identify the exact policy key that denied the route.",
+        ] {
+            assert!(
+                policy_spec.contains(needle),
+                "expected ITPS1 policy spec to contain {needle:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn c1_itps1_decision_register_locks_tuple_family_reuse_and_explain_surface_ownership() {
+        let decision_register = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/decision_register.md",
+        );
+
+        for needle in [
+            "### DR-ITPS-01 — Tuple-policy publication family (`identity_tuple` reuse vs trace-only tuple shape)",
+            "- **Selected:** Option A — Reuse `identity_tuple` and `placement_posture` across status, diagnostics, and trace.",
+            "One tuple vocabulary preserves semantic ownership and prevents schema drift across deny, status, and trace surfaces.",
+            "### DR-ITPS-02 — Authoritative inspection surface for `llm.constraints.*` (`policy current show --explain` vs config view)",
+            "- **Selected:** Option A — `substrate policy current show --explain` is the authoritative merged inspection surface.",
+            "Tuple-axis constraints are policy keys, and the policy effective view is already the merged explain surface that carries their provenance.",
+        ] {
+            assert!(
+                decision_register.contains(needle),
+                "expected ITPS1 decision register to contain {needle:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn c3_itps3_manual_validation_closure_locks_cross_platform_review_and_stale_reference_audits() {
+        let spec = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
+        );
+        let playbook = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/manual_testing_playbook.md",
+        );
+        let adr = read_repo_file(
+            "docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md",
+        );
+
+        for needle in [
+            "- `ITPS3` closes the manual review matrix for the authoritative `substrate policy current show --explain` surface, schema-invalid tuple-policy input, tuple-aware gateway status publication, and the router, provider, protocol, and auth-authority deny families.",
+            "- Validation closure covers Linux, macOS, and Windows as one operator contract, even when the execution substrate differs across world backends.",
+            "- Validation examples that mention paths such as `~/.codex/auth.json` remain validation-only examples and do not become new Substrate-owned path contracts.",
+            "- Validation closure includes one-owner-per-surface review across `contract.md`, `tuple-policy-schema-spec.md`, `policy-spec.md`, `telemetry-spec.md`, `compatibility-spec.md`, and `manual_testing_playbook.md`.",
+            "- Validation closure includes stale-reference review for overloaded `backend_id` wording, config-versus-policy inspection drift, and any wording that implies telemetry owns tuple semantics.",
+        ] {
+            assert!(
+                spec.contains(needle),
+                "expected ITPS3 spec to contain {needle:?}"
+            );
+        }
+
+        for needle in [
+            "Behavior-platform smoke coverage:",
+            "Windows smoke remains optional manual evidence for this pack and automates only the policy inspection plus schema-invalid checks because Windows is compile-parity only in `tasks.json`.",
+            "sections 6 through 8 remain the manual extension path for protocol mismatch, auth-authority mismatch, and validation-only auth-file review.",
+            "## One-owner-per-surface checklist",
+            "## Stale-reference checks",
+            "Accept only if `substrate policy current show --explain` is the authoritative merged view for `llm.constraints.*`.",
+            "rg -n '~/.codex/auth.json|codex_subscription|openai_api_key' \\",
+            "- `~/.codex/auth.json` appears only as illustrative validation input",
+            "- `tuple-policy-schema-spec.md` is the only owner of `llm.constraints.*` key grammar, defaults, and empty-list semantics.",
+            "- `policy-spec.md` is the only owner of tuple-axis evaluation ordering and deny taxonomy.",
+            "- `telemetry-spec.md` is the only owner of tuple-aware allow and deny publication rules.",
+            "- `compatibility-spec.md` is the only owner of additive rollout and promotion invariants.",
+        ] {
+            assert!(
+                playbook.contains(needle),
+                "expected ITPS3 manual playbook to contain {needle:?}"
+            );
+        }
+
+        for needle in [
+            "- `substrate policy current show --explain` is the authoritative merged inspection surface for `llm.constraints.*`.",
+            "- Linux:",
+            "- macOS:",
+            "- Windows:",
+            "- Same policy semantics as Linux.",
+            "- Codex + Responses API + `~/.codex/auth.json`, with `auth_authority` expressed separately from `provider`.",
+        ] {
+            assert!(
+                adr.contains(needle),
+                "expected ADR-0043 to contain {needle:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn c3_itps3_checkpoint_alignment_locks_single_post_itps3_boundary_and_task_wiring() {
+        let spec = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
+        );
+        let checkpoint_plan = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/ci_checkpoint_plan.md",
+        );
+        let tasks_json = read_repo_json(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/tasks.json",
+        );
+
+        for needle in [
+            "- `ITPS3` is the final slice before the only pre-planned CI checkpoint boundary for this feature.",
+            "- The accepted slice order remains `ITPS0`, `ITPS1`, `ITPS2`, `ITPS3`.",
+            "- `CP1-ci-checkpoint` is aligned to run after `ITPS3` and to validate the completed broker, shell, trace, and operator-contract seam together.",
+            "- `meta.checkpoint_boundaries = [\"ITPS3\"]` remains the required final-task wiring target once the single-writer planning lane materializes `tasks.json`.",
+            "- `ITPS3` does not create a second checkpoint or split the existing cross-platform gate into platform-local promotion paths.",
+        ] {
+            assert!(
+                spec.contains(needle),
+                "expected ITPS3 spec to contain {needle:?}"
+            );
+        }
+
+        for needle in [
+            "\"task_id\": \"CP1-ci-checkpoint\"",
+            "\"slices\": [\"ITPS0\", \"ITPS1\", \"ITPS2\", \"ITPS3\"]",
+            "Cross-platform validation after ITPS3 covers Linux/macOS feature behavior plus Linux/macOS/Windows compile parity",
+            "- Set `tasks.json` `meta.checkpoint_boundaries = [\"ITPS3\"]`.",
+        ] {
+            assert!(
+                checkpoint_plan.contains(needle),
+                "expected checkpoint plan to contain {needle:?}"
+            );
+        }
+
+        assert_eq!(
+            tasks_json["meta"]["checkpoint_boundaries"],
+            serde_json::json!(["ITPS3"]),
+            "tasks.json must keep ITPS3 as the sole checkpoint boundary"
+        );
+
+        let expected_depends_on = [
+            ("ITPS3-code", serde_json::json!(["ITPS2-integ"])),
+            ("ITPS3-test", serde_json::json!(["ITPS2-integ"])),
+            (
+                "ITPS3-integ-core",
+                serde_json::json!(["ITPS3-code", "ITPS3-test"]),
+            ),
+            ("CP1-ci-checkpoint", serde_json::json!(["ITPS3-integ-core"])),
+            ("ITPS3-integ-linux", serde_json::json!(["ITPS3-integ-core"])),
+            ("ITPS3-integ-macos", serde_json::json!(["ITPS3-integ-core"])),
+            (
+                "ITPS3-integ-windows",
+                serde_json::json!(["ITPS3-integ-core"]),
+            ),
+            (
+                "ITPS3-integ",
+                serde_json::json!([
+                    "ITPS3-integ-core",
+                    "ITPS3-integ-linux",
+                    "ITPS3-integ-macos",
+                    "ITPS3-integ-windows"
+                ]),
+            ),
+            ("FZ-feature-cleanup", serde_json::json!(["ITPS3-integ"])),
+        ];
+
+        for (task_id, expected) in expected_depends_on {
+            assert_eq!(
+                task_by_id(&tasks_json, task_id)["depends_on"],
+                expected,
+                "unexpected depends_on wiring for {task_id}"
+            );
+        }
+    }
+
+    #[test]
+    fn c3_itps3_promotion_packaging_extends_the_implemented_adr_0027_pack_without_reassigning_ownerships(
+    ) {
+        let spec = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/slices/ITPS3/ITPS3-spec.md",
+        );
+        let compatibility_spec = read_repo_file(
+            "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/compatibility-spec.md",
+        );
+        let implemented_contract = read_repo_file(
+            "docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/contract.md",
+        );
+        let implemented_schema = read_repo_file(
+            "docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/SCHEMA.md",
+        );
+
+        for needle in [
+            "- Promotion closes into the implemented ADR-0027 pack by extending its contract and schema surfaces with the tuple-axis policy additions locked by this feature.",
+            "- Promotion packaging requires the implemented ADR-0027 pack to absorb the authoritative policy inspection surface, tuple-axis schema tables, additive rollout wording, and validation-ready operator contract text.",
+            "- Promotion packaging does not move telemetry-field ownership out of `ITPS2`, does not move runtime-ordering ownership out of `ITPS1`, and does not create a second implemented pack for the same policy family.",
+        ] {
+            assert!(
+                spec.contains(needle),
+                "expected ITPS3 spec to contain {needle:?}"
+            );
+        }
+
+        for needle in [
+            "Promotion is complete only when the implemented ADR-0027 pack absorbs these additive surfaces:",
+            "- tuple-policy contract wording for `substrate policy current show --explain`",
+            "- schema tables for the four `llm.constraints.*` keys",
+            "- additive rollout wording that keeps policy files and precedence unchanged",
+            "Promotion does not move tuple semantics out of ADR-0042 or trace-envelope ownership out of ADR-0028.",
+            "- Promotion into the implemented ADR-0027 pack extends the existing policy system instead of creating a second one.",
+        ] {
+            assert!(
+                compatibility_spec.contains(needle),
+                "expected compatibility spec to contain {needle:?}"
+            );
+        }
+
+        for needle in [
+            "- `docs/project_management/adrs/draft/ADR-0043-adr-0027-identity-tuple-policy-surface.md`",
+            "- ADR-0043 extends the policy surface additively with tuple-axis constraints under `llm.constraints.*`.",
+        ] {
+            assert!(
+                implemented_contract.contains(needle),
+                "expected implemented ADR-0027 contract to contain {needle:?}"
+            );
+        }
+
+        for needle in [
+            "Phase 8 additive note:",
+            "- ADR-0043 extends this policy family with tuple-axis narrowing constraints under `llm.constraints`:",
+            "- `llm.constraints.routers`",
+            "- `llm.constraints.providers`",
+            "- `llm.constraints.protocols`",
+            "- `llm.constraints.auth_authorities`",
+            "- Those keys are additive follow-on policy surfaces. They are not implemented or fully specified by this pack, but they must be interpreted as narrowing constraints layered on top of backend/adapter allowlists.",
+        ] {
+            assert!(
+                implemented_schema.contains(needle),
+                "expected implemented ADR-0027 schema to contain {needle:?}"
+            );
+        }
+
+        assert!(
+            !repo_root()
+                .join("docs/project_management/packs/implemented/adr-0027-identity-tuple-policy-surface")
+                .exists(),
+            "promotion must extend the existing implemented ADR-0027 pack instead of creating a second implemented policy-pack directory"
         );
     }
 
@@ -1393,6 +1798,117 @@ workflow:
             explain_layers(&explain, "workflow.router.allowed_rule_ids"),
             vec!["workspace_patch".to_string()]
         );
+    }
+
+    #[test]
+    #[serial]
+    fn c0_policy_current_show_explain_treats_empty_tuple_constraint_lists_as_workspace_replacements(
+    ) {
+        for (key, pointer, global_value) in [
+            (
+                "llm.constraints.routers",
+                "/llm/constraints/routers",
+                "substrate_gateway",
+            ),
+            (
+                "llm.constraints.providers",
+                "/llm/constraints/providers",
+                "openai",
+            ),
+            (
+                "llm.constraints.protocols",
+                "/llm/constraints/protocols",
+                "openai.responses",
+            ),
+            (
+                "llm.constraints.auth_authorities",
+                "/llm/constraints/auth_authorities",
+                "openai_api_key",
+            ),
+        ] {
+            let fixture = Fixture::new();
+            fixture.write_workspace_marker();
+            fixture.write_global_policy(&format!(
+                "llm:\n  constraints:\n    {}:\n      - {}\n",
+                key.rsplit('.').next().expect("constraint leaf key"),
+                global_value
+            ));
+            fixture.write_workspace_policy(&format!(
+                "llm:\n  constraints:\n    {}: []\n",
+                key.rsplit('.').next().expect("constraint leaf key")
+            ));
+
+            let cwd = fixture.child_dir();
+            let output =
+                fixture.run_substrate(&cwd, &["policy", "current", "show", "--json", "--explain"]);
+            assert!(
+                output.status.success(),
+                "policy current show --explain should succeed for {key}: {output:?}"
+            );
+
+            let json: serde_json::Value =
+                serde_json::from_slice(&output.stdout).expect("policy JSON parse");
+            assert_eq!(
+                json.pointer(pointer),
+                Some(&serde_json::Value::Array(Vec::new())),
+                "expected workspace [] to replace global tuple constraint for {key}: {json}"
+            );
+
+            let explain: serde_json::Value =
+                serde_json::from_slice(&output.stderr).expect("policy explain JSON parse");
+            assert_eq!(
+                explain_layers(&explain, key),
+                vec!["workspace_patch".to_string()],
+                "expected explain provenance to show workspace replacement for {key}"
+            );
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn c0_policy_global_set_rejects_invalid_or_unknown_tuple_constraint_updates_with_exit_2() {
+        let fixture = Fixture::new();
+        fixture.write_workspace_marker();
+        let cwd = fixture.child_dir();
+
+        for (update, expected_hint) in [
+            (
+                "llm.constraints.routers=[\"Substrate_Gateway\"]",
+                "llm.constraints.routers",
+            ),
+            (
+                "llm.constraints.providers=[\"openai-responses\"]",
+                "llm.constraints.providers",
+            ),
+            (
+                "llm.constraints.protocols=[\"openai\"]",
+                "llm.constraints.protocols",
+            ),
+            (
+                "llm.constraints.auth_authorities=[\"OpenAI_API_Key\"]",
+                "llm.constraints.auth_authorities",
+            ),
+            (
+                "llm.constraints.clients=[\"human\"]",
+                "llm.constraints.clients",
+            ),
+        ] {
+            let output =
+                fixture.run_substrate(&cwd, &["policy", "global", "set", "--json", update]);
+            assert_eq!(
+                output.status.code(),
+                Some(2),
+                "tuple-constraint update should exit 2 for {update}: {output:?}"
+            );
+
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(
+                stderr.contains(expected_hint)
+                    || stderr.contains("invalid")
+                    || stderr.contains("unknown field"),
+                "stderr should explain the tuple-constraint failure for {update}\nstderr: {stderr}"
+            );
+        }
     }
 
     #[test]

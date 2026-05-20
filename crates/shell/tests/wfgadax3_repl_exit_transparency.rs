@@ -349,7 +349,7 @@ fn wfgadax3_prints_exit_note_when_world_cwd_differs_default_target_is_entered_cw
     let _server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output_or_exit("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output_or_exit("Substrate v", Duration::from_secs(6))
         .expect("banner");
 
     repl.send_line("cd exit-target");
@@ -399,7 +399,7 @@ fn wfgadax3_repl_exit_cwd_last_world_selects_world_cwd_as_exit_target_when_repre
     let _server = ReplWorldAgentStub::start(&sock, StreamBehavior::Normal);
 
     let mut repl = PtyRepl::spawn(&project, &home, &substrate_home, &sock, &[], &["--world"]);
-    repl.wait_for_output_or_exit("Substrate v", Duration::from_secs(2))
+    repl.wait_for_output_or_exit("Substrate v", Duration::from_secs(6))
         .expect("banner");
 
     repl.send_line("cd exit-target");

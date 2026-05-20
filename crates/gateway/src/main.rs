@@ -6,6 +6,7 @@ use tracing_subscriber::EnvFilter;
 mod auth;
 mod cli;
 mod core;
+mod launch;
 mod message_tracing;
 mod models;
 mod pid;
@@ -13,6 +14,8 @@ mod providers;
 mod router;
 mod server;
 mod structured_events;
+
+use launch::GatewayLaunchContract;
 
 const PROCESS_TRANSITION_GRACE_MS: u64 = 500;
 
@@ -42,7 +45,12 @@ async fn stop_service(pid: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn start_foreground(config: cli::AppConfig, config_path: PathBuf) -> anyhow::Result<()> {
+async fn start_foreground(
+    config: cli::AppConfig,
+    launch: GatewayLaunchContract,
+) -> anyhow::Result<()> {
+    let integrated_auth = server::IntegratedGatewayAuthContext::from_launch_mode(launch.mode)?;
+
     // Write PID file
     if let Err(e) = pid::write_pid() {
         eprintln!("Warning: Failed to write PID file: {}", e);
@@ -71,7 +79,7 @@ async fn start_foreground(config: cli::AppConfig, config_path: PathBuf) -> anyho
     println!();
     println!("Press Ctrl+C to stop");
 
-    let result = server::start_server(config, config_path).await;
+    let result = server::start_server(config, launch, integrated_auth).await;
     let _ = pid::cleanup_pid();
     result
 }
@@ -107,6 +115,24 @@ fn spawn_background_service(port: Option<u16>, config_path: Option<PathBuf>) -> 
     Ok(())
 }
 
+fn resolve_launch_and_config(
+    cli_config: Option<PathBuf>,
+) -> anyhow::Result<(GatewayLaunchContract, cli::AppConfig)> {
+    let launch = GatewayLaunchContract::resolve(
+        cli_config,
+        cli::AppConfig::default_path,
+        auth::token_store::TokenStore::default_path,
+    )?;
+    let config = cli::AppConfig::parse_file_without_env_resolution(&launch.config_path)?;
+    Ok((launch, config))
+}
+
+fn init_tracing(config: &cli::AppConfig) {
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(&config.server.log_level));
+    tracing_subscriber::fmt().with_env_filter(filter).init();
+}
+
 #[derive(Parser)]
 #[command(name = "substrate-gateway")]
 #[command(about = "Substrate Gateway - single public gateway identity built in Rust", long_about = None)]
@@ -115,7 +141,7 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
-    /// Path to configuration file (defaults to ~/.substrate-gateway/config.toml)
+    /// Path to configuration file (standalone-local default: ~/.substrate-gateway/config.toml)
     #[arg(short, long)]
     config: Option<PathBuf>,
 }
@@ -151,24 +177,11 @@ enum Commands {
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
-    // Get config path (use default if not specified)
-    let config_path = match &cli.config {
-        Some(path) => path.clone(),
-        None => {
-            cli::AppConfig::default_path().unwrap_or_else(|_| PathBuf::from("config/default.toml"))
-        }
-    };
-
-    // Load configuration
-    let config = cli::AppConfig::from_file(&config_path)?;
-
-    // Initialize tracing: RUST_LOG env var takes precedence, otherwise use config log_level
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&config.server.log_level));
-    tracing_subscriber::fmt().with_env_filter(filter).init();
-
     match cli.command {
         Commands::Start { port, detach } => {
+            let (launch, config) = resolve_launch_and_config(cli.config.clone())?;
+            init_tracing(&config);
+
             // If detached, spawn as background process
             if detach {
                 println!("Starting Substrate Gateway in background...");
@@ -185,7 +198,7 @@ async fn main() -> anyhow::Result<()> {
                 let _ = pid::cleanup_pid();
 
                 // Start in background
-                spawn_background_service(port, cli.config)?;
+                spawn_background_service(port, cli.config.clone())?;
                 tokio::time::sleep(tokio::time::Duration::from_millis(
                     PROCESS_TRANSITION_GRACE_MS,
                 ))
@@ -222,7 +235,7 @@ async fn main() -> anyhow::Result<()> {
                 let _ = pid::cleanup_pid();
             }
 
-            start_foreground(config, config_path).await?;
+            start_foreground(config, launch.clone()).await?;
         }
         Commands::Stop => {
             println!("Stopping Substrate Gateway...");
@@ -243,6 +256,9 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Restart { detach } => {
+            let (launch, config) = resolve_launch_and_config(cli.config.clone())?;
+            init_tracing(&config);
+
             // Stop the existing service
             let was_running = match pid::read_pid() {
                 Ok(pid) => {
@@ -267,7 +283,7 @@ async fn main() -> anyhow::Result<()> {
                 // Background mode
                 println!("Starting service in background...");
                 let port_from_config = Some(config.server.port);
-                spawn_background_service(port_from_config, cli.config)?;
+                spawn_background_service(port_from_config, cli.config.clone())?;
                 tokio::time::sleep(tokio::time::Duration::from_millis(
                     PROCESS_TRANSITION_GRACE_MS,
                 ))
@@ -281,7 +297,7 @@ async fn main() -> anyhow::Result<()> {
                 }
             } else {
                 // Foreground mode
-                start_foreground(config, config_path).await?;
+                start_foreground(config, launch.clone()).await?;
             }
         }
         Commands::Status => {
@@ -301,6 +317,9 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         Commands::Model => {
+            let (_launch, config) = resolve_launch_and_config(cli.config.clone())?;
+            init_tracing(&config);
+
             println!("📊 Model Configuration");
             println!();
             println!("Configured Models:");

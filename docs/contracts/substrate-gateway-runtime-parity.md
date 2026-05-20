@@ -19,10 +19,20 @@ Concrete rules:
 - Shell/operator entrypoints consume a typed runtime surface; they must not rebuild gateway state via raw exec probing, backend-private config files, or log scraping.
 - `crates/shell/src/builtins/world_gateway.rs` and later shell execution wiring are consumers of that typed surface. They may render operator output and exit codes, but they do not own runtime truth.
 - The typed runtime surface is owned by the world/backend boundary: `crates/world-agent`, shared request/response models in `crates/agent-api-types`, and transport helpers in `crates/agent-api-client`.
+- Non-isolated gateway lifecycle/status flows must not depend on reusable session-world creation or recovery when no world-backed isolation is required for the gateway runtime. In that posture, the typed runtime surface may use a stable synthetic runtime identity derived from the effective lifecycle binding inputs.
+- Isolated gateway lifecycle/status flows must continue to require a real compatible world/session identity and any required world-backed attachment primitives.
 - `substrate world gateway status --json` remains governed by `docs/contracts/substrate-gateway-status-schema.md`; this contract may not widen the JSON field list or redefine `client_wiring.*`.
 - Policy placement, fail-closed routing, secret delivery, and trust-boundary rules remain governed by `docs/contracts/substrate-gateway-policy-evaluation.md`.
 - The operator command family and exit taxonomy remain governed by `docs/contracts/substrate-gateway-operator-contract.md`, including exit `4` for the required gateway/world component unavailable posture.
 - Linux, macOS, and Windows must present one operator-facing lifecycle/status contract even when the underlying world transport differs.
+- This contract governs lifecycle/status semantics for whichever integrated backends the
+  implementation and compatibility surfaces currently support; it does not itself promote a
+  backend into the supported set.
+- The lifecycle launcher must honor the public `substrate-gateway` CLI contract when starting the runtime. Runtime bootstrap must not rely on a private argv layout or place gateway-global flags in positions the gateway CLI does not accept.
+- Runtime readiness truth is the managed gateway health endpoint: `GET /health` on the managed runtime endpoint returning HTTP `200`.
+- The readiness probe must behave like a normal HTTP client for that endpoint; it must not depend on private transport assumptions such as the server tolerating an early half-close on the client write side before it sends the response.
+- When lifecycle failures surface managed runtime artifact paths (for example `/run/substrate/substrate-gateway-runtime/.../stderr.log`), authorized operators must be able to read those artifacts through the supported host authorization boundary on that platform.
+- On Linux and the macOS Lima guest path, the managed runtime artifact boundary is the `substrate` group: runtime directories remain `0750`, runtime files remain `0640`, and these artifacts must not rely on world-readable permissions.
 - Platform transport and bootstrap mechanics may differ only in the hidden backend layer:
   - Linux uses direct Unix socket transport to `/run/substrate.sock`.
   - macOS uses Lima-backed forwarding to the guest `world-agent`.
@@ -34,6 +44,9 @@ Concrete rules:
 
 - This contract does not define the operator command family or exit codes beyond consuming them from the operator contract.
 - This contract does not define `status --json` fields beyond consuming the published schema contract.
+- This contract does not publish the supported integrated-backend matrix or require a first
+  additional-backend rollout baseline before lifecycle/status semantics are considered contract
+  complete.
 - This contract does not define provider, planner, or executor internals inside `substrate-gateway`.
 - This contract does not pull provisioning behavior into gateway lifecycle/status ownership.
 - This contract does not replace `docs/WORLD.md`, `docs/INSTALLATION.md`, or the Windows/macOS world setup guides as the source of transport and provisioning detail.
@@ -45,6 +58,7 @@ The later execution slices must keep the runtime/parity contract aligned across 
 - `crates/shell/src/builtins/world_gateway.rs`
 - `crates/shell/tests/world_gateway.rs`
 - `crates/world-agent/src/lib.rs`
+- `crates/world-agent/src/gateway_runtime.rs`
 - `crates/world-agent/tests/socket_activation.rs`
 - `crates/agent-api-types/src/lib.rs`
 - `crates/agent-api-client/src/lib.rs`

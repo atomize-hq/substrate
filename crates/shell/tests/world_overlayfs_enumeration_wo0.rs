@@ -49,6 +49,7 @@ fn world_doctor_json_includes_strategy_keys_per_adr_0004() {
     let _socket = AgentSocket::start(&socket_path, SocketResponse::Capabilities);
 
     let output = get_substrate_binary()
+        .current_dir(temp.path())
         .env("HOME", &home)
         .env("USERPROFILE", &home)
         .env("SUBSTRATE_HOME", home.join(".substrate"))
@@ -155,6 +156,7 @@ fn trace_command_complete_includes_world_fs_strategy_fields_and_enums() {
     fs::write(&trace_path, "").expect("seed trace log");
 
     get_substrate_binary()
+        .current_dir(temp.path())
         .env("HOME", &home)
         .env("USERPROFILE", &home)
         .env("SUBSTRATE_HOME", home.join(".substrate"))

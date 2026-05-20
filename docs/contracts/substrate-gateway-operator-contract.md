@@ -17,6 +17,9 @@ Rules:
 
 - `substrate world gateway status --json` is the authoritative machine-readable wiring surface.
 - Human-readable `substrate world gateway status` may abbreviate details, but it must not redefine the JSON wiring meaning.
+- `substrate world gateway status` may legitimately return unavailable before the first successful `sync`/`restart`, even when config/policy permit gateway lifecycle.
+- `substrate world gateway status` is observational only: it reports the current managed runtime posture and does not launch the gateway or wait for readiness.
+- When `substrate world gateway sync` or `restart` reports a managed runtime log path to inspect, that path is part of the Substrate-owned operator experience and must be inspectable by authorized operators without ad hoc root-only recovery steps.
 - The stable non-secret wiring env outputs remain:
   - `SUBSTRATE_LLM_OPENAI_BASE_URL`
   - `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`

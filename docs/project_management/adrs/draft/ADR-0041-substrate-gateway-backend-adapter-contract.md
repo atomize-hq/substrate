@@ -1,12 +1,14 @@
-# ADR-0041 — Substrate Gateway Backend Adapter Contract (Universal Agent API)
+# ADR-0041 — Substrate Gateway Backend Adapter Contract (Unified Agent API)
 
 ## Status
+
 - Status: Draft
 - Supersession note: This ADR supersedes the architectural intent of `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md` while leaving ADR-0024 in place as historical context for the original CLI-backend engine draft and archived planning set.
 - Date (UTC): 2026-04-02
 - Owner(s): Spenser McConnell (Substrate)
 
 ## Scope
+
 - Feature directory: `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/`
 - Sequencing spine: `docs/project_management/packs/sequencing.json`
 - Standards:
@@ -31,10 +33,10 @@ This ADR is a successor to ADR-0024 and should be read as a contract clarificati
   - `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/adr/0007-integrate-via-normalized-structured-events-not-raw-provider-streams.md`
   - `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/substrate-boundary-c05-contract.md`
   - `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/docs/foundation/substrate-structured-events-c06-contract.md`
-- Universal Agent API evidence:
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/docs/adr/0013-agent-api-backend-harness.md`
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/docs/adr/0015-universal-agent-api-session-extensions.md`
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/docs/adr/0017-universal-agent-api-session-thread-id-surfacing.md`
+- Unified Agent API evidence:
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/docs/adr/0013-agent-api-backend-harness.md`
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/docs/adr/0015-unified-agent-api-session-extensions.md`
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/docs/adr/0017-unified-agent-api-session-thread-id-surfacing.md`
 - Handoff evidence:
   - `.codex/handoffs/2026-04-02-144618-substrate-gateway-architecture-alignment.md`
 - Follow-on boundary ADR:
@@ -42,25 +44,28 @@ This ADR is a successor to ADR-0024 and should be read as a contract clarificati
 
 ## Executive Summary (Operator)
 
-ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb3539
+ADR_BODY_SHA256: 10d71a701199e24edda589d0bac6e8edcaf6c56de561e07c59b90aec3102f0d1
+
 ### Changes (operator-facing)
+
 - Replace the bespoke Substrate-local engine assumption with a gateway adapter contract
   - Existing: ADR-0024 frames backend execution as if Substrate should own a distinct `llm-manager` / per-CLI engine layer as the primary implementation path.
-  - New: `substrate-gateway` owns a backend-adapter layer that presents stable `<kind>:<name>` backend identities to Substrate and uses capability-driven adapters internally, with Universal Agent API style session/capability semantics preferred for CLI backends.
+  - New: `substrate-gateway` owns a backend-adapter layer that presents stable `<kind>:<name>` backend identities to Substrate and uses capability-driven adapters internally, with Unified Agent API style session/capability semantics preferred for CLI backends.
   - Why: This keeps backend identity stable, avoids coupling policy to provider implementation details, and matches the runtime ownership split clarified in ADR-0040.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
     - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/docs/adr/0013-agent-api-backend-harness.md`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/docs/adr/0015-universal-agent-api-session-extensions.md`
-    - `/Users/spensermcconnell/__Active_Code/codex-wrapper/docs/adr/0017-universal-agent-api-session-thread-id-surfacing.md`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/docs/adr/0013-agent-api-backend-harness.md`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/docs/adr/0015-unified-agent-api-session-extensions.md`
+    - `/Users/spensermcconnell/atomize-hq/unified-agent-api/docs/adr/0017-unified-agent-api-session-thread-id-surfacing.md`
 
 ## Problem / Context
+
 - ADR-0024 captured the right product goal: subscription-authenticated CLIs should be usable as provider backends without forcing API keys.
 - The architecture split has since sharpened:
   - Substrate owns the trusted boundary, backend allowlisting, and world placement / lifecycle.
   - `substrate-gateway` owns the in-world runtime that executes backend adapters.
-- The adjacent gateway and Universal Agent API work show a better implementation shape than a bespoke Substrate-local engine layer:
+- The adjacent gateway and Unified Agent API work show a better implementation shape than a bespoke Substrate-local engine layer:
   - one stable backend identity per capability,
   - adapter-level capabilities and session handles,
   - normalized request/event translation,
@@ -68,9 +73,10 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
 - Without a successor ADR, Substrate risks treating engine internals, provider quirks, or wrapper session details as if they were part of the authoritative policy surface.
 
 ## Goals
+
 - Keep backend ids stable in `<kind>:<name>` form and keep selection/allowlisting governed by ADR-0027.
 - Define a gateway adapter contract that lets `substrate-gateway` host CLI and API backend adapters without making Substrate aware of per-provider engine seams.
-- Prefer Universal Agent API style adapter semantics for CLI backends where available:
+- Prefer Unified Agent API style adapter semantics for CLI backends where available:
   - capability advertising,
   - versioned extension keys,
   - backend-defined session handles,
@@ -79,6 +85,7 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
 - Keep normalized structured events and canonical trace vocabulary delegated to ADR-0017 and ADR-0028.
 
 ## Non-Goals
+
 - Reintroducing a Substrate-owned `llm-manager` as the primary architecture seam.
 - Re-specifying config file families, key paths, precedence, or allowlist semantics already owned by ADR-0027.
 - Redefining output rendering, PTY passthrough, or structured event envelope semantics already owned by ADR-0017.
@@ -89,6 +96,7 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
 ## User Contract (Authoritative)
 
 ### CLI
+
 - Commands:
   - `substrate world gateway status`: continues to be the authoritative Substrate-owned status surface for gateway availability, routing posture, and backend capability visibility.
   - `substrate world gateway sync`: continues to ensure the in-world gateway runtime is running for the active world session and is the lifecycle entrypoint for adapter-backed operation.
@@ -102,6 +110,7 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
   - `5`: policy or safety failure
 
 ### Config
+
 - Files and locations (precedence):
   1. `$SUBSTRATE_HOME/config.yaml` and `<workspace_root>/.substrate/workspace.yaml`: operator-controlled selection surface
   2. `$SUBSTRATE_HOME/policy.yaml` and `<workspace_root>/.substrate/policy.yaml`: allowlists, fail-closed posture, and world-boundary requirements
@@ -114,6 +123,7 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
   - Gateway adapter internals, session mode selection, and provider-specific prompt shaping are implementation details of `substrate-gateway`.
 
 ### Platform guarantees
+
 - Linux:
   - When worlds are enabled and policy requires in-world execution, backend adapters execute inside the world boundary through `substrate-gateway`.
   - The Substrate-facing backend id remains stable even if the gateway switches internal provider, wrapper, or session strategy.
@@ -123,6 +133,7 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
   - The same backend identity and allowlist contract apply through the Windows world backend.
 
 ## Architecture Shape
+
 - Components:
   - `substrate-gateway` runtime: owns the backend adapter registry, request normalization, adapter dispatch, and response/event translation.
   - Gateway adapter implementations: one adapter per backend identity, with capability-driven execution semantics.
@@ -153,6 +164,7 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
     - Substrate-owned status / wiring / trace records
 
 ## Sequencing / Dependencies
+
 - Sequencing entry: `docs/project_management/packs/sequencing.json` → `llm-gateway-backend-adapter-contract` or the next available gateway backend slot
 - Prerequisite integration task IDs:
   - `ADR-0040` must land first so the gateway/runtime ownership split is fixed.
@@ -163,6 +175,7 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
 ## Work Lift (discovery estimate)
 
 <!-- PM_LIFT_VECTOR:BEGIN -->
+
 ```json
 {
   "model_version": 1,
@@ -194,9 +207,11 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
   "notes": "Contract clarification only; implementation work is intentionally deferred to the gateway/runtime adapter layer."
 }
 ```
+
 <!-- PM_LIFT_VECTOR:END -->
 
 ## Security / Safety Posture
+
 - Fail-closed rules:
   - Backend selection MUST fail closed if `llm.allowed_backends` does not include the requested `<kind>:<name>`.
   - Backend selection MUST fail closed if the adapter is missing, unsupported, or cannot satisfy required capabilities.
@@ -211,6 +226,7 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
 ## Validation Plan (Authoritative)
 
 ### Tests
+
 - Unit tests:
   - ADR review checklist against the ownership split:
     - Substrate owns selection, allowlisting, lifecycle, and operator-visible status.
@@ -221,10 +237,11 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
   - Not required for this ADR draft.
 
 ### Manual validation
+
 - Compare this ADR against:
   - `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
   - `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
-  - the codex-wrapper UAA ADRs
+  - the unified-agent-api UAA ADRs
   - the gateway boundary evidence in `kimi-claude-adapter`
 - Confirm there is no remaining ambiguity about who owns:
   - backend identity
@@ -235,19 +252,21 @@ ADR_BODY_SHA256: b67de05fbeaa80aec80f5e36ed4bd523526afb01a250f3eab944800db6bb353
   - operator-visible status
 
 ## Rollout / Backwards Compatibility
+
 - This ADR is additive in intent and clarifies the gateway backend adapter contract rather than changing the external backend identity model.
 - ADR-0024 should be treated as superseded in architectural intent once this ADR is accepted.
 - Existing operator workflows remain valid, but the implementation path is now explicit:
   - Substrate keeps the stable control boundary.
   - `substrate-gateway` hosts adapter internals.
-  - Universal Agent API style adapter semantics are preferred for CLI backends where supported.
+  - Unified Agent API style adapter semantics are preferred for CLI backends where supported.
 
 ## Decision Summary
+
 - Decision Register entries (if applicable):
   - None required for this contract clarification draft.
 - Options (required; at least two):
-  - A) Gateway-hosted, capability-driven backend adapters with Universal Agent API style session semantics.
+  - A) Gateway-hosted, capability-driven backend adapters with Unified Agent API style session semantics.
   - B) Bespoke Substrate-local engine contracts per provider or CLI.
 - Selection:
   - Chosen: A
-  - Rationale: This preserves stable backend identity, keeps policy surfaces simple, fits the clarified gateway ownership split, and aligns the CLI backend path with the Universal Agent API direction already established in `codex-wrapper`.
+  - Rationale: This preserves stable backend identity, keeps policy surfaces simple, fits the clarified gateway ownership split, and aligns the CLI backend path with the Unified Agent API direction already established in `unified-agent-api`.

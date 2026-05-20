@@ -46,7 +46,7 @@ execution_horizon:
   - `docs/contracts/substrate-gateway-status-schema.md`
   - `docs/contracts/substrate-gateway-policy-evaluation.md`
   - `docs/contracts/substrate-gateway-runtime-parity.md`
-  - Universal Agent API evidence from `codex-wrapper`
+  - Unified Agent API evidence from `unified-agent-api`
   - gateway boundary evidence from `kimi-claude-adapter`
 - **Known unknowns / risks**:
   - ADR-0040 alignment remains evidence-only and future runtime-boundary drift would still require owner-led revalidation

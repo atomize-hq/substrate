@@ -3,8 +3,9 @@ use super::{
     error::ProviderError, AnthropicCompatibleProvider, GatewayProvider, OpenAIProvider,
     OpenAIProviderConfig, OpenAITransport, ProviderConfig,
 };
-use crate::auth::TokenStore;
+use crate::auth::{CodexAuthSource, CodexAuthState, TokenStore};
 use crate::cli::ModelConfig;
+use crate::launch::GatewayMode;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -13,6 +14,29 @@ const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 
 /// GitHub repository URL (used in HTTP-Referer headers)
 const REPO_URL: &str = "https://github.com/elidickinson/claude-code-mux";
+
+fn codex_auth_source_for_openai_oauth(
+    config: &ProviderConfig,
+    gateway_mode: GatewayMode,
+) -> Result<Option<CodexAuthSource>, ProviderError> {
+    if config.provider_type != "openai" || config.auth_type != super::AuthType::OAuth {
+        return Ok(None);
+    }
+
+    let source = match gateway_mode {
+        GatewayMode::InWorld => CodexAuthSource::Integrated,
+        GatewayMode::HostOnly => CodexAuthSource::StandaloneLocal {
+            path: CodexAuthState::default_path().map_err(|e| {
+                ProviderError::ConfigError(format!(
+                    "Failed to resolve standalone Codex auth path for provider '{}': {}",
+                    config.name, e
+                ))
+            })?,
+        },
+    };
+
+    Ok(Some(source))
+}
 
 /// Provider registry that manages all configured providers
 pub struct ProviderRegistry {
@@ -46,6 +70,18 @@ impl ProviderRegistry {
         token_store: Option<TokenStore>,
         models: &[ModelConfig],
     ) -> Result<Self, ProviderError> {
+        let gateway_mode = GatewayMode::from_env_or_default().map_err(|e| {
+            ProviderError::ConfigError(format!("Failed to resolve gateway launch mode: {}", e))
+        })?;
+        Self::from_configs_with_models_and_mode(configs, token_store, models, gateway_mode)
+    }
+
+    pub(crate) fn from_configs_with_models_and_mode(
+        configs: &[ProviderConfig],
+        token_store: Option<TokenStore>,
+        models: &[ModelConfig],
+        gateway_mode: GatewayMode,
+    ) -> Result<Self, ProviderError> {
         let mut registry = Self::new();
 
         for config in configs {
@@ -72,6 +108,8 @@ impl ProviderRegistry {
                 }
             };
 
+            let codex_auth_source = codex_auth_source_for_openai_oauth(config, gateway_mode)?;
+
             // Create provider instance based on type
             let provider: Box<dyn GatewayProvider> = match config.provider_type.as_str() {
                 // OpenAI-compatible providers (unified with custom headers support)
@@ -95,6 +133,7 @@ impl ProviderRegistry {
                         custom_headers,
                         oauth_provider: config.oauth_provider.clone(),
                         token_store: token_store.clone(),
+                        codex_auth_source,
                     }))
                 }
 
@@ -126,6 +165,7 @@ impl ProviderRegistry {
                             custom_headers,
                             oauth_provider: config.oauth_provider.clone(),
                             token_store: token_store.clone(),
+                            codex_auth_source: None,
                         },
                     ))
                 }
@@ -147,6 +187,7 @@ impl ProviderRegistry {
                     ],
                     oauth_provider: config.oauth_provider.clone(),
                     token_store: token_store.clone(),
+                    codex_auth_source: None,
                 })),
 
                 // Deprecated aliases for OpenAI-compatible providers
@@ -202,6 +243,7 @@ impl ProviderRegistry {
                         custom_headers: headers_vec,
                         oauth_provider: config.oauth_provider.clone(),
                         token_store: token_store.clone(),
+                        codex_auth_source: None,
                     }))
                 }
 

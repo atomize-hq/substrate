@@ -3,9 +3,10 @@
 #[path = "common.rs"]
 mod common;
 
-use common::{substrate_shell_driver, temp_dir};
+use common::substrate_shell_driver;
 use std::fs;
 use std::path::{Path, PathBuf};
+use tempfile::Builder;
 
 fn manager_manifest_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/manager_hooks.yaml")
@@ -82,7 +83,10 @@ fn base_env_cmd(
 
 #[test]
 fn fail_closed_routing_true_exits_3_when_world_socket_unavailable() {
-    let temp = temp_dir("substrate-i1-fail-closed-routing-");
+    let temp = Builder::new()
+        .prefix("substrate-i1-fail-closed-routing-")
+        .tempdir_in("/tmp")
+        .expect("failed to allocate integration test temp dir");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     fs::create_dir_all(&home).expect("create home");
@@ -124,7 +128,10 @@ fn fail_closed_routing_true_exits_3_when_world_socket_unavailable() {
 
 #[test]
 fn require_world_false_warns_once_and_falls_back_to_host_when_world_socket_unavailable() {
-    let temp = temp_dir("substrate-i1-optional-world-");
+    let temp = Builder::new()
+        .prefix("substrate-i1-optional-world-")
+        .tempdir_in("/tmp")
+        .expect("failed to allocate integration test temp dir");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     fs::create_dir_all(&home).expect("create home");

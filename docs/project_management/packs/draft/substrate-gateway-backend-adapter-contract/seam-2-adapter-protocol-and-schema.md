@@ -61,7 +61,7 @@ open_remediations:
     - `C-02`
     - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md`
     - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
-    - Universal Agent API evidence referenced by ADR-0041
+    - Unified Agent API evidence referenced by ADR-0041
   - Outputs:
     - `C-03`
     - `C-04`
@@ -76,7 +76,7 @@ open_remediations:
     - `SEAM-1` closeout must remain the current published source for the stable selection contract and the adapter-visible status publication boundary
   - Transitive blockers:
     - ADR-0017 or ADR-0028 wording drift could collapse the intended local-to-external handoff line
-    - unresolved Universal Agent API subset choices could force a schema split or resequencing
+    - unresolved Unified Agent API subset choices could force a schema split or resequencing
   - Direct consumers:
     - `SEAM-3`
   - Derived consumers:
@@ -126,7 +126,7 @@ open_remediations:
   - What the first seam-local review should focus on
     - dispatch lifecycle
     - fail-closed capability order
-    - adopted Universal Agent API subset
+    - adopted Unified Agent API subset
     - session-handle boundary
     - exact ADR-0017 / ADR-0028 handoff wording
 - **Expected seam-exit concerns**:

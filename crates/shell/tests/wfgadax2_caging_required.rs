@@ -65,7 +65,10 @@ fn base_env_cmd(
 
 #[test]
 fn wfgadax2_control_caged_required_allows_caged_workspace_execution() {
-    let temp = temp_dir("substrate-wfgadax2-control-");
+    let temp = Builder::new()
+        .prefix("substrate-wfgadax2-control-")
+        .tempdir_in("/tmp")
+        .expect("create control tempdir");
     let home = temp.path().join("home");
     let project = temp.path().join("project");
     let substrate_home = home.join(".substrate");

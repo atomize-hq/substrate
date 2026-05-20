@@ -1,4 +1,8 @@
+#[doc(hidden)]
+pub mod agent_dev_support;
 pub mod agent_events;
+pub(crate) mod agent_inventory;
+pub(crate) mod agent_runtime;
 mod agents_cmd;
 mod auto_sync;
 mod cli;
@@ -29,6 +33,7 @@ mod value_parse;
 mod workspace;
 mod workspace_cmd;
 
+pub(crate) use agents_cmd::handle_agent_command;
 pub(crate) use agents_cmd::handle_agents_command;
 pub(crate) use auto_sync::run_auto_sync_if_enabled;
 pub use cli::*;

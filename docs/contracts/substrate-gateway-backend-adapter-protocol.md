@@ -20,6 +20,8 @@ Concrete rules:
   contract has been accepted as a fixed input.
 - One selected backend id maps to one adapter dispatch target for the duration of a run. Internal
   provider or wrapper mechanics remain hidden behind that adapter identity.
+- If adapter resolution fails for a backend id that has already passed selection and allowlist
+  validation, the outcome is dependency unavailable rather than invalid selection.
 - The protocol lifecycle is:
   1. resolve the adapter for the already-selected backend id
   2. load the adapter capability advertisement for the adopted capability subset
@@ -30,7 +32,7 @@ Concrete rules:
   7. surface one completion result and any bounded metadata attached to that completion
 - Unsupported extension keys and unsupported required capabilities fail closed before any adapter
   process is started.
-- Extension-value validation uses closed `.v1` schema rules where the adopted Universal Agent API
+- Extension-value validation uses closed `.v1` schema rules where the adopted Unified Agent API
   owner docs pin them.
 - Session resume and fork selectors are mutually exclusive.
 - Session-handle metadata is gateway-contract data only. It must not be treated as policy input,
@@ -68,6 +70,8 @@ The local-to-external handoff is explicit:
 
 - This contract does not redefine the stable backend-id grammar or allowlist order. That remains
   owned by `docs/contracts/substrate-gateway-backend-adapter-selection.md`.
+- This contract consumes the upstream invalid-selection, dependency-unavailable, and policy-denial
+  buckets; adapter lookup must not reinterpret backend-id grammar or allowlist policy locally.
 - This contract does not widen the machine-readable status boundary. That remains owned by
   `docs/contracts/substrate-gateway-status-schema.md`.
 - This contract does not define provider-specific routing strategy, planner/executor role splits,
@@ -82,5 +86,5 @@ The implementation and verification surfaces for this contract are expected to s
 
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-protocol-spec.md`
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
-- the Universal Agent API normative specs and backend harnesses cited by ADR-0041
+- the Unified Agent API normative specs and backend harnesses cited by ADR-0041
 - the standalone gateway structured-event normalization surfaces cited by ADR-0041

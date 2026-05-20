@@ -1,18 +1,52 @@
 use async_trait::async_trait;
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine as _;
+use mockito::Server;
+use once_cell::sync::Lazy;
+use secrecy::ExposeSecret;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::env;
+use std::fs;
+#[cfg(unix)]
+use std::io::{Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::fd::IntoRawFd;
+use std::path::PathBuf;
+#[cfg(unix)]
+use substrate_common::{
+    GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
+    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+    SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+};
+use substrate_gateway::auth::CodexAuthSource;
 use substrate_gateway::core::{
     GatewayRequest, GatewayResponse, GatewayStreamResponse, GatewayUsage,
 };
+#[cfg(unix)]
+use substrate_gateway::launch::GatewayMode;
 use substrate_gateway::models::{ContentBlock, MessageContent};
 use substrate_gateway::providers::error::ProviderError;
 use substrate_gateway::providers::{GatewayProvider, ProviderRegistry};
 use substrate_gateway::server::openai_conformance_test_support::{
-    read_json_fixture, response_text, ConformanceHarness, FixtureNamespace, StubProvider,
+    read_json_fixture, response_text, response_text_response, ConformanceHarness, FixtureNamespace,
+    StubProvider,
 };
+#[cfg(unix)]
+use substrate_gateway::server::IntegratedGatewayAuthContext;
+use tempfile::TempDir;
+use tokio::sync::Mutex;
+
+const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
+const SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID: &str =
+    "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID";
+const SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN: &str =
+    "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN";
 
 type CapturedRequests = std::sync::Arc<std::sync::Mutex<Vec<GatewayRequest>>>;
+
+static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 #[derive(Debug, Deserialize)]
 struct ChatSyncFixture {
@@ -37,7 +71,7 @@ fn chat_sync_fixture() -> ChatSyncFixture {
 }
 
 fn responses_sync_fixture() -> ResponsesSyncFixture {
-    read_json_fixture(FixtureNamespace::OpenAiResponses, "sync-text.json")
+    read_json_fixture(FixtureNamespace::OpenAiResponses, "codex-sync-text.json")
 }
 
 fn chat_stream_fixture() -> ChatStreamFixture {
@@ -45,7 +79,8 @@ fn chat_stream_fixture() -> ChatStreamFixture {
 }
 
 fn responses_stream_fixture_request() -> Value {
-    read_json_fixture::<Value>(FixtureNamespace::OpenAiResponses, "stream-mixed.json")["request"]
+    read_json_fixture::<Value>(FixtureNamespace::OpenAiResponses, "codex-stream-mixed.json")
+        ["request"]
         .clone()
 }
 
@@ -77,6 +112,30 @@ fn routing_header(provider: &str) -> HeaderMap {
 
 fn build_single_provider_harness(provider: StubProvider) -> ConformanceHarness {
     ConformanceHarness::single_provider(provider, "primary-actual", false)
+}
+
+fn build_codex_oauth_provider_harness(
+    base_url: &str,
+    actual_model: &str,
+    codex_auth_source: CodexAuthSource,
+) -> ConformanceHarness {
+    let provider = CodexAuthProbeProvider {
+        base_url: base_url.to_string(),
+        actual_model: actual_model.to_string(),
+        codex_auth_source,
+    };
+    let mut registry = ProviderRegistry::new();
+    registry.insert_provider_for_tests("codex-auth-probe", Box::new(provider));
+    ConformanceHarness::with_registry(
+        "gateway-default",
+        registry,
+        vec![substrate_gateway::cli::ModelMapping {
+            priority: 1,
+            provider: "codex-auth-probe".to_string(),
+            actual_model: actual_model.to_string(),
+            inject_continuation_prompt: false,
+        }],
+    )
 }
 
 fn build_multi_provider_harness(
@@ -135,6 +194,13 @@ fn make_failure_provider() -> FailingProvider {
     }
 }
 
+fn make_auth_failure_provider() -> FailingProvider {
+    FailingProvider {
+        api_status: 401,
+        message: "unauthorized".to_string(),
+    }
+}
+
 fn reasoning_sync_response() -> GatewayResponse {
     GatewayResponse {
         id: "resp_reasoning_sync".to_string(),
@@ -189,6 +255,184 @@ fn assert_provider_error_shape(json: &Value, class: &str, message: &str) {
     assert_eq!(json["error"]["message"], message);
 }
 
+fn codex_sync_sse_body(text: &str) -> String {
+    format!(
+        "event: response.completed\ndata: {}\n\n",
+        json!({
+            "type": "response.completed",
+            "response": {
+                "id": "resp_codex_auth",
+                "model": "gpt-5-codex",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": text
+                            }
+                        ]
+                    }
+                ],
+                "usage": {
+                    "input_tokens": 4,
+                    "output_tokens": 2
+                }
+            }
+        })
+    )
+}
+
+fn codex_access_token(account_id: &str) -> String {
+    let payload = serde_json::json!({
+        "https://api.openai.com/auth": {
+            "chatgpt_account_id": account_id
+        }
+    });
+    let encoded_payload = URL_SAFE_NO_PAD.encode(payload.to_string());
+    format!("header.{}.signature", encoded_payload)
+}
+
+fn write_codex_auth_state(home: &TempDir, account_id: Option<&str>, access_token: &str) -> PathBuf {
+    let codex_dir = home.path().join(".codex");
+    fs::create_dir_all(&codex_dir).unwrap();
+    let auth_path = codex_dir.join("auth.json");
+    let payload = match account_id {
+        Some(account_id) => json!({
+            "account_id": account_id,
+            "access_token": access_token
+        }),
+        None => json!({
+            "access_token": access_token
+        }),
+    };
+    fs::write(auth_path, serde_json::to_vec(&payload).unwrap()).unwrap();
+    codex_dir.join("auth.json")
+}
+
+struct EnvVarGuard {
+    key: &'static str,
+    original: Option<String>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: impl Into<String>) -> Self {
+        let original = env::var(key).ok();
+        env::set_var(key, value.into());
+        Self { key, original }
+    }
+
+    fn unset(key: &'static str) -> Self {
+        let original = env::var(key).ok();
+        env::remove_var(key);
+        Self { key, original }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match self.original.as_deref() {
+            Some(value) => env::set_var(self.key, value),
+            None => env::remove_var(self.key),
+        }
+    }
+}
+
+#[cfg(unix)]
+struct GatewayAuthBundleFdGuard {
+    original: Option<String>,
+}
+
+#[cfg(unix)]
+impl GatewayAuthBundleFdGuard {
+    fn install(bundle: GatewayAuthBundleV1) -> Self {
+        let mut file = tempfile::tempfile().expect("create auth bundle tempfile");
+        serde_json::to_writer(&mut file, &bundle).expect("serialize auth bundle");
+        file.flush().expect("flush auth bundle");
+        file.seek(SeekFrom::Start(0))
+            .expect("rewind auth bundle tempfile");
+        let raw_fd = file.into_raw_fd();
+
+        let original = env::var(SUBSTRATE_LLM_AUTH_BUNDLE_FD).ok();
+        env::set_var(SUBSTRATE_LLM_AUTH_BUNDLE_FD, raw_fd.to_string());
+        Self { original }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for GatewayAuthBundleFdGuard {
+    fn drop(&mut self) {
+        match self.original.as_deref() {
+            Some(value) => env::set_var(SUBSTRATE_LLM_AUTH_BUNDLE_FD, value),
+            None => env::remove_var(SUBSTRATE_LLM_AUTH_BUNDLE_FD),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct CodexAuthProbeProvider {
+    base_url: String,
+    actual_model: String,
+    codex_auth_source: CodexAuthSource,
+}
+
+#[async_trait]
+impl GatewayProvider for CodexAuthProbeProvider {
+    async fn send_message(
+        &self,
+        _request: GatewayRequest,
+    ) -> Result<GatewayResponse, ProviderError> {
+        let auth_context = self.codex_auth_source.resolve().map_err(|e| {
+            ProviderError::AuthError(format!("Failed to resolve Codex auth context: {}", e))
+        })?;
+
+        let response = reqwest::Client::new()
+            .post(format!("{}/backend-api/codex/responses", self.base_url))
+            .header(
+                "Authorization",
+                format!("Bearer {}", auth_context.access_token.expose_secret()),
+            )
+            .header("ChatGPT-Account-ID", auth_context.account_id)
+            .header("Content-Type", "application/json")
+            .body("{}")
+            .send()
+            .await
+            .map_err(ProviderError::HttpError)?;
+
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(ProviderError::ApiError { status, message });
+        }
+
+        let body = response.text().await.map_err(ProviderError::HttpError)?;
+        Ok(response_text_response(&body, &self.actual_model))
+    }
+
+    async fn send_message_stream(
+        &self,
+        _request: GatewayRequest,
+    ) -> Result<GatewayStreamResponse, ProviderError> {
+        Err(ProviderError::ConfigError(
+            "Codex auth probe provider does not support streaming".to_string(),
+        ))
+    }
+
+    async fn count_tokens(
+        &self,
+        _request: substrate_gateway::models::CountTokensRequest,
+    ) -> Result<substrate_gateway::models::CountTokensResponse, ProviderError> {
+        Ok(substrate_gateway::models::CountTokensResponse { input_tokens: 0 })
+    }
+
+    fn supports_model(&self, model: &str) -> bool {
+        model == self.actual_model
+    }
+}
+
 #[tokio::test]
 async fn model_echo_is_shared_across_endpoints() {
     let chat_fixture = chat_sync_fixture();
@@ -231,6 +475,67 @@ async fn model_echo_is_shared_across_endpoints() {
         let responses_requests = responses_requests.lock().unwrap();
         assert_eq!(responses_requests.len(), 1);
         assert_eq!(responses_requests[0].model, "primary-actual");
+    }
+}
+
+#[tokio::test]
+async fn responses_sync_and_stream_requests_preserve_explicit_tool_choice_metadata() {
+    let harness = build_single_provider_harness(StubProvider::new(
+        reasoning_sync_response(),
+        reasoning_stream_chunks(),
+    ));
+
+    let base_request = serde_json::json!({
+        "model": "gateway-default",
+        "input": "hello",
+        "tools": [
+            { "type": "function", "function": { "name": "alpha", "parameters": {"type":"object"} } },
+            { "type": "function", "function": { "name": "beta", "parameters": {"type":"object"} } }
+        ],
+        "tool_choice": { "type": "function", "function": { "name": "beta" } }
+    });
+
+    let sync_response = harness
+        .invoke_responses(HeaderMap::new(), {
+            let mut request = base_request.clone();
+            request["stream"] = serde_json::json!(false);
+            request
+        })
+        .await;
+    assert_eq!(sync_response.status(), StatusCode::OK);
+
+    let stream_response = harness
+        .invoke_responses(HeaderMap::new(), {
+            let mut request = base_request;
+            request["stream"] = serde_json::json!(true);
+            request
+        })
+        .await;
+    assert_eq!(stream_response.status(), StatusCode::OK);
+
+    let captured_requests = harness.captured_requests();
+    let captured_requests = captured_requests.lock().unwrap();
+    assert_eq!(captured_requests.len(), 2);
+
+    for captured in captured_requests.iter() {
+        assert_eq!(
+            captured
+                .metadata
+                .as_ref()
+                .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY)),
+            Some(&serde_json::json!({
+                "type": "function",
+                "function": { "name": "beta" }
+            }))
+        );
+        assert_eq!(captured.tools.as_ref().map(|tools| tools.len()), Some(1));
+        assert_eq!(
+            captured
+                .tools
+                .as_ref()
+                .and_then(|tools| tools[0].name.as_deref()),
+            Some("beta")
+        );
     }
 }
 
@@ -322,7 +627,7 @@ async fn responses_direct_fallback_streaming_preserves_sse_contract() {
             "unused",
             "gateway-direct",
         ),
-        read_json_fixture::<Value>(FixtureNamespace::OpenAiResponses, "stream-text.json")
+        read_json_fixture::<Value>(FixtureNamespace::OpenAiResponses, "codex-stream-text.json")
             ["provider_stream_chunks"]
             .as_array()
             .expect("stream fixture chunks")
@@ -652,6 +957,289 @@ async fn provider_failure_maps_to_shared_502_envelope() {
         chat_json["error"]["message"],
         responses_json["error"]["message"]
     );
+}
+
+#[tokio::test]
+async fn provider_auth_failure_maps_to_shared_auth_envelope() {
+    let harness = ConformanceHarness::with_registry(
+        "gateway-default",
+        {
+            let mut registry = ProviderRegistry::new();
+            registry
+                .insert_provider_for_tests("test-provider", Box::new(make_auth_failure_provider()));
+            registry
+        },
+        vec![substrate_gateway::cli::ModelMapping {
+            priority: 1,
+            provider: "test-provider".to_string(),
+            actual_model: "primary-actual".to_string(),
+            inject_continuation_prompt: false,
+        }],
+    );
+
+    let response = harness
+        .invoke_responses(HeaderMap::new(), responses_sync_request())
+        .await;
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+
+    let body = response_text(response).await;
+    assert!(
+        !body.contains("unauthorized"),
+        "auth failures should remain redacted"
+    );
+
+    let json: Value = serde_json::from_str(&body).expect("auth failure response body must be JSON");
+    assert_provider_error_shape(&json, "auth", "Authentication failed");
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn integrated_gateway_startup_reads_cli_codex_bundle_once_from_pointer_env() {
+    let _guard = ENV_LOCK.lock().await;
+    let _openai = EnvVarGuard::unset("OPENAI_API_KEY");
+    let _account_id = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
+    let _access_token = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
+    let _bundle = GatewayAuthBundleFdGuard::install(GatewayAuthBundleV1 {
+        schema_version: 1,
+        backend_id: GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX.to_string(),
+        fields: std::collections::HashMap::from([
+            (
+                SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID.to_string(),
+                "acct_bundle_explicit".to_string(),
+            ),
+            (
+                SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN.to_string(),
+                codex_access_token("acct_bundle_jwt"),
+            ),
+        ]),
+    });
+
+    let context = IntegratedGatewayAuthContext::from_launch_mode(GatewayMode::InWorld)
+        .expect("read cli:codex auth bundle")
+        .expect("in-world startup should produce integrated auth context");
+    match context {
+        IntegratedGatewayAuthContext::CliCodex(handoff) => {
+            let expected_access_token = codex_access_token("acct_bundle_jwt");
+            assert_eq!(handoff.account_id.as_deref(), Some("acct_bundle_explicit"));
+            assert_eq!(
+                handoff.access_token.expose_secret(),
+                expected_access_token.as_str()
+            );
+        }
+        other => panic!("unexpected integrated auth context: {other:?}"),
+    }
+
+    assert!(
+        env::var(SUBSTRATE_LLM_AUTH_BUNDLE_FD).is_err(),
+        "pointer env should be consumed on first read"
+    );
+
+    let err = IntegratedGatewayAuthContext::from_launch_mode(GatewayMode::InWorld)
+        .expect_err("second read should fail after pointer env is consumed");
+    assert!(err.to_string().contains("missing pointer env"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn integrated_gateway_startup_reads_openai_bundle_without_secret_env_fallback() {
+    let _guard = ENV_LOCK.lock().await;
+    let _openai = EnvVarGuard::unset("OPENAI_API_KEY");
+    let _bundle = GatewayAuthBundleFdGuard::install(GatewayAuthBundleV1 {
+        schema_version: 1,
+        backend_id: GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI.to_string(),
+        fields: std::collections::HashMap::from([(
+            SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY.to_string(),
+            "sk-openai-bundle".to_string(),
+        )]),
+    });
+
+    let context = IntegratedGatewayAuthContext::from_launch_mode(GatewayMode::InWorld)
+        .expect("read api:openai auth bundle")
+        .expect("in-world startup should produce integrated auth context");
+    match context {
+        IntegratedGatewayAuthContext::ApiOpenAI { api_key } => {
+            assert_eq!(api_key, "sk-openai-bundle");
+        }
+        other => panic!("unexpected integrated auth context: {other:?}"),
+    }
+
+    assert!(
+        env::var("OPENAI_API_KEY").is_err(),
+        "integrated startup should not require OPENAI_API_KEY in process env"
+    );
+    assert!(
+        env::var(SUBSTRATE_LLM_AUTH_BUNDLE_FD).is_err(),
+        "pointer env should be consumed on first read"
+    );
+}
+
+#[tokio::test]
+async fn integrated_codex_missing_handoff_does_not_fallback_to_local_auth_files_at_route_boundary()
+{
+    let _guard = ENV_LOCK.lock().await;
+    let mut server = Server::new_async().await;
+    let upstream = server
+        .mock("POST", "/backend-api/codex/responses")
+        .expect(0)
+        .with_status(200)
+        .with_header("content-type", "text/event-stream")
+        .with_body(codex_sync_sse_body("should not reach upstream"))
+        .create_async()
+        .await;
+
+    let standalone_home = TempDir::new().unwrap();
+    let standalone_access_token = codex_access_token("acct_local_jwt");
+    let _auth_path = write_codex_auth_state(
+        &standalone_home,
+        Some("acct_local_explicit"),
+        &standalone_access_token,
+    );
+
+    let _home = EnvVarGuard::set("HOME", standalone_home.path().display().to_string());
+    let _account_id = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
+    let _access_token = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
+
+    let harness = build_codex_oauth_provider_harness(
+        &server.url(),
+        "codex-mini-latest",
+        CodexAuthSource::Integrated,
+    );
+    let response = harness
+        .invoke_responses(HeaderMap::new(), responses_sync_request())
+        .await;
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let body = response_text(response).await;
+    assert!(!body.contains("acct_local_explicit"));
+    let json: Value =
+        serde_json::from_str(&body).expect("integrated missing handoff failure must be JSON");
+    assert_provider_error_shape(&json, "auth", "Authentication failed");
+    upstream.assert_async().await;
+}
+
+#[tokio::test]
+async fn standalone_codex_auth_state_succeeds_with_distinct_route_boundary_proof() {
+    let _guard = ENV_LOCK.lock().await;
+    let mut server = Server::new_async().await;
+    let access_token = codex_access_token("acct_local_jwt");
+    let upstream = server
+        .mock("POST", "/backend-api/codex/responses")
+        .match_header("authorization", format!("Bearer {}", access_token).as_str())
+        .match_header("chatgpt-account-id", "acct_local_explicit")
+        .match_header("content-type", "application/json")
+        .with_status(200)
+        .with_header("content-type", "text/event-stream")
+        .with_body(codex_sync_sse_body("Standalone auth route proof"))
+        .create_async()
+        .await;
+
+    let home = TempDir::new().unwrap();
+    let auth_path = write_codex_auth_state(&home, Some("acct_local_explicit"), &access_token);
+    let _account_id = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
+    let _access_token = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
+
+    let harness = build_codex_oauth_provider_harness(
+        &server.url(),
+        "codex-mini-latest",
+        CodexAuthSource::StandaloneLocal { path: auth_path },
+    );
+    let response = harness
+        .invoke_responses(HeaderMap::new(), responses_sync_request())
+        .await;
+
+    let status = response.status();
+    let body = response_text(response).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.contains("Standalone auth route proof"));
+    upstream.assert_async().await;
+}
+
+#[tokio::test]
+async fn unresolved_codex_identity_fails_before_upstream_for_integrated_and_standalone_modes() {
+    let _guard = ENV_LOCK.lock().await;
+
+    let mut integrated_server = Server::new_async().await;
+    let integrated_upstream = integrated_server
+        .mock("POST", "/backend-api/codex/responses")
+        .expect(0)
+        .with_status(200)
+        .with_header("content-type", "text/event-stream")
+        .with_body(codex_sync_sse_body("should not reach upstream"))
+        .create_async()
+        .await;
+
+    let bad_home = TempDir::new().unwrap();
+    let bad_home_path = bad_home.path().join("home-as-file");
+    fs::write(&bad_home_path, "not a directory").unwrap();
+
+    let _home = EnvVarGuard::set("HOME", bad_home_path.display().to_string());
+    let _account_id = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
+    let _access_token = EnvVarGuard::set(
+        SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+        "not-a-jwt",
+    );
+
+    let integrated_harness = build_codex_oauth_provider_harness(
+        &integrated_server.url(),
+        "gpt-5-codex",
+        CodexAuthSource::Integrated,
+    );
+    let integrated_response = integrated_harness
+        .invoke_responses(HeaderMap::new(), responses_sync_request())
+        .await;
+
+    assert_eq!(integrated_response.status(), StatusCode::BAD_GATEWAY);
+    let integrated_body = response_text(integrated_response).await;
+    assert!(!integrated_body.contains("not-a-jwt"));
+    let integrated_json: Value =
+        serde_json::from_str(&integrated_body).expect("integrated auth failure envelope");
+    assert_provider_error_shape(&integrated_json, "auth", "Authentication failed");
+    integrated_upstream.assert_async().await;
+
+    drop(_access_token);
+    drop(_account_id);
+    drop(_home);
+
+    let mut standalone_server = Server::new_async().await;
+    let standalone_upstream = standalone_server
+        .mock("POST", "/backend-api/codex/responses")
+        .expect(0)
+        .with_status(200)
+        .with_header("content-type", "text/event-stream")
+        .with_body(codex_sync_sse_body("should not reach upstream"))
+        .create_async()
+        .await;
+
+    let standalone_home = TempDir::new().unwrap();
+    let auth_path = write_codex_auth_state(&standalone_home, None, "not-a-jwt");
+    let _account_id = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID);
+    let _access_token = EnvVarGuard::unset(SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN);
+
+    let standalone_harness = build_codex_oauth_provider_harness(
+        &standalone_server.url(),
+        "gpt-5-codex",
+        CodexAuthSource::StandaloneLocal { path: auth_path },
+    );
+    let standalone_response = standalone_harness
+        .invoke_responses(HeaderMap::new(), responses_sync_request())
+        .await;
+
+    assert_eq!(standalone_response.status(), StatusCode::BAD_GATEWAY);
+    let standalone_body = response_text(standalone_response).await;
+    assert!(!standalone_body.contains("not-a-jwt"));
+    let standalone_json: Value =
+        serde_json::from_str(&standalone_body).expect("standalone auth failure envelope");
+    assert_provider_error_shape(&standalone_json, "auth", "Authentication failed");
+    assert_eq!(
+        integrated_json["error"]["message"],
+        standalone_json["error"]["message"]
+    );
+    assert_eq!(
+        integrated_json["error"]["class"],
+        standalone_json["error"]["class"]
+    );
+    standalone_upstream.assert_async().await;
 }
 
 #[tokio::test]

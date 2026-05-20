@@ -1,7 +1,12 @@
+use crate::auth::codex_auth_context::{
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+};
 use crate::providers::ProviderConfig;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use substrate_common::SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY;
 
 /// Application configuration
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -66,6 +71,12 @@ fn resolve_env_var(value: &str) -> Option<String> {
         .strip_prefix('$')
         .and_then(|env_var| std::env::var(env_var).ok())
 }
+
+fn referenced_env_var(value: &str) -> Option<&str> {
+    value.strip_prefix('$')
+}
+
+const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 
 impl Default for ServerConfig {
     fn default() -> Self {
@@ -140,7 +151,7 @@ pub struct RouterConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PromptRule {
     /// Regex pattern to match against user prompt content.
-    /// Can include capture groups: (pattern) or named: (?P<name>pattern)
+    /// Can include capture groups like `(pattern)` or named groups like `(?P<name>pattern)`.
     pub pattern: String,
     /// Model to route to when pattern matches.
     /// Can reference capture groups: $1, $name, ${1}, ${name}, or mixed like "prefix-$1"
@@ -191,7 +202,18 @@ impl AppConfig {
     }
 
     /// Load configuration from a TOML file
+    #[allow(dead_code)]
     pub fn from_file(path: &PathBuf) -> Result<Self> {
+        let mut config = Self::parse_file_without_env_resolution(path)?;
+
+        // Resolve environment variables
+        config.resolve_env_vars()?;
+
+        Ok(config)
+    }
+
+    /// Load configuration from a TOML file without interpolating environment variables.
+    pub fn parse_file_without_env_resolution(path: &PathBuf) -> Result<Self> {
         // Check if file exists, if not create a default one
         if !path.exists() {
             Self::create_default_config(path)?;
@@ -200,11 +222,8 @@ impl AppConfig {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {}", path.display()))?;
 
-        let mut config: AppConfig = toml::from_str(&content)
+        let config: AppConfig = toml::from_str(&content)
             .with_context(|| format!("Failed to parse config file: {}", path.display()))?;
-
-        // Resolve environment variables
-        config.resolve_env_vars()?;
 
         Ok(config)
     }
@@ -347,9 +366,28 @@ default = "placeholder-model"
     }
 
     /// Resolve environment variables in configuration
-    fn resolve_env_vars(&mut self) -> Result<()> {
+    pub(crate) fn resolve_env_vars(&mut self) -> Result<()> {
+        self.resolve_env_vars_with_blocked_secrets(&[])
+    }
+
+    pub(crate) fn resolve_env_vars_for_integrated_mode(&mut self) -> Result<()> {
+        self.resolve_env_vars_with_blocked_secrets(&[
+            SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
+            SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+            SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+            OPENAI_API_KEY_ENV,
+        ])
+    }
+
+    fn resolve_env_vars_with_blocked_secrets(&mut self, blocked_env_vars: &[&str]) -> Result<()> {
         // Resolve server API key
         if let Some(ref key) = self.server.api_key {
+            ensure_env_reference_allowed(
+                key,
+                blocked_env_vars,
+                "server.api_key",
+                self.server.host.as_str(),
+            )?;
             if let Some(resolved) = resolve_env_var(key) {
                 self.server.api_key = Some(resolved);
             }
@@ -364,6 +402,12 @@ default = "placeholder-model"
 
             // Only resolve env vars for API key auth
             if let Some(ref api_key) = provider.api_key {
+                ensure_env_reference_allowed(
+                    api_key,
+                    blocked_env_vars,
+                    "providers.api_key",
+                    provider.name.as_str(),
+                )?;
                 if let Some(env_var) = api_key.strip_prefix('$') {
                     if let Some(resolved) = resolve_env_var(api_key) {
                         provider.api_key = Some(resolved);
@@ -378,6 +422,12 @@ default = "placeholder-model"
             }
 
             if let Some(ref base_url) = provider.base_url {
+                ensure_env_reference_allowed(
+                    base_url,
+                    blocked_env_vars,
+                    "providers.base_url",
+                    provider.name.as_str(),
+                )?;
                 if let Some(env_var) = base_url.strip_prefix('$') {
                     if let Some(resolved) = resolve_env_var(base_url) {
                         provider.base_url = Some(resolved);
@@ -394,6 +444,28 @@ default = "placeholder-model"
 
         Ok(())
     }
+}
+
+fn ensure_env_reference_allowed(
+    value: &str,
+    blocked_env_vars: &[&str],
+    field_name: &str,
+    owner_name: &str,
+) -> Result<()> {
+    let Some(env_var) = referenced_env_var(value) else {
+        return Ok(());
+    };
+
+    if blocked_env_vars.contains(&env_var) {
+        anyhow::bail!(
+            "Integrated gateway startup forbids env-based secret delivery via ${} for {} '{}'",
+            env_var,
+            field_name,
+            owner_name
+        );
+    }
+
+    Ok(())
 }
 
 // TODO: Re-enable these tests by adding tempfile to dev-dependencies

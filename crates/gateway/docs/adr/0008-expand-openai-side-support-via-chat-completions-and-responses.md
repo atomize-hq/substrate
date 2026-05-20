@@ -268,13 +268,15 @@ Every SSE `data:` payload MUST be a JSON object with a `type` string that matche
 
 #### Tool loop contract (responses)
 
-Tool continuation MUST be performed using `function_call_output` input items:
+Tool continuation MUST be performed using `function_call` plus `function_call_output` input items:
 
 1. Client sends a request.
 2. Gateway emits `function_call` output items (non-streaming: in `output`; streaming: via events).
-3. Client executes tools, then sends a follow-up `/v1/responses` request whose `input` appends one `function_call_output` item per tool call:
+3. Client executes tools, then sends a follow-up `/v1/responses` request whose `input` preserves the authoritative `function_call` item for each continued tool call and appends one `function_call_output` item per tool call:
+   - `function_call` MUST use the flat Responses shape: `{ "type": "function_call", "call_id": string, "name": string, "arguments": string }`.
    - `call_id` MUST match the tool call id emitted by the model.
    - `output` MUST be a string (the client is responsible for serializing structured outputs).
+4. Orphaned `function_call_output` items without authoritative prior `function_call` provenance MUST be rejected before any upstream call; the gateway MUST NOT synthesize placeholder tool names or `{}` arguments.
 
 ### Adapter Boundaries (Implementation Constraints)
 

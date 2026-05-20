@@ -1,0 +1,1202 @@
+{
+  "meta": {
+    "adr_paths": [
+      "docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md"
+    ],
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/agent-hub-core-successor-identity-tuple-compatible"
+    },
+    "behavior_platforms_required": [],
+    "checkpoint_boundaries": [
+      "AHCSITC2",
+      "AHCSITC3"
+    ],
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "cross_platform": true,
+    "execution_gates": false,
+    "feature": "agent-hub-core-successor-identity-tuple-compatible",
+    "schema_version": 4,
+    "slice_spec_version": 2
+  },
+  "tasks": [
+    {
+      "ac_ids": [
+        "AC-AHCSITC0-01",
+        "AC-AHCSITC0-02",
+        "AC-AHCSITC0-03",
+        "AC-AHCSITC0-04",
+        "AC-AHCSITC0-05",
+        "AC-AHCSITC0-06"
+      ],
+      "acceptance_criteria": [
+        "Implements the behaviors required by ac_ids (see slices/AHCSITC0/AHCSITC0-spec.md)."
+      ],
+      "concurrent_with": [
+        "AHCSITC0-test"
+      ],
+      "depends_on": [],
+      "description": "Implement the AHCSITC0 operator contract and identity presentation behaviors.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC0-code\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc0-code",
+      "id": "AHCSITC0-code",
+      "integration_task": "AHCSITC0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC0/kickoff_prompts/AHCSITC0-code.md",
+      "name": "AHCSITC0 slice (code)",
+      "phase": "AHCSITC0",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC0/AHCSITC0-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/impact_map.md",
+        "docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC0-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" SLICE_ID=\"AHCSITC0\""
+      ],
+      "status": "completed",
+      "type": "code",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc0-code"
+    },
+    {
+      "ac_ids": [
+        "AC-AHCSITC0-01",
+        "AC-AHCSITC0-02",
+        "AC-AHCSITC0-03",
+        "AC-AHCSITC0-04",
+        "AC-AHCSITC0-05",
+        "AC-AHCSITC0-06"
+      ],
+      "acceptance_criteria": [
+        "Tests enforce the behaviors required by ac_ids (see slices/AHCSITC0/AHCSITC0-spec.md)."
+      ],
+      "concurrent_with": [
+        "AHCSITC0-code"
+      ],
+      "depends_on": [],
+      "description": "Add tests that enforce the AHCSITC0 operator contract and identity presentation behaviors.",
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC0-test\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc0-test",
+      "id": "AHCSITC0-test",
+      "integration_task": "AHCSITC0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC0/kickoff_prompts/AHCSITC0-test.md",
+      "name": "AHCSITC0 slice (test)",
+      "phase": "AHCSITC0",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC0/AHCSITC0-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/impact_map.md",
+        "docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md"
+      ],
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC0-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" SLICE_ID=\"AHCSITC0\""
+      ],
+      "status": "completed",
+      "type": "test",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc0-test"
+    },
+    {
+      "ac_ids": [
+        "AC-AHCSITC0-01",
+        "AC-AHCSITC0-02",
+        "AC-AHCSITC0-03",
+        "AC-AHCSITC0-04",
+        "AC-AHCSITC0-05",
+        "AC-AHCSITC0-06"
+      ],
+      "acceptance_criteria": [
+        "Slice is green under make integ-checks and implements the behaviors required by ac_ids."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC0-code",
+        "AHCSITC0-test"
+      ],
+      "description": "Finalize AHCSITC0 after the code and test branches merge cleanly.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests.",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC0-integ\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc0-integ",
+      "id": "AHCSITC0-integ",
+      "integration_task": "AHCSITC0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC0/kickoff_prompts/AHCSITC0-integ.md",
+      "merge_to_orchestration": true,
+      "name": "AHCSITC0 slice (integration final)",
+      "phase": "AHCSITC0",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC0/AHCSITC0-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/impact_map.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC0-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC0-integ\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc0-integ"
+    },
+    {
+      "ac_ids": [
+        "AC-AHCSITC1-01",
+        "AC-AHCSITC1-02",
+        "AC-AHCSITC1-03",
+        "AC-AHCSITC1-04",
+        "AC-AHCSITC1-05",
+        "AC-AHCSITC1-06"
+      ],
+      "acceptance_criteria": [
+        "Implements the behaviors required by ac_ids (see slices/AHCSITC1/AHCSITC1-spec.md)."
+      ],
+      "concurrent_with": [
+        "AHCSITC1-test"
+      ],
+      "depends_on": [
+        "AHCSITC0-integ"
+      ],
+      "description": "Implement the AHCSITC1 session protocol and placement behaviors.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC1-code\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc1-code",
+      "id": "AHCSITC1-code",
+      "integration_task": "AHCSITC1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC1/kickoff_prompts/AHCSITC1-code.md",
+      "name": "AHCSITC1 slice (code)",
+      "phase": "AHCSITC1",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC1/AHCSITC1-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/agent-hub-session-protocol-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/spec_manifest.md",
+        "docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC1-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" SLICE_ID=\"AHCSITC1\""
+      ],
+      "status": "completed",
+      "type": "code",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc1-code"
+    },
+    {
+      "ac_ids": [
+        "AC-AHCSITC1-01",
+        "AC-AHCSITC1-02",
+        "AC-AHCSITC1-03",
+        "AC-AHCSITC1-04",
+        "AC-AHCSITC1-05",
+        "AC-AHCSITC1-06"
+      ],
+      "acceptance_criteria": [
+        "Tests enforce the behaviors required by ac_ids (see slices/AHCSITC1/AHCSITC1-spec.md)."
+      ],
+      "concurrent_with": [
+        "AHCSITC1-code"
+      ],
+      "depends_on": [
+        "AHCSITC0-integ"
+      ],
+      "description": "Add tests that enforce the AHCSITC1 session protocol and placement behaviors.",
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC1-test\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc1-test",
+      "id": "AHCSITC1-test",
+      "integration_task": "AHCSITC1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC1/kickoff_prompts/AHCSITC1-test.md",
+      "name": "AHCSITC1 slice (test)",
+      "phase": "AHCSITC1",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC1/AHCSITC1-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/agent-hub-session-protocol-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/contract.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/spec_manifest.md",
+        "docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md"
+      ],
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC1-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" SLICE_ID=\"AHCSITC1\""
+      ],
+      "status": "completed",
+      "type": "test",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc1-test"
+    },
+    {
+      "ac_ids": [
+        "AC-AHCSITC1-01",
+        "AC-AHCSITC1-02",
+        "AC-AHCSITC1-03",
+        "AC-AHCSITC1-04",
+        "AC-AHCSITC1-05",
+        "AC-AHCSITC1-06"
+      ],
+      "acceptance_criteria": [
+        "Slice is green under make integ-checks and implements the behaviors required by ac_ids."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC1-code",
+        "AHCSITC1-test"
+      ],
+      "description": "Finalize AHCSITC1 after the code and test branches merge cleanly.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests.",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC1-integ\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc1-integ",
+      "id": "AHCSITC1-integ",
+      "integration_task": "AHCSITC1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC1/kickoff_prompts/AHCSITC1-integ.md",
+      "merge_to_orchestration": true,
+      "name": "AHCSITC1 slice (integration final)",
+      "phase": "AHCSITC1",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC1/AHCSITC1-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/agent-hub-session-protocol-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/impact_map.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC1-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC1-integ\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc1-integ"
+    },
+    {
+      "ac_ids": [
+        "AC-AHCSITC2-01",
+        "AC-AHCSITC2-02",
+        "AC-AHCSITC2-03",
+        "AC-AHCSITC2-04",
+        "AC-AHCSITC2-05",
+        "AC-AHCSITC2-06"
+      ],
+      "acceptance_criteria": [
+        "Implements the behaviors required by ac_ids (see slices/AHCSITC2/AHCSITC2-spec.md)."
+      ],
+      "concurrent_with": [
+        "AHCSITC2-test"
+      ],
+      "depends_on": [
+        "AHCSITC1-integ"
+      ],
+      "description": "Implement the AHCSITC2 fail-closed policy and telemetry publication behaviors.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC2-code\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-code",
+      "id": "AHCSITC2-code",
+      "integration_task": "AHCSITC2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/kickoff_prompts/AHCSITC2-code.md",
+      "name": "AHCSITC2 slice (code)",
+      "phase": "AHCSITC2",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/AHCSITC2-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/policy-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/telemetry-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/spec_manifest.md",
+        "docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" SLICE_ID=\"AHCSITC2\""
+      ],
+      "status": "completed",
+      "type": "code",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-code"
+    },
+    {
+      "ac_ids": [
+        "AC-AHCSITC2-01",
+        "AC-AHCSITC2-02",
+        "AC-AHCSITC2-03",
+        "AC-AHCSITC2-04",
+        "AC-AHCSITC2-05",
+        "AC-AHCSITC2-06"
+      ],
+      "acceptance_criteria": [
+        "Tests enforce the behaviors required by ac_ids (see slices/AHCSITC2/AHCSITC2-spec.md)."
+      ],
+      "concurrent_with": [
+        "AHCSITC2-code"
+      ],
+      "depends_on": [
+        "AHCSITC1-integ"
+      ],
+      "description": "Add tests that enforce the AHCSITC2 fail-closed policy and telemetry publication behaviors.",
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC2-test\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-test",
+      "id": "AHCSITC2-test",
+      "integration_task": "AHCSITC2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/kickoff_prompts/AHCSITC2-test.md",
+      "name": "AHCSITC2 slice (test)",
+      "phase": "AHCSITC2",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/AHCSITC2-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/policy-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/telemetry-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/spec_manifest.md",
+        "docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md"
+      ],
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" SLICE_ID=\"AHCSITC2\""
+      ],
+      "status": "completed",
+      "type": "test",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-test"
+    },
+    {
+      "acceptance_criteria": [
+        "Local integration gates are green for AHCSITC2 (fmt, clippy, tests, integ-checks).",
+        "Core integration branch is ready for checkpoint validation (`CP1-ci-checkpoint`)."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC2-code",
+        "AHCSITC2-test"
+      ],
+      "description": "Integrate AHCSITC2 implementation and make it green on the primary development platform before CP1.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests.",
+        "make integ-checks",
+        "On the orchestration branch, run checkpoint task: CP1-ci-checkpoint",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC2-integ-core\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-integ-core",
+      "id": "AHCSITC2-integ-core",
+      "integration_task": "AHCSITC2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/kickoff_prompts/AHCSITC2-integ-core.md",
+      "merge_to_orchestration": false,
+      "name": "AHCSITC2 slice (integration core)",
+      "phase": "AHCSITC2",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/AHCSITC2-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/policy-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/telemetry-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC2-integ-core\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-integ-core"
+    },
+    {
+      "acceptance_criteria": [
+        "The checkpoint audit trail is recorded in session_log.md.",
+        "Compile parity is green for the checkpoint checkout SHA.",
+        "Windows remains a compile-parity checkpoint lane only; no Windows feature-smoke run is required.",
+        "The task only validates the checkpoint boundary defined by pre-planning/ci_checkpoint_plan.md."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC2-integ-core"
+      ],
+      "description": "Run the cross-platform compile-parity gate for the checkpoint group ending at AHCSITC2.",
+      "end_checklist": [
+        "Dispatch compile parity for the checkpoint checkout SHA and record run ids/URLs.",
+        "Record any checkpoint blockers or required platform follow-ups in session_log.md.",
+        "Do not dispatch or require Windows feature smoke for this checkpoint.",
+        "Set status to completed; add END entry; commit docs."
+      ],
+      "id": "CP1-ci-checkpoint",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/kickoff_prompts/CP1-ci-checkpoint.md",
+      "name": "CP1 CI checkpoint (cross-platform parity)",
+      "phase": "CP1",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/impact_map.md",
+        "docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read pre-planning/ci_checkpoint_plan.md, tasks.json, session_log.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs."
+      ],
+      "status": "completed",
+      "type": "ops",
+      "worktree": null
+    },
+    {
+      "acceptance_criteria": [
+        "Linux compile and test parity is green for AHCSITC2."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "description": "Linux platform-fix integration task for AHCSITC2 parity failures.",
+      "end_checklist": [
+        "Run Linux-local parity gates (fmt, clippy, relevant tests) and capture outputs.",
+        "If parity still fails remotely, record the compile-parity run id/URL that justified this task.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC2-integ-linux\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-integ-linux",
+      "id": "AHCSITC2-integ-linux",
+      "integration_task": "AHCSITC2-integ-linux",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/kickoff_prompts/AHCSITC2-integ-linux.md",
+      "merge_to_orchestration": false,
+      "name": "AHCSITC2 slice (integration Linux parity)",
+      "phase": "AHCSITC2",
+      "platform": "linux",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/AHCSITC2-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/policy-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/telemetry-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a Linux host if possible.",
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC2-integ-linux\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-integ-linux"
+    },
+    {
+      "acceptance_criteria": [
+        "macOS compile and test parity is green for AHCSITC2."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "description": "macOS platform-fix integration task for AHCSITC2 parity failures.",
+      "end_checklist": [
+        "Run macOS-local parity gates (fmt, clippy, relevant tests) and capture outputs.",
+        "If parity still fails remotely, record the compile-parity run id/URL that justified this task.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC2-integ-macos\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-integ-macos",
+      "id": "AHCSITC2-integ-macos",
+      "integration_task": "AHCSITC2-integ-macos",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/kickoff_prompts/AHCSITC2-integ-macos.md",
+      "merge_to_orchestration": false,
+      "name": "AHCSITC2 slice (integration macOS parity)",
+      "phase": "AHCSITC2",
+      "platform": "macos",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/AHCSITC2-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/policy-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/telemetry-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a macOS host if possible.",
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC2-integ-macos\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-integ-macos"
+    },
+    {
+      "acceptance_criteria": [
+        "Windows compile and test parity is green for AHCSITC2."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC2-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "description": "Windows platform-fix integration task for AHCSITC2 parity failures.",
+      "end_checklist": [
+        "Run Windows-local parity gates (fmt, clippy, relevant tests) and capture outputs.",
+        "If parity still fails remotely, record the compile-parity run id/URL that justified this task.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC2-integ-windows\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-integ-windows",
+      "id": "AHCSITC2-integ-windows",
+      "integration_task": "AHCSITC2-integ-windows",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/kickoff_prompts/AHCSITC2-integ-windows.md",
+      "merge_to_orchestration": false,
+      "name": "AHCSITC2 slice (integration Windows parity)",
+      "phase": "AHCSITC2",
+      "platform": "windows",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/AHCSITC2-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/policy-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/telemetry-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a Windows host if possible.",
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC2-integ-windows\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-integ-windows"
+    },
+    {
+      "ac_ids": [
+        "AC-AHCSITC2-01",
+        "AC-AHCSITC2-02",
+        "AC-AHCSITC2-03",
+        "AC-AHCSITC2-04",
+        "AC-AHCSITC2-05",
+        "AC-AHCSITC2-06"
+      ],
+      "acceptance_criteria": [
+        "All required CI parity runs for AHCSITC2 are green.",
+        "Any platform-specific follow-ups are merged and reflected in session_log.md.",
+        "The final merged state implements the behaviors required by ac_ids."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC2-integ-core",
+        "CP1-ci-checkpoint",
+        "AHCSITC2-integ-linux",
+        "AHCSITC2-integ-macos",
+        "AHCSITC2-integ-windows"
+      ],
+      "description": "Finalize AHCSITC2 across required CI parity platforms.",
+      "end_checklist": [
+        "Merge platform-fix branches (if any) and resolve conflicts.",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests.",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC2-integ\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-integ",
+      "id": "AHCSITC2-integ",
+      "integration_task": "AHCSITC2-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/kickoff_prompts/AHCSITC2-integ.md",
+      "merge_to_orchestration": true,
+      "name": "AHCSITC2 slice (integration final)",
+      "phase": "AHCSITC2",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC2/AHCSITC2-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/policy-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/telemetry-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC2-integ\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc2-integ"
+    },
+    {
+      "ac_ids": [
+        "AC-AHCSITC3-01",
+        "AC-AHCSITC3-02",
+        "AC-AHCSITC3-03",
+        "AC-AHCSITC3-04",
+        "AC-AHCSITC3-05",
+        "AC-AHCSITC3-06"
+      ],
+      "acceptance_criteria": [
+        "Implements the behaviors required by ac_ids (see slices/AHCSITC3/AHCSITC3-spec.md)."
+      ],
+      "concurrent_with": [
+        "AHCSITC3-test"
+      ],
+      "depends_on": [
+        "CP1-ci-checkpoint",
+        "AHCSITC2-integ"
+      ],
+      "description": "Implement the AHCSITC3 platform parity, compatibility, and validation behaviors.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC3-code\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-code",
+      "id": "AHCSITC3-code",
+      "integration_task": "AHCSITC3-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/kickoff_prompts/AHCSITC3-code.md",
+      "name": "AHCSITC3 slice (code)",
+      "phase": "AHCSITC3",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/AHCSITC3-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/platform-parity-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/compatibility-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md",
+        "docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC3-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" SLICE_ID=\"AHCSITC3\""
+      ],
+      "status": "completed",
+      "type": "code",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-code"
+    },
+    {
+      "ac_ids": [
+        "AC-AHCSITC3-01",
+        "AC-AHCSITC3-02",
+        "AC-AHCSITC3-03",
+        "AC-AHCSITC3-04",
+        "AC-AHCSITC3-05",
+        "AC-AHCSITC3-06"
+      ],
+      "acceptance_criteria": [
+        "Tests enforce the behaviors required by ac_ids (see slices/AHCSITC3/AHCSITC3-spec.md)."
+      ],
+      "concurrent_with": [
+        "AHCSITC3-code"
+      ],
+      "depends_on": [
+        "CP1-ci-checkpoint",
+        "AHCSITC2-integ"
+      ],
+      "description": "Add tests that enforce the AHCSITC3 platform parity, compatibility, and validation behaviors.",
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC3-test\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-test",
+      "id": "AHCSITC3-test",
+      "integration_task": "AHCSITC3-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/kickoff_prompts/AHCSITC3-test.md",
+      "name": "AHCSITC3 slice (test)",
+      "phase": "AHCSITC3",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/AHCSITC3-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/platform-parity-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/compatibility-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md",
+        "docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md"
+      ],
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC3-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" SLICE_ID=\"AHCSITC3\""
+      ],
+      "status": "completed",
+      "type": "test",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-test"
+    },
+    {
+      "acceptance_criteria": [
+        "Local integration gates are green for AHCSITC3 (fmt, clippy, tests, integ-checks).",
+        "Core integration branch is ready for checkpoint validation (`CP2-ci-checkpoint`)."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC3-code",
+        "AHCSITC3-test"
+      ],
+      "description": "Integrate AHCSITC3 implementation and make it green on the primary development platform before CP2.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests.",
+        "make integ-checks",
+        "On the orchestration branch, run checkpoint task: CP2-ci-checkpoint",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC3-integ-core\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-integ-core",
+      "id": "AHCSITC3-integ-core",
+      "integration_task": "AHCSITC3-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/kickoff_prompts/AHCSITC3-integ-core.md",
+      "merge_to_orchestration": false,
+      "name": "AHCSITC3 slice (integration core)",
+      "phase": "AHCSITC3",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/AHCSITC3-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/platform-parity-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/compatibility-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC3-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC3-integ-core\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-integ-core"
+    },
+    {
+      "acceptance_criteria": [
+        "The checkpoint audit trail is recorded in session_log.md.",
+        "Compile parity is green for the checkpoint checkout SHA.",
+        "Windows remains a compile-parity checkpoint lane only; no Windows feature-smoke run is required.",
+        "The task only validates the checkpoint boundary defined by pre-planning/ci_checkpoint_plan.md."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC3-integ-core"
+      ],
+      "description": "Run the cross-platform compile-parity gate for the checkpoint group ending at AHCSITC3.",
+      "end_checklist": [
+        "Dispatch compile parity for the checkpoint checkout SHA and record run ids/URLs.",
+        "Record any checkpoint blockers or required platform follow-ups in session_log.md.",
+        "Do not dispatch or require Windows feature smoke for this checkpoint.",
+        "Set status to completed; add END entry; commit docs."
+      ],
+      "id": "CP2-ci-checkpoint",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/kickoff_prompts/CP2-ci-checkpoint.md",
+      "name": "CP2 CI checkpoint (cross-platform parity)",
+      "phase": "CP2",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/impact_map.md",
+        "docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read pre-planning/ci_checkpoint_plan.md, tasks.json, session_log.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs."
+      ],
+      "status": "completed",
+      "type": "ops",
+      "worktree": null
+    },
+    {
+      "acceptance_criteria": [
+        "Linux compile and test parity is green for AHCSITC3."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC3-integ-core",
+        "CP2-ci-checkpoint"
+      ],
+      "description": "Linux platform-fix integration task for AHCSITC3 parity failures.",
+      "end_checklist": [
+        "Run Linux-local parity gates (fmt, clippy, relevant tests) and capture outputs.",
+        "If parity still fails remotely, record the compile-parity run id/URL that justified this task.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC3-integ-linux\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-integ-linux",
+      "id": "AHCSITC3-integ-linux",
+      "integration_task": "AHCSITC3-integ-linux",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/kickoff_prompts/AHCSITC3-integ-linux.md",
+      "merge_to_orchestration": false,
+      "name": "AHCSITC3 slice (integration Linux parity)",
+      "phase": "AHCSITC3",
+      "platform": "linux",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/AHCSITC3-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/platform-parity-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/compatibility-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a Linux host if possible.",
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC3-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC3-integ-linux\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-integ-linux"
+    },
+    {
+      "acceptance_criteria": [
+        "macOS compile and test parity is green for AHCSITC3."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC3-integ-core",
+        "CP2-ci-checkpoint"
+      ],
+      "description": "macOS platform-fix integration task for AHCSITC3 parity failures.",
+      "end_checklist": [
+        "Run macOS-local parity gates (fmt, clippy, relevant tests) and capture outputs.",
+        "If parity still fails remotely, record the compile-parity run id/URL that justified this task.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC3-integ-macos\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-integ-macos",
+      "id": "AHCSITC3-integ-macos",
+      "integration_task": "AHCSITC3-integ-macos",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/kickoff_prompts/AHCSITC3-integ-macos.md",
+      "merge_to_orchestration": false,
+      "name": "AHCSITC3 slice (integration macOS parity)",
+      "phase": "AHCSITC3",
+      "platform": "macos",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/AHCSITC3-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/platform-parity-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/compatibility-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a macOS host if possible.",
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC3-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC3-integ-macos\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-integ-macos"
+    },
+    {
+      "acceptance_criteria": [
+        "Windows compile and test parity is green for AHCSITC3."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC3-integ-core",
+        "CP2-ci-checkpoint"
+      ],
+      "description": "Windows platform-fix integration task for AHCSITC3 parity failures.",
+      "end_checklist": [
+        "Run Windows-local parity gates (fmt, clippy, relevant tests) and capture outputs.",
+        "If parity still fails remotely, record the compile-parity run id/URL that justified this task.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC3-integ-windows\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-integ-windows",
+      "id": "AHCSITC3-integ-windows",
+      "integration_task": "AHCSITC3-integ-windows",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/kickoff_prompts/AHCSITC3-integ-windows.md",
+      "merge_to_orchestration": false,
+      "name": "AHCSITC3 slice (integration Windows parity)",
+      "phase": "AHCSITC3",
+      "platform": "windows",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/AHCSITC3-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/platform-parity-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/compatibility-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a Windows host if possible.",
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC3-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC3-integ-windows\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-integ-windows"
+    },
+    {
+      "ac_ids": [
+        "AC-AHCSITC3-01",
+        "AC-AHCSITC3-02",
+        "AC-AHCSITC3-03",
+        "AC-AHCSITC3-04",
+        "AC-AHCSITC3-05",
+        "AC-AHCSITC3-06"
+      ],
+      "acceptance_criteria": [
+        "All required CI parity runs for AHCSITC3 are green.",
+        "Any platform-specific follow-ups are merged and reflected in session_log.md.",
+        "The final merged state implements the behaviors required by ac_ids."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC3-integ-core",
+        "CP2-ci-checkpoint",
+        "AHCSITC3-integ-linux",
+        "AHCSITC3-integ-macos",
+        "AHCSITC3-integ-windows"
+      ],
+      "description": "Finalize AHCSITC3 across required CI parity platforms.",
+      "end_checklist": [
+        "Merge platform-fix branches (if any) and resolve conflicts.",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests.",
+        "make integ-checks",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"AHCSITC3-integ\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-integ",
+      "id": "AHCSITC3-integ",
+      "integration_task": "AHCSITC3-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/kickoff_prompts/AHCSITC3-integ.md",
+      "merge_to_orchestration": true,
+      "name": "AHCSITC3 slice (integration final)",
+      "phase": "AHCSITC3",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC3/AHCSITC3-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/platform-parity-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/compatibility-spec.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/manual_testing_playbook.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, AHCSITC3-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" TASK_ID=\"AHCSITC3-integ\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/agent-hub-core-successor-identity-tuple-compatible-ahcsitc3-integ"
+    },
+    {
+      "acceptance_criteria": [
+        "Feature directory docs remain consistent after cleanup.",
+        "All temporary worktrees are removed.",
+        "The cleanup summary is recorded in session_log.md."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "AHCSITC3-integ"
+      ],
+      "description": "Close out the feature task graph and remove retained worktrees.",
+      "end_checklist": [
+        "Run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Then run: make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1",
+        "Set status to completed; add END entry with the cleanup summary; commit docs."
+      ],
+      "id": "FZ-feature-cleanup",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/kickoff_prompts/FZ-feature-cleanup.md",
+      "name": "Feature cleanup (worktrees + branches)",
+      "phase": "FZ",
+      "references": [
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/plan.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/tasks.json",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/session_log.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/quality_gate_report.md",
+        "docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_AND_FEATURE_SETUP.md"
+      ],
+      "start_checklist": [
+        "git checkout feat/agent-hub-core-successor-identity-tuple-compatible && git pull --ff-only",
+        "Confirm all tasks are completed and merged as intended.",
+        "Set status to in_progress; add START entry; commit docs."
+      ],
+      "status": "pending",
+      "type": "ops",
+      "worktree": null
+    }
+  ]
+}

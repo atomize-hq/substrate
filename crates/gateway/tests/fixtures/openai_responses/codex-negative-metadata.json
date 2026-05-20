@@ -1,0 +1,13 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "metadata": {
+      "trace_id": "abc123"
+    }
+  },
+  "expected_error_contains": "metadata is not supported on the Codex route",
+  "expected_status": 502,
+  "expected_error_class": "route",
+  "expected_error_message": "Route selection failed"
+}

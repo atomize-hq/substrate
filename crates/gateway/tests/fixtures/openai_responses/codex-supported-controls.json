@@ -1,0 +1,72 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "Describe this image"
+          },
+          {
+            "type": "input_image",
+            "image_url": "https://example.com/image.png",
+            "detail": "high"
+          }
+        ]
+      }
+    ],
+    "stream": false,
+    "parallel_tool_calls": false,
+    "reasoning": {
+      "effort": "low",
+      "summary": "concise"
+    },
+    "include": [
+      "reasoning.encrypted_content"
+    ],
+    "text": {
+      "format": {
+        "type": "text"
+      },
+      "verbosity": "low"
+    },
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "lookup",
+          "description": "Look something up",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "ignored",
+          "parameters": {
+            "type": "object"
+          }
+        }
+      }
+    ],
+    "tool_choice": {
+      "type": "function",
+      "function": {
+        "name": "lookup"
+      }
+    }
+  }
+}

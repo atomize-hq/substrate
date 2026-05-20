@@ -15,11 +15,13 @@ LOG_DIR=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/mac/smoke.sh [--netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
+Usage: scripts/mac/smoke.sh [--orchestration-conformance | --netfilter-conformance | --bedpm-installer-conformance] [--log-dir DIR]
 
 Options:
   --world-disabled-diagnostics
                            Run the world-disabled-diagnostics conformance smoke instead of the generic smoke
+  --orchestration-conformance
+                           Run the macOS/Lima orchestration conformance smoke
   --netfilter-conformance  Run the posture-aware Lima netfilter smoke instead of the generic smoke
   --bedpm-installer-conformance
                            Run the BEDPM Linux installer smoke through the Lima-backed guest path
@@ -36,6 +38,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --world-disabled-diagnostics)
       MODE="world-disabled-diagnostics"
+      shift
+      ;;
+    --orchestration-conformance)
+      MODE="orchestration-conformance"
       shift
       ;;
     --bedpm-installer-conformance)
@@ -93,6 +99,94 @@ ensure_substrate_binary() {
     log "Building substrate binary for smoke test..."
     (cd "${REPO_ROOT}" && cargo build --bin substrate >/dev/null)
   fi
+}
+
+prepare_host_gateway_smoke_auth() {
+  local auth_path="${HOME}/.codex/auth.json"
+  if [[ -f "${auth_path}" ]]; then
+    printf 'present\n'
+    return 0
+  fi
+
+  local tmp
+  tmp="$(mktemp)"
+  cat >"${tmp}" <<'JSON'
+{
+  "account_id": "acct_smoke",
+  "access_token": "header.payload.signature"
+}
+JSON
+  install -d -m0700 "${HOME}/.codex"
+  install -m0600 "${tmp}" "${auth_path}"
+  rm -f "${tmp}"
+  printf 'created\n'
+}
+
+cleanup_host_gateway_smoke_auth() {
+  rm -f "${HOME}/.codex/auth.json"
+}
+
+run_gateway_lifecycle_proof() {
+  local auth_state=""
+  local cleanup_auth=0
+  local status_json=""
+  local base_url=""
+  local port=""
+
+  log "Running gateway lifecycle proof"
+  auth_state="$(prepare_host_gateway_smoke_auth)"
+  if [[ "${auth_state}" == "created" ]]; then
+    cleanup_auth=1
+  fi
+  trap 'if [[ ${cleanup_auth} -eq 1 ]]; then cleanup_host_gateway_smoke_auth; fi' RETURN
+
+  pushd "${REPO_ROOT}" >/dev/null
+  "${SUBSTRATE_BIN}" world gateway sync
+  status_json="$("${SUBSTRATE_BIN}" world gateway status --json)"
+  printf '%s\n' "${status_json}" | jq -e '
+    .status == "available" and
+    .client_wiring.openai_base_url == .client_wiring.anthropic_base_url
+  ' >/dev/null
+
+  "${SUBSTRATE_BIN}" world gateway restart
+  status_json="$("${SUBSTRATE_BIN}" world gateway status --json)"
+  base_url="$(printf '%s\n' "${status_json}" | jq -r '.client_wiring.openai_base_url')"
+  port="$(printf '%s\n' "${base_url}" | sed -n 's#http://127\.0\.0\.1:\([0-9][0-9]*\)$#\1#p')"
+  popd >/dev/null
+  if [[ -z "${port}" ]]; then
+    echo "ERROR: unable to derive gateway port from ${base_url}" >&2
+    exit 1
+  fi
+
+  limactl shell substrate curl --fail --silent "http://127.0.0.1:${port}/health" \
+    | jq -e '.status == "ok" and .service == "substrate-gateway"' >/dev/null
+}
+
+run_dev_install_readiness_proof() {
+  local install_prefix="$1"
+  local install_bin="${install_prefix%/}/bin/substrate"
+  local doctor_json=""
+
+  log "Running macOS dev-install readiness proof"
+  "${REPO_ROOT}/scripts/substrate/dev-install-substrate.sh" --prefix "${install_prefix}" --profile debug
+
+  if [[ ! -x "${install_bin}" ]]; then
+    echo "ERROR: dev-install did not produce ${install_bin}" >&2
+    exit 1
+  fi
+
+  limactl shell substrate sudo test -x /usr/local/bin/substrate-world-agent
+  limactl shell substrate sudo test -x /usr/local/bin/substrate-gateway
+  limactl shell substrate systemctl is-active --quiet substrate-world-agent
+
+  doctor_json="$(env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
+    "${install_bin}" world doctor --json)"
+  printf '%s\n' "${doctor_json}" | jq -e '
+    .ok == true and
+    .host.ok == true and
+    .world.ok == true and
+    .world.status == "ok"
+  ' >/dev/null
 }
 
 default_netfilter_log_dir() {
@@ -508,10 +602,13 @@ run_world_disabled_diagnostics() {
 
 run_generic_smoke() {
   local trace_log
+  local dev_install_prefix
   trace_log="${SHIM_TRACE_LOG:-$HOME/.substrate/trace.jsonl}"
+  dev_install_prefix="$(mktemp -d)"
 
   rm -rf "${REPO_ROOT}/world-mac-smoke"
-  "${SCRIPTS_ROOT}/lima-warm.sh"
+  run_dev_install_readiness_proof "${dev_install_prefix}"
+  run_gateway_lifecycle_proof
   "${SUBSTRATE_BIN}" -c 'echo smoke-nonpty'
   "${SUBSTRATE_BIN}" --pty -c 'printf smoke-pty\n'
   mkdir -p "$(dirname "${trace_log}")"
@@ -539,6 +636,7 @@ run_generic_smoke() {
   "${SUBSTRATE_BIN}" --replay "${span}" --replay-verbose
   "${SUBSTRATE_BIN}" --trace "${span}" | tee /tmp/world-mac-replay.json
   jq '.fs_diff | ((.writes // []) + (.mods // []))' /tmp/world-mac-replay.json | grep 'world-mac-smoke/file.txt'
+  rm -rf "${dev_install_prefix}"
 }
 
 run_bedpm_installer_conformance() {
@@ -548,7 +646,13 @@ run_bedpm_installer_conformance() {
 
   log "Running BEDPM Linux smoke through the Lima-backed guest path"
   "${SCRIPTS_ROOT}/lima-warm.sh"
+  run_gateway_lifecycle_proof
   "${SUBSTRATE_BIN}" -c "${smoke_cmd}"
+}
+
+run_orchestration_conformance() {
+  log "Running macOS/Lima orchestration conformance smoke"
+  "${SCRIPTS_ROOT}/orchestration-smoke.sh"
 }
 
 run_netfilter_conformance() {
@@ -563,6 +667,7 @@ run_netfilter_conformance() {
 
   log "Using log directory ${log_dir}"
   SUBSTRATE_WORLD_NETFILTER_ENABLE=1 "${SCRIPTS_ROOT}/lima-warm.sh"
+  run_gateway_lifecycle_proof
 
   run_netfilter_posture "allow-all" '["*"]' yes "${fixture_home}" "${substrate_home}" "${project_dir}" "${log_dir}"
   run_netfilter_posture "deny-all" '[]' no "${fixture_home}" "${substrate_home}" "${project_dir}" "${log_dir}"
@@ -582,6 +687,9 @@ ensure_substrate_binary
 
 if [[ "${MODE}" == "world-disabled-diagnostics" ]]; then
   run_world_disabled_diagnostics
+elif [[ "${MODE}" == "orchestration-conformance" ]]; then
+  ensure_host_prereqs
+  run_orchestration_conformance
 elif [[ "${MODE}" == "netfilter-conformance" ]]; then
   ensure_host_prereqs
   if [[ -z "${LOG_DIR}" ]]; then

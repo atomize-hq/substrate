@@ -92,10 +92,11 @@ CREATE REL TABLE PARENT_OF(FROM Span TO Span);
 
 ```bash
 # Default (mock facade)
-cargo build -p substrate-graph
+cargo build --manifest-path crates/substrate-graph/Cargo.toml
 
 # With Kuzu (planned): requires cmake, slow build
-# cargo build -p substrate-graph --features kuzu-static
+# cargo build --manifest-path crates/substrate-graph/Cargo.toml --features kuzu-static
+```
 
 ## CLI Usage (mock backend)
 

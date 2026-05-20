@@ -3,13 +3,17 @@ mod openai_compat;
 pub mod openai_conformance_test_support;
 mod openai_responses;
 
+use crate::auth::codex_auth_context::{
+    install_integrated_codex_auth_handoff, CodexIntegratedAuthHandoff,
+};
 use crate::auth::TokenStore;
 use crate::cli::AppConfig;
 use crate::core::GatewayRequest;
+use crate::launch::{GatewayLaunchContract, GatewayMode, TokenStoreStrategy};
 use crate::message_tracing::MessageTracer;
 use crate::models::{AnthropicMessagesRequest, RouteType};
 use crate::providers::error::ProviderError;
-use crate::providers::ProviderRegistry;
+use crate::providers::{AuthType, ProviderRegistry};
 use crate::router::Router;
 use crate::structured_events::{
     normalized_events_from_provider_response, AnthropicSseNormalizedEventExtractor,
@@ -25,10 +29,75 @@ use axum::{
 };
 use chrono::Local;
 use futures::stream::TryStreamExt;
+use std::env;
+#[cfg(unix)]
+use std::io::Read;
 use std::pin::Pin;
 use std::sync::Arc;
+use substrate_common::{
+    GatewayAuthBundleV1, GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
+    GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX, SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+    SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+};
 use tokio::net::TcpListener;
 use tracing::{debug, error, info};
+
+const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
+
+#[derive(Debug, Clone)]
+pub enum IntegratedGatewayAuthContext {
+    CliCodex(CodexIntegratedAuthHandoff),
+    ApiOpenAI { api_key: String },
+}
+
+impl IntegratedGatewayAuthContext {
+    pub fn from_launch_mode(mode: GatewayMode) -> anyhow::Result<Option<Self>> {
+        match mode {
+            GatewayMode::HostOnly => Ok(None),
+            GatewayMode::InWorld => Self::from_auth_bundle_env().map(Some),
+        }
+    }
+
+    fn from_auth_bundle_env() -> anyhow::Result<Self> {
+        let bundle = read_gateway_auth_bundle_from_env()?;
+        match bundle.backend_id.as_str() {
+            GATEWAY_AUTH_BUNDLE_BACKEND_CLI_CODEX => Ok(Self::CliCodex(
+                CodexIntegratedAuthHandoff::from_fields(&bundle.fields)?,
+            )),
+            GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI => {
+                let api_key = bundle
+                    .fields
+                    .get(SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY)
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Integrated gateway startup received invalid gateway auth bundle: gateway auth bundle for '{}' is missing required field '{}'",
+                            GATEWAY_AUTH_BUNDLE_BACKEND_API_OPENAI,
+                            SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY
+                        )
+                    })?;
+                Ok(Self::ApiOpenAI { api_key })
+            }
+            other => Err(anyhow::anyhow!(
+                "Integrated gateway startup received invalid gateway auth bundle: unsupported gateway auth bundle backend_id '{}'",
+                other
+            )),
+        }
+    }
+
+    fn apply_to_config(&self, config: &mut AppConfig) -> anyhow::Result<()> {
+        install_integrated_codex_auth_handoff(None)?;
+
+        match self {
+            Self::CliCodex(handoff) => {
+                install_integrated_codex_auth_handoff(Some(handoff.clone()))?;
+                Ok(())
+            }
+            Self::ApiOpenAI { api_key } => overlay_api_openai_auth(config, api_key),
+        }
+    }
+}
 
 /// Reloadable components - rebuilt on config reload
 pub struct ReloadableState {
@@ -84,6 +153,136 @@ fn build_app(state: Arc<AppState>) -> AxumRouter {
         .with_state(state)
 }
 
+fn prepare_startup_config(
+    config: &mut AppConfig,
+    mode: GatewayMode,
+    integrated_auth: Option<&IntegratedGatewayAuthContext>,
+) -> anyhow::Result<()> {
+    install_integrated_codex_auth_handoff(None)?;
+
+    match mode {
+        GatewayMode::HostOnly => {
+            if integrated_auth.is_some() {
+                anyhow::bail!(
+                    "Host-only gateway startup does not accept an integrated auth bundle context"
+                );
+            }
+            config.resolve_env_vars()?;
+        }
+        GatewayMode::InWorld => {
+            let integrated_auth = integrated_auth.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Integrated gateway startup requires a startup-owned auth bundle context before provider initialization"
+                )
+            })?;
+            integrated_auth.apply_to_config(config)?;
+            config.resolve_env_vars_for_integrated_mode()?;
+        }
+    }
+
+    Ok(())
+}
+
+fn overlay_api_openai_auth(config: &mut AppConfig, api_key: &str) -> anyhow::Result<()> {
+    let mut applied = 0usize;
+
+    for provider in &mut config.providers {
+        if !provider.is_enabled() || provider.auth_type != AuthType::ApiKey {
+            continue;
+        }
+
+        match provider.api_key.as_deref() {
+            Some(value)
+                if value == format!("${OPENAI_API_KEY_ENV}")
+                    || value == format!("${SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY}") =>
+            {
+                provider.api_key = Some(api_key.to_string());
+                applied += 1;
+            }
+            _ => {}
+        }
+    }
+
+    if applied == 0 {
+        anyhow::bail!(
+            "Integrated gateway startup could not apply api:openai auth bundle: no provider api_key matched $OPENAI_API_KEY or $SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY"
+        );
+    }
+
+    Ok(())
+}
+
+fn take_auth_bundle_fd_env() -> anyhow::Result<String> {
+    match env::var(SUBSTRATE_LLM_AUTH_BUNDLE_FD) {
+        Ok(value) => {
+            env::remove_var(SUBSTRATE_LLM_AUTH_BUNDLE_FD);
+            Ok(value)
+        }
+        Err(env::VarError::NotPresent) => Err(anyhow::anyhow!(
+            "Integrated gateway startup is missing pointer env {}",
+            SUBSTRATE_LLM_AUTH_BUNDLE_FD
+        )),
+        Err(err) => Err(anyhow::anyhow!(
+            "Integrated gateway startup could not read pointer env {}: {}",
+            SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+            err
+        )),
+    }
+}
+
+#[cfg(unix)]
+fn read_gateway_auth_bundle_from_env() -> anyhow::Result<GatewayAuthBundleV1> {
+    use std::fs::File;
+    use std::os::fd::{FromRawFd, OwnedFd, RawFd};
+
+    let raw_fd = take_auth_bundle_fd_env()?;
+    let fd = raw_fd.trim().parse::<RawFd>().map_err(|err| {
+        anyhow::anyhow!(
+            "Integrated gateway startup could not parse {} as a file descriptor: {}",
+            SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+            err
+        )
+    })?;
+
+    let mut body = String::new();
+    {
+        let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
+        let mut file = File::from(owned_fd);
+        file.read_to_string(&mut body).map_err(|err| {
+            anyhow::anyhow!(
+                "Integrated gateway startup could not read auth bundle from {}: {}",
+                SUBSTRATE_LLM_AUTH_BUNDLE_FD,
+                err
+            )
+        })?;
+    }
+
+    let bundle: GatewayAuthBundleV1 = serde_json::from_str(&body).map_err(|err| {
+        anyhow::anyhow!(
+            "Integrated gateway startup received malformed gateway auth bundle JSON: {}",
+            err
+        )
+    })?;
+
+    bundle.validate().map_err(|err| {
+        anyhow::anyhow!(
+            "Integrated gateway startup received invalid gateway auth bundle: {}",
+            err
+        )
+    })?;
+
+    Ok(bundle)
+}
+
+#[cfg(not(unix))]
+fn read_gateway_auth_bundle_from_env() -> anyhow::Result<GatewayAuthBundleV1> {
+    let _ = take_auth_bundle_fd_env();
+    anyhow::bail!(
+        "Integrated gateway startup via {} is unsupported on this platform",
+        SUBSTRATE_LLM_AUTH_BUNDLE_FD
+    )
+}
+
 const RECENT_REQUESTS_WINDOW: usize = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,6 +314,11 @@ fn classify_provider_error(error: &ProviderError) -> FailureClass {
             let lowered = message.to_ascii_lowercase();
             if lowered.contains("url") || lowered.contains("base_url") {
                 FailureClass::Url
+            } else if lowered.contains("codex route")
+                || lowered.contains("authoritative provenance")
+                || lowered.contains("prior function_call")
+            {
+                FailureClass::Route
             } else {
                 FailureClass::TransportDrift
             }
@@ -226,14 +430,23 @@ fn write_routing_info(model: &str, provider: &str, route_type: &RouteType) {
 
 /// Start the HTTP server
 pub async fn start_server(
-    config: AppConfig,
-    _config_path: std::path::PathBuf,
+    mut config: AppConfig,
+    launch: GatewayLaunchContract,
+    integrated_auth: Option<IntegratedGatewayAuthContext>,
 ) -> anyhow::Result<()> {
+    let GatewayLaunchContract {
+        mode, token_store, ..
+    } = launch;
+
+    prepare_startup_config(&mut config, mode, integrated_auth.as_ref())?;
     let router = Router::new(config.clone());
 
     // Initialize OAuth token store FIRST (needed by provider registry)
-    let token_store = TokenStore::load_default()
-        .map_err(|e| anyhow::anyhow!("Failed to initialize token store: {}", e))?;
+    let token_store = match token_store {
+        TokenStoreStrategy::Persistent(path) => TokenStore::new(path),
+        TokenStoreStrategy::Disabled => Ok(TokenStore::disabled()),
+    }
+    .map_err(|e| anyhow::anyhow!("Failed to initialize token store: {}", e))?;
 
     let existing_tokens = token_store.list_providers();
     if !existing_tokens.is_empty() {
@@ -245,10 +458,11 @@ pub async fn start_server(
 
     // Initialize provider registry from config (with token store and model mappings)
     let provider_registry = Arc::new(
-        ProviderRegistry::from_configs_with_models(
+        ProviderRegistry::from_configs_with_models_and_mode(
             &config.providers,
             Some(token_store.clone()),
             &config.models,
+            mode,
         )
         .map_err(|e| anyhow::anyhow!("Failed to initialize provider registry: {}", e))?,
     );

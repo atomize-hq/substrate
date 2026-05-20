@@ -2,7 +2,7 @@
 
 This document describes the world execution model, transport topology, and validation evidence used by Substrate. It is descriptive context for `docs/contracts/substrate-gateway-runtime-parity.md`, `docs/contracts/substrate-gateway-operator-contract.md`, and `docs/contracts/substrate-gateway-status-schema.md`; it does not redefine those operator contracts.
 
-Status: Linux and macOS default to "always-in-world" execution. Windows uses the same gateway semantics through WSL-backed transport, with permitted backend divergence in the hidden transport layer.
+Status: Linux host-native and macOS Lima-backed worlds are the supported provisioning paths in this slice. Windows/WSL helper scripts are intentionally fail-closed until their placement contract matches the Linux-first runtime contract.
 
 ---
 
@@ -22,7 +22,7 @@ On Linux the agent runs directly on the host. On macOS the agent runs inside a L
 
 Helper scripts (`scripts/mac/lima-*.sh`, `scripts/mac/smoke.sh`) keep the Lima environment reproducible.
 
-`/tmp` is included in the guest unit’s `ReadWritePaths` list so replay and shim flows can surface temp‑file diffs on both platforms. The provisioning script embeds this setting in the unit automatically—no manual tuning needed.
+`/tmp` is included in the guest unit’s `ReadWritePaths` list so replay and shim flows can surface temp‑file diffs on both platforms. The provisioning scripts also wire `SUBSTRATE_HOME` into the service unit and keep that path writable under `ReadWritePaths`, so manager/config/runtime state lands in the same canonical home on Linux host-native and macOS Lima guest paths.
 
 ### Transport boundary and multi-user posture
 
@@ -30,6 +30,7 @@ These socket ACL details are runtime transport facts, not a second operator cont
 
 - The authorization boundary for world-agent requests is the OS-level transport ACL (Linux: Unix socket ownership/mode for `/run/substrate.sock`).
 - On Linux, `/run/substrate.sock` MUST be owned by `root:substrate` with mode `0660` (`srw-rw----`).
+- Managed gateway runtime diagnostics under `/run/substrate/substrate-gateway-runtime/` use that same `substrate` group boundary on Linux and in the macOS Lima guest path: directories remain `0750`, runtime files remain `0640`, and they are not expected to be world-readable.
 - Access to the socket is granted by membership in the `substrate` group; verify with `id -nG "$USER"`, grant with `sudo usermod -aG substrate <user>`, and re-login so the new group membership takes effect.
 - On multi-user hosts, operators MUST ensure only intended users are members of the `substrate` group.
 - Platform-specific transport differences stay confined to the hidden backend layer; this section records the socket ACL and reachability facts that support the runtime parity contract.
@@ -50,12 +51,62 @@ Always-on by default (unless disabled via `SUBSTRATE_WORLD=disabled`):
 
 - REPL integration
   - The Substrate REPL can force PTY per‑line using the `:pty ` prefix. The shell strips this prefix before sending the command to the agent.
+  - Persistent-session startup keeps a caller-shape split: sync shell/bootstrap callers continue to
+    use sync `PlatformWorldContext.ensure_ready()`, while the macOS async REPL startup path now
+    uses a dedicated async readiness seam that delegates back into backend-owned Lima readiness.
+  - `SUBSTRATE_WORLD_SOCKET` keeps exact bypass semantics for persistent-session startup. When that
+    override is set, the shell connects directly to the requested socket instead of invoking the
+    platform readiness seam first.
 
 - Fallback
   - If `world_fs.require_world=false` and the agent/socket is unavailable (or a transport handshake fails), the shell prints exactly one warning and runs on the host path for that command. Subsequent commands continue to attempt world routing.
   - If `world_fs.require_world=true`, Substrate fails closed when the world backend is unavailable (or disabled via `--no-world`/`SUBSTRATE_WORLD=disabled`) instead of falling back to host execution.
 
-Windows (WSL backend) follows the same operator-facing lifecycle/status meaning; only the transport/bootstrap implementation differs. When the world backend is unavailable, the same `world_fs.require_world` rules apply (fallback only when `false`).
+Windows/WSL helper support is intentionally fail-closed in this slice. The older WSL bootstrap path is not documented here as a supported operator flow because its socket/group and `SUBSTRATE_HOME` placement do not yet match the Linux/macOS contract.
+
+### Shared-owner world reuse (Linux-source contract, macOS/Lima parity)
+
+Substrate now has two reuse modes in the shared `world-api` contract:
+
+- `reuse_mode=generic_compatible` is the legacy/default reusable-world lookup.
+- `reuse_mode=shared_orchestration` activates explicit shared-owner reuse with:
+  - `orchestration_session_id`
+  - `action=attach_or_create`
+  - `action=replace_expected_generation { expected_generation, reason }`
+
+When explicit shared-owner reuse is active, the authoritative proof surface is `WorldHandle.shared_binding`:
+
+- `orchestration_session_id`
+- `world_id`
+- `world_generation`
+- `binding_state`
+
+Current enforcement boundary:
+
+- Linux remains the source-of-truth implementation for owner-bound shared-world reuse semantics, and those semantics live in `crates/world`.
+- On Linux, the persisted authority is `SessionWorldMetadata` in `crates/world/src/session.rs`; there is no shell-owned co-authoritative binding store in this slice.
+- `set_shared_binding_state()` is the only shared-binding mutation path, and `persist_metadata()` writes `session.json` atomically.
+- Reuse requires both exact owner match and compatible world inputs; generic compatibility alone is not enough.
+- Same-owner Linux shared-world ensure/replace paths are serialized by a backend-local mutex in `crates/world` so attach/create and replace do not race each other inside one backend instance.
+- When a caller explicitly requests shared-owner reuse, the proof echoed back to request/PTY callers must describe the same `orchestration_session_id` and `world_id`, and the proof must be in `binding_state=active`. `active` remains the only binding proof downstream surfaces may expose or accept.
+- On macOS, the supported Lima-backed transport path now preserves the same explicit shared-owner proof contract: the shell forwards `SharedWorldOwnerSpec`, requires `ready.shared_world` / `WorldHandle.shared_binding` proof, and keeps replacement fail-closed on the forwarded guest path.
+- On macOS, explicit shared-owner requests still reject when callers bypass the Lima-backed path with `SUBSTRATE_WORLD_SOCKET`, because that override skips the authoritative forwarded transport.
+- Windows still rejects explicit shared-owner requests before bootstrap/fallback logic runs in this slice.
+- Windows/WSL readiness split work in this slice is internal-only parity hardening. It does not
+  create a supported Windows persistent-session shell caller.
+
+Replacement and recovery guarantees on Linux:
+
+- `replace_expected_generation` runs in four stages inside `crates/world`: pre-commit the current world to `binding_state=replacing`, commit the replacement world as `binding_state=active` with `world_generation + 1`, roll the old world back to `active` if replacement creation fails, then finalize the old world to `binding_state=replaced`.
+- The commit window is intentionally two-phase: recovery may observe either one `active` world or one lone `replacing` world for an owner, but never treat `replacing` as a downstream proof state.
+- Recovery reconciles a lone `replacing` world back to `active`, prefers a newer `active` world over an older `replacing` world, and fails closed on ambiguous same-owner states or malformed owner metadata.
+- Ownerless legacy metadata, partial owner metadata, and `replaced`/`abandoned` bindings are never reusable for shared-owner flows.
+
+Deliberate boundary for later lanes:
+
+- Runtime-state projection of the active binding into shell-owned live state remains PLAN-04.
+- Invalidation/replacement registry semantics for generation changes and non-`active` binding states remain PLAN-05.
+- This document does not claim restart persistence or cross-generation invalidation behavior beyond the current Linux backend reuse proof.
 
 ---
 
@@ -65,8 +116,15 @@ Windows (WSL backend) follows the same operator-facing lifecycle/status meaning;
   world-agent under `/usr/local/bin`, write the `.service` **and** `.socket` units,
   and enable socket activation. The script uses `sudo` for filesystem and systemd operations and
   will prompt if elevated credentials are required.
+- The generated service unit exports `SUBSTRATE_HOME` (default: `<invoking-user-home>/.substrate`,
+  or the explicit `SUBSTRATE_HOME` you pass to the helper) and keeps that path in
+  `ReadWritePaths` alongside `/var/lib/substrate`, `/run`, `/run/substrate`, `/sys/fs/cgroup`,
+  and `/tmp`.
 - The helper ensures the Linux `substrate` group exists, adds the invoking user when possible,
-  and rewrites the socket unit so `/run/substrate.sock` is created as `root:substrate 0660`.
+  and rewrites the socket/service units so `/run/substrate` is recreated as
+  `root:substrate 0750`, `/run/substrate.sock` is created as `root:substrate 0660`,
+  and managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/`
+  stay group-readable (`0750` directories, `0640` files).
   If it cannot add you automatically it prints `sudo usermod -aG substrate <user>`. Run
   `loginctl enable-linger <user>` on hosts with systemd/logind (the script reports the current
   status) so socket activation survives logout or reboot.
@@ -81,7 +139,9 @@ Windows (WSL backend) follows the same operator-facing lifecycle/status meaning;
   substrate --shim-status | grep 'World socket'
   ```
   The socket listing should show `root substrate 0660`. If it does not, rerun the provisioning
-  helper or the installer to refresh the socket unit and group membership.
+  helper or the installer to refresh the socket/service units and group membership. Gateway
+  lifecycle failures that reference `/run/substrate/substrate-gateway-runtime/.../*.log` should
+  point at files readable by the `substrate` group after reprovision.
   The host-scoped doctor JSON surfaces `host.world_socket`:
   ```json
   {
@@ -126,7 +186,7 @@ Substrate on macOS uses a Lima VM (“substrate”) to host the world-agent. The
 Hosted installer behavior coverage on macOS flows through this Lima-backed Linux guest/world-agent path; package-manager selection itself remains Linux-only and does not define native macOS package-manager selection.
 
 - Provisioning & lifecycle
-- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` with `/tmp` included in `ReadWritePaths`.
+- `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` and managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
   - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` reports health (virtualization, agent socket, service status, forwarding tools).
   - The helper scripts substitute the active project path so `/src` inside the VM mirrors the host repo checkout.
   - If full isolation writable allowlists fail with `EPERM` in the guest, confirm the guest service has `cap_chown`:
@@ -137,6 +197,9 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
   2. SSH Unix domain socket forwarding (`~/.substrate/sock/agent.sock`)
   3. SSH TCP forwarding (`127.0.0.1:<port>`)
   - The backend attempts transports in that order; failure logs include remediation hints and the shell degrades to host execution after a single warning if all transports fail.
+  - For async persistent-session startup on macOS, the shell now awaits the backend-owned async
+    readiness path before opening `/v1/stream` unless `SUBSTRATE_WORLD_SOCKET` is explicitly
+    overriding the transport.
 
 - Logs & diagnostics
   - Agent logs live in the guest: `substrate sudo journalctl -u substrate-world-agent -n 200` (the CLI shells into Lima automatically) or manually via `limactl shell substrate sudo journalctl -u substrate-world-agent -n 200`.
@@ -144,8 +207,9 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
 
 - Validation
   - `scripts/mac/smoke.sh` exercises non‑PTY, PTY, and replay flows on macOS and asserts that the replay `fs_diff` contains project paths.
+  - `scripts/mac/orchestration-smoke.sh` warms Lima, runs the live `world-mac-lima` backend smoke example, and then runs the macOS-targeted orchestration regression tests that cover shared-owner attach/create, replacement, lazy member launch, targeted follow-up reuse, guest-owned cancel, and shared-world mismatch rejection.
   - `scripts/mac/smoke.sh --bedpm-installer-conformance` runs the BEDPM Linux smoke wrapper through the same Lima-backed guest path so hosted installer verification reuses the authoritative Linux harness instead of implying native macOS package-manager selection.
-  - `scripts/linux/agent-hub-isolation-verify.sh` verifies `world_fs.mode=read_only` and `world_fs.isolation=full` enforcement (on macOS it drives the Lima-backed world; on Windows, use WSL-specific tooling instead).
+  - `scripts/linux/agent-hub-isolation-verify.sh` verifies `world_fs.mode=read_only` and `world_fs.isolation=full` enforcement (on macOS it drives the Lima-backed world). WSL-specific provisioning helpers are intentionally disabled in this slice.
 
 ## 4) Isolation Details (Linux)
 
@@ -170,6 +234,8 @@ Per session world (identified by `WORLD_ID`, e.g., `wld_01994…`):
 
 ## 5) Agent API (over UDS)
 
+This section describes Substrate's local host/world transport API over the `world-agent` socket. It is not the external Unified Agent API (`unified-agent-api` on crates.io; imported in Rust code as `agent_api`) used for CLI-agent runtime abstraction.
+
 Socket: `/run/substrate.sock`
 
 - `GET /v1/capabilities`
@@ -177,24 +243,36 @@ Socket: `/run/substrate.sock`
 - `GET /v1/doctor/world`
   - World enforcement readiness report (guest-kernel + agent view; used by `substrate world doctor`)
 - `POST /v1/execute` (non‑PTY)
-  - Body: `{ cmd, cwd, env, pty: false, agent_id, budget?, profile? }`
-  - Returns: `{ exit, span_id, stdout_b64, stderr_b64, scopes_used }`
+  - Body: `{ cmd, cwd, env, pty: false, agent_id, budget?, profile?, policy_snapshot, shared_world?, world_network?, world_fs_mode? }`
+  - `shared_world` request shape: `{ orchestration_session_id, action }`
+  - Returns: `{ exit, span_id, stdout_b64, stderr_b64, scopes_used, fs_diff?, shared_world?, ...process_telemetry }`
+  - `shared_world` response shape is the authoritative echoed proof:
+    `{ orchestration_session_id, world_id, world_generation, binding_state }`
 - `GET /v1/stream` (WebSocket, PTY)
   - Client → Server frames (text JSON):
     - `{"type":"start","cmd":"bash -lc '<raw>'","cwd":"/path","env":{...},"span_id":"spn_...","cols":<u16>,"rows":<u16>}`
+    - Legacy `start` does not support `shared_world`.
+    - Persistent session start:
+      `{"type":"start_session","protocol_version":1,"cwd":"/path","env":{...},"policy_snapshot":{...},"shared_world?":{...},"world_network?":{...},"cols":<u16>,"rows":<u16>}`
     - `{"type":"stdin","data_b64":"..."}`
     - `{"type":"resize","cols":<u16>,"rows":<u16>}`
     - `{"type":"signal","sig":"INT|TERM|HUP|QUIT"}`
   - Server → Client frames:
+    - Persistent-session ready:
+      `{"type":"ready","session_nonce":"<hex32>","world_id":"wld_...","cwd":"/path","protocol_version":1,"shared_world?":{...}}`
     - `{"type":"stdout","data_b64":"..."}`
+    - Persistent-session command completion:
+      `{"type":"command_complete","seq":<u64>,"token_hex":"<hex32>","exit":0,"cwd":"/path"}`
     - `{"type":"exit","code":0}`
-    - `{"type":"error","message":"..."}`
+    - `{"type":"error","code":"...","message":"...","fatal":true,"seq?":<u64>}`
 - `GET /v1/trace/:span_id` (placeholder)
 - `POST /v1/request_scopes` (placeholder)
 - `POST /v1/gc` (netns GC; see §10)
 
 Notes
 - Protocol is stable; no TLS by design (UDS only).
+- The shared-world proof is additive. Generic callers omit `shared_world` entirely and do not receive owner-bound proof fields.
+- PTY shared-world requests must use `start_session`; the agent rejects `shared_world` on legacy `start`.
 - `profile` is an advanced request field used for backend-specific execution posture. For example,
   `substrate world enable --provision-deps` sets `profile=world-deps-provision` so provisioning can
   run with the expected world-agent behavior. On guest Linux agents, that profile is executed via a
@@ -212,21 +290,21 @@ Notes
 
 ## 6) Shell Behavior
 
-- Default‑on world (Linux, macOS, Windows)
+- Default‑on world (Linux, macOS)
   - On startup, the shell ensures a session world and sets `SUBSTRATE_WORLD=enabled` plus `SUBSTRATE_WORLD_ID`.
   - macOS builds warm the Lima VM, establish forwarding, and reuse the same backend factory used on Linux.
-  - Windows hosts call `platform_world::windows::ensure_world_ready`, which provisions/warms the `substrate-wsl` distro (via the PowerShell helpers) and keeps the world agent reachable through the forwarder named pipe.
   - The gateway lifecycle/status meaning is owned by the runtime parity contract; this section only records how the shell reaches the agent on each platform.
 - Routing
-  - Non‑PTY: POST to `/v1/execute` over UDS (Linux) or the forwarded socket/port (macOS/Windows).
+  - Non‑PTY: POST to `/v1/execute` over UDS (Linux) or the forwarded socket/port (macOS).
   - PTY: use WS to `/v1/stream` over the active transport; host fallback only occurs when `world_fs.require_world=false`.
+  - Explicit shared-owner requests keep Linux as the source contract, but the supported macOS/Lima path now forwards the same attach/create and replacement proof flow instead of rejecting before bootstrap. Windows still rejects explicit shared-owner requests before bootstrap/fallback rather than silently degrading to generic reuse.
 - Prompt safety
   - The REPL wraps PTY runs in `reedline::suspend_guard()` to avoid prompt corruption during external output.
 - Readiness & auto‑spawn
   - The shell probes `/v1/capabilities`; if stale socket is found, it removes it.
   - If the agent isn’t running, the shell attempts to spawn it (Linux dev flow: `target/debug/world-agent`).
   - macOS invokes the Lima backend ensure path to boot the VM and wire up its tunnel.
-  - Windows triggers the forwarder warm routine; see `docs/cross-platform/wsl_world_setup.md` for the underlying PowerShell flow.
+  - Windows/WSL helper flows are intentionally fail-closed in this slice; see `docs/cross-platform/wsl_world_setup.md`.
 - Fallback
   - With `world_fs.require_world=false`, exactly one warning is printed if the world cannot be reached; execution continues on the host in that situation.
   - With `world_fs.require_world=true`, world routing failures are treated as hard errors (no host fallback).
@@ -314,6 +392,7 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
 - macOS quick validation
   - `scripts/mac/lima-doctor.sh`
   - `PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh` (non‑PTY, PTY, replay + fs_diff assertion)
+  - `PATH="$(pwd)/target/debug:$PATH" scripts/mac/orchestration-smoke.sh` (Lima warm + live backend reachability + shared-owner/member-runtime orchestration contract regressions)
   - `substrate sudo journalctl -u substrate-world-agent -n 200` (or `limactl shell substrate sudo journalctl -u substrate-world-agent -n 200`) to review guest logs
 
 ---
@@ -359,7 +438,7 @@ Implemented features:
 
 - The host CLI exposes the same inventory via `substrate world cleanup`. Without flags it reports idle/active namespaces, cgroups, and host-level nft tables plus the exact manual commands needed to purge them.
 - Add `--purge` (and run as root/CAP_NET_ADMIN) to delete idle `substrate-<WORLD_ID>` netns entries, their nft tables, and matching `/sys/fs/cgroup/substrate/<WORLD_ID>` directories.
-- macOS + Lima: run the helper inside the guest (`limactl shell substrate sudo substrate world cleanup --purge`). WSL follows the same pattern (`wsl -d substrate-wsl -- sudo substrate world cleanup --purge`).
+- macOS + Lima: run the helper inside the guest (`limactl shell substrate sudo substrate world cleanup --purge`).
 - When purge isn't available, follow the printed instructions (`sudo ip netns exec ... nft delete table inet substrate_<WORLD_ID>`, `sudo ip netns delete ...`, `sudo rm -rf /sys/fs/cgroup/substrate/<WORLD_ID>`).
 
 ### Isolation fallback diagnostics
@@ -376,7 +455,7 @@ Implemented features:
 ## 12) Limitations & Next Steps
 
 - PTY overlay fs_diff is intentionally deferred; non‑PTY continues to provide `fs_diff`.
-- macOS/Windows support is "observe‑only" for worlds.
+- Windows/WSL provisioning helpers remain unsupported in this slice and exit fail-closed instead of mutating the guest.
 - Next steps
   - Consider PTY overlay or post‑exit diff per span as a follow‑up phase
 

@@ -7,6 +7,12 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenStorePersistence {
+    Persistent(PathBuf),
+    Disabled,
+}
+
 /// Serialize SecretString for storage
 fn serialize_secret<S>(secret: &SecretString, serializer: S) -> Result<S::Ok, S::Error>
 where
@@ -68,8 +74,8 @@ impl OAuthToken {
 /// Token storage - persists to JSON file
 #[derive(Debug, Clone)]
 pub struct TokenStore {
-    /// Path to token storage file
-    file_path: PathBuf,
+    /// Persistence strategy for this store
+    persistence: TokenStorePersistence,
     /// In-memory cache of tokens
     tokens: Arc<RwLock<HashMap<String, OAuthToken>>>,
 }
@@ -78,15 +84,27 @@ impl TokenStore {
     /// Create a new token store
     /// Loads existing tokens from file if it exists
     pub fn new(file_path: PathBuf) -> Result<Self> {
-        let tokens = if file_path.exists() {
-            let content = fs::read_to_string(&file_path).context("Failed to read token file")?;
-            serde_json::from_str(&content).context("Failed to parse token file")?
-        } else {
-            HashMap::new()
+        Self::with_persistence(TokenStorePersistence::Persistent(file_path))
+    }
+
+    pub fn disabled() -> Self {
+        Self {
+            persistence: TokenStorePersistence::Disabled,
+            tokens: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub fn with_persistence(persistence: TokenStorePersistence) -> Result<Self> {
+        let tokens = match &persistence {
+            TokenStorePersistence::Persistent(file_path) if file_path.exists() => {
+                let content = fs::read_to_string(file_path).context("Failed to read token file")?;
+                serde_json::from_str(&content).context("Failed to parse token file")?
+            }
+            _ => HashMap::new(),
         };
 
         Ok(Self {
-            file_path,
+            persistence,
             tokens: Arc::new(RwLock::new(tokens)),
         })
     }
@@ -101,6 +119,7 @@ impl TokenStore {
     }
 
     /// Create a token store at the default location
+    #[allow(dead_code)]
     pub fn load_default() -> Result<Self> {
         let path = Self::default_path()?;
         Self::new(path)
@@ -170,21 +189,30 @@ impl TokenStore {
 
     /// Persist tokens to file
     fn persist(&self) -> Result<()> {
+        let file_path = match &self.persistence {
+            TokenStorePersistence::Persistent(file_path) => file_path,
+            TokenStorePersistence::Disabled => return Ok(()),
+        };
+
         let tokens = self
             .tokens
             .read()
             .expect("Token store lock poisoned during read - cannot proceed safely");
         let json = serde_json::to_string_pretty(&*tokens).context("Failed to serialize tokens")?;
 
-        fs::write(&self.file_path, json).context("Failed to write token file")?;
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).context("Failed to create token store directory")?;
+        }
+
+        fs::write(file_path, json).context("Failed to write token file")?;
 
         // Set file permissions to 0600 (owner read/write only)
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut perms = fs::metadata(&self.file_path)?.permissions();
+            let mut perms = fs::metadata(file_path)?.permissions();
             perms.set_mode(0o600);
-            fs::set_permissions(&self.file_path, perms)?;
+            fs::set_permissions(file_path, perms)?;
         }
 
         Ok(())
@@ -246,5 +274,22 @@ mod tests {
 
         assert!(!valid_token.is_expired());
         assert!(!valid_token.needs_refresh());
+    }
+
+    #[test]
+    fn disabled_token_store_stays_in_memory() {
+        let store = TokenStore::disabled();
+
+        let token = OAuthToken {
+            provider_id: "test-provider".to_string(),
+            access_token: SecretString::new("access-123".to_string()),
+            refresh_token: SecretString::new("refresh-456".to_string()),
+            expires_at: Utc::now() + chrono::Duration::hours(1),
+            enterprise_url: None,
+            project_id: None,
+        };
+
+        store.save(token).unwrap();
+        assert!(store.get("test-provider").is_some());
     }
 }

@@ -2,6 +2,7 @@ use axum::http::{HeaderMap, StatusCode};
 use mockito::{Matcher, Server};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use substrate_gateway::auth::TokenStore;
 use substrate_gateway::cli::ModelMapping;
 use substrate_gateway::core::GatewayResponse;
 use substrate_gateway::providers::streaming::parse_sse_events;
@@ -10,6 +11,12 @@ use substrate_gateway::server::openai_conformance_test_support::{
     read_json_fixture, response_text as response_body_text, ConformanceHarness, FixtureNamespace,
     StubProvider,
 };
+
+const OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY: &str = "openai_responses_tool_choice";
+const OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY: &str = "openai_responses_reasoning_effort";
+const OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY: &str = "openai_responses_reasoning_summary";
+const OPENAI_RESPONSES_INCLUDE_METADATA_KEY: &str = "openai_responses_include";
+const OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY: &str = "openai_responses_text_verbosity";
 
 #[derive(Debug, Deserialize)]
 struct UsageExpected {
@@ -56,7 +63,22 @@ struct NegativeFixture {
 struct ToolLoopFixture {
     request: Value,
     expected_tool_use_id: String,
+    expected_tool_name: String,
+    expected_arguments: Value,
     expected_output: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PreviousResponseContinuationFixture {
+    request: Value,
+    previous_response_id: String,
+    expected_tool_use_id: String,
+    expected_output: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SupportedControlsFixture {
+    request: Value,
 }
 
 fn collect_output_summary(output: &Value) -> (Vec<String>, Vec<String>, Vec<String>) {
@@ -156,6 +178,43 @@ fn build_openai_provider_harness(base_url: &str, actual_model: &str) -> Conforma
     )
 }
 
+fn build_codex_oauth_provider_harness(actual_model: &str) -> ConformanceHarness {
+    let token_store = TokenStore::new(std::env::temp_dir().join(format!(
+        "substrate-gateway-codex-conformance-{}.json",
+        uuid::Uuid::new_v4()
+    )))
+    .unwrap();
+    let registry = ProviderRegistry::from_configs_with_models(
+        &[ProviderConfig {
+            name: "openai-codex".to_string(),
+            provider_type: "openai".to_string(),
+            auth_type: AuthType::OAuth,
+            api_key: None,
+            oauth_provider: Some("test-oauth-provider".to_string()),
+            project_id: None,
+            location: None,
+            base_url: Some("https://chatgpt.com/backend-api".to_string()),
+            headers: None,
+            models: vec![],
+            enabled: Some(true),
+        }],
+        Some(token_store),
+        &[],
+    )
+    .unwrap();
+
+    ConformanceHarness::with_registry(
+        "gateway-default",
+        registry,
+        vec![ModelMapping {
+            priority: 1,
+            provider: "openai-codex".to_string(),
+            actual_model: actual_model.to_string(),
+            inject_continuation_prompt: false,
+        }],
+    )
+}
+
 fn responses_api_sync_body(model: &str, text: &str) -> String {
     format!(
         "event: response.completed\ndata: {}\n\n",
@@ -186,7 +245,11 @@ fn responses_api_sync_body(model: &str, text: &str) -> String {
 
 #[tokio::test]
 async fn sync_responses_conformance_cases_cover_shape_order_and_ignore_posture() {
-    for fixture_name in ["sync-text.json", "sync-tool-call.json", "sync-mixed.json"] {
+    for fixture_name in [
+        "codex-sync-text.json",
+        "codex-sync-tool-call.json",
+        "codex-sync-mixed.json",
+    ] {
         let fixture: SyncFixture =
             read_json_fixture(FixtureNamespace::OpenAiResponses, fixture_name);
         let harness = build_sync_harness(&fixture.provider_response);
@@ -223,10 +286,53 @@ async fn sync_responses_conformance_cases_cover_shape_order_and_ignore_posture()
 }
 
 #[tokio::test]
+async fn sync_responses_conformance_keeps_reasoning_internal() {
+    let provider_response = GatewayResponse {
+        id: "resp_reasoning_internal".to_string(),
+        r#type: "message".to_string(),
+        role: "assistant".to_string(),
+        content: vec![
+            substrate_gateway::models::ContentBlock::thinking(serde_json::json!({
+                "thinking": "secret reasoning"
+            })),
+            substrate_gateway::models::ContentBlock::text("Visible answer".to_string(), None),
+        ],
+        model: "primary-actual".to_string(),
+        stop_reason: Some("end_turn".to_string()),
+        stop_sequence: None,
+        usage: substrate_gateway::core::GatewayUsage {
+            input_tokens: 3,
+            output_tokens: 2,
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+        },
+    };
+
+    let harness = build_sync_harness(&provider_response);
+    let request = json!({
+        "model": "gateway-default",
+        "input": "hello",
+        "stream": false
+    });
+    let response = harness.invoke_responses(HeaderMap::new(), request).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_body_text(response).await;
+    assert!(!body.contains("secret reasoning"));
+    assert!(body.contains("Visible answer"));
+
+    let json: Value = serde_json::from_str(&body).expect("sync response body must be JSON");
+    let (item_types, texts, call_ids) = collect_output_summary(&json["output"]);
+    assert_eq!(item_types, vec!["message"]);
+    assert_eq!(texts, vec!["Visible answer"]);
+    assert!(call_ids.is_empty());
+}
+
+#[tokio::test]
 async fn tool_loop_continuation_preserves_call_id_through_the_public_route() {
     let fixture: ToolLoopFixture = read_json_fixture(
         FixtureNamespace::OpenAiResponses,
-        "request-tool-loop-function-call-output.json",
+        "codex-request-tool-loop-function-call-output.json",
     );
     let provider = StubProvider::new(
         substrate_gateway::server::openai_conformance_test_support::response_text_response(
@@ -250,6 +356,19 @@ async fn tool_loop_continuation_preserves_call_id_through_the_public_route() {
 
     let requests = captured_requests.lock().unwrap();
     assert_eq!(requests.len(), 1);
+    let tool_use_message = &requests[0].messages[1];
+    let tool_use_blocks = match &tool_use_message.content {
+        substrate_gateway::models::MessageContent::Blocks(blocks) => blocks,
+        other => panic!("expected tool use blocks, got {other:?}"),
+    };
+    assert!(matches!(
+        &tool_use_blocks[0],
+        substrate_gateway::models::ContentBlock::Known(
+            substrate_gateway::models::KnownContentBlock::ToolUse { id, name, input }
+        ) if id == &fixture.expected_tool_use_id
+            && name == &fixture.expected_tool_name
+            && input == &fixture.expected_arguments
+    ));
     let last_message = requests[0].messages.last().expect("captured request");
     let blocks = match &last_message.content {
         substrate_gateway::models::MessageContent::Blocks(blocks) => blocks,
@@ -273,7 +392,7 @@ async fn tool_loop_continuation_uses_upstream_responses_api_and_preserves_functi
 ) {
     let fixture: ToolLoopFixture = read_json_fixture(
         FixtureNamespace::OpenAiResponses,
-        "request-tool-loop-function-call-output.json",
+        "codex-request-tool-loop-function-call-output.json",
     );
     let mut server = Server::new_async().await;
     let responses_mock = server
@@ -296,8 +415,8 @@ async fn tool_loop_continuation_uses_upstream_responses_api_and_preserves_functi
                 {
                     "type": "function_call",
                     "call_id": fixture.expected_tool_use_id,
-                    "name": "tool_call",
-                    "arguments": "{}"
+                    "name": fixture.expected_tool_name,
+                    "arguments": fixture.expected_arguments.to_string()
                 },
                 {
                     "type": "function_call_output",
@@ -358,6 +477,122 @@ async fn tool_loop_continuation_uses_upstream_responses_api_and_preserves_functi
 }
 
 #[tokio::test]
+async fn previous_response_id_continuation_uses_upstream_responses_api_without_replaying_function_call(
+) {
+    let fixture: PreviousResponseContinuationFixture = read_json_fixture(
+        FixtureNamespace::OpenAiResponses,
+        "request-previous-response-id-function-call-output.json",
+    );
+    let mut server = Server::new_async().await;
+    let responses_mock = server
+        .mock("POST", "/v1/responses")
+        .match_header("authorization", "Bearer openai-secret")
+        .match_body(Matcher::PartialJson(json!({
+            "model": "gpt-4.1-mini",
+            "stream": true,
+            "previous_response_id": fixture.previous_response_id,
+            "input": [
+                {
+                    "type": "function_call_output",
+                    "call_id": fixture.expected_tool_use_id,
+                    "output": fixture.expected_output
+                }
+            ]
+        })))
+        .with_status(200)
+        .with_body(responses_api_sync_body(
+            "gpt-4.1-mini",
+            "continued-tool-loop-ok",
+        ))
+        .create_async()
+        .await;
+    let chat_mock = server
+        .mock("POST", "/v1/chat/completions")
+        .with_status(200)
+        .with_body(
+            r#"{
+            "id":"chatcmpl_wrong_endpoint",
+            "object":"chat.completion",
+            "model":"gpt-4.1-mini",
+            "choices":[{
+                "message":{"role":"assistant","content":"wrong endpoint"},
+                "finish_reason":"stop"
+            }],
+            "usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}
+        }"#,
+        )
+        .create_async()
+        .await;
+
+    let harness = build_openai_provider_harness(&server.url(), "gpt-4.1-mini");
+    let response = harness
+        .invoke_responses(HeaderMap::new(), fixture.request.clone())
+        .await;
+
+    assert!(
+        responses_mock.matched_async().await,
+        "gateway should forward previous_response_id continuations to /v1/responses with output-only function_call_output items"
+    );
+    assert!(
+        !chat_mock.matched_async().await,
+        "gateway must not lower previous_response_id continuations into /v1/chat/completions"
+    );
+    let status = response.status();
+    let body = response_body_text(response).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let json: Value =
+        serde_json::from_str(&body).expect("continuation regression response body must be JSON");
+    assert_eq!(json["object"], "response");
+    assert_eq!(json["status"], "completed");
+
+    let (item_types, texts, call_ids) = collect_output_summary(&json["output"]);
+    assert_eq!(item_types, vec!["message".to_string()]);
+    assert_eq!(texts, vec!["continued-tool-loop-ok".to_string()]);
+    assert!(call_ids.is_empty());
+
+    responses_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn orphaned_function_call_output_rejects_before_any_upstream_call() {
+    let fixture: NegativeFixture = read_json_fixture(
+        FixtureNamespace::OpenAiResponses,
+        "negative-orphaned-function-call-output-without-previous-response-id.json",
+    );
+    let mut server = Server::new_async().await;
+    let responses_mock = server
+        .mock("POST", "/v1/responses")
+        .with_status(200)
+        .with_body(responses_api_sync_body("gpt-4.1-mini", "wrong"))
+        .create_async()
+        .await;
+
+    let harness = build_openai_provider_harness(&server.url(), "gpt-4.1-mini");
+    let response = harness
+        .invoke_responses(HeaderMap::new(), fixture.request.clone())
+        .await;
+
+    assert_eq!(
+        response.status(),
+        StatusCode::from_u16(fixture.expected_status).unwrap()
+    );
+    assert!(
+        !responses_mock.matched_async().await,
+        "gateway must reject orphaned continuations before the upstream call when previous_response_id is absent"
+    );
+    assert!(
+        fixture.request.get("previous_response_id").is_none(),
+        "negative orphan fixture must not include previous_response_id"
+    );
+
+    let body = response_body_text(response).await;
+    let json: Value = serde_json::from_str(&body).expect("negative response body must be JSON");
+    assert_eq!(json["error"]["type"], "error");
+    assert_eq!(json["error"]["class"], fixture.expected_error_class);
+    assert_eq!(json["error"]["message"], fixture.expected_error_message);
+}
+
+#[tokio::test]
 async fn parallel_tool_calls_is_preserved_on_the_public_responses_route() {
     let provider = StubProvider::new(
         substrate_gateway::server::openai_conformance_test_support::response_text_response(
@@ -392,12 +627,162 @@ async fn parallel_tool_calls_is_preserved_on_the_public_responses_route() {
 }
 
 #[tokio::test]
+async fn supported_route_matrix_controls_are_preserved_in_gateway_request_shape() {
+    let fixture: SupportedControlsFixture = read_json_fixture(
+        FixtureNamespace::OpenAiResponses,
+        "codex-supported-controls.json",
+    );
+    let provider = StubProvider::new(
+        substrate_gateway::server::openai_conformance_test_support::response_text_response(
+            "matrix-ok",
+            "primary-actual",
+        ),
+        vec![],
+    );
+    let harness = ConformanceHarness::single_provider(provider, "primary-actual", false);
+
+    let response = harness
+        .invoke_responses(HeaderMap::new(), fixture.request.clone())
+        .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let captured_requests = harness.captured_requests();
+    let captured_requests = captured_requests.lock().unwrap();
+    assert_eq!(captured_requests.len(), 1);
+
+    let captured = &captured_requests[0];
+    assert_eq!(captured.stream, Some(false));
+    assert_eq!(
+        captured
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("parallel_tool_calls")),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        captured
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_REASONING_EFFORT_METADATA_KEY)),
+        Some(&serde_json::json!("low"))
+    );
+    assert_eq!(
+        captured
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_REASONING_SUMMARY_METADATA_KEY)),
+        Some(&serde_json::json!("concise"))
+    );
+    assert_eq!(
+        captured
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_INCLUDE_METADATA_KEY)),
+        Some(&serde_json::json!(["reasoning.encrypted_content"]))
+    );
+    assert_eq!(
+        captured
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TEXT_VERBOSITY_METADATA_KEY)),
+        Some(&serde_json::json!("low"))
+    );
+    assert_eq!(
+        captured
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY)),
+        Some(&serde_json::json!({
+            "type": "function",
+            "function": { "name": "lookup" }
+        }))
+    );
+    assert_eq!(captured.tools.as_ref().map(|tools| tools.len()), Some(1));
+    assert_eq!(
+        captured
+            .tools
+            .as_ref()
+            .and_then(|tools| tools[0].name.as_deref()),
+        Some("lookup")
+    );
+
+    assert_eq!(captured.messages.len(), 1);
+    let blocks = match &captured.messages[0].content {
+        substrate_gateway::models::MessageContent::Blocks(blocks) => blocks,
+        other => panic!("expected multimodal blocks, got {other:?}"),
+    };
+    assert!(matches!(
+        &blocks[0],
+        substrate_gateway::models::ContentBlock::Known(
+            substrate_gateway::models::KnownContentBlock::Text { text, .. }
+        ) if text == "Describe this image"
+    ));
+    assert!(matches!(
+        &blocks[1],
+        substrate_gateway::models::ContentBlock::Known(
+            substrate_gateway::models::KnownContentBlock::Image { source }
+        ) if source.url.as_deref() == Some("https://example.com/image.png")
+    ));
+}
+
+#[tokio::test]
+async fn explicit_tool_choice_is_preserved_in_metadata_and_flat_tools() {
+    let provider = StubProvider::new(
+        substrate_gateway::server::openai_conformance_test_support::response_text_response(
+            "tool-choice-ok",
+            "primary-actual",
+        ),
+        vec![],
+    );
+    let harness = ConformanceHarness::single_provider(provider, "primary-actual", false);
+
+    let request = serde_json::json!({
+        "model": "gateway-default",
+        "input": "hello",
+        "stream": false,
+        "tools": [
+            { "type": "function", "function": { "name": "alpha", "parameters": {"type":"object"} } },
+            { "type": "function", "function": { "name": "beta", "parameters": {"type":"object"} } }
+        ],
+        "tool_choice": { "type": "function", "function": { "name": "beta" } }
+    });
+
+    let response = harness.invoke_responses(HeaderMap::new(), request).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let captured_requests = harness.captured_requests();
+    let captured_requests = captured_requests.lock().unwrap();
+    assert_eq!(captured_requests.len(), 1);
+    let captured = &captured_requests[0];
+
+    assert_eq!(
+        captured
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get(OPENAI_RESPONSES_TOOL_CHOICE_METADATA_KEY)),
+        Some(&serde_json::json!({
+            "type": "function",
+            "function": { "name": "beta" }
+        }))
+    );
+    assert_eq!(captured.tools.as_ref().map(|tools| tools.len()), Some(1));
+    assert_eq!(
+        captured
+            .tools
+            .as_ref()
+            .and_then(|tools| tools[0].name.as_deref()),
+        Some("beta")
+    );
+}
+
+#[tokio::test]
 async fn streaming_responses_conformance_cases_cover_event_order_and_completed_payload() {
     for fixture_name in [
-        "stream-text.json",
-        "stream-tool-call.json",
-        "stream-mixed.json",
-        "stream-with-usage.json",
+        "codex-stream-text.json",
+        "codex-stream-tool-call.json",
+        "codex-stream-mixed.json",
+        "codex-stream-with-usage.json",
     ] {
         let fixture: StreamFixture =
             read_json_fixture(FixtureNamespace::OpenAiResponses, fixture_name);
@@ -466,12 +851,13 @@ async fn streaming_responses_conformance_cases_cover_event_order_and_completed_p
 }
 
 #[tokio::test]
-async fn negative_responses_requests_return_redacted_gateway_envelopes() {
+async fn generic_negative_responses_requests_return_redacted_gateway_envelopes() {
     for fixture_name in [
-        "negative-built-in-tool.json",
-        "negative-non-function-tool.json",
-        "negative-unsupported-text-format.json",
-        "negative-invalid-call-id.json",
+        "codex-negative-built-in-tool.json",
+        "codex-negative-non-function-tool.json",
+        "codex-negative-unsupported-text-format.json",
+        "codex-negative-invalid-call-id.json",
+        "codex-negative-invalid-function-call-arguments.json",
     ] {
         let fixture: NegativeFixture =
             read_json_fixture(FixtureNamespace::OpenAiResponses, fixture_name);
@@ -483,6 +869,56 @@ async fn negative_responses_requests_return_redacted_gateway_envelopes() {
             vec![],
         );
         let harness = ConformanceHarness::single_provider(provider, "primary-actual", false);
+
+        let response = harness
+            .invoke_responses(HeaderMap::new(), fixture.request.clone())
+            .await;
+
+        assert_eq!(
+            response.status(),
+            StatusCode::from_u16(fixture.expected_status).unwrap(),
+            "{fixture_name}"
+        );
+
+        let body = response_body_text(response).await;
+        assert!(
+            !body.contains(&fixture.expected_error_contains),
+            "{fixture_name}: public error body should stay redacted"
+        );
+        let json: Value = serde_json::from_str(&body).expect("negative response body must be JSON");
+
+        assert_eq!(json["error"]["type"], "error", "{fixture_name}");
+        assert_eq!(
+            json["error"]["class"], fixture.expected_error_class,
+            "{fixture_name}"
+        );
+        assert_eq!(
+            json["error"]["message"], fixture.expected_error_message,
+            "{fixture_name}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn codex_route_negative_requests_return_redacted_gateway_envelopes() {
+    for fixture_name in [
+        "codex-negative-max-output-tokens.json",
+        "codex-negative-metadata.json",
+        "codex-negative-truncation.json",
+        "codex-negative-previous-response-id.json",
+        "codex-negative-temperature.json",
+        "codex-negative-top-p.json",
+        "codex-negative-user.json",
+        "codex-negative-service-tier.json",
+        "codex-negative-stream-options.json",
+        "codex-negative-required-tool-choice.json",
+        "codex-negative-invalid-reasoning-summary.json",
+        "codex-negative-encrypted-include-without-reasoning.json",
+        "codex-negative-invalid-function-call-arguments.json",
+    ] {
+        let fixture: NegativeFixture =
+            read_json_fixture(FixtureNamespace::OpenAiResponses, fixture_name);
+        let harness = build_codex_oauth_provider_harness("codex-mini-latest");
 
         let response = harness
             .invoke_responses(HeaderMap::new(), fixture.request.clone())

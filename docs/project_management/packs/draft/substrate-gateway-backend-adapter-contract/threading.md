@@ -53,7 +53,7 @@ Horizon policy for this extracted pack:
   - **Direct consumers**: `SEAM-3`
   - **Derived consumers**: adapter implementations, validation artifacts, and any future durable schema publication
   - **Thread IDs**: `THR-02`
-  - **Definition**: the adopted Universal Agent API subset for capability advertisement, versioned extension keys, request and response payloads, adapter error objects, and backend-defined session-handle facets.
+  - **Definition**: the adopted Unified Agent API subset for capability advertisement, versioned extension keys, request and response payloads, adapter error objects, and backend-defined session-handle facets.
   - **Canonical contract ref**: `docs/contracts/substrate-gateway-backend-adapter-schema.md`
   - **Versioning / compat**: field names, defaults, omission rules, and bounded error detail must stay explicit and additive; session-handle facets remain gateway-contract data rather than Substrate policy input.
 

@@ -8,10 +8,10 @@ use std::sync::Arc;
 
 use agent_api_types::{
     ApiError, ExecuteCancelRequestV1, ExecuteCancelResponseV1, ExecuteRequest, ExecuteResponse,
-    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, PendingDiffClearRequestV1,
-    PendingDiffClearResponseV1, PendingDiffReconcileRequestV1, PendingDiffReconcileResponseV1,
-    PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1, WorldFsReadRequestV1,
-    WorldFsReadResponseV1,
+    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, MemberTurnSubmitRequestV1,
+    PendingDiffClearRequestV1, PendingDiffClearResponseV1, PendingDiffReconcileRequestV1,
+    PendingDiffReconcileResponseV1, PendingDiffRecordV1, PendingDiffRequestV1, WorldDoctorReportV1,
+    WorldFsReadRequestV1, WorldFsReadResponseV1,
 };
 use anyhow::{anyhow, Context, Result};
 use http_body_util::{BodyExt, Full};
@@ -141,6 +141,31 @@ impl AgentClient {
             .context("Failed to request streamed execute cancellation")?;
 
         self.parse_response(response).await
+    }
+
+    /// Submit a follow-up turn to a retained world member session and stream incremental output.
+    pub async fn submit_member_turn_stream(
+        &self,
+        request: MemberTurnSubmitRequestV1,
+    ) -> Result<Response<hyper::body::Incoming>> {
+        let response = self
+            .post("/v1/member_turn/stream", &request)
+            .await
+            .context("Failed to initiate member turn submit stream")?;
+
+        if response.status().is_success() {
+            return Ok(response);
+        }
+
+        let status = response.status();
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .context("Failed to read error body")?
+            .to_bytes();
+
+        Err(Self::map_http_error(status, &body_bytes))
     }
 
     /// Get agent capabilities.

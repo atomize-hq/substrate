@@ -1,0 +1,89 @@
+# adr-0027-identity-tuple-policy-surface — CI checkpoint plan
+
+This file defines when cross-platform CI gates run for this feature during pre-planning.
+
+Standard:
+
+- `docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md`
+
+## Inputs
+
+- Feature directory: `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/`
+- `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/impact_map.md`
+- `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/spec_manifest.md`
+- `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/pre-planning/minimal_spec_draft.md`
+
+## Operator rules
+
+- This plan is authoritative for checkpoint cadence during pre-planning.
+- If slice ids, platform scope, or checkpoint boundaries change, update this plan first.
+- `tasks.json` already carries the required schema v4 automation baseline, Linux/macOS behavior-platform scope, and Linux/macOS/Windows CI compile-parity scope for this draft pack.
+- Full planning must add `CP1-ci-checkpoint` and set `meta.checkpoint_boundaries = ["ITPS3"]` after slice tasks exist.
+- Mechanical validation is deferred until `tasks.json` contains real slice integration tasks and the checkpoint ops task.
+
+## Applicability
+
+- Checkpoint planning applies because the authoritative inputs define one cross-platform tuple-policy contract across Linux, macOS, and Windows.
+- `impact_map.md` ties the feature to broker policy parsing, shell denial and explain surfaces, trace publication, and operator documentation parity.
+- `spec_manifest.md` keeps the feature on four contiguous slices that together close the contract, schema, policy, telemetry, compatibility, validation, checkpoint-alignment, and promotion surfaces.
+
+## Machine-readable plan (linted)
+
+```json
+{
+  "version": 1,
+  "defaults": {
+    "min_triads_per_checkpoint": 4,
+    "max_triads_per_checkpoint": 8
+  },
+  "checkpoints": [
+    {
+      "id": "CP1",
+      "task_id": "CP1-ci-checkpoint",
+      "slices": ["ITPS0", "ITPS1", "ITPS2", "ITPS3"],
+      "gates": {
+        "compile_parity": true,
+        "feature_smoke": true,
+        "ci_testing": "full"
+      },
+      "rationale": "The accepted slice set contains four slices and still closes under one final cross-platform checkpoint. ITPS0 locks the tuple-axis contract and schema surface. ITPS1 closes policy-evaluation ordering, deny taxonomy, and explain-surface closure. ITPS2 closes telemetry publication and compatibility posture. ITPS3 closes manual validation, CI checkpoint alignment, and promotion packaging. Cross-platform validation after ITPS3 covers Linux/macOS feature behavior plus Linux/macOS/Windows compile parity across the completed broker, shell, trace, and operator-contract seam in one pass."
+    }
+  ]
+}
+```
+
+## Human-readable rationale
+
+### CP1 (`ITPS0` through `ITPS3`)
+
+- Code-grounded boundary:
+  - `ITPS0` owns the additive `llm.constraints.*` contract and schema surface, the authoritative explain surface, and naming and precedence rules.
+  - `ITPS1` owns ordered policy evaluation, tuple-axis deny semantics, and explain-surface closure.
+  - `ITPS2` owns tuple-aware telemetry publication and compatibility guarantees.
+  - `ITPS3` owns manual validation, CI checkpoint alignment, and promotion closure.
+  - The completed seam crosses `crates/broker`, `crates/shell`, `crates/trace`, and the cross-platform operator contract surfaces named in `impact_map.md`.
+- Stabilized surfaces:
+  - tuple-axis contract and schema publication
+  - authoritative policy inspection and explain wording
+  - backend-gate plus tuple-axis evaluation ordering
+  - tuple-aware allow and deny telemetry publication
+  - backend-id compatibility boundary
+  - CI checkpoint alignment and promotion packaging
+  - Linux and macOS behavior validation plus Windows compile-parity closure
+- Risk reduced at this checkpoint:
+  - contract drift between policy docs and effective policy output
+  - deny-taxonomy drift across broker and shell surfaces
+  - trace-field drift against the selected tuple vocabulary
+  - platform-specific parity regressions in the final operator story, including Windows compile-only regressions
+- Gate selection:
+  - `compile_parity`: run at `CP1` because the feature touches shared broker, shell, and trace surfaces.
+  - `feature_smoke`: run at `CP1` for Linux and macOS because the feature still needs behavior-level checkpoint coverage where the pack requires it.
+  - `ci_testing = "full"`: run at `CP1` because this is the only checkpoint and it closes the full contract-to-promotion seam.
+
+## Follow-ups
+
+- Add real slice tasks to `tasks.json` for `ITPS0`, `ITPS1`, `ITPS2`, and `ITPS3`.
+- Add `CP1-ci-checkpoint` to `tasks.json` with dependencies anchored to the ending slice integration task.
+- Set `tasks.json` `meta.checkpoint_boundaries = ["ITPS3"]`.
+- Replace the draft slice ids in the machine-readable JSON if full planning renames or splits the current slices.
+- Run `python3 docs/project_management/system/scripts/planning/validate_ci_checkpoint_plan.py --feature-dir "docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface"` after the real slice tasks and checkpoint task exist.

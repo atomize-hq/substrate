@@ -1,10 +1,12 @@
 # substrate-gateway-backend-adapter-contract — impact map
 
 Authoring standards:
+
 - `docs/project_management/system/fse/standards/planning/PLANNING_IMPACT_MAP_STANDARD.md`
 - `docs/project_management/system/fse/standards/planning/PLANNING_SPEC_DETERMINATION_STANDARD.md`
 
 ## Inputs
+
 - Feature directory: `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/`
 - ADR(s):
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
@@ -14,6 +16,7 @@ Authoring standards:
 ## Touch set (explicit)
 
 ### Create
+
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/impact_map.md`
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/minimal_spec_draft.md`
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/workstream_triage.md`
@@ -31,6 +34,7 @@ Authoring standards:
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/seam-planning/parity-and-validation.md`
 
 ### Edit
+
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
 - `docs/contracts/substrate-gateway-operator-contract.md`
 - `docs/contracts/substrate-gateway-policy-evaluation.md`
@@ -45,32 +49,38 @@ Authoring standards:
 - `crates/shell/tests/world_gateway.rs`
 
 ### Deprecate
+
 - `docs/project_management/adrs/draft/ADR-0024-cli-backend-provider-engine.md`
 
 ### Delete
+
 - None
 
 ## Cascading implications (behavior and UX)
 
 ### CLI / UX
+
 - Change: `substrate world gateway sync`, `substrate world gateway status`, and `substrate world gateway restart` remain the only operator entrypoints while backend selection stays expressed as a stable `<kind>:<name>` id behind the gateway boundary.
   - Direct impact: no new top-level CLI surface lands in Substrate for adapter selection or adapter administration.
   - Cascading impact: human-readable status text, JSON status output, and manual playbooks must keep exit `4` reserved for required gateway or world component absence and must keep invalid adapter selection, unsupported capability, and policy denial outside that absent-state bucket.
   - Contradiction risks: archived command orderings such as `substrate world sync gateway` and `substrate world status gateway` remain wrong, and any operator text that treats provider ids or wrapper ids as stable CLI-facing identities recreates ADR-0024 drift.
 
 ### Config / env vars / paths
+
 - Change: adapter selection continues to consume the existing ADR-0027 config and policy roots, the existing one-file-per-backend inventory model, and the existing backend-id grammar.
   - Direct impact: no new config family, no new policy family, and no new backend filename grammar land in this feature.
   - Cascading impact: the feature-local contract and policy docs must define adapter-missing, adapter-unsupported, and capability-unsatisfied behavior without inventing new YAML keys; the Substrate-owned non-secret wiring exports remain `SUBSTRATE_LLM_OPENAI_BASE_URL` and `SUBSTRATE_LLM_ANTHROPIC_BASE_URL`; host credential reads remain gated by `agents.host_credentials.read.allowed_backends`.
   - Contradiction risks: any draft or spec that points at `docs/project_management/packs/active/llm_and_agent_config_policy_surface/*` in this checkout creates link drift because the live pack path is `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/*`; any text that overloads `llm.routing.default_backend` with router, provider, auth-authority, or protocol meaning conflicts with ADR-0042 and ADR-0043.
 
 ### Policy / isolation / security posture
+
 - Change: allowlisting, fail-closed routing, host-to-world secret delivery, and trusted-input boundaries remain Substrate-owned, while adapter internals remain `substrate-gateway` implementation details.
   - Direct impact: invalid integration state, dependency unavailability, and policy denial remain separate outcomes for adapter-backed execution.
   - Cascading impact: Substrate status/lifecycle code must refuse to trust gateway-local config, admin mutation surfaces, token persistence, or session storage as policy inputs; adapter capability checks must map to explicit failure classes instead of collapsing into gateway absence; world-required routing remains fail-closed when policy demands in-world execution.
   - Contradiction risks: any host fallback path that bypasses world-required policy, any control path that authorizes execution from gateway-local state, and any leak of secret or session-handle data into operator-visible status or logs breaks the contract.
 
 ### Runtime / protocol / trace
+
 - Change: adapter protocol semantics, capability advertisement, extension keys, request and response schema, and session-handle lifecycle move into new feature-local specs while normalized event envelopes and canonical trace vocabulary remain owned by ADR-0017 and ADR-0028.
   - Direct impact: the feature must author exact local protocol and schema docs before any typed runtime surface widens.
   - Cascading impact: `GatewayLifecycleResponseV1` and `substrate world gateway status --json` need one owner decision for any additive adapter metadata before code lands; backend ids remain `<kind>:<name>` selectors in trace and events; tuple fields such as `client`, `router`, `provider`, `auth_authority`, and `protocol` remain external vocabulary rather than new local schema keys.
@@ -79,6 +89,7 @@ Authoring standards:
 ## Cross-queue scan (ADRs + Planning Packs)
 
 ### Relevant ADRs
+
 - ADR: `docs/project_management/adrs/draft/ADR-0040-substrate-gateway-boundary-and-runtime-ownership.md`
   - Overlap surfaces: operator command family, typed lifecycle and status runtime boundary, host-to-world secret delivery ownership, and the no-second-control-plane rule.
   - Conflict: no
@@ -124,6 +135,7 @@ Authoring standards:
     - Selected option: B
 
 ### Relevant Planning Packs
+
 - Planning Pack: `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/`
   - Overlap surfaces: operator contract, policy-evaluation boundary, runtime parity, typed lifecycle routes, and world-backed status semantics.
   - Conflict: yes
@@ -165,4 +177,4 @@ Authoring standards:
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md` — replace stale `packs/active/llm_and_agent_config_policy_surface/*` links with `packs/implemented/llm_and_agent_config_policy_surface/*`.
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/compatibility-spec.md` — record ADR-0024 and `docs/project_management/_archived/next/llm_cli_backend_engine/*` as historical evidence-only surfaces.
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-protocol-spec.md` — define the exact fail-closed capability-validation order and the exact boundary to ADR-0017 and ADR-0028.
-  - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md` — pin the adopted Universal Agent API subset, the extension-key set, and the session-handle facet schema.
+  - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md` — pin the adopted Unified Agent API subset, the extension-key set, and the session-handle facet schema.

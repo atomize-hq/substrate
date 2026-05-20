@@ -8,7 +8,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use substrate_broker::{
-    validate_backend_id, Policy, PolicyExplainV1, WorldFsDenyEnforcement, WorldFsDimensionPolicy,
+    validate_backend_id, validate_dotted_id, validate_snake_case_id, Policy, PolicyExplainV1,
+    WorldFsDenyEnforcement, WorldFsDimensionPolicy,
 };
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -72,6 +73,8 @@ pub(crate) struct LlmPatch {
     pub require_approval: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_backends: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "LlmConstraintsPatch::is_empty")]
+    pub constraints: LlmConstraintsPatch,
     #[serde(skip_serializing_if = "LlmSecretsPatch::is_empty")]
     pub secrets: LlmSecretsPatch,
 }
@@ -81,6 +84,7 @@ impl LlmPatch {
         self.fail_closed.is_empty()
             && self.require_approval.is_none()
             && self.allowed_backends.is_none()
+            && self.constraints.is_empty()
             && self.secrets.is_empty()
     }
 }
@@ -108,6 +112,28 @@ pub(crate) struct LlmSecretsPatch {
 impl LlmSecretsPatch {
     fn is_empty(&self) -> bool {
         self.env_allowed.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct LlmConstraintsPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub providers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_authorities: Option<Vec<String>>,
+}
+
+impl LlmConstraintsPatch {
+    fn is_empty(&self) -> bool {
+        self.routers.is_none()
+            && self.providers.is_none()
+            && self.protocols.is_none()
+            && self.auth_authorities.is_none()
     }
 }
 
@@ -350,6 +376,19 @@ pub(crate) fn parse_policy_patch_yaml(path: &Path, raw: &str) -> Result<PolicyPa
 
 fn validate_policy_patch(patch: &PolicyPatch) -> Result<()> {
     validate_backend_id_list_opt(&patch.llm.allowed_backends, "llm.allowed_backends")?;
+    validate_snake_case_id_list_opt(&patch.llm.constraints.routers, "llm.constraints.routers")?;
+    validate_snake_case_id_list_opt(
+        &patch.llm.constraints.providers,
+        "llm.constraints.providers",
+    )?;
+    validate_dotted_id_list_opt(
+        &patch.llm.constraints.protocols,
+        "llm.constraints.protocols",
+    )?;
+    validate_snake_case_id_list_opt(
+        &patch.llm.constraints.auth_authorities,
+        "llm.constraints.auth_authorities",
+    )?;
     validate_backend_id_list_opt(&patch.agents.allowed_backends, "agents.allowed_backends")?;
     validate_backend_id_list_opt(
         &patch.agents.host_credentials.read.allowed_backends,
@@ -366,6 +405,38 @@ fn validate_backend_id_list_opt(values: &Option<Vec<String>>, key: &str) -> Resu
         validate_backend_id(value).map_err(|_| {
             config_model::user_error(format!(
                 "invalid {} entry '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+                key,
+                value.trim()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_snake_case_id_list_opt(values: &Option<Vec<String>>, key: &str) -> Result<()> {
+    let Some(values) = values else {
+        return Ok(());
+    };
+    for value in values {
+        validate_snake_case_id(value).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid {} entry '{}'; expected lowercase snake_case id",
+                key,
+                value.trim()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_dotted_id_list_opt(values: &Option<Vec<String>>, key: &str) -> Result<()> {
+    let Some(values) = values else {
+        return Ok(());
+    };
+    for value in values {
+        validate_dotted_id(value).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid {} entry '{}'; expected lowercase dotted id",
                 key,
                 value.trim()
             ))
@@ -931,6 +1002,19 @@ fn validate_policy(policy: &Policy) -> Result<()> {
         ));
     }
     validate_backend_id_list(&policy.llm_allowed_backends, "llm.allowed_backends")?;
+    validate_snake_case_id_list(&policy.llm_constraints_routers, "llm.constraints.routers")?;
+    validate_snake_case_id_list(
+        &policy.llm_constraints_providers,
+        "llm.constraints.providers",
+    )?;
+    validate_dotted_id_list(
+        &policy.llm_constraints_protocols,
+        "llm.constraints.protocols",
+    )?;
+    validate_snake_case_id_list(
+        &policy.llm_constraints_auth_authorities,
+        "llm.constraints.auth_authorities",
+    )?;
     validate_backend_id_list(&policy.agents_allowed_backends, "agents.allowed_backends")?;
     validate_backend_id_list(
         &policy.agents_host_credentials_read_allowed_backends,
@@ -944,6 +1028,32 @@ fn validate_backend_id_list(values: &[String], key: &str) -> Result<()> {
         validate_backend_id(value).map_err(|_| {
             config_model::user_error(format!(
                 "invalid {} entry '{}'; expected <kind>:<name> with kind [a-z0-9_]+ and name [a-z0-9_-]+",
+                key,
+                value.trim()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_snake_case_id_list(values: &[String], key: &str) -> Result<()> {
+    for value in values {
+        validate_snake_case_id(value).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid {} entry '{}'; expected lowercase snake_case id",
+                key,
+                value.trim()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn validate_dotted_id_list(values: &[String], key: &str) -> Result<()> {
+    for value in values {
+        validate_dotted_id(value).map_err(|_| {
+            config_model::user_error(format!(
+                "invalid {} entry '{}'; expected lowercase dotted id",
                 key,
                 value.trim()
             ))
@@ -1033,6 +1143,18 @@ fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     }
     if let Some(v) = &patch.llm.allowed_backends {
         target.llm_allowed_backends = v.clone();
+    }
+    if let Some(v) = &patch.llm.constraints.routers {
+        target.llm_constraints_routers = v.clone();
+    }
+    if let Some(v) = &patch.llm.constraints.providers {
+        target.llm_constraints_providers = v.clone();
+    }
+    if let Some(v) = &patch.llm.constraints.protocols {
+        target.llm_constraints_protocols = v.clone();
+    }
+    if let Some(v) = &patch.llm.constraints.auth_authorities {
+        target.llm_constraints_auth_authorities = v.clone();
     }
     if let Some(v) = &patch.llm.secrets.env_allowed {
         target.llm_secrets_env_allowed = v.clone();
@@ -1132,6 +1254,12 @@ fn reset_policy_patch_key(patch: &mut PolicyPatch, key: &str) -> Result<bool> {
         "llm.fail_closed.routing" => Ok(patch.llm.fail_closed.routing.take().is_some()),
         "llm.require_approval" => Ok(patch.llm.require_approval.take().is_some()),
         "llm.allowed_backends" => Ok(patch.llm.allowed_backends.take().is_some()),
+        "llm.constraints.routers" => Ok(patch.llm.constraints.routers.take().is_some()),
+        "llm.constraints.providers" => Ok(patch.llm.constraints.providers.take().is_some()),
+        "llm.constraints.protocols" => Ok(patch.llm.constraints.protocols.take().is_some()),
+        "llm.constraints.auth_authorities" => {
+            Ok(patch.llm.constraints.auth_authorities.take().is_some())
+        }
         "llm.secrets.env_allowed" => Ok(patch.llm.secrets.env_allowed.take().is_some()),
 
         "agents.allowed_backends" => Ok(patch.agents.allowed_backends.take().is_some()),
@@ -1236,6 +1364,18 @@ fn apply_update_to_patch(patch: &mut PolicyPatch, update: &ConfigUpdate) -> Resu
         }
         "llm.allowed_backends" => {
             apply_backend_id_list_opt(&mut patch.llm.allowed_backends, update)
+        }
+        "llm.constraints.routers" => {
+            apply_string_list_opt(&mut patch.llm.constraints.routers, update)
+        }
+        "llm.constraints.providers" => {
+            apply_string_list_opt(&mut patch.llm.constraints.providers, update)
+        }
+        "llm.constraints.protocols" => {
+            apply_string_list_opt(&mut patch.llm.constraints.protocols, update)
+        }
+        "llm.constraints.auth_authorities" => {
+            apply_string_list_opt(&mut patch.llm.constraints.auth_authorities, update)
         }
         "llm.secrets.env_allowed" => {
             apply_string_list_opt(&mut patch.llm.secrets.env_allowed, update)
@@ -1600,5 +1740,91 @@ mod tests {
         assert!(err
             .to_string()
             .contains("unknown policy key 'world_fs.read_allowlist'"));
+    }
+
+    #[test]
+    fn policy_patch_parses_tuple_axes_under_existing_llm_constraints_root() {
+        let path = Path::new("policy.yaml");
+        let patch = parse_policy_patch_yaml(
+            path,
+            r#"
+llm:
+  allowed_backends:
+    - "api:openai"
+  constraints:
+    routers:
+      - "substrate_gateway"
+    providers:
+      - "openai"
+    protocols:
+      - "openai.responses"
+    auth_authorities:
+      - "openai_api_key"
+"#,
+        )
+        .expect("tuple-axis keys should parse under llm.constraints");
+
+        assert_eq!(
+            patch.llm.allowed_backends.as_deref(),
+            Some(&["api:openai".to_string()][..])
+        );
+        assert_eq!(
+            patch.llm.constraints.routers.as_deref(),
+            Some(&["substrate_gateway".to_string()][..])
+        );
+        assert_eq!(
+            patch.llm.constraints.providers.as_deref(),
+            Some(&["openai".to_string()][..])
+        );
+        assert_eq!(
+            patch.llm.constraints.protocols.as_deref(),
+            Some(&["openai.responses".to_string()][..])
+        );
+        assert_eq!(
+            patch.llm.constraints.auth_authorities.as_deref(),
+            Some(&["openai_api_key".to_string()][..])
+        );
+    }
+
+    #[test]
+    fn policy_patch_rejects_second_tuple_policy_roots_and_unknown_tuple_axes() {
+        let path = Path::new("policy.yaml");
+        let invalid_cases = [
+            (
+                r#"
+llm:
+  identity_tuple:
+    providers:
+      - "openai"
+"#,
+                "unknown field `identity_tuple`",
+            ),
+            (
+                r#"
+trace:
+  identity_tuple:
+    provider: "openai"
+"#,
+                "unknown field `trace`",
+            ),
+            (
+                r#"
+llm:
+  constraints:
+    clients:
+      - "codex"
+"#,
+                "unknown field `clients`",
+            ),
+        ];
+
+        for (raw, expected_fragment) in invalid_cases {
+            let err = parse_policy_patch_yaml(path, raw)
+                .expect_err("invalid tuple-policy roots should fail validation");
+            assert!(
+                err.to_string().contains(expected_fragment),
+                "expected `{expected_fragment}` in error, got: {err}"
+            );
+        }
     }
 }

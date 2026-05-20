@@ -1,0 +1,1058 @@
+{
+  "meta": {
+    "adr_paths": [
+      "docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md"
+    ],
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/llm-and-agent-identity-tuple-and-deployment-posture"
+    },
+    "behavior_platforms_required": [
+      "linux",
+      "macos"
+    ],
+    "checkpoint_boundaries": [
+      "LAITDP1",
+      "LAITDP2"
+    ],
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "cross_platform": true,
+    "execution_gates": true,
+    "feature": "llm-and-agent-identity-tuple-and-deployment-posture",
+    "schema_version": 4,
+    "slice_spec_version": 2
+  },
+  "tasks": [
+    {
+      "acceptance_criteria": [
+        "The execution preflight report is completed with a clear recommendation.",
+        "The planning quality gate remains `ACCEPT` and the task graph validates cleanly before LAITDP0 begins."
+      ],
+      "concurrent_with": [],
+      "depends_on": [],
+      "description": "Run the execution preflight gate before LAITDP0 begins.",
+      "end_checklist": [
+        "Complete: docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/execution_preflight_report.md",
+        "Record the gate summary in session_log.md.",
+        "Mark this task completed in tasks.json before starting LAITDP0."
+      ],
+      "id": "F0-exec-preflight",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/F0-exec-preflight.md",
+      "name": "Execution preflight gate (feature start)",
+      "phase": "F0",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/quality_gate_report.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/execution_preflight_report.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/manual_testing_playbook.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/F0-exec-preflight.md"
+      ],
+      "start_checklist": [
+        "Verify the orchestration checkout is on the feature branch.",
+        "Read plan.md, tasks.json, session_log.md, quality_gate_report.md, and the kickoff prompt.",
+        "Confirm `quality_gate_report.md` still says `RECOMMENDATION: ACCEPT`.",
+        "Complete execution_preflight_report.md with ACCEPT/REVISE and required fixes"
+      ],
+      "status": "completed",
+      "type": "ops",
+      "worktree": null
+    },
+    {
+      "ac_ids": [
+        "AC-LAITDP0-01",
+        "AC-LAITDP0-02",
+        "AC-LAITDP0-03",
+        "AC-LAITDP0-04",
+        "AC-LAITDP0-05",
+        "AC-LAITDP0-06"
+      ],
+      "acceptance_criteria": [
+        "Implements the behaviors required by ac_ids (see docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-spec.md)."
+      ],
+      "concurrent_with": [
+        "LAITDP0-test"
+      ],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "description": "Implement the LAITDP0 contract and schema lock.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP0-code\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp0-code",
+      "id": "LAITDP0-code",
+      "integration_task": "LAITDP0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/kickoff_prompts/LAITDP0-code.md",
+      "name": "LAITDP0 slice (code)",
+      "phase": "LAITDP0",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md",
+        "docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP0-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" SLICE_ID=\"LAITDP0\""
+      ],
+      "status": "completed",
+      "type": "code",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp0-code"
+    },
+    {
+      "ac_ids": [
+        "AC-LAITDP0-01",
+        "AC-LAITDP0-02",
+        "AC-LAITDP0-03",
+        "AC-LAITDP0-04",
+        "AC-LAITDP0-05",
+        "AC-LAITDP0-06"
+      ],
+      "acceptance_criteria": [
+        "Tests enforce the behaviors required by ac_ids (see docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-spec.md)."
+      ],
+      "concurrent_with": [
+        "LAITDP0-code"
+      ],
+      "depends_on": [
+        "F0-exec-preflight"
+      ],
+      "description": "Add tests that enforce the LAITDP0 contract and schema lock.",
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP0-test\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp0-test",
+      "id": "LAITDP0-test",
+      "integration_task": "LAITDP0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/kickoff_prompts/LAITDP0-test.md",
+      "name": "LAITDP0 slice (test)",
+      "phase": "LAITDP0",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/contract.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/identity-tuple-schema-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md",
+        "docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md"
+      ],
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP0-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" SLICE_ID=\"LAITDP0\""
+      ],
+      "status": "completed",
+      "type": "test",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp0-test"
+    },
+    {
+      "ac_ids": [
+        "AC-LAITDP0-01",
+        "AC-LAITDP0-02",
+        "AC-LAITDP0-03",
+        "AC-LAITDP0-04",
+        "AC-LAITDP0-05",
+        "AC-LAITDP0-06"
+      ],
+      "acceptance_criteria": [
+        "Slice is green under make integ-checks and implements the behaviors required by ac_ids."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP0-code",
+        "LAITDP0-test"
+      ],
+      "description": "Finalize LAITDP0 after the code and test branches merge cleanly.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests.",
+        "make integ-checks",
+        "Complete slice closeout gate report: docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-closeout_report.md",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP0-integ\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp0-integ",
+      "id": "LAITDP0-integ",
+      "integration_task": "LAITDP0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/kickoff_prompts/LAITDP0-integ.md",
+      "merge_to_orchestration": true,
+      "name": "LAITDP0 slice (integration final)",
+      "phase": "LAITDP0",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP0/LAITDP0-closeout_report.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/spec_manifest.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP0-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP0-integ\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp0-integ"
+    },
+    {
+      "ac_ids": [
+        "AC-LAITDP1-01",
+        "AC-LAITDP1-02",
+        "AC-LAITDP1-03",
+        "AC-LAITDP1-04",
+        "AC-LAITDP1-05",
+        "AC-LAITDP1-06"
+      ],
+      "acceptance_criteria": [
+        "Implements the behaviors required by ac_ids (see docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md)."
+      ],
+      "concurrent_with": [
+        "LAITDP1-test"
+      ],
+      "depends_on": [
+        "LAITDP0-integ"
+      ],
+      "description": "Implement the LAITDP1 policy and observability lock.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP1-code\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-code",
+      "id": "LAITDP1-code",
+      "integration_task": "LAITDP1-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-code.md",
+      "name": "LAITDP1 slice (code)",
+      "phase": "LAITDP1",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/policy-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP1-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" SLICE_ID=\"LAITDP1\""
+      ],
+      "status": "completed",
+      "type": "code",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-code"
+    },
+    {
+      "ac_ids": [
+        "AC-LAITDP1-01",
+        "AC-LAITDP1-02",
+        "AC-LAITDP1-03",
+        "AC-LAITDP1-04",
+        "AC-LAITDP1-05",
+        "AC-LAITDP1-06"
+      ],
+      "acceptance_criteria": [
+        "Tests enforce the behaviors required by ac_ids (see docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md)."
+      ],
+      "concurrent_with": [
+        "LAITDP1-code"
+      ],
+      "depends_on": [
+        "LAITDP0-integ"
+      ],
+      "description": "Add tests that enforce the LAITDP1 policy and observability lock.",
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP1-test\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-test",
+      "id": "LAITDP1-test",
+      "integration_task": "LAITDP1-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-test.md",
+      "name": "LAITDP1 slice (test)",
+      "phase": "LAITDP1",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/policy-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/telemetry-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md"
+      ],
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP1-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" SLICE_ID=\"LAITDP1\""
+      ],
+      "status": "completed",
+      "type": "test",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-test"
+    },
+    {
+      "acceptance_criteria": [
+        "Local integration gates are green for the LAITDP1 core branch.",
+        "The core branch is ready for CP1-ci-checkpoint."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP1-code",
+        "LAITDP1-test"
+      ],
+      "description": "Integrate LAITDP1 and make the core branch green before CP1.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests.",
+        "make integ-checks",
+        "On the orchestration branch, run CP1-ci-checkpoint.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP1-integ-core\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-core",
+      "id": "LAITDP1-integ-core",
+      "integration_task": "LAITDP1-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-integ-core.md",
+      "merge_to_orchestration": false,
+      "name": "LAITDP1 slice (integration core)",
+      "phase": "LAITDP1",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-closeout_report.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP1-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP1-integ-core\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-core"
+    },
+    {
+      "acceptance_criteria": [
+        "Linux parity evidence for LAITDP1 is green."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP1-integ-core"
+      ],
+      "description": "Green the LAITDP1 platform-fix branch for Linux after CP1.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for Linux when needed.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP1-integ-linux\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-linux",
+      "id": "LAITDP1-integ-linux",
+      "integration_task": "LAITDP1-integ-linux",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-integ-linux.md",
+      "merge_to_orchestration": false,
+      "name": "LAITDP1 slice (integration linux)",
+      "phase": "LAITDP1",
+      "platform": "linux",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a Linux host if possible.",
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP1-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP1-integ-linux\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-linux"
+    },
+    {
+      "acceptance_criteria": [
+        "macOS parity evidence for LAITDP1 is green."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP1-integ-core"
+      ],
+      "description": "Green the LAITDP1 platform-fix branch for macOS after CP1.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for macOS when needed.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP1-integ-macos\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-macos",
+      "id": "LAITDP1-integ-macos",
+      "integration_task": "LAITDP1-integ-macos",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-integ-macos.md",
+      "merge_to_orchestration": false,
+      "name": "LAITDP1 slice (integration macos)",
+      "phase": "LAITDP1",
+      "platform": "macos",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a macOS host if possible.",
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP1-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP1-integ-macos\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-macos"
+    },
+    {
+      "acceptance_criteria": [
+        "Windows CI parity is green for LAITDP1.",
+        "Any Windows-specific fixes stay scoped to parity issues surfaced by CP1."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP1-integ-core"
+      ],
+      "description": "Resolve Windows CI parity follow-up work for LAITDP1 after CP1 when fixes are required.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for the failing Windows path.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP1-integ-windows\"",
+        "Hand off parity results and ask the operator to rerun CP1-ci-checkpoint if needed."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-windows",
+      "id": "LAITDP1-integ-windows",
+      "integration_task": "LAITDP1-integ-windows",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-integ-windows.md",
+      "merge_to_orchestration": false,
+      "name": "LAITDP1 slice (integration windows)",
+      "phase": "LAITDP1",
+      "platform": "windows",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a Windows host when available.",
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP1-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP1-integ-windows\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ-windows"
+    },
+    {
+      "ac_ids": [
+        "AC-LAITDP1-01",
+        "AC-LAITDP1-02",
+        "AC-LAITDP1-03",
+        "AC-LAITDP1-04",
+        "AC-LAITDP1-05",
+        "AC-LAITDP1-06"
+      ],
+      "acceptance_criteria": [
+        "Slice is green under make integ-checks and implements the behaviors required by ac_ids."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP1-integ-core",
+        "LAITDP1-integ-linux",
+        "LAITDP1-integ-macos",
+        "LAITDP1-integ-windows"
+      ],
+      "description": "Finalize LAITDP1 across the required platforms after CP1.",
+      "end_checklist": [
+        "Merge platform-fix branches and resolve conflicts.",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests.",
+        "make integ-checks",
+        "Complete slice closeout gate report: docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-closeout_report.md",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP1-integ\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ",
+      "id": "LAITDP1-integ",
+      "integration_task": "LAITDP1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/kickoff_prompts/LAITDP1-integ.md",
+      "merge_to_orchestration": true,
+      "name": "LAITDP1 slice (integration final)",
+      "phase": "LAITDP1",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP1/LAITDP1-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP1-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP1-integ\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp1-integ"
+    },
+    {
+      "ac_ids": [
+        "AC-LAITDP2-01",
+        "AC-LAITDP2-02",
+        "AC-LAITDP2-03",
+        "AC-LAITDP2-04",
+        "AC-LAITDP2-05",
+        "AC-LAITDP2-06"
+      ],
+      "acceptance_criteria": [
+        "Implements the behaviors required by ac_ids (see docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md)."
+      ],
+      "concurrent_with": [
+        "LAITDP2-test"
+      ],
+      "depends_on": [
+        "CP1-ci-checkpoint",
+        "LAITDP1-integ"
+      ],
+      "description": "Implement the LAITDP2 platform rollout and validation lock.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP2-code\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-code",
+      "id": "LAITDP2-code",
+      "integration_task": "LAITDP2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-code.md",
+      "name": "LAITDP2 slice (code)",
+      "phase": "LAITDP2",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/platform-parity-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/compatibility-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/manual_testing_playbook.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" SLICE_ID=\"LAITDP2\""
+      ],
+      "status": "completed",
+      "type": "code",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-code"
+    },
+    {
+      "ac_ids": [
+        "AC-LAITDP2-01",
+        "AC-LAITDP2-02",
+        "AC-LAITDP2-03",
+        "AC-LAITDP2-04",
+        "AC-LAITDP2-05",
+        "AC-LAITDP2-06"
+      ],
+      "acceptance_criteria": [
+        "Tests enforce the behaviors required by ac_ids (see docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md)."
+      ],
+      "concurrent_with": [
+        "LAITDP2-code"
+      ],
+      "depends_on": [
+        "CP1-ci-checkpoint",
+        "LAITDP1-integ"
+      ],
+      "description": "Add tests that enforce the LAITDP2 platform rollout and validation lock.",
+      "end_checklist": [
+        "cargo fmt",
+        "Run the targeted tests you add or touch.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP2-test\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-test",
+      "id": "LAITDP2-test",
+      "integration_task": "LAITDP2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-test.md",
+      "name": "LAITDP2 slice (test)",
+      "phase": "LAITDP2",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/platform-parity-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/compatibility-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/manual_testing_playbook.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md"
+      ],
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start-pair FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" SLICE_ID=\"LAITDP2\""
+      ],
+      "status": "completed",
+      "type": "test",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-test"
+    },
+    {
+      "acceptance_criteria": [
+        "Local integration gates are green for the LAITDP2 core branch.",
+        "The core branch is ready for CP2-ci-checkpoint."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP2-code",
+        "LAITDP2-test"
+      ],
+      "description": "Integrate LAITDP2 and make the core branch green before CP2.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests.",
+        "make integ-checks",
+        "On the orchestration branch, run CP2-ci-checkpoint.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP2-integ-core\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-core",
+      "id": "LAITDP2-integ-core",
+      "integration_task": "LAITDP2-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ-core.md",
+      "merge_to_orchestration": false,
+      "name": "LAITDP2 slice (integration core)",
+      "phase": "LAITDP2",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-closeout_report.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP2-integ-core\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-core"
+    },
+    {
+      "acceptance_criteria": [
+        "Linux parity evidence for LAITDP2 is green."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP2-integ-core"
+      ],
+      "description": "Green the LAITDP2 platform-fix branch for Linux after CP2.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for Linux when needed.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP2-integ-linux\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-linux",
+      "id": "LAITDP2-integ-linux",
+      "integration_task": "LAITDP2-integ-linux",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ-linux.md",
+      "merge_to_orchestration": false,
+      "name": "LAITDP2 slice (integration linux)",
+      "phase": "LAITDP2",
+      "platform": "linux",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a Linux host if possible.",
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP2-integ-linux\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-linux"
+    },
+    {
+      "acceptance_criteria": [
+        "macOS parity evidence for LAITDP2 is green."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP2-integ-core"
+      ],
+      "description": "Green the LAITDP2 platform-fix branch for macOS after CP2.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for macOS when needed.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP2-integ-macos\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-macos",
+      "id": "LAITDP2-integ-macos",
+      "integration_task": "LAITDP2-integ-macos",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ-macos.md",
+      "merge_to_orchestration": false,
+      "name": "LAITDP2 slice (integration macos)",
+      "phase": "LAITDP2",
+      "platform": "macos",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a macOS host if possible.",
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP2-integ-macos\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-macos"
+    },
+    {
+      "acceptance_criteria": [
+        "Windows CI parity is green for LAITDP2.",
+        "Any Windows-specific fixes stay scoped to parity issues surfaced by CP2."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP2-integ-core"
+      ],
+      "description": "Resolve Windows CI parity follow-up work for LAITDP2 after CP2 when fixes are required.",
+      "end_checklist": [
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests for the failing Windows path.",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP2-integ-windows\"",
+        "Hand off parity results and ask the operator to rerun CP2-ci-checkpoint if needed."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-windows",
+      "id": "LAITDP2-integ-windows",
+      "integration_task": "LAITDP2-integ-windows",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ-windows.md",
+      "merge_to_orchestration": false,
+      "name": "LAITDP2 slice (integration windows)",
+      "phase": "LAITDP2",
+      "platform": "windows",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "start_checklist": [
+        "Run on a Windows host when available.",
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP2-integ-windows\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ-windows"
+    },
+    {
+      "ac_ids": [
+        "AC-LAITDP2-01",
+        "AC-LAITDP2-02",
+        "AC-LAITDP2-03",
+        "AC-LAITDP2-04",
+        "AC-LAITDP2-05",
+        "AC-LAITDP2-06"
+      ],
+      "acceptance_criteria": [
+        "Slice is green under make integ-checks and implements the behaviors required by ac_ids."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP2-integ-core",
+        "LAITDP2-integ-linux",
+        "LAITDP2-integ-macos",
+        "LAITDP2-integ-windows"
+      ],
+      "description": "Finalize LAITDP2 across the required platforms after CP2.",
+      "end_checklist": [
+        "Merge platform-fix branches and resolve conflicts.",
+        "cargo fmt",
+        "cargo clippy --workspace --all-targets -- -D warnings",
+        "Run relevant tests.",
+        "make integ-checks",
+        "Complete slice closeout gate report: docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-closeout_report.md",
+        "From inside the worktree: make triad-task-finish TASK_ID=\"LAITDP2-integ\"",
+        "Update tasks.json and session_log.md on the orchestration branch."
+      ],
+      "git_branch": "llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ",
+      "id": "LAITDP2-integ",
+      "integration_task": "LAITDP2-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/kickoff_prompts/LAITDP2-integ.md",
+      "merge_to_orchestration": true,
+      "name": "LAITDP2 slice (integration final)",
+      "phase": "LAITDP2",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/slices/LAITDP2/LAITDP2-spec.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/system/standards/triad/TASK_TRIADS_WORKTREE_EXECUTION_STANDARD.md"
+      ],
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "start_checklist": [
+        "git checkout feat/llm-and-agent-identity-tuple-and-deployment-posture && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, LAITDP2-spec.md, and the kickoff prompt.",
+        "Set status to in_progress; add START entry; commit docs.",
+        "Run: make triad-task-start FEATURE_DIR=\"docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture\" TASK_ID=\"LAITDP2-integ\""
+      ],
+      "status": "completed",
+      "type": "integration",
+      "worktree": "wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ"
+    },
+    {
+      "acceptance_criteria": [
+        "The checkpoint plan, task graph, and boundary slice stay aligned.",
+        "Checkpoint evidence is recorded in the session log."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP1-integ-core"
+      ],
+      "description": "Run the CP1 checkpoint pass for LAITDP1 before LAITDP2 begins.",
+      "end_checklist": [
+        "Record run ids and URLs in session_log.md.",
+        "Mark this task completed in tasks.json.",
+        "Do not begin LAITDP2 until this task is green."
+      ],
+      "id": "CP1-ci-checkpoint",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/CP1-ci-checkpoint.md",
+      "name": "CP1 CI checkpoint (cross-platform validation)",
+      "phase": "CP1",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/quality_gate_report.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/CP1-ci-checkpoint.md",
+        "docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md"
+      ],
+      "start_checklist": [
+        "Verify the orchestration checkout is on the feature branch.",
+        "Read the checkpoint plan, tasks.json, and session log.",
+        "Compute the checkpoint checkout SHA from `LAITDP1-integ-core`."
+      ],
+      "status": "completed",
+      "type": "ops",
+      "worktree": null
+    },
+    {
+      "acceptance_criteria": [
+        "The checkpoint plan, task graph, and boundary slice stay aligned.",
+        "Checkpoint evidence is recorded in the session log."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP2-integ-core"
+      ],
+      "description": "Run the CP2 checkpoint pass for LAITDP2 before feature cleanup.",
+      "end_checklist": [
+        "Record run ids and URLs in session_log.md.",
+        "Mark this task completed in tasks.json.",
+        "Do not begin feature cleanup until this task is green."
+      ],
+      "id": "CP2-ci-checkpoint",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/CP2-ci-checkpoint.md",
+      "name": "CP2 CI checkpoint (cross-platform validation)",
+      "phase": "CP2",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/pre-planning/impact_map.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/quality_gate_report.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/CP2-ci-checkpoint.md",
+        "docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md"
+      ],
+      "start_checklist": [
+        "Verify the orchestration checkout is on the feature branch.",
+        "Read the checkpoint plan, tasks.json, and session log.",
+        "Compute the checkpoint checkout SHA from `LAITDP2-integ-core`."
+      ],
+      "status": "completed",
+      "type": "ops",
+      "worktree": null
+    },
+    {
+      "acceptance_criteria": [
+        "Feature cleanup actions are recorded in the session log.",
+        "No planning doc is edited from inside a task worktree."
+      ],
+      "concurrent_with": [],
+      "depends_on": [
+        "LAITDP2-integ"
+      ],
+      "description": "Clean up worktrees and close the feature after LAITDP2 lands.",
+      "end_checklist": [
+        "Run the cleanup commands from the kickoff prompt.",
+        "Record the cleanup summary in session_log.md.",
+        "Mark this task completed in tasks.json."
+      ],
+      "id": "FZ-feature-cleanup",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/FZ-feature-cleanup.md",
+      "name": "Feature cleanup",
+      "phase": "FZ",
+      "references": [
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/plan.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/tasks.json",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/session_log.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/quality_gate_report.md",
+        "docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/kickoff_prompts/FZ-feature-cleanup.md"
+      ],
+      "start_checklist": [
+        "Verify all feature tasks are complete.",
+        "Verify the orchestration checkout is clean.",
+        "Read the cleanup prompt."
+      ],
+      "status": "pending",
+      "type": "ops",
+      "worktree": null
+    }
+  ]
+}

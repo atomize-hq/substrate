@@ -9,6 +9,8 @@ ExecStart=/usr/local/bin/substrate-world-agent
 Restart=always
 RestartSec=5
 Environment=RUST_LOG=info
+Group=substrate
+UMask=0027
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
 StateDirectory=substrate

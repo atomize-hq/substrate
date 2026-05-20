@@ -4,6 +4,7 @@ set -euo pipefail
 VM_NAME="${LIMA_VM_NAME:-substrate}"
 PROFILE="${LIMA_PROFILE_PATH:-scripts/mac/lima/substrate.yaml}"
 PROJECT_PATH=""
+PROJECT_PATH_EXPLICIT=0
 CHECK_ONLY=0
 BUILD_PROFILE="${LIMA_BUILD_PROFILE:-release}"
 LAYOUT_SENTINEL="/etc/substrate-lima-layout"
@@ -50,6 +51,7 @@ while [[ $# -gt 0 ]]; do
         *)
             if [[ -z "${PROJECT_PATH}" ]]; then
                 PROJECT_PATH="$1"
+                PROJECT_PATH_EXPLICIT=1
             else
                 fatal "Unexpected argument: $1"
             fi
@@ -62,6 +64,30 @@ if [[ -z "${PROJECT_PATH}" ]]; then
     PROJECT_PATH="$(pwd)"
 fi
 PROJECT_PATH="$(cd "${PROJECT_PATH}" && pwd)"
+
+resolve_default_worktree_path() {
+    if [[ "${PROJECT_PATH_EXPLICIT}" -eq 1 ]]; then
+        return
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+        return
+    fi
+
+    local git_dir common_dir primary_worktree
+    git_dir="$(git -C "${PROJECT_PATH}" rev-parse --git-dir 2>/dev/null || true)"
+    common_dir="$(git -C "${PROJECT_PATH}" rev-parse --git-common-dir 2>/dev/null || true)"
+    if [[ -z "${git_dir}" || -z "${common_dir}" || "${git_dir}" == "${common_dir}" ]]; then
+        return
+    fi
+
+    primary_worktree="$(git -C "${PROJECT_PATH}" worktree list --porcelain 2>/dev/null | awk '/^worktree / { print substr($0, 10); exit }')"
+    if [[ -n "${primary_worktree}" && -d "${primary_worktree}" && "${primary_worktree}" != "${PROJECT_PATH}" ]]; then
+        log "Detected linked worktree; defaulting Lima mount path to primary checkout ${primary_worktree}"
+        PROJECT_PATH="${primary_worktree}"
+    fi
+}
+
+resolve_default_worktree_path
 
 require_cmd() {
     local name="$1"
@@ -117,6 +143,11 @@ check_only_status() {
                 fi
             else
                 echo "[check-only] Guest systemd service file for substrate-world-agent is missing."
+            fi
+            if limactl shell "${VM_NAME}" sudo -n test -x /usr/local/bin/substrate-gateway >/dev/null 2>&1; then
+                echo "[check-only] Guest gateway binary present at /usr/local/bin/substrate-gateway."
+            else
+                echo "[check-only] Guest gateway binary missing at /usr/local/bin/substrate-gateway."
             fi
         fi
     else
@@ -343,11 +374,46 @@ sudo rm -f /tmp/substrate-cli
 EOF
 }
 
+host_gateway_candidate() {
+    local base="${PROJECT_PATH}"
+    local candidates=(
+        "${base}/bin/linux/substrate-gateway"
+        "${base}/bin/substrate-gateway-linux"
+        "${base}/bin/substrate-gateway"
+        "${base}/target/release/substrate-gateway"
+        "${base}/target/debug/substrate-gateway"
+    )
+    local path
+    for path in "${candidates[@]}"; do
+        if [[ -f "${path}" ]]; then
+            local file_type
+            file_type="$(file -b "${path}" 2>/dev/null || true)"
+            if echo "${file_type}" | grep -qi "ELF"; then
+                printf '%s\n' "${path}"
+                return 0
+            fi
+        fi
+    done
+    return 1
+}
+
+install_gateway_from_host() {
+    local gateway_path="$1"
+    log "Installing Linux substrate-gateway from ${gateway_path}"
+    limactl copy "${gateway_path}" "${VM_NAME}:/tmp/substrate-gateway"
+    limactl shell "${VM_NAME}" bash <<'EOF'
+set -euo pipefail
+sudo install -Dm0755 /tmp/substrate-gateway /usr/local/bin/substrate-gateway
+sudo rm -f /tmp/substrate-gateway
+EOF
+}
+
 build_missing_components_inside_vm() {
     local build_cli="${1:-0}"
     local build_agent="${2:-0}"
+    local build_gateway="${3:-0}"
 
-    if [[ "${build_cli}" -ne 1 && "${build_agent}" -ne 1 ]]; then
+    if [[ "${build_cli}" -ne 1 && "${build_agent}" -ne 1 && "${build_gateway}" -ne 1 ]]; then
         return 0
     fi
 
@@ -357,10 +423,16 @@ build_missing_components_inside_vm() {
     if [[ "${build_cli}" -eq 1 ]]; then
         log "Building Linux substrate CLI inside Lima for diagnostics (profile: ${BUILD_PROFILE})"
     fi
+    if [[ "${build_gateway}" -eq 1 ]]; then
+        log "Building Linux substrate-gateway inside Lima (profile: ${BUILD_PROFILE})"
+    fi
 
     if [[ ! -f "${PROJECT_PATH}/Cargo.toml" ]]; then
         if [[ "${build_agent}" -eq 1 ]]; then
             fatal "Linux world-agent missing and ${PROJECT_PATH} does not contain Cargo sources. Provide bin/linux/world-agent or rerun from a source checkout."
+        fi
+        if [[ "${build_gateway}" -eq 1 ]]; then
+            fatal "Linux substrate-gateway missing and ${PROJECT_PATH} does not contain Cargo sources. Provide bin/linux/substrate-gateway or rerun from a source checkout."
         fi
         warn "Skipping guest CLI build; ${PROJECT_PATH} lacks Cargo sources."
         # The guest CLI is optional (diagnostics only) and release bundles don't ship Cargo sources.
@@ -368,10 +440,11 @@ build_missing_components_inside_vm() {
         return 0
     fi
 
-    if ! limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" bash <<'EOF'; then
+    if ! limactl shell "${VM_NAME}" env BUILD_PROFILE="${BUILD_PROFILE}" BUILD_GUEST_CLI="${build_cli}" BUILD_GUEST_AGENT="${build_agent}" BUILD_GUEST_GATEWAY="${build_gateway}" bash <<'EOF'; then
 set -euo pipefail
 build_cli="${BUILD_GUEST_CLI:-0}"
 build_agent="${BUILD_GUEST_AGENT:-0}"
+build_gateway="${BUILD_GUEST_GATEWAY:-0}"
 
 ensure_cargo() {
     # Cargo.lock v4 requires a newer cargo than Ubuntu 24.04's apt cargo on some images.
@@ -461,7 +534,7 @@ ensure_cargo() {
     return 1
 }
 
-if [[ "${build_cli}" != "1" && "${build_agent}" != "1" ]]; then
+if [[ "${build_cli}" != "1" && "${build_agent}" != "1" && "${build_gateway}" != "1" ]]; then
     exit 0
 fi
 
@@ -483,11 +556,25 @@ if [[ -z "${cargo_bin}" ]]; then
     exit 1
 fi
 BUILD_DIR="/tmp/substrate-lima-build"
+BUILD_OUTPUT_DIR="${BUILD_PROFILE}"
+BUILD_PROFILE_FLAG=()
+case "${BUILD_PROFILE}" in
+debug)
+    BUILD_OUTPUT_DIR="debug"
+    ;;
+release)
+    BUILD_OUTPUT_DIR="release"
+    BUILD_PROFILE_FLAG=(--profile release)
+    ;;
+*)
+    BUILD_PROFILE_FLAG=(--profile "${BUILD_PROFILE}")
+    ;;
+esac
 mkdir -p "${BUILD_DIR}"
 cd /src
 if [[ "${build_cli}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build --bin substrate --profile "${BUILD_PROFILE}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_PROFILE}/substrate" /usr/local/bin/substrate
+    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build --bin substrate "${BUILD_PROFILE_FLAG[@]}" --locked
+    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate" /usr/local/bin/substrate
     sudo tee /usr/local/bin/world >/dev/null <<'WORLD'
 #!/usr/bin/env bash
 exec substrate world "$@"
@@ -495,8 +582,12 @@ WORLD
     sudo chmod 0755 /usr/local/bin/world
 fi
 if [[ "${build_agent}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p world-agent --profile "${BUILD_PROFILE}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_PROFILE}/world-agent" /usr/local/bin/substrate-world-agent
+    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p world-agent "${BUILD_PROFILE_FLAG[@]}" --locked
+    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/world-agent" /usr/local/bin/substrate-world-agent
+fi
+if [[ "${build_gateway}" == "1" ]]; then
+    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p substrate-gateway "${BUILD_PROFILE_FLAG[@]}" --locked
+    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/substrate-gateway" /usr/local/bin/substrate-gateway
 fi
 rm -rf "${BUILD_DIR}"
 EOF
@@ -504,15 +595,19 @@ EOF
         if [[ "${build_agent}" -eq 1 ]]; then
             fatal "Failed to build Linux world-agent inside Lima (exit ${status}). Provide a prebuilt agent under bin/linux/world-agent or rerun from a source checkout."
         fi
+        if [[ "${build_gateway}" -eq 1 ]]; then
+            fatal "Failed to build Linux substrate-gateway inside Lima (exit ${status}). Provide a prebuilt gateway under bin/linux/substrate-gateway or rerun from a source checkout."
+        fi
         warn "Failed to build Linux CLI inside Lima; diagnostics requiring a guest CLI will need to run on the host."
         return 1
     fi
 }
 
 install_guest_binaries() {
-    local cli_candidate agent_candidate
+    local cli_candidate agent_candidate gateway_candidate
     local need_cli_build=0
     local need_agent_build=0
+    local need_gateway_build=0
 
     cli_candidate="$(host_cli_candidate)" || true
     if [[ -n "${cli_candidate:-}" ]]; then
@@ -534,21 +629,41 @@ install_guest_binaries() {
         need_agent_build=1
     fi
 
-    if [[ "${need_cli_build}" -eq 1 || "${need_agent_build}" -eq 1 ]]; then
+    gateway_candidate="$(host_gateway_candidate)" || true
+    if [[ -n "${gateway_candidate:-}" ]]; then
+        install_gateway_from_host "${gateway_candidate}"
+    else
+        log "Linux substrate-gateway binary not found or invalid in ${PROJECT_PATH}; falling back to an in-guest build."
+        need_gateway_build=1
+    fi
+
+    if [[ "${need_cli_build}" -eq 1 || "${need_agent_build}" -eq 1 || "${need_gateway_build}" -eq 1 ]]; then
         if [[ "${SKIP_GUEST_BUILD}" -eq 1 ]]; then
             if [[ "${need_agent_build}" -eq 1 ]]; then
                 warn "Linux world-agent missing but SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1; skipping guest build. Ensure another step installs /usr/local/bin/substrate-world-agent."
+            fi
+            if [[ "${need_gateway_build}" -eq 1 ]]; then
+                warn "Linux substrate-gateway missing but SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1; skipping guest build. Ensure another step installs /usr/local/bin/substrate-gateway."
             fi
             if [[ "${need_cli_build}" -eq 1 ]]; then
                 warn "Linux CLI missing but SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1; skipping guest build. Diagnostics will fall back to host CLI."
             fi
             return 0
         fi
-        build_missing_components_inside_vm "${need_cli_build}" "${need_agent_build}"
+        build_missing_components_inside_vm "${need_cli_build}" "${need_agent_build}" "${need_gateway_build}"
     fi
 }
 
+verify_guest_binaries() {
+    limactl shell "${VM_NAME}" bash <<'EOF'
+set -euo pipefail
+test -x /usr/local/bin/substrate-world-agent
+test -x /usr/local/bin/substrate-gateway
+EOF
+}
+
 write_systemd_units() {
+    local guest_substrate_home="$1"
     local enable_netfilter="${SUBSTRATE_WORLD_NETFILTER_ENABLE:-0}"
     case "${enable_netfilter}" in
         1|true|yes|TRUE|YES)
@@ -558,7 +673,7 @@ write_systemd_units() {
             log "Writing guest systemd unit without WORLD_NETFILTER_ENABLE=1"
             ;;
     esac
-    limactl shell "${VM_NAME}" env SUBSTRATE_WORLD_NETFILTER_ENABLE="${enable_netfilter}" bash <<'EOF'
+    limactl shell "${VM_NAME}" env SUBSTRATE_WORLD_NETFILTER_ENABLE="${enable_netfilter}" SUBSTRATE_GUEST_HOME="${guest_substrate_home}" bash <<'EOF'
 set -euo pipefail
 
 netfilter_env=""
@@ -582,7 +697,10 @@ RestartSec=5
 Environment=RUST_LOG=info
 Environment=SUBSTRATE_AGENT_TCP_PORT=61337
 Environment=SUBSTRATE_WORLD_SOCKET=/run/substrate.sock
+Environment=SUBSTRATE_HOME=${SUBSTRATE_GUEST_HOME}
 ${netfilter_env}
+Group=substrate
+UMask=0027
 RuntimeDirectory=substrate
 RuntimeDirectoryMode=0750
 StateDirectory=substrate
@@ -593,7 +711,7 @@ StandardError=journal
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
+ReadWritePaths=${SUBSTRATE_GUEST_HOME} /var/lib/substrate /run /run/substrate /sys/fs/cgroup /tmp
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_DAC_OVERRIDE CAP_CHOWN CAP_SYS_PTRACE
 
@@ -622,15 +740,18 @@ EOF
 }
 
 enable_socket_activation() {
-    limactl shell "${VM_NAME}" bash <<'EOF'
+    local guest_substrate_home="$1"
+    limactl shell "${VM_NAME}" env SUBSTRATE_GUEST_HOME="${guest_substrate_home}" bash <<'EOF'
 set -euo pipefail
+sudo install -d -m0755 "${SUBSTRATE_GUEST_HOME}"
 sudo install -d -m0750 /var/lib/substrate
-sudo install -d -m0750 /run/substrate
+sudo install -d -m0750 -o root -g substrate /run/substrate
 sudo systemctl daemon-reload
 sudo systemctl enable substrate-world-agent.service >/dev/null
 sudo systemctl enable substrate-world-agent.socket >/dev/null
 sudo systemctl stop substrate-world-agent.service >/dev/null 2>&1 || true
 sudo systemctl stop substrate-world-agent.socket >/dev/null 2>&1 || true
+sudo install -d -m0750 -o root -g substrate /run/substrate
 sudo rm -f /run/substrate.sock
 sudo systemctl start substrate-world-agent.socket
 sudo systemctl start substrate-world-agent.service
@@ -671,14 +792,22 @@ linger_guidance() {
 configure_guest() {
     ensure_repo_mount
     local vm_user
+    local vm_home
+    local guest_substrate_home
     vm_user="$(limactl shell "${VM_NAME}" id -un | tr -d '\r')"
     if [[ -z "${vm_user}" ]]; then
         fatal "Unable to determine Lima guest user."
     fi
+    vm_home="$(limactl shell "${VM_NAME}" getent passwd "${vm_user}" | cut -d: -f6 | tr -d '\r')"
+    if [[ -z "${vm_home}" ]]; then
+        vm_home="/home/${vm_user}"
+    fi
+    guest_substrate_home="${vm_home}/.substrate"
     ensure_substrate_group "${vm_user}"
     install_guest_binaries
-    write_systemd_units
-    enable_socket_activation
+    verify_guest_binaries
+    write_systemd_units "${guest_substrate_home}"
+    enable_socket_activation "${guest_substrate_home}"
     socket_summary
     write_layout_sentinel
     linger_guidance "${vm_user}"
@@ -694,3 +823,4 @@ ensure_vm_ready
 configure_guest
 
 log "Lima world backend '${VM_NAME}' is ready. Verify with: limactl shell ${VM_NAME} sudo systemctl status substrate-world-agent.socket"
+log "Optional orchestration parity proof: scripts/mac/orchestration-smoke.sh"

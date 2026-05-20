@@ -1,0 +1,11 @@
+{
+  "request": {
+    "model": "gateway-default",
+    "input": "hello",
+    "previous_response_id": "resp_prev"
+  },
+  "expected_error_contains": "previous_response_id is not supported on the Codex route",
+  "expected_status": 502,
+  "expected_error_class": "route",
+  "expected_error_message": "Route selection failed"
+}

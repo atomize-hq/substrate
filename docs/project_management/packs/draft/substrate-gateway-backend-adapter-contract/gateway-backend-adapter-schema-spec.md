@@ -3,7 +3,7 @@
 This spec is the seam-local execution baseline for `C-04`. The durable contract text for this
 surface lives in `docs/contracts/substrate-gateway-backend-adapter-schema.md`.
 
-## Adopted Universal Agent API Subset
+## Adopted Unified Agent API Subset
 
 ### Adopted capability ids
 
@@ -172,12 +172,12 @@ Pinned rules:
 
 These are planning and verification anchors only. They describe where later implementation must align with `C-04`; they do not widen this slice into implementation work.
 
-- `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/lib.rs`
-- `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/session_selectors.rs`
-- `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/backend.rs`
-- `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/harness.rs`
-- `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/backend.rs`
-- `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/harness.rs`
+- `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/lib.rs`
+- `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/session_selectors.rs`
+- `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/backend.rs`
+- `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/harness.rs`
+- `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/backend.rs`
+- `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/harness.rs`
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs`
 
 ### Verification plan
@@ -185,23 +185,23 @@ These are planning and verification anchors only. They describe where later impl
 Keep the following verification surfaces aligned with the adopted subset:
 
 - `codex_backend_reports_required_capabilities`
-  in `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/capabilities.rs`
+  in `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/tests/capabilities.rs`
 - `claude_backend_reports_required_capabilities`
-  in `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/capabilities.rs`
+  in `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/tests/capabilities.rs`
 - `handle_facet_emitted_once_on_thread_started_and_attached_to_completion`
   and `synthetic_status_is_emitted_if_id_first_seen_on_non_status_event`
-  in `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/codex/tests/session_handle.rs`
+  in `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/tests/session_handle.rs`
 - `claude_emits_handle_facet_once_when_first_event_is_status` and
   `claude_completion_attaches_handle_facet_when_id_is_known`
-  in `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/claude_code/tests/session_handle.rs`
+  in `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/tests/session_handle.rs`
 - `resume_v1_invalid_cases_rejected_with_pinned_messages` and
   `fork_v1_invalid_cases_rejected_with_pinned_messages`
-  in `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/src/backends/session_selectors.rs`
+  in `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/session_selectors.rs`
 - runtime rejection and cancellation coverage in:
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c1_codex_exec_policy.rs`
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c5_claude_add_dirs_runtime_rejection.rs`
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c3_explicit_cancellation.rs`
-  - `/Users/spensermcconnell/__Active_Code/codex-wrapper/crates/agent_api/tests/c3_explicit_cancellation_claude_code.rs`
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c1_codex_exec_policy.rs`
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c5_claude_add_dirs_runtime_rejection.rs`
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c3_explicit_cancellation.rs`
+  - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/tests/c3_explicit_cancellation_claude_code.rs`
 
 Pass/fail conditions:
 
