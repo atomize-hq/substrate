@@ -22,7 +22,9 @@ mod repo;
 #[path = "support/repo_support.rs"]
 mod repo_support;
 
-use repo_support::{copy_fixture_tree, default_snapshot_options, inventory_paths, write_file};
+use repo_support::{
+    TempDir, copy_fixture_tree, default_snapshot_options, inventory_paths, write_file,
+};
 
 #[test]
 fn invalid_caller_glob_hard_fails() {
