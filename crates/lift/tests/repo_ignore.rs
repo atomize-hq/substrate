@@ -23,7 +23,7 @@ mod repo;
 mod repo_support;
 
 use repo_support::{
-    TempDir, copy_fixture_tree, default_snapshot_options, inventory_paths, write_file,
+    copy_fixture_tree, default_snapshot_options, inventory_paths, write_file, TempDir,
 };
 
 #[test]
