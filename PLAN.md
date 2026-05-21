@@ -1,401 +1,445 @@
-# PLAN: Async Persistent-Session Bootstrap Readiness Split
+# PLAN: UAA Boundary and Naming Cleanup
 
-Source SOW: [26-async-persistent-session-bootstrap-readiness.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/26-async-persistent-session-bootstrap-readiness.md)  
-Related slices: [21-macos-lima-shared-owner-and-member-runtime-parity.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/21-macos-lima-shared-owner-and-member-runtime-parity.md), [24-fix-host-bootstrap-readiness-and-clean-detach-parking.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/24-fix-host-bootstrap-readiness-and-clean-detach-parking.md), [25-host-durable-session-closeout-and-qa-hardening.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/25-host-durable-session-closeout-and-qa-hardening.md)  
-Primary protocol doc: [persistent_session.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/repl/persistent_session.md)  
-World backend docs: [WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)  
-Supersedes: previous root `PLAN.md`, which tracked durable host-orchestrator closeout instead of the slice-26 readiness split  
-Current workspace branch: `feat/host-orchestrator-durable-session`  
+Source SOW: [27-uaa-boundary-and-naming-cleanup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/27-uaa-boundary-and-naming-cleanup.md)  
+Related validation plan: [spensermcconnell-testing-uaa-boundary-hardening-test-plan-20260521-111202.md](/Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/spensermcconnell-testing-uaa-boundary-hardening-test-plan-20260521-111202.md)  
+Primary boundary anchors: [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md), [ADR-0042](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md), [ADR-0044](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0044-agent-hub-core-successor-identity-tuple-compatible.md), [ADR-0047](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md), [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md), [docs/TRACE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/TRACE.md)  
+Current workspace branch: `testing`  
 Base branch: `main`  
-Plan type: backend/runtime correction, no UI scope, developer-facing runtime scope  
-Status: unified implementation plan, 2026-05-15
+Plan type: repo-wide naming and boundary correction, no UI scope, developer-facing runtime and operator scope  
+Status: unified implementation plan, 2026-05-21  
+Supersedes: previous root `PLAN.md`, which tracked the async persistent-session bootstrap readiness split instead of the UAA boundary cleanup slice
 
 ## Objective
 
-Fix the async persistent-session startup seam so REPL world-session bootstrap no longer crosses the synchronous readiness bridge on macOS, while preserving the existing synchronous bootstrap and request-builder surfaces.
+Finish the boundary cleanup so the repo no longer blurs:
 
-This is a design correction, not a trait rewrite. The slice lands one explicit async readiness path for persistent-session startup, keeps `WorldBackend` synchronous, preserves fail-closed behavior, and makes the Windows parity decision explicit.
+1. the external Unified Agent API runtime abstraction,
+2. the Substrate-local host<->world typed transport,
+3. the Substrate-local in-world daemon and service boundary,
+4. and the Substrate-local pure-agent protocol-family label used in config, persistence, and trace identity.
+
+This is a naming and supportability correction, not a runtime-model rewrite.
+
+The exact choices in this plan are fixed:
+
+1. upstream `agent_api` keeps its current meaning and does not rename,
+2. `world-api` keeps its current meaning and does not rename,
+3. canonical local pure-agent protocol-family becomes `substrate.agent.session`,
+4. `world-agent*` renames to `world-service*`,
+5. `agent-api*` renames to `transport-api*`,
+6. the slice is a direct cutover on live supported surfaces, not a long-lived compatibility program,
+7. and world-required flows must remain fail closed if rename drift breaks service discovery.
 
 ## Acceptance Criteria
 
 This plan is complete only when all of the following are true:
 
-1. Persistent-session startup no longer calls `PlatformWorldContext.ensure_ready` from [world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs).
-2. macOS/Lima REPL startup under the current-thread Tokio runtime no longer panics with the `block_in_place` runtime invariant.
-3. Readiness failures surface as normal `Result` errors, not panic unwinds.
-4. Existing synchronous bootstrap and request-builder callers keep using `ensure_ready` with no async signature expansion.
-5. Shared readiness rules remain consistent across sync and async entrypoints for VM start, forwarding, client construction, and backend-owned capabilities verification semantics.
-6. The Windows/WSL backend is either hardened with the same split-ready internals or explicitly documented as a future-only consumer with no current persistent-session caller.
-7. Tests and docs make the caller-shape split obvious enough that a future async caller does not regress back through the sync bridge.
+1. `Unified Agent API`, `UAA`, Rust `agent_api`, and adopted `agent_api.*` capability and schema ids have one stable repo meaning: the upstream CLI-agent runtime abstraction only.
+2. `substrate.agent.session` is the only canonical local pure-agent protocol-family label on supported live surfaces.
+3. `world-agent*` has been replaced by `world-service*` across code, package names, binaries, systemd units, install helpers, bundle payloads, docs, and operator remediation text on live surfaces.
+4. `agent-api-types`, `agent-api-core`, and `agent-api-client` have been replaced by `transport-api-types`, `transport-api-core`, and `transport-api-client`, including the Rust crate ids `transport_api_types`, `transport_api_core`, and `transport_api_client`.
+5. `world-api` remains unchanged as the abstract world backend contract.
+6. Mixed-boundary crates that import both upstream `agent_api` and local transport crates read clearly at the dependency and import layer after the rename.
+7. Old `uaa.agent.session` live configs, fixtures, and persisted rows are no longer treated as supported canonical inputs after cutover. If encountered, they fail closed with explicit operator-readable errors.
+8. The live-surface grep wall passes with zero stale hits for `world-agent`, `substrate-world-agent`, `agent-api-*`, `agent_api_*`, and `uaa.agent.session` outside the explicit historical allowlist.
+9. Linux, macOS Lima, and WSL provision, warm, smoke, doctor, uninstall, and release-bundle flows all use the renamed `world-service` family consistently.
+10. World-required routing still hard-fails if renamed service discovery breaks. No rename drift path silently falls back to host execution.
 
 ## Step 0: Scope Challenge
 
 ### What already exists
 
-| Sub-problem | Existing code | Plan decision |
+| Sub-problem | Existing code or surface | Plan decision |
 | --- | --- | --- |
-| REPL async caller | [`open_world_session(...)` in async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs), [`ReplPersistentSessionClient::start_with(...)` in world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) | Reuse. The caller is already async and stays async. |
-| Persistent-session transport/bootstrap | [`build_ws_and_start_session_frame(...)` in world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) | Reuse transport and handshake logic. Replace only the readiness bridge. |
-| Sync platform-world context | [`PlatformWorldContext` in platform_world/mod.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform_world/mod.rs) | Keep `ensure_ready` for sync callers. Add a separate async-ready path instead of widening the existing one. |
-| macOS readiness ownership | [`MacLimaBackend` in world-mac-lima/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs) | Reuse backend-owned VM/forwarding/client logic. Split adapters, not ownership. |
-| Windows readiness ownership | [`WindowsWslBackend` in world-windows-wsl/src/backend.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/backend.rs) | Reuse. Harden parity logic now, but do not invent a Windows persistent-session feature in this slice. |
-| Sync bootstrap callers | [`routing/world.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/world.rs), [`world_ops.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs), [`workspace_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/workspace_cmd.rs) | Preserve behavior. Regression-test them instead of rewriting them. |
+| Upstream UAA runtime boundary | [`crates/shell/Cargo.toml`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/Cargo.toml), [`crates/world-agent/Cargo.toml`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/Cargo.toml), [`docs/contracts/substrate-gateway-backend-adapter-schema.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/contracts/substrate-gateway-backend-adapter-schema.md) | Reuse. Upstream `agent_api` stays untouched. |
+| Local pure-agent protocol label | [`mapping.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/mapping.rs), [`validator.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs), [`agent_events.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/common/src/agent_events.rs), [`state_store.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse central seams. Cut over to `substrate.agent.session` in one supported pass. |
+| Local typed host<->world contract | [`crates/agent-api-types/`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/), [`crates/agent-api-core/`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-core/), [`crates/agent-api-client/`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-client/) | Reuse the actual contract. Rename the local family to `transport-api-*` without touching upstream `agent_api`. |
+| In-world daemon and control surface | [`crates/world-agent/`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/), [`scripts/linux/world-provision.sh`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/linux/world-provision.sh), [`docs/WORLD.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md) | Reuse the implementation. Rename the service family to `world-service*`. |
+| Install, warm, release, and CI harnesses | [`scripts/substrate/install-substrate.sh`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/substrate/install-substrate.sh), [`scripts/mac/lima-warm.sh`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/mac/lima-warm.sh), [`scripts/windows/wsl-warm.ps1`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/windows/wsl-warm.ps1), [`dist/scripts/assemble-release-bundles.sh`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/dist/scripts/assemble-release-bundles.sh), [`.github/workflows/feature-smoke.yml`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.github/workflows/feature-smoke.yml) | Reuse as the real validation wall. These are first-class implementation scope, not polish. |
+| Boundary wording | [`AGENT_ORCHESTRATION_GAP_MATRIX.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md), [`docs/WORLD.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md), [`docs/TRACE.md`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/TRACE.md) | Reuse as source-of-truth anchors, then rewrite so the same story appears everywhere. |
 
 ### Minimum honest diff
 
-The minimum honest implementation touches these module groups:
+The minimum honest implementation touches these module and surface groups:
 
-1. [`crates/shell/src/execution/platform_world/`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform_world/)
-2. [`crates/shell/src/execution/routing/dispatch/world_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs)
-3. [`crates/world-mac-lima/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs)
-4. [`crates/world-windows-wsl/src/backend.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/backend.rs)
-5. targeted tests in [`crates/shell/tests/`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/), macOS backend tests in [`crates/world-mac-lima/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs), and WSL tests in [`crates/world-windows-wsl/src/tests.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/tests.rs)
-6. docs in [persistent_session.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/repl/persistent_session.md) and [WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
+1. workspace manifests and crate directories under `Cargo.toml` and `crates/`
+2. runtime label and validator seams under `crates/common/` and `crates/shell/src/execution/agent_runtime/`
+3. host<->world routing and payload seams under `crates/shell/src/execution/routing/` and the renamed transport crates
+4. the in-world daemon crate and its tests under the renamed `crates/world-service/`
+5. installers, provisioners, warm scripts, uninstallers, bundle builders, and CI under `scripts/`, `dist/`, and `.github/`
+6. operator and developer docs under `docs/`, `README.md`, and `AGENTS.md`
+7. targeted tests in `crates/shell/tests/`, the renamed transport crates, `world-mac-lima`, `world-windows-wsl`, and `substrate-replay`
 
-Anything smaller is a shortcut. It would either leave the async caller on the sync bridge, duplicate readiness rules in shell code, or fail to prove the sync surfaces still behave correctly.
+Anything smaller is a shortcut. It would leave drift in install surfaces, service discovery, validation, or mixed-boundary imports.
 
 ### Repo-truth findings
 
-1. [`world_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) and the REPL world-session entrypoints in [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) are compiled only on Linux and macOS today. The shell-side persistent-session seam is not a current Windows caller.
-2. `PlatformWorldContext` still exposes one synchronous `ensure_ready` closure, and it is actively consumed by sync bootstrap and request-builder paths. Deleting or widening that surface in this slice is cross-cutting churn with no user payoff.
-3. Both non-Linux backends already contain the same risk pattern:
-   - Lima uses `block_on_compat(...)` in [`world-mac-lima/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs).
-   - WSL uses `block_on(...)` in [`world-windows-wsl/src/backend.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/backend.rs).
-4. The real defect is not the websocket protocol and not `WorldBackend` itself. The defect is that an already-async caller is still forced through a sync bootstrap seam that uses sync-over-async capability verification.
-5. [`PlatformWorldContext`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform_world/mod.rs) currently erases the concrete backend behind `Arc<dyn WorldBackend>` and only stores the sync `ensure_ready` closure. Phase 1 therefore must preserve some concrete async-ready access path in the platform-world layer; a pure shell helper that "dispatches to the concrete backend" is not implementable unless that access path is added deliberately.
+1. This is not greenfield. `world-agent`, `substrate-world-agent`, `agent-api-*`, and `uaa.agent.session` already appear in code, package names, binaries, units, docs, CI, and persisted state.
+2. The biggest product risk is not runtime speed. It is supportability drift. If rename work misses systemd units, bundle paths, or doctor text, users get broken worlds and misleading remediation.
+3. The highest-severity technical risk is fail-open behavior. If renamed service discovery breaks and world-required flows quietly fall back to host execution, the cleanup weakens the isolation model.
+4. The highest-severity migration seam is `uaa.agent.session`. It is exact-matched in validator paths, config examples, traces, transport payloads, and durable runtime/session state.
+5. Mixed-boundary consumers already import both upstream `agent_api` and local `agent-api-*` names. The rename must make those files clearer, not just different.
+6. `world-agent` is not just transport. It owns execute, cancel, gateway, member-runtime, and world-fs behavior. `world-service` is the truthful replacement. `world-transport` is not.
 
 ### Complexity, completeness, and distribution verdict
 
-1. This is a medium slice. It touches more than 8 files once tests and docs are counted, but the spread is justified because the bug spans one async caller, one shared shell context, and two backend adapter implementations.
-2. The complete fix is still the right fix. A hotfix inside `block_on_compat(...)` alone is cheaper to type, but it leaves the wrong architecture in place and guarantees the same confusion later.
-3. No new binary, package, service, or distribution pipeline is introduced. Distribution is unchanged in this slice.
-4. There is no repo-root `TODOS.md` today. Deferred work stays in `NOT in scope` and `Deferred follow-ups` instead of inventing a backlog surface mid-slice.
+1. This is a large slice. It touches more than eight files and crosses crates, scripts, CI, release, docs, and operator guidance. That is justified because the ambiguity is already cross-cutting.
+2. The complete fix is still the right fix. A code-only rename without install, bundle, and grep walls is fake completeness and will produce support debt immediately.
+3. No new binary class or distribution pipeline is introduced, but existing distribution surfaces are part of the implementation scope because the renamed daemon already ships through them.
+4. Direct cutover is approved for supported live surfaces. That means supported examples, fixtures, and docs get rewritten now, and unsupported stale rows fail closed with clear errors after the cutover.
 
 ### Scope ruling
 
-The scope is accepted as-is. It is bigger than a one-line hotfix, but smaller than a trait migration, and that is the right middle.
+The scope is accepted as-is.
+
+This plan is intentionally broader than a few crate renames and intentionally narrower than a public runtime or protocol redesign. That is the right middle.
 
 ## Architecture Review
 
 ### Problem statement
 
-The repo already has a real async persistent-session startup path:
+The repo already has three real boundaries:
+
+1. upstream `agent_api` for external Unified Agent API semantics,
+2. local typed host<->world contracts,
+3. local in-world daemon and control surfaces.
+
+The bug is not missing architecture. The bug is that the names still blur those boundaries.
+
+### Boundary thesis
+
+Responsibility decides the noun.
+
+- upstream runtime semantics keep `agent_api`
+- local contract crates use `transport`
+- the in-world daemon uses `service`
+- the abstract world backend layer keeps `world-api`
+- the local pure-agent protocol-family uses `substrate.agent.session`
+
+### Target boundary map
 
 ```text
-CURRENT BROKEN STARTUP
-======================
-async REPL current-thread runtime
-    -> open_world_session(...)
-    -> ReplPersistentSessionClient::start_with(...)
-    -> build_ws_and_start_session_frame(...)
-    -> ctx.ensure_ready()                    [sync bridge]
-    -> backend.ensure_session(...)
-    -> ensure_agent_ready(...)
-    -> block_on_compat(client.capabilities())
-    -> Tokio panic on macOS current-thread runtime
+TARGET BOUNDARY MAP
+===================
+upstream Unified Agent API
+    -> Rust crate/import: agent_api
+    -> capability/schema ids: agent_api.*
+    -> meaning: external CLI-agent runtime abstraction only
+
+Substrate local world contract
+    -> crates: transport-api-types / transport-api-core / transport-api-client
+    -> Rust crate ids: transport_api_types / transport_api_core / transport_api_client
+    -> meaning: typed host<->world transport contract only
+
+Substrate local in-world daemon
+    -> crate/package/binary/service: world-service
+    -> systemd/socket family: substrate-world-service.*
+    -> meaning: in-world execution and control daemon
+
+Abstract world backend layer
+    -> crate/package: world-api
+    -> meaning: backend contract only
+
+Local pure-agent protocol-family
+    -> canonical label: substrate.agent.session
+    -> meaning: Substrate-local pure-agent identity only
 ```
 
-The mismatch is narrow but real:
+### Canonical rename contract
 
-1. the caller is async,
-2. the readiness bridge is sync,
-3. the backend uses sync-over-async capability verification that is only safe under some runtime shapes.
+| Current canonical name | New canonical name | Decision |
+| --- | --- | --- |
+| `uaa.agent.session` | `substrate.agent.session` | rename |
+| `crates/world-agent` | `crates/world-service` | rename |
+| package `world-agent` | package `world-service` | rename |
+| binary `world-agent` | binary `world-service` | rename |
+| installed alias `substrate-world-agent` | `substrate-world-service` | rename |
+| `substrate-world-agent.service` / `.socket` | `substrate-world-service.service` / `.socket` | rename |
+| `crates/agent-api-types` | `crates/transport-api-types` | rename |
+| `crates/agent-api-core` | `crates/transport-api-core` | rename |
+| `crates/agent-api-client` | `crates/transport-api-client` | rename |
+| `agent_api_types` / `agent_api_core` / `agent_api_client` | `transport_api_types` / `transport_api_core` / `transport_api_client` | rename |
+| `world-api` | `world-api` | keep |
+| upstream `agent_api` | upstream `agent_api` | keep |
+| upstream `agent_api.*` ids | upstream `agent_api.*` ids | keep |
 
-The fix is not "teach `block_in_place` a new trick." The fix is to stop sending an async caller through the sync bridge.
+### Live rename boundary and historical allowlist
 
-### Architecture thesis
+Live rename scope must go green on:
 
-Caller shape decides the bootstrap adapter. Readiness ownership stays with the backend, but the shell must stop pretending sync and async callers are the same thing.
+1. `Cargo.toml`
+2. `crates/**`
+3. `scripts/**`
+4. `.github/**`
+5. `dist/**`
+6. `README.md`
+7. `AGENTS.md`
+8. `config/**`
+9. operator and developer docs under `docs/**`
 
-### Target architecture
+Historical or evidence-bearing files may retain old tokens only when intentionally preserved, for example:
 
-```text
-TARGET STARTUP MODEL
-====================
-async REPL current-thread runtime
-    -> open_world_session(...)
-    -> build_ws_and_start_session_frame(...)
-    -> ensure_persistent_session_ready_async(...)
-    -> backend-specific async readiness adapter
-    -> transport connect
-    -> websocket handshake
-    -> ready frame
+1. `docs/project_management/_archived/**`
+2. older planning packs or captured artifacts that are not normative runtime or operator guidance
 
-sync bootstrap / sync request-builders
-    -> ctx.ensure_ready()
-    -> backend.ensure_session(...)
-    -> backend-specific sync adapter
-    -> unchanged caller contract
-```
-
-### Readiness ownership split
-
-```text
-BACKEND READINESS OWNERSHIP
-===========================
-shared sync-safe steps
-    - ensure_vm_running() / warm backend
-    - ensure_forwarding()
-    - build_agent_client()
-
-shared async verification step
-    - capabilities probe
-    - preserve current per-backend timeout / retry behavior
-    - fail-closed error mapping
-
-sync adapter
-    -> shared setup
-    -> block_on(private_runtime_or_safe_bridge, async verification)
-
-async adapter
-    -> shared setup
-    -> await async verification directly
-```
-
-This is the whole design. No async `WorldBackend`, no shell-side Lima logic clone, no new protocol.
-
-### Caller contract matrix
-
-| Caller shape | Current entrypoint | Required readiness path after this slice | Notes |
-| --- | --- | --- | --- |
-| Async REPL persistent-session startup | [`open_world_session(...)` in async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | `ensure_persistent_session_ready_async(...)` | Must never call `ctx.ensure_ready()` on macOS again. |
-| Linux persistent-session startup | [`build_ws_and_start_session_frame(...)` in world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) | existing Linux readiness path | Linux already uses the world-agent readiness flow and stays boring. |
-| Sync platform bootstrap | [`routing/world.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/world.rs) | existing `ctx.ensure_ready()` | No signature or behavior rewrite. |
-| Sync request builders | [`world_ops.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs) | existing `ctx.ensure_ready()` | Regression coverage required because these are easy to break silently. |
-| Workspace sync capabilities checks | [`workspace_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/workspace_cmd.rs) | dedicated runtime `block_on(...)` already local to workspace sync | Not the main bug, but still part of the sync-surface preservation check. |
+This plan does not allow a vague "repo-wide rename." It requires the live-surface command wall and the historical allowlist to be named explicitly.
 
 ### Frozen contract
 
 If implementation wants to violate any rule below, stop and revise the plan first.
 
-1. `WorldBackend` stays synchronous in this slice.
-2. `PlatformWorldContext.ensure_ready` remains available and continues to serve sync callers.
-3. Persistent-session startup must not call `ensure_ready` on macOS. Linux may keep its existing direct world-agent readiness path.
-4. Explicit `SUBSTRATE_WORLD_SOCKET` overrides continue to bypass Lima detection and startup exactly as they do today.
-5. VM/forwarder/client/capabilities rules remain backend-owned. Shell code may orchestrate, not duplicate.
-6. All readiness failures remain fail closed. A missing VM, failed forwarder, failed capabilities probe, or bad websocket connect returns an error, never a best-effort degraded session.
-7. Windows/WSL does not gain a new persistent-session product surface in this slice. Only internal readiness parity and hardening land there.
-8. The platform-world layer must preserve a concrete backend-owned async-ready path for persistent-session startup, whether through an additional callback, a typed carrier, or another testable adapter surface. Shell code must not recover that access by duplicating backend logic.
+1. Upstream `agent_api` and `agent_api.*` remain untouched.
+2. `world-api` remains untouched.
+3. `substrate.agent.session` is the only canonical supported local protocol-family label after cutover.
+4. Direct cutover applies to supported live surfaces. Do not add permanent compatibility aliases just to avoid touching docs or scripts.
+5. Unsupported stale rows and configs must fail closed with explicit error text, not silent acceptance and not silent downgrade.
+6. World-required flows must not fall back to host execution because a renamed binary, socket, or unit was missed.
+7. Operator-facing unit names, install aliases, release payload names, and doctor text must match the code rename in the same slice.
+8. Mixed-boundary files must read more clearly after the rename than before.
 
 ## Code Quality Review
 
 ### Explicit design choices
 
-1. Add one shell-facing async helper for persistent-session startup. Do not generalize this into a broad "all world readiness is async now" abstraction.
-2. Keep backend-owned readiness logic central. The shell helper dispatches to backend adapters; it does not reimplement VM boot, forwarding, or capability checks.
-3. Split shared backend internals by behavior, not by platform folklore:
-   - shared setup,
-   - shared async verification,
-   - sync wrapper,
-   - async wrapper.
-4. Because `PlatformWorldContext` currently erases concrete backend type information, Phase 1 must also define how the shell reaches the backend-owned async-ready adapter. The acceptable shapes are narrow:
-   - an additional async-ready callback stored alongside `ensure_ready`,
-   - a typed platform carrier that still preserves the sync surface,
-   - or an equivalent platform-world adapter that remains shell-thin and testable.
-5. Harden sync bridge helpers as defense-in-depth only. If `block_on_compat(...)` or WSL `block_on(...)` are touched, the change is there to produce a controlled error instead of a panic, not to justify leaving the async caller on the sync bridge.
-6. Preserve Linux simplicity. Do not backdoor a second non-Linux abstraction into Linux just for symmetry.
+1. Rename only the local transport and daemon families. Do not widen this slice into a public runtime or protocol redesign.
+2. Treat scripts, CI, bundles, and docs as product surfaces. Do not dump them into "truth sync later."
+3. Centralize the protocol-family cutover through the current validator, mapping, trace, and persistence seams instead of scattering custom translation code.
+4. Keep the direct-cutover rule honest: all supported examples and checked-in live fixtures update now; unsupported stale rows fail clearly after cutover.
+5. Use one exact rename matrix and one exact grep wall. No ad hoc exceptions.
 
 ### Naming and ownership expectations
 
-The plan is intentionally opinionated about the shape of the new seam:
-
-1. The shell helper should be named for the real caller, for example `ensure_persistent_session_ready_async(...)`, not a generic future-looking async world API.
-2. macOS and WSL should each expose backend-local async readiness wrappers that reuse the same internal setup/verification steps as the sync wrapper.
-3. `PlatformWorldContext` remains the sync compatibility carrier, but Phase 1 must deliberately preserve a backend-owned async-ready access path. A free helper is fine only if the platform-world layer exposes enough information to reach the real backend adapter without rebuilding readiness logic in shell code.
+1. `world-service` means "the in-world daemon and control surface." It is not just a transport pipe.
+2. `transport-api-*` means "the local typed host<->world contract layer." It does not mean upstream UAA.
+3. `world-api` keeps the abstract backend meaning and should be explicitly called out as unchanged anywhere the rename is explained.
+4. Mixed-boundary consumers should preserve explicit wording in comments and tests: upstream runtime on one side, local transport on the other.
 
 ### DRY guardrails
 
-The following are non-negotiable:
-
-1. No shell-side duplication of Lima forwarding or agent capability logic.
-2. No one-off macOS-only bypass that leaves WSL with the same trap hidden in a different crate.
-3. No separate definitions of "ready" for sync and async startup.
+1. There must be one authoritative rename matrix, not slightly different rename lists in code comments, docs, and scripts.
+2. There must be one grep wall for old-name detection across live surfaces, not one command per contributor with different scopes.
+3. There must be one canonical protocol-family constant after cutover. Do not leave stale helper constants lying around under alternate names.
+4. Error and remediation copy should be sourced from renamed truth, not duplicated with half-updated old examples.
 
 ## Implementation Plan
 
 ### Phase summary
 
-| Phase | Purpose | Modules touched | Hard dependency |
+| Phase | Purpose | Modules or surfaces touched | Hard dependency |
 | --- | --- | --- | --- |
-| 1 | Define async shell bootstrap contract | `crates/shell/src/execution/platform_world/`, `crates/shell/src/execution/routing/dispatch/world_persistent_session.rs` | — |
-| 2 | Split macOS readiness internals into shared setup plus sync/async adapters | `crates/world-mac-lima/` | 1 |
-| 3 | Migrate persistent-session caller to async seam | `crates/shell/src/execution/routing/dispatch/`, `crates/shell/src/repl/` | 1, 2 |
-| 4 | Harden WSL parity without adding new product surface | `crates/world-windows-wsl/` | 1 |
-| 5 | Prove sync surfaces still behave the same | `crates/shell/tests/`, `crates/shell/src/execution/routing/` | 3 |
-| 6 | Document the split and run smoke validation | `docs/`, `llm-last-mile/` | 3, 5 |
+| 1 | Freeze vocabulary, rename matrix, and live-surface boundary | `Cargo.toml`, `AGENT_ORCHESTRATION_GAP_MATRIX.md`, `docs/`, `README.md`, `AGENTS.md` | — |
+| 2 | Cut over local protocol-family label | `crates/common/`, `crates/shell/src/execution/agent_runtime/`, `config/`, relevant fixtures and tests | 1 |
+| 3 | Rename local transport and daemon families | `crates/world-agent/`, `crates/agent-api-*/`, `Cargo.toml`, mixed-boundary consumers | 1 |
+| 4 | Sweep installers, release bundles, platform helpers, and CI | `scripts/`, `dist/`, `.github/` | 1, 3 |
+| 5 | Sweep operator docs, ADRs, and developer guidance | `docs/`, `README.md`, `AGENTS.md`, ADRs | 1, 2, 3, 4 |
+| 6 | Run grep wall, package tests, operator validation, and closeout | repo root, platform scripts, release scripts | 2, 3, 4, 5 |
 
-### Phase 1: Add the async shell bootstrap seam
+### Phase 1: Freeze vocabulary, rename matrix, and live-surface boundary
 
-Files:
+Files and surfaces:
 
-1. [platform_world/mod.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform_world/mod.rs)
-2. [world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs)
-
-Actions:
-
-1. Introduce one shell-facing async helper for persistent-session startup. Its job is to:
-   - preserve the existing Linux readiness behavior,
-   - detect or reuse the platform world context for macOS,
-   - reach a backend-owned async-ready adapter through an explicit platform-world seam,
-   - and return only when readiness is sufficient to open the transport.
-2. Because `PlatformWorldContext` currently stores only `Arc<dyn WorldBackend>` plus sync `ensure_ready`, Phase 1 must add the missing async-ready access path explicitly. Acceptable implementations include an additional async callback or a typed platform carrier, but not shell-side duplication of backend logic.
-3. Keep `PlatformWorldContext` usable by existing sync callers. Do not change its current `ensure_ready` contract.
-4. Freeze the shell-to-backend async contract before parallel backend work starts. This is the merge point every other lane depends on.
-
-Exit criteria:
-
-1. The shell has one explicit async readiness seam for persistent-session startup.
-2. No sync caller changes signature.
-3. The shell contract is specific enough that macOS and WSL work can proceed in parallel without guessing.
-
-### Phase 2: Refactor macOS/Lima readiness into shared internals plus sync/async adapters
-
-Files:
-
-1. [world-mac-lima/src/lib.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs)
+1. [AGENT_ORCHESTRATION_GAP_MATRIX.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENT_ORCHESTRATION_GAP_MATRIX.md)
+2. [README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/README.md)
+3. [AGENTS.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENTS.md)
+4. [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
+5. [docs/TRACE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/TRACE.md)
 
 Actions:
 
-1. Keep `ensure_vm_running()` and `ensure_forwarding()` as shared sync-safe setup steps.
-2. Extract the capabilities verification portion of `ensure_agent_ready()` into an async helper that can be awaited directly after client construction, while preserving current Lima semantics. This slice does not add a new timeout or retry policy to macOS.
-3. Keep `ensure_agent_ready()` as the sync wrapper used by `ensure_session(...)`.
-4. Add a dedicated async readiness wrapper for persistent-session startup that reuses the same setup and verification rules.
-5. Harden `block_on_compat(...)` so accidental future misuse returns a controlled error with context instead of a runtime panic.
+1. Freeze the vocabulary contract in one place: upstream `agent_api`, local `transport-api-*`, local `world-service`, unchanged `world-api`, local `substrate.agent.session`.
+2. Freeze the exact rename matrix for crate directories, package names, Rust crate ids, binaries, install aliases, unit names, and bundle paths before file moves start.
+3. Freeze the live rename boundary and historical allowlist before grep work starts.
+4. Record the exact grep wall commands in the plan so contributors are checking the same thing.
 
 Exit criteria:
 
-1. macOS sync `ensure_session(...)` still works.
-2. macOS async persistent-session bootstrap no longer touches `block_on_compat(...)` on the happy path.
-3. Sync and async Lima readiness share the same setup and verification logic.
+1. Every later phase can point back to one exact rename matrix.
+2. No implementation phase has to guess which surfaces are live and which are historical.
 
-### Phase 3: Migrate persistent-session startup to the async seam
+### Phase 2: Cut over the local protocol-family label to `substrate.agent.session`
 
-Files:
+Files and surfaces:
 
-1. [world_persistent_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs)
-2. [async_repl.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs)
+1. [crates/common/src/agent_events.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/common/src/agent_events.rs)
+2. [crates/shell/src/execution/agent_runtime/mapping.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/mapping.rs)
+3. [crates/shell/src/execution/agent_runtime/validator.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs)
+4. [crates/shell/src/execution/agent_runtime/session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/session.rs)
+5. [crates/shell/src/execution/agent_runtime/orchestration_session.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/orchestration_session.rs)
+6. [crates/shell/src/execution/agent_runtime/state_store.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/state_store.rs)
+7. [config/agents/codex.yaml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/config/agents/codex.yaml)
 
 Actions:
 
-1. Leave `ReplSessionStartParams`, policy/env normalization, shared-world request wiring, and websocket framing alone.
-2. Replace the macOS `ctx.ensure_ready` call with the new async readiness helper.
-3. Preserve `SUBSTRATE_WORLD_SOCKET` short-circuiting exactly. The override path is already the clean escape hatch for tests and explicit custom sockets.
-4. Keep Linux on its existing direct world-agent readiness path.
+1. Replace the canonical local protocol-family constant from `uaa.agent.session` to `substrate.agent.session`.
+2. Update validator success paths, error text, config examples, emitted traces, transport payloads, and durable writes to the new canonical label.
+3. Rewrite supported fixtures, checked-in examples, and test inventories in the same cutover.
+4. Make stale old-label rows fail closed with explicit operator-readable errors after cutover. Do not silently accept them as canonical.
+5. Preserve all true upstream `agent_api.*` ids and `uaa_session_id` semantics unchanged.
 
 Exit criteria:
 
-1. REPL startup remains one straight async flow.
-2. The only semantic change is the readiness boundary before transport connect.
-3. The macOS path no longer crosses the sync bridge.
+1. `protocol: substrate.agent.session` validates and shows up in emitted live surfaces.
+2. `uaa.agent.session` is no longer documented or accepted as the preferred supported local label.
+3. No public selector or upstream capability id semantics changed.
 
-### Phase 4: WSL parity hardening, not product-surface expansion
+### Phase 3: Rename local transport and daemon families directly
 
-Files:
+Files and surfaces:
 
-1. [world-windows-wsl/src/backend.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/backend.rs)
-2. [world-windows-wsl/src/tests.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/tests.rs)
+1. [Cargo.toml](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/Cargo.toml)
+2. [crates/world-agent/](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/)
+3. [crates/agent-api-types/](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/)
+4. [crates/agent-api-core/](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-core/)
+5. [crates/agent-api-client/](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-client/)
+6. mixed-boundary consumers such as [`crates/shell/src/repl/async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) and [`member_runtime.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/member_runtime.rs)
 
 Actions:
 
-1. Split WSL capabilities verification and warm-retry logic into shared async internals plus a sync wrapper, preserving the existing WSL warm-and-retry behavior rather than introducing a new cross-platform policy.
-2. Harden `block_on(...)` the same way macOS is hardened.
-3. Do not add a Windows persistent-session shell caller in this slice.
-4. Document in code comments and docs that this is backend-local parity work for future async callers, not shipped Windows persistent-session support.
+1. Rename `crates/world-agent` to `crates/world-service`, package `world-agent` to `world-service`, and binary `world-agent` to `world-service`.
+2. Rename installed alias and service family from `substrate-world-agent` to `substrate-world-service`.
+3. Rename the local contract crates to `transport-api-types`, `transport-api-core`, and `transport-api-client`, including their Rust crate ids.
+4. Update all imports, dependency keys, workspace member entries, crate references, and tests to the new names.
+5. Preserve `world-api` unchanged.
+6. Tighten comments and tests in mixed-boundary files so the upstream-vs-local distinction is explicit.
 
 Exit criteria:
 
-1. WSL remains compile-safe and behaviorally unchanged for existing sync callers.
-2. Future async callers have a safe backend-local seam waiting for them.
-3. The Windows parity decision is explicit and test-backed.
+1. The workspace builds with the renamed local families.
+2. Mixed-boundary files read cleanly with upstream `agent_api` alongside local `transport_api_*`.
+3. No supported live surface still treats `world-agent` or `agent-api-*` as canonical names.
 
-### Phase 5: Prove sync callers still work
+### Phase 4: Sweep installers, platform helpers, release bundles, and CI
 
-Files:
+Files and surfaces:
 
-1. [routing/world.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/world.rs)
-2. [world_ops.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs)
-3. [workspace_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/workspace_cmd.rs)
+1. [scripts/linux/world-provision.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/linux/world-provision.sh)
+2. [scripts/substrate/install-substrate.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/substrate/install-substrate.sh)
+3. [scripts/substrate/dev-install-substrate.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/substrate/dev-install-substrate.sh)
+4. [scripts/substrate/uninstall-substrate.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/substrate/uninstall-substrate.sh)
+5. [scripts/mac/lima-warm.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/mac/lima-warm.sh)
+6. [scripts/windows/wsl-warm.ps1](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/windows/wsl-warm.ps1)
+7. [scripts/windows/uninstall-substrate.ps1](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/scripts/windows/uninstall-substrate.ps1)
+8. [dist/scripts/assemble-release-bundles.sh](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/dist/scripts/assemble-release-bundles.sh)
+9. [dist/release-template.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/dist/release-template.md)
+10. [`.github/workflows/feature-smoke.yml`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.github/workflows/feature-smoke.yml) and [`.github/workflows/nightly.yml`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.github/workflows/nightly.yml)
 
 Actions:
 
-1. Preserve call sites unless a tiny adapter shim is required for compilation.
-2. Add regression tests that prove sync bootstrap and sync request-building still succeed and still fail closed.
-3. Confirm that workspace sync capability checks remain unaffected by the new persistent-session path.
+1. Update install, warm, provision, uninstall, and smoke flows to the renamed binary, socket, and unit names.
+2. Update release bundle assembly so host and guest payloads stage `world-service` in the right locations.
+3. Update CI package invocations, smoke checks, and release checks to the renamed package and service family names.
+4. Update doctor, remediation, and helper output so operators are never pointed back at `substrate-world-agent`.
 
 Exit criteria:
 
-1. Sync callers remain boring.
-2. No hidden async creep enters these surfaces.
-3. Existing fail-closed semantics are preserved.
+1. Linux, macOS Lima, and WSL helpers all target `world-service`.
+2. Release bundle and CI surfaces prove the rename beyond code compilation.
+3. Operator guidance and helper text are consistent with the new service family.
 
-### Phase 6: Docs and manual validation
+### Phase 5: Sweep boundary docs, ADRs, and developer guidance
 
-Files:
+Files and surfaces:
 
-1. [persistent_session.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/internals/repl/persistent_session.md)
-2. [WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
-3. optionally [llm-last-mile/README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/README.md) if the packet index needs a note
+1. [docs/CONFIGURATION.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/CONFIGURATION.md)
+2. [docs/TRACE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/TRACE.md)
+3. [docs/WORLD.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/WORLD.md)
+4. [docs/INSTALLATION.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/INSTALLATION.md)
+5. [docs/UNINSTALL.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/UNINSTALL.md)
+6. [docs/COMMANDS.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/COMMANDS.md)
+7. [docs/USAGE.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/USAGE.md)
+8. [docs/REPLAY.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/REPLAY.md)
+9. [docs/reference/env/contract.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/reference/env/contract.md)
+10. [docs/manual_verification/linux_world_socket.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/manual_verification/linux_world_socket.md)
+11. [docs/cross-platform/mac_world_setup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/mac_world_setup.md)
+12. [docs/cross-platform/wsl_world_troubleshooting.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/docs/cross-platform/wsl_world_troubleshooting.md)
+13. [README.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/README.md)
+14. [AGENTS.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/AGENTS.md)
+15. relevant ADRs including ADR-0042, ADR-0044, ADR-0045, and ADR-0021
 
 Actions:
 
-1. Document the caller-shape split explicitly.
-2. Call out that persistent-session startup on macOS uses an async readiness adapter while sync request-builders still use the legacy sync seam.
-3. Record the Windows parity decision so nobody mistakes "hardened internals" for "Windows persistent REPL shipped."
-4. Run the manual repro smoke and confirm the failure mode is now either success or a normal readiness error.
+1. Rewrite operator and developer docs so upstream UAA and local transport or service layers are never described as the same thing.
+2. Rewrite doc examples to `substrate.agent.session` and the renamed `world-service` and `transport-api-*` families.
+3. Keep historical references only where explicitly marked as historical or archived.
+4. Update the gap matrix so the boundary row is no longer "partially clarified."
 
 Exit criteria:
 
-1. The docs reflect the real architecture.
-2. The next person reading the code does not have to reverse-engineer why the split exists.
-3. The manual repro no longer panics.
+1. The same exact boundary story appears in docs, ADRs, code comments, and install guides.
+2. No live operator doc still tells someone to inspect `substrate-world-agent.service` or use `uaa.agent.session`.
+
+### Phase 6: Validation and closeout
+
+Files and surfaces:
+
+1. repo root grep wall
+2. target package tests
+3. platform helper and smoke commands
+4. release bundle assembly
+
+Actions:
+
+1. Run the grep wall on live surfaces and confirm zero stale hits outside the historical allowlist.
+2. Run workspace tests and the targeted renamed-package tests.
+3. Run Linux, Lima, and WSL validation commands against the renamed surfaces.
+4. Run release bundle assembly and verify renamed payloads.
+5. Confirm explicit fail-closed behavior for rename drift and old local protocol label usage.
+
+Exit criteria:
+
+1. The rename is proven across code, scripts, docs, bundles, and operator flows.
+2. Old-name drift is either gone or explicitly historical.
 
 ## Test Review
 
-Rust is the project runtime and `cargo test` remains the authoritative framework for this slice.
+Rust and shell or operator validation are the authoritative test layers for this slice.
 
 ### Code path coverage
 
 ```text
 CODE PATH COVERAGE
 ==================
-[+] Async REPL startup
-    async_repl::start_world_session(...)
-        -> open_world_session(...)
-        -> ReplPersistentSessionClient::start_with(...)
-        -> build_ws_and_start_session_frame(...)
-        -> ensure_persistent_session_ready_async(...)
-        -> websocket connect / ready frame
+[+] Local protocol-family cutover
+    mapping.rs
+        -> canonical label constant
+    validator.rs
+        -> config validation
+    agent_events.rs / agents_cmd.rs / state_store.rs
+        -> emitted trace + persisted state + status grouping
     Required tests:
-        - macOS current-thread startup succeeds without panic
-        - readiness failure returns Result error
-        - explicit SUBSTRATE_WORLD_SOCKET override still bypasses bootstrap
+        - substrate.agent.session validates
+        - emitted trace rows use substrate.agent.session
+        - stale uaa.agent.session input fails clearly after cutover
 
-[+] Sync bootstrap callers
-    routing/world.rs
-        -> ctx.ensure_ready()
-        -> backend.ensure_session(...)
-    world_ops.rs request builders
-        -> ctx.ensure_ready()
-        -> AgentClient transport selection
-    workspace_cmd.rs capabilities checks
-        -> dedicated runtime.block_on(...)
+[+] Local transport-family rename
+    Cargo.toml
+        -> workspace members + dependency keys
+    renamed transport-api-* crates
+        -> package names + Rust crate ids
+    mixed-boundary consumers
+        -> upstream agent_api stays unchanged
     Required tests:
-        - sync bootstrap unchanged
-        - sync request builders unchanged
-        - fail-closed behavior preserved
+        - mixed-boundary crates compile cleanly
+        - imports remain unambiguous
 
-[+] Backend adapters
-    MacLimaBackend
-        -> ensure_vm_running()
-        -> ensure_forwarding()
-        -> async capabilities probe
-    WindowsWslBackend
-        -> warm / retry path
-        -> async capabilities probe
+[+] world-service rename
+    renamed world-service crate
+        -> package + binary + tests
+    socket activation / world routing / doctor paths
+        -> renamed binary + socket + unit discovery
     Required tests:
-        - async adapter success
-        - probe failure returns normal error
-        - sync adapter still works
+        - service discovery uses new names
+        - world-required routing still fails closed if service is missing
+
+[+] Operator and release surfaces
+    install/dev-install/uninstall scripts
+    Lima/WSL warm and smoke flows
+    release bundle assembly
+    feature-smoke and nightly workflows
+    Required tests:
+        - renamed payloads are staged
+        - renamed unit names are enabled and queried
+        - CI invokes renamed packages and binaries
 ```
 
 ### User-flow and error-state coverage
@@ -403,82 +447,90 @@ CODE PATH COVERAGE
 ```text
 USER FLOW COVERAGE
 ==================
-[+] macOS REPL startup, default transport
-    - world session starts under current-thread runtime
-    - user sees normal REPL startup, not Tokio panic
+[+] New config or inventory author
+    - writes protocol: substrate.agent.session
+    - validator accepts it
+    - docs show the same label
 
-[+] macOS REPL startup, readiness failure
-    - VM unavailable / forwarder unavailable / capabilities probe fails
-    - user sees explicit readiness failure
+[+] Operator provisions or warms a world
+    - install or provision script stages world-service
+    - systemd unit names are substrate-world-service.*
+    - doctor and remediation text point at world-service, not world-agent
 
-[+] macOS REPL startup, explicit socket override
-    - no Lima bootstrap side effects
-    - custom socket still connects
+[+] World-required execution path
+    - renamed service discovery succeeds
+    - if it fails, command errors explicitly
+    - no host fallback when require_world=true
 
-[+] Sync command surfaces
-    - world bootstrap still works
-    - world_ops request builders still work
-    - workspace capabilities checks still work
+[+] Contributor runs CI or bundle commands
+    - cargo package names are renamed
+    - feature-smoke and nightly still pass
+    - release bundles contain world-service payloads
 
-[+] WSL backend hardening
-    - existing sync flows unaffected
-    - future async callers no longer depend on unsafe sync-over-async behavior
+[+] Legacy unsupported old-name input
+    - uaa.agent.session row or config is encountered post-cutover
+    - validator or load path rejects it clearly
+    - user sees explicit remediation, not silent drift
 ```
 
 ### Concrete test additions
 
 | Target | Test requirement | Type |
 | --- | --- | --- |
-| shell-side current-thread test near [`world_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) or an adjacent focused shell test | Add a no-override current-thread regression that exercises the path which previously called `ctx.ensure_ready()` and proves startup now returns success or a normal error without panic. | focused unit/integration |
-| [`crates/shell/tests/repl_world_first_routing_v1.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/repl_world_first_routing_v1.rs) | Preserve explicit `SUBSTRATE_WORLD_SOCKET` override bypass regression coverage only. This harness is valid for override-path behavior, not for reproducing the original panic. | integration |
-| [`world_persistent_session.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_persistent_session.rs) tests | Cover async readiness success, readiness error propagation, and any shell-side helper behavior needed to prove the caller-shape split. | focused unit/integration |
-| [`world-mac-lima/src/lib.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-mac-lima/src/lib.rs) tests | Use the existing `session_setup_override` seam to prove sync and async adapters share readiness rules. | crate unit |
-| [`world-windows-wsl/src/tests.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-windows-wsl/src/tests.rs) | Cover async-parity helper behavior and sync-wrapper preservation. | crate unit |
-| [`routing/world.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/world.rs) and [`world_ops.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/dispatch/world_ops.rs) | Add sync regression coverage that proves unchanged success and fail-closed behavior. | integration |
+| [`crates/shell/tests/agents_validate.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agents_validate.rs) and [`validator.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime/validator.rs) | Validate `protocol: substrate.agent.session`; reject `uaa.agent.session` with explicit post-cutover error text. | focused unit and integration |
+| [`crates/common/src/agent_events.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/common/src/agent_events.rs), [`agents_cmd.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs), [`crates/shell/tests/agent_successor_contract_ahcsitc0.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/tests/agent_successor_contract_ahcsitc0.rs) | Prove trace, status, and grouping emit and consume `substrate.agent.session` without regression. | focused unit and integration |
+| renamed `transport-api-*` crates plus mixed-boundary consumers such as [`async_repl.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/repl/async_repl.rs) | Compile and runtime tests that prove upstream `agent_api` remains distinct from renamed local `transport_api_*` crates. | compile and focused unit |
+| renamed `world-service` crate tests, including current `world-agent` test families | Keep daemon execute, stream, cancel, and member-runtime behavior intact under the new package and binary names. | crate unit and integration |
+| [`socket_activation.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/socket_activation.rs), [`platform/linux.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/platform/linux.rs), [`routing/world.rs`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/routing/world.rs) | Prove rename drift still fails closed when service or socket discovery is broken. | focused integration |
+| install, warm, smoke, and bundle helpers under `scripts/`, `dist/`, and `.github/` | Prove renamed package invocations, renamed payload staging, and renamed service or socket names across Linux, Lima, and WSL. | shell smoke and CI validation |
+| repo-root grep wall | Prove no stale old-name hits remain on live surfaces, while positive guardrails still find upstream `agent_api.*` and unchanged `world-api`. | static validation |
 
 ### Regression rule for this slice
 
-The macOS REPL panic is a regression against an existing command surface. That makes the no-panic REPL startup test mandatory. No defer, no follow-up issue, no "manual smoke is enough."
+Two regressions are mandatory blockers:
 
-The override-backed REPL harness is not sufficient by itself for this regression because `SUBSTRATE_WORLD_SOCKET` bypasses platform detection and the sync readiness bridge. The no-panic regression must execute a no-override path that would have crossed `ctx.ensure_ready()` before this slice.
+1. any path that causes world-required routing to stop failing closed because a renamed binary, socket, or unit was missed
+2. any path that leaves supported live surfaces still advertising or emitting `uaa.agent.session`
+
+No defer. No "docs follow-up." These are slice-completion gates.
 
 ## Failure Modes Registry
 
 | Failure mode | Where it happens | Required handling | Test requirement | Critical gap if missing |
 | --- | --- | --- | --- | --- |
-| Tokio current-thread panic | macOS REPL startup | Eliminate by moving async caller off sync bridge | REPL startup regression | Yes |
-| VM starts but forwarding is absent | macOS async adapter | Return fail-closed readiness error | macOS adapter test | Yes |
-| Capabilities probe hangs or fails | macOS + WSL adapters | Return normal error with context, no panic, while preserving existing per-backend retry/timeout semantics | adapter timeout/failure tests | Yes |
-| Explicit socket override accidentally triggers platform bootstrap | macOS startup override path | Preserve short-circuit bypass | override regression test | Yes |
-| Sync bootstrap silently starts using async path | `routing/world.rs` or `world_ops.rs` | Keep sync callers on `ensure_ready` | sync regression tests | Yes |
-| Future Windows async caller repeats the same trap | WSL backend | Land async-parity internals and harden sync bridge | WSL parity tests | No, but document if partially deferred |
+| World-required routing falls back to host execution because renamed service discovery broke | socket activation, world routing, platform helpers | fail closed with explicit error | fail-closed routing tests | Yes |
+| Renamed unit or binary is missed in install or warm flows | Linux, Lima, WSL scripts | explicit install or warm failure with renamed guidance | platform smoke and doctor checks | Yes |
+| Release bundles still stage old payload names | `dist/` scripts and release template | bundle assembly fails or is corrected before release | release gate checks | Yes |
+| Mixed-boundary code becomes more confusing after rename | shell and world-service consumers | explicit import and comment cleanup | compile and focused tests | No, but fix in-slice |
+| Old `uaa.agent.session` rows or configs drift through silently | validator and persistence load paths | explicit rejection after cutover | validator and state tests | Yes |
+| Docs or remediation text still point operators to `substrate-world-agent` | docs, doctor output, helper strings | rewrite all live guidance | grep wall plus manual validation | No, but unacceptable for ship |
 
-Any failure mode that has no test, no error handling, and only a silent failure is a release blocker for this slice.
+Any failure mode with no test, no explicit handling, and a silent or misleading user experience is a release blocker for this slice.
 
 ## Performance Review
 
-This slice is about startup correctness, but there are still performance guardrails:
+This slice is not driven by runtime throughput, but there are still real performance and operational guardrails:
 
-1. No duplicate readiness passes. The async path should perform one readiness preparation before transport connect, not re-probe capabilities again immediately after connect unless that is already part of the existing handshake contract.
-2. No extra VM warm cycles. Shared setup must remain idempotent enough that moving to an async adapter does not accidentally start the Lima VM twice.
-3. No hidden runtime creation on the async happy path. The point of the async seam is to avoid bridging through a blocking helper.
-4. Timeout and retry policy must remain backend-owned and unchanged in spirit. Do not silently lengthen startup latency just to mask the design bug.
-5. Steady-state REPL throughput is unchanged. There is no new hot-path work after session start.
+1. No repeated service-discovery loops should be added just to paper over rename drift.
+2. No compatibility shim should sit on the hot path for supported live flows after cutover.
+3. No extra validation pass should be added to the steady-state execution path beyond the existing semantics required to enforce the renamed label.
+4. CI and bundle validation may get broader, but runtime execution should remain unchanged in steady state.
+5. The dominant cost center is support churn, not CPU time. The plan should optimize for zero operator ambiguity.
 
 ## NOT in scope
 
-1. Converting [`WorldBackend`](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-api/src/lib.rs) into an async trait.
-2. Rewriting LinuxLocalBackend.
-3. Redesigning the persistent-session protocol or `ready` frame contract.
-4. Broad transport refactors unrelated to readiness.
-5. Shipping Windows persistent-session REPL support as a new product surface.
-6. Changing public CLI behavior outside of replacing the panic with normal readiness errors.
+1. Renaming true upstream `agent_api` imports or any upstream `agent_api.*` capability or schema ids.
+2. Renaming `world-api`.
+3. Changing public session selectors or widening public control surfaces.
+4. Reworking HTTP path schemas unless a rename is explicitly required by the chosen service family.
+5. Bulk-rewriting archived evidence packs, old planning logs, or historical artifacts just to purge old tokens.
+6. Renaming generic `SUBSTRATE_*AGENT*` environment variables solely because they contain the word `agent`.
 
 ## Deferred Follow-Ups
 
-1. Full async `WorldBackend` migration, if future async callers justify the cost.
-2. Broader unification of sync request-builders if those surfaces ever move fully async.
-3. Any Windows persistent-session feature work beyond backend hardening.
+1. Optional archival cleanup for historical documents after the live-surface wall is green.
+2. Any future naming cleanup for non-blocking environment variable families, only if it earns its own scope and rollout story.
+3. Any later public contract cleanup beyond the local transport and service boundary, only if separately justified.
 
 ## Worktree Parallelization Strategy
 
@@ -486,67 +538,142 @@ This slice is about startup correctness, but there are still performance guardra
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| 1. Define async shell bootstrap contract | `crates/shell/src/execution/platform_world/`, `crates/shell/src/execution/routing/dispatch/` | — |
-| 2. Refactor macOS shared readiness internals | `crates/world-mac-lima/` | 1 |
-| 3. Harden WSL parity internals | `crates/world-windows-wsl/` | 1 |
-| 4. Migrate persistent-session caller to async seam | `crates/shell/src/execution/routing/dispatch/`, `crates/shell/src/repl/` | 1, 2 |
-| 5. Add sync-regression coverage | `crates/shell/tests/`, `crates/shell/src/execution/routing/` | 4 |
-| 6. Update docs and smoke notes | `docs/`, `llm-last-mile/` | 4, 5 |
+| 1. Freeze rename contract and grep boundary | `Cargo.toml`, `docs/`, `README.md`, `AGENTS.md` | — |
+| 2. Cut over `substrate.agent.session` | `crates/common/`, `crates/shell/src/execution/agent_runtime/`, `config/` | 1 |
+| 3. Rename `world-agent*` and `agent-api*` families | `crates/world-service/`, `crates/transport-api-*/`, `Cargo.toml`, mixed-boundary consumers | 1 |
+| 4. Sweep scripts, CI, and release bundles | `scripts/`, `.github/`, `dist/` | 1, 3 |
+| 5. Sweep docs and ADRs | `docs/`, `README.md`, `AGENTS.md` | 1, 2, 3, 4 |
+| 6. Run validation wall and closeout | repo root, platform helpers, release scripts | 2, 3, 4, 5 |
 
 ### Parallel lanes
 
-Lane A: Step 1 -> Step 4 -> Step 5  
-Reason: shared shell modules, sequential changes, one owner
+Lane A: Step 2 -> Step 3  
+Reason: shared crate and Cargo naming work, one owner, sequential
 
-Lane B: Step 2  
-Reason: isolated macOS backend work once Step 1 contract is frozen
+Lane B: Step 4  
+Reason: scripts, CI, and bundle surfaces are mostly isolated once Step 3 names are frozen
 
-Lane C: Step 3  
-Reason: isolated WSL backend hardening once Step 1 contract is frozen
+Lane C: Step 5  
+Reason: docs and ADR rewrites can proceed in parallel once the final names are frozen, but they should trail the code rename enough to avoid doc churn
 
 Lane D: Step 6  
-Reason: doc work can start after Step 4 stabilizes, then finish after Step 5 validation lands
+Reason: validation must run after A, B, and C converge
 
 ### Execution order
 
-1. Land Step 1 first. This defines the contract every other lane depends on.
-2. Launch Lane B and Lane C in parallel worktrees after Step 1 merges, or after Step 1 is frozen enough that function names and result shapes will not churn.
-3. Merge Lane B before Lane A Step 4 if the shell migration depends on the final macOS adapter names.
-4. Run Lane A Step 4 after Lane B is stable, because the shell caller migration is the user-visible fix.
-5. Run Lane A Step 5 after Step 4, because sync-regression coverage must validate the final shell wiring.
-6. Finish Lane D last, after test names and final behavior are known.
+1. Land Step 1 first. No parallel work before the rename matrix is frozen.
+2. Launch Lane A first. The protocol cutover and code-family rename define the real names everyone else must reference.
+3. Launch Lane B once the renamed package, binary, and unit names are stable enough to wire into scripts and CI.
+4. Launch Lane C once the same names are stable enough for docs. It can run in parallel with Lane B.
+5. Run Lane D last. Validation is the merge gate for the whole slice.
 
 ### Conflict flags
 
-1. Lane A and Lane B share the shell-to-backend contract even though they do not share the same files. Freeze function names and error-shape expectations before parallelizing.
-2. Lane A Step 5 touches shell routing modules that may also pick up compile fixes from Step 4. Keep those changes in the same lane to avoid merge churn.
-3. Lane B and Lane C are safe in parallel. They touch different backend crates.
-4. Do not split Step 4 and Step 5 across different worktrees. Both touch the shell routing surface and will conflict.
+1. Lane A and Lane B both indirectly depend on exact package, binary, and unit names. Freeze those before parallelizing.
+2. Lane B and Lane C both touch operator command strings and remediation copy. Keep one canonical rename matrix open while both lanes run.
+3. Do not split Step 2 and Step 3 across different owners if they both touch the same mixed-boundary consumers in `crates/shell/`.
 
 ## Validation Commands
 
+### Grep Gates
+
+Run after the rename and expect zero live-surface hits unless the hit is in the explicit historical allowlist.
+
 ```bash
-cargo fmt --all
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test -p substrate-shell -- --nocapture
-cargo test -p world-mac-lima -- --nocapture
-cargo test -p world-windows-wsl -- --nocapture
-script -q /dev/null zsh -lc 'RUST_BACKTRACE=1 ~/.substrate/bin/substrate'
+rg -n "world-agent|substrate-world-agent|agent-api-types|agent-api-core|agent-api-client|agent_api_types|agent_api_core|agent_api_client|uaa\.agent\.session" \
+  Cargo.toml crates scripts docs .github dist README.md AGENTS.md config
 ```
 
-If the macOS manual smoke still fails, it must fail as a normal readiness error. A Tokio runtime panic means the slice is not done.
+Positive guardrails that must still return expected upstream and unchanged-boundary hits:
+
+```bash
+rg -n "agent_api\.run|agent_api\.session\.resume\.v1|agent_api\.session\.handle\.v1" crates docs config
+rg -n "world-api" Cargo.toml crates docs
+```
+
+### Cargo Gates
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo build --workspace
+cargo test --workspace -- --nocapture
+cargo test -p shell -- --nocapture
+cargo test -p world-service -- --nocapture
+cargo test -p transport-api-types -- --nocapture
+cargo test -p transport-api-core -- --nocapture
+cargo test -p transport-api-client -- --nocapture
+cargo test -p world-mac-lima -- --nocapture
+cargo test -p world-windows-wsl -- --nocapture
+cargo test -p substrate-replay -- --nocapture
+```
+
+### Operator Surface Gates
+
+Linux:
+
+```bash
+systemctl status substrate-world-service.socket --no-pager
+systemctl status substrate-world-service.service --no-pager
+substrate host doctor --json | jq .
+substrate world doctor --json | jq .
+```
+
+macOS Lima:
+
+```bash
+scripts/mac/lima-warm.sh --check-only
+scripts/mac/smoke.sh
+limactl shell substrate systemctl status substrate-world-service.socket
+limactl shell substrate systemctl status substrate-world-service.service
+```
+
+WSL:
+
+```powershell
+pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)
+pwsh -File scripts/windows/wsl-smoke.ps1
+pwsh -File scripts/windows/wsl-doctor.ps1
+```
+
+### Release Gates
+
+```bash
+./dist/scripts/assemble-release-bundles.sh
+rg -n "world-service|substrate-world-service" dist/release-template.md dist/scripts/assemble-release-bundles.sh
+```
+
+### Fail-Closed Checks
+
+1. `protocol: substrate.agent.session` validates.
+2. Old `uaa.agent.session` live configs or fixtures are rejected clearly after cutover.
+3. World-required routing still hard-fails if renamed service discovery breaks.
+4. No doctor, help, or remediation string points operators back to `substrate-world-agent`.
+
+### Manual validation proof points
+
+Manual validation for this slice should explicitly prove:
+
+1. a canonical new config entry using `protocol: substrate.agent.session`
+2. the local in-world daemon is renamed to the `world-service` family through package, binary, installed alias, bundle path, and systemd unit naming
+3. the local host<->world contract crates are renamed to the `transport-api-*` family
+4. `world-api` remains unchanged
+5. pure-agent trace output now emits `substrate.agent.session`
+6. stale old-name live surfaces are gone outside the historical allowlist
+7. world-required rename drift still fails closed
+8. true upstream `agent_api.*` capability and session-handle wording is unchanged
 
 ## Completion Summary
 
 This plan is ready to implement when the work lands with this end state:
 
-1. Step 0: scope accepted as-is, no trait rewrite, no protocol rewrite.
-2. Architecture: one async persistent-session readiness seam added, sync seam preserved.
-3. Code quality: backend-owned readiness logic shared, no shell-side duplication, no generic future-API abstraction.
-4. Tests: REPL startup regression, socket override regression, sync surface regressions, macOS adapter coverage, WSL parity coverage.
-5. Performance: no duplicate readiness pass, no extra VM warm cycle, no blocking bridge on the async happy path.
+1. Step 0: scope accepted as-is, direct cutover on supported live surfaces, no upstream `agent_api` rename, no `world-api` rename.
+2. Architecture: one stable boundary story, one rename matrix, one live-surface wall.
+3. Code quality: local transport and service families are renamed truthfully, mixed-boundary code is clearer, and no duplicated rename rules remain.
+4. Tests: protocol cutover, mixed-boundary compile paths, service discovery, fail-closed routing, install or warm flows, bundle staging, and grep gates are all covered.
+5. Performance: no new hot-path compatibility shims, no extra fallback loops, no runtime ambiguity.
 6. `NOT in scope`: written.
 7. `What already exists`: written.
-8. Failure modes: six named production failures accounted for, five of them critical if left untested.
-9. Parallelization: four lanes, two backend lanes safely parallel after the shell contract lands.
-10. Lake score: the complete fix wins over the hotfix. The repo pays the right engineering cost once instead of paying the bug twice.
+8. Failure modes: six named production failures accounted for, four of them critical if left untested.
+9. Parallelization: four lanes, with one code lane and two safe side lanes after the contract freeze.
+10. Lake score: the complete rename and validation wall wins over the fake-cheap partial rename.
