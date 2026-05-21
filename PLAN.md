@@ -1,4 +1,3 @@
-<!-- /autoplan restore point: /Users/spensermcconnell/.gstack/projects/atomize-hq-substrate/testing-autoplan-restore-20260521-120419.md -->
 # PLAN: UAA Boundary and Naming Cleanup
 
 Source SOW: [27-uaa-boundary-and-naming-cleanup.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/27-uaa-boundary-and-naming-cleanup.md)  
@@ -76,6 +75,15 @@ In scope:
 6. Reworking HTTP path schemas unless a rename is directly required by the chosen service family.
 7. Bulk-rewriting archived evidence packs, old planning logs, or historical artifacts just to purge old tokens.
 8. Renaming generic `SUBSTRATE_*AGENT*` environment variables solely because they contain the word `agent`.
+
+## Current Repo Truth
+
+These facts are already true. This plan builds on them and does not reopen them.
+
+1. The real upstream UAA boundary already exists in this repo. `crates/shell` and the current `crates/world-agent` already consume upstream `agent_api`, and adopted `agent_api.*` ids are already live.
+2. The local host↔world contract is also already real. The rename target is the local `agent-api-*` family, not the upstream runtime abstraction.
+3. `world-api` already names the abstract world backend contract. It is not part of the rename and should stay visually stable throughout the slice.
+4. `uaa.agent.session` is not just a doc token. It is wired into config, validation, trace emission, transport payloads, and durable state. That is why this plan uses a direct cutover with fail-closed handling instead of a docs-only cleanup.
 
 ## Step 0: Scope Challenge
 
@@ -160,6 +168,39 @@ If implementation wants to violate any rule below, stop and revise the plan firs
 8. Mixed-boundary files must read more clearly after the rename than before.
 9. The plan lands in this order: freeze names first, rename live code second, sweep scripts and docs third, validate last.
 
+## Architecture Review
+
+This slice should stay boring.
+
+1. No new runtime boundary, migration subsystem, compatibility daemon, or abstraction layer is introduced.
+2. The only intentional live-name changes are `uaa.agent.session` -> `substrate.agent.session`, `world-agent*` -> `world-service*`, and `agent-api*` -> `transport-api*`.
+3. The critical dependency chain after cutover is:
+
+```text
+shell runtime
+    |\
+    | +--> upstream agent_api                 (unchanged)
+    |
+    +----> transport-api-*                    (renamed local host<->world contract)
+              |
+              +----> world-api                (unchanged abstract backend contract)
+                         |
+                         +----> world-service (renamed in-world daemon)
+```
+
+4. Distribution architecture is part of the implementation, not follow-up polish. Binaries, units, sockets, install aliases, release bundles, and CI package invocations must cut over in the same slice as the code rename.
+5. The one unacceptable architectural regression is silent downgrade from world-required routing to host execution because a renamed binary, unit, or socket was missed.
+
+## Code Quality Review
+
+The implementation should be judged against these quality rules:
+
+1. Prefer direct rename over alias shims. A compatibility layer here preserves ambiguity instead of reducing it.
+2. Mixed-boundary files must become easier to read, not harder. Upstream runtime imports stay `agent_api`; local contract crates become `transport_api_*`; the in-world daemon becomes `world_service`.
+3. Update comments, fixtures, examples, and operator text in the same slice as the code change. No live surface should require a reader to remember both old and new names.
+4. Update nearby ASCII diagrams when touched. A stale boundary diagram is worse than no diagram because it teaches the wrong model.
+5. Do not add helper abstractions unless they eliminate real duplication across multiple live surfaces. This slice wants explicit rename mechanics, not clever indirection.
+
 ## Canonical Rename Matrix
 
 | Current canonical name | New canonical name | Decision |
@@ -218,14 +259,14 @@ This slice does not allow vague language like "repo-wide rename." It requires bo
 
 ### Phase summary
 
-| Phase | Purpose | Modules or surfaces touched | Hard dependency |
-| --- | --- | --- | --- |
-| 1 | Freeze vocabulary, rename matrix, and grep boundary | `PLAN.md`, `AGENT_ORCHESTRATION_GAP_MATRIX.md`, top-level truth docs | — |
-| 2 | Cut over the local protocol-family label | `crates/common/`, `crates/shell/src/execution/agent_runtime/`, `config/`, relevant fixtures and tests | 1 |
-| 3 | Rename local transport and daemon families | `Cargo.toml`, `crates/world-agent/`, `crates/agent-api-*/`, mixed-boundary consumers | 1, 2 |
-| 4 | Sweep installers, platform helpers, release bundles, and CI | `scripts/`, `dist/`, `.github/`, doctor or remediation text | 3 |
-| 5 | Sweep docs, ADRs, and developer guidance | `docs/`, `README.md`, `AGENTS.md`, ADRs, truth docs | 2, 3 |
-| 6 | Run grep wall, package tests, operator validation, and closeout | repo root, platform helpers, release scripts | 2, 3, 4, 5 |
+| Phase | Purpose | Modules or surfaces touched | Hard dependency | Exit gate |
+| --- | --- | --- | --- | --- |
+| 1 | Freeze vocabulary, rename matrix, and grep boundary | `PLAN.md`, `AGENT_ORCHESTRATION_GAP_MATRIX.md`, top-level truth docs | — | Exact rename matrix, live boundary, historical allowlist, and grep wall are frozen in writing |
+| 2 | Cut over the local protocol-family label | `crates/common/`, `crates/shell/src/execution/agent_runtime/`, `config/`, relevant fixtures and tests | 1 | `substrate.agent.session` validates and emits; stale `uaa.agent.session` fails closed with explicit guidance |
+| 3 | Rename local transport and daemon families | `Cargo.toml`, `crates/world-agent/`, `crates/agent-api-*/`, mixed-boundary consumers | 1, 2 | Workspace builds with `world-service` and `transport-api-*`; mixed-boundary imports stay clear |
+| 4 | Sweep installers, platform helpers, release bundles, and CI | `scripts/`, `dist/`, `.github/`, doctor or remediation text | 3 | Install, warm, release, and CI surfaces all use renamed package, binary, unit, and socket names |
+| 5 | Sweep docs, ADRs, and developer guidance | `docs/`, `README.md`, `AGENTS.md`, ADRs, truth docs | 2, 3 | Live docs and ADRs tell the same boundary story as the code and scripts |
+| 6 | Run grep wall, package tests, operator validation, and closeout | repo root, platform helpers, release scripts | 2, 3, 4, 5 | Grep, cargo, operator, release, and fail-closed gates all pass together |
 
 ### Phase 1: Freeze vocabulary, rename matrix, and grep boundary
 
@@ -269,7 +310,7 @@ Required actions:
 1. Replace the canonical local protocol-family constant from `uaa.agent.session` to `substrate.agent.session`.
 2. Update validator success paths, error text, config examples, emitted traces, transport payloads, and durable writes to the new canonical label.
 3. Rewrite supported fixtures, checked-in examples, and test inventories in the same cutover.
-4. Make stale old-label rows fail closed with explicit operator-readable errors after cutover.
+4. Make stale old-label rows fail closed with explicit operator-readable errors after cutover, including the exact remediation path operators should take instead of automatic rewrite.
 5. Preserve all true upstream `agent_api.*` ids and `uaa_session_id` semantics unchanged.
 
 Done when:
@@ -449,6 +490,15 @@ CODE PATH COVERAGE
 | install, warm, smoke, and bundle helpers under `scripts/`, `dist/`, and `.github/` | Prove renamed package invocations, renamed payload staging, and renamed service or socket names across Linux, Lima, and WSL. | shell smoke and CI validation |
 | repo-root grep wall | Prove no stale old-name hits remain on live surfaces while positive guardrails still find upstream `agent_api.*` and unchanged `world-api`. | static validation |
 
+### QA handoff artifact
+
+Implementation is not done when the tests compile. The PR or implementation notes must also leave one compact test handoff artifact that names:
+
+1. affected operator commands and flows,
+2. Linux, Lima, and WSL paths that must be exercised,
+3. fail-closed checks for old protocol labels and missing renamed services,
+4. and the exact grep wall commands that prove the rename is complete on live surfaces.
+
 ### Regression rule for this slice
 
 Two regressions are mandatory blockers:
@@ -478,11 +528,11 @@ Any failure mode with no test, no explicit handling, and a silent or misleading 
 3. No repeated service-discovery retries should be added just to paper over rename drift.
 4. The dominant cost center here is support churn and operator confusion, not CPU time. Optimize for zero ambiguity, explicit failure, and minimal moving parts.
 
-## Deferred Follow-Ups
+## Deferred Follow-Ups / TODO Candidates
 
-1. Optional archival cleanup for historical documents after the live-surface wall is green.
-2. Any later naming cleanup for non-blocking environment variable families, only if it earns its own rollout story.
-3. Any future public contract cleanup beyond the local transport and service boundary, only if separately justified.
+1. Optional archival cleanup for historical documents after the live-surface wall is green. Rationale: useful hygiene, but not part of the cutover proof.
+2. Any later naming cleanup for non-blocking environment variable families, only if it earns its own rollout story. Rationale: do not expand scope just because the token contains `agent`.
+3. Any future public contract cleanup beyond the local transport and service boundary, only if separately justified. Rationale: this plan is a local naming correction, not a public API redesign.
 
 ## Worktree Parallelization Strategy
 
@@ -626,15 +676,18 @@ Manual validation for this slice should explicitly prove:
 
 ## Completion Summary
 
-This plan is ready to implement when the work lands with this end state:
+This plan is implementation-ready because it now fixes the full execution contract:
 
-1. one stable boundary story,
-2. one exact rename matrix,
-3. one explicit live-surface grep wall,
-4. one direct cutover for supported local protocol and local service or transport names,
-5. one fail-closed story for rename drift and unsupported old protocol rows,
-6. one operator truth set across Linux, Lima, WSL, CI, and release surfaces,
-7. and one honest parallelization model: contract freeze first, code lane first, scripts and docs parallel second, validation last.
+1. Step 0: scope is accepted as intentionally broad because the ambiguity already spans code, packaging, install flows, CI, release surfaces, and docs.
+2. Architecture review: the target boundary graph, unchanged seams, direct-cutover rule, and fail-closed posture are frozen in this document.
+3. Code quality review: no alias layer, no mixed vocabulary on live surfaces, and no stale diagram or comment debt is allowed at ship time.
+4. Test review: the code-path coverage map, concrete test additions, regression blockers, QA handoff artifact, and validation commands are all defined.
+5. Performance and complexity review: the slice stays boring, explicit, and free of hot-path compatibility machinery.
+6. NOT in scope: explicitly written.
+7. What already exists: explicitly written.
+8. Deferred follow-ups / TODO candidates: explicitly written.
+9. Failure modes: the critical gaps are named and treated as release blockers.
+10. Parallelization: one foundation lane, two honest parallel follow-on lanes, one final validation lane.
 
 After this slice lands, the repo should read as if the boundary was intentional from the start:
 
