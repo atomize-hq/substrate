@@ -1,0 +1,16 @@
+kind = "profile"
+version = 1
+id = "acme/advanced-dedupe"
+name = "Advanced dedupe profile"
+
+[score]
+model = "file:score/generic_lift_v2.json"
+
+[queries]
+packs = ["file:queries/rust_core.json"]
+
+[rules]
+packs = ["file:generic_policy.json"]
+
+[recipes]
+packs = ["file:generic_core_recipes.json"]

@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "case": "minimal-valid",
+  "source_kind": "worktree",
+  "options": {
+    "symlink_policy": "skip",
+    "well_known_excludes": [],
+    "exclude_globs": [],
+    "non_utf8_path_policy": "error",
+    "max_file_bytes": null,
+    "large_file_policy": "error"
+  },
+  "files": [
+    {
+      "path": "src/lib.rs",
+      "file_id": "file:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "blob_fingerprint": "sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+      "size_bytes": 7
+    }
+  ],
+  "snapshot_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "stats": {
+    "file_count": 1,
+    "total_bytes": 7,
+    "skipped_by_ignore": 0,
+    "skipped_symlinks": 0,
+    "skipped_non_utf8_paths": 0,
+    "skipped_large_files": 0,
+    "skipped_unsupported_file_kinds": 0
+  }
+}

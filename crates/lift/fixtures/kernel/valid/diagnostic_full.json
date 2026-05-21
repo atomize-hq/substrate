@@ -1,0 +1,22 @@
+{
+  "code": "kernel.schema.fixture_example",
+  "severity": "warning",
+  "message": "example diagnostic",
+  "subject": {
+    "path": "src/lib.rs",
+    "span": {
+      "start_byte": 1,
+      "end_byte": 4
+    }
+  },
+  "related": [
+    {
+      "locator": {
+        "path": "README.md",
+        "json_pointer": "/sections/0"
+      },
+      "message": "related location"
+    }
+  ],
+  "help": "Update the fixture to match the kernel schema."
+}

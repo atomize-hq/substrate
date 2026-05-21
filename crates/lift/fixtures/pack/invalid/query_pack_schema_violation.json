@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schemas.substrate.dev/lift/pack/query_pack.v1.json",
+  "kind": "query_pack",
+  "version": 1,
+  "id": "acme/schema-violation",
+  "name": "Schema violation",
+  "language": "rust",
+  "engine": "custom",
+  "queries": [
+    {
+      "id": "use_statement",
+      "pattern": "(use_declaration) @use",
+      "captures": [
+        {
+          "name": "use",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

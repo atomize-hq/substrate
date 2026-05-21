@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.substrate.dev/lift/repo/diff_manifest.v1.json",
+  "title": "Lift Repo Diff Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "case",
+    "base_fingerprint",
+    "head_fingerprint",
+    "entries",
+    "diff_fingerprint"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "case": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_fingerprint": {
+      "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+    },
+    "head_fingerprint": {
+      "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diff_entry"
+      }
+    },
+    "diff_fingerprint": {
+      "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+    }
+  },
+  "$defs": {
+    "diff_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "kind",
+        "before_blob_fingerprint",
+        "after_blob_fingerprint"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/repo_path"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["added", "modified", "removed"]
+        },
+        "before_blob_fingerprint": {
+          "anyOf": [
+            {
+              "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after_blob_fingerprint": {
+          "anyOf": [
+            {
+              "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "added"
+            },
+            "before_blob_fingerprint": {
+              "type": "null"
+            },
+            "after_blob_fingerprint": {
+              "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "modified"
+            },
+            "before_blob_fingerprint": {
+              "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+            },
+            "after_blob_fingerprint": {
+              "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+            }
+          }
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "removed"
+            },
+            "before_blob_fingerprint": {
+              "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+            },
+            "after_blob_fingerprint": {
+              "type": "null"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

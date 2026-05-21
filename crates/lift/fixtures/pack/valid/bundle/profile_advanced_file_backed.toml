@@ -1,0 +1,13 @@
+kind = "profile"
+version = 1
+id = "acme/advanced-bundle"
+name = "Advanced bundle profile"
+
+[score]
+model = "file:score/generic_lift_v2.json"
+
+[rules]
+packs = ["file:generic_policy.json"]
+
+[recipes]
+packs = ["file:generic_core_recipes.json"]

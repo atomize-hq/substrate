@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "case": "bad-well-known-exclude",
+  "source_kind": "worktree",
+  "options": {
+    "symlink_policy": "skip",
+    "well_known_excludes": ["cargo_home"],
+    "exclude_globs": [],
+    "non_utf8_path_policy": "error",
+    "max_file_bytes": null,
+    "large_file_policy": "error"
+  },
+  "files": [],
+  "snapshot_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "stats": {
+    "file_count": 0,
+    "total_bytes": 0,
+    "skipped_by_ignore": 0,
+    "skipped_symlinks": 0,
+    "skipped_non_utf8_paths": 0,
+    "skipped_large_files": 0,
+    "skipped_unsupported_file_kinds": 0
+  }
+}

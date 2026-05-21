@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schemas.substrate.dev/lift/pack/recipe_pack.v1.json",
+  "kind": "recipe_pack",
+  "version": 1,
+  "id": "acme/bad-transform",
+  "name": "Bad transform",
+  "recipes": [
+    {
+      "id": "rename_old_api",
+      "query": {
+        "pack": "file:queries/rust_core.json",
+        "id": "use_statement"
+      },
+      "transforms": [
+        {
+          "op": "delete_capture_text",
+          "capture": "use"
+        }
+      ]
+    }
+  ]
+}

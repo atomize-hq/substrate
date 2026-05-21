@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "case": "rename-as-add-remove",
+  "base_fingerprint": "sha256:915b9a0916f0d7b9389d2abea1bd34bcd19128d4381c7c0b12c46010076ac174",
+  "head_fingerprint": "sha256:3669519358efb85699d3b38038f1ebd1cd63d32c68661f46184ac825d2a11630",
+  "entries": [
+    {
+      "path": "src/lib.rs",
+      "kind": "removed",
+      "before_blob_fingerprint": "sha256:7ec5d58e058c0ba12b07aee16397bb31edebce652614d76d4f970125791ffba7",
+      "after_blob_fingerprint": null
+    },
+    {
+      "path": "src/renamed.rs",
+      "kind": "added",
+      "before_blob_fingerprint": null,
+      "after_blob_fingerprint": "sha256:7ec5d58e058c0ba12b07aee16397bb31edebce652614d76d4f970125791ffba7"
+    }
+  ],
+  "diff_fingerprint": "sha256:9dddb52cd86542af3dbd945675fc4cbd5a78983698b4021b11989247fe211b9b"
+}

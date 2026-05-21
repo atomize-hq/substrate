@@ -1,0 +1,23 @@
+{
+  "kind": "recipe_pack",
+  "$schema": "https://schemas.substrate.dev/lift/pack/recipe_pack.v1.json",
+  "version": 1,
+  "id": "acme/core-recipes",
+  "name": "Acme core recipes",
+  "recipes": [
+    {
+      "transforms": [
+        {
+          "text": "new_api",
+          "capture": "use",
+          "op": "replace_capture_text"
+        }
+      ],
+      "query": {
+        "pack": "file:queries/rust_core.json",
+        "id": "use_statement"
+      },
+      "id": "rename_old_api"
+    }
+  ]
+}

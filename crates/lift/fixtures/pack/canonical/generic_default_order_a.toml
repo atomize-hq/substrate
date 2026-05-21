@@ -1,0 +1,18 @@
+name = "Generic default profile"
+id = "generic/default"
+version = 1
+kind = "profile"
+description = "Default deterministic profile for generic repositories"
+
+[topology]
+boundary_taxonomy = "builtin:generic/boundaries"
+component_map = "builtin:generic/components"
+
+[analysis]
+max_scope_depth = 2
+follow_symlinks = false
+languages = ["typescript", "javascript", "python", "rust", "yaml", "toml", "json"]
+
+[apps]
+default = "score"
+enabled = ["score"]

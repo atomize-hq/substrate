@@ -1,0 +1,7 @@
+{
+  "kind": "profile",
+  "version": 1,
+  "id": "acme/unknown-field",
+  "name": "Unknown field profile",
+  "unexpected": true
+}

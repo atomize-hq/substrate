@@ -1,0 +1,13 @@
+kind = "profile"
+version = 1
+id = "acme/bundle-order"
+name = "Bundle order"
+
+[recipes]
+packs = ["file:generic_core_recipes.json"]
+
+[rules]
+packs = ["file:generic_policy.json"]
+
+[queries]
+packs = ["file:queries/rust_core.json"]

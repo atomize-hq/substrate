@@ -1,0 +1,9 @@
+{
+  "kind": "profile",
+  "version": 1,
+  "id": "acme/invalid-ref",
+  "name": "Invalid ref profile",
+  "score": {
+    "model": "file:/score/model.toml"
+  }
+}

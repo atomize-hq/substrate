@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.substrate.dev/lift/pack/score_model.v1.json",
+  "title": "Substrate Lift Score Model Pack v1",
+  "type": "object",
+  "required": [
+    "$schema",
+    "kind",
+    "version",
+    "id",
+    "name",
+    "vector_version",
+    "lift_score",
+    "estimated_slices",
+    "triggers",
+    "confidence",
+    "missing_input_rules"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.substrate.dev/lift/pack/score_model.v1.json"
+    },
+    "kind": {
+      "const": "score_model"
+    },
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "common.v1.json#/$defs/pack_name"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "vector_version": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "lift_score": {
+      "$ref": "common.v1.json#/$defs/expr"
+    },
+    "estimated_slices": {
+      "$ref": "common.v1.json#/$defs/expr"
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/trigger_rule"
+      }
+    },
+    "confidence": {
+      "$ref": "#/$defs/confidence_model"
+    },
+    "missing_input_rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/missing_input_rule"
+      }
+    }
+  },
+  "$defs": {
+    "trigger_rule": {
+      "type": "object",
+      "required": ["id", "when"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "when": {
+          "$ref": "common.v1.json#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    },
+    "confidence_model": {
+      "type": "object",
+      "required": ["default", "rules"],
+      "properties": {
+        "default": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/confidence_rule"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "confidence_rule": {
+      "type": "object",
+      "required": ["id", "when", "set", "causes"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "when": {
+          "$ref": "common.v1.json#/$defs/expr"
+        },
+        "set": {
+          "type": "string",
+          "minLength": 1
+        },
+        "causes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "missing_input_rule": {
+      "type": "object",
+      "required": ["field", "when"],
+      "properties": {
+        "field": {
+          "$ref": "common.v1.json#/$defs/json_pointer"
+        },
+        "when": {
+          "$ref": "common.v1.json#/$defs/expr"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

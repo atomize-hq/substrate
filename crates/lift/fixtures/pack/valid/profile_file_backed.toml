@@ -1,0 +1,30 @@
+kind = "profile"
+version = 1
+id = "acme/file-backed"
+name = "File backed profile"
+description = "Uses local file refs when loaded from disk"
+
+[apps]
+enabled = ["score"]
+default = "score"
+
+[analysis]
+languages = ["rust", "toml"]
+follow_symlinks = true
+max_scope_depth = 3
+
+[topology]
+boundary_taxonomy = "file:topology/boundary-taxonomy.json"
+component_map = "file:topology/component-map.json"
+
+[score]
+model = "file:score/generic_lift_v2.json"
+
+[rules]
+packs = ["file:rules/generic_policy.json"]
+
+[queries]
+packs = ["file:queries/rust_core.json"]
+
+[recipes]
+packs = ["file:recipes/generic_core_recipes.json"]

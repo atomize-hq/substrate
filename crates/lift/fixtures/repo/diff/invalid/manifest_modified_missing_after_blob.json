@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "case": "modified-missing-after-blob",
+  "base_fingerprint": "sha256:915b9a0916f0d7b9389d2abea1bd34bcd19128d4381c7c0b12c46010076ac174",
+  "head_fingerprint": "sha256:4f85fa23bafa0b79706c1755e4e9535706d089fcff0422e38e6f32ad95253d93",
+  "entries": [
+    {
+      "path": "src/lib.rs",
+      "kind": "modified",
+      "before_blob_fingerprint": "sha256:7ec5d58e058c0ba12b07aee16397bb31edebce652614d76d4f970125791ffba7",
+      "after_blob_fingerprint": null
+    }
+  ],
+  "diff_fingerprint": "sha256:bfc6f540059bf988db38ec259916a75111e90764f5b0b33881a9d942710fdcd0"
+}

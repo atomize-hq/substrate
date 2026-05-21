@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "case": "missing-diff-fingerprint",
+  "base_fingerprint": "sha256:915b9a0916f0d7b9389d2abea1bd34bcd19128d4381c7c0b12c46010076ac174",
+  "head_fingerprint": "sha256:1e54dff245aff0dcf803692c63b8e43765b7ab342303b0d0df7458e6c3547dbb",
+  "entries": [
+    {
+      "path": "build/output.txt",
+      "kind": "removed",
+      "before_blob_fingerprint": "sha256:36603704a81ec200acfe816b7f89b3b0986c7bc8c2c95a9d986290c01befab94",
+      "after_blob_fingerprint": null
+    }
+  ]
+}

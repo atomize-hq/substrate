@@ -1,0 +1,5 @@
+{
+  "code": "kernel.repo_path.invalid_absolute",
+  "severity": "error",
+  "message": "absolute paths are not allowed"
+}

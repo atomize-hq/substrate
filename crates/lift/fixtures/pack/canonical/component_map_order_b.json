@@ -1,0 +1,24 @@
+{
+  "components": [
+    {
+      "tags": ["client", "ui"],
+      "include": ["ui/**", "web/**"],
+      "label": "Frontend",
+      "id": "frontend"
+    },
+    {
+      "label": "Backend",
+      "tags": ["service", "server"],
+      "exclude": ["api/internal/**"],
+      "include": ["server/**", "api/**"],
+      "id": "backend"
+    }
+  ],
+  "counting": {
+    "mode": "distinct"
+  },
+  "name": "Canonical component map",
+  "id": "acme/components",
+  "version": 1,
+  "kind": "component_map"
+}

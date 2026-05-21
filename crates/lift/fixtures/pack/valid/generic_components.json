@@ -1,0 +1,42 @@
+{
+  "kind": "component_map",
+  "version": 1,
+  "id": "generic/components",
+  "name": "Generic repository components",
+  "description": "Generic component map for common repository layouts.",
+  "counting": {
+    "mode": "distinct"
+  },
+  "components": [
+    {
+      "id": "frontend",
+      "label": "Frontend",
+      "include": ["web/**", "ui/**", "frontend/**", "apps/web/**", "packages/ui/**"],
+      "tags": ["client", "ui"]
+    },
+    {
+      "id": "backend",
+      "label": "Backend",
+      "include": ["api/**", "backend/**", "server/**", "services/**", "apps/api/**"],
+      "tags": ["server", "service"]
+    },
+    {
+      "id": "shared",
+      "label": "Shared libraries",
+      "include": ["crates/**", "packages/shared/**", "packages/config/**", "libs/**", "src/**"],
+      "tags": ["shared", "library"]
+    },
+    {
+      "id": "tooling",
+      "label": "Tooling",
+      "include": ["scripts/**", "tools/**", ".github/**", "infra/**"],
+      "tags": ["tooling", "ops"]
+    },
+    {
+      "id": "tests",
+      "label": "Tests",
+      "include": ["tests/**", "test/**", "e2e/**", "integration-tests/**"],
+      "tags": ["test"]
+    }
+  ]
+}

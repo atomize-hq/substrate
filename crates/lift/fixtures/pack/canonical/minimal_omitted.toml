@@ -1,0 +1,4 @@
+kind = "profile"
+version = 1
+id = "acme/minimal-defaults"
+name = "Acme minimal defaults"

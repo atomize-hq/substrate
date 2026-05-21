@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "case": "empty-diff",
+  "base_fingerprint": "sha256:915b9a0916f0d7b9389d2abea1bd34bcd19128d4381c7c0b12c46010076ac174",
+  "head_fingerprint": "sha256:915b9a0916f0d7b9389d2abea1bd34bcd19128d4381c7c0b12c46010076ac174",
+  "entries": [],
+  "diff_fingerprint": "sha256:f643d29d0e0be167c8fa0aa33831c05b11f58fc2d92bc9d72aab45c36443d300"
+}

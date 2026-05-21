@@ -44,6 +44,7 @@ members = [
     "crates/shim", 
     "crates/shell",
     "crates/gateway",
+    "crates/lift",
     # New Phase 4 crates
     "crates/world-api",
     "crates/world",

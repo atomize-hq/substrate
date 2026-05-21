@@ -1,0 +1,13 @@
+kind = "rule_pack"
+version = 2
+id = "Acme/Invalid"
+name = "Schema violation"
+
+[apps]
+enabled = ["score", "Bad-App"]
+default = "Bad-App"
+
+[analysis]
+languages = ["rust", "BadLang"]
+follow_symlinks = "sometimes"
+max_scope_depth = "deep"

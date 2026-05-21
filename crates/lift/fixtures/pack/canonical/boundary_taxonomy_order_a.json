@@ -1,0 +1,21 @@
+{
+  "kind": "boundary_taxonomy",
+  "version": 1,
+  "id": "generic/boundaries",
+  "name": "Generic repository boundaries",
+  "counting": {
+    "mode": "distinct_minus_one"
+  },
+  "boundaries": [
+    {
+      "id": "application",
+      "label": "Application surface",
+      "include": ["apps/**", "services/**", "bin/**", "cmd/**"]
+    },
+    {
+      "id": "library",
+      "label": "Shared library surface",
+      "include": ["crates/**", "packages/**", "libs/**", "src/**"]
+    }
+  ]
+}

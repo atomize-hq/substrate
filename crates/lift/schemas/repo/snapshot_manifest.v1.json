@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.substrate.dev/lift/repo/snapshot_manifest.v1.json",
+  "title": "Lift Repo Snapshot Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "case",
+    "source_kind",
+    "options",
+    "files",
+    "snapshot_fingerprint",
+    "stats"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "case": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_kind": {
+      "type": "string",
+      "enum": ["worktree", "git_rev"]
+    },
+    "source_rev": {
+      "type": "string",
+      "minLength": 1
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "symlink_policy",
+        "well_known_excludes",
+        "exclude_globs",
+        "non_utf8_path_policy",
+        "max_file_bytes",
+        "large_file_policy"
+      ],
+      "properties": {
+        "symlink_policy": {
+          "type": "string",
+          "enum": ["skip", "follow"]
+        },
+        "well_known_excludes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/well_known_exclude"
+          },
+          "uniqueItems": true
+        },
+        "exclude_globs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "non_utf8_path_policy": {
+          "type": "string",
+          "enum": ["error", "skip"]
+        },
+        "max_file_bytes": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "large_file_policy": {
+          "type": "string",
+          "enum": ["error", "skip"]
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/file_record"
+      }
+    },
+    "snapshot_fingerprint": {
+      "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+    },
+    "stats": {
+      "$ref": "#/$defs/stats"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source_kind": {
+            "const": "git_rev"
+          }
+        }
+      },
+      "then": {
+        "required": ["source_rev"]
+      },
+      "else": {
+        "not": {
+          "required": ["source_rev"]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "well_known_exclude": {
+      "type": "string",
+      "enum": [
+        "rust_target",
+        "node_modules",
+        "python_hidden_venv",
+        "python_venv",
+        "python_pycache",
+        "web_dist",
+        "web_build"
+      ]
+    },
+    "file_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "file_id", "blob_fingerprint", "size_bytes"],
+      "properties": {
+        "path": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/repo_path"
+        },
+        "file_id": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/stable_id"
+        },
+        "blob_fingerprint": {
+          "$ref": "../kernel/primitives.v1.json#/$defs/fingerprint"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file_count",
+        "total_bytes",
+        "skipped_by_ignore",
+        "skipped_symlinks",
+        "skipped_non_utf8_paths",
+        "skipped_large_files",
+        "skipped_unsupported_file_kinds"
+      ],
+      "properties": {
+        "file_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_by_ignore": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_symlinks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_non_utf8_paths": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_large_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_unsupported_file_kinds": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

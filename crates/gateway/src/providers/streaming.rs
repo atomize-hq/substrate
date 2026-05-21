@@ -236,11 +236,11 @@ where
                                     }
                                     *this.logged_message_start = true;
                                 }
-                                Some("content_block_delta") => {
+                                Some("content_block_delta")
                                     // Mark first token arrival
-                                    if this.first_token_time.is_none() {
-                                        *this.first_token_time = Some(std::time::Instant::now());
-                                    }
+                                    if this.first_token_time.is_none() =>
+                                {
+                                    *this.first_token_time = Some(std::time::Instant::now());
                                 }
                                 Some("message_delta") => {
                                     // Track tokens (output_tokens always, input_tokens for OpenAI providers)
@@ -296,11 +296,9 @@ where
 
                 // Build cache info string if caching was used
                 let cache_info = if *this.cache_creation > 0 || *this.cache_read > 0 {
-                    let cache_pct = if total_input > 0 {
-                        (*this.cache_read * 100) / total_input
-                    } else {
-                        0
-                    };
+                    let cache_pct = (*this.cache_read * 100)
+                        .checked_div(total_input)
+                        .unwrap_or(0);
                     format!(" cache:{}%", cache_pct)
                 } else {
                     String::new()

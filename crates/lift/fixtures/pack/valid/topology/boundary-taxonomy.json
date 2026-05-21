@@ -1,0 +1,23 @@
+{
+  "kind": "boundary_taxonomy",
+  "version": 1,
+  "id": "acme/boundaries",
+  "name": "Acme boundaries",
+  "description": "Boundary taxonomy for file-backed topology resolution tests.",
+  "counting": {
+    "mode": "distinct_minus_one"
+  },
+  "boundaries": [
+    {
+      "id": "runtime",
+      "label": "Runtime",
+      "include": ["services/runtime/**"],
+      "exclude": ["services/runtime/generated/**"]
+    },
+    {
+      "id": "public_api",
+      "label": "Public API",
+      "include": ["api/**", "openapi/**"]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schemas.substrate.dev/lift/pack/score_model.v1.json",
+  "kind": "score_model",
+  "version": 1,
+  "id": "acme/bad-expr",
+  "name": "Bad expr",
+  "vector_version": 2,
+  "lift_score": {
+    "op": "add",
+    "args": "bad"
+  },
+  "estimated_slices": {
+    "op": "const_int",
+    "value": 1
+  },
+  "triggers": [],
+  "confidence": {
+    "default": "high",
+    "rules": []
+  },
+  "missing_input_rules": []
+}

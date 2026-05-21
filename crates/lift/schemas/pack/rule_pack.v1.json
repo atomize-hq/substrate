@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.substrate.dev/lift/pack/rule_pack.v1.json",
+  "title": "Substrate Lift Rule Pack v1",
+  "type": "object",
+  "required": ["$schema", "kind", "version", "id", "name", "rules"],
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.substrate.dev/lift/pack/rule_pack.v1.json"
+    },
+    "kind": {
+      "const": "rule_pack"
+    },
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "common.v1.json#/$defs/pack_name"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rule"
+      }
+    }
+  },
+  "$defs": {
+    "rule": {
+      "type": "object",
+      "required": ["id", "severity", "query", "emit"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "common.v1.json#/$defs/severity"
+        },
+        "scope": {
+          "$ref": "#/$defs/rule_scope"
+        },
+        "query": {
+          "$ref": "common.v1.json#/$defs/query_ref"
+        },
+        "emit": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/emit_action"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "rule_scope": {
+      "type": "object",
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "$ref": "common.v1.json#/$defs/language_id"
+          }
+        },
+        "path_classes": {
+          "type": "array",
+          "items": {
+            "$ref": "common.v1.json#/$defs/reserved_path_class"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "emit_action": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/finding_emit_action"
+        }
+      ]
+    },
+    "finding_emit_action": {
+      "type": "object",
+      "required": ["kind", "code", "message"],
+      "properties": {
+        "kind": {
+          "const": "finding"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -316,10 +316,8 @@ pub fn transform_gateway_response_to_openai(
 
     for block in &anthropic_resp.content {
         match block {
-            ContentBlock::Known(KnownContentBlock::Text { text, .. }) => {
-                if !text.is_empty() {
-                    text_parts.push(text.clone());
-                }
+            ContentBlock::Known(KnownContentBlock::Text { text, .. }) if !text.is_empty() => {
+                text_parts.push(text.clone());
             }
             ContentBlock::Known(KnownContentBlock::ToolUse { id, name, input }) => {
                 let arguments = serde_json::to_string(input).unwrap_or_else(|_| "{}".to_string());

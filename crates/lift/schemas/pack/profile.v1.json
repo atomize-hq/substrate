@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.substrate.dev/lift/pack/profile.v1.json",
+  "title": "Substrate Lift Profile Pack v1",
+  "type": "object",
+  "required": ["kind", "version", "id", "name"],
+  "properties": {
+    "kind": {
+      "const": "profile"
+    },
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "common.v1.json#/$defs/pack_name"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "apps": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "default": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "analysis": {
+      "type": "object",
+      "properties": {
+        "languages": {
+          "type": "array",
+          "items": {
+            "$ref": "common.v1.json#/$defs/language_id"
+          }
+        },
+        "follow_symlinks": {
+          "type": "boolean"
+        },
+        "max_scope_depth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        }
+      },
+      "additionalProperties": false
+    },
+    "topology": {
+      "type": "object",
+      "properties": {
+        "boundary_taxonomy": {
+          "$ref": "common.v1.json#/$defs/pack_ref"
+        },
+        "component_map": {
+          "$ref": "common.v1.json#/$defs/pack_ref"
+        }
+      },
+      "additionalProperties": false
+    },
+    "score": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "$ref": "common.v1.json#/$defs/pack_ref"
+        }
+      },
+      "additionalProperties": false
+    },
+    "rules": {
+      "$ref": "#/$defs/include_section"
+    },
+    "queries": {
+      "$ref": "#/$defs/include_section"
+    },
+    "recipes": {
+      "$ref": "#/$defs/include_section"
+    }
+  },
+  "$defs": {
+    "include_section": {
+      "type": "object",
+      "properties": {
+        "packs": {
+          "type": "array",
+          "items": {
+            "$ref": "common.v1.json#/$defs/pack_ref"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "id": "generic/lift-v2",
+  "name": "Generic Lift model v2",
+  "$schema": "https://schemas.substrate.dev/lift/pack/score_model.v1.json",
+  "kind": "score_model",
+  "vector_version": 2,
+  "estimated_slices": {
+    "args": [
+      { "value": 1, "op": "const_int" },
+      { "path": "/touch/components_touched", "op": "field" }
+    ],
+    "op": "max"
+  },
+  "lift_score": {
+    "args": [
+      { "path": "/touch/edit_files", "op": "field" },
+      { "path": "/touch/components_touched", "op": "field" }
+    ],
+    "op": "add"
+  },
+  "missing_input_rules": [],
+  "confidence": {
+    "rules": [],
+    "default": "high"
+  },
+  "triggers": []
+}

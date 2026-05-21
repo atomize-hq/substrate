@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.substrate.dev/lift/pack/query_pack.v1.json",
+  "title": "Substrate Lift Query Pack v1",
+  "type": "object",
+  "required": ["$schema", "kind", "version", "id", "name", "language", "engine", "queries"],
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.substrate.dev/lift/pack/query_pack.v1.json"
+    },
+    "kind": {
+      "const": "query_pack"
+    },
+    "version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "common.v1.json#/$defs/pack_name"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "language": {
+      "$ref": "common.v1.json#/$defs/language_id"
+    },
+    "engine": {
+      "$ref": "#/$defs/query_engine"
+    },
+    "queries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/query"
+      }
+    }
+  },
+  "$defs": {
+    "query_engine": {
+      "type": "string",
+      "enum": ["tree_sitter"]
+    },
+    "query": {
+      "type": "object",
+      "required": ["id", "pattern", "captures"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "captures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capture"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "capture": {
+      "type": "object",
+      "required": ["name", "required"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
