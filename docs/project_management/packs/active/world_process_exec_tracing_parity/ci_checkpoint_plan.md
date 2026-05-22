@@ -55,7 +55,7 @@ Standard:
         "feature_smoke": true,
         "ci_testing": "quick"
       },
-      "rationale": "Checkpoint after process telemetry protocol+persistence, Linux capture, and argv/env redaction hardening are merged. This boundary is a high-risk platform seam: it touches world-agent transport, trace persistence, Linux ptrace/caps behavior, and redaction correctness."
+      "rationale": "Checkpoint after process telemetry protocol+persistence, Linux capture, and argv/env redaction hardening are merged. This boundary is a high-risk platform seam: it touches world-service transport, trace persistence, Linux ptrace/caps behavior, and redaction correctness."
     }
   ]
 }

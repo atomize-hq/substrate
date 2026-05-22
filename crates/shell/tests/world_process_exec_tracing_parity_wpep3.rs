@@ -51,7 +51,7 @@ fn world_process_events_preserve_linux_capture_fields_and_redacted_argv() {
         .prefix("substrate-wpep3-linux-events-sock-")
         .tempdir_in("/tmp")
         .expect("create socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let _socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndExecuteWithProcessEvents {
@@ -64,7 +64,7 @@ fn world_process_events_preserve_linux_capture_fields_and_redacted_argv() {
                     "ts": "2026-04-01T00:00:00Z",
                     "ts_unix_ns": 1_743_465_600_000_000_000u64,
                     "event_type": "world_process_start",
-                    "component": "world-agent",
+                    "component": "world-service",
                     "session_id": "ses_wpep3",
                     "world_id": "wld_demo",
                     "pid": 101,
@@ -78,7 +78,7 @@ fn world_process_events_preserve_linux_capture_fields_and_redacted_argv() {
                     "ts": "2026-04-01T00:00:01Z",
                     "ts_unix_ns": 1_743_465_601_000_000_000u64,
                     "event_type": "world_process_exit",
-                    "component": "world-agent",
+                    "component": "world-service",
                     "session_id": "ses_wpep3",
                     "world_id": "wld_demo",
                     "pid": 101,
@@ -130,7 +130,7 @@ fn world_process_events_preserve_linux_capture_fields_and_redacted_argv() {
     for event in &process_events {
         assert_eq!(
             event.get("component").and_then(Value::as_str),
-            Some("world-agent")
+            Some("world-service")
         );
         assert!(
             event.get("argv_omitted").is_none(),

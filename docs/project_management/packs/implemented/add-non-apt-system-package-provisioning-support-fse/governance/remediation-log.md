@@ -23,7 +23,7 @@ related_seam: SEAM-4
 related_slice: null
 related_thread: THR-04
 related_contract: C-04
-related_artifact: crates/world-agent/src/service.rs
+related_artifact: crates/world-service/src/service.rs
 severity: blocking
 status: resolved
 owner_seam: SEAM-4
@@ -31,11 +31,11 @@ blocked_targets:
   - seam: SEAM-4
     field: status
     value: decomposed
-summary: adjacent staging and tracing work can stale the provisioning-wiring touch surface before seam-local planning reaches the shared world_enable and world-agent execution paths.
-required_fix: revalidate scripts/substrate/world-enable.sh and crates/world-agent/src/service.rs against adjacent packs before decomposing SEAM-4.
+summary: adjacent staging and tracing work can stale the provisioning-wiring touch surface before seam-local planning reaches the shared world_enable and world-service execution paths.
+required_fix: revalidate scripts/substrate/world-enable.sh and crates/world-service/src/service.rs against adjacent packs before decomposing SEAM-4.
 resolution_evidence:
   - scripts/substrate/world-enable.sh revalidated during SEAM-4 promotion; helper posture still delegates provisioning follow-up without contradicting in-world manager routing.
-  - crates/world-agent/src/service.rs revalidated during SEAM-4 promotion; reserved world-deps request-profile handling remains in place for provisioning wrappers.
+  - crates/world-service/src/service.rs revalidated during SEAM-4 promotion; reserved world-deps request-profile handling remains in place for provisioning wrappers.
   - crates/shell/src/execution/routing/dispatch/world_ops.rs revalidated during SEAM-4 promotion; reserved profile handling still prevents host environment takeover of world-deps provisioning profiles.
   - governance/seam-3-closeout.md now publishes THR-03 and closes the upstream schema handoff required for SEAM-4 basis currentness.
 ```
@@ -77,6 +77,6 @@ blocked_targets: []
 summary: Arch-family pacman-success evidence on macOS depended on a manual non-default Lima fixture and could drift if the fixture assumptions were not kept explicit.
 required_fix: keep the Arch manual fixture contract explicit in the playbook and closeout evidence or raise a follow-on automation plan without broadening this pack.
 resolution_evidence:
-  - `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/manual_testing_playbook.md` section 4 records the Arch-family Lima fixture assumptions explicitly, including the `ID=arch` / `ID_LIKE=arch`, `pacman`, `/usr/local/bin/substrate`, `/usr/local/bin/substrate-world-agent`, and `/run/substrate.sock` checks.
+  - `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/manual_testing_playbook.md` section 4 records the Arch-family Lima fixture assumptions explicitly, including the `ID=arch` / `ID_LIKE=arch`, `pacman`, `/usr/local/bin/substrate`, `/usr/local/bin/substrate-world-service`, and `/run/substrate.sock` checks.
   - `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/platform-parity-spec.md` marks the Arch-family pacman-success path as manual-only evidence on macOS and keeps the default-guest smoke boundary explicit.
 ```

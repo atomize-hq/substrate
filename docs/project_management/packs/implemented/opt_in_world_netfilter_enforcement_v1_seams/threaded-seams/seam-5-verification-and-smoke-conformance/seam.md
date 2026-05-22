@@ -53,7 +53,7 @@ open_remediations: []
   - Out:
     - new enforcement behavior or contract ownership changes in `SEAM-1` through `SEAM-4`
 - **Touch surface**:
-  - `crates/agent-api-types/src/lib.rs`
+  - `crates/transport-api-types/src/lib.rs`
   - `crates/shell/tests/world_request_net_allowed_snapshot.rs`
   - `crates/shell/tests/doctor_scopes_ds0.rs`
   - `crates/shell/tests/shim_doctor.rs`

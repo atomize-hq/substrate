@@ -59,8 +59,8 @@
       ]
     },
     {
-      "id": "AHCSITC-PWS-world_agent_profile",
-      "role": "world_agent_profile",
+      "id": "AHCSITC-PWS-world_service_profile",
+      "role": "world_service_profile",
       "depends_on": [
         "AHCSITC-PWS-contract",
         "AHCSITC-PWS-schema_inventory"
@@ -78,7 +78,7 @@
       "role": "docs_validation",
       "depends_on": [
         "AHCSITC-PWS-runtime_fail_early",
-        "AHCSITC-PWS-world_agent_profile"
+        "AHCSITC-PWS-world_service_profile"
       ],
       "assumes": [
         "manual validation remains the canonical proof path for list, status, doctor, and nested-record checks"
@@ -94,7 +94,7 @@
         "AHCSITC-PWS-contract",
         "AHCSITC-PWS-schema_inventory",
         "AHCSITC-PWS-runtime_fail_early",
-        "AHCSITC-PWS-world_agent_profile"
+        "AHCSITC-PWS-world_service_profile"
       ],
       "assumes": [
         "execution stays in existing crates named by the impact map"
@@ -182,7 +182,7 @@
 - Proposed slices and triads:
   - `AHCSITC2-{code,test,integ}`
 
-### AHCSITC-PWS-world_agent_profile — Platform parity and compatibility closure
+### AHCSITC-PWS-world_service_profile — Platform parity and compatibility closure
 - Goal: lock host-orchestrator versus world-member placement guarantees, `world_id` and `world_generation` visibility, parity evidence, and ADR-0025 supersession wording.
 - Owned surfaces:
   - `platform-parity-spec.md`
@@ -199,7 +199,7 @@
   - `manual_testing_playbook.md`
 - Dependencies:
   - `AHCSITC-PWS-runtime_fail_early`
-  - `AHCSITC-PWS-world_agent_profile`
+  - `AHCSITC-PWS-world_service_profile`
 - Proposed slices and triads:
   - `AHCSITC3-{code,test,integ}`
 
@@ -214,7 +214,7 @@
   - `AHCSITC-PWS-contract`
   - `AHCSITC-PWS-schema_inventory`
   - `AHCSITC-PWS-runtime_fail_early`
-  - `AHCSITC-PWS-world_agent_profile`
+  - `AHCSITC-PWS-world_service_profile`
 - Proposed slices and triads:
   - `AHCSITC0-{code,test,integ}`
   - `AHCSITC1-{code,test,integ}`
@@ -248,7 +248,7 @@
 - Hard ordering:
   - `AHCSITC-PWS-contract` starts first.
   - `AHCSITC-PWS-schema_inventory` starts after `AHCSITC-PWS-contract`.
-  - `AHCSITC-PWS-runtime_fail_early` and `AHCSITC-PWS-world_agent_profile` start after `AHCSITC-PWS-schema_inventory` and can run in parallel.
+  - `AHCSITC-PWS-runtime_fail_early` and `AHCSITC-PWS-world_service_profile` start after `AHCSITC-PWS-schema_inventory` and can run in parallel.
   - `AHCSITC-PWS-docs_validation` starts after runtime and parity closures are locked.
   - `AHCSITC-PWS-implementation_seams` starts after contract, schema inventory, runtime fail-early, and world-profile surfaces are locked.
   - `AHCSITC-PWS-tasks_checkpoints` runs last.

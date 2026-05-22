@@ -61,7 +61,7 @@ Evidence already present:
 - `crates/broker/src/policy.rs` and `crates/broker/src/effective_policy.rs` enforce backend-id validation
 - `docs/contracts/substrate-gateway-policy-evaluation.md` already separates invalid integration state,
   dependency unavailability, and policy denial
-- `crates/shell/tests/world_gateway.rs` and `crates/world-agent/tests/gateway_runtime_parity.rs`
+- `crates/shell/tests/world_gateway.rs` and `crates/world-service/tests/gateway_runtime_parity.rs`
   already prove the current unavailable and available status posture
 
 Execution checklist for landing this seam:
@@ -70,6 +70,6 @@ Execution checklist for landing this seam:
 - add targeted tests where the boundary changes:
   - `crates/broker/src/policy/tests.rs` for malformed or disallowed backend ids
   - `crates/shell/tests/world_gateway.rs` for CLI/operator-visible selection classification
-  - `crates/world-agent/tests/gateway_runtime_parity.rs` if the typed runtime status posture changes
+  - `crates/world-service/tests/gateway_runtime_parity.rs` if the typed runtime status posture changes
 - pass when invalid selection, dependency unavailability, and policy denial each terminate in one explicit contract bucket
 - fail when any gateway-local surface is required to authorize backend selection or when allowlist gating happens after dispatch

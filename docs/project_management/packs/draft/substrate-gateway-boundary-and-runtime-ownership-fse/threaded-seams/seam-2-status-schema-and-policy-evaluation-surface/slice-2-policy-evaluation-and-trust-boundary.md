@@ -38,7 +38,7 @@ candidate_subslices: []
     - ban on trusting gateway-local config, admin, and persistence surfaces
   - Out:
     - top-level status schema and `client_wiring.*` inventory
-    - typed world-agent transport and parity guarantees
+    - typed world-service transport and parity guarantees
 - **Acceptance criteria**:
   - invalid integration state, dependency unavailability, and policy denial stay distinct
   - no-host-fallback posture is explicit

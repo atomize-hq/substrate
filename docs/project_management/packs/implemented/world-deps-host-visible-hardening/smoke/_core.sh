@@ -23,7 +23,7 @@ fi
 SUBSTRATE_BIN="$(command -v "$SUBSTRATE_BIN")"
 
 # Default the request profile to the non-login-shell execution path so smoke assertions about
-# sanitized PATH do not depend on runner world-agent provisioning/version drift.
+# sanitized PATH do not depend on runner world-service provisioning/version drift.
 export SUBSTRATE_WORLD_REQUEST_PROFILE="${SUBSTRATE_WORLD_REQUEST_PROFILE:-world-deps-provision}"
 
 tmp_root="${SUBSTRATE_SMOKE_ROOT:-}"

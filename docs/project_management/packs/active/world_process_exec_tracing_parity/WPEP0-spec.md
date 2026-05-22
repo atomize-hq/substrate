@@ -26,5 +26,5 @@
   - canonical trace contains no `builtin_command_raw` records.
 
 ## Out of scope (explicit)
-- Any world-agent API additions for `process_events`.
+- Any world-service API additions for `process_events`.
 - Any Linux ptrace capture implementation.

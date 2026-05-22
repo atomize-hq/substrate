@@ -1,4 +1,4 @@
-//! Host-side persistent REPL session client for world-agent `/v1/stream` (PROTOCOL v1).
+//! Host-side persistent REPL session client for world-service `/v1/stream` (PROTOCOL v1).
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[allow(dead_code)]
@@ -62,7 +62,7 @@ mod imp {
     enum SessionState {
         Starting {
             ready_tx: tokio::sync::oneshot::Sender<ReadyFrame>,
-            requested_shared_world: Option<agent_api_types::SharedWorldOwnerSpec>,
+            requested_shared_world: Option<transport_api_types::SharedWorldOwnerSpec>,
         },
         Ready {
             next_seq: u64,
@@ -82,16 +82,16 @@ mod imp {
         pub(crate) world_id: String,
         pub(crate) cwd: String,
         pub(crate) protocol_version: u32,
-        pub(crate) shared_world: Option<agent_api_types::SharedWorldBindingSnapshot>,
+        pub(crate) shared_world: Option<transport_api_types::SharedWorldBindingSnapshot>,
     }
 
     #[derive(Debug, Clone)]
     pub(crate) struct ReplSessionStartParams {
         pub(crate) cwd: String,
         pub(crate) env: HashMap<String, String>,
-        pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV3,
-        pub(crate) shared_world: Option<agent_api_types::SharedWorldOwnerSpec>,
-        pub(crate) world_network: agent_api_types::WorldNetworkRoutingV1,
+        pub(crate) policy_snapshot: transport_api_types::PolicySnapshotV3,
+        pub(crate) shared_world: Option<transport_api_types::SharedWorldOwnerSpec>,
+        pub(crate) world_network: transport_api_types::WorldNetworkRoutingV1,
         pub(crate) cols: u16,
         pub(crate) rows: u16,
     }
@@ -100,8 +100,8 @@ mod imp {
         pub(crate) fn for_cwd_and_snapshot(
             cwd: String,
             cwd_path: &Path,
-            policy_snapshot: agent_api_types::PolicySnapshotV3,
-            world_network: agent_api_types::WorldNetworkRoutingV1,
+            policy_snapshot: transport_api_types::PolicySnapshotV3,
+            world_network: transport_api_types::WorldNetworkRoutingV1,
         ) -> Result<(Self, bool)> {
             let (env, inherit_from_host) = build_world_env_map_for_cwd(cwd_path)?;
             let (cols, rows) = terminal_size_or_default();
@@ -376,10 +376,10 @@ mod imp {
         StartSession {
             cwd: String,
             env: HashMap<String, String>,
-            policy_snapshot: Box<agent_api_types::PolicySnapshotV3>,
+            policy_snapshot: Box<transport_api_types::PolicySnapshotV3>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            shared_world: Option<agent_api_types::SharedWorldOwnerSpec>,
-            world_network: agent_api_types::WorldNetworkRoutingV1,
+            shared_world: Option<transport_api_types::SharedWorldOwnerSpec>,
+            world_network: transport_api_types::WorldNetworkRoutingV1,
             cols: u16,
             rows: u16,
         },
@@ -412,7 +412,7 @@ mod imp {
             cwd: String,
             protocol_version: u32,
             #[serde(default)]
-            shared_world: Option<agent_api_types::SharedWorldBindingSnapshot>,
+            shared_world: Option<transport_api_types::SharedWorldBindingSnapshot>,
         },
         Stdout {
             data_b64: String,
@@ -673,7 +673,7 @@ mod imp {
                     ));
                 }
                 let seq_note = seq.map(|s| format!(" seq={s}")).unwrap_or_default();
-                Err(anyhow!("world-agent error ({code}{seq_note}): {message}"))
+                Err(anyhow!("world-service error ({code}{seq_note}): {message}"))
             }
         }
     }
@@ -682,15 +682,15 @@ mod imp {
     async fn build_ws_and_start_session_frame(
         start: ReplSessionStartParams,
     ) -> Result<(tungs::WebSocketStream<WsIo>, String)> {
-        super::super::world_ops::ensure_world_agent_ready()
-            .context("world backend unavailable: ensure world-agent ready")?;
+        super::super::world_ops::ensure_world_service_ready()
+            .context("world backend unavailable: ensure world-service ready")?;
 
         let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::path::PathBuf::from("/run/substrate.sock"));
         let stream = UnixStream::connect(&socket_path)
             .await
-            .with_context(|| format!("connect world-agent UDS ({})", socket_path.display()))?;
+            .with_context(|| format!("connect world-service UDS ({})", socket_path.display()))?;
 
         let url = url::Url::parse("ws://localhost/v1/stream").expect("static ws URL");
         let io: WsIo = Box::new(stream);
@@ -742,9 +742,9 @@ mod imp {
         // Allow explicit socket overrides (used by tests/fixtures and advanced setups).
         if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
             let socket_path = std::path::PathBuf::from(socket_path);
-            let stream = UnixStream::connect(&socket_path)
-                .await
-                .with_context(|| format!("connect world-agent UDS ({})", socket_path.display()))?;
+            let stream = UnixStream::connect(&socket_path).await.with_context(|| {
+                format!("connect world-service UDS ({})", socket_path.display())
+            })?;
             let url = url::Url::parse("ws://localhost/v1/stream").expect("static ws URL");
             let io: WsIo = Box::new(stream);
             let (ws, _resp) = tungs::client_async(url, io)
@@ -778,7 +778,7 @@ mod imp {
             pw::WorldTransport::Unix(path) => {
                 let stream = UnixStream::connect(path)
                     .await
-                    .with_context(|| format!("connect world-agent UDS ({})", path.display()))?;
+                    .with_context(|| format!("connect world-service UDS ({})", path.display()))?;
                 let url = url::Url::parse("ws://localhost/v1/stream").expect("static ws URL");
                 let io: WsIo = Box::new(stream);
                 tungs::client_async(url, io).await?
@@ -788,7 +788,7 @@ mod imp {
                 let url = url::Url::parse(&ws_url).context("invalid ws URL")?;
                 let tcp = tokio::net::TcpStream::connect(format!("{host}:{port}"))
                     .await
-                    .with_context(|| format!("connect world-agent TCP ({host}:{port})"))?;
+                    .with_context(|| format!("connect world-service TCP ({host}:{port})"))?;
                 let io: WsIo = Box::new(tcp);
                 tungs::client_async(url, io).await?
             }
@@ -799,7 +799,7 @@ mod imp {
                 let tcp = tokio::net::TcpStream::connect(format!("{host}:{port}"))
                     .await
                     .with_context(|| {
-                        format!("connect world-agent VSock proxy TCP ({host}:{port})")
+                        format!("connect world-service VSock proxy TCP ({host}:{port})")
                     })?;
                 let io: WsIo = Box::new(tcp);
                 tungs::client_async(url, io).await?
@@ -907,36 +907,36 @@ mod imp {
             let frame = ClientFrame::StartSession {
                 cwd: "/tmp/project".to_string(),
                 env: HashMap::new(),
-                policy_snapshot: Box::new(agent_api_types::PolicySnapshotV3 {
+                policy_snapshot: Box::new(transport_api_types::PolicySnapshotV3 {
                     schema_version: 3,
                     net_allowed: vec!["example.com".to_string()],
-                    world_fs: agent_api_types::PolicySnapshotWorldFsV3 {
+                    world_fs: transport_api_types::PolicySnapshotWorldFsV3 {
                         host_visible: true,
-                        fail_closed: agent_api_types::PolicySnapshotWorldFsFailClosedV3 {
+                        fail_closed: transport_api_types::PolicySnapshotWorldFsFailClosedV3 {
                             routing: false,
                         },
                         deny_enforcement: None,
                         caged_required: false,
-                        discover: Some(agent_api_types::PolicySnapshotWorldFsDimensionV3 {
+                        discover: Some(transport_api_types::PolicySnapshotWorldFsDimensionV3 {
                             allow_list: vec![".".to_string()],
                             deny_list: Vec::new(),
                         }),
-                        read: Some(agent_api_types::PolicySnapshotWorldFsDimensionV3 {
+                        read: Some(transport_api_types::PolicySnapshotWorldFsDimensionV3 {
                             allow_list: vec![".".to_string()],
                             deny_list: Vec::new(),
                         }),
-                        write: agent_api_types::PolicySnapshotWorldFsWriteV3 {
+                        write: transport_api_types::PolicySnapshotWorldFsWriteV3 {
                             enabled: true,
                             allow_list: vec![".".to_string()],
                             deny_list: Vec::new(),
                         },
                     },
                 }),
-                shared_world: Some(agent_api_types::SharedWorldOwnerSpec {
+                shared_world: Some(transport_api_types::SharedWorldOwnerSpec {
                     orchestration_session_id: "orch-test".to_string(),
-                    action: agent_api_types::SharedWorldOwnerAction::AttachOrCreate,
+                    action: transport_api_types::SharedWorldOwnerAction::AttachOrCreate,
                 }),
-                world_network: agent_api_types::WorldNetworkRoutingV1 {
+                world_network: transport_api_types::WorldNetworkRoutingV1 {
                     isolate_network: true,
                     allowed_domains: vec!["example.com".to_string()],
                 },
@@ -1001,19 +1001,19 @@ mod imp {
             ReplSessionStartParams {
                 cwd: "/tmp/project".to_string(),
                 env: HashMap::new(),
-                policy_snapshot: agent_api_types::PolicySnapshotV3 {
+                policy_snapshot: transport_api_types::PolicySnapshotV3 {
                     schema_version: 3,
                     net_allowed: Vec::new(),
-                    world_fs: agent_api_types::PolicySnapshotWorldFsV3 {
+                    world_fs: transport_api_types::PolicySnapshotWorldFsV3 {
                         host_visible: true,
-                        fail_closed: agent_api_types::PolicySnapshotWorldFsFailClosedV3 {
+                        fail_closed: transport_api_types::PolicySnapshotWorldFsFailClosedV3 {
                             routing: false,
                         },
                         deny_enforcement: None,
                         caged_required: false,
                         discover: None,
                         read: None,
-                        write: agent_api_types::PolicySnapshotWorldFsWriteV3 {
+                        write: transport_api_types::PolicySnapshotWorldFsWriteV3 {
                             enabled: true,
                             allow_list: vec![".".to_string()],
                             deny_list: Vec::new(),
@@ -1021,7 +1021,7 @@ mod imp {
                     },
                 },
                 shared_world: None,
-                world_network: agent_api_types::WorldNetworkRoutingV1 {
+                world_network: transport_api_types::WorldNetworkRoutingV1 {
                     isolate_network: false,
                     allowed_domains: Vec::new(),
                 },
@@ -1182,16 +1182,16 @@ mod imp {
         pub(crate) world_id: String,
         pub(crate) cwd: String,
         pub(crate) protocol_version: u32,
-        pub(crate) shared_world: Option<agent_api_types::SharedWorldBindingSnapshot>,
+        pub(crate) shared_world: Option<transport_api_types::SharedWorldBindingSnapshot>,
     }
 
     #[derive(Debug, Clone)]
     pub(crate) struct ReplSessionStartParams {
         pub(crate) cwd: String,
         pub(crate) env: HashMap<String, String>,
-        pub(crate) policy_snapshot: agent_api_types::PolicySnapshotV3,
-        pub(crate) shared_world: Option<agent_api_types::SharedWorldOwnerSpec>,
-        pub(crate) world_network: agent_api_types::WorldNetworkRoutingV1,
+        pub(crate) policy_snapshot: transport_api_types::PolicySnapshotV3,
+        pub(crate) shared_world: Option<transport_api_types::SharedWorldOwnerSpec>,
+        pub(crate) world_network: transport_api_types::WorldNetworkRoutingV1,
         pub(crate) cols: u16,
         pub(crate) rows: u16,
     }
@@ -1200,8 +1200,8 @@ mod imp {
         pub(crate) fn for_cwd_and_snapshot(
             cwd: String,
             _cwd_path: &Path,
-            policy_snapshot: agent_api_types::PolicySnapshotV3,
-            world_network: agent_api_types::WorldNetworkRoutingV1,
+            policy_snapshot: transport_api_types::PolicySnapshotV3,
+            world_network: transport_api_types::WorldNetworkRoutingV1,
         ) -> Result<(Self, bool)> {
             Ok((
                 Self {

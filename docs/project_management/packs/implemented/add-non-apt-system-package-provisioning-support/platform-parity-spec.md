@@ -53,7 +53,7 @@ What is identical across platforms:
     - `/etc/os-release` with `ID=arch` or `ID_LIKE=arch`
     - `pacman` on `PATH`
     - `/usr/local/bin/substrate`
-    - `/usr/local/bin/substrate-world-agent`
+    - `/usr/local/bin/substrate-world-service`
     - `/run/substrate.sock`
   - `manual_testing_playbook.md` is authoritative for that Arch-family success case.
 

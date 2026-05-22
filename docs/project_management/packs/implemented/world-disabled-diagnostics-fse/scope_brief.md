@@ -44,7 +44,7 @@ execution_horizon:
   - Linux/macOS/Windows semantics must remain aligned
 - **External systems / dependencies**:
   - `resolve_effective_config` and diagnostics routing inside `crates/shell/src/execution/*`
-  - World backend probe surfaces (world-agent socket / forwarder pipe / `substrate world doctor --json` subprocess)
+  - World backend probe surfaces (world-service socket / forwarder pipe / `substrate world doctor --json` subprocess)
   - CLI text/JSON renderers in `shim_doctor` and `health`
   - `docs/USAGE.md`, manual playbook, smoke scripts, and CP1 cross-platform checkpoint expectations from the source pack
   - Adjacent in-flight surfaces named by the source pack: `ADR-0037`, `ADR-0030`, `ADR-0033`, `json-mode`, provisioning packs

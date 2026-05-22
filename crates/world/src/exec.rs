@@ -1171,7 +1171,7 @@ if [ "${SUBSTRATE_WORLD_FS_ISOLATION:-workspace}" = "full" ]; then
     fi
   fi
 
-  # Optional: bind-mount the host world-agent binary into the isolated rootfs so it can apply Landlock
+  # Optional: bind-mount the host world-service binary into the isolated rootfs so it can apply Landlock
   # restrictions before executing the command.
   if [ "$landlock_requested" = "1" ]; then
     if [ -z "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ] || [ ! -e "${SUBSTRATE_LANDLOCK_HELPER_SRC:-}" ]; then
@@ -1410,7 +1410,7 @@ pub(crate) fn execute_shell_command_with_project_bind_mount_capture(
         command.arg("-c");
         command.arg(script);
         command.current_dir("/");
-        // Ensure the unshare wrapper and its child workload do not inherit the host/world-agent
+        // Ensure the unshare wrapper and its child workload do not inherit the host/world-service
         // service environment. The caller must fully specify the desired environment.
         command.env_clear();
         command.envs(env_map);

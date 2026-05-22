@@ -138,7 +138,7 @@ ADR_BODY_SHA256: 10d71a701199e24edda589d0bac6e8edcaf6c56de561e07c59b90aec3102f0d
   - `substrate-gateway` runtime: owns the backend adapter registry, request normalization, adapter dispatch, and response/event translation.
   - Gateway adapter implementations: one adapter per backend identity, with capability-driven execution semantics.
   - UAA-style adapter harness concepts: preferred internal shape for CLI backends, including capability validation, versioned session semantics, and backend-defined session handle surfacing.
-  - `crates/world-agent`, `crates/broker`, and `crates/trace`: retain the ownership described in ADR-0040 and ADR-0028.
+  - `crates/world-service`, `crates/broker`, and `crates/trace`: retain the ownership described in ADR-0040 and ADR-0028.
 - End-to-end flow:
   - Inputs:
     - Substrate config/policy

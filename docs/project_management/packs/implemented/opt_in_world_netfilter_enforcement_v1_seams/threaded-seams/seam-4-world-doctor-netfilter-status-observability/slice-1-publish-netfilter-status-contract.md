@@ -45,8 +45,8 @@ candidate_subslices: []
     - terminal smoke playbook coverage (`SEAM-5`)
     - new runtime enforcement semantics (`SEAM-2`)
 - **Acceptance criteria**:
-  - `crates/agent-api-types` publishes additive doctor fields for the netfilter status block.
-  - `crates/world-agent` returns one coherent block with the four required signals populated or intentionally null.
+  - `crates/transport-api-types` publishes additive doctor fields for the netfilter status block.
+  - `crates/world-service` returns one coherent block with the four required signals populated or intentionally null.
   - Existing doctor schema/version compatibility remains intact for callers that ignore the new block.
 - **Dependencies**:
   - published routing handoff in `../../governance/seam-1-closeout.md`
@@ -64,7 +64,7 @@ candidate_subslices: []
 
 - **Outcome**: the world doctor contract has one explicit place for netfilter observability.
 - **Files**:
-  - `crates/agent-api-types/src/lib.rs`
+  - `crates/transport-api-types/src/lib.rs`
 - **Thread/contract refs**:
   - `THR-01`
   - `THR-02`
@@ -74,7 +74,7 @@ candidate_subslices: []
   - the schema names requested/enabled/guard/failure fields explicitly
   - the fields remain additive relative to current doctor JSON consumers
 - **Test notes**:
-  - add or refresh doctor-schema assertions in shell/world-agent test fixtures
+  - add or refresh doctor-schema assertions in shell/world-service test fixtures
 
 Checklist:
 - Implement: additive doctor schema fields
@@ -85,7 +85,7 @@ Checklist:
 
 - **Outcome**: the doctor block reflects the actual routed request posture rather than inferred or duplicated logic.
 - **Files**:
-  - `crates/world-agent/src/handlers.rs`
+  - `crates/world-service/src/handlers.rs`
 - **Thread/contract refs**:
   - `THR-01`
   - `THR-02`

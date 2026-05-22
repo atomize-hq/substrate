@@ -39,7 +39,7 @@ Not owned here:
 ## Permitted divergences
 
 - Linux may use direct Unix socket transport to `/run/substrate.sock`.
-- macOS may use Lima-backed forwarding to the guest `world-agent`.
+- macOS may use Lima-backed forwarding to the guest `world-service`.
 - Windows may use the WSL-backed forwarder path, including named-pipe or TCP bridge transport as needed.
 - Platform-specific doctor commands, forwarder diagnostics, or remediation hints may differ so long as the operator-facing lifecycle/status meaning stays unchanged.
 
@@ -55,16 +55,16 @@ Not owned here:
   - this feature-local parity spec
   - `docs/contracts/substrate-gateway-runtime-parity.md`
 - **Code surfaces that later slices must implement against**:
-  - `crates/world-agent/src/lib.rs`
-  - `crates/agent-api-types/src/lib.rs`
-  - `crates/agent-api-client/src/lib.rs`
+  - `crates/world-service/src/lib.rs`
+  - `crates/transport-api-types/src/lib.rs`
+  - `crates/transport-api-client/src/lib.rs`
   - `crates/shell/src/builtins/world_gateway.rs`
 - **Tests to add or extend**:
   - extend `crates/shell/tests/world_gateway.rs` with `world_gateway_status_uses_typed_runtime_contract`
   - extend `crates/shell/tests/world_gateway.rs` with `world_gateway_status_json_preserves_client_wiring_absence_rules`
   - extend `crates/shell/tests/world_gateway.rs` with `world_gateway_sync_and_restart_follow_typed_lifecycle_contract`
-  - add `crates/world-agent/tests/gateway_runtime_parity.rs` with `gateway_runtime_status_route_matches_socket_activation_transport`
-  - add `crates/world-agent/tests/gateway_runtime_parity.rs` with `gateway_runtime_restart_route_preserves_component_unavailable_classification`
+  - add `crates/world-service/tests/gateway_runtime_parity.rs` with `gateway_runtime_status_route_matches_socket_activation_transport`
+  - add `crates/world-service/tests/gateway_runtime_parity.rs` with `gateway_runtime_restart_route_preserves_component_unavailable_classification`
 
 ## Acceptance criteria
 

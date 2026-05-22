@@ -26,12 +26,12 @@ Code pointers:
 
 ## Why `$HOME` installs are ephemeral in hardened worlds
 
-Substrate’s hardened world-agent service runs with a restrictive systemd sandbox on guest Linux (Lima/WSL), including:
+Substrate’s hardened world-service service runs with a restrictive systemd sandbox on guest Linux (Lima/WSL), including:
 - `ProtectSystem=strict` (rootfs is effectively read-only)
 - `ReadWritePaths=... /var/lib/substrate ... /tmp` (Substrate-owned writable surfaces)
 
 On macOS (Lima), see:
-- `scripts/mac/substrate-world-agent.service`
+- `scripts/mac/substrate-world-service.service`
 
 Additionally, Substrate’s world env contract sets:
 - `HOME=/root`
@@ -63,7 +63,7 @@ In the macOS Lima guest, you will typically observe:
   - `/` is read-only
   - `/var/lib/substrate` is writable
 
-This difference is expected: it comes from the world-agent service sandbox.
+This difference is expected: it comes from the world-service service sandbox.
 
 ## Wrapper fields are literal strings (no ${VAR} expansion)
 
@@ -151,7 +151,7 @@ System-package provisioning is owned by:
 - `substrate world enable --provision-deps`
 
 On guest Linux agents, the `world-deps-provision` request profile is executed through a transient
-`systemd-run` unit. This keeps the long-lived `substrate-world-agent.service` sandbox hardened for
+`systemd-run` unit. This keeps the long-lived `substrate-world-service.service` sandbox hardened for
 normal runtime execution while still allowing explicit provisioning-time OS mutation (`apt`,
 package postinst scripts, privilege drops to `_apt`) to touch the guest system paths it needs.
 Those internal world-deps profiles are reserved for Substrate’s built-in world-deps flows; generic

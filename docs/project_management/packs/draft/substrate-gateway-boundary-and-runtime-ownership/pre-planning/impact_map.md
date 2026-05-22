@@ -39,14 +39,14 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/pre-planning/impact_map.md`
 
 ### Edit
-- `crates/agent-api-client/src/lib.rs`
-- `crates/agent-api-types/src/lib.rs`
+- `crates/transport-api-client/src/lib.rs`
+- `crates/transport-api-types/src/lib.rs`
 - `crates/shell/src/builtins/mod.rs`
 - `crates/shell/src/execution/cli.rs`
 - `crates/shell/src/execution/platform/mod.rs`
-- `crates/world-agent/src/handlers.rs`
-- `crates/world-agent/src/lib.rs`
-- `crates/world-agent/src/service.rs`
+- `crates/world-service/src/handlers.rs`
+- `crates/world-service/src/lib.rs`
+- `crates/world-service/src/service.rs`
 - `docs/CONFIGURATION.md`
 - `docs/TRACE.md`
 - `docs/USAGE.md`
@@ -80,15 +80,15 @@ For each externally visible change, list:
     - `docs/project_management/_archived/next/llm_gateway_in_world/contract.md` still publishes `substrate world status gateway` and `substrate world sync gateway`; without a historical-evidence-only banner, the archive can read like a second operator contract.
     - Backend-specific status text from ADR-0041 cannot leak into the base gateway status surface before this pack locks the base envelope.
 
-- Change: gateway lifecycle and status transport runs through a dedicated world-agent surface instead of raw exec probing.
-  - Option A: add typed gateway lifecycle and status endpoints to world-agent and consume them through `crates/agent-api-types/src/lib.rs` and `crates/agent-api-client/src/lib.rs`.
+- Change: gateway lifecycle and status transport runs through a dedicated world-service surface instead of raw exec probing.
+  - Option A: add typed gateway lifecycle and status endpoints to world-service and consume them through `crates/transport-api-types/src/lib.rs` and `crates/transport-api-client/src/lib.rs`.
   - Option B: shell builtins issue ad hoc exec probes through the existing execute transport and assemble status JSON locally.
   - Selected option: A.
   - Direct impact:
     - CLI behavior stays stable across Linux, macOS, and Windows because Substrate owns one typed lifecycle and status surface.
     - Gateway status JSON stays detached from gateway binary internals and detached from per-platform shell probing.
   - Cascading impact:
-    - `crates/world-agent/src/lib.rs`, `crates/world-agent/src/handlers.rs`, `crates/world-agent/src/service.rs`, `crates/agent-api-types/src/lib.rs`, and `crates/agent-api-client/src/lib.rs` move as a set.
+    - `crates/world-service/src/lib.rs`, `crates/world-service/src/handlers.rs`, `crates/world-service/src/service.rs`, `crates/transport-api-types/src/lib.rs`, and `crates/transport-api-client/src/lib.rs` move as a set.
     - The manual playbook must verify that `status`, `sync`, and `restart` all exercise the same internal lifecycle state and failure taxonomy.
   - Contradiction risks:
     - Exec-probe status would make operator JSON depend on runtime-private commands and would reintroduce the second-control-plane drift ADR-0040 blocks.
@@ -123,7 +123,7 @@ For each externally visible change, list:
     - Operators get one deterministic exit boundary: `2` invalid config or invalid integration state, `3` transient runtime failure, `4` missing world or gateway component, `5` policy or safety denial.
     - `host_only` remains blocked when `llm.fail_closed.routing=true`.
   - Cascading impact:
-    - `policy-spec.md`, `contract.md`, `docs/WORLD.md`, and the world-agent lifecycle surface must all agree on placement failure, dependency failure, and denial wording.
+    - `policy-spec.md`, `contract.md`, `docs/WORLD.md`, and the world-service lifecycle surface must all agree on placement failure, dependency failure, and denial wording.
     - The manual playbook must verify that no host fallback path appears when policy requires in-world execution.
   - Contradiction risks:
     - Any host fallback when policy requires in-world execution would violate ADR-0040 and ADR-0042.
@@ -260,7 +260,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
 - Decision Register entries required:
   - None. The selected A/B resolutions above are boundary locks for this pre-planning artifact. Add a feature-local decision register later only if planning introduces a new operator-visible option beyond these selections.
 - Spec updates required (if any):
-  - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/pre-planning/spec_manifest.md` — add an explicit internal-surface note for `crates/agent-api-types/src/lib.rs` and `crates/agent-api-client/src/lib.rs` so the dedicated world-agent transport choice is reflected in the authoritative ownership map.
+  - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/pre-planning/spec_manifest.md` — add an explicit internal-surface note for `crates/transport-api-types/src/lib.rs` and `crates/transport-api-client/src/lib.rs` so the dedicated world-service transport choice is reflected in the authoritative ownership map.
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/contract.md` — lock the exact command spelling, the exit `2|3|4|5` split, and the rule that `status --json` is the operator wiring authority.
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/gateway-status-schema-spec.md` — lock the `client_wiring.*` field family and the additive ownership boundary against ADR-0042 tuple metadata.
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md` — state that provisioning is outside this pack and list the evidence required before any platform script or backend change lands.

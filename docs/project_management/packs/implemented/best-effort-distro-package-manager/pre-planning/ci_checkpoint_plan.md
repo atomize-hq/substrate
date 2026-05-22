@@ -82,7 +82,7 @@ Standard:
   - Running the checkpoint only after `BEDPM3` avoids spending multi-OS CI before the hosted-installer contract, wrapper/doc propagation, repo test path, and operator evidence are coherent.
 - Gate choice:
   - `feature_smoke = true` because the canonical impact map explicitly selects `tests/installers/pkg_manager_detection_smoke.sh` as the exact repo test path and selects `smoke/linux-smoke.sh` as the feature-local Linux wrapper.
-  - `ci_testing = "quick"` because the canonical impact map keeps implementation changes out of `crates/`, `src/`, `crates/world*`, `crates/shim`, `crates/shell`, and `crates/world-agent`, and scopes the work to installer shell scripts, installer docs, repo tests, and planning artifacts. If full planning expands the touch set into those areas or into workflow/infrastructure changes, update this plan first and then raise the checkpoint gate to `full`.
+  - `ci_testing = "quick"` because the canonical impact map keeps implementation changes out of `crates/`, `src/`, `crates/world*`, `crates/shim`, `crates/shell`, and `crates/world-service`, and scopes the work to installer shell scripts, installer docs, repo tests, and planning artifacts. If full planning expands the touch set into those areas or into workflow/infrastructure changes, update this plan first and then raise the checkpoint gate to `full`.
 
 ## Wiring Status
 

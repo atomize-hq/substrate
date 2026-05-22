@@ -47,7 +47,7 @@ open_remediations: []
   - Out:
     - the detailed `status --json` field list
     - the policy decision table over ADR-0027 keys
-    - typed world-agent endpoint shapes or parity evidence
+    - typed world-service endpoint shapes or parity evidence
     - provisioning changes or final docs/quality-gate lock-in
 - **Primary interfaces**
   - Inputs:

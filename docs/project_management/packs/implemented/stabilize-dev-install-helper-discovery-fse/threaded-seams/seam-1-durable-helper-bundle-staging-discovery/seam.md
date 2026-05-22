@@ -48,7 +48,7 @@ open_remediations: []
     - New config keys, config precedence, or environment precedence
     - Dev-uninstall implementation and protected-path refusal behavior
     - Windows behavior enablement
-    - Full macOS provisioning parity or ADR-0035 world-agent staging
+    - Full macOS provisioning parity or ADR-0035 world-service staging
 - **Touch surface**:
   - `scripts/substrate/dev-install-substrate.sh`
   - `crates/shell/src/builtins/world_enable/runner/paths.rs`

@@ -23,7 +23,7 @@
 ADR_BODY_SHA256: a1beafeadd0d0cb480745724dfb520a52ef5ae886dcd2174c2d66b4567db63dc
 ### Changes (operator-facing)
 - Agent Hub provides a stable registry + session router for CLI and API agents
-  - Existing: Substrate can run worlds, trace commands, and call a world-agent API, but “agents” are not uniformly registered/routed as role-swappable backends.
+  - Existing: Substrate can run worlds, trace commands, and call a world-service API, but “agents” are not uniformly registered/routed as role-swappable backends.
   - New: Substrate maintains an Agent Hub registry where any backend (CLI or API) can assume the `orchestrator` role (privileged) or a non-orchestrator role (taxonomy label), and emits stable event attribution for concurrent routing.
   - Why: Enable consistent orchestration across Codex/Claude/Gemini CLIs and API agents without hardcoding roles into types.
   - Links:

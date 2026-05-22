@@ -314,7 +314,7 @@ Good slice boundaries:
 
 Split triggers (if any are true, split into additional slices):
 - The slice has multiple independent UX flows (multiple “Existing → New → Why” deltas).
-- The slice touches multiple major subsystems (e.g., shim + broker + world-agent + world backend) without a narrow, single-threaded data flow.
+- The slice touches multiple major subsystems (e.g., shim + broker + world-service + world backend) without a narrow, single-threaded data flow.
 - The acceptance criteria list is “wide” (many unrelated bullets) instead of “deep” (few bullets with clear constraints).
 - The work requires heavy refactors plus new behavior in the same slice (split “refactor enabling change” from “feature behavior”).
 - Cross-platform parity requires substantial platform-specific behavior differences (split to isolate platform-fix work).

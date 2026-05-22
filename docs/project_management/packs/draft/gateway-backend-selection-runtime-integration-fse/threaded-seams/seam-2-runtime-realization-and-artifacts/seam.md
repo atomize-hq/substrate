@@ -46,17 +46,17 @@ open_remediations: []
     - shared request and integrated auth payload widening beyond the current `cli_codex`-only shape
     - adapter-driven config render plus managed runtime artifact semantics
     - launch, readiness, restart, and failure mapping for supported versus unavailable integrated backends
-    - shell/world-agent/shared-type tests that lock in the selected-backend runtime handoff
+    - shell/world-service/shared-type tests that lock in the selected-backend runtime handoff
   - Out:
     - backend selection order, inventory identity, and auth precedence definition owned by `SEAM-1`
     - parity matrix, rollout proof, and named additional-backend validation owned by `SEAM-3`
     - new operator commands, status-schema widening, tuple-surface changes, or secret-channel redesign
 - **Touch surface**:
-  - `crates/world-agent/src/gateway_runtime.rs`
-  - `crates/world-agent/src/service.rs`
-  - `crates/agent-api-types/src/lib.rs`
+  - `crates/world-service/src/gateway_runtime.rs`
+  - `crates/world-service/src/service.rs`
+  - `crates/transport-api-types/src/lib.rs`
   - `crates/shell/src/builtins/world_gateway.rs`
-  - `crates/world-agent/tests/gateway_runtime_parity.rs`
+  - `crates/world-service/tests/gateway_runtime_parity.rs`
   - `crates/shell/tests/world_gateway.rs`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-protocol-spec.md`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md`
@@ -71,8 +71,8 @@ open_remediations: []
     - auth precedence is already pinned by canonical policy docs
     - remaining gaps are runtime lookup, payload shape, artifact semantics, and lifecycle behavior that this seam owns
   - Verification for this seam centers on:
-    - adapter lookup and capability validation order in `crates/world-agent/src/service.rs` and `crates/world-agent/src/gateway_runtime.rs`
-    - shared integrated-auth/request shape generalization in `crates/agent-api-types/src/lib.rs`
+    - adapter lookup and capability validation order in `crates/world-service/src/service.rs` and `crates/world-service/src/gateway_runtime.rs`
+    - shared integrated-auth/request shape generalization in `crates/transport-api-types/src/lib.rs`
     - shell request construction staying backend-aware without reopening selection ownership
     - runtime tests proving unsupported backends fail explicitly while supported backends preserve the selected-backend contract across sync/status/restart
 - **Basis posture**:
@@ -123,8 +123,8 @@ open_remediations: []
   - runtime artifact naming, permissions, or inspectability changes
   - readiness or restart semantics change relative to the reviewed plan
 - **Expected closeout evidence**:
-  - landed runtime updates in `crates/world-agent/src/gateway_runtime.rs` and `crates/world-agent/src/service.rs`
-  - landed shared request/auth updates in `crates/agent-api-types/src/lib.rs`
+  - landed runtime updates in `crates/world-service/src/gateway_runtime.rs` and `crates/world-service/src/service.rs`
+  - landed shared request/auth updates in `crates/transport-api-types/src/lib.rs`
   - landed shell request updates in `crates/shell/src/builtins/world_gateway.rs`
   - landed regression coverage in runtime and shell tests
   - resolution or explicit carry status for `REM-003` and `REM-004`

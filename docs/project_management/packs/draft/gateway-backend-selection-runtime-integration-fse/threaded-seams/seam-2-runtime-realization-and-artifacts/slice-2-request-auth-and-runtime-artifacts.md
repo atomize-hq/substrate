@@ -47,7 +47,7 @@ open_remediations:
   - `C-02`
   - `C-04`
 - **Verification**:
-  - targeted shell/world-agent/shared-type tests around payload serialization, bounded auth validation, config render, and runtime manifest/log behavior
+  - targeted shell/world-service/shared-type tests around payload serialization, bounded auth validation, config render, and runtime manifest/log behavior
 - **Rollout/safety**:
   - keep auth-carrier redesign out of scope; widen only the bounded request/artifact shapes required to land runtime behavior
 - **Review surface refs**:
@@ -59,7 +59,7 @@ open_remediations:
 - **Outcome**:
   - request preparation supports more than `cli_codex` while preserving the policy-owned precedence boundary from `THR-01`.
 - **Inputs/outputs**:
-  - Inputs: `docs/contracts/substrate-gateway-backend-adapter-schema.md`, `docs/contracts/substrate-gateway-policy-evaluation.md`, `crates/agent-api-types/src/lib.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/world-agent/src/service.rs`
+  - Inputs: `docs/contracts/substrate-gateway-backend-adapter-schema.md`, `docs/contracts/substrate-gateway-policy-evaluation.md`, `crates/transport-api-types/src/lib.rs`, `crates/shell/src/builtins/world_gateway.rs`, `crates/world-service/src/service.rs`
   - Outputs: widened shared types, backend-aware request construction, bounded auth validation, test coverage
 - **Thread/contract refs**:
   - `THR-01`
@@ -91,7 +91,7 @@ Checklist:
 - **Outcome**:
   - config paths, manifests, and logs become backend-aware runtime artifacts instead of incidental side effects of the Codex-specific launch path.
 - **Inputs/outputs**:
-  - Inputs: runtime manager behavior, filesystem semantics spec, world-agent tests
+  - Inputs: runtime manager behavior, filesystem semantics spec, world-service tests
   - Outputs: explicit render/artifact implementation and coverage
 - **Thread/contract refs**:
   - `THR-02`

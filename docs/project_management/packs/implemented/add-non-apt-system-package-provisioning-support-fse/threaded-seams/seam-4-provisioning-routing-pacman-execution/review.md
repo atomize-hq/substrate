@@ -13,7 +13,7 @@ This artifact feeds `gates.pre_exec.review`.
 
 - Can any mixed-manager path still partially provision one manager before rejecting the other?
 - Can request-profile routing still be influenced by `SUBSTRATE_WORLD_REQUEST_PROFILE` or host environment instead of the internal `world-deps-provision` path?
-- Can pacman dry-run, no-op detection, or verbose rendering drift between the runner, dispatch, world-agent, and helper surfaces?
+- Can pacman dry-run, no-op detection, or verbose rendering drift between the runner, dispatch, world-service, and helper surfaces?
 
 ## R1 - Provisioning workflow
 
@@ -32,7 +32,7 @@ flowchart TD
 ```mermaid
 flowchart LR
   Runner["world_enable runner"] --> Dispatch["dispatch/world_ops"]
-  Dispatch --> Agent["world-agent service"]
+  Dispatch --> Agent["world-service service"]
   Agent --> Helper["world-enable.sh / wrapper path"]
   Helper --> Manager["apt or pacman only"]
   Schema["C-03 pacman schema truth"] --> Runner
@@ -42,7 +42,7 @@ flowchart LR
 ## Likely mismatch hotspots
 
 - mixed-manager rejection timing in `crates/shell/src/builtins/world_enable/runner/provision_deps.rs`
-- request-profile isolation in `crates/shell/src/execution/routing/dispatch/world_ops.rs` and `crates/world-agent/src/service.rs`
+- request-profile isolation in `crates/shell/src/execution/routing/dispatch/world_ops.rs` and `crates/world-service/src/service.rs`
 - helper-script posture in `scripts/substrate/world-enable.sh`
 - dry-run and verbose rendering drift across the runner, logging, and test surfaces
 
@@ -50,7 +50,7 @@ flowchart LR
 
 - `THR-01` remains authoritative from `SEAM-1` and current for the shared manager-aware operator contract.
 - `THR-02` and `THR-03` were published by `SEAM-2` and `SEAM-3`, then revalidated here against the current provisioning touch surface.
-- `REM-003` no longer blocks decomposition: `world_enable.sh`, `world_ops.rs`, and `world-agent/src/service.rs` still align with the internal `world-deps-provision` routing boundary and do not contradict the published probe or schema contracts.
+- `REM-003` no longer blocks decomposition: `world_enable.sh`, `world_ops.rs`, and `world-service/src/service.rs` still align with the internal `world-deps-provision` routing boundary and do not contradict the published probe or schema contracts.
 
 ## Pre-exec gate disposition
 
@@ -64,7 +64,7 @@ flowchart LR
     - stable dry-run / verbose rendering and no-op behavior
 - **Revalidation prerequisites**:
   - Consumed published `C-02` (`THR-02`) and `C-03` (`THR-03`) and confirmed the current provisioning surfaces still defer to those upstream contracts.
-  - Revalidated the shared helper and world-agent touch surfaces that previously drove `REM-003`.
+  - Revalidated the shared helper and world-service touch surfaces that previously drove `REM-003`.
 - **Opened remediations**: none
 
 ## Planned seam-exit gate focus

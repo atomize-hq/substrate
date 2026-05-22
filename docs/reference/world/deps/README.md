@@ -91,7 +91,7 @@ Behavior:
 - Unsupported on Windows.
 - Uses the effective enabled world-deps set for the current directory.
 - `--dry-run` prints the derived requirement sets without mutating the world.
-- `--verbose` additionally shows the provisioning request posture used for the world-agent call.
+- `--verbose` additionally shows the provisioning request posture used for the world-service call.
 
 ### Runtime contract
 

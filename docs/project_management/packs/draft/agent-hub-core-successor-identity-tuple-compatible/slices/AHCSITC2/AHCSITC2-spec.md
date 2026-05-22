@@ -28,7 +28,7 @@
 - Event-plane and trace-plane observation remain non-authoritative for control-plane approval.
 
 ### Telemetry and alert publication lock
-- Pure-agent orchestration records publish `client`, `router = "agent_hub"`, `protocol = "uaa.agent.session"`, `backend_id`, and world fields only when the record is world-scoped.
+- Pure-agent orchestration records publish `client`, `router = "agent_hub"`, `protocol = "substrate.agent.session"`, `backend_id`, and world fields only when the record is world-scoped.
 - Nested gateway-backed records publish `client`, `router = "substrate_gateway"`, `protocol`, `provider`, and `auth_authority`, and omit `world_id` plus `world_generation`.
 - Restart alerts publish the active replacement world at the top level and keep prior world values inside `data.previous_*`.
 - Redaction for nested request metadata remains on the existing shared redaction path and emits normalized ids only.
@@ -37,7 +37,7 @@
 - AC-AHCSITC2-01: `AHCSITC2` applies ordered fail-closed evaluation for orchestrator selection, member dispatch, required world-boundary availability, and shared-world drift before any nested gateway handoff begins.
 - AC-AHCSITC2-02: Agent-side allowlist checks use only derived `backend_id` values, and event-plane or trace-plane records do not authorize orchestrator or member control-plane actions.
 - AC-AHCSITC2-03: Nested LLM requests leave the agent-hub control plane after the agent-side decision and reuse gateway policy gates without inheriting approval by implication from a prior agent-hub success.
-- AC-AHCSITC2-04: Pure-agent orchestration records publish `client`, `router = "agent_hub"`, `protocol = "uaa.agent.session"`, and omit `provider` plus `auth_authority`, while nested gateway-backed records publish `provider` plus `auth_authority` and omit `world_id` plus `world_generation`.
+- AC-AHCSITC2-04: Pure-agent orchestration records publish `client`, `router = "agent_hub"`, `protocol = "substrate.agent.session"`, and omit `provider` plus `auth_authority`, while nested gateway-backed records publish `provider` plus `auth_authority` and omit `world_id` plus `world_generation`.
 - AC-AHCSITC2-05: World-scoped steady-state records and restart alerts publish `world_generation` at the top level, while previous world values remain inside restart-alert `data.previous_*` fields.
 - AC-AHCSITC2-06: The implementation boundary for this slice stays on common event helpers, shell telemetry plumbing, trace persistence, and related tests instead of reopening command wording, protocol grammar, or parity proof.
 

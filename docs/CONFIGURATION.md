@@ -39,7 +39,7 @@ Agent Hub successor routing is configured through the normal Substrate config an
 Config keys:
 - `agents.hub.orchestrator_agent_id` selects the canonical host-scoped orchestrator agent for `substrate agent status` and `substrate agent doctor`.
 - Agent inventory entries continue to define each agent's adapter kind and execution posture; the derived `backend_id` remains `<kind>:<agent_id>`.
-- The shell-owned v1 runtime only realizes selected orchestrators with `config.kind=cli`, `protocol=uaa.agent.session`, and `cli.mode=persistent`.
+- The shell-owned v1 runtime only realizes selected orchestrators with `config.kind=cli`, `protocol=substrate.agent.session`, and `cli.mode=persistent`.
 - The first realized shell-owned UAA backends are `cli:codex` and `cli:claude_code`. Other inventory items may still validate and list successfully, but they are not runtime-realizable on the selected orchestrator path in v1.
 - `config.cli.binary` for the selected orchestrator must resolve on the host during `substrate agent doctor` and async REPL bootstrap.
 
@@ -60,7 +60,7 @@ version: 1
 id: claude_code
 config:
   kind: cli
-  protocol: uaa.agent.session
+  protocol: substrate.agent.session
   execution:
     scope: host
   cli:
@@ -174,7 +174,7 @@ Other world-adjacent variables:
 
 | Variable | Purpose | Default | Example |
 |----------|---------|---------|---------|
-| `SUBSTRATE_WORLD_REQUEST_PROFILE` | Sets the Agent API request `profile` for world-agent executions (advanced/internal only). Built-in world-deps profiles such as `world-deps-provision` and `world-deps-probe` are reserved for Substrate’s own world-deps flows and are ignored when supplied through this env var; the operator-facing APT provisioning workflow remains `substrate world enable --provision-deps`. See `docs/reference/world/deps/README.md`, `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`, and the historical draft-pack path `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`. | *unset* | `wdap-smoke-profile` |
+| `SUBSTRATE_WORLD_REQUEST_PROFILE` | Sets the Agent API request `profile` for world-service executions (advanced/internal only). Built-in world-deps profiles such as `world-deps-provision` and `world-deps-probe` are reserved for Substrate’s own world-deps flows and are ignored when supplied through this env var; the operator-facing APT provisioning workflow remains `substrate world enable --provision-deps`. See `docs/reference/world/deps/README.md`, `docs/project_management/packs/implemented/world-deps-apt-provisioning/contract.md`, and the historical draft-pack path `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`. | *unset* | `wdap-smoke-profile` |
 | `SUBSTRATE_SOCKET_ACTIVATION_OVERRIDE` | Force socket activation mode reporting (`socket_activation`, `manual`, or `unknown`) for diagnostics/tests | auto-detect via systemd | `socket_activation` |
 | `SUBSTRATE_SYSTEMCTL_TIMEOUT_MS` | Timeout (ms) for `systemctl show …` probes used by Linux socket-activation detection; prevents hangs when systemd/dbus is unhealthy | `2000` | `250` |
 
@@ -246,7 +246,7 @@ Unknown keys and extra tables are preserved for future expansion.
 - Legacy installs that still have `config.json` are read automatically, but new writes use `config.yaml`.
 - The generated `~/.substrate/manager_env.sh` exports derived `SUBSTRATE_*` state so shims and subprocesses observe a consistent view of the effective config.
 - Supported Linux/macOS provisioning helpers also wire `SUBSTRATE_HOME` into the
-  `substrate-world-agent` systemd unit and keep that exact path writable via
+  `substrate-world-service` systemd unit and keep that exact path writable via
   `ReadWritePaths`. WSL helper scripts are intentionally fail-closed in this slice
   and do not claim that placement contract yet.
 
@@ -267,7 +267,7 @@ enforcement is visible without extra flags.
 
 Substrate policy files on disk are always *patch-only*: a sparse YAML mapping where omitted keys mean
 “inherit”. The broker resolves a single effective policy for the current directory and all execution
-paths (shell/shim/world-agent) consume that same resolved policy.
+paths (shell/shim/world-service) consume that same resolved policy.
 
 Effective policy resolution order:
 

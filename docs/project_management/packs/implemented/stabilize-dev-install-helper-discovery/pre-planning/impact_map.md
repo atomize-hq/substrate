@@ -77,7 +77,7 @@ For each externally visible change, list:
 
 - Change: Cross-platform behavior is affected differently by the helper’s location because `scripts/substrate/world-enable.sh` derives `RELEASE_ROOT` from its own path.
   - Direct impact:
-    - Linux: helper can provision via staged artifacts under the inferred version dir and is primarily sensitive to helper *discovery* and `world-agent` availability.
+    - Linux: helper can provision via staged artifacts under the inferred version dir and is primarily sensitive to helper *discovery* and `world-service` availability.
     - macOS: the helper’s macOS provisioning path expects `${RELEASE_ROOT}/scripts/mac/lima-warm.sh`; staging the helper under `$SUBSTRATE_HOME/scripts/substrate/…` does not imply `${RELEASE_ROOT}/scripts/mac/…` exists for dev installs.
   - Cascading impact:
     - The contract and playbook must be explicit about macOS expectations for “enable later” in dev installs (e.g., whether the helper is expected to succeed beyond `--dry-run`, or whether additional staging/follow-up work is required).
@@ -121,8 +121,8 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
     - `scripts/substrate/install-substrate.sh`
   - Conflict: yes (shared script touchpoints + same “enable later” workflow)
   - Resolution (explicit):
-    - Sequencing boundary: land helper-staging stability (this ADR) before or concurrently with “stage world-agent on `--no-world`” so the enable-later path has both (a) resolvable helper scripts and (b) required provisioning artifacts.
-    - Non-overlap boundary: this ADR owns helper staging under `$SUBSTRATE_HOME/scripts/substrate/…`; ADR-0035 owns `world-agent` artifact staging and missing-artifact remediation. Both must share/align on dev-install overwrite/ownership guard decisions to avoid divergent behavior.
+    - Sequencing boundary: land helper-staging stability (this ADR) before or concurrently with “stage world-service on `--no-world`” so the enable-later path has both (a) resolvable helper scripts and (b) required provisioning artifacts.
+    - Non-overlap boundary: this ADR owns helper staging under `$SUBSTRATE_HOME/scripts/substrate/…`; ADR-0035 owns `world-service` artifact staging and missing-artifact remediation. Both must share/align on dev-install overwrite/ownership guard decisions to avoid divergent behavior.
 
 - ADR: `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md`
   - Overlap surfaces:

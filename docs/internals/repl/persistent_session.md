@@ -1,6 +1,6 @@
 # Persistent Session REPL: Execution Notes
 
-Substrate’s world-first REPL uses the world-agent WebSocket `/v1/stream` “persistent session”
+Substrate’s world-first REPL uses the world-service WebSocket `/v1/stream` “persistent session”
 protocol (v1) to execute interactive commands while persisting a small amount of state across
 commands (not a long-lived login shell).
 
@@ -11,7 +11,7 @@ This doc is intentionally implementation-focused. For the authoritative project 
 
 - A REPL “session” is long-lived (WebSocket stays up), but each command is executed as a separate
   `bash -c "<program>"` process inside the world.
-- After each command completes, world-agent captures:
+- After each command completes, world-service captures:
   - physical cwd (`pwd -P` equivalent), and
   - exported environment variables
   and persists them for the next command.
@@ -33,7 +33,7 @@ The guard is implemented as shell code that:
 
 The guard must be evaluated in the *same shell process* that interprets the user’s program text.
 
-Gotcha (fixed in `world-agent` persistent-session exec):
+Gotcha (fixed in `world-service` persistent-session exec):
 - If you wrap the *outer* command (e.g. the “inner command” that does `exec /bin/bash -c "$PROGRAM"`),
   the `exec` replaces the shell process, and the guard’s `cd()` override is lost.
 - Correct approach: wrap the *program string* itself (the thing passed to `bash -c ...`) so the guard

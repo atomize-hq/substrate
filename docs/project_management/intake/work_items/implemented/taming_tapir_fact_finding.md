@@ -13,7 +13,7 @@ Goal:
 - avoid orphaned REPL processes
 
 Strictly out of scope:
-- world-agent changes
+- world-service changes
 - shim changes
 - new CLI/config knobs
 - broad REPL redesign

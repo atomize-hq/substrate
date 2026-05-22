@@ -4,11 +4,11 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use agent_api_types::ApiError;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
+use transport_api_types::ApiError;
 
 use crate::AuthConfig;
 

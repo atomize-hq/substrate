@@ -70,7 +70,7 @@ open_remediations: []
     - none; this seam exists because the source pack explicitly treated contract and decision settlement as the prerequisite workstream
   - Transitive blockers:
     - overlapping ADR and planning-pack docs can stale the authority story if they move before reconciliation lands
-    - shared code surfaces in `world_enable` and `world-agent` can expose hidden assumptions that still contradict the contract
+    - shared code surfaces in `world_enable` and `world-service` can expose hidden assumptions that still contradict the contract
   - Direct consumers:
     - `SEAM-2`
     - `SEAM-3`

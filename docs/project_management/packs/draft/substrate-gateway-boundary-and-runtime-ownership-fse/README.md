@@ -53,5 +53,5 @@ Source-pack crosswalk:
 
 - `pre-planning/spec_manifest.md`, `pre-planning/minimal_spec_draft.md`, and ADR-0040 operator contract language map chiefly to `SEAM-1`
 - `pre-planning/spec_manifest.md`, `pre-planning/impact_map.md`, and the `SGBRO-PWS-schema_inventory` lane in `pre-planning/workstream_triage.md` map chiefly to `SEAM-2`
-- the selected typed world-agent option in `pre-planning/impact_map.md`, the parity requirements in `pre-planning/ci_checkpoint_plan.md`, and the `SGBRO-PWS-world_agent_profile` lane map chiefly to `SEAM-3`
+- the selected typed world-service option in `pre-planning/impact_map.md`, the parity requirements in `pre-planning/ci_checkpoint_plan.md`, and the `SGBRO-PWS-world_service_profile` lane map chiefly to `SEAM-3`
 - `pre-planning/ci_checkpoint_plan.md`, the docs-validation and task-checkpoint workstreams in `pre-planning/workstream_triage.md`, and the cross-doc touch set in `pre-planning/impact_map.md` map chiefly to `SEAM-4`

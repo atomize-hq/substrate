@@ -3,11 +3,11 @@ use crate::execution::policy_snapshot::bootstrap_world_spec as build_bootstrap_w
 use crate::execution::settings;
 #[cfg(test)]
 use crate::execution::world_env_guard;
-use agent_api_client::{AgentClient, Transport};
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use substrate_broker::world_fs_mode;
+use transport_api_client::{AgentClient, Transport};
 use world_api::{SharedWorldOwnerSpec, WorldBackend, WorldSpec};
 use world_windows_wsl::WindowsWslBackend;
 

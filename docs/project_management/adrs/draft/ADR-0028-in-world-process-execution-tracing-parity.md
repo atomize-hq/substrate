@@ -34,7 +34,7 @@ ADR_BODY_SHA256: 799e22a5981fbf644d83626d36c3bbd7b788b80a22ec85629e59c499c25815a
 ### Changes (operator-facing)
 - World executions gain subprocess-level visibility (exec/exit telemetry) comparable to host shim tracing
   - Existing: host execution is richly observable via shims, but world execution is observable primarily at “one command per world execute/stream” granularity (no structured visibility into spawned subprocess trees).
-  - New: world-agent returns a redacted process tree (spawn/exec/exit) for each world execution, and the shell persists these as structured trace events alongside existing spans, policy decisions, and fs diffs.
+  - New: world-service returns a redacted process tree (spawn/exec/exit) for each world execution, and the shell persists these as structured trace events alongside existing spans, policy decisions, and fs diffs.
   - Why: eliminate audit/debug blind spots for dependency installers and wrapper-based tools, and make world-first execution diagnosable without stdout/stderr inference.
   - Links:
     - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md#L1`
@@ -48,7 +48,7 @@ ADR_BODY_SHA256: 799e22a5981fbf644d83626d36c3bbd7b788b80a22ec85629e59c499c25815a
   - policy debugging and audit scenarios where stdout/stderr inference is insufficient.
 
 ### Repo reality checks (what exists today)
-- `crates/world-agent/src/service.rs`:
+- `crates/world-service/src/service.rs`:
   - `/v1/execute`: spans are generated after execution, and `ExecRequest.span_id` is not currently populated.
   - `/v1/stream`: span id is generated up-front and `ExecRequest.span_id` is populated.
 - `crates/world/src/session.rs` + `crates/world/src/exec.rs`:
@@ -65,14 +65,14 @@ ADR_BODY_SHA256: 799e22a5981fbf644d83626d36c3bbd7b788b80a22ec85629e59c499c25815a
   - shim argv redaction is robust (`crates/shim/src/logger.rs`), including “flag consumes next arg” semantics.
   - `substrate_common::redact_sensitive()` is not sufficient for safe argv/env capture at process granularity (it does not redact values following flags).
 - Provisioning (Linux-backed backends):
-  - The `substrate-world-agent` systemd unit currently does not grant `CAP_SYS_PTRACE` by default (`scripts/linux/world-provision.sh`, `scripts/mac/lima-warm.sh`), so ptrace-based capture may be blocked unless the unit is updated.
+  - The `substrate-world-service` systemd unit currently does not grant `CAP_SYS_PTRACE` by default (`scripts/linux/world-provision.sh`, `scripts/mac/lima-warm.sh`), so ptrace-based capture may be blocked unless the unit is updated.
 
 ## Goals
 - Achieve in-world per-process execution tracing parity with the host shim model:
   - capture a process tree for each world execution (exec/exit at minimum; fork/clone for parent relationships),
   - capture argv/env/cwd with safe redaction and data minimization,
   - capture pid/ppid and exit status, plus timing (start timestamp + duration).
-- Return process events from world-agent for both:
+- Return process events from world-service for both:
   - `/v1/execute` (batched in the response),
   - `/v1/stream` (batched on the Exit frame initially).
 - Persist process events into `~/.substrate/trace.jsonl` via the existing shell trace append pathway so they are co-located with:
@@ -98,10 +98,10 @@ ADR_BODY_SHA256: 799e22a5981fbf644d83626d36c3bbd7b788b80a22ec85629e59c499c25815a
 - No new CLI commands or flags are introduced by this ADR.
 - Operator-visible behavior change:
   - When world execution succeeds and process tracing is supported, `~/.substrate/trace.jsonl` gains additional event records with `event_type` `world_process_start` and `world_process_exit`.
-  - When process tracing is unavailable or fails, execution MUST still succeed (see “Failure behavior”), but the world-agent response MUST carry an explicit structured diagnostic so operators can distinguish “no subprocesses spawned” from “subprocess tracing unavailable”.
+  - When process tracing is unavailable or fails, execution MUST still succeed (see “Failure behavior”), but the world-service response MUST carry an explicit structured diagnostic so operators can distinguish “no subprocesses spawned” from “subprocess tracing unavailable”.
 
 ### World-Agent API (Authoritative)
-This ADR extends the world-agent responses to optionally include process events.
+This ADR extends the world-service responses to optionally include process events.
 
 - `/v1/execute` response:
   - MUST include `span_id` generated before execution.
@@ -149,7 +149,7 @@ World process events are structured trace events aligned with `crates/common/src
 - Minimum required fields (always present):
   - `ts` (timestamp)
   - `event_type` (`world_process_start` or `world_process_exit`)
-  - `component` (`world-agent`)
+  - `component` (`world-service`)
   - `session_id` (from `SHIM_SESSION_ID` env propagated into the world execution)
   - `world_id`
   - `pid`, `ppid`
@@ -183,7 +183,7 @@ Default env capture policy for process events:
 To bound volume:
 - Cap maximum events per execution (default: 10,000).
 - Cap argv length per event and env value lengths (default: 4KB/value).
-- When truncation occurs, the world-agent response MUST include summary fields:
+- When truncation occurs, the world-service response MUST include summary fields:
   - `process_events_status: "truncated"`
   - `process_events_dropped: <n>`
 
@@ -354,12 +354,12 @@ Any record intended to trigger routing or cross-component attribution MUST carry
     - fix span parent linkage bug in `crates/trace/src/span.rs` by capturing parent span at span start and restoring env stack discipline on finish
   - `crates/world` (Linux only; behind `cfg(target_os=\"linux\")`):
     - implement ptrace-based process tree capture in world exec paths (`crates/world/src/exec.rs`)
-    - note: this Linux runtime powers both native Linux deployments and macOS Lima deployments (world-agent runs in a Linux guest; `docs/WORLD.md`)
+    - note: this Linux runtime powers both native Linux deployments and macOS Lima deployments (world-service runs in a Linux guest; `docs/WORLD.md`)
     - store captured events in session state keyed by `span_id` and provide take semantics to avoid unbounded growth
-  - `crates/world-agent`:
+  - `crates/world-service`:
     - generate and plumb `span_id` consistently for `/v1/execute` and `/v1/stream`
     - retrieve captured events from the backend and return them in responses/frames
-  - `crates/agent-api-types`:
+  - `crates/transport-api-types`:
     - extend response/frame types to transport `process_events` (greenfield; lockstep updates; breaking allowed)
   - `crates/shell`:
     - parse `process_events` from responses/Exit frames
@@ -375,7 +375,7 @@ Any record intended to trigger routing or cross-component attribution MUST carry
   - Actions:
     - execute command inside world
     - capture exec/exit events for the process tree
-    - return events to host via world-agent API
+    - return events to host via world-service API
     - append events to `trace.jsonl`
   - Outputs:
     - process event records co-located with spans for deterministic reconstruction
@@ -404,7 +404,7 @@ Any record intended to trigger routing or cross-component attribution MUST carry
   - shared argv redaction covers “flag consumes next arg” patterns and `--flag=value` patterns
   - env redaction strips credentials from URL-like values and redacts obvious secret keys
   - span parent linkage: no self-parent spans; stack discipline restores prior parent span
-- Integration tests (world-agent):
+- Integration tests (world-service):
   - child spawn parity:
     - run a deterministic child-spawning command and assert at least two processes are observed with correct parent relationships and exit metadata
   - wrapper-based execution:
@@ -422,7 +422,7 @@ Any record intended to trigger routing or cross-component attribution MUST carry
 
 ## Rollout / Backwards Compatibility
 - Policy: greenfield breaking is allowed
-- Backwards compatibility: not a goal for this ADR. Host + world-agent + API types are updated in lockstep; breaking changes are allowed.
+- Backwards compatibility: not a goal for this ADR. Host + world-service + API types are updated in lockstep; breaking changes are allowed.
 - Trace volume increase is expected; bounded by caps and truncation summaries.
 
 ## Decision Summary

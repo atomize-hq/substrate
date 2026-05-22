@@ -60,7 +60,7 @@ Horizon policy for this extracted pack:
   - **Direct consumers**: `SEAM-4`
   - **Derived consumers**: shell builtins, shared agent API clients, parity docs, and quality-gate evidence
   - **Thread IDs**: `THR-04`
-  - **Definition**: the typed world-agent lifecycle/status contract and the Linux/macOS/Windows parity guarantees that let CLI behavior stay stable without raw exec probing or platform-specific operator contracts.
+  - **Definition**: the typed world-service lifecycle/status contract and the Linux/macOS/Windows parity guarantees that let CLI behavior stay stable without raw exec probing or platform-specific operator contracts.
   - **Canonical contract ref**: `docs/contracts/substrate-gateway-runtime-parity.md`
   - **Versioning / compat**: endpoint ownership, lifecycle/status semantics, allowed divergence, and required validation evidence must stay synchronized across host and backend consumers.
 
@@ -102,8 +102,8 @@ Horizon policy for this extracted pack:
   - **Carried contract IDs**: `C-04`
   - **Purpose**: publish the typed lifecycle/status transport and parity evidence contract that cross-doc validation and quality-gate work will lock in.
   - **State**: `revalidated`
-  - **Revalidation trigger**: typed world-agent endpoint shape, shell/client integration path, allowed divergence list, or Linux/macOS/Windows evidence requirements change.
-  - **Satisfied by**: `governance/seam-3-closeout.md` records the landed `C-04` publication, the S1 typed runtime boundary in `8c0bd439`, the S2 parity evidence update in `4511b3a5`, the durable contract mirror in `docs/contracts/substrate-gateway-runtime-parity.md`, and the targeted verification reruns for the shared client, the `gateway_runtime_parity` target-local route-shape tests, and the shell gateway tests; host-local runtime-dependent `world-agent` cases self-skipped outside Linux/VM support. `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` revalidates that handoff for the active conformance seam.
+  - **Revalidation trigger**: typed world-service endpoint shape, shell/client integration path, allowed divergence list, or Linux/macOS/Windows evidence requirements change.
+  - **Satisfied by**: `governance/seam-3-closeout.md` records the landed `C-04` publication, the S1 typed runtime boundary in `8c0bd439`, the S2 parity evidence update in `4511b3a5`, the durable contract mirror in `docs/contracts/substrate-gateway-runtime-parity.md`, and the targeted verification reruns for the shared client, the `gateway_runtime_parity` target-local route-shape tests, and the shell gateway tests; host-local runtime-dependent `world-service` cases self-skipped outside Linux/VM support. `threaded-seams/seam-4-validation-and-cross-doc-lock-in/review.md` revalidates that handoff for the active conformance seam.
   - **Notes**: this thread now carries the revalidated typed lifecycle/status and parity-evidence contract into `SEAM-4`. Provisioning changes remain out of scope for this pack and were not pulled into the published contract.
 
 ## Dependency graph
@@ -144,7 +144,7 @@ flowchart LR
   - Focus: `status --json`, `client_wiring.*`, fail-closed policy flow, secret-delivery trust boundary
 - **Typed runtime and parity lane**
   - Primary seam: `SEAM-3`
-  - Focus: typed world-agent lifecycle/status transport, shared client wiring, Linux/macOS/Windows guarantees
+  - Focus: typed world-service lifecycle/status transport, shared client wiring, Linux/macOS/Windows guarantees
 - **Conformance and checkpoint lane**
   - Primary seam: `SEAM-4`
   - Focus: manual validation, docs alignment, plan/task wiring, checkpoint evidence, pack quality gate

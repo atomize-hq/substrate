@@ -7,5 +7,5 @@ This section complements the operator-facing config contract in `docs/reference/
 ## Documents
 
 - `docs/internals/config/world_root_and_caging.md`: how `world.anchor_mode`, `world.anchor_path`, and `world.caged` flow
-  through the shell → world-agent → world backend (including persistent-session behavior).
+  through the shell → world-service → world backend (including persistent-session behavior).
 

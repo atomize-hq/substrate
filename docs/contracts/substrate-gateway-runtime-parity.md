@@ -18,7 +18,7 @@ Concrete rules:
 
 - Shell/operator entrypoints consume a typed runtime surface; they must not rebuild gateway state via raw exec probing, backend-private config files, or log scraping.
 - `crates/shell/src/builtins/world_gateway.rs` and later shell execution wiring are consumers of that typed surface. They may render operator output and exit codes, but they do not own runtime truth.
-- The typed runtime surface is owned by the world/backend boundary: `crates/world-agent`, shared request/response models in `crates/agent-api-types`, and transport helpers in `crates/agent-api-client`.
+- The typed runtime surface is owned by the world/backend boundary: `crates/world-service`, shared request/response models in `crates/transport-api-types`, and transport helpers in `crates/transport-api-client`.
 - Non-isolated gateway lifecycle/status flows must not depend on reusable session-world creation or recovery when no world-backed isolation is required for the gateway runtime. In that posture, the typed runtime surface may use a stable synthetic runtime identity derived from the effective lifecycle binding inputs.
 - Isolated gateway lifecycle/status flows must continue to require a real compatible world/session identity and any required world-backed attachment primitives.
 - `substrate world gateway status --json` remains governed by `docs/contracts/substrate-gateway-status-schema.md`; this contract may not widen the JSON field list or redefine `client_wiring.*`.
@@ -35,7 +35,7 @@ Concrete rules:
 - On Linux and the macOS Lima guest path, the managed runtime artifact boundary is the `substrate` group: runtime directories remain `0750`, runtime files remain `0640`, and these artifacts must not rely on world-readable permissions.
 - Platform transport and bootstrap mechanics may differ only in the hidden backend layer:
   - Linux uses direct Unix socket transport to `/run/substrate.sock`.
-  - macOS uses Lima-backed forwarding to the guest `world-agent`.
+  - macOS uses Lima-backed forwarding to the guest `world-service`.
   - Windows uses the WSL-backed forwarder path, with named-pipe or TCP bridge transport as needed.
 - Platform-specific provisioning helpers, doctor flows, and socket/forwarder mechanics are verification evidence, not separate operator contracts.
 - Base URLs discovered through `status --json` or the stable env exports remain intended for in-world reachability, not as a guarantee of direct host reachability.
@@ -57,10 +57,10 @@ The later execution slices must keep the runtime/parity contract aligned across 
 
 - `crates/shell/src/builtins/world_gateway.rs`
 - `crates/shell/tests/world_gateway.rs`
-- `crates/world-agent/src/lib.rs`
-- `crates/world-agent/src/gateway_runtime.rs`
-- `crates/world-agent/tests/socket_activation.rs`
-- `crates/agent-api-types/src/lib.rs`
-- `crates/agent-api-client/src/lib.rs`
+- `crates/world-service/src/lib.rs`
+- `crates/world-service/src/gateway_runtime.rs`
+- `crates/world-service/tests/socket_activation.rs`
+- `crates/transport-api-types/src/lib.rs`
+- `crates/transport-api-client/src/lib.rs`
 - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`
 - `docs/WORLD.md`

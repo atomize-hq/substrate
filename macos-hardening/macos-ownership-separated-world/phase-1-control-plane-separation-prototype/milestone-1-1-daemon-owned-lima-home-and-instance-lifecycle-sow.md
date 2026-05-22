@@ -29,7 +29,7 @@ first break that ownership pattern before transport changes mean anything.
   invokes `limactl`.
 - Update install, dev-install, world-enable, and uninstall planning so they
   manage daemon-owned state rather than same-user instance state.
-- Decide how guest-side `substrate-world-agent` and `substrate-gateway`
+- Decide how guest-side `substrate-world-service` and `substrate-gateway`
   binaries are staged and verified under the new owner model.
 
 ## Out-of-Scope
@@ -92,7 +92,7 @@ attempting in-place adoption of a user-owned `~/.lima/substrate` tree.
 - `scripts/substrate/uninstall-substrate.sh`
   Replace direct `limactl stop/delete substrate` assumptions with daemon-owned
   teardown.
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
   Confirm how the new owner model installs or verifies gateway runtime launch
   prerequisites before gateway lifecycle calls are attempted.
 

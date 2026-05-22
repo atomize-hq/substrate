@@ -114,5 +114,5 @@ Provisioning-time APT must be able to mutate guest OS packages without weakening
 **Surfaces impacted (must implement this selection)**
 
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md` (platform/backends support matrix + explicit profile/env relationship)
-- `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md` (world-agent request construction + guard rails)
+- `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP0/WDAP0-spec.md` (world-service request construction + guard rails)
 - `docs/project_management/packs/draft/world-deps-apt-provisioning/slices/WDAP1/WDAP1-spec.md` (runtime prohibition + remediation invariants)

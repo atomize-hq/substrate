@@ -3044,7 +3044,7 @@ fn build_world_probe_script(checks: &[PackageWorldCheck]) -> String {
     script
 }
 
-fn run_world_command_for_deps(cmd: &str) -> Result<agent_api_types::ExecuteResponse> {
+fn run_world_command_for_deps(cmd: &str) -> Result<transport_api_types::ExecuteResponse> {
     run_world_command_for_deps_at(cmd, None, None)
 }
 
@@ -3052,7 +3052,7 @@ fn run_world_command_for_deps_at(
     cmd: &str,
     cwd_override: Option<&str>,
     profile_override: Option<&str>,
-) -> Result<agent_api_types::ExecuteResponse> {
+) -> Result<transport_api_types::ExecuteResponse> {
     let (client, mut request, _) = build_agent_client_and_request(cmd)?;
     // Runtime world-deps execution uses a dedicated internal profile so read-only probes and
     // world-deps wrapper installs can run on runners that block unprivileged user namespaces,
@@ -3077,7 +3077,7 @@ fn run_world_command_for_deps_at(
         client
             .execute(request)
             .await
-            .context("world-agent /v1/execute request failed")
+            .context("world-service /v1/execute request failed")
     })?;
     Ok(response)
 }
@@ -3121,7 +3121,7 @@ fn looks_like_world_backend_unavailable(err: &anyhow::Error) -> bool {
     let mut current: Option<&(dyn StdError + 'static)> = Some(err.as_ref());
     while let Some(err) = current {
         let message = err.to_string();
-        if message.contains("world-agent")
+        if message.contains("world-service")
             || message.contains("platform world context")
             || message.contains("world backend")
             || message.contains("connect UDS")

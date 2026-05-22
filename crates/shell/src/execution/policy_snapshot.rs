@@ -1,8 +1,3 @@
-use agent_api_types::{
-    validate_net_allowed_for_enforcement, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
-    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
-    WorldFsDenyEnforcementV3,
-};
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
@@ -14,6 +9,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::SystemTime;
 use substrate_common::WorldFsMode;
+use transport_api_types::{
+    validate_net_allowed_for_enforcement, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    WorldFsDenyEnforcementV3,
+};
 use world_api::{ResourceLimits, WorldReuseMode, WorldSpec};
 
 const WORLD_FS_ENFORCEMENT_PLAN_B64_ENV: &str = "SUBSTRATE_WORLD_FS_ENFORCEMENT_PLAN_B64";
@@ -184,8 +184,8 @@ pub(crate) fn bootstrap_world_spec(project_dir: PathBuf, fs_mode: WorldFsMode) -
 
 pub(crate) fn request_world_network_routing(
     network_policy: &ResolvedWorldNetworkPolicy,
-) -> agent_api_types::WorldNetworkRoutingV1 {
-    agent_api_types::WorldNetworkRoutingV1 {
+) -> transport_api_types::WorldNetworkRoutingV1 {
+    transport_api_types::WorldNetworkRoutingV1 {
         isolate_network: network_policy.isolate_network,
         allowed_domains: network_policy.allowed_domains.clone(),
     }

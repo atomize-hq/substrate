@@ -58,7 +58,7 @@ open_remediations: []
     - disabled-mode shim operator contract (`C-04`)
 - **Key invariants / rules**:
   - Disabled mode must not spawn `substrate world doctor --json`
-  - Disabled mode must not make world-agent socket/pipe calls for diagnostics
+  - Disabled mode must not make world-service socket/pipe calls for diagnostics
   - Disabled mode must not compute world-deps applied state
   - Disabled mode must publish `.world.status = "disabled"` and `.world_deps.status = "skipped_disabled"`
   - Disabled mode must omit probe-derived `world.error`, `world.details`, `world_deps.error`, and `world_deps.report`

@@ -150,7 +150,7 @@ Secondary reference surfaces likely touched by downstream execution:
 - `crates/world-mac-lima/src/lib.rs`
 - `crates/world-mac-lima/src/forwarding.rs`
 - `crates/world-mac-lima/src/transport.rs`
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
 
 ## Milestones
 

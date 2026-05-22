@@ -20,13 +20,13 @@ Align replay network routing with the current world netfilter posture.
 ## 3. Why not ADR
 
 - This is parity and maintenance work, not a new architectural fork.
-- The current shell and world-agent contract already defines when network isolation is requested: effective `world.net.filter` plus canonical restrictive `policy_snapshot.net_allowed`.
+- The current shell and world-service contract already defines when network isolation is requested: effective `world.net.filter` plus canonical restrictive `policy_snapshot.net_allowed`.
 - The gap is that replay currently bypasses that contract in two places instead of consuming it consistently.
 - If the team wants replay to intentionally diverge from normal world execution semantics, that would warrant an ADR. This WI assumes the desired direction is parity with the shipped contract.
 
 ## 4. Task definition (bounded)
 
-- Make replay derive and honor world network routing using the same effective-policy and config semantics as the main shell/world-agent path.
+- Make replay derive and honor world network routing using the same effective-policy and config semantics as the main shell/world-service path.
 - Eliminate the current replay drift where:
   - local world-backend replay hardcodes `isolate_network: true`
   - local world-backend replay uses `substrate_broker::allowed_domains()` directly
@@ -131,7 +131,7 @@ Triggers:
 
 - Should replay import the existing shell helper as-is via a small visibility/shared-module refactor, or should the routing logic move to a more neutral shared home?
   - Recommended default: extract the minimal shared helper and keep replay thin.
-- Should replay preserve any intentional distinction between local fallback netns behavior and agent/world-agent routing, or should the request-construction contract be fully unified even if the underlying fallback mechanisms still differ?
+- Should replay preserve any intentional distinction between local fallback netns behavior and agent/world-service routing, or should the request-construction contract be fully unified even if the underlying fallback mechanisms still differ?
   - Recommended default: unify request construction and policy derivation; runtime fallback mechanics can remain implementation-specific.
 - Do we want replay-specific doctor or trace assertions as part of this work, or is routing parity coverage enough for the first pass?
   - Recommended default: routing parity tests first, observability expansion only if the implementation naturally touches those surfaces.

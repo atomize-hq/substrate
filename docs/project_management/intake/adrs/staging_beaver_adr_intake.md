@@ -27,7 +27,7 @@ Stabilize dev-install helper discovery under `$SUBSTRATE_HOME` (reduce coupling 
 
 - Production installs stage a complete bundle into `~/.substrate/versions/<version>/` (with `bin/`, `scripts/`, `config/`) and then link `~/.substrate/bin/*` into that version dir.
 - Dev installs (`scripts/substrate/dev-install-substrate.sh`) currently link `~/.substrate/bin/substrate` directly to `<repo>/target/<profile>/substrate`, which makes the inferred “version dir” become `<repo>/target/` (via canonicalization).
-- This couples runtime helper discovery (e.g., `substrate world enable` helper path) and artifact expectations (e.g., `bin/linux/world-agent`) to `<repo>/target/*` conventions rather than Substrate home.
+- This couples runtime helper discovery (e.g., `substrate world enable` helper path) and artifact expectations (e.g., `bin/linux/world-service`) to `<repo>/target/*` conventions rather than Substrate home.
 - The coupling creates sharp edges for “install with `--no-world`, enable later”, for multi-repo setups, and for users who clean `target/` frequently.
 
 ## 4. Proposed Outcome
@@ -101,7 +101,7 @@ Concrete on-disk expectations:
 
 **Cons**
 - Still leaves version-dir inference pointing into `<repo>/target/`.
-- Doesn’t solve other `<repo>/target/` coupling (e.g., expecting `bin/linux/world-agent` under `<repo>/target/` for provisioning).
+- Doesn’t solve other `<repo>/target/` coupling (e.g., expecting `bin/linux/world-service` under `<repo>/target/` for provisioning).
 
 **Risk notes**
 - Might not fully solve downstream tooling that assumes “version dir” semantics.

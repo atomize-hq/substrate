@@ -27,26 +27,26 @@ ADR_BODY_SHA256: aac6d834bacc2c3ee4699c19512380a00740ed494d50998c519ef5b493d4494
 ### Changes (operator-facing)
 - Split doctor into host vs world scopes (without requiring a guest-installed `substrate` CLI)
   - Existing: `substrate world doctor` is host-oriented on macOS (Lima/transport/service checks) and kernel-oriented on Linux (overlay/nft/cgroup + Landlock probe). On macOS it cannot report guest-kernel facts like Landlock ABI/support without manually running commands inside the VM.
-  - New: `substrate host doctor` reports host/transport readiness only. `substrate world doctor` reports world-agent / in-world readiness by querying the world-agent for a structured “world doctor” report; it includes guest-kernel facts (e.g., Landlock support/ABI) on macOS without depending on a guest-installed `substrate` binary.
-  - Why: Operators need one canonical “is isolation actually enforceable right now?” answer. On macOS, that answer lives in the Lima guest kernel + world-agent, not on the host.
+  - New: `substrate host doctor` reports host/transport readiness only. `substrate world doctor` reports world-service / in-world readiness by querying the world-service for a structured “world doctor” report; it includes guest-kernel facts (e.g., Landlock support/ABI) on macOS without depending on a guest-installed `substrate` binary.
+  - Why: Operators need one canonical “is isolation actually enforceable right now?” answer. On macOS, that answer lives in the Lima guest kernel + world-service, not on the host.
   - Links:
     - `crates/shell/src/execution/platform/macos.rs` (current macOS doctor is host/transport/service oriented)
     - `crates/shell/src/execution/platform/linux.rs` (current Linux doctor probes Landlock + kernel prereqs)
-    - `crates/world-agent/src/service.rs` (agent capabilities + request handling)
+    - `crates/world-service/src/service.rs` (agent capabilities + request handling)
     - `docs/WORLD.md` (current framing of `world doctor`)
     - `docs/COMMANDS.md` (command matrix; needs update)
 
 ## Problem / Context
-- On macOS, Substrate world execution runs inside a Lima guest (Linux world-agent). Many correctness/security facts (Landlock ABI/support, mount namespace behavior, overlay viability in the guest) are properties of the guest kernel and the world-agent service privileges.
+- On macOS, Substrate world execution runs inside a Lima guest (Linux world-service). Many correctness/security facts (Landlock ABI/support, mount namespace behavior, overlay viability in the guest) are properties of the guest kernel and the world-service service privileges.
 - Today’s `substrate world doctor` on macOS is necessarily host-centric (Lima installed, VM running, forwarding path, service/socket active), and does not report guest-kernel enforcement readiness (e.g. Landlock).
 - Operators currently work around this by manually running commands inside the guest (e.g. `limactl shell substrate ...`), which is brittle and may require a guest-installed `substrate` binary (dev-installer quirk), and can produce misleading failures when run as an unprivileged guest user (socket permissions, mount EPERM).
 
 ## Goals
 - Introduce a clear, user-facing split:
   - `substrate host doctor`: host/transport/service readiness only.
-  - `substrate world doctor`: “in-world” readiness from the world-agent perspective (guest kernel + service privileges), without requiring a guest-installed `substrate` CLI.
+  - `substrate world doctor`: “in-world” readiness from the world-service perspective (guest kernel + service privileges), without requiring a guest-installed `substrate` CLI.
 - Make macOS `substrate world doctor` report guest-kernel facts that matter for enforcement (at minimum: Landlock support/ABI and the active FS strategy probe outcome).
-- Keep Linux behavior strong and understandable: Linux should continue to surface Landlock support and overlay strategy diagnostics, but in a way that distinguishes host prerequisites from world-agent enforcement readiness.
+- Keep Linux behavior strong and understandable: Linux should continue to surface Landlock support and overlay strategy diagnostics, but in a way that distinguishes host prerequisites from world-service enforcement readiness.
 - Preserve JSON output stability for automation by introducing new, explicitly-scoped JSON shapes rather than overloading ambiguous fields.
 
 ## Non-Goals
@@ -65,11 +65,11 @@ ADR_BODY_SHA256: aac6d834bacc2c3ee4699c19512380a00740ed494d50998c519ef5b493d4494
   - macOS:
     - Reports Lima installation and host virtualization support.
     - Reports VM running status and forwarding/agent socket reachability (capabilities probe).
-    - MUST NOT attempt to infer guest-kernel primitives (Landlock ABI/support) except via explicit world-agent reported fields.
+    - MUST NOT attempt to infer guest-kernel primitives (Landlock ABI/support) except via explicit world-service reported fields.
 - `substrate world doctor [--json]`
-  - Purpose: Report “in-world readiness” from the world-agent’s perspective (guest kernel + agent privileges).
+  - Purpose: Report “in-world readiness” from the world-service’s perspective (guest kernel + agent privileges).
   - Behavior:
-    - MUST query the world-agent for a structured “world doctor” report over the active transport.
+    - MUST query the world-service for a structured “world doctor” report over the active transport.
     - MUST NOT depend on `substrate` being installed in the guest.
     - MUST include the `host` doctor summary (host/transport readiness) and the `world` doctor summary (agent-reported readiness) as separate JSON blocks.
   - Output:
@@ -81,14 +81,14 @@ Exit codes:
 - `0`: doctor report `ok=true` (all required checks passed)
 - `1`: unexpected internal error (bug, panic, unhandled I/O)
 - `2`: CLI usage/config error (invalid flags/args)
-- `3`: required dependency unavailable (world enabled, transport prerequisites present, but world-agent unreachable)
+- `3`: required dependency unavailable (world enabled, transport prerequisites present, but world-service unreachable)
 - `4`: not supported / missing prerequisites (platform unsupported; world disabled; world not provisioned; or agent reachable but cannot enforce required primitives)
 
 Discriminator for exit `3` vs `4` when world is enabled:
 - Exit `4` when transport prerequisites are not satisfied (not provisioned):
   - Linux: agent socket path does not exist (`host.world_socket.socket_exists==false`)
   - macOS: Lima prerequisites are not satisfied (`host.lima.installed==false`, `host.lima.virtualization==false`, `host.lima.vm_status!="Running"`, or `host.lima.service_active==false`)
-- Exit `3` when transport prerequisites above are satisfied but the world-agent request fails (connect/probe/HTTP failure).
+- Exit `3` when transport prerequisites above are satisfied but the world-service request fails (connect/probe/HTTP failure).
 
 ### Config
 - No new configuration keys are introduced by default.
@@ -109,22 +109,22 @@ Discriminator for exit `3` vs `4` when world is enabled:
   - Update the `world doctor` routing to include “world scope” behavior.
 - `crates/shell/src/execution/platform/macos.rs`
   - Extract the existing macOS doctor into a “host doctor” implementation.
-  - Add a client call to the world-agent “world doctor” endpoint and render it.
+  - Add a client call to the world-service “world doctor” endpoint and render it.
 - `crates/shell/src/execution/platform/linux.rs`
   - Keep existing host-kernel probing behavior as the host doctor implementation.
-  - Add the world-agent “world doctor” client call and render it for `substrate world doctor`.
-- `crates/world-agent/src/service.rs` (+ API types)
+  - Add the world-service “world doctor” client call and render it for `substrate world doctor`.
+- `crates/world-service/src/service.rs` (+ API types)
   - Add a structured “world doctor” report endpoint that returns:
     - Landlock support/ABI (guest kernel)
     - Filesystem strategy probe status/reason (agent view)
     - Any other agent-side prerequisites required to enforce `world_fs` policy
-- `crates/agent-api-types` / `crates/agent-api-client`
+- `crates/transport-api-types` / `crates/transport-api-client`
   - Add request/response models and client methods for the new endpoint.
 
 ### End-to-end flow
 - Inputs:
   - Host platform (linux/macos/windows)
-  - Active transport to world-agent (UDS on Linux; forwarded socket on macOS)
+  - Active transport to world-service (UDS on Linux; forwarded socket on macOS)
 - Derived state:
   - Host readiness summary (`substrate host doctor`)
   - World readiness summary via agent endpoint (`substrate world doctor`)
@@ -152,7 +152,7 @@ Discriminator for exit `3` vs `4` when world is enabled:
 - Add unit/integration coverage for:
   - CLI parsing: `substrate host doctor` and `substrate world doctor` wiring.
   - JSON contract: stable `host`/`world` blocks and top-level `ok`.
-  - Agent endpoint schema round-trip via `agent-api-types`.
+  - Agent endpoint schema round-trip via `transport-api-types`.
 
 ### Manual validation
 - macOS:

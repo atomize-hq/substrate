@@ -44,7 +44,7 @@ open_remediations: []
     - production layout changes under `$SUBSTRATE_HOME/versions/...`
     - new config keys, config precedence, or environment-precedence rules
     - Windows behavior enablement
-    - ADR-0035 world-agent staging or full macOS bundle parity
+    - ADR-0035 world-service staging or full macOS bundle parity
 - **Primary interfaces**
   - Inputs:
     - `scripts/substrate/dev-install-substrate.sh --prefix/--profile --no-world --no-shims`

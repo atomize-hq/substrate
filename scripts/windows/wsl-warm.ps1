@@ -54,7 +54,7 @@ function Install-GuestWorldBinaries {
     )
 
     if ($ProjectHasCargo) {
-        Write-Info "Building world-agent and substrate-gateway (release) inside WSL"
+        Write-Info "Building world-service and substrate-gateway (release) inside WSL"
         $projectPathQuoted = Quote-ForBash $ProjectPathWsl
         $buildScript = @"
 set -euo pipefail
@@ -62,27 +62,27 @@ if [ -f ~/.cargo/env ]; then
   . ~/.cargo/env
 fi
 cd $projectPathQuoted
-cargo build -p world-agent -p substrate-gateway --release
-sudo install -m755 target/release/world-agent /usr/local/bin/substrate-world-agent
+cargo build -p world-service -p substrate-gateway --release
+sudo install -m755 target/release/world-service /usr/local/bin/substrate-world-service
 sudo install -m755 target/release/substrate-gateway /usr/local/bin/substrate-gateway
-sudo systemctl restart substrate-world-agent.service
+sudo systemctl restart substrate-world-service.service
 "@
         $buildScript = $buildScript -replace "`r", ""
         & wsl -d $DistroName -- bash -lc $buildScript
         if ($LASTEXITCODE -ne 0) {
-            Write-ErrorAndExit "Failed to build/install world-agent and substrate-gateway inside WSL"
+            Write-ErrorAndExit "Failed to build/install world-service and substrate-gateway inside WSL"
         }
         return
     }
 
-    Write-Info "Installing packaged world-agent and substrate-gateway into WSL"
-    $agentFragment = Convert-ToWslPathFragment (Join-Path $ProjectPath 'bin\\linux\\world-agent')
+    Write-Info "Installing packaged world-service and substrate-gateway into WSL"
+    $agentFragment = Convert-ToWslPathFragment (Join-Path $ProjectPath 'bin\\linux\\world-service')
     $gatewayFragment = Convert-ToWslPathFragment (Join-Path $ProjectPath 'bin\\linux\\substrate-gateway')
     $agentPath = Quote-ForBash "/mnt/c/$agentFragment"
     $gatewayPath = Quote-ForBash "/mnt/c/$gatewayFragment"
-    & wsl -d $DistroName -- bash -lc "set -euo pipefail; sudo install -m755 ${agentPath} /usr/local/bin/substrate-world-agent; sudo install -m755 ${gatewayPath} /usr/local/bin/substrate-gateway; sudo systemctl restart substrate-world-agent.service"
+    & wsl -d $DistroName -- bash -lc "set -euo pipefail; sudo install -m755 ${agentPath} /usr/local/bin/substrate-world-service; sudo install -m755 ${gatewayPath} /usr/local/bin/substrate-gateway; sudo systemctl restart substrate-world-service.service"
     if ($LASTEXITCODE -ne 0) {
-        Write-ErrorAndExit "Failed to install packaged world-agent and substrate-gateway"
+        Write-ErrorAndExit "Failed to install packaged world-service and substrate-gateway"
     }
 }
 
@@ -93,12 +93,12 @@ Write-Info "Project path: $projectPath"
 Write-ErrorAndExit "WSL world provisioning is intentionally fail-closed in this slice because the WSL helper path is not aligned with the Linux/macOS placement contract for SUBSTRATE_HOME placement, socket/group ownership, and runtime artifact access. Use Linux host-native provisioning, macOS Lima provisioning, or a CLI-only WSL install with --no-world instead." 4
 
 $projectHasCargo = Test-Path (Join-Path $projectPath 'Cargo.toml')
-$packagedWorldAgent = Join-Path $projectPath 'bin\\linux\\world-agent'
+$packagedWorldAgent = Join-Path $projectPath 'bin\\linux\\world-service'
 $packagedGateway = Join-Path $projectPath 'bin\\linux\\substrate-gateway'
 $usesBundledArtifacts = -not $projectHasCargo
 
 if (-not $projectHasCargo -and (-not (Test-Path $packagedWorldAgent) -or -not (Test-Path $packagedGateway))) {
-    Write-ErrorAndExit "Project path must contain Cargo.toml or packaged bin\\linux\\world-agent and bin\\linux\\substrate-gateway artifacts"
+    Write-ErrorAndExit "Project path must contain Cargo.toml or packaged bin\\linux\\world-service and bin\\linux\\substrate-gateway artifacts"
 }
 
 $cargoCandidates = @()
@@ -234,7 +234,7 @@ $projectPathWsl = "/mnt/c/$projectPathFragment"
 
 $guestWorldAgentInstalled = $false
 $guestGatewayInstalled = $false
-try { $guestWorldAgentInstalled = Test-GuestExecutablePresent -DistroName $DistroName -Path '/usr/local/bin/substrate-world-agent' } catch {}
+try { $guestWorldAgentInstalled = Test-GuestExecutablePresent -DistroName $DistroName -Path '/usr/local/bin/substrate-world-service' } catch {}
 try { $guestGatewayInstalled = Test-GuestExecutablePresent -DistroName $DistroName -Path '/usr/local/bin/substrate-gateway' } catch {}
 
 Write-Info "Preflight agent health check"
@@ -260,8 +260,8 @@ if (-not $isHealthy -or $forceRebuild) {
     Install-GuestWorldBinaries -DistroName $DistroName -ProjectPathWsl $projectPathWsl -ProjectHasCargo:$projectHasCargo -ProjectPath $projectPath
 
     # Ensure systemd units are enabled
-    Write-Info "Ensuring substrate-world-agent service and socket are enabled"
-    & wsl -d $DistroName -- bash -lc "sudo systemctl daemon-reload && sudo systemctl enable substrate-world-agent.service && sudo systemctl enable --now substrate-world-agent.socket && sudo systemctl restart substrate-world-agent.service"
+    Write-Info "Ensuring substrate-world-service service and socket are enabled"
+    & wsl -d $DistroName -- bash -lc "sudo systemctl daemon-reload && sudo systemctl enable substrate-world-service.service && sudo systemctl enable --now substrate-world-service.socket && sudo systemctl restart substrate-world-service.service"
     if ($LASTEXITCODE -ne 0) {
         Write-ErrorAndExit "Failed to enable/restart agent units"
     }

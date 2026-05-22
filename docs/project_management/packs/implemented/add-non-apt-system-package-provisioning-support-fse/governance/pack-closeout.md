@@ -20,7 +20,7 @@ Scaffold only. This file is seeded during extraction and should be completed onl
   - `THR-05`
 - **Downstream stale triggers still requiring attention**:
   - shared CLI/runtime wording drift across ADR-0033, the APT pack, and the bundles contract
-  - shared-file overlap in `world_enable` and `world-agent`
+  - shared-file overlap in `world_enable` and `world-service`
   - runtime docs/tests drifting back toward mutation-at-runtime semantics
   - macOS manual Arch fixture assumptions changing without corresponding validation updates
 - **Evidence summary**:

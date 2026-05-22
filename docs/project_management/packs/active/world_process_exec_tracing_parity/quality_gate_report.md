@@ -457,7 +457,7 @@ rg -n "## 3\\) World process event family" "$FEATURE_DIR/SCHEMA.md"
 - Evidence:
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/PROTOCOL.md` lists `ts_unix_ns` as a required base field for ProcessEvent.
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md` required field list for `world_process_*` does not include `ts_unix_ns`.
-- Impact: Implementers do not have a single authoritative “required fields” set for world process events; this increases the risk of drift between world-agent payloads and persisted trace records.
+- Impact: Implementers do not have a single authoritative “required fields” set for world process events; this increases the risk of drift between world-service payloads and persisted trace records.
 - Fix required (exact):
   - Either (A) add `ts_unix_ns` to the required fields list in `docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md`, or
   - (B) change `docs/project_management/packs/active/world_process_exec_tracing_parity/PROTOCOL.md` to make `ts_unix_ns` explicitly optional and document whether it must/must-not be persisted into `trace.jsonl`.

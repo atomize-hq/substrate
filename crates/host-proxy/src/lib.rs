@@ -2,9 +2,9 @@
 //!
 //! This crate provides the host-side HTTP/WebSocket server that:
 //! - Binds to ~/.substrate/sock/agent.sock
-//! - Forwards requests to world-agent via agent-api-client
+//! - Forwards requests to world-service via transport-api-client
 //! - Adds middleware for auth, rate limiting, and budgets
-//! - Uses the same schema from agent-api-types
+//! - Uses the same schema from transport-api-types
 
 pub mod auth;
 pub mod middleware;

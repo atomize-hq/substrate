@@ -63,12 +63,12 @@ Authoring standards:
 - `docs/contracts/substrate-gateway-runtime-parity.md`
 - `docs/CONFIGURATION.md`
 - `docs/USAGE.md`
-- `crates/agent-api-types/src/lib.rs`
+- `crates/transport-api-types/src/lib.rs`
 - `crates/shell/src/builtins/world_gateway.rs`
 - `crates/shell/tests/world_gateway.rs`
-- `crates/world-agent/src/gateway_runtime.rs`
-- `crates/world-agent/src/service.rs`
-- `crates/world-agent/tests/gateway_runtime_parity.rs`
+- `crates/world-service/src/gateway_runtime.rs`
+- `crates/world-service/src/service.rs`
+- `crates/world-service/tests/gateway_runtime_parity.rs`
 - `crates/gateway/src/auth/`
 - `crates/gateway/src/providers/`
 - `crates/gateway/tests/`
@@ -88,7 +88,7 @@ Authoring standards:
   - `status` stops reporting generic gateway availability for unsupported integrated selections when integrated gateway mode is enabled. It reports the selected-backend outcome.
 - Cascading impact:
   - `crates/shell/src/builtins/world_gateway.rs` must stop returning `None` for every non-`cli:codex` backend in `resolve_integrated_auth_payload`.
-  - `crates/world-agent/src/gateway_runtime.rs` must stop rejecting every backend other than `cli:codex` in `GatewayControlSettings::from_request_env` and `render_integrated_config`.
+  - `crates/world-service/src/gateway_runtime.rs` must stop rejecting every backend other than `cli:codex` in `GatewayControlSettings::from_request_env` and `render_integrated_config`.
   - `crates/shell/tests/world_gateway.rs` cases that treat `api:openai` as a generic available status path must move to the new classification matrix: supported backend, blocked backend, invalid backend, missing inventory, missing adapter, and missing auth.
 - Contradiction risks:
   - Silent collapse back to the Codex template would violate ADR-0046 and ADR-0041.
@@ -102,7 +102,7 @@ Authoring standards:
 - Cascading impact:
   - `filesystem-semantics-spec.md` must define the exact global and workspace inventory roots, filename rules, absence semantics, and generated runtime artifact paths.
   - `docs/CONFIGURATION.md` must publish the operator-facing discovery path for the backend inventory roots and the rule that gateway-local persistence does not authorize execution.
-  - `crates/world-agent/src/service.rs` and `crates/world-agent/src/gateway_runtime.rs` must agree on where inventory lookup happens so `status`, `sync`, and `restart` share one resolution order.
+  - `crates/world-service/src/service.rs` and `crates/world-service/src/gateway_runtime.rs` must agree on where inventory lookup happens so `status`, `sync`, and `restart` share one resolution order.
 - Contradiction risks:
   - The current repo documents agent inventory roots and deps inventory roots, but it does not publish backend inventory roots. Leaving that gap open would make the ADR claim inventory-backed realization without an operator discoverability path.
   - Treating gateway-local config files as the inventory source would violate `docs/contracts/substrate-gateway-policy-evaluation.md`.
@@ -111,9 +111,9 @@ Authoring standards:
 - Direct impact:
   - `GatewayCliCodexIntegratedAuthV1`, `GatewayIntegratedAuthPayloadV1`, and `GatewayRuntimeStartContext.integrated_auth` no longer describe the full integrated auth surface.
   - The shell path must source auth material per backend using the existing gates: `llm.secrets.env_allowed` and `agents.host_credentials.read.allowed_backends`.
-  - The world-agent path must validate adapter-owned auth handoff kinds fail-closed before launch.
+  - The world-service path must validate adapter-owned auth handoff kinds fail-closed before launch.
 - Cascading impact:
-  - `crates/agent-api-types/src/lib.rs` must widen the integrated auth payload model.
+  - `crates/transport-api-types/src/lib.rs` must widen the integrated auth payload model.
   - `crates/shell/src/builtins/world_gateway.rs` must classify missing env reads, blocked env reads, blocked host credential reads, incomplete handoff payloads, and unsupported handoff kinds into the existing exit-code buckets.
   - `crates/gateway/src/auth/`, `crates/gateway/src/providers/`, and `crates/gateway/tests/` enter the touch set because the integrated gateway consumer side is Codex-shaped today.
 - Contradiction risks:
@@ -129,7 +129,7 @@ Authoring standards:
 - Cascading impact:
   - `gateway-runtime-adapter-protocol-spec.md` must define the exact order: selection passed in, adapter lookup, capability gate, auth resolution, config render, launch, readiness probe, restart.
   - `gateway-runtime-adapter-schema-spec.md` must define binding metadata, capability-set metadata, auth payload variants, config payload variants, and failure shapes.
-  - `crates/world-agent/tests/gateway_runtime_parity.rs` must move from the current Codex-only fixture to one matrix with at least one additional supported backend.
+  - `crates/world-service/tests/gateway_runtime_parity.rs` must move from the current Codex-only fixture to one matrix with at least one additional supported backend.
 - Contradiction risks:
   - Reusing the adapter contract docs as implementation notes without freezing the integrated lifecycle subset would blur owner lines between ADR-0041 and ADR-0046.
   - Launch-time fallback from missing adapter binding to `unavailable` would collapse dependency-unavailable and invalid-integration outcomes.
@@ -158,7 +158,7 @@ Authoring standards:
 - ADR: `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
   - Overlap surfaces: stable backend ids, one-backend-id-to-one-adapter binding, capability gating, adapter protocol, and adapter schema.
   - Conflict: no
-  - Resolution: ADR-0041 remains the contract owner. ADR-0046 realizes those contracts inside the shell and world-agent lifecycle path without redefining backend-id semantics.
+  - Resolution: ADR-0041 remains the contract owner. ADR-0046 realizes those contracts inside the shell and world-service lifecycle path without redefining backend-id semantics.
 
 - ADR: `docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md`
   - Overlap surfaces: `llm.routing.default_backend`, `llm.allowed_backends`, `llm.secrets.env_allowed`, `agents.host_credentials.read.allowed_backends`, file families, and fail-closed posture.
@@ -202,8 +202,8 @@ Authoring standards:
   - Overlap surfaces: selection contract, capability contract, protocol contract, schema contract, compatibility baseline, and parity contract.
   - Conflict: yes
   - Resolution:
-    - Option A: widen the adapter-contract pack so it absorbs the shell/world-agent implementation seam.
-    - Option B: keep that pack as contract truth and use ADR-0046 for the shell/world-agent realization seam.
+    - Option A: widen the adapter-contract pack so it absorbs the shell/world-service implementation seam.
+    - Option B: keep that pack as contract truth and use ADR-0046 for the shell/world-service realization seam.
     - Selected option: B.
 
 - Planning Pack: `docs/project_management/packs/implemented/llm_and_agent_config_policy_surface/`

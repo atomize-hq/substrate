@@ -31,7 +31,7 @@ ADR_BODY_SHA256: <run `make adr-fix ADR=docs/project_management/adrs/draft/ADR-0
 
 ### Changes (operator-facing)
 - Linux can provision `system_packages` without mutating the host OS
-  - Existing: on Linux, `world-agent` runs on the host and `world deps provision` is intentionally unsupported because installing OS packages would mutate the workstation.
+  - Existing: on Linux, `world-service` runs on the host and `world deps provision` is intentionally unsupported because installing OS packages would mutate the workstation.
   - New: Linux gains a guest-like backend based on a Substrate-managed Linux root filesystem (“guest rootfs”), enabling `world deps provision` to install apt packages into the guest rootfs (not the host) while keeping the same explicit/selection-driven UX as macOS (Lima) and Windows (WSL).
   - Why: restores parity for `system_packages` while preserving the agent-hub threat model (“no privileged host mutation as a side effect of tool selection”).
   - Links:
@@ -84,7 +84,7 @@ Exit codes:
 - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - `0`: success (including “no system packages required”)
 - `2`: configuration/usage error (invalid selection YAML, unknown tool id, schema mismatch)
-- `3`: world backend unavailable when required (e.g., world-agent/socket unavailable)
+- `3`: world backend unavailable when required (e.g., world-service/socket unavailable)
 - `4`: unsupported/missing prerequisites (e.g., Linux host-native backend selected; guest rootfs missing; guest rootfs does not support apt)
 - `5`: safety-rail refusal (hardening/cage conflict prevents operation; protected-path violation)
 
@@ -111,11 +111,11 @@ This ADR introduces a new Linux backend selection knob (exact schema location is
 - `crates/world`:
   - Add guest-rootfs mount/overlay plumbing used by `world_fs.isolation=full` (Linux).
   - Ensure the guest rootfs provides persistent system state for apt installs (no host `/usr` mutation).
-- `crates/world-agent`:
+- `crates/world-service`:
   - Expose capability/doctor readiness for guest-rootfs availability.
   - Ensure both non-PTY (`/v1/execute`) and PTY (`/v1/stream`) enter the guest-rootfs-backed full cage when configured.
 - `crates/shell`:
-  - Plumb the backend selection from config/env into the world-agent request environment (or explicit request fields, as implemented).
+  - Plumb the backend selection from config/env into the world-service request environment (or explicit request fields, as implemented).
   - Ensure error messaging points to the warm script when guest rootfs prerequisites are missing.
 - `scripts/linux/world-rootfs-warm.sh` (new):
   - Build/repair the guest rootfs under a Substrate-owned location, with explicit privilege use (sudo) and idempotence.

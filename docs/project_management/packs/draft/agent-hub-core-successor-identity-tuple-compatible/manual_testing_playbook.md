@@ -127,7 +127,7 @@ jq -e '
     (.agent_id | type == "string") and
     (.backend_id | test("^[a-z0-9_]+:[A-Za-z0-9_.-]+$")) and
     (.execution.scope == "host" or .execution.scope == "world") and
-    (.protocol == "uaa.agent.session") and
+    (.protocol == "substrate.agent.session") and
     (has("provider") | not) and
     (has("auth_authority") | not) and
     (has("world_id") | not) and
@@ -170,7 +170,7 @@ jq -e '
     .role == "orchestrator" and
     .execution.scope == "host" and
     .router == "agent_hub" and
-    .protocol == "uaa.agent.session" and
+    .protocol == "substrate.agent.session" and
     (has("provider") | not) and
     (has("auth_authority") | not) and
     (has("world_id") | not) and
@@ -294,7 +294,7 @@ jq -e '
   any(select(
     .event_type == "agent_event" and
     .router == "agent_hub" and
-    .protocol == "uaa.agent.session" and
+    .protocol == "substrate.agent.session" and
     (.provider? == null) and
     (.auth_authority? == null)
   ))

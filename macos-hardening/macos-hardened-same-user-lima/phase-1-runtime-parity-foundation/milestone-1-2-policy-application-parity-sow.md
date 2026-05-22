@@ -141,7 +141,7 @@ Current divergence evidence:
   the macOS backend and can trigger session update, reapply, or fail-closed
   behavior by design.
 - macOS execution requests carry the same relevant policy fields that Linux
-  world-agent requests already depend on.
+  world-service requests already depend on.
 - macOS backend requests also preserve the existing `shared_world` propagation
   contract instead of regressing orchestration support while policy parity is
   fixed.

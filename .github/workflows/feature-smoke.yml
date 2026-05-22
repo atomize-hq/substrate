@@ -201,10 +201,10 @@ jobs:
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --all-targets
 
-      - name: Build substrate + world-agent (debug)
+      - name: Build substrate + world-service (debug)
         run: |
           cargo build --bin substrate --bin substrate-shim
-          cargo build -p world-agent --bin world-agent
+          cargo build -p world-service --bin world-service
 
       - name: Add substrate to PATH
         run: echo "$GITHUB_WORKSPACE/target/debug" >> "$GITHUB_PATH"
@@ -239,11 +239,11 @@ jobs:
               exit 1
             fi
 
-            manual_sock="${RUNNER_TEMP:-/tmp}/substrate-world-agent.sock"
-            manual_log="${RUNNER_TEMP:-/tmp}/substrate-world-agent.log"
+            manual_sock="${RUNNER_TEMP:-/tmp}/substrate-world-service.sock"
+            manual_log="${RUNNER_TEMP:-/tmp}/substrate-world-service.log"
             rm -f "${manual_sock}" "${manual_log}"
 
-            "${socket_activate}" --listen="${manual_sock}" --fdname=substrate-world-agent "$GITHUB_WORKSPACE/target/debug/world-agent" >"${manual_log}" 2>&1 &
+            "${socket_activate}" --listen="${manual_sock}" --fdname=substrate-world-service "$GITHUB_WORKSPACE/target/debug/world-service" >"${manual_log}" 2>&1 &
             agent_pid=$!
 
             for _ in $(seq 1 50); do
@@ -254,13 +254,13 @@ jobs:
             done
 
             if [[ ! -S "${manual_sock}" ]]; then
-              echo "ERROR: failed to start user-scoped world-agent socket fallback" >&2
+              echo "ERROR: failed to start user-scoped world-service socket fallback" >&2
               [[ -f "${manual_log}" ]] && cat "${manual_log}" >&2
               exit 1
             fi
 
             export SUBSTRATE_WORLD_SOCKET="${manual_sock}"
-            echo "Using user-scoped world-agent socket fallback: ${manual_sock}"
+            echo "Using user-scoped world-service socket fallback: ${manual_sock}"
           fi
 
           feature_dir="${{ inputs.feature_dir }}"
@@ -309,15 +309,15 @@ jobs:
             echo "dir=." >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Provision world-agent (Linux self-hosted; WAPS)
-        if: startsWith(inputs.feature_dir, 'docs/project_management/packs/draft/world-deps-apt-provisioning') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
+      - name: Provision world-service (Linux self-hosted; WAPS)
+        if: startsWith(inputs.feature_dir, 'docs/project_management/packs/draft/world-deps-apt-provisioning') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-service-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
         working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: |
           set -euo pipefail
           if [[ -S /run/substrate.sock && -w /run/substrate.sock ]]; then
-            echo "Using existing system world-agent socket"
+            echo "Using existing system world-service socket"
           elif sudo -n true >/dev/null 2>&1; then
-            cargo build -p world-agent --release
+            cargo build -p world-service --release
             scripts/linux/world-provision.sh --profile release --skip-build --sudo-noninteractive
           else
             echo "WARN: sudo -n unavailable on this runner; smoke will fall back to a user-scoped socket if needed" >&2
@@ -333,7 +333,7 @@ jobs:
             exit 0
           fi
 
-          echo "WARN: system world-agent socket unavailable; smoke will try a user-scoped socket fallback" >&2
+          echo "WARN: system world-service socket unavailable; smoke will try a user-scoped socket fallback" >&2
           if [[ -e "${sock}" ]]; then
             ls -l "${sock}" >&2 || true
             stat "${sock}" >&2 || true
@@ -385,11 +385,11 @@ jobs:
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --all-targets
 
-      - name: Build substrate + world-agent (debug)
+      - name: Build substrate + world-service (debug)
         working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: |
           cargo build --bin substrate --bin substrate-shim
-          cargo build -p world-agent --bin world-agent
+          cargo build -p world-service --bin world-service
 
       - name: Add substrate to PATH
         shell: bash
@@ -433,11 +433,11 @@ jobs:
               exit 1
             fi
 
-            manual_sock="${RUNNER_TEMP:-/tmp}/substrate-world-agent.sock"
-            manual_log="${RUNNER_TEMP:-/tmp}/substrate-world-agent.log"
+            manual_sock="${RUNNER_TEMP:-/tmp}/substrate-world-service.sock"
+            manual_log="${RUNNER_TEMP:-/tmp}/substrate-world-service.log"
             rm -f "${manual_sock}" "${manual_log}"
 
-            "${socket_activate}" --listen="${manual_sock}" --fdname=substrate-world-agent "$PWD/target/debug/world-agent" >"${manual_log}" 2>&1 &
+            "${socket_activate}" --listen="${manual_sock}" --fdname=substrate-world-service "$PWD/target/debug/world-service" >"${manual_log}" 2>&1 &
             agent_pid=$!
 
             for _ in $(seq 1 50); do
@@ -448,13 +448,13 @@ jobs:
             done
 
             if [[ ! -S "${manual_sock}" ]]; then
-              echo "ERROR: failed to start user-scoped world-agent socket fallback" >&2
+              echo "ERROR: failed to start user-scoped world-service socket fallback" >&2
               [[ -f "${manual_log}" ]] && cat "${manual_log}" >&2
               exit 1
             fi
 
             export SUBSTRATE_WORLD_SOCKET="${manual_sock}"
-            echo "Using user-scoped world-agent socket fallback: ${manual_sock}"
+            echo "Using user-scoped world-service socket fallback: ${manual_sock}"
           fi
 
           feature_dir="${{ inputs.feature_dir }}"
@@ -581,7 +581,7 @@ jobs:
         run: caffeinate -dimsu &
 
       - name: Warm Lima world (macOS self-hosted; WAPS)
-        if: startsWith(inputs.feature_dir, 'docs/project_management/packs/draft/world-deps-apt-provisioning') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
+        if: startsWith(inputs.feature_dir, 'docs/project_management/packs/draft/world-deps-apt-provisioning') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/next/world-sync') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-service-policy-snapshot') || startsWith(inputs.feature_dir, 'docs/project_management/_archived/full-isolation-landlock-overlayfs-compat')
         working-directory: ${{ steps.checkout_dir.outputs.dir }}
         run: bash scripts/mac/lima-warm.sh "$PWD"
 
@@ -751,7 +751,7 @@ jobs:
           cargo test --workspace --all-targets
 
       - name: Warm WSL world (Windows self-hosted; WAPS)
-        if: startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-agent-policy-snapshot')
+        if: startsWith(inputs.feature_dir, 'docs/project_management/_archived/world-service-policy-snapshot')
         shell: pwsh
         env:
           # The Windows WSL backend is expected to use the named pipe forwarder; disable the TCP bridge
@@ -828,7 +828,7 @@ jobs:
           if [[ ! -S "${sock}" ]]; then
             echo "SUBSTRATE_RUNNER_MISPROVISIONED=1"
             echo "SUBSTRATE_RUNNER_MISPROVISIONED_REASON=substrate_sock_missing"
-            echo "WSL runner is missing required world-agent socket: ${sock}" >&2
+            echo "WSL runner is missing required world-service socket: ${sock}" >&2
             echo "Remediation: provision the world agent + ensure the runner user can access ${sock} (root:substrate 0660)." >&2
             echo "Diagnostics: id=$(id -a || true)" >&2
             exit 1
@@ -837,7 +837,7 @@ jobs:
           if [[ ! -w "${sock}" ]]; then
             echo "SUBSTRATE_RUNNER_MISPROVISIONED=1"
             echo "SUBSTRATE_RUNNER_MISPROVISIONED_REASON=substrate_sock_permission_denied"
-            echo "WSL runner cannot access required world-agent socket: ${sock} (need write permission to connect)" >&2
+            echo "WSL runner cannot access required world-service socket: ${sock} (need write permission to connect)" >&2
             echo "Remediation: ensure runner user is in substrate group + restart runner service; confirm ${sock} is root:substrate 0660." >&2
             ls -l "${sock}" >&2 || true
             stat "${sock}" >&2 || true

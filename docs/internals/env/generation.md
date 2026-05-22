@@ -72,6 +72,6 @@ When a variable is platform-specific, keep it in the catalog with its OS-specifi
 
 - Windows: `scripts/windows/*.ps1`, `crates/world-windows-wsl/**`
 - macOS: `scripts/mac/*.sh`, `crates/world-mac-lima/**`
-- Linux: `scripts/linux/*.sh`, `crates/world/**`, `crates/world-agent/**`
+- Linux: `scripts/linux/*.sh`, `crates/world/**`, `crates/world-service/**`
 
 The catalog’s evidence columns must include at least one real platform-specific usage site for these variables.

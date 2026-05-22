@@ -66,7 +66,7 @@ Template standard:
 
 **Option B — Compute a baseline PATH inside the world once and pin it**
 
-- **Pros:** adapts to the world image layout while keeping the effective PATH deterministic for a given Substrate/world-agent release.
+- **Pros:** adapts to the world image layout while keeping the effective PATH deterministic for a given Substrate/world-service release.
 - **Cons:** adds an extra bootstrap step and caching; requires a strict rule that no rcfiles are sourced and that the computed value is stable.
 - **Cascading implications:** requires a minimal bootstrap PATH to run a single deterministic PATH query (for example, `getconf PATH`), then caching the result and using it for both PTY and non-PTY env construction.
 - **Risks:** backend variance produces different baselines across machines; mitigated by pinning the computed baseline to the world image version and treating mismatches as test failures for that release.
@@ -198,7 +198,7 @@ Template standard:
 **Follow-up tasks (explicit)**
 
 - Specify default deny patterns and override knobs, plus exit code (`5`) in `WDH2-spec.md`: `WDH2-code`.
-- Implement enforcement in the world execution path (world-agent/backend): `WDH2-code`.
+- Implement enforcement in the world execution path (world-service/backend): `WDH2-code`.
 - Add integration test and smoke case: explicit host binary path invocation fails with exit `5`: `WDH2-test`, `WDH3-integ-*` (final checkpoint).
 - Track persistent policy/config configurability for the denylist in `docs/BACKLOG.md` (P1 “world exec-guard denylist” item).
 

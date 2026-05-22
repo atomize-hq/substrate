@@ -50,4 +50,4 @@ candidate_subslices: []
   - `../../review_surfaces.md`
   - `review.md`
 - **Implementation disposition**:
-  - Landed via the updated seam closeout and thread publication that now cite the additive `C-07` schema in `crates/agent-api-types`, world-agent doctor population in `crates/world-agent`, and focused shell/shim doctor tests as the evidence chain for publishing `THR-05`.
+  - Landed via the updated seam closeout and thread publication that now cite the additive `C-07` schema in `crates/transport-api-types`, world-service doctor population in `crates/world-service`, and focused shell/shim doctor tests as the evidence chain for publishing `THR-05`.

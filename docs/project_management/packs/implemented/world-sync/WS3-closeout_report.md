@@ -75,4 +75,4 @@ If any platform-fix work was required:
 
 Notes:
 
-- Auto-sync coverage is enforced by `crates/shell/tests/workspace_auto_sync_ws3.rs` (contract-level stub world-agent).
+- Auto-sync coverage is enforced by `crates/shell/tests/workspace_auto_sync_ws3.rs` (contract-level stub world-service).

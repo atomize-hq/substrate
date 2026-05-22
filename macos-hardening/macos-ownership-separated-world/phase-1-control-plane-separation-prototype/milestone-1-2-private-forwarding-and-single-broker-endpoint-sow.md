@@ -36,7 +36,7 @@ that hole in the prototype.
 
 ## Out-of-Scope
 
-- Full redesign of the guest `world-agent` API.
+- Full redesign of the guest `world-service` API.
 - Final production crypto lifecycle.
 - Final breakglass tooling.
 
@@ -88,7 +88,7 @@ The prototype must also preserve the durable gateway operator contract:
 - `crates/shell/src/builtins/world_gateway.rs`
   Keep the current lifecycle command surface, but route it through the broker
   rather than directly through Lima forwarding.
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
   Keep current managed runtime semantics while changing who can reach the
   runtime path.
 - `scripts/mac/lima-warm.sh`

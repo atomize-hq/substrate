@@ -27,7 +27,7 @@ Options:
   --profile <name>          Cargo profile to build (debug or release; default: debug)
   --version-label <name>    Version directory label under <prefix>/versions (default: dev)
   --no-world                Mark install metadata as world_disabled (skips provisioning entirely)
-  --world-netfilter         Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-agent.service)
+  --world-netfilter         Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-service.service)
   --anchor-mode <mode>      Default anchor mode (workspace|follow-cwd|custom; default: workspace)
   --anchor-path <path>      Default anchor path (for custom mode)
   --caged                   Write caged=true to install metadata (default)
@@ -292,16 +292,16 @@ record_linger_state() {
   fi
 }
 
-find_linux_world_agent() {
+find_linux_world_service() {
   local root="$1"
   local target_dir="$2"
   local candidates=(
-    "${root}/bin/linux/world-agent"
-    "${root}/bin/world-agent-linux"
-    "${root}/bin/world-agent"
-    "${root}/target/x86_64-unknown-linux-gnu/${target_dir}/world-agent"
-    "${root}/target/aarch64-unknown-linux-gnu/${target_dir}/world-agent"
-    "${root}/target/${target_dir}/world-agent"
+    "${root}/bin/linux/world-service"
+    "${root}/bin/world-service-linux"
+    "${root}/bin/world-service"
+    "${root}/target/x86_64-unknown-linux-gnu/${target_dir}/world-service"
+    "${root}/target/aarch64-unknown-linux-gnu/${target_dir}/world-service"
+    "${root}/target/${target_dir}/world-service"
   )
   for candidate in "${candidates[@]}"; do
     if [[ -x "${candidate}" ]]; then
@@ -910,8 +910,8 @@ ensure_socket_group_alignment() {
     warn "systemctl not found; verify /run/substrate.sock is root:substrate 0660 and /run/substrate is root:substrate 0750 after provisioning."
     return
   fi
-  local socket_unit="/etc/systemd/system/substrate-world-agent.socket"
-  local service_unit="/etc/systemd/system/substrate-world-agent.service"
+  local socket_unit="/etc/systemd/system/substrate-world-service.socket"
+  local service_unit="/etc/systemd/system/substrate-world-service.service"
   if [[ ! -f "${socket_unit}" ]]; then
     warn "Socket unit missing at ${socket_unit}; rerun scripts/linux/world-provision.sh to install it."
     return
@@ -921,7 +921,7 @@ ensure_socket_group_alignment() {
     return
   fi
   if grep -q '^SocketGroup=substrate' "${socket_unit}"; then
-    log "substrate-world-agent.socket already sets SocketGroup=substrate."
+    log "substrate-world-service.socket already sets SocketGroup=substrate."
   else
     log "Updating ${socket_unit} to enforce SocketGroup=substrate (sudo may prompt)..."
     if ! run_privileged sed -i 's/^SocketGroup=.*/SocketGroup=substrate/' "${socket_unit}"; then
@@ -930,7 +930,7 @@ ensure_socket_group_alignment() {
     fi
   fi
   if grep -q '^Group=substrate$' "${service_unit}" && grep -q '^UMask=0027$' "${service_unit}"; then
-    log "substrate-world-agent.service already sets Group=substrate and UMask=0027."
+    log "substrate-world-service.service already sets Group=substrate and UMask=0027."
   else
     log "Updating ${service_unit} to enforce Group=substrate and UMask=0027 (sudo may prompt)..."
     if ! run_privileged python3 - "${service_unit}" <<'PY'
@@ -975,13 +975,13 @@ PY
     fi
   fi
 
-  log "Restarting world-agent units to apply socket ownership (sudo may prompt)..."
-  run_privileged systemctl stop substrate-world-agent.service substrate-world-agent.socket || true
+  log "Restarting world-service units to apply socket ownership (sudo may prompt)..."
+  run_privileged systemctl stop substrate-world-service.service substrate-world-service.socket || true
   run_privileged install -d -m0750 -o root -g substrate /run/substrate || true
   run_privileged rm -f /run/substrate.sock || true
   run_privileged systemctl daemon-reload || true
-  run_privileged systemctl start substrate-world-agent.socket || true
-  run_privileged systemctl start substrate-world-agent.service || true
+  run_privileged systemctl start substrate-world-service.socket || true
+  run_privileged systemctl start substrate-world-service.service || true
   log "Reloaded socket/service units so /run/substrate is root:substrate 0750 and /run/substrate.sock is recreated as root:substrate 0660."
 }
 
@@ -1027,11 +1027,11 @@ find_linux_substrate_cli() {
   return 1
 }
 
-find_linux_world_agent_elf() {
+find_linux_world_service_elf() {
   local root="$1"
   local target_dir="$2"
   local candidate
-  candidate="$(find_linux_world_agent "${root}" "${target_dir}")" || return 1
+  candidate="$(find_linux_world_service "${root}" "${target_dir}")" || return 1
   local file_type
   file_type="$(file -b "${candidate}" 2>/dev/null || true)"
   if [[ -n "${file_type}" ]] && ! echo "${file_type}" | grep -qi "ELF"; then
@@ -1205,7 +1205,7 @@ clear_managed_prefix_linux_binary_cache() {
   while IFS= read -r cached_path; do
     case "${cached_path}" in
       "${BIN_DIR}/linux/substrate"|\
-      "${BIN_DIR}/linux/world-agent"|\
+      "${BIN_DIR}/linux/world-service"|\
       "${BIN_DIR}/linux/substrate-gateway")
         if [[ -f "${cached_path}" && ! -L "${cached_path}" ]]; then
           rm -f "${cached_path}"
@@ -1244,7 +1244,7 @@ cache_linux_binary_from_lima() {
 verify_prefix_linux_bundle() {
   local missing_status=0
   local binary path
-  for binary in substrate world-agent substrate-gateway; do
+  for binary in substrate world-service substrate-gateway; do
     path="${BIN_DIR}/linux/${binary}"
     if ! is_linux_elf "${path}"; then
       warn "Expected cached Linux ${binary} at ${path}, but it is missing or not a Linux ELF."
@@ -1288,11 +1288,11 @@ stage_dev_world_runtime_bundle() {
   fi
 
   local linux_agent
-  linux_agent="$(find_linux_world_agent_elf "${repo_root}" "${target_dir}")" || true
+  linux_agent="$(find_linux_world_service_elf "${repo_root}" "${target_dir}")" || true
   if [[ -n "${linux_agent:-}" ]]; then
-    stage_managed_bundle_symlink "${linux_agent}" "${bin_linux_dir}/world-agent" "${repo_root}" "${MANAGED_MAC_LINUX_BINARIES_PATH}" "Linux world-agent"
+    stage_managed_bundle_symlink "${linux_agent}" "${bin_linux_dir}/world-service" "${repo_root}" "${MANAGED_MAC_LINUX_BINARIES_PATH}" "Linux world-service"
   else
-    warn "Linux world-agent not available; leaving ${bin_linux_dir}/world-agent unchanged."
+    warn "Linux world-service not available; leaving ${bin_linux_dir}/world-service unchanged."
   fi
 
   local linux_gateway
@@ -1329,15 +1329,15 @@ ensure_release_bin_bridge() {
   local src_root="${target_root%/}/${profile_dir}"
   local dest_bin="${target_root%/}/bin"
   mkdir -p "${dest_bin}" "${dest_bin}/linux"
-  local -a binaries=("substrate" "substrate-shim" "substrate-forwarder" "host-proxy" "world-agent" "substrate-gateway")
+  local -a binaries=("substrate" "substrate-shim" "substrate-forwarder" "host-proxy" "world-service" "substrate-gateway")
   for binary in "${binaries[@]}"; do
     local src="${src_root}/${binary}"
     local dest="${dest_bin}/${binary}"
     if [[ -x "${src}" ]]; then
       ln -sfn "${src}" "${dest}"
-      if [[ "${binary}" == "world-agent" ]]; then
-        ln -sfn "${src}" "${dest_bin}/linux/world-agent"
-        ln -sfn "${src}" "${dest_bin}/world-agent-linux"
+      if [[ "${binary}" == "world-service" ]]; then
+        ln -sfn "${src}" "${dest_bin}/linux/world-service"
+        ln -sfn "${src}" "${dest_bin}/world-service-linux"
       elif [[ "${binary}" == "substrate-gateway" ]]; then
         ln -sfn "${src}" "${dest_bin}/linux/substrate-gateway"
       fi
@@ -1367,7 +1367,7 @@ MSG
 
   if ! command -v loginctl >/dev/null 2>&1; then
     cat <<MSG
-[dev-install-substrate] loginctl not found. To keep the socket-activated world-agent alive
+[dev-install-substrate] loginctl not found. To keep the socket-activated world-service alive
 across logouts/reboots, run this on a systemd host once:
   loginctl enable-linger ${invoking_user}
 MSG
@@ -1522,14 +1522,14 @@ fi
 log "Building Substrate (${PROFILE})..."
 cargo "${BUILD_FLAGS[@]}"
 
-# Linux dev-install always builds world-agent so the accepted staging bridge can
+# Linux dev-install always builds world-service so the accepted staging bridge can
 # be refreshed even when --no-world skips provisioning.
 if [[ "${IS_LINUX}" -eq 1 ]]; then
-  log "Building world-agent (${PROFILE})..."
+  log "Building world-service (${PROFILE})..."
   if [[ "${PROFILE}" == "release" ]]; then
-    cargo build -p world-agent --release
+    cargo build -p world-service --release
   else
-    cargo build -p world-agent
+    cargo build -p world-service
   fi
 fi
 
@@ -1594,7 +1594,7 @@ else
   shim_note="Shims were not deployed (--no-shims). Binaries are available under ${BIN_DIR}."
 fi
 
-for binary in substrate substrate-shim substrate-forwarder host-proxy world-agent substrate-gateway; do
+for binary in substrate substrate-shim substrate-forwarder host-proxy world-service substrate-gateway; do
   src="${REPO_ROOT}/target/${TARGET_DIR}/${binary}"
   if [[ -x "${src}" ]]; then
     stage_managed_bundle_symlink "${src}" "${BIN_DIR}/${binary}" "${REPO_ROOT}" "" "host binary ${binary}"
@@ -1603,12 +1603,12 @@ for binary in substrate substrate-shim substrate-forwarder host-proxy world-agen
   fi
 done
 
-# Provide substrate-world-agent alias so CLI discovery works without extra config.
-world_agent_src="${REPO_ROOT}/target/${TARGET_DIR}/world-agent"
-if [[ -x "${world_agent_src}" ]]; then
-  stage_managed_bundle_symlink "${world_agent_src}" "${BIN_DIR}/substrate-world-agent" "${REPO_ROOT}" "" "host binary substrate-world-agent"
-elif [[ -x "${world_agent_src}.exe" ]]; then
-  stage_managed_bundle_symlink "${world_agent_src}.exe" "${BIN_DIR}/substrate-world-agent.exe" "${REPO_ROOT}" "" "host binary substrate-world-agent.exe"
+# Provide substrate-world-service alias so CLI discovery works without extra config.
+world_service_src="${REPO_ROOT}/target/${TARGET_DIR}/world-service"
+if [[ -x "${world_service_src}" ]]; then
+  stage_managed_bundle_symlink "${world_service_src}" "${BIN_DIR}/substrate-world-service" "${REPO_ROOT}" "" "host binary substrate-world-service"
+elif [[ -x "${world_service_src}.exe" ]]; then
+  stage_managed_bundle_symlink "${world_service_src}.exe" "${BIN_DIR}/substrate-world-service.exe" "${REPO_ROOT}" "" "host binary substrate-world-service.exe"
 fi
 
 if [[ -d "${REPO_ROOT}/target" ]]; then
@@ -1628,7 +1628,7 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
       write_install_metadata "${WORLD_ENABLED}"
       write_env_sh_script "${WORLD_ENABLED}"
       write_manager_env_script "${WORLD_ENABLED}"
-      warn "Unable to cache sudo credentials; world-agent service not provisioned."
+      warn "Unable to cache sudo credentials; world-service service not provisioned."
       warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run 'substrate world enable --home \"${PREFIX}\"' to flip it back on."
     fi
   fi
@@ -1638,7 +1638,7 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
   ensure_substrate_group_membership
 	  PROVISION_SCRIPT="${REPO_ROOT}/scripts/linux/world-provision.sh"
 	  if [[ -x "${PROVISION_SCRIPT}" ]]; then
-	    log "Provisioning Linux world-agent service via ${PROVISION_SCRIPT} (sudo may prompt)..."
+	    log "Provisioning Linux world-service service via ${PROVISION_SCRIPT} (sudo may prompt)..."
 	    provision_args=(--profile "${PROFILE}" --skip-build)
 	    if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
 	      provision_args+=(--world-netfilter)
@@ -1649,7 +1649,7 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
 	      write_install_metadata "${WORLD_ENABLED}"
 	      write_env_sh_script "${WORLD_ENABLED}"
       write_manager_env_script "${WORLD_ENABLED}"
-      warn "world-provision script reported an error; rerun ${PROVISION_SCRIPT} manually to enable the world-agent service."
+      warn "world-provision script reported an error; rerun ${PROVISION_SCRIPT} manually to enable the world-service service."
       warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run 'substrate world enable --home \"${PREFIX}\"' to flip it back on."
     fi
   else
@@ -1658,13 +1658,13 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
     write_install_metadata "${WORLD_ENABLED}"
     write_env_sh_script "${WORLD_ENABLED}"
     write_manager_env_script "${WORLD_ENABLED}"
-    warn "Linux world-provision script missing at ${PROVISION_SCRIPT}; world-agent service not configured."
+    warn "Linux world-provision script missing at ${PROVISION_SCRIPT}; world-service service not configured."
     warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures."
   fi
   ensure_socket_group_alignment
   fi
 elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
-  log "Provisioning macOS Lima world-agent service..."
+  log "Provisioning macOS Lima world-service service..."
   if ! command -v limactl >/dev/null 2>&1; then
     fatal "limactl not found; install Lima or rerun with --no-world to skip macOS world provisioning."
   fi
@@ -1682,7 +1682,7 @@ elif [[ "${WORLD_ENABLED}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
   if ! cache_linux_binary_from_lima /usr/local/bin/substrate "${BIN_DIR}/linux/substrate" "substrate CLI"; then
     cache_ok=0
   fi
-  if ! cache_linux_binary_from_lima /usr/local/bin/substrate-world-agent "${BIN_DIR}/linux/world-agent" "world-agent"; then
+  if ! cache_linux_binary_from_lima /usr/local/bin/substrate-world-service "${BIN_DIR}/linux/world-service" "world-service"; then
     cache_ok=0
   fi
   if ! cache_linux_binary_from_lima /usr/local/bin/substrate-gateway "${BIN_DIR}/linux/substrate-gateway" "substrate-gateway"; then

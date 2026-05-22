@@ -47,7 +47,7 @@ ADR_BODY_SHA256: 8ad8c9d462d0994cf25b517bc3b3d6bdcfadeadc1a38687bbd455e9ebc44357
 ## Non-Goals
 - Changing `substrate world enable` provisioning behavior.
 - Changing world-deps inventory semantics or adding new inventory items.
-- Reworking world-agent readiness probe logic (beyond skipping when disabled).
+- Reworking world-service readiness probe logic (beyond skipping when disabled).
 - Changing normal command execution routing/enforcement behavior.
 
 ## Out of Scope

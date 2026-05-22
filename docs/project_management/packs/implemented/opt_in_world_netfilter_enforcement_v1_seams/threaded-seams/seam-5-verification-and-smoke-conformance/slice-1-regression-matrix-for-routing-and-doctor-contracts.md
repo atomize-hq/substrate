@@ -50,11 +50,11 @@ candidate_subslices: []
 - **Acceptance criteria**:
   - `crates/shell/tests/world_request_net_allowed_snapshot.rs` covers allow-all, deny-all, and restrictive routing postures against the effective host gate.
   - `crates/shell/tests/doctor_scopes_ds0.rs` and `crates/shell/tests/shim_doctor.rs` pin the published `requested`, `enabled`, `world_netfilter_enable_present`, and `last_failure_reason` fields without platform-specific drift.
-  - `crates/agent-api-types/src/lib.rs` continues to prove additive schema compatibility for the doctor block while the conformance matrix references the same published field names.
+  - `crates/transport-api-types/src/lib.rs` continues to prove additive schema compatibility for the doctor block while the conformance matrix references the same published field names.
 - **Dependencies**:
   - landed closeouts `../../governance/seam-1-closeout.md`, `../../governance/seam-3-closeout.md`, and `../../governance/seam-4-closeout.md`
 - **Verification**:
-  - `cargo test -p agent-api-types -- --nocapture`
+  - `cargo test -p transport-api-types -- --nocapture`
   - `cargo test -p shell --test world_request_net_allowed_snapshot -- --nocapture`
   - `cargo test -p shell --test doctor_scopes_ds0 -- --nocapture`
   - `cargo test -p shell --test shim_doctor -- --nocapture`
@@ -92,7 +92,7 @@ Checklist:
 
 - **Outcome**: operators and downstream tooling keep seeing one stable observability contract when requested isolation is in play.
 - **Files**:
-  - `crates/agent-api-types/src/lib.rs`
+  - `crates/transport-api-types/src/lib.rs`
   - `crates/shell/tests/doctor_scopes_ds0.rs`
   - `crates/shell/tests/shim_doctor.rs`
 - **Thread/contract refs**:

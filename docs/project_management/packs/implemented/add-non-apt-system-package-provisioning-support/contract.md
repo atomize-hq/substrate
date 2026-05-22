@@ -149,7 +149,7 @@ When `--verbose` is present, stdout MUST include:
 Mapping for `substrate world enable --provision-deps`:
 - `0`: success, including a contract-defined no-op
 - `2`: invalid inventory or schema input, including APT requirement-version conflicts and invalid `install.method=pacman` inventory shape
-- `3`: world backend unavailable or cannot connect to world-agent when execution is required
+- `3`: world backend unavailable or cannot connect to world-service when execution is required
 - `4`: unsupported platform/backend, unsupported world manager, mixed-manager enabled set, missing in-world package manager executable, or package-manager command failure after dispatch
 - `5`: safety or protected-path violation
 - `1`: unexpected internal error

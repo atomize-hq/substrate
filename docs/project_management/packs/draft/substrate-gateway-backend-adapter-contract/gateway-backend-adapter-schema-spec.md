@@ -178,7 +178,7 @@ These are planning and verification anchors only. They describe where later impl
 - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/harness.rs`
 - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/backend.rs`
 - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/harness.rs`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/transport-api-types/src/lib.rs`
 
 ### Verification plan
 

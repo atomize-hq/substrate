@@ -16,7 +16,7 @@ basis:
     - THR-02
     - THR-04
   stale_triggers:
-    - "Any change to WorldSpec.isolate_network/allowed_domains routing semantics or world-agent request parity"
+    - "Any change to WorldSpec.isolate_network/allowed_domains routing semantics or world-service request parity"
     - "Any new process-spawn path that bypasses cgroup attach or weakens attach-or-fail behavior under isolate_network"
     - "Any change to WORLD_NETFILTER_ENABLE guard semantics or nftables ruleset shape"
 gates:
@@ -50,7 +50,7 @@ open_remediations: []
 - **Primary interfaces**
   - Inputs:
     - `WorldSpec.isolate_network` and `WorldSpec.allowed_domains` (from `SEAM-1` routing).
-    - `WORLD_NETFILTER_ENABLE` (world-agent service env).
+    - `WORLD_NETFILTER_ENABLE` (world-service service env).
   - Outputs:
     - Applied nftables/netfilter rules scoped to the correct cgroup/netns.
     - Structured error diagnostics on any enforcement setup failure.

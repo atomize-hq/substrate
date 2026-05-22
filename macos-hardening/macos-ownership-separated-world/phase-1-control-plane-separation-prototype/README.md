@@ -83,7 +83,7 @@ operator command family and move it under the new owner:
 - `crates/shell/src/builtins/world_gateway.rs`
   Current macOS gateway lifecycle/status client that phase 1 must rehome behind
   the new broker boundary.
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
   Current guest-owned managed runtime and auth-bundle seam that phase 1 must
   reach through the new host owner.
 - `scripts/mac/lima-warm.sh`

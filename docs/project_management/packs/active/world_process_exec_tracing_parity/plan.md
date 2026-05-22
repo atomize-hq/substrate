@@ -31,7 +31,7 @@
 ## Platforms
 - Behavior platforms required:
   - Linux (ptrace-based capture in world backend).
-  - macOS (Lima): ptrace capture supported because world-agent runs in a Linux guest (`docs/WORLD.md`).
+  - macOS (Lima): ptrace capture supported because world-service runs in a Linux guest (`docs/WORLD.md`).
   - Windows: must remain build/trace coherent while process capture is out of scope (degrade with explicit diagnostics).
 - CI parity platforms required:
   - linux/macos/windows (compile/test parity).

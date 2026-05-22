@@ -42,7 +42,7 @@ Replacement completeness requirement:
 
 ## Key Terms
 - **Host**: the developer workstation environment running `substrate`.
-- **World**: the isolated execution environment behind world-agent (Linux host, macOS Lima VM, Windows WSL).
+- **World**: the isolated execution environment behind world-service (Linux host, macOS Lima VM, Windows WSL).
 - **Inventory**: definitions of available **packages** and **bundles**.
 - **Enabled**: the desired set of inventory items for the **current directory** (resolved via sparse config merge).
 - **World image** install: mutates OS-managed state in the world (e.g. apt/dpkg under `/usr`, `/var/lib/dpkg`).
@@ -52,7 +52,7 @@ Replacement completeness requirement:
 Substrate world execution is intentionally conservative and does not behave like an interactive login shell.
 
 Contract:
-- World commands executed via non-interactive pathways (e.g., `substrate -c`, automation, world-agent `/v1/execute`) execute under `/bin/sh -c` in the world, with no user shell rc sourcing.
+- World commands executed via non-interactive pathways (e.g., `substrate -c`, automation, world-service `/v1/execute`) execute under `/bin/sh -c` in the world, with no user shell rc sourcing.
 - Interactive REPL sessions (`substrate>`) execute under the world-first persistent-session model and evaluate submissions under `/bin/bash --noprofile --norc -c` (still no user rc sourcing).
 - Therefore, runnable deps MUST expose real executable entrypoints (files) and MUST NOT rely on shell functions, aliases, or `~/.bashrc`-style initialization. If a tool requires shell init, it MUST be made runnable via a generated wrapper entrypoint (e.g., `bash_function` / `bash_source_exec` wrappers).
 
@@ -365,11 +365,11 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - Output SHOULD be a table.
   - Table columns MUST include: `source`, `kind`, `name`, `runnable`, `method`, `entrypoints`, `platforms`, `description`.
     - `source` MUST be one of: `builtin`, `global`, `workspace` and indicates which scope contributed the **effective definition** after inventory merge + platform filtering + `world.deps.inventory_mode` (full-replace by item name).
-  - It MUST NOT make world-agent calls.
+  - It MUST NOT make world-service calls.
   - Hints (stderr, only if empty):
     - `substrate: note: no deps inventory items visible for this directory; add definitions under $SUBSTRATE_HOME/deps/ or <workspace_root>/.substrate/deps/`
 - `enabled`:
-  - Prints the **current enabled list** (effective merged enabled list for `cwd`) without querying world-agent.
+  - Prints the **current enabled list** (effective merged enabled list for `cwd`) without querying world-service.
   - It MUST NOT expand bundles; it prints exactly what the effective enabled list contains (packages and bundles).
   - If any enabled name does not exist in the effective available inventory view, it MUST fail with exit `2` and list the unknown names.
   - Stderr (always):
@@ -377,7 +377,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - Hints (stderr, when empty):
     - `substrate: hint: add deps with 'substrate world deps workspace add ...' (or '... global add ...') then apply with 'substrate world deps current sync'`
 - `applied`:
-  - Prints world-agent-backed status for items.
+  - Prints world-service-backed status for items.
   - Default scope: the **effective enabled closure** for the current directory:
     - Start from the effective enabled list.
     - For each enabled bundle, include the bundle row and each of its constituent packages (that exist in the effective inventory) as additional rows, in-order, de-duplicated.

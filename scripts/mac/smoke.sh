@@ -102,7 +102,8 @@ ensure_substrate_binary() {
 }
 
 prepare_host_gateway_smoke_auth() {
-  local auth_path="${HOME}/.codex/auth.json"
+  local home_dir="$1"
+  local auth_path="${home_dir}/.codex/auth.json"
   if [[ -f "${auth_path}" ]]; then
     printf 'present\n'
     return 0
@@ -116,40 +117,121 @@ prepare_host_gateway_smoke_auth() {
   "access_token": "header.payload.signature"
 }
 JSON
-  install -d -m0700 "${HOME}/.codex"
+  install -d -m0700 "${home_dir}/.codex"
   install -m0600 "${tmp}" "${auth_path}"
   rm -f "${tmp}"
   printf 'created\n'
 }
 
 cleanup_host_gateway_smoke_auth() {
-  rm -f "${HOME}/.codex/auth.json"
+  local home_dir="$1"
+  rm -f "${home_dir}/.codex/auth.json"
+}
+
+write_gateway_smoke_config() {
+  local substrate_home="$1"
+  mkdir -p "${substrate_home}"
+  cat >"${substrate_home}/config.yaml" <<'EOF'
+llm:
+  enabled: true
+  gateway:
+    enabled: true
+  routing:
+    default_backend: cli:codex
+EOF
+}
+
+write_gateway_smoke_policy() {
+  local substrate_home="$1"
+  mkdir -p "${substrate_home}"
+  cat >"${substrate_home}/policy.yaml" <<'EOF'
+id: gateway-smoke
+name: gateway-smoke
+
+world_fs:
+  host_visible: true
+  fail_closed:
+    routing: false
+  write:
+    enabled: true
+
+llm:
+  allowed_backends:
+    - "cli:codex"
+  secrets:
+    env_allowed:
+      - "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID"
+      - "SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN"
+
+agents:
+  host_credentials:
+    read:
+      allowed_backends:
+        - "cli:codex"
+
+net_allowed: []
+cmd_allowed: []
+cmd_denied: []
+cmd_isolated: []
+require_approval: false
+allow_shell_operators: true
+
+limits:
+  max_memory_mb: null
+  max_cpu_percent: null
+  max_runtime_ms: null
+  max_egress_bytes: null
+
+metadata: {}
+EOF
+}
+
+write_gateway_smoke_inventory() {
+  local substrate_home="$1"
+  mkdir -p "${substrate_home}/agents"
+  cp "${REPO_ROOT}/config/agents/codex.yaml" "${substrate_home}/agents/codex.yaml"
 }
 
 run_gateway_lifecycle_proof() {
-  local auth_state=""
-  local cleanup_auth=0
   local status_json=""
   local base_url=""
   local port=""
+  local fixture_root=""
+  local substrate_home=""
+  local codex_account_id="acct_smoke"
+  local codex_access_token="header.payload.signature"
 
   log "Running gateway lifecycle proof"
-  auth_state="$(prepare_host_gateway_smoke_auth)"
-  if [[ "${auth_state}" == "created" ]]; then
-    cleanup_auth=1
-  fi
-  trap 'if [[ ${cleanup_auth} -eq 1 ]]; then cleanup_host_gateway_smoke_auth; fi' RETURN
+  fixture_root="$(mktemp -d)"
+  substrate_home="${fixture_root}/substrate-home"
+  mkdir -p "${substrate_home}"
+  write_gateway_smoke_config "${substrate_home}"
+  write_gateway_smoke_policy "${substrate_home}"
+  write_gateway_smoke_inventory "${substrate_home}"
+  trap 'rm -rf "'"${fixture_root}"'"' RETURN
 
   pushd "${REPO_ROOT}" >/dev/null
-  "${SUBSTRATE_BIN}" world gateway sync
-  status_json="$("${SUBSTRATE_BIN}" world gateway status --json)"
+  env SUBSTRATE_HOME="${substrate_home}" \
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+    "${SUBSTRATE_BIN}" world gateway sync
+  status_json="$(env SUBSTRATE_HOME="${substrate_home}" \
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+    "${SUBSTRATE_BIN}" world gateway status --json)"
   printf '%s\n' "${status_json}" | jq -e '
     .status == "available" and
     .client_wiring.openai_base_url == .client_wiring.anthropic_base_url
   ' >/dev/null
 
-  "${SUBSTRATE_BIN}" world gateway restart
-  status_json="$("${SUBSTRATE_BIN}" world gateway status --json)"
+  env SUBSTRATE_HOME="${substrate_home}" \
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+    "${SUBSTRATE_BIN}" world gateway restart
+  status_json="$(env SUBSTRATE_HOME="${substrate_home}" \
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID="${codex_account_id}" \
+    SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN="${codex_access_token}" \
+    "${SUBSTRATE_BIN}" world gateway status --json)"
   base_url="$(printf '%s\n' "${status_json}" | jq -r '.client_wiring.openai_base_url')"
   port="$(printf '%s\n' "${base_url}" | sed -n 's#http://127\.0\.0\.1:\([0-9][0-9]*\)$#\1#p')"
   popd >/dev/null
@@ -175,9 +257,9 @@ run_dev_install_readiness_proof() {
     exit 1
   fi
 
-  limactl shell substrate sudo test -x /usr/local/bin/substrate-world-agent
+  limactl shell substrate sudo test -x /usr/local/bin/substrate-world-service
   limactl shell substrate sudo test -x /usr/local/bin/substrate-gateway
-  limactl shell substrate systemctl is-active --quiet substrate-world-agent
+  limactl shell substrate systemctl is-active --quiet substrate-world-service
 
   doctor_json="$(env SUBSTRATE_HOME="${install_prefix}" SUBSTRATE_ROOT="${install_prefix}" \
     "${install_bin}" world doctor --json)"
@@ -624,7 +706,13 @@ run_generic_smoke() {
   fi
 
   local span
-  span="$(jq -r 'select(.event_type=="command_complete" and ((.fs_diff.mods? // []) | index("world-mac-smoke/file.txt") != null)) | .span_id' "${trace_log}" | tail -n 1)"
+  span="$(jq -r '
+    select(
+      .event_type == "command_complete"
+      and (((.fs_diff.writes? // []) + (.fs_diff.mods? // [])) | index("world-mac-smoke/file.txt") != null)
+    )
+    | .span_id
+  ' "${trace_log}" | tail -n 1)"
 
   if [[ -z "${span}" ]]; then
     echo "ERROR: failed to locate span id for world-mac-smoke command (${payload_cmd})" >&2

@@ -128,7 +128,7 @@ Canonical token format:
   - Examples:
     - `openai.responses`
     - `anthropic.messages`
-    - `uaa.agent.session`
+    - `substrate.agent.session`
     - `mcp.toolbox.v1`
 - Human-readable prose labels MAY appear in surrounding text, but operator-visible status, policy, and trace surfaces MUST use the normalized ids above.
 
@@ -220,7 +220,7 @@ Why this matters:
 ## Architecture Shape
 - Components:
   - `substrate_gateway`: routing authority and in-world fulfillment boundary.
-  - `crates/world-agent` and world backends: transport and lifecycle into the world boundary.
+  - `crates/world-service` and world backends: transport and lifecycle into the world boundary.
   - `crates/broker`: policy gating and explainability.
   - `crates/trace`: canonical trace persistence and correlation vocabulary.
   - `crates/shell`: operator surfaces for status, wiring, and diagnostics.

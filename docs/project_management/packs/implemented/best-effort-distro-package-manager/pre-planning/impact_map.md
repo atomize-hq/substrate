@@ -67,7 +67,7 @@ No implementation change is required under:
 - `crates/world-windows-wsl/`
 - `crates/shim/`
 - `crates/shell/`
-- `crates/world-agent/`
+- `crates/world-service/`
 - `scripts/substrate/dev-install-substrate.sh`
 - `scripts/substrate/world-enable.sh`
 - `tests/installers/install_smoke.sh`
@@ -283,7 +283,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
     - Keep the guest-world provisioning meaning of `pacman` in that pack.
     - Do not reuse host PATH probing or `PKG_MANAGER` semantics for in-world provisioning.
 
-- Planning Pack: `docs/project_management/packs/draft/dev-install-world-agent-staging/`
+- Planning Pack: `docs/project_management/packs/draft/dev-install-world-service-staging/`
   - Overlap surfaces:
     - `scripts/substrate/install-substrate.sh`
   - Conflict: no

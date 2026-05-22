@@ -50,11 +50,11 @@ members = [
     "crates/world",
     "crates/world-mac-lima",
     "crates/world-backend-factory",
-    "crates/world-agent",
+    "crates/world-service",
     # Agent API (shared contract + proxy)
-    "crates/agent-api-types",
-    "crates/agent-api-core",
-    "crates/agent-api-client",
+    "crates/transport-api-types",
+    "crates/transport-api-core",
+    "crates/transport-api-client",
     "crates/host-proxy",
     "crates/broker", "crates/trace",
     # "crates/trace",   # TODO: Implement after broker

@@ -34,7 +34,6 @@ pub(crate) fn world_doctor_main(
 
 mod world_doctor_macos {
     use super::*;
-    use agent_api_client::AgentClient;
     use chrono::SecondsFormat;
     use serde_json::Value;
     use std::io::{Read, Write};
@@ -44,6 +43,7 @@ mod world_doctor_macos {
     use std::path::PathBuf;
     use std::process::Command;
     use std::time::Duration;
+    use transport_api_client::AgentClient;
 
     pub(super) trait CommandRunner {
         fn run(&self, program: &str, args: &[&str]) -> CommandOutput;
@@ -186,7 +186,7 @@ cat /sys/kernel/security/landlock/abi_version
             let combined = format!("{}{}", landlock_output.stdout, landlock_output.stderr);
             // Some Lima guests don't expose the Landlock ABI via securityfs, even when the
             // Landlock syscalls are present. Prefer a best-effort "supported" fallback so macOS
-            // doctor scopes remain usable when the deployed world-agent is behind this CLI.
+            // doctor scopes remain usable when the deployed world-service is behind this CLI.
             if combined.contains("landlock/abi_version")
                 && (combined.contains("No such file") || combined.contains("not found"))
             {
@@ -360,7 +360,7 @@ echo pass
                         &vm_name,
                         "systemctl",
                         "is-active",
-                        "substrate-world-agent",
+                        "substrate-world-service",
                     ],
                 )
                 .success
@@ -628,7 +628,7 @@ echo pass
                         &vm_name,
                         "systemctl",
                         "is-active",
-                        "substrate-world-agent",
+                        "substrate-world-service",
                     ],
                 )
                 .success
@@ -638,9 +638,9 @@ echo pass
 
         if !json_mode && can_probe_vm {
             if service_active {
-                pass("substrate-world-agent service active");
+                pass("substrate-world-service service active");
             } else {
-                fail("substrate-world-agent service not active");
+                fail("substrate-world-service service not active");
             }
         }
 
@@ -659,9 +659,9 @@ echo pass
 
         if !json_mode && can_probe_vm && service_active {
             if agent_caps_ok {
-                pass("world-agent reachable (capabilities probe)");
+                pass("world-service reachable (capabilities probe)");
             } else {
-                fail("world-agent unreachable (capabilities probe)");
+                fail("world-service unreachable (capabilities probe)");
             }
         }
 
@@ -783,17 +783,17 @@ echo pass
 
         if !json_mode && can_probe_vm {
             if assessment.service_active {
-                pass("substrate-world-agent service active");
+                pass("substrate-world-service service active");
             } else {
-                fail("substrate-world-agent service not active");
+                fail("substrate-world-service service not active");
             }
         }
 
         if !json_mode && can_probe_vm && assessment.service_active {
             if assessment.agent_caps_ok {
-                pass("world-agent reachable (capabilities probe)");
+                pass("world-service reachable (capabilities probe)");
             } else {
-                fail("world-agent unreachable (capabilities probe)");
+                fail("world-service unreachable (capabilities probe)");
             }
         }
 
@@ -947,7 +947,7 @@ echo pass
                         if first_line.starts_with("GET /v1/capabilities") {
                             write_response(
                                 &mut stream,
-                                r#"{"version":"v1","features":["execute"],"backend":"world-agent","platform":"linux"}"#,
+                                r#"{"version":"v1","features":["execute"],"backend":"world-service","platform":"linux"}"#,
                             );
                         } else if first_line.starts_with("GET /v1/doctor/world") {
                             write_response(
@@ -1041,7 +1041,7 @@ echo pass
                         "substrate".into(),
                         "systemctl".into(),
                         "is-active".into(),
-                        "substrate-world-agent".into(),
+                        "substrate-world-service".into(),
                     ],
                     success_out("active\n"),
                 ),
@@ -1108,7 +1108,7 @@ echo pass
                                         vm_name.into(),
                                         "systemctl".into(),
                                         "is-active".into(),
-                                        "substrate-world-agent".into(),
+                                        "substrate-world-service".into(),
                                     ],
                                     success_out("active\n"),
                                 ),
@@ -1157,7 +1157,7 @@ echo pass
                                 vm_name.into(),
                                 "systemctl".into(),
                                 "is-active".into(),
-                                "substrate-world-agent".into(),
+                                "substrate-world-service".into(),
                             ],
                             success_out("active\n"),
                         ),
@@ -1239,7 +1239,7 @@ echo pass
                             "substrate".into(),
                             "systemctl".into(),
                             "is-active".into(),
-                            "substrate-world-agent".into(),
+                            "substrate-world-service".into(),
                         ],
                         failure_out(),
                     ),

@@ -336,7 +336,7 @@ agents:
     fs::write(
         home_substrate.join("agents/codex.yaml"),
         format!(
-            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
             fake_codex.display()
         ),
     )
@@ -379,7 +379,7 @@ agents:
     fs::write(
         home_substrate.join("agents/claude_code.yaml"),
         format!(
-            "version: 1\nid: claude_code\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            "version: 1\nid: claude_code\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
             fake_orchestrator.display()
         ),
     )
@@ -387,7 +387,7 @@ agents:
     fs::write(
         home_substrate.join("agents/codex.yaml"),
         format!(
-            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
             fake_member.display()
         ),
     )
@@ -430,7 +430,7 @@ agents:
     fs::write(
         home_substrate.join("agents/claude_code.yaml"),
         format!(
-            "version: 1\nid: claude_code\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            "version: 1\nid: claude_code\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
             fake_orchestrator.display()
         ),
     )
@@ -438,7 +438,7 @@ agents:
     fs::write(
         home_substrate.join("agents/codex.yaml"),
         format!(
-            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
             fake_secondary_host.display()
         ),
     )
@@ -590,7 +590,7 @@ agents:
     fs::write(
         home_substrate.join("agents/codex.yaml"),
         format!(
-            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
             fake_codex.display()
         ),
     )
@@ -809,7 +809,7 @@ fn write_live_world_member_manifest(
         "agent_id": "codex",
         "backend_id": "cli:codex",
         "role": "member",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "execution": { "scope": "world" },
         "state": "ready",
         "opened_at": ts,
@@ -3957,7 +3957,7 @@ fn c3_drift_fail_closed_suppresses_world_restart_required_agent_event_without_ex
     assert_eq!(
         guard.persistent_execs.len(),
         1,
-        "fail-closed drift must stop before the second exec reaches world-agent; records: {guard:#?}"
+        "fail-closed drift must stop before the second exec reaches world-service; records: {guard:#?}"
     );
     assert_start_sessions_have_no_shared_world_context(
         &guard,

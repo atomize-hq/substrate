@@ -9,8 +9,8 @@ Keep concise, actionable, and security-focused.
   - Problem: host execution is richly observable via the shim (per-process exec logging), but world execution is primarily observable at the “one command per world execute” level. This creates blind spots for world-deps installs and wrapper-based tools (e.g. `nvm` wrappers invoking `bash -lc ...`), where internal subprocesses are not recorded as structured events.
   - Goal: in-world activity is traceable at the same granularity as the host: every spawned process (argv/env redaction/exit code/timing) is captured and attached to spans, so debugging and policy auditing do not depend on stdout/stderr inference.
   - Work:
-    - Define an in-world execution event schema (align with `crates/common/src/lib.rs` `log_schema`) for per-process spawn/exit telemetry emitted by world-agent.
-    - Extend `world-agent` execution paths (`/v1/execute`, `/v1/stream`) to capture process tree events for the executed command (including wrapper-invoked shells like `bash -lc`) and return them to the host.
+    - Define an in-world execution event schema (align with `crates/common/src/lib.rs` `log_schema`) for per-process spawn/exit telemetry emitted by world-service.
+    - Extend `world-service` execution paths (`/v1/execute`, `/v1/stream`) to capture process tree events for the executed command (including wrapper-invoked shells like `bash -lc`) and return them to the host.
     - Follow-on optimization: stream per-process events incrementally over `/v1/stream` (v1 batches on Exit).
     - Plumb the returned process events into `crates/trace` spans so they are persisted alongside existing world fs diffs and policy decisions.
     - Ensure redaction rules apply consistently (no secrets in argv/env); reuse shared redaction helpers.
@@ -75,7 +75,7 @@ Keep concise, actionable, and security-focused.
 
 - **P1 – Structured anchor-guard events for caged `cd` (dedupe warnings; avoid heuristics)**
   - Problem: In persistent world sessions, the in-world anchor guard prints user-facing “caged root guard” warnings, but the host async REPL also performs host-side `cd` prediction/caging to keep `world_cwd` consistent when the world reports an unchanged cwd. This can produce duplicate warnings (guard + prediction) and forces brittle host-side suppression heuristics.
-  - Goal: Make “anchor guard bounced `cd` back into the cage” a first-class structured signal from world-agent so the host prints exactly once, consistently formatted, without stderr parsing or cwd-heuristic dedupe.
+  - Goal: Make “anchor guard bounced `cd` back into the cage” a first-class structured signal from world-service so the host prints exactly once, consistently formatted, without stderr parsing or cwd-heuristic dedupe.
   - Proposed design (backwards-compatible; no protocol_version bump):
     - Add a per-command sentinel env var set by the in-world guard *only when it bounces* (example):
       - `__SUBSTRATE_GUARD_EVENT_B64=<base64 json>`
@@ -85,13 +85,13 @@ Keep concise, actionable, and security-focused.
         - `anchor_root: <abs path>`
         - `returned_to: <abs path>`
         - `display_scope: "host"|"world"` (optional; controls `([Substrate Host])` vs `([Substrate World])`)
-    - On persistent session completion, world-agent already captures the child shell’s env; extract + decode this sentinel and:
+    - On persistent session completion, world-service already captures the child shell’s env; extract + decode this sentinel and:
       - include it as an optional field on `command_complete` (e.g., `guard_event` / `guard_events`),
       - strip the sentinel key(s) from the persisted env before storing (so it never leaks into later commands).
     - Host shell prints from the structured field (once) and stops printing prediction-layer warnings for world sessions (prediction remains state-only).
   - Work (concrete):
     - `crates/world/src/guard.rs`: set `__SUBSTRATE_GUARD_EVENT_B64` when bouncing a `cd` (and optionally stop printing the user-facing warning directly once the structured path is plumbed end-to-end).
-    - `crates/world-agent/src/pty.rs`:
+    - `crates/world-service/src/pty.rs`:
       - plumb sentinel extraction from `PersistentChildEvent::Finished { env, .. }`,
       - extend `PersistentServerMessage::CommandComplete { .. }` with an optional `guard_event(s)` field (serde should ignore unknown fields for older clients),
       - strip sentinel keys from the session env before persisting.
@@ -99,7 +99,7 @@ Keep concise, actionable, and security-focused.
     - `crates/shell/src/repl/async_repl.rs`: delete any remaining prediction-layer warning emission for world sessions (keep only the cwd correction).
     - Optional: record `guard_event(s)` into `trace.jsonl` (span extra) so guard bounces are auditable without stdout/stderr inference.
   - Tests:
-    - `world-agent` persistent session test: run `cd ..` outside anchor and assert `command_complete.guard_event(s)` present; assert sentinel key stripped from persisted env.
+    - `world-service` persistent session test: run `cd ..` outside anchor and assert `command_complete.guard_event(s)` present; assert sentinel key stripped from persisted env.
     - `shell` client tests: unknown/missing `guard_event(s)` remains compatible; when present, message prints once.
     - End-to-end (Linux): `substrate` async REPL `cd ../` outside anchor prints exactly one caged warning line (no duplicates).
   - Acceptance: no duplicate caged warnings; no stderr parsing; persisted env does not retain sentinel; old/new clients interoperate via optional fields.
@@ -114,7 +114,7 @@ Keep concise, actionable, and security-focused.
 
 - **P1 – Policy-driven world fs mode**
   - Problem: write permissions inside worlds currently depend on systemd hardening + overlay success, not on broker policy. Sensitive repos need a policy bit to force read-only worlds while other projects remain writable, without editing unit files manually.
-  - Work: extend broker schema to accept `world.fs_mode = read_only|writable` (global + per-project), plumb into shell/world-agent so PTY + non-PTY sessions honor it, and update docs/doctor to surface the active mode. Systemd units must allow `/home` writes so policy can enforce RO vs writable deterministically.
+  - Work: extend broker schema to accept `world.fs_mode = read_only|writable` (global + per-project), plumb into shell/world-service so PTY + non-PTY sessions honor it, and update docs/doctor to surface the active mode. Systemd units must allow `/home` writes so policy can enforce RO vs writable deterministically.
   - Acceptance: policy defaults to writable; flipping to read-only blocks writes (clear errors, trace telemetry); installers/docs explain the knob and tests cover both modes (with skip notes for hosts lacking overlay/cgroup permissions).
 
 - **P1 – Add world OS/distro fields to doctor JSON**
@@ -133,7 +133,7 @@ Keep concise, actionable, and security-focused.
   - Acceptance: operators can pin the world image per workspace and see the effective image in doctor/health; behavior is reproducible across machines; unsafe/unknown images fail closed with clear guidance.
 
 - **P1 fs_diff parity (agent HTTP + PTY)**
-  - *Agent HTTP path:* Today only replay/local backends attach `fs_diff`; agent-routed non-PTY commands drop the diff. Extend `agent-api-types::ExecuteResponse` / `world-agent` so `/v1/execute` returns `fs_diff: Option<FsDiff>` and update the shell to record it in completion spans. Acceptance: `fs_diff` shows up in `trace.jsonl` for agent HTTP runs.
+  - *Agent HTTP path:* Today only replay/local backends attach `fs_diff`; agent-routed non-PTY commands drop the diff. Extend `transport-api-types::ExecuteResponse` / `world-service` so `/v1/execute` returns `fs_diff: Option<FsDiff>` and update the shell to record it in completion spans. Acceptance: `fs_diff` shows up in `trace.jsonl` for agent HTTP runs.
   - *PTY sessions:* Interactive runs still lack filesystem diffs. Explore capturing post-exit diffs via overlayfs/copydiff and plumb the result through the PTY telemetry path so REPL + `substrate -i` sessions produce the same audit artifacts as non-PTY commands. Document caveats (long-running PTYs, partial diffs) and add tests to prove PTY diffs land in spans.
 
 - **P1 – Record `world_id` for REPL/local exec spans**
@@ -238,7 +238,7 @@ Keep concise, actionable, and security-focused.
   - Considerations: support non-interactive modes (`--defaults`, `--profile`), validate paths, respect existing configs (idempotent), and clearly document the choices made.
 
 - **P4 – macOS bootstrap automation**
-  - Build a signed installer script (or helper binary) that validates macOS version/virtualization support, installs required Homebrew packages (`lima`, `jq`, `openssh`, `coreutils`, `gnused`, `gnu-tar`, `gettext`), provisions Lima, deploys `substrate-world-agent`, and runs doctor checks automatically.
+  - Build a signed installer script (or helper binary) that validates macOS version/virtualization support, installs required Homebrew packages (`lima`, `jq`, `openssh`, `coreutils`, `gnused`, `gnu-tar`, `gettext`), provisions Lima, deploys `substrate-world-service`, and runs doctor checks automatically.
   - Acceptance: Fresh macOS host can run a single installer command and end up with the Lima VM, agent, and smoke test ready without manual steps.
 
 - **P4 – macOS installer dependency automation**
@@ -325,11 +325,11 @@ Keep concise, actionable, and security-focused.
     - Future readers can answer, from docs and tests, whether any shipped entrypoint still uses a hidden bootstrap prompt.
     - Either the hidden fallback is removed, or it remains with explicit documentation and tests proving its exact reachability boundary.
 - Document backend divergence
-  - Clarify why shell uses world-agent and replay uses LinuxLocalBackend; outline future convergence plan.
+  - Clarify why shell uses world-service and replay uses LinuxLocalBackend; outline future convergence plan.
 - Redaction hardening for “command body” tracing (preexec + future trace surfaces)
   - Problem: some debug-grade event families (e.g., bash preexec `builtin_command`) can include raw command bodies that may contain tokens/headers/secrets. Today we omit bodies from canonical trace for safety; to safely include bodies we need hardened, shared redaction across the codebase.
   - Work:
-    - Define a shared redaction module usable by shell/shim/world-agent/preexec (flag consumes next arg, `--flag=value`, URL credentials, headers, exports, common token env patterns).
+    - Define a shared redaction module usable by shell/shim/world-service/preexec (flag consumes next arg, `--flag=value`, URL credentials, headers, exports, common token env patterns).
     - Add tests that prove representative leaks are redacted (tokens, Authorization headers, proxy URLs, `export FOO_TOKEN=...`, etc.).
     - Add an explicit opt-in mode to include redacted command bodies in canonical trace for debug profiles (and ensure it is non-triggerable by default for ADR-0029 routing).
   - Acceptance: command-body logging is safe-by-default, can be enabled explicitly for debug with strong redaction + tests, and is clearly labeled/filtered.
@@ -387,7 +387,7 @@ Code changes required (touch points)
 - `crates/world-windows-wsl/src/lib.rs`
   - Ensure `build_agent_client()` resolves the same default and exposes the
     chosen endpoint for telemetry.
-- `crates/agent-api-client` (tests)
+- `crates/transport-api-client` (tests)
   - Update unit tests that assert the hard‑coded legacy pipe to accept the
     dynamic, user‑scoped default.
 - `crates/shell` (tests/telemetry)
@@ -446,11 +446,11 @@ Risks / considerations
 ## DONE -- IMPLEMENTED
 
 
-- ~~**P0 –Socket-activated world-agent service~~ **(Done)**
-  - Current provisioning only installs `substrate-world-agent.service`; the agent binds `/run/substrate.sock` itself and must stay running. Introduce a matching `.socket` unit so systemd listens on the socket, launches the agent on demand, and restarts it transparently.
+- ~~**P0 –Socket-activated world-service service~~ **(Done)**
+  - Current provisioning only installs `substrate-world-service.service`; the agent binds `/run/substrate.sock` itself and must stay running. Introduce a matching `.socket` unit so systemd listens on the socket, launches the agent on demand, and restarts it transparently.
   - Work items:
-    - Update `world-agent` to accept an inherited listener (LISTEN_FDS) in addition to binding directly; keep the existing code path for non-systemd environments.
-    - Teach `ensure_world_agent_ready()` to tolerate socket-activated setups (socket already present, service only starts when probed).
+    - Update `world-service` to accept an inherited listener (LISTEN_FDS) in addition to binding directly; keep the existing code path for non-systemd environments.
+    - Teach `ensure_world_service_ready()` to tolerate socket-activated setups (socket already present, service only starts when probed).
     - Extend Linux/Lima/WSL installers, world-enable helper, and uninstall scripts to deploy/remove both `.service` and `.socket` units.
     - Refresh docs/tests to describe the new flow; ensure guidance around sudo/user installs and permissions highlights the benefit.
   - Can run in parallel with other features—touches agent + provisioning scripts but does not block shell, tracing, or UX work.
@@ -458,7 +458,7 @@ Risks / considerations
 - ~~**Replay polish – isolation + verbose scopes~~ **(Done)**
   - *Isolation follow-up:* Most of the Phase 4.5 isolation plan shipped (per-replay netns + nft scoping), but optional enhancements remain: nft cgroup matching fallback, documentation updates (`COMPLETE_FIXES_PHASE4_PRE45.md`), and diagnostic tooling for leftover netns/rules.
   - *Verbose scopes:* When running `substrate --replay --replay-verbose`, show a concise `scopes: [...]` line next to the “world strategy” output so operators can see which policy scopes were exercised per replay.
-  - *Clear warnings:* Differentiate shell vs. replay world warnings—shell path messages should explicitly say “shell world-agent path”, while replay warnings keep the `[replay] …` prefix.
+  - *Clear warnings:* Differentiate shell vs. replay world warnings—shell path messages should explicitly say “shell world-service path”, while replay warnings keep the `[replay] …` prefix.
   - *Default-to-world replay tests:* Add integration coverage for the default world-on path, `--no-world`, and env opt-out so replay regressions are caught automatically.
   - Treat all of the above as a single replay-focused bucket so backend polish and CLI visibility ship together (shared tests/docs).  
 
@@ -471,16 +471,16 @@ Risks / considerations
   - Implementation: `substrate config init` scaffolds `~/.substrate/config.yaml`, `config show` renders YAML/JSON with redaction hooks, and `config set` applies multi-key updates atomically with schema validation.
   - Docs/installer output highlight the new subcommands across Linux/macOS/Windows, and the precedence stack (flags → directory config → global config → env) remains unchanged.
 
-- ~~Auto-start world-agent on shell startup (Linux)~~ **(Done)**
+- ~~Auto-start world-service on shell startup (Linux)~~ **(Done)**
   - Implementation: `run_shell()` now initializes the Linux backend, flips
     `SUBSTRATE_WORLD=enabled`, sets `SUBSTRATE_WORLD_ID`, and uses
     `ensure_session()` before handling commands (`crates/shell/src/lib.rs:1576-1620`).
   - Notes: macOS and Windows paths share the same default-on behavior; the Linux
-    helper still attempts to spawn `world-agent` if `/run/substrate.sock` is
+    helper still attempts to spawn `world-service` if `/run/substrate.sock` is
     stale (`crates/shell/src/lib.rs:3680-3687`).
 
 - ~~Non-PTY agent auto-start parity (shell)~~ **(Done)**
-  - Implementation: Non-PTY routing now calls `ensure_world_agent_ready()` when
+  - Implementation: Non-PTY routing now calls `ensure_world_service_ready()` when
     worlds are enabled (Linux HTTP path) and records transport metadata for
     macOS/Windows agent calls (`crates/shell/src/lib.rs:3680-3703`, `3560-3663`).
   - Result: The shell only falls back to host execution after a single warning
@@ -493,10 +493,10 @@ Risks / considerations
   - Implement the async agent output path so events can stream without prompt corruption.
 
 - ~~macOS binary distribution~~ **(Done)**
-  - Publish prebuilt `substrate` and `substrate-world-agent` artifacts (e.g., GitHub releases or Homebrew formula) so operators do not need a Rust toolchain to onboard.
+  - Publish prebuilt `substrate` and `substrate-world-service` artifacts (e.g., GitHub releases or Homebrew formula) so operators do not need a Rust toolchain to onboard.
   - Acceptance: Installer/bootstrap script can download versioned binaries; manual instructions reference the published artifacts instead of local builds.
 
 - ~~macOS backend enablement (Lima)~~ — **DONE (2025-09)**
-  - Implemented `world-mac-lima` agent calls via `agent-api-client` with VSock/SSH fallbacks.
+  - Implemented `world-mac-lima` agent calls via `transport-api-client` with VSock/SSH fallbacks.
   - Shell now routes macOS commands through Lima, ensures VM/forwarding, and mirrors Linux telemetry.
   - Acceptance met: `scripts/mac/smoke.sh` validates non-PTY, PTY, and replay; docs refreshed (`docs/WORLD.md`, `docs/dev/mac_world_setup.md`, `docs/INSTALLATION.md`).

@@ -16,7 +16,7 @@ Execution horizon summary:
   - **Direct consumers**: `SEAM-1`, `SEAM-2`
   - **Derived consumers**: `SEAM-4`, `SEAM-5`
   - **Thread IDs**: `THR-01`
-  - **Definition**: `agent-api-types::PolicySnapshotV3.net_allowed: Vec<String>` canonicalized allowlist (supports `"*"` allow-all; `[]` deny-all).
+  - **Definition**: `transport-api-types::PolicySnapshotV3.net_allowed: Vec<String>` canonicalized allowlist (supports `"*"` allow-all; `[]` deny-all).
   - **Normalization posture**: ASCII lowercasing + trailing-dot stripping; Unicode/IDNA input rejected (punycode required). See `SEAM-1/S1.T1`.
   - **Versioning / compat**: additive field with `#[serde(default)]`; canonicalization rules are enforced at snapshot build/validation time.
 
@@ -80,10 +80,10 @@ Execution horizon summary:
   - **Producer seam**: `SEAM-1`
   - **Consumer seam(s)**: `SEAM-2`, `SEAM-4`, `SEAM-5`
   - **Carried contract IDs**: `C-01`
-  - **Purpose**: Make policy `net_allowed` available to world-agent via Snapshot V3 without relying on in-guest broker state.
+  - **Purpose**: Make policy `net_allowed` available to world-service via Snapshot V3 without relying on in-guest broker state.
   - **State**: revalidated
   - **Revalidation trigger**: Any change to `PolicySnapshotV3` schema or canonicalization/validation rules.
-  - **Satisfied by**: Snapshot builder populates canonicalized `net_allowed`, and world-agent request routing consumes the snapshot plus `world_network` payload instead of broker-derived allowlist state.
+  - **Satisfied by**: Snapshot builder populates canonicalized `net_allowed`, and world-service request routing consumes the snapshot plus `world_network` payload instead of broker-derived allowlist state.
   - **Notes**: Canonicalization must collapse `"*"` to exactly `["*"]` and reject non-`"*"` wildcard forms when enforcement is requested. `SEAM-4` pre-exec review now revalidates this handoff as the basis for doctor `requested` semantics.
 
 - **Thread ID**: `THR-02`
@@ -93,7 +93,7 @@ Execution horizon summary:
   - **Purpose**: Ensure the enforcement request to the world backend is unambiguous: when isolate is requested, enforce or fail.
   - **State**: revalidated
   - **Revalidation trigger**: Any new execution path in world backend or shim that spawns processes without cgroup attach.
-  - **Satisfied by**: Host routing requests isolation only when `world.net.filter=true` and canonicalized `net_allowed` is restrictive, and world-agent enforces parity between the snapshot and `world_network.allowed_domains` across PTY and non-PTY request paths.
+  - **Satisfied by**: Host routing requests isolation only when `world.net.filter=true` and canonicalized `net_allowed` is restrictive, and world-service enforces parity between the snapshot and `world_network.allowed_domains` across PTY and non-PTY request paths.
   - **Notes**: `SEAM-1` publishes the request contract; `SEAM-2` closeout now records the landed fail-closed runtime and attach-or-fail semantics that make that routed request real.
 
 - **Thread ID**: `THR-03`
@@ -112,7 +112,7 @@ Execution horizon summary:
   - **Carried contract IDs**: `C-02`
   - **Purpose**: Operational safety guard: enforcement must not accidentally “turn on” without `WORLD_NETFILTER_ENABLE=1`.
   - **State**: revalidated
-  - **Revalidation trigger**: Installer changes or world-agent service configuration changes.
+  - **Revalidation trigger**: Installer changes or world-service service configuration changes.
   - **Satisfied by**: If `isolate_network=true`, the world backend now errors when `WORLD_NETFILTER_ENABLE` is missing/unset, when nftables install fails, when allowed domains cannot resolve, or when helper-path cgroup attach cannot be guaranteed before command start.
   - **Notes**: Published by the `SEAM-2` closeout; this protects against accidental nftables installs/configuration drift and gives `SEAM-4` / `SEAM-5` one concrete failure taxonomy to consume. `SEAM-4` pre-exec review now revalidates this handoff as the basis for doctor failure-state observability.
 

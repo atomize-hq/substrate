@@ -20,7 +20,7 @@ Constraints enforced in this slice:
 
 - Inventory parsing rejects invalid YAML and schema violations.
 - Inventory merge rules are enforced (full-replace per item name; package/bundle name collisions are an error).
-- `current list available` and `current show` MUST NOT make world-agent calls.
+- `current list available` and `current show` MUST NOT make world-service calls.
 
 ## Exit codes
 

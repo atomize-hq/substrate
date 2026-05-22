@@ -165,7 +165,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
   - Resolution (explicit):
     - Treat disable-attribution as orthogonal; provisioning packs must branch their guidance on “world disabled” and must not erase the attribution line that tells operators *why* it is disabled.
 
-- Planning Pack: `docs/project_management/packs/draft/dev-install-world-agent-staging/`
+- Planning Pack: `docs/project_management/packs/draft/dev-install-world-service-staging/`
   - Overlap surfaces:
     - “install with `--no-world`, enable later” workflows where attribution reduces confusion about what to flip back on.
   - Conflict: no

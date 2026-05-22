@@ -35,11 +35,11 @@ Authoritative inputs:
 
 - `backend_id` uses the derived adapter grammar `<kind>:<agent_id>`.
 - `execution.scope` is exactly `host` or `world`.
-- The pure-agent protocol token is exactly `uaa.agent.session`.
+- The pure-agent protocol token is exactly `substrate.agent.session`.
 - Pure-agent identity uses:
   - `client=<agent_id>`
   - `router=agent_hub`
-  - `protocol=uaa.agent.session`
+  - `protocol=substrate.agent.session`
   - `provider`: omitted
   - `auth_authority`: omitted
 - Nested gateway-backed LLM activity stays on a separate correlated record with:
@@ -61,7 +61,7 @@ The hub consumes one canonical capability descriptor per effective inventory ite
   "execution": {
     "scope": "world"
   },
-  "protocol": "uaa.agent.session",
+  "protocol": "substrate.agent.session",
   "capabilities": {
     "session_start": true,
     "session_resume": true,
@@ -80,7 +80,7 @@ Field rules:
 - `backend_id` is derived from `kind` plus `agent_id`. Backends do not publish an independent backend id field.
 - `kind` is the effective inventory backend kind token.
 - `execution.scope` is the effective runtime placement declared by inventory and is exactly `host` or `world`.
-- `protocol` is exactly `uaa.agent.session`.
+- `protocol` is exactly `substrate.agent.session`.
 - `capabilities.session_start`, `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, and `event_stream` are required booleans.
 - `capabilities.llm` and `capabilities.mcp_client` are required booleans and feed the list-surface capability summary.
 - Unknown top-level fields are invalid for `AgentBackendCapabilityDescriptorV1`.
@@ -102,7 +102,7 @@ The hub owns the session participant record. Backends do not invent or persist a
   "agent_id": "codex",
   "backend_id": "cli:codex",
   "role": "member",
-  "protocol": "uaa.agent.session",
+  "protocol": "substrate.agent.session",
   "execution": {
     "scope": "world"
   },
@@ -189,7 +189,7 @@ An inventory item is orchestrator-eligible only when all of these checks pass:
 1. the effective inventory contains the referenced `agent_id`
 2. the effective inventory item is enabled
 3. `execution.scope=host`
-4. `protocol=uaa.agent.session`
+4. `protocol=substrate.agent.session`
 5. `capabilities.session_start=true`
 6. `capabilities.session_resume=true`
 7. `capabilities.session_fork=true`
@@ -258,7 +258,7 @@ This is the exact object shape for each `substrate agent list --json` row.
     "state": "allowed",
     "reason": null
   },
-  "protocol": "uaa.agent.session"
+  "protocol": "substrate.agent.session"
 }
 ```
 
@@ -281,7 +281,7 @@ This is the exact object shape for each pure-agent entry in `substrate agent sta
   "backend_id": "cli:codex",
   "client": "codex",
   "router": "agent_hub",
-  "protocol": "uaa.agent.session",
+  "protocol": "substrate.agent.session",
   "execution": {
     "scope": "world"
   },
@@ -296,7 +296,7 @@ Field rules:
 - `participant_id` is the canonical child identity for status, toolbox, and participant-aware trace correlation.
 - `client` is exactly the emitting session `agent_id`.
 - `router` is exactly `agent_hub`.
-- `protocol` is exactly `uaa.agent.session`.
+- `protocol` is exactly `substrate.agent.session`.
 - `role` is `orchestrator` or `member`.
 - `last_event_at` is the latest accepted structured event timestamp for that participant.
 - `world_id` and `world_generation` are both required when `execution.scope=world`.
@@ -380,7 +380,7 @@ Required or conditional fields:
 - `identity_tuple` is required on pure-agent session events and MUST be:
   - `client=<agent_id>`
   - `router=agent_hub`
-  - `protocol=uaa.agent.session`
+  - `protocol=substrate.agent.session`
   - `provider`: omitted
   - `auth_authority`: omitted
 - `placement_posture` is optional in the exchange envelope and never changes the routing or eligibility rules defined in this file.

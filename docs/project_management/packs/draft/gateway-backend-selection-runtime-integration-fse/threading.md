@@ -44,7 +44,7 @@ Horizon policy for this pack:
   - **Type**: `API`
   - **Owner seam**: `SEAM-2`
   - **Direct consumers**: `SEAM-3`
-  - **Derived consumers**: world-agent service, runtime launch path, lifecycle restart handling
+  - **Derived consumers**: world-service service, runtime launch path, lifecycle restart handling
   - **Thread IDs**: `THR-02`
   - **Definition**: the integrated adapter realization protocol after selection succeeds: one binding lookup, required capability gate, auth handoff validation order, adapter-driven config render, launch, readiness, and restart semantics.
   - **Canonical contract ref**: `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
@@ -101,7 +101,7 @@ Horizon policy for this pack:
   - **Purpose**: land one integrated runtime realization path that parity and rollout can verify without inventing binding, capability, auth, or artifact behavior.
   - **State**: `revalidated`
   - **Revalidation trigger**: binding lookup rules, capability gates, auth handoff validation, runtime payload shapes, artifact naming, readiness semantics, or restart behavior changes.
-  - **Satisfied by**: `governance/seam-2-closeout.md` plus evidence that shell, `world-agent`, and shared agent-api surfaces still implement the published adapter-protocol and runtime-owned schema surfaces without widening unrelated external ownership.
+  - **Satisfied by**: `governance/seam-2-closeout.md` plus evidence that shell, `world-service`, and shared agent-api surfaces still implement the published adapter-protocol and runtime-owned schema surfaces without widening unrelated external ownership.
   - **Notes**: this thread was published by the landed `SEAM-2` closeout once the bounded multi-backend runtime handoff (`cli:codex` plus `api:openai`) passed tests and seam-exit review. It is now `revalidated` because active `SEAM-3` checked that closeout against live runtime/test surfaces and its seam-local `review.md`.
 
 - **Thread ID**: `THR-03`

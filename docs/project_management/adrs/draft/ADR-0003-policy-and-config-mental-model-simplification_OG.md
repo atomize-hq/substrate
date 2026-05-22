@@ -824,7 +824,7 @@ Primary hot spots (current code reality that must be rewritten to satisfy this A
 - Policy schema:
   - `crates/broker/src/policy.rs` (`world_fs.cage` -> `world_fs.isolation`)
 - World env plumbing and parsing:
-  - `crates/world-agent/src/service.rs`
+  - `crates/world-service/src/service.rs`
   - `crates/world/src/exec.rs`
   - `crates/shell/src/execution/routing/dispatch/exec.rs`
 - CLI flags:

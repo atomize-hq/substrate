@@ -69,7 +69,7 @@ Rules:
   - requirement `name` is satisfied only when `pacman -Q <name>` returns success for that exact package name
   - if `pacman -Q` cannot be executed inside the selected world, the pacman requirement is unsatisfied
   - pacman runtime presence checks do not add version matching, alias expansion, or fallback to any other pacman query mode
-- If world-agent connectivity is required for either read-only probe and cannot be established, runtime MUST exit `3` with actionable stderr.
+- If world-service connectivity is required for either read-only probe and cannot be established, runtime MUST exit `3` with actionable stderr.
 
 ### Runtime fail-early sequencing
 For `substrate world deps current sync|install`:

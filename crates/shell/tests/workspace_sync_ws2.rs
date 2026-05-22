@@ -113,7 +113,7 @@ fn workspace_sync_apply_from_world_applies_deletes_respects_excludes_and_clears_
         .prefix("substrate-ws2-sock-")
         .tempdir_in("/tmp")
         .expect("create ws2 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
 
     let state = PendingDiffAckState {
         features: vec![
@@ -211,7 +211,7 @@ fn workspace_sync_apply_refuses_when_pending_diff_contains_protected_paths_and_d
         .prefix("substrate-ws2-sock-")
         .tempdir_in("/tmp")
         .expect("create ws2 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
 
     let state = PendingDiffAckState {
         features: vec!["execute".to_string(), "pending_diff_v1".to_string()],
@@ -271,7 +271,7 @@ fn workspace_sync_apply_refuses_when_max_paths_guard_exceeded_and_includes_thres
         .prefix("substrate-ws2-sock-")
         .tempdir_in("/tmp")
         .expect("create ws2 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
 
     let deletes = (0..10001)
         .map(|idx| format!("too_many_{idx:05}.txt"))
@@ -328,7 +328,7 @@ fn workspace_sync_apply_conflict_policy_abort_refuses_and_does_not_clear_pending
         .prefix("substrate-ws2-sock-")
         .tempdir_in("/tmp")
         .expect("create ws2 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
 
     let state = PendingDiffAckState {
         features: vec![
@@ -422,7 +422,7 @@ fn workspace_sync_apply_conflict_policy_prefer_host_skips_conflicts_exits_0_and_
         .prefix("substrate-ws2-sock-")
         .tempdir_in("/tmp")
         .expect("create ws2 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
 
     let state = PendingDiffAckState {
         features: vec![
@@ -526,7 +526,7 @@ fn workspace_sync_apply_exits_1_when_applied_but_pending_diffs_not_cleared_and_d
         .prefix("substrate-ws2-sock-")
         .tempdir_in("/tmp")
         .expect("create ws2 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
 
     let initial = pending_diff_record(
         "2100-01-01T00:00:00Z",

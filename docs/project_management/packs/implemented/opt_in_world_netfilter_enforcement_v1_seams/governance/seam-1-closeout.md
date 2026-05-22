@@ -15,7 +15,7 @@ basis:
   stale_triggers:
     - "Any change to PolicySnapshotV3 schema or net_allowed canonicalization/validation rules requires SEAM-2, SEAM-4, and SEAM-5 revalidation."
     - "Any change to host routing semantics for world.net.filter or world_network payload construction requires SEAM-2 and SEAM-5 revalidation."
-    - "Any change to world-agent request routing across PTY/non-PTY paths requires SEAM-2, SEAM-4, and SEAM-5 revalidation."
+    - "Any change to world-service request routing across PTY/non-PTY paths requires SEAM-2, SEAM-4, and SEAM-5 revalidation."
 gates:
   post_exec:
     landing: passed
@@ -23,27 +23,27 @@ gates:
 open_remediations: []
 ---
 
-# Closeout - SEAM-1 Snapshot V3 `net_allowed` contract + host→world-agent plumbing
+# Closeout - SEAM-1 Snapshot V3 `net_allowed` contract + host→world-service plumbing
 
 ## Seam-exit gate record
 
 - **Source artifact**: `threaded-seams/seam-1-snapshot-v3-net-allowlist-plumbing/slice-4-seam-exit-gate.md`
 - **Landed evidence**:
-  - `crates/agent-api-types/src/lib.rs` publishes `PolicySnapshotV3.net_allowed` plus the canonicalization and enforcement-validation helpers that define `C-01`.
+  - `crates/transport-api-types/src/lib.rs` publishes `PolicySnapshotV3.net_allowed` plus the canonicalization and enforcement-validation helpers that define `C-01`.
   - `crates/shell/src/execution/policy_snapshot.rs` canonicalizes `net_allowed`, consumes the published `world.net.filter` gate from `SEAM-3`, and emits `world_network` routing that encodes `C-02` and `C-03`.
-  - `crates/world-agent/src/request_routing.rs`, `crates/world-agent/src/service.rs`, and `crates/world-agent/src/pty.rs` consume Snapshot V3 plus `world_network` across non-PTY and PTY paths without broker-derived allowlist lookups on the `SEAM-1` request path.
-  - Verification landed in `crates/agent-api-types/src/lib.rs`, `crates/world-agent/src/request_routing.rs`, `crates/shell/tests/world_request_net_allowed_snapshot.rs`, `crates/shell/tests/repl_world_first_routing_v1.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/config_set.rs`, and `crates/shell/tests/ev0_override_split.rs`.
+  - `crates/world-service/src/request_routing.rs`, `crates/world-service/src/service.rs`, and `crates/world-service/src/pty.rs` consume Snapshot V3 plus `world_network` across non-PTY and PTY paths without broker-derived allowlist lookups on the `SEAM-1` request path.
+  - Verification landed in `crates/transport-api-types/src/lib.rs`, `crates/world-service/src/request_routing.rs`, `crates/shell/tests/world_request_net_allowed_snapshot.rs`, `crates/shell/tests/repl_world_first_routing_v1.rs`, `crates/shell/tests/config_show.rs`, `crates/shell/tests/config_set.rs`, and `crates/shell/tests/ev0_override_split.rs`.
 - **Contracts published or changed**:
   - `C-01`: `PolicySnapshotV3.net_allowed` is now the canonical host-to-world allowlist contract with additive serde-default back-compat behavior.
   - `C-02`: `WorldSpec.isolate_network` is requested only when the effective `world.net.filter` gate is enabled and canonicalized `net_allowed` is restrictive.
   - `C-03`: `WorldSpec.allowed_domains` is derived from canonicalized `net_allowed` and is only meaningful when `isolate_network=true`.
 - **Threads published / advanced**:
   - `THR-01` is published: the host snapshot now carries canonicalized `net_allowed`, and downstream consumers rely on the snapshot instead of broker state.
-  - `THR-02` is published: host and world-agent now share one explicit routing contract for `isolate_network` and `allowed_domains`, including allow-all and deny-all postures.
+  - `THR-02` is published: host and world-service now share one explicit routing contract for `isolate_network` and `allowed_domains`, including allow-all and deny-all postures.
 - **Review-surface delta**:
   - Snapshot V3 now owns the allowlist truth.
   - Host routing now owns the opt-in gate semantics and request shape.
-  - world-agent request routing now enforces PTY/non-PTY parity through `request_routing.rs` instead of per-path broker lookups.
+  - world-service request routing now enforces PTY/non-PTY parity through `request_routing.rs` instead of per-path broker lookups.
 - **Planned-vs-landed delta**:
   - The landed implementation uses the additive `world_network` request payload to make `C-02` and `C-03` explicit across service boundaries; this is tighter than the original planning text but aligned with the seam intent.
   - No remaining seam-local delta exists for `C-01` to `C-03`; downstream seams now consume a published handoff.

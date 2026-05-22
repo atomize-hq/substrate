@@ -45,7 +45,7 @@ open_remediations: []
   - Out:
     - `status --json` field-by-field schema and `client_wiring.*` shape (`SEAM-2`)
     - fail-closed policy-evaluation decision tables and trust-boundary rules (`SEAM-2`)
-    - typed world-agent lifecycle/status transport and parity guarantees (`SEAM-3`)
+    - typed world-service lifecycle/status transport and parity guarantees (`SEAM-3`)
     - final docs-validation and quality-gate lock-in (`SEAM-4`)
 - **Touch surface**:
   - Primary planning surfaces:

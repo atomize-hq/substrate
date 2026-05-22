@@ -11,7 +11,7 @@ This artifact feeds `gates.pre_exec.review`.
 
 ## Falsification questions
 
-- Can the CLI or docs still define lifecycle/status behavior through raw exec probing instead of one typed world-agent contract?
+- Can the CLI or docs still define lifecycle/status behavior through raw exec probing instead of one typed world-service contract?
 - Can Linux, macOS, and Windows surface materially different operator-visible lifecycle/status semantics without an explicit allowed-divergence rule?
 - Can provisioning or gateway-local runtime internals leak into the typed lifecycle/status contract this seam is supposed to own?
 
@@ -20,7 +20,7 @@ This artifact feeds `gates.pre_exec.review`.
 ```mermaid
 flowchart LR
   CLI["Shell builtin / operator surface"] --> CLIENT["Shared agent API client/types"]
-  CLIENT --> AGENT["Typed world-agent lifecycle/status contract"]
+  CLIENT --> AGENT["Typed world-service lifecycle/status contract"]
   AGENT --> BACKENDS["Linux / macOS / Windows backends"]
   AGENT --> C04["Runtime parity contract"]
 ```
@@ -39,8 +39,8 @@ flowchart TB
 
 ## Likely mismatch hotspots
 
-- Shell-side exec probing could reappear if the typed world-agent lifecycle/status contract is not made explicit first.
-- Shared client/server alignment can drift if `crates/agent-api-types` and `crates/agent-api-client` move ahead of the owned runtime/parity contract baseline.
+- Shell-side exec probing could reappear if the typed world-service lifecycle/status contract is not made explicit first.
+- Shared client/server alignment can drift if `crates/transport-api-types` and `crates/transport-api-client` move ahead of the owned runtime/parity contract baseline.
 - Platform parity language can accidentally absorb provisioning or backend-private layout decisions unless the allowed-divergence list stays explicit.
 
 ## Pre-exec findings

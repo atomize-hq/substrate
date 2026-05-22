@@ -300,7 +300,7 @@ fn test_scoped_list_enabled_is_patch_view_not_effective_merged() {
 }
 
 #[test]
-fn test_current_list_enabled_merges_scopes_and_does_not_call_world_agent() {
+fn test_current_list_enabled_merges_scopes_and_does_not_call_world_service() {
     let fixture = ShellEnvFixture::new();
     let ws_root = workspace_root(&fixture);
     fs::create_dir_all(&ws_root).expect("create ws root");
@@ -347,7 +347,7 @@ fn test_current_list_enabled_merges_scopes_and_does_not_call_world_agent() {
     );
     assert!(
         !stderr.contains("world backend unavailable"),
-        "current list enabled must not call world-agent: stderr={stderr}"
+        "current list enabled must not call world-service: stderr={stderr}"
     );
     let a_pos = find_name_pos(&stdout, "a");
     let b_pos = find_name_pos(&stdout, "b");

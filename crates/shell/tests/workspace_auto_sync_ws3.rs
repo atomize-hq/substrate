@@ -130,7 +130,7 @@ fn auto_sync_runs_after_successful_non_pty_world_command_and_applies_pending_dif
         .prefix("substrate-ws3-sock-")
         .tempdir_in("/tmp")
         .expect("create ws3 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let state = ws3_socket_state(pending_diff_record_deletes(
         "2100-01-01T00:00:00Z",
         "diff_ws3_01",
@@ -210,7 +210,7 @@ fn auto_sync_does_not_run_when_non_pty_world_command_exits_nonzero() {
         .prefix("substrate-ws3-sock-")
         .tempdir_in("/tmp")
         .expect("create ws3 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let state = ws3_socket_state(pending_diff_record_deletes(
         "2100-01-01T00:00:00Z",
         "diff_ws3_nonzero",
@@ -286,7 +286,7 @@ fn auto_sync_failure_propagates_exit_code_and_prefixes_error() {
         .prefix("substrate-ws3-sock-")
         .tempdir_in("/tmp")
         .expect("create ws3 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let state = ws3_socket_state(json!({
         "session_started_at": "2100-01-01T00:00:00Z",
         "diff_id": "diff_ws3_protected",
@@ -349,7 +349,7 @@ fn auto_sync_noops_when_effective_direction_is_from_host() {
         .prefix("substrate-ws3-sock-")
         .tempdir_in("/tmp")
         .expect("create ws3 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let state = ws3_socket_state(pending_diff_record_deletes(
         "2100-01-01T00:00:00Z",
         "diff_ws3_from_host",

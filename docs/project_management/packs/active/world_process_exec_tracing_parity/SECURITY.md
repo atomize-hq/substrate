@@ -38,12 +38,12 @@ For process telemetry (`world_process_*`):
 - Command execution inside the world MUST proceed even if process telemetry capture is unavailable.
 
 ### 3.2 Observability correctness (no silent omission)
-- If process telemetry is unavailable, world-agent MUST return explicit diagnostics:
+- If process telemetry is unavailable, world-service MUST return explicit diagnostics:
   - `process_events_status: "unavailable"`
   - `process_events_reason: "<stable reason code>"`
 
 ### 3.3 Truncation correctness
-- When event caps trigger truncation, world-agent MUST:
+- When event caps trigger truncation, world-service MUST:
   - return `process_events_status: "truncated"`, and
   - include a deterministic dropped-count summary (`process_events_dropped`).
 

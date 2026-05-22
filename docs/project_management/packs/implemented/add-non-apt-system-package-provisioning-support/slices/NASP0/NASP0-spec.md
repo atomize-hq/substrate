@@ -1,7 +1,7 @@
 # NASP0-spec — World-manager probe and provisioning support gate
 
 ## Behavior delta (single)
-- Existing: ADR-0033 requires an in-world package-manager probe for `substrate world enable --provision-deps`, but the pack had no canonical slice spec for precedence between `/etc/os-release` and manager-presence checks, leaving shell, dispatch, and world-agent support-gate behavior unspecified.
+- Existing: ADR-0033 requires an in-world package-manager probe for `substrate world enable --provision-deps`, but the pack had no canonical slice spec for precedence between `/etc/os-release` and manager-presence checks, leaving shell, dispatch, and world-service support-gate behavior unspecified.
 - New: `NASP0` defines one deterministic provisioning probe and support gate: in-world `/etc/os-release` identity is authoritative, in-world `command -v pacman` confirms Arch-family support, unsupported or contradictory results fail closed with exit `4`, and host state is never consulted for manager selection.
 - Why: Later slices need one stable manager-selection contract before pacman schema, provisioning routing, and runtime fail-early behavior can be implemented safely.
 

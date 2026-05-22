@@ -31,7 +31,7 @@ Add alternate macOS Lima VM/profile support to installer world provisioning.
   - `LIMA_PROFILE_PATH=scripts/mac/lima/substrate-arch.yaml`
   - `./scripts/substrate/dev-install-substrate.sh --profile release --world-netfilter`
 - The end state must allow an operator to provision/build/install against `substrate-arch` without renaming or disturbing the default Ubuntu `substrate` fixture.
-- Remove or replace APT-only guest bootstrap assumptions inside the macOS installer path so an Arch-family guest can complete the “build Linux substrate + world-agent inside Lima” fallback path.
+- Remove or replace APT-only guest bootstrap assumptions inside the macOS installer path so an Arch-family guest can complete the “build Linux substrate + world-service inside Lima” fallback path.
 - Cover the staged runtime-bundle path too: the helper/profile artifacts linked into the effective prefix must be sufficient for later reuse of the selected profile/VM strategy, or the implementation must intentionally constrain that path and document the reason.
 - Review the production installer’s macOS path at the same time. It currently shares the same hardcoded `substrate` assumption during post-provision verification, so future planning should treat dev/prod parity as part of the same touch set unless there is a deliberate split.
 
@@ -40,7 +40,7 @@ Add alternate macOS Lima VM/profile support to installer world provisioning.
 - `scripts/substrate/dev-install-substrate.sh` can provision a non-default macOS Lima VM/profile by env override, including the Arch-family profile at `scripts/mac/lima/substrate-arch.yaml`.
 - The dev installer no longer contains macOS world-provisioning calls that hardcode `limactl shell substrate ...` or `limactl copy ... substrate:...`.
 - The macOS installer path no longer assumes guest package bootstrap must use `apt-get`; the Arch-family path can obtain Rust/cargo or otherwise build the needed Linux binaries successfully.
-- An Arch-family run can build/install `/usr/local/bin/substrate` and `/usr/local/bin/substrate-world-agent` inside the alternate VM and cache Linux ELFs back into the managed prefix.
+- An Arch-family run can build/install `/usr/local/bin/substrate` and `/usr/local/bin/substrate-world-service` inside the alternate VM and cache Linux ELFs back into the managed prefix.
 - The default Ubuntu `substrate` installer path still works unchanged when no override vars are set.
 - The production installer’s macOS verification path is either updated to the same VM-name/profile contract or explicitly split into a follow-up with rationale captured in the implementation notes.
 - macOS installer tests cover both default and alternate VM/profile behavior.

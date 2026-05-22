@@ -154,7 +154,7 @@ cargo build --release
 
 - **Security Worlds Enhancements**: Default-on worlds ship for Linux, macOS (via Lima), and Windows (via WSL **functional but experimental**); active work includes tightening isolation policies and expanding telemetry around world sessions.
 - **Policy Engine Evolution**: The broker today enforces allow/deny/isolate rules in observe mode by default; future milestones include opt-in enforcement flows and richer restriction types.
-- **Agent API Maturation**: `world-agent` already exposes REST/WebSocket endpoints for shell integration—planned work adds per-agent budgets and scope negotiation for third-party assistants.
+- **Agent API Maturation**: `world-service` already exposes REST/WebSocket endpoints for shell integration—planned work adds per-agent budgets and scope negotiation for third-party assistants.
 - **Graph Intelligence Roadmap**: The `substrate-graph` crate ships with a mock backend; Kuzu-powered ingestion and query tooling remain active development areas.
 
 ### Future Features Pipeline
@@ -221,7 +221,7 @@ macOS report highlights:
 
 - Lima tooling (`limactl`), Virtualization.framework (`sysctl kern.hv_support`), and optional `vsock-proxy`
 - Lima VM `substrate` status plus SSH connectivity
-- Guest `substrate-world-agent` service, socket, and `/v1/capabilities` response
+- Guest `substrate-world-service` service, socket, and `/v1/capabilities` response
 - nftables availability and root filesystem usage inside the guest
 - JSON output nests these fields under `lima.{installed, vm_status, service_active, agent_socket, agent_caps_ok, vsock_proxy, ssh, nft, disk_usage}`
 

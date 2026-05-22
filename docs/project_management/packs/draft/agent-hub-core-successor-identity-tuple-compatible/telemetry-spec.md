@@ -54,7 +54,7 @@ Required top-level fields:
 - ADR-0044 tuple-compatible fields:
   - `client`
   - `router = "agent_hub"`
-  - `protocol = "uaa.agent.session"`
+  - `protocol = "substrate.agent.session"`
 
 Conditional top-level fields:
 
@@ -147,7 +147,7 @@ When the hub auto-restarts a shared world, it emits one `agent_event` record wit
   - `backend_id`
   - `client`
   - `router = "agent_hub"`
-  - `protocol = "uaa.agent.session"`
+  - `protocol = "substrate.agent.session"`
   - `role = "orchestrator"`
   - `world_id = <new_world_id>`
   - `world_generation = <new_world_generation>`
@@ -175,7 +175,7 @@ When drift is detected under fail-closed posture, the hub emits one `agent_event
   - `backend_id`
   - `client`
   - `router = "agent_hub"`
-  - `protocol = "uaa.agent.session"`
+  - `protocol = "substrate.agent.session"`
   - `role = "orchestrator"`
 - `world_id` and `world_generation`:
   - both are present when the invalidated world is still known at alert time
@@ -229,7 +229,7 @@ Trace rules:
 ## Acceptance criteria
 
 - Pure-agent orchestration records and nested gateway-backed LLM records are always published as separate `agent_event` records.
-- Pure-agent records always publish `client`, `router = "agent_hub"`, `protocol = "uaa.agent.session"`, and omit `provider` plus `auth_authority`.
+- Pure-agent records always publish `client`, `router = "agent_hub"`, `protocol = "substrate.agent.session"`, and omit `provider` plus `auth_authority`.
 - Nested gateway-backed records always publish `client`, `router = "substrate_gateway"`, `protocol`, `provider`, `auth_authority`, and omit `world_id` plus `world_generation`.
 - `world_generation` is always top-level on steady-state world-scoped pure-agent records and on restart alerts that know the active world.
 - Restart alerts always keep previous-generation values inside `data.previous_*` and active replacement values at the top level plus `data.new_*`.

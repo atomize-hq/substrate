@@ -38,7 +38,7 @@ unsupported-backend behavior remaining explicit and no-fallback.
   - canonical contract baseline:
     - `docs/contracts/substrate-gateway-runtime-parity.md`
   - landed automated parity evidence:
-    - `crates/world-agent/tests/gateway_runtime_parity.rs`
+    - `crates/world-service/tests/gateway_runtime_parity.rs`
       - `gateway_openai_sync_makes_status_available_and_is_idempotent`
       - `gateway_openai_restart_recycles_the_runtime`
       - `gateway_openai_manifest_recovery_restores_status_sync_and_restart`

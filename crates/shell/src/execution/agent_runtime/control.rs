@@ -11,8 +11,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-#[cfg(target_os = "linux")]
-use agent_api_types::{ExecuteStreamFrame, MemberTurnSubmitRequestV1};
 use anyhow::{Context, Result};
 #[cfg(target_os = "linux")]
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -26,6 +24,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{mpsc, oneshot};
+#[cfg(target_os = "linux")]
+use transport_api_types::{ExecuteStreamFrame, MemberTurnSubmitRequestV1};
 use uuid::Uuid;
 
 #[cfg(unix)]

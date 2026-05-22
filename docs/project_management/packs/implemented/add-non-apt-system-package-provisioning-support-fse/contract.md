@@ -241,7 +241,7 @@ When runtime exits `4` because a required system package is missing, stderr MUST
 - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 - 0: success, including a contract-defined no-op
 - 2: invalid inventory or schema input, including invalid `install.method`, invalid `install.pacman` shape, or enabling an unknown item
-- 3: world backend unavailable or cannot connect to world-agent when execution is required
+- 3: world backend unavailable or cannot connect to world-service when execution is required
 - 4: not supported / missing prerequisites, including unsupported platforms/backends, unsupported world manager, mixed-manager enabled sets, manager mismatches, or missing required system packages at runtime
 - 5: safety / protected-path violation
 - 1: unexpected internal error

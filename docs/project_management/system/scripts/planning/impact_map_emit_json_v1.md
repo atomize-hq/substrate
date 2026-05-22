@@ -96,11 +96,11 @@ Strict, prefix-present:
 
 ```json
 {
-  "create": ["crates/world-agent/", "docs/foo.md"],
+  "create": ["crates/world-service/", "docs/foo.md"],
   "edit": [],
   "deprecate": [],
   "delete": [],
-  "dir_prefixes": ["crates/world-agent/"]
+  "dir_prefixes": ["crates/world-service/"]
 }
 ```
 

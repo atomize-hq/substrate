@@ -67,7 +67,7 @@ Standard:
 - Boundary type:
   - First contiguous checkpoint group across the accepted slice order.
 - Why this boundary is code-grounded:
-  - `NASP0` stabilizes the in-world probe and support gate across `world_enable`, dispatch, and `world-agent`.
+  - `NASP0` stabilizes the in-world probe and support gate across `world_enable`, dispatch, and `world-service`.
   - `NASP1` isolates schema and inventory-view changes from provisioning execution.
   - `NASP2` consumes the probe and schema contract to drive provisioning routing, request-profile use, and pacman execution.
 - What surfaces are stabilized here:

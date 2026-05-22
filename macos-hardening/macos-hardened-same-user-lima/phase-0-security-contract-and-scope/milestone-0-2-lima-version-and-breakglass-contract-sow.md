@@ -116,7 +116,7 @@ This milestone should produce four concrete decisions.
 - Gateway lifecycle/status contract already landed:
   - `docs/contracts/substrate-gateway-operator-contract.md`
   - `docs/contracts/substrate-gateway-status-schema.md`
-  - `crates/world-agent/src/gateway_runtime.rs`
+  - `crates/world-service/src/gateway_runtime.rs`
 - Operator guidance that must be reclassified:
   - `docs/WORLD.md`
   - `docs/cross-platform/mac_world_setup.md`
@@ -164,7 +164,7 @@ This milestone should produce four concrete decisions.
   baseline captures the current UDS-backed story, stale `7788` references, and
   host TCP `17788` compatibility probing.
 - Review `crates/shell/src/builtins/world_gateway.rs`,
-  `crates/world-agent/src/gateway_runtime.rs`, and
+  `crates/world-service/src/gateway_runtime.rs`, and
   `scripts/mac/smoke.sh` and confirm the SOW acknowledges the already-landed
   gateway lifecycle/status contract and smoke coverage.
 - Review `docs/cross-platform/mac_world_setup.md` and `docs/WORLD.md` and

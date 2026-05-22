@@ -16,7 +16,7 @@ basis:
     - THR-03
   stale_triggers:
     - "Any change to policy schema for net egress (net_allowed semantics)"
-    - "Any world-agent request/response contract changes"
+    - "Any world-service request/response contract changes"
     - "Any change to host config gating semantics for world.net.filter (C-04)"
 gates:
   pre_exec:
@@ -33,15 +33,15 @@ seam_exit_gate:
 open_remediations: []
 ---
 
-# SEAM-1 - Snapshot V3 `net_allowed` contract + host→world-agent plumbing
+# SEAM-1 - Snapshot V3 `net_allowed` contract + host→world-service plumbing
 
-- **Goal / value**: Ensure world-agent enforcement is driven by an explicit, canonicalized `net_allowed` allowlist in Policy Snapshot V3 (no in-guest broker state), and that the host-to-world routing is unambiguous about when to request isolation vs allow-all.
+- **Goal / value**: Ensure world-service enforcement is driven by an explicit, canonicalized `net_allowed` allowlist in Policy Snapshot V3 (no in-guest broker state), and that the host-to-world routing is unambiguous about when to request isolation vs allow-all.
 - **Scope**
   - In:
     - Add `net_allowed` to Snapshot V3 with `#[serde(default)]`.
     - Canonicalize/validate `net_allowed` (trim, drop empties, dedupe, collapse `"*"` to `["*"]`, reject unsupported wildcards/URLs/ports/paths when enforcement is enabled).
     - Host snapshot builder populates `net_allowed` from effective policy.
-    - world-agent uses Snapshot V3 `net_allowed` instead of `substrate_broker::allowed_domains()` and routes requests to the world backend via `WorldSpec`.
+    - world-service uses Snapshot V3 `net_allowed` instead of `substrate_broker::allowed_domains()` and routes requests to the world backend via `WorldSpec`.
   - Out:
     - Implementing `world.net.filter` config and CLI (owned by `SEAM-3`).
     - Making nftables enforcement fail-closed at runtime (owned by `SEAM-2`).
@@ -50,7 +50,7 @@ open_remediations: []
     - Effective policy `net_allowed` (host-side).
     - Host config gate `world.net.filter` (producer is `SEAM-3`; consumed here).
   - Outputs:
-    - `PolicySnapshotV3.net_allowed` delivered to world-agent.
+    - `PolicySnapshotV3.net_allowed` delivered to world-service.
     - `WorldSpec.isolate_network` and `allowed_domains` request shape passed to world backend.
 - **Key invariants / rules**:
   - Snapshot is the sole source of truth for `net_allowed` in the world; no in-world broker lookups for allowlists.
@@ -67,12 +67,12 @@ open_remediations: []
   - Derived consumers:
     - `SEAM-5` (tests/smoke)
 - **Touch surface**:
-  - `crates/agent-api-types` snapshot schema
+  - `crates/transport-api-types` snapshot schema
   - `crates/shell/src/execution/policy_snapshot.rs`
-  - `crates/world-agent/src/service.rs` + `crates/world-agent/src/pty.rs`
+  - `crates/world-service/src/service.rs` + `crates/world-service/src/pty.rs`
 - **Verification**:
-  - Unit tests for canonicalization/validation in `agent-api-types`.
-  - Tests asserting world-agent routes allowlists from snapshot (not broker).
+  - Unit tests for canonicalization/validation in `transport-api-types`.
+  - Tests asserting world-service routes allowlists from snapshot (not broker).
 - **Current blocker posture**:
   - `SEAM-3` now publishes `C-04` / `THR-03` as landed upstream input, and this seam now consumes that handoff in the
     landed host routing implementation. Remaining work sits downstream in `SEAM-2`, `SEAM-4`, and `SEAM-5`.

@@ -10,7 +10,7 @@ basis:
   basis_ref: seam.md#basis
   stale_triggers:
   - THR-01 changes probe precedence, supported families, or exit `4` posture
-  - world_enable / world-agent shared-file changes alter where the probe runs
+  - world_enable / world-service shared-file changes alter where the probe runs
   - platform posture changes (Linux host-native / macOS Lima / Windows WSL) require a different
     supported-vs-unsupported gate outcome
 gates:

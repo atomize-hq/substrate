@@ -49,7 +49,7 @@ Execution triads under this Planning Pack are expected to edit:
 
 - `crates/shell/src/builtins/world_deps/*` — replace legacy selection/manifest plumbing with inventory+enabled-patch contract
 - `crates/common/src/world_deps_manifest.rs` — replace/extend manifest model to parse package/bundle inventory definitions
-- `crates/world-agent/*` — implement in-world probe + install execution for packages/bundles (apt + script + manual blocked)
+- `crates/world-service/*` — implement in-world probe + install execution for packages/bundles (apt + script + manual blocked)
 - Installer scripts that stage legacy world-deps files — stop copying/reading legacy paths
 
 ### Delete (execution scope; end state)
@@ -112,10 +112,10 @@ When execution completes, delete legacy world-deps selection/overlay plumbing so
   - Conflict: no
   - Resolution (explicit): `world deps` patch editing and effective views use the broker-owned patch merge rules and do not implement a bespoke merge/precedence engine
 
-- ADR: `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
-  - Overlap surfaces: world-agent concurrency safety, policy snapshot inputs to world-agent enforcement
+- ADR: `docs/project_management/adrs/implemented/ADR-0014-world-service-policy-resolution-and-concurrency.md`
+  - Overlap surfaces: world-service concurrency safety, policy snapshot inputs to world-service enforcement
   - Conflict: no
-  - Resolution (explicit): world-backed `world deps` operations execute via host-provided policy snapshots (`PolicySnapshotV3`); legacy local policy resolution inside world-agent is not in scope for this Planning Pack
+  - Resolution (explicit): world-backed `world deps` operations execute via host-provided policy snapshots (`PolicySnapshotV3`); legacy local policy resolution inside world-service is not in scope for this Planning Pack
 
 - ADR: `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`
   - Overlap surfaces: interactive REPL evaluator shell contract

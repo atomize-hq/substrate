@@ -234,7 +234,7 @@ fn command_mode_world_consistency_v1_routes_both_c_and_pipe_via_world_socket() {
     let recorded = records.lock().expect("lock records");
     assert!(
         recorded.len() >= 2,
-        "expected both -c and pipe mode to issue world-agent execute requests; recorded={}",
+        "expected both -c and pipe mode to issue world-service execute requests; recorded={}",
         recorded.len()
     );
 }
@@ -377,12 +377,12 @@ fn command_mode_world_consistency_v1_c_mode_does_not_host_canonicalize_cd_pwd() 
     assert!(
         cmds.iter()
             .any(|cmd| cmd.contains(&format!("mkdir -p {dir_name}"))),
-        "expected mkdir command to be sent to world-agent; cmds={cmds:?}"
+        "expected mkdir command to be sent to world-service; cmds={cmds:?}"
     );
     assert!(
         cmds.iter()
             .any(|cmd| cmd.contains(&format!("cd {dir_name}")) && cmd.contains("pwd -P")),
-        "expected cd/pwd command text to be sent to world-agent (not host builtins); cmds={cmds:?}"
+        "expected cd/pwd command text to be sent to world-service (not host builtins); cmds={cmds:?}"
     );
 }
 
@@ -460,12 +460,12 @@ fn command_mode_world_consistency_v1_pipe_mode_does_not_host_canonicalize_cd_pwd
     assert!(
         cmds.iter()
             .any(|cmd| cmd.contains(&format!("mkdir -p {dir_name}"))),
-        "expected mkdir command to be sent to world-agent; cmds={cmds:?}"
+        "expected mkdir command to be sent to world-service; cmds={cmds:?}"
     );
     assert!(
         cmds.iter()
             .any(|cmd| cmd.contains(&format!("cd {dir_name}")) && cmd.contains("pwd -P")),
-        "expected cd/pwd command text to be sent to world-agent (not host builtins); cmds={cmds:?}"
+        "expected cd/pwd command text to be sent to world-service (not host builtins); cmds={cmds:?}"
     );
 }
 

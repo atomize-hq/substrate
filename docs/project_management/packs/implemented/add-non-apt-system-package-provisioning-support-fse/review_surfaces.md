@@ -27,7 +27,7 @@ flowchart TD
   READONLY -->|missing| EXIT4R["Exit 4 + remediation:<br/>substrate world enable --provision-deps"]
 ```
 
-## R2 - CLI, shell, world-agent, and inventory/data flow
+## R2 - CLI, shell, world-service, and inventory/data flow
 
 ```mermaid
 flowchart LR
@@ -38,7 +38,7 @@ flowchart LR
   ENABLED --> CLI1[world enable --provision-deps]
   CLI1 --> RUNNER[world_enable runner]
   RUNNER --> DISPATCH[dispatch/world_ops]
-  DISPATCH --> AGENT[world-agent service]
+  DISPATCH --> AGENT[world-service service]
   AGENT --> PROBE[/etc/os-release + command -v pacman/]
   PROBE --> EXEC[Provisioning path<br/>apt or pacman only]
 
@@ -56,7 +56,7 @@ flowchart TB
   CONTRACT --> SCHEMASEAM[NASP1 / pacman schema]
   PROBESEAM --> ENABLEFLOW[world_enable runner/helper_script/log_ops]
   SCHEMASEAM --> INVFLOW[inventory.rs + inventory views/tests]
-  ENABLEFLOW --> DISPATCH[dispatch/world_ops + world-agent/service]
+  ENABLEFLOW --> DISPATCH[dispatch/world_ops + world-service/service]
   INVFLOW --> PROVISION[NASP2 / provisioning routing]
   PROVISION --> RUNTIME[NASP3 / runtime fail-early]
   RUNTIME --> CONF[NASP4 / parity + manual + smoke]

@@ -8,7 +8,7 @@ Last updated: 2026-05-19
 
 ## Purpose / outcome
 
-Unify the macOS Lima guest `substrate-world-agent` service and socket
+Unify the macOS Lima guest `substrate-world-service` service and socket
 definitions behind one authoritative source so the hardened sandbox,
 socket-activation contract, and environment are consistent across VM creation,
 repair, and diagnostics.
@@ -65,7 +65,7 @@ The unified contract must explicitly encode:
 - no default guest TCP listener injection for the hardened path
 - writable/runtime paths required for `/run/substrate.sock` and
   `/run/substrate/substrate-gateway-runtime/`
-- only the minimum environment needed for supported world-agent and managed
+- only the minimum environment needed for supported world-service and managed
   gateway operation
 
 ## Dependencies / sequencing
@@ -85,7 +85,7 @@ The unified contract must explicitly encode:
 - `scripts/mac/lima-warm.sh`
   - currently rewrites the service and socket units during warm/repair
   - currently injects hardening-relevant environment and capability settings
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
   - authoritative runtime-artifact expectations for `/run/substrate/substrate-gateway-runtime/`
 - `scripts/mac/lima-doctor.sh`
   - should verify the unified unit contract rather than loosely checking partial state
@@ -105,7 +105,7 @@ The unified contract must explicitly encode:
 
 ## Acceptance criteria
 
-- There is exactly one authoritative macOS guest unit definition path for `substrate-world-agent.service` and `substrate-world-agent.socket`.
+- There is exactly one authoritative macOS guest unit definition path for `substrate-world-service.service` and `substrate-world-service.socket`.
 - Hardening-critical settings are identical whether the guest is freshly created or repaired.
 - Doctor, gateway lifecycle, and troubleshooting guidance point to the unified
   unit contract instead of to whichever path happened to run last.

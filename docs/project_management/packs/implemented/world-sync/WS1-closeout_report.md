@@ -36,7 +36,7 @@ Slice spec:
 - `cargo clippy --workspace --all-targets -- -D warnings`: pass
 - Relevant tests: pass
   - `cargo test -p shell --test workspace_sync_ws0 -- --nocapture`
-  - `cargo test -p world-agent -- --nocapture`
+  - `cargo test -p world-service -- --nocapture`
 - `make integ-checks`: pass
 
 ## Cross-Platform Smoke (if applicable)

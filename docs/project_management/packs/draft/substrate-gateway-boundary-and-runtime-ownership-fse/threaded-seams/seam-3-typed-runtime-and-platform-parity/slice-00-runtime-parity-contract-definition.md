@@ -33,11 +33,11 @@ open_remediations:
 - **User/system value**: downstream runtime and docs work inherit one explicit typed lifecycle/status contract instead of improvising around backend-specific behavior.
 - **Scope (in/out)**:
   - In:
-    - define the owned boundary for the typed world-agent lifecycle/status contract
+    - define the owned boundary for the typed world-service lifecycle/status contract
     - define the allowed divergence list and the evidence expectations for Linux, macOS, and Windows
     - name the publication surfaces for the feature-local parity spec and the durable runtime/parity contract
   - Out:
-    - world-agent handler implementation
+    - world-service handler implementation
     - shell/client adoption work
     - seam-exit evidence and downstream docs lock-in
 - **Acceptance criteria**:
@@ -64,7 +64,7 @@ These are the binding contract statements this seam must implement and later pub
 1. **Authority boundary**: lifecycle and status operations behind `substrate world gateway sync`, `status`, and `restart` must consume a typed world/backend runtime surface instead of shell-side raw exec probing or backend-private heuristics.
 2. **Ownership split inside the runtime path**:
    - `crates/shell/src/builtins/world_gateway.rs` owns operator rendering and exit classification only.
-   - `crates/world-agent`, `crates/agent-api-types`, and `crates/agent-api-client` own the typed runtime transport boundary.
+   - `crates/world-service`, `crates/transport-api-types`, and `crates/transport-api-client` own the typed runtime transport boundary.
    - `substrate-gateway` internals remain out of scope for this contract except through the stable lifecycle/status boundary they present to Substrate.
 3. **Inherited upstream contracts remain authoritative**:
    - `C-01` still owns the command family and exit taxonomy.
@@ -74,7 +74,7 @@ These are the binding contract statements this seam must implement and later pub
 4. **Platform parity guarantee**: Linux, macOS, and Windows expose one operator-facing lifecycle/status meaning even though the underlying world transport differs by platform.
 5. **Allowed divergence list**:
    - Linux may use direct Unix socket transport to `/run/substrate.sock`.
-   - macOS may use Lima-backed forwarding to reach the guest `world-agent`.
+   - macOS may use Lima-backed forwarding to reach the guest `world-service`.
    - Windows may use the WSL-backed forwarder path, including named-pipe or TCP bridge transport as needed.
    - Provisioning helpers, doctor commands, and transport-remediation hints may differ by platform, but those differences must not create a second operator contract.
 6. **Out-of-scope guardrail**: provisioning and world warm-flow ownership remain outside this seam, and runtime parity language must not absorb them.
@@ -85,16 +85,16 @@ These are the binding contract statements this seam must implement and later pub
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`
   - `docs/contracts/substrate-gateway-runtime-parity.md`
 - **Code surfaces that must land against this contract**:
-  - `crates/world-agent/src/lib.rs`
-  - `crates/agent-api-types/src/lib.rs`
-  - `crates/agent-api-client/src/lib.rs`
+  - `crates/world-service/src/lib.rs`
+  - `crates/transport-api-types/src/lib.rs`
+  - `crates/transport-api-client/src/lib.rs`
   - `crates/shell/src/builtins/world_gateway.rs`
 - **Tests to add or extend**:
   - extend `crates/shell/tests/world_gateway.rs` with `world_gateway_status_uses_typed_runtime_contract`
   - extend `crates/shell/tests/world_gateway.rs` with `world_gateway_status_json_preserves_client_wiring_absence_rules`
   - extend `crates/shell/tests/world_gateway.rs` with `world_gateway_sync_and_restart_follow_typed_lifecycle_contract`
-  - add `crates/world-agent/tests/gateway_runtime_parity.rs` with `gateway_runtime_status_route_matches_socket_activation_transport`
-  - add `crates/world-agent/tests/gateway_runtime_parity.rs` with `gateway_runtime_restart_route_preserves_component_unavailable_classification`
+  - add `crates/world-service/tests/gateway_runtime_parity.rs` with `gateway_runtime_status_route_matches_socket_activation_transport`
+  - add `crates/world-service/tests/gateway_runtime_parity.rs` with `gateway_runtime_restart_route_preserves_component_unavailable_classification`
 - **Edge cases that later slices must cover**:
   - required gateway/world component unavailable still produces the operator-owned exit `4` posture across `sync`, `status`, `status --json`, and `restart`
   - `status --json` omits `client_wiring` rather than emitting placeholders when the runtime cannot publish wiring
@@ -108,7 +108,7 @@ These are the binding contract statements this seam must implement and later pub
 
 - **Outcome**: `C-04` is concrete in both the feature-local parity spec and the durable contract mirror.
 - **Inputs/outputs**:
-  - Inputs: `../../threading.md`, `../../governance/seam-1-closeout.md`, `../../governance/seam-2-closeout.md`, `docs/WORLD.md`, `docs/INSTALLATION.md`, and the current shell/world-agent transport surfaces
+  - Inputs: `../../threading.md`, `../../governance/seam-1-closeout.md`, `../../governance/seam-2-closeout.md`, `docs/WORLD.md`, `docs/INSTALLATION.md`, and the current shell/world-service transport surfaces
   - Outputs: aligned `platform-parity-spec.md` and `docs/contracts/substrate-gateway-runtime-parity.md`
 - **Thread/contract refs**: `THR-04`, `C-04`
 - **Acceptance criteria**:
@@ -120,7 +120,7 @@ These are the binding contract statements this seam must implement and later pub
 
 - **Outcome**: later slices can implement the runtime boundary without reopening contract questions.
 - **Inputs/outputs**:
-  - Inputs: the published `C-01`, `C-02`, and `C-03` contracts plus the current shell/world-agent code surface
+  - Inputs: the published `C-01`, `C-02`, and `C-03` contracts plus the current shell/world-service code surface
   - Outputs: named code loci, test loci, edge cases, and pass/fail conditions for S1 and S2
 - **Thread/contract refs**: `THR-04`, `C-04`
 - **Acceptance criteria**:

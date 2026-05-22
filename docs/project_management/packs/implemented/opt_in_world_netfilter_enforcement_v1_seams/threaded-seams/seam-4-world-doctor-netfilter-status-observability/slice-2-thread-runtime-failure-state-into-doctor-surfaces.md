@@ -49,7 +49,7 @@ candidate_subslices: []
   - doctor contract from `S1`
 - **Verification**:
   - platform doctor JSON tests / fixtures in `crates/shell/tests`
-  - world-agent handler coverage for failure-state serialization
+  - world-service handler coverage for failure-state serialization
 - **Rollout/safety**:
   - preserve existing doctor readiness output while adding actionable netfilter detail
 - **Review surface refs**:
@@ -59,7 +59,7 @@ candidate_subslices: []
 
 - **Outcome**: doctor output surfaces actionable failure reasons from the landed fail-closed runtime instead of generic "not enabled" messaging.
 - **Files**:
-  - `crates/world-agent/src/handlers.rs`
+  - `crates/world-service/src/handlers.rs`
   - runtime error/state surfaces consumed by the handler
 - **Thread/contract refs**:
   - `THR-04`

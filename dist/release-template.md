@@ -30,7 +30,7 @@ Refer to `docs/INSTALLATION.md` and `docs/WORLD.md` for advanced flags, prereqs,
 | macOS | arm64 | [substrate-v${VERSION}-macos_arm64.tar.gz](https://github.com/atomize-hq/substrate/releases/download/${RELEASE_TAG}/substrate-v${VERSION}-macos_arm64.tar.gz) |
 | Windows | x86_64 | [substrate-v${VERSION}-windows_x86_64.zip](https://github.com/atomize-hq/substrate/releases/download/${RELEASE_TAG}/substrate-v${VERSION}-windows_x86_64.zip) |
 
-Each bundle includes `substrate`, `substrate-shim`, `host-proxy`, and `substrate-gateway`. Linux bundles ship host `world-agent` and `substrate-gateway` binaries in `bin/`; macOS/Windows bundles ship the Linux guest `world-agent` and `substrate-gateway` binaries under `bin/linux`, alongside platform helpers like `substrate-forwarder.exe`.
+Each bundle includes `substrate`, `substrate-shim`, `host-proxy`, and `substrate-gateway`. Linux bundles ship host `world-service` and `substrate-gateway` binaries in `bin/`; macOS/Windows bundles ship the Linux guest `world-service` and `substrate-gateway` binaries under `bin/linux`, alongside platform helpers like `substrate-forwarder.exe`.
 
 ## Support + Checksums
 

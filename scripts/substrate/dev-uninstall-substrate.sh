@@ -22,7 +22,7 @@ Options:
   --profile <name>       Cargo profile whose binary should be used for shim removal
   --bin <path>           Explicit path to substrate binary to invoke for shim removal
   --version-label <name> Version directory label used during dev install (default: dev)
-  --remove-world-service Remove the Linux world-agent systemd service (requires sudo)
+  --remove-world-service Remove the Linux world-service systemd service (requires sudo)
   --cleanup-state        Remove installer-recorded group membership/lingering (opt-in)
   --help                 Show this message
 
@@ -160,7 +160,7 @@ remove_managed_prefix_linux_binary_copies() {
   while IFS= read -r cached_path; do
     case "${cached_path}" in
       "${BIN_DIR}/linux/substrate"|\
-      "${BIN_DIR}/linux/world-agent")
+      "${BIN_DIR}/linux/world-service")
         if [[ -f "${cached_path}" && ! -L "${cached_path}" ]]; then
           rm -f "${cached_path}"
           log "Removing managed copied Linux binary ${cached_path}"
@@ -566,7 +566,7 @@ fi
 
 if [[ -d "${BIN_DIR}" ]]; then
   log "Cleaning dev symlinks in ${BIN_DIR}"
-  for binary in substrate substrate-shim substrate-forwarder host-proxy world-agent substrate-world-agent; do
+  for binary in substrate substrate-shim substrate-forwarder host-proxy world-service substrate-world-service; do
     for candidate in "${binary}" "${binary}.exe"; do
       target_path="${BIN_DIR}/${candidate}"
       if remove_managed_symlink "${target_path}"; then
@@ -595,7 +595,7 @@ BIN_LINUX_DIR="${BIN_DIR}/linux"
 if [[ -d "${BIN_LINUX_DIR}" ]]; then
   remove_managed_prefix_linux_binary_copies "${MANAGED_MAC_LINUX_BINARIES_PATH}"
   remove_managed_symlink "${BIN_LINUX_DIR}/substrate" || true
-  remove_managed_symlink "${BIN_LINUX_DIR}/world-agent" || true
+  remove_managed_symlink "${BIN_LINUX_DIR}/world-service" || true
   rmdir "${BIN_LINUX_DIR}" 2>/dev/null || true
 fi
 rmdir "${BIN_DIR}" 2>/dev/null || true
@@ -610,23 +610,23 @@ if [[ -d "${PREFIX}" ]]; then
 fi
 
 if [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
-  log "Attempting to remove substrate-world-agent service (sudo may prompt)"
+  log "Attempting to remove substrate-world-service service (sudo may prompt)"
   if ! command -v sudo >/dev/null 2>&1; then
-    warn "sudo not available; cannot modify substrate-world-agent service."
+    warn "sudo not available; cannot modify substrate-world-service service."
   else
-    sudo systemctl disable --now substrate-world-agent.socket substrate-world-agent.service >/dev/null 2>&1 || warn "Failed to disable substrate-world-agent socket/service units"
-    sudo rm -f /etc/systemd/system/substrate-world-agent.service || true
-    sudo rm -f /etc/systemd/system/substrate-world-agent.socket || true
+    sudo systemctl disable --now substrate-world-service.socket substrate-world-service.service >/dev/null 2>&1 || warn "Failed to disable substrate-world-service socket/service units"
+    sudo rm -f /etc/systemd/system/substrate-world-service.service || true
+    sudo rm -f /etc/systemd/system/substrate-world-service.socket || true
     sudo systemctl daemon-reload || true
-    sudo rm -f /usr/local/bin/substrate-world-agent || true
+    sudo rm -f /usr/local/bin/substrate-world-service || true
     sudo rm -rf /var/lib/substrate || true
     sudo rm -rf /run/substrate || true
     sudo rm -f /run/substrate.sock || true
   fi
 elif [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
-  log "Attempting to remove Lima world-agent service from VM 'substrate'"
+  log "Attempting to remove Lima world-service service from VM 'substrate'"
   if ! command -v limactl >/dev/null 2>&1; then
-    warn "limactl not available; cannot modify Lima world-agent service. Remove manually if desired."
+    warn "limactl not available; cannot modify Lima world-service service. Remove manually if desired."
   elif [[ ! -d "${HOME}/.lima/substrate" ]]; then
     warn "Lima VM 'substrate' not found under ${HOME}/.lima/substrate; skipping guest cleanup."
   else
@@ -634,15 +634,15 @@ elif [[ "${REMOVE_WORLD_SERVICE}" -eq 1 && "${IS_MAC}" -eq 1 ]]; then
     # commands interactively via `limactl shell substrate`.
     out="$(
       limactl shell substrate -- bash -lc \
-        'sudo -n systemctl disable --now substrate-world-agent.socket substrate-world-agent.service' 2>&1
-    )" || warn "Failed to disable agent units inside Lima VM. Try: limactl shell substrate, then run: sudo systemctl disable --now substrate-world-agent.socket substrate-world-agent.service. Error: ${out}"
+        'sudo -n systemctl disable --now substrate-world-service.socket substrate-world-service.service' 2>&1
+    )" || warn "Failed to disable agent units inside Lima VM. Try: limactl shell substrate, then run: sudo systemctl disable --now substrate-world-service.socket substrate-world-service.service. Error: ${out}"
 
     limactl shell substrate -- bash -lc \
-      'sudo -n rm -f /etc/systemd/system/substrate-world-agent.service /etc/systemd/system/substrate-world-agent.socket' >/dev/null 2>&1 || true
+      'sudo -n rm -f /etc/systemd/system/substrate-world-service.service /etc/systemd/system/substrate-world-service.socket' >/dev/null 2>&1 || true
     limactl shell substrate -- bash -lc \
       'sudo -n systemctl daemon-reload' >/dev/null 2>&1 || true
     limactl shell substrate -- bash -lc \
-      'sudo -n rm -f /usr/local/bin/substrate-world-agent' >/dev/null 2>&1 || true
+      'sudo -n rm -f /usr/local/bin/substrate-world-service' >/dev/null 2>&1 || true
     limactl shell substrate -- bash -lc \
       'sudo -n rm -f /usr/local/bin/substrate /usr/local/bin/world' >/dev/null 2>&1 || true
     limactl shell substrate -- bash -lc \
@@ -669,10 +669,10 @@ collect_protected_paths \
   "${BIN_DIR}/substrate-forwarder.exe" \
   "${BIN_DIR}/host-proxy" \
   "${BIN_DIR}/host-proxy.exe" \
-  "${BIN_DIR}/world-agent" \
-  "${BIN_DIR}/world-agent.exe" \
-  "${BIN_DIR}/substrate-world-agent" \
-  "${BIN_DIR}/substrate-world-agent.exe" \
+  "${BIN_DIR}/world-service" \
+  "${BIN_DIR}/world-service.exe" \
+  "${BIN_DIR}/substrate-world-service" \
+  "${BIN_DIR}/substrate-world-service.exe" \
   "${RUNTIME_SCRIPTS_DIR}/substrate/world-enable.sh" \
   "${RUNTIME_SCRIPTS_DIR}/substrate/install-substrate.sh" \
   "${RUNTIME_SCRIPTS_DIR}/substrate/world-deps.yaml" \
@@ -680,7 +680,7 @@ collect_protected_paths \
   "${RUNTIME_SCRIPTS_DIR}/mac/lima/substrate.yaml" \
   "${RUNTIME_SCRIPTS_DIR}/mac/lima/substrate-dev.yaml" \
   "${BIN_LINUX_DIR}/substrate" \
-  "${BIN_LINUX_DIR}/world-agent"
+  "${BIN_LINUX_DIR}/world-service"
 
 if [[ "${#PROTECTED_PATHS[@]}" -gt 0 ]]; then
   report_protected_paths

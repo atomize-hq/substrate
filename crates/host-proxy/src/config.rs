@@ -9,7 +9,7 @@ use crate::transport::AgentTransportConfig;
 pub struct ProxyConfig {
     /// Path to the host-side Unix socket.
     pub host_socket: PathBuf,
-    /// Transport used to reach world-agent.
+    /// Transport used to reach world-service.
     #[serde(default)]
     pub agent: AgentTransportConfig,
     /// Maximum request body size in bytes.

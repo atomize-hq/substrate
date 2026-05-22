@@ -376,7 +376,7 @@ fn world_enable_provision_deps_dry_run_runs_probe_and_skips_apt_side_effects() {
 }
 
 #[test]
-fn world_enable_provision_deps_conflicts_fail_before_helper_or_world_agent() {
+fn world_enable_provision_deps_conflicts_fail_before_helper_or_world_service() {
     let fixture = WorldEnableProvisionFixture::new();
     fixture.write_global_config(&["nodejs-20", "nodejs-18"]);
     fixture.write_workspace_config(&[]);
@@ -403,7 +403,7 @@ fn world_enable_provision_deps_conflicts_fail_before_helper_or_world_agent() {
     );
     assert!(
         recorded_requests(&records).is_empty(),
-        "conflict path must not execute world-agent requests"
+        "conflict path must not execute world-service requests"
     );
 }
 
@@ -434,7 +434,7 @@ fn world_enable_provision_deps_forces_helper_no_sync_and_provision_profile() {
     assert_eq!(
         first_apt_like_profile(&records).as_deref(),
         Some("world-deps-provision"),
-        "first apt/dpkg world-agent request must force profile=world-deps-provision; records={:?}",
+        "first apt/dpkg world-service request must force profile=world-deps-provision; records={:?}",
         recorded_requests(&records)
     );
 }
@@ -630,7 +630,7 @@ fn world_enable_provision_deps_runs_pacman_with_normalized_order_and_internal_pr
 }
 
 #[test]
-fn world_enable_provision_deps_rejects_mixed_manager_sets_before_helper_or_world_agent() {
+fn world_enable_provision_deps_rejects_mixed_manager_sets_before_helper_or_world_service() {
     let fixture = WorldEnableProvisionFixture::new();
     fixture.write_global_config(&["apt-only", "pacman-only"]);
     fixture.write_workspace_config(&[]);
@@ -657,7 +657,7 @@ fn world_enable_provision_deps_rejects_mixed_manager_sets_before_helper_or_world
     );
     assert!(
         recorded_requests(&records).is_empty(),
-        "mixed-manager rejection must not execute world-agent requests"
+        "mixed-manager rejection must not execute world-service requests"
     );
 }
 

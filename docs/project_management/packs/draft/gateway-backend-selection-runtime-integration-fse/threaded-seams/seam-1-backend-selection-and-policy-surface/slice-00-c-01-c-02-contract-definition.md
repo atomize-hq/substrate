@@ -79,7 +79,7 @@ Checklist:
 - Implement:
   - record the exact shell code surfaces that must adopt `C-01`
 - Test:
-  - verify the selection path is fully validated before the world-agent call
+  - verify the selection path is fully validated before the world-service call
 - Validate:
   - confirm `SEAM-2` inherits an allowed backend id, not unresolved shell validation work
 

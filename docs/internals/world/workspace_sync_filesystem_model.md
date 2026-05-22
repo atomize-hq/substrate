@@ -15,7 +15,7 @@ world-only layer is applied to the host and/or discarded.
 ## Glossary
 
 - **Host workspace**: the real directory on the developer machine (e.g. `/home/<user>/repo`).
-- **World session**: a reusable isolated context created by `world-agent` (one per compatible
+- **World session**: a reusable isolated context created by `world-service` (one per compatible
   `WorldSpec` in the daemon process).
 - **Overlay lower**: the host workspace directory (bind-mounted for overlay mounting).
 - **Overlay upper/work**: where world-only writes and deletes are materialized.
@@ -31,7 +31,7 @@ Shell (“workspace sync” CLI and apply logic):
   - Implements directions `from_world | from_host | both` and conflict policy.
 
 World agent (pending diff record, conditional clear, reconciliation):
-- `crates/world-agent/src/service.rs`
+- `crates/world-service/src/service.rs`
   - `pending_diff()` builds `PendingDiffRecordV1` (includes `session_started_at` + `diff_id`).
   - `pending_diff_clear()` clears only if the `diff_id` still matches.
   - `pending_diff_reconcile()` discards selected overlay paths (host-preferred reconciliation).
@@ -72,7 +72,7 @@ Pending diff computation walks overlay upper and interprets whiteouts:
 ### 3) `workspace sync` (from_world) applies pending world diffs to host, then clears the snapshot
 
 The host apply path:
-1) Fetch pending diff record from world-agent (includes `diff_id`).
+1) Fetch pending diff record from world-service (includes `diff_id`).
 2) Apply deletes then writes/mods (after preflight validation).
 3) Attempt to clear the pending diff snapshot using `pending_diff_clear(diff_id=...)`.
 
@@ -97,7 +97,7 @@ Because host is already the baseline, “host→world” sync is implemented as:
 
 This is implemented by `pending_diff_reconcile_v1`:
 - shell: `crates/shell/src/execution/workspace_cmd.rs`
-- agent: `crates/world-agent/src/service.rs` (`pending_diff_reconcile()`)
+- agent: `crates/world-service/src/service.rs` (`pending_diff_reconcile()`)
 - backend: `crates/world/src/lib.rs` (`discard_pending_paths()`)
 - overlay: `crates/world/src/overlayfs/mod.rs` (`discard_paths()`)
 

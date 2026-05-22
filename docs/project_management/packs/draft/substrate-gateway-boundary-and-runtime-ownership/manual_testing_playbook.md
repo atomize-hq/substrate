@@ -60,7 +60,7 @@ Pass condition:
 Validate that typed lifecycle/status runtime behavior and platform parity are owned only by `docs/contracts/substrate-gateway-runtime-parity.md`.
 
 Check:
-- The playbook treats shell and world-agent runtime interaction as a typed boundary, not raw probing or log scraping.
+- The playbook treats shell and world-service runtime interaction as a typed boundary, not raw probing or log scraping.
 - Linux, macOS, and Windows are checked as one operator-facing lifecycle/status contract with permitted hidden transport divergence only.
 - Provisioning and warm-flow mechanics are treated as evidence surfaces, not as the operator contract itself.
 - Start/restart windows are validated as transient runtime failures in the operator surface even if the hidden transport symptom is a temporary connect failure.

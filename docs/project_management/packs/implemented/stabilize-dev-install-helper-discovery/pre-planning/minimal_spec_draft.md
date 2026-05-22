@@ -94,7 +94,7 @@ Decision Register constraints (must be resolved before execution-quality gate):
 
 Cross-queue alignment constraints:
 - This pack owns helper staging under `$SUBSTRATE_HOME/scripts/substrate/…`.
-- ADR-0035 (`ADR-0035-summoning-wombat.md`) owns `world-agent` artifact staging and missing-artifact remediation; both workstreams must align on overwrite and ownership-guard decisions.
+- ADR-0035 (`ADR-0035-summoning-wombat.md`) owns `world-service` artifact staging and missing-artifact remediation; both workstreams must align on overwrite and ownership-guard decisions.
 - Align with ADR-0003 (`ADR-0003-policy-and-config-mental-model-simplification.md`) by not introducing new env/config precedence behavior and by not reintroducing removed legacy knobs (`SUBSTRATE_PREFIX`, `--prefix` on `substrate world enable`).
 
 ## Follow-ups for full planning

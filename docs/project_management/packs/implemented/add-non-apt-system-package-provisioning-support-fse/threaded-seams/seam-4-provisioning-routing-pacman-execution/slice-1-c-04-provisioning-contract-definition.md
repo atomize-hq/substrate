@@ -11,7 +11,7 @@ basis:
   stale_triggers:
   - C-02 changes probe/support-gate outcomes
   - C-03 changes pacman schema semantics or derived requirement assumptions
-  - shared-file changes in world_enable or world-agent invalidate the provisioning execution basis
+  - shared-file changes in world_enable or world-service invalidate the provisioning execution basis
 gates:
   pre_exec:
     review: passed

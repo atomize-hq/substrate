@@ -1,14 +1,14 @@
 use super::*;
 use crate::execution::agent_events::{self, clear_agent_event_sender, init_event_channel};
 use crate::execution::routing::dispatch::world_ops::consume_agent_stream_buffer_with_meta;
-use agent_api_types::{
-    ExecuteStreamFrame, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry,
-};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde_json::Value as JsonValue;
 use substrate_common::FsDiff;
 use tokio::runtime::Runtime;
+use transport_api_types::{
+    ExecuteStreamFrame, ProcessEvent, ProcessEventType, ProcessEventsStatus, ProcessTelemetry,
+};
 
 // Telemetry stream handling
 #[test]

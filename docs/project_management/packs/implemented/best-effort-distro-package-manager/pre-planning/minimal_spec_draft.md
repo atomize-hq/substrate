@@ -59,7 +59,7 @@ During full planning, authority splits as follows:
   - `Detected distro: <id> (like: <id_like>), using package manager: <pkg_manager> (source: <flag|env|os_release|path_probe>)`
 - The missing-data sentinel is fixed: `<unknown>`.
 - Linux is the only behavior-changing platform in scope. macOS and Windows remain no-change platforms.
-- Implementation touch stays inside installer shell scripts, installer docs, repo tests, and planning artifacts. No implementation change belongs under `crates/`, `src/`, `crates/world/`, `crates/world-mac-lima/`, `crates/world-windows-wsl/`, `crates/shim/`, `crates/shell/`, or `crates/world-agent/`.
+- Implementation touch stays inside installer shell scripts, installer docs, repo tests, and planning artifacts. No implementation change belongs under `crates/`, `src/`, `crates/world/`, `crates/world-mac-lima/`, `crates/world-windows-wsl/`, `crates/shim/`, `crates/shell/`, or `crates/world-service/`.
 - The exact repo test path for hermetic validation is fixed: `tests/installers/pkg_manager_detection_smoke.sh`.
 - The feature-local smoke script `docs/project_management/packs/implemented/best-effort-distro-package-manager/smoke/linux-smoke.sh` is a thin wrapper over the repo test path above and does not define a second contract.
 - `docs/INSTALLATION.md` and `docs/reference/env/contract.md` must reuse the same precedence chain, vocabularies, stderr line shape, exit classes, and remediation posture.

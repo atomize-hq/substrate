@@ -13,14 +13,14 @@
   - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
 
 ## Related Docs
-- Policy snapshot spec: `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md`
+- Policy snapshot spec: `docs/project_management/_archived/world-service-policy-snapshot/policy-snapshot-spec.md`
 - Decision Register: `docs/project_management/_archived/full-isolation-landlock-overlayfs-compat/decision_register.md`
 - Related ADRs:
-  - `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+  - `docs/project_management/adrs/implemented/ADR-0014-world-service-policy-resolution-and-concurrency.md`
 - Grounding code references:
   - Full isolation mount wrapper + allowlist remounting: `crates/world/src/exec.rs`
-  - Landlock exec wrapper (full isolation policy): `crates/world-agent/src/internal_exec.rs`
-  - Snapshot allowlist canonicalization + env injection: `crates/world-agent/src/service.rs`, `crates/world-agent/src/pty.rs`
+  - Landlock exec wrapper (full isolation policy): `crates/world-service/src/internal_exec.rs`
+  - Snapshot allowlist canonicalization + env injection: `crates/world-service/src/service.rs`, `crates/world-service/src/pty.rs`
 
 ## Executive Summary (Operator)
 
@@ -32,8 +32,8 @@ ADR_BODY_SHA256: 87c75c5c6a66e71783be1d1c033f8791711165b4de6dff5a1555d04c9e4eb61
   - Why: Landlock enforcement currently blocks overlayfs’ internal upper/work backing directory writes (not user policy writes), which breaks the operator contract for `world_fs.write_allowlist`.
   - Links:
     - `docs/ISOLATION_SUPPORT_MATRIX.md`
-    - `docs/project_management/_archived/world-agent-policy-snapshot/decision_register.md`
-    - `crates/world-agent/src/internal_exec.rs`
+    - `docs/project_management/_archived/world-service-policy-snapshot/decision_register.md`
+    - `crates/world-service/src/internal_exec.rs`
     - `crates/world/src/exec.rs`
 
 ## Problem / Context
@@ -77,7 +77,7 @@ ADR_BODY_SHA256: 87c75c5c6a66e71783be1d1c033f8791711165b4de6dff5a1555d04c9e4eb61
 
 ## Architecture Shape
 - Components:
-  - `crates/world-agent/src/internal_exec.rs`: extends the full-isolation Landlock policy to include runtime-derived internal write roots required by the active filesystem strategy (overlayfs backing dirs).
+  - `crates/world-service/src/internal_exec.rs`: extends the full-isolation Landlock policy to include runtime-derived internal write roots required by the active filesystem strategy (overlayfs backing dirs).
   - `crates/world` (new helper module or existing procfs utilities): provides a Linux-only helper that inspects `/proc/self/mountinfo` (preferred) to resolve the backing dirs for the project mountpoint.
 - End-to-end flow:
   - Inputs:
@@ -92,7 +92,7 @@ ADR_BODY_SHA256: 87c75c5c6a66e71783be1d1c033f8791711165b4de6dff5a1555d04c9e4eb61
     - allowlisted project writes succeed; denied writes remain denied; diagnostics improve on failure.
 
 ## Sequencing / Dependencies
-- Sequencing entry: `docs/project_management/packs/sequencing.json` (world-agent policy snapshot parity workstream)
+- Sequencing entry: `docs/project_management/packs/sequencing.json` (world-service policy snapshot parity workstream)
 - Prerequisites:
   - Policy snapshot allowlist canonicalization and env injection must already be in place (covered by ADR-0014 and the policy snapshot implementation).
 
@@ -112,7 +112,7 @@ ADR_BODY_SHA256: 87c75c5c6a66e71783be1d1c033f8791711165b4de6dff5a1555d04c9e4eb61
 - Unit tests:
   - Add Linux-only tests for the mountinfo parsing helper using fixture mountinfo text.
 - Integration tests:
-  - Add/extend a Linux world-agent integration test gated on Landlock support that asserts:
+  - Add/extend a Linux world-service integration test gated on Landlock support that asserts:
     - allowlisted writes succeed in full isolation (`./prim/*` style prefixes)
     - denied writes remain denied
     - failure modes surface high-signal diagnostics when prerequisites are missing

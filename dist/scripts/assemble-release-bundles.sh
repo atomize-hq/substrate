@@ -20,6 +20,19 @@ fatal() {
   exit 1
 }
 
+resolve_path() {
+  local target="$1"
+  local strict="${2:-0}"
+  python3 - "$target" "$strict" <<'PY'
+import pathlib
+import sys
+
+target = pathlib.Path(sys.argv[1]).expanduser()
+strict = sys.argv[2] == "1"
+print(target.resolve(strict=strict))
+PY
+}
+
 TAG=""
 ARTIFACTS_DIR=""
 OUTPUT_DIR=""
@@ -56,8 +69,8 @@ done
 VERSION="${TAG#v}"
 [[ -n "$VERSION" ]] || fatal "Tag $TAG must start with 'v' followed by the version number"
 
-ARTIFACTS_DIR="$(realpath "$ARTIFACTS_DIR")"
-OUTPUT_DIR="$(realpath -m "$OUTPUT_DIR")"
+ARTIFACTS_DIR="$(resolve_path "$ARTIFACTS_DIR" 1)"
+OUTPUT_DIR="$(resolve_path "$OUTPUT_DIR" 0)"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -69,39 +82,6 @@ SUPPORT_DIR="$TMP_DIR/support"
 STAGING_DIR="$TMP_DIR/staging"
 mkdir -p "$WORK_DIR" "$SUPPORT_DIR" "$STAGING_DIR"
 
-# Mapping between bundle labels and Rust targets we build.
-declare -A HOST_TARGETS=(
-  [linux_x86_64]="x86_64-unknown-linux-gnu"
-  [linux_aarch64]="aarch64-unknown-linux-gnu"
-  [macos_x86_64]="x86_64-apple-darwin"
-  [macos_arm64]="aarch64-apple-darwin"
-  [windows_x86_64]="x86_64-pc-windows-msvc"
-)
-
-declare -A HOST_KIND=(
-  [linux_x86_64]="linux"
-  [linux_aarch64]="linux"
-  [macos_x86_64]="mac"
-  [macos_arm64]="mac"
-  [windows_x86_64]="windows"
-)
-
-declare -A GUEST_AGENT_TARGET=(
-  [linux_x86_64]="x86_64-unknown-linux-gnu"
-  [linux_aarch64]="aarch64-unknown-linux-gnu"
-  [macos_x86_64]="x86_64-unknown-linux-gnu"
-  [macos_arm64]="aarch64-unknown-linux-gnu"
-  [windows_x86_64]="x86_64-unknown-linux-gnu"
-)
-
-declare -A ARCHIVE_EXT=(
-  [windows_x86_64]="zip"
-  [linux_x86_64]="tar.gz"
-  [linux_aarch64]="tar.gz"
-  [macos_x86_64]="tar.gz"
-  [macos_arm64]="tar.gz"
-)
-
 BUNDLE_LABELS=(
   linux_x86_64
   linux_aarch64
@@ -109,6 +89,45 @@ BUNDLE_LABELS=(
   macos_arm64
   windows_x86_64
 )
+
+host_target_for() {
+  case "$1" in
+    linux_x86_64) printf '%s\n' "x86_64-unknown-linux-gnu" ;;
+    linux_aarch64) printf '%s\n' "aarch64-unknown-linux-gnu" ;;
+    macos_x86_64) printf '%s\n' "x86_64-apple-darwin" ;;
+    macos_arm64) printf '%s\n' "aarch64-apple-darwin" ;;
+    windows_x86_64) printf '%s\n' "x86_64-pc-windows-msvc" ;;
+    *) fatal "Unknown bundle label: $1" ;;
+  esac
+}
+
+host_kind_for() {
+  case "$1" in
+    linux_x86_64|linux_aarch64) printf '%s\n' "linux" ;;
+    macos_x86_64|macos_arm64) printf '%s\n' "mac" ;;
+    windows_x86_64) printf '%s\n' "windows" ;;
+    *) fatal "Unknown bundle label: $1" ;;
+  esac
+}
+
+guest_agent_target_for() {
+  case "$1" in
+    linux_x86_64|linux_aarch64|macos_x86_64|macos_arm64|windows_x86_64)
+      printf '%s\n' "x86_64-unknown-linux-gnu"
+      ;;
+    *)
+      fatal "Unknown bundle label: $1"
+      ;;
+  esac
+}
+
+archive_ext_for() {
+  case "$1" in
+    windows_x86_64) printf '%s\n' "zip" ;;
+    linux_x86_64|linux_aarch64|macos_x86_64|macos_arm64) printf '%s\n' "tar.gz" ;;
+    *) fatal "Unknown bundle label: $1" ;;
+  esac
+}
 
 find_artifact() {
   local crate="$1"
@@ -259,17 +278,17 @@ package_bundle() {
   fi
 
   if [[ "$kind" == "linux" ]]; then
-    copy_bin_from_artifact "world-agent" "$target" "$bundle_dir/bin"
+    copy_bin_from_artifact "world-service" "$target" "$bundle_dir/bin"
     copy_bin_from_artifact "substrate-gateway" "$target" "$bundle_dir/bin"
   else
     local guest_dir="$bundle_dir/bin/linux"
     mkdir -p "$guest_dir"
-    copy_bin_from_artifact "world-agent" "$guest_agent" "$guest_dir"
+    copy_bin_from_artifact "world-service" "$guest_agent" "$guest_dir"
     copy_bin_from_artifact "substrate-gateway" "$guest_agent" "$guest_dir"
   fi
 
   local archive_name="substrate-v${VERSION}-${label}."
-  archive_name+="${ARCHIVE_EXT[$label]}"
+  archive_name+="$(archive_ext_for "$label")"
   local archive_path="$OUTPUT_DIR/$archive_name"
 
   if [[ "$kind" == "windows" ]]; then
@@ -286,7 +305,11 @@ GENERATED_FILES=()
 GENERATED_FILES+=("$SUPPORT_TAR_OUT" "$SUPPORT_ZIP_OUT")
 
 for label in "${BUNDLE_LABELS[@]}"; do
-  package_bundle "$label" "${HOST_TARGETS[$label]}" "${HOST_KIND[$label]}" "${GUEST_AGENT_TARGET[$label]}"
+  package_bundle \
+    "$label" \
+    "$(host_target_for "$label")" \
+    "$(host_kind_for "$label")" \
+    "$(guest_agent_target_for "$label")"
 done
 
 sha256sum "${GENERATED_FILES[@]}" > "$OUTPUT_DIR/SHA256SUMS"

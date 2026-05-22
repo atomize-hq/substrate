@@ -9,10 +9,10 @@ block in `substrate host doctor --json` (and in the `host` block of `substrate w
 ## Requirements
 
 - Linux host with sudo access and systemd (the script installs/starts
-  `substrate-world-agent.service` + `.socket`).
+  `substrate-world-service.service` + `.socket`).
 - Rust toolchain installed so `cargo build -p substrate --bin substrate` succeeds.
 - `jq` available on PATH to slice the doctor JSON.
-- Ability to tolerate `/usr/local/bin/substrate-world-agent` and systemd unit changes during the test.
+- Ability to tolerate `/usr/local/bin/substrate-world-service` and systemd unit changes during the test.
 
 ## Running the harness
 
@@ -28,7 +28,7 @@ The script performs the following:
 
 1. Builds the local `substrate` CLI (debug profile) if needed.
 2. Calls `scripts/linux/world-provision.sh --profile <profile>` to install the
-   world-agent, write both systemd units, and enable the socket.
+   world-service, write both systemd units, and enable the socket.
 3. Records `systemctl status` output for the `.socket` and `.service` into
    `artifacts/linux/world-socket-verify-<timestamp>/`.
 4. Captures `/run/substrate.sock` ownership/perms (`root:substrate 0660`),

@@ -1,6 +1,7 @@
 use anyhow::Result;
 
-pub(crate) const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
+pub(crate) const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
+pub(crate) const LEGACY_PURE_AGENT_PROTOCOL: &str = concat!("uaa.agent", ".session");
 pub(crate) const PURE_AGENT_ROUTER: &str = "agent_hub";
 pub(crate) const NESTED_ROUTER: &str = "substrate_gateway";
 pub(crate) const ORCHESTRATOR_ROLE: &str = "orchestrator";
@@ -29,5 +30,14 @@ pub(crate) fn orchestrator_backend_kind(agent_id: &str) -> Result<AgentRuntimeBa
         other => Err(anyhow::anyhow!(
             "selected orchestrator backend '{other}' is not supported by the shell-owned UAA runtime; supported backends are cli:codex and cli:claude_code"
         )),
+    }
+}
+
+pub(crate) fn protocol_validation_error(subject: &str, actual: Option<&str>) -> String {
+    match actual {
+        Some(LEGACY_PURE_AGENT_PROTOCOL) => format!(
+            "{subject} advertises legacy unsupported protocol '{LEGACY_PURE_AGENT_PROTOCOL}'; rename it to '{PURE_AGENT_PROTOCOL}'"
+        ),
+        _ => format!("{subject} does not advertise protocol '{PURE_AGENT_PROTOCOL}'"),
     }
 }

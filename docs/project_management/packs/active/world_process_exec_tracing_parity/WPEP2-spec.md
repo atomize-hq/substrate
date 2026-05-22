@@ -2,10 +2,10 @@
 
 ## Scope (explicit)
 - Land Linux process tree capture for in-world executions (ptrace-based).
-  - Supported backends: native Linux and macOS Lima guest (world-agent runs on Linux; `docs/WORLD.md`).
+  - Supported backends: native Linux and macOS Lima guest (world-service runs on Linux; `docs/WORLD.md`).
 - Provisioning requirement (Linux-backed backends):
-  - The `substrate-world-agent` systemd service MUST include `CAP_SYS_PTRACE` in `CapabilityBoundingSet` and `AmbientCapabilities`.
-  - If the capability is missing (or ptrace is blocked by kernel policy), world-agent MUST degrade explicitly:
+  - The `substrate-world-service` systemd service MUST include `CAP_SYS_PTRACE` in `CapabilityBoundingSet` and `AmbientCapabilities`.
+  - If the capability is missing (or ptrace is blocked by kernel policy), world-service MUST degrade explicitly:
     - `process_events_status: "unavailable"`
     - `process_events_reason: "ptrace_not_permitted"`
 - World-agent returns a capped `process_events` list for:

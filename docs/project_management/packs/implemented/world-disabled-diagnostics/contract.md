@@ -37,7 +37,7 @@ Authoritative precedence and env-var semantics are owned by:
 When world is disabled, diagnostics MUST degrade quietly and explicitly:
 
 - **No probes (invariant):**
-  - MUST NOT probe the world backend for diagnostics purposes (no world-agent socket calls).
+  - MUST NOT probe the world backend for diagnostics purposes (no world-service socket calls).
   - MUST NOT spawn `substrate world doctor --json` from inside diagnostics.
   - MUST NOT compute world-deps “applied” state (probe-backed).
 

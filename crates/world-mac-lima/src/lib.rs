@@ -2,20 +2,20 @@
 //! macOS world backend using Lima VM with Linux isolation inside.
 //!
 //! This backend provides identical policy enforcement semantics to LinuxLocal
-//! by running a Linux VM via Lima and delegating to the world-agent inside.
+//! by running a Linux VM via Lima and delegating to the world-service inside.
 
-use agent_api_client::AgentClient;
-use agent_api_types::{
-    ExecuteRequest, ExecuteResponse, MemberDispatchRequestV1,
-    MemberRuntimeBackendKindV1 as AgentMemberRuntimeBackendKindV1, PolicySnapshotV3,
-    PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
-    PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1, WorldFsMode,
-};
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::PathBuf;
 use substrate_common::FsDiff;
 use tokio::runtime::Runtime;
+use transport_api_client::AgentClient;
+use transport_api_types::{
+    ExecuteRequest, ExecuteResponse, MemberDispatchRequestV1,
+    MemberRuntimeBackendKindV1 as AgentMemberRuntimeBackendKindV1, PolicySnapshotV3,
+    PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3,
+    PolicySnapshotWorldFsWriteV3, ResolvedMemberRuntimeDescriptorV1, WorldFsMode,
+};
 use world_api::{
     ExecRequest, ExecResult, SharedWorldBindingSnapshot, SharedWorldBindingState,
     SharedWorldOwnerAction, WorldBackend, WorldHandle, WorldSpec,
@@ -30,7 +30,7 @@ pub use forwarding::{ForwardingHandle, ForwardingKind};
 pub use transport::Transport;
 pub use vm::LimaVM;
 
-/// macOS backend that delegates to Linux world-agent inside Lima VM.
+/// macOS backend that delegates to Linux world-service inside Lima VM.
 pub struct MacLimaBackend {
     vm_name: String,
     agent_socket: PathBuf,
@@ -178,7 +178,7 @@ impl MacLimaBackend {
         let max_attempts = 30;
         let mut attempts = 0;
 
-        tracing::info!("Waiting for world-agent to be ready...");
+        tracing::info!("Waiting for world-service to be ready...");
 
         while attempts < max_attempts {
             // Try to connect to the agent socket
@@ -190,7 +190,7 @@ impl MacLimaBackend {
             attempts += 1;
             if attempts % 5 == 0 {
                 tracing::debug!(
-                    "Still waiting for world-agent... ({}/{})",
+                    "Still waiting for world-service... ({}/{})",
                     attempts,
                     max_attempts
                 );
@@ -391,7 +391,7 @@ impl MacLimaBackend {
         }
     }
 
-    fn get_agent_endpoint(&self) -> Result<agent_api_client::Transport> {
+    fn get_agent_endpoint(&self) -> Result<transport_api_client::Transport> {
         let forwarding = self
             .forwarding
             .lock()
@@ -399,10 +399,10 @@ impl MacLimaBackend {
         match forwarding.as_ref() {
             Some(handle) => match handle.kind() {
                 ForwardingKind::SshUds { path } => {
-                    Ok(agent_api_client::Transport::UnixSocket { path: path.clone() })
+                    Ok(transport_api_client::Transport::UnixSocket { path: path.clone() })
                 }
                 ForwardingKind::SshTcp { port } | ForwardingKind::Vsock { port } => {
-                    Ok(agent_api_client::Transport::Tcp {
+                    Ok(transport_api_client::Transport::Tcp {
                         host: "127.0.0.1".to_string(),
                         port: *port,
                     })
@@ -412,7 +412,7 @@ impl MacLimaBackend {
         }
     }
 
-    /// Convert world_api::ExecRequest to agent_api_types::ExecuteRequest.
+    /// Convert world_api::ExecRequest to transport_api_types::ExecuteRequest.
     fn convert_exec_request(&self, req: &ExecRequest, fs_mode: WorldFsMode) -> ExecuteRequest {
         let write_enabled = matches!(fs_mode, WorldFsMode::Writable);
         let policy_snapshot = PolicySnapshotV3 {
@@ -455,7 +455,7 @@ impl MacLimaBackend {
         }
     }
 
-    /// Convert agent_api_types::ExecuteResponse to world_api::ExecResult.
+    /// Convert transport_api_types::ExecuteResponse to world_api::ExecResult.
     fn convert_exec_response(&self, resp: ExecuteResponse) -> ExecResult {
         use base64::Engine;
         let engine = base64::engine::general_purpose::STANDARD;

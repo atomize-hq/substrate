@@ -49,10 +49,10 @@ Additional remediation rules for this pack:
   summary: typed runtime and platform parity now has a concrete owned contract baseline, and the SEAM-3 runtime and publication surfaces have landed against it
   required_fix: land the SEAM-3 owner execution surfaces attached to `threaded-seams/seam-3-typed-runtime-and-platform-parity/slice-00-runtime-parity-contract-definition.md`, `slice-1-typed-lifecycle-status-api-boundary.md`, and `slice-2-shell-consumption-and-platform-parity-evidence.md` so `C-04` and `THR-04` publish from runtime evidence without widening the contract
   resolution_evidence:
-    - `8c0bd439` landed the S1 typed runtime boundary across `crates/agent-api-types/src/lib.rs`, `crates/agent-api-client/src/lib.rs`, `crates/world-agent/src/handlers.rs`, `crates/world-agent/src/service.rs`, `crates/shell/src/builtins/world_gateway.rs`, and the corresponding runtime parity and shell gateway tests
+    - `8c0bd439` landed the S1 typed runtime boundary across `crates/transport-api-types/src/lib.rs`, `crates/transport-api-client/src/lib.rs`, `crates/world-service/src/handlers.rs`, `crates/world-service/src/service.rs`, `crates/shell/src/builtins/world_gateway.rs`, and the corresponding runtime parity and shell gateway tests
     - `4511b3a5` landed the S2 parity evidence update in `docs/WORLD.md` without widening the operator contract
     - `docs/contracts/substrate-gateway-runtime-parity.md` remains the durable canonical `C-04` contract without planning IDs
-    - `cargo test -p agent-api-client -- --nocapture` passed `13/13` tests plus `0` doc tests on the current tree
-    - `cargo test -p world-agent --test gateway_runtime_parity -- --nocapture` completed successfully on the current tree; the `3/3` target-local route-shape tests passed and the runtime-dependent service cases self-skipped on this host after `WorldAgentService::new()` reported Linux/VM-only support
+    - `cargo test -p transport-api-client -- --nocapture` passed `13/13` tests plus `0` doc tests on the current tree
+    - `cargo test -p world-service --test gateway_runtime_parity -- --nocapture` completed successfully on the current tree; the `3/3` target-local route-shape tests passed and the runtime-dependent service cases self-skipped on this host after `WorldService::new()` reported Linux/VM-only support
     - `cargo test -p shell --test world_gateway -- --nocapture` passed `8/8` tests on the current tree
 ```

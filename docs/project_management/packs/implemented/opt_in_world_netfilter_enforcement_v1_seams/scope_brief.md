@@ -10,15 +10,15 @@ execution_horizon:
 
 # Scope Brief - Opt-in World Netfilter Enforcement (Config Gate + Snapshot V3 Plumbing)
 
-- **Goal**: Add opt-in, fail-closed outbound egress enforcement at the world boundary (Linux + macOS via Lima guest) using nftables/netfilter, driven by policy `net_allowed` and gated by host config + world-agent service env.
+- **Goal**: Add opt-in, fail-closed outbound egress enforcement at the world boundary (Linux + macOS via Lima guest) using nftables/netfilter, driven by policy `net_allowed` and gated by host config + world-service service env.
 - **Why now**: Current behavior can represent restrictive `net_allowed` but does not reliably enforce deny-all/allowlist at runtime; this creates “policy says deny-all but ping works” risk and undermines safety guarantees for isolated execution.
 - **Primary user(s) + JTBD**:
   - Operator: “Enable real outbound egress restrictions for worlds on machines that support nftables, without breaking existing workspaces by default.”
   - Policy author: “Express allowed outbound domains in policy and have it enforced at execution time.”
 - **In-scope**:
   - Config-side opt-in lever `world.net.filter: bool` (default `false`) and related overrides/exports.
-  - Policy Snapshot V3 plumbing for `net_allowed` (canonicalized list) from host to world-agent.
-  - world-agent uses snapshot `net_allowed` and routes to world backend with `WorldSpec.isolate_network` and `allowed_domains`.
+  - Policy Snapshot V3 plumbing for `net_allowed` (canonicalized list) from host to world-service.
+  - world-service uses snapshot `net_allowed` and routes to world backend with `WorldSpec.isolate_network` and `allowed_domains`.
   - `crates/world` netfilter enforcement becomes real + fail-closed when requested (deny-all denies DNS; resolution failures are errors; execution attaches to cgroup or fails).
   - Observability: doctor output includes a netfilter status block sufficient to debug “requested vs enabled vs failed”.
 - **Out-of-scope**:
@@ -32,11 +32,11 @@ execution_horizon:
   - Operator-visible diagnostics exist to explain whether enforcement is requested, enabled, and what failed.
 - **Constraints**:
   - Fail-closed posture for requested filtering: no warn-and-run-unfiltered.
-  - No in-guest broker state: world-agent enforcement is driven entirely by Snapshot V3 + request spec.
+  - No in-guest broker state: world-service enforcement is driven entirely by Snapshot V3 + request spec.
   - cgroup-scoped rules must apply to every spawned process; any non-attached path must fail when isolation is requested.
 - **External systems / dependencies**:
   - nftables in the world environment (Linux host world, Lima guest world).
-  - systemd unit environment / installer plumbing for `WORLD_NETFILTER_ENABLE=1` in world-agent service env.
+  - systemd unit environment / installer plumbing for `WORLD_NETFILTER_ENABLE=1` in world-service service env.
   - DNS resolution availability during setup (fail-closed if required names cannot resolve).
 - **Known unknowns / risks**:
   - Exact domain normalization rules (casefolding, IDNA/punycode behavior) required to avoid false allows/denies.

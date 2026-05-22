@@ -46,7 +46,7 @@ Runner-injected phase directive (authoritative when present):
 Discovery requirements (must do):
 1) Repo-wide touch discovery:
    - Identify the exact crates/modules/scripts/config/docs that must change to implement the ADR.
-   - List paths under `crates/`, `src/`, `scripts/`, `docs/`, and any platform backends (`crates/world*`, `crates/shim`, `crates/shell`, `crates/world-agent`) that are implicated.
+   - List paths under `crates/`, `src/`, `scripts/`, `docs/`, and any platform backends (`crates/world*`, `crates/shim`, `crates/shell`, `crates/world-service`) that are implicated.
 2) Cascading UX/behavior analysis:
    - Compare the proposed ADR contract against existing operator workflows to catch contradictions.
    - Call out any UX disjoint (different commands behaving inconsistently, mismatched defaults, conflicting env var semantics).

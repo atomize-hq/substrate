@@ -54,7 +54,7 @@ This milestone should lock the contract around these rules:
 
 1. Supported mode
    - One macOS host user owns the Substrate process, the Lima VM lifecycle, and the host-side forwarding artifacts.
-   - The world-agent still runs inside Linux and keeps guest-local socket ACL semantics (`root:substrate 0660`) inside the guest.
+   - The world-service still runs inside Linux and keeps guest-local socket ACL semantics (`root:substrate 0660`) inside the guest.
    - Substrate-owned commands, not direct `limactl`, are the supported control plane.
    - The supported control plane already includes `substrate host doctor`,
      `substrate world doctor`, and
@@ -62,7 +62,7 @@ This milestone should lock the contract around these rules:
      over around those surfaces rather than inventing new baseline commands.
 2. Linux parity claims we keep
    - In-world execution remains the default.
-   - Guest-local `world-agent` behavior, socket-activation shape, and policy evaluation intent must converge toward Linux semantics.
+   - Guest-local `world-service` behavior, socket-activation shape, and policy evaluation intent must converge toward Linux semantics.
    - PTY and non-PTY routing should become transport-agnostic from the shell's point of view.
    - Shared-world/orchestration support remains part of the supported runtime
      story; hardening must preserve the existing `shared_world` request/binding
@@ -129,7 +129,7 @@ This milestone should lock the contract around these rules:
 - The milestone defines the supported mode as same-user hardened Lima, not Linux-equivalent host authorization.
 - The milestone states clearly that Linux ownership-boundary parity is impossible under the current same-user Lima model.
 - The milestone names which Linux semantics remain implementation goals:
-  - world-agent-first execution
+  - world-service-first execution
   - guest-local socket activation and ACL discipline
   - Linux-like backend policy semantics for the backend-mediated execution path
   - transport-agnostic PTY and non-PTY behavior

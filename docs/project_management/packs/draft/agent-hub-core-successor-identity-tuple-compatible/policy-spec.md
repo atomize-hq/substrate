@@ -79,7 +79,7 @@ Agent-hub control-plane policy evaluation follows this fixed order:
 5. Validate orchestrator eligibility in this exact order:
    - the inventory item is enabled
    - `execution.scope = host`
-   - `protocol = uaa.agent.session`
+   - `protocol = substrate.agent.session`
    - `session_start = true`
    - `session_resume = true`
    - `session_fork = true`
@@ -90,7 +90,7 @@ Agent-hub control-plane policy evaluation follows this fixed order:
 7. Derive the member `backend_id = "<kind>:<agent_id>"`.
 8. Apply `agents.allowed_backends` to the member `backend_id`.
 9. Validate member protocol eligibility:
-   - `protocol = uaa.agent.session`
+   - `protocol = substrate.agent.session`
    - the required session capability for the requested action is `true`
 10. Apply execution-scope gating:
    - `execution.scope = host` permits host-scoped member dispatch without world attachment
@@ -111,7 +111,7 @@ These conditions deny before any member dispatch is considered:
 - the referenced `agent_id` is missing from the effective inventory
 - the referenced inventory item is disabled
 - `execution.scope = world`
-- `protocol != uaa.agent.session`
+- `protocol != substrate.agent.session`
 - any required orchestrator capability is `false`
 
 The deny explanation must identify the exact failing condition and, when applicable, the exact policy key:
@@ -120,7 +120,7 @@ The deny explanation must identify the exact failing condition and, when applica
 - `"orchestrator agent '<agent_id>' is missing from effective inventory"`
 - `"orchestrator agent '<agent_id>' is disabled in effective inventory"`
 - `"orchestrator agent '<agent_id>' is world-scoped and host-scoped orchestration is required"`
-- `"orchestrator agent '<agent_id>' does not advertise protocol 'uaa.agent.session'"`
+- `"orchestrator agent '<agent_id>' does not advertise protocol 'substrate.agent.session'"`
 - `"orchestrator agent '<agent_id>' is missing required capability '<capability>'"`
 
 ### Policy allowlist denial
@@ -142,7 +142,7 @@ These conditions deny after orchestrator eligibility succeeds:
 - the requested member `agent_id` is missing from effective inventory
 - the requested member inventory item is disabled
 - the derived member `backend_id` is denied by `agents.allowed_backends`
-- `protocol != uaa.agent.session`
+- `protocol != substrate.agent.session`
 - the requested action needs a capability that is `false`
 
 The deny explanation must identify the exact failing condition and, when applicable, the exact policy key:
@@ -150,7 +150,7 @@ The deny explanation must identify the exact failing condition and, when applica
 - `"member agent '<agent_id>' is missing from effective inventory"`
 - `"member agent '<agent_id>' is disabled in effective inventory"`
 - `"member backend '<backend_id>' is not allowlisted by effective policy agents.allowed_backends"`
-- `"member agent '<agent_id>' does not advertise protocol 'uaa.agent.session'"`
+- `"member agent '<agent_id>' does not advertise protocol 'substrate.agent.session'"`
 - `"member agent '<agent_id>' is missing required capability '<capability>' for action '<action>'"`
 
 ### Required world-boundary denial

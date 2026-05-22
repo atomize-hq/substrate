@@ -277,7 +277,7 @@ Fixture assumptions:
 - The guest reports an Arch-family identity through `/etc/os-release` by setting `ID=arch` or `ID_LIKE=arch`.
 - `pacman` is available on `PATH` inside the guest.
 - `/usr/local/bin/substrate` exists and is executable.
-- `/usr/local/bin/substrate-world-agent` exists and is executable.
+- `/usr/local/bin/substrate-world-service` exists and is executable.
 - `/run/substrate.sock` exists and is reachable as a socket.
 
 Validate the fixture with all of the following commands:
@@ -286,7 +286,7 @@ Validate the fixture with all of the following commands:
 limactl shell substrate sh -lc 'grep -E "^(ID|ID_LIKE)=" /etc/os-release'
 limactl shell substrate sh -lc 'command -v pacman'
 limactl shell substrate sh -lc 'test -x /usr/local/bin/substrate'
-limactl shell substrate sh -lc 'test -x /usr/local/bin/substrate-world-agent'
+limactl shell substrate sh -lc 'test -x /usr/local/bin/substrate-world-service'
 limactl shell substrate sudo test -S /run/substrate.sock
 ```
 

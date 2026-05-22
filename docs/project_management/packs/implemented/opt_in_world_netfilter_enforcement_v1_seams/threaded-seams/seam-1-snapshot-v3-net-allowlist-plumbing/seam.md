@@ -15,7 +15,7 @@ basis:
     - THR-03
   stale_triggers:
     - "Any change to PolicySnapshotV3 schema or net_allowed canonicalization/validation rules"
-    - "Any change to world-agent execute request shape that carries snapshot/worldspec"
+    - "Any change to world-service execute request shape that carries snapshot/worldspec"
     - "Any change to WorldSpec.isolate_network/allowed_domains semantics"
     - "Any change to host config gating semantics for world.net.filter (C-04)"
 gates:
@@ -32,28 +32,28 @@ seam_exit_gate:
   status: passed
 open_remediations: []
 ---
-# SEAM-1 - Snapshot V3 `net_allowed` contract + host→world-agent plumbing
+# SEAM-1 - Snapshot V3 `net_allowed` contract + host→world-service plumbing
 
 ## Seam Brief (Restated)
 
-- **Goal / value**: Ensure world-agent enforcement is driven by an explicit, canonicalized `net_allowed` allowlist carried in Policy Snapshot V3 (no in-world broker state), and that the host-to-world request shape is unambiguous about when to request isolation vs allow-all.
+- **Goal / value**: Ensure world-service enforcement is driven by an explicit, canonicalized `net_allowed` allowlist carried in Policy Snapshot V3 (no in-world broker state), and that the host-to-world request shape is unambiguous about when to request isolation vs allow-all.
 - **Type**: integration
 - **Scope**
   - In:
     - Add `net_allowed` to Snapshot V3 with `#[serde(default)]`.
     - Canonicalize/validate `net_allowed` (trim, drop empties, dedupe, collapse `"*"` to `["*"]`, reject unsupported wildcards/URLs/ports/paths when enforcement is requested).
     - Host snapshot builder populates `net_allowed` from effective policy and constructs `WorldSpec.isolate_network` + `WorldSpec.allowed_domains`.
-    - world-agent uses Snapshot V3 `net_allowed` / `WorldSpec` fields instead of `substrate_broker::allowed_domains()`.
+    - world-service uses Snapshot V3 `net_allowed` / `WorldSpec` fields instead of `substrate_broker::allowed_domains()`.
   - Out:
     - Define/ship the host config opt-in lever `world.net.filter` (owned by `SEAM-3`).
     - Make nftables enforcement fail-closed at runtime (owned by `SEAM-2`).
 - **Touch surface**:
-  - `crates/agent-api-types` (Snapshot V3 schema + canonicalization/validation helpers)
+  - `crates/transport-api-types` (Snapshot V3 schema + canonicalization/validation helpers)
   - `crates/shell/src/execution/policy_snapshot.rs` (host snapshot builder + WorldSpec construction)
-  - `crates/world-agent/src/service.rs` and `crates/world-agent/src/pty.rs` (execute routing / allowlist plumbing)
+  - `crates/world-service/src/service.rs` and `crates/world-service/src/pty.rs` (execute routing / allowlist plumbing)
 - **Verification**:
-  - Unit tests for canonicalization/validation in `agent-api-types`.
-  - Tests asserting world-agent routes allowlists from snapshot (not broker), across non-PTY and PTY execute paths.
+  - Unit tests for canonicalization/validation in `transport-api-types`.
+  - Tests asserting world-service routes allowlists from snapshot (not broker), across non-PTY and PTY execute paths.
 - **Basis posture**:
   - Currentness: `current`; `SEAM-3` now publishes `C-04` / `THR-03` in landed config/env surfaces and operator docs, so
     this seam can treat the host gate as published input instead of a provisional planning dependency.
@@ -96,18 +96,18 @@ open_remediations: []
   - Any change to how PTY vs non-PTY paths source the allowlist
 - **Expected closeout evidence**:
   - Pointers to the schema + tests landing for `C-01`
-  - Evidence that world-agent consumes Snapshot V3 `net_allowed` and does not consult in-world broker state for allowlists
+  - Evidence that world-service consumes Snapshot V3 `net_allowed` and does not consult in-world broker state for allowlists
 - **Actual closeout disposition**:
-  - `S1` landed in the Snapshot V3 schema plus canonicalization/validation helpers and tests in `crates/agent-api-types`.
+  - `S1` landed in the Snapshot V3 schema plus canonicalization/validation helpers and tests in `crates/transport-api-types`.
   - `S2` landed in the host snapshot/world-network routing helpers that consume the published `world.net.filter` gate.
-  - `S3` landed in the shared world-agent request-routing path used by both service and PTY execution flows.
+  - `S3` landed in the shared world-service request-routing path used by both service and PTY execution flows.
   - `S4` now records the published `C-01` to `C-03` and `THR-01` to `THR-02` handoff in `../../governance/seam-1-closeout.md`.
 
 ## Slice index
 
 - `S1` -> `slice-1-publish-net-allowed-contract.md`
 - `S2` -> `slice-2-host-snapshot-and-worldspec-plumbing.md`
-- `S3` -> `slice-3-world-agent-snapshot-routing.md`
+- `S3` -> `slice-3-world-service-snapshot-routing.md`
 - `S4` -> `slice-4-seam-exit-gate.md`
 
 ## Governance pointers

@@ -21,4 +21,4 @@ Authoritative inputs:
 - Deny is unambiguous from completion records:
   - completion spans MUST reflect denied vs executed clearly (`outcome: "denied"` on deny).
 - Degrade is explicit:
-  - if in-world process capture is unavailable, world-agent responses MUST include deterministic diagnostics; omission must not be silent.
+  - if in-world process capture is unavailable, world-service responses MUST include deterministic diagnostics; omission must not be silent.

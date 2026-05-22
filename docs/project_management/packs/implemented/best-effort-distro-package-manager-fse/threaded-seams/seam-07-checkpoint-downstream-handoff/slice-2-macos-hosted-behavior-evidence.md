@@ -51,7 +51,7 @@ candidate_subslices: []
 - Repository evidence remains explicit and unchanged:
   - `scripts/mac/smoke.sh --bedpm-installer-conformance` is defined as "Run the BEDPM Linux installer smoke through the Lima-backed guest path"
   - `docs/project_management/packs/draft/best-effort-distro-package-manager/manual_testing_playbook.md` records the macOS-hosted Lima verification flow and states that it runs `smoke/linux-smoke.sh` through the Lima-backed Linux guest path
-  - `docs/WORLD.md` states that hosted installer behavior coverage on macOS flows through the Lima-backed Linux guest/world-agent path and does not define native macOS package-manager selection
+  - `docs/WORLD.md` states that hosted installer behavior coverage on macOS flows through the Lima-backed Linux guest/world-service path and does not define native macOS package-manager selection
 - Current checkpoint references that bind the inherited hosted evidence into `CP1`:
   - compile parity run `23711447102` (`https://github.com/atomize-hq/substrate/actions/runs/23711447102`) passed on `macos-14`, so the checkpoint record includes current macOS parity coverage without claiming native behavior coverage
   - quick CI run `23711510594` (`https://github.com/atomize-hq/substrate/actions/runs/23711510594`) failed on Linux shell lint, not on the hosted-evidence posture, so the blocker is checkpoint cleanliness rather than macOS-hosted ambiguity

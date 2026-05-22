@@ -86,7 +86,7 @@ Options:
   --no-world           Skip world backend provisioning
   --no-shims           Skip shim deployment
   --sync-deps          Run 'substrate world deps current sync' after provisioning completes
-  --world-netfilter    Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-agent.service)
+  --world-netfilter    Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-service.service)
   --dry-run            Print actions without executing
   --artifact-dir <dir> Use pre-downloaded host bundle + SHA256SUMS
   --archive <dir>      Alias for --artifact-dir (deprecated)
@@ -547,7 +547,7 @@ MSG
   else
     cat <<MSG
 [substrate-install] loginctl status for ${target_user}: ${linger_state:-unknown}
-Enable lingering to allow systemd to start the world-agent socket after logout:
+Enable lingering to allow systemd to start the world-service socket after logout:
   loginctl enable-linger ${target_user}
 MSG
   fi
@@ -2019,13 +2019,13 @@ provision_macos_world() {
     fi
   )
 
-  if ! limactl shell substrate test -x /usr/local/bin/substrate-world-agent >/dev/null 2>&1; then
-    fatal "Lima provisioning completed but /usr/local/bin/substrate-world-agent is missing. Provide bin/linux/world-agent in the release bundle or rerun from a source checkout so the installer can build one."
+  if ! limactl shell substrate test -x /usr/local/bin/substrate-world-service >/dev/null 2>&1; then
+    fatal "Lima provisioning completed but /usr/local/bin/substrate-world-service is missing. Provide bin/linux/world-service in the release bundle or rerun from a source checkout so the installer can build one."
   fi
   if ! limactl shell substrate test -x /usr/local/bin/substrate-gateway >/dev/null 2>&1; then
     fatal "Lima provisioning completed but /usr/local/bin/substrate-gateway is missing. Provide bin/linux/substrate-gateway in the release bundle or rerun from a source checkout so the installer can build one."
   fi
-  log "Verified Linux world-agent + substrate-gateway installation inside Lima (copy/build path logged above)."
+  log "Verified Linux world-service + substrate-gateway installation inside Lima (copy/build path logged above)."
 }
 
 provision_linux_world() {
@@ -2036,12 +2036,12 @@ provision_linux_world() {
     return
   fi
 
-  local world_agent=""
+  local world_service=""
   local gateway_binary=""
-  if [[ -x "${version_dir}/bin/world-agent" ]]; then
-    world_agent="${version_dir}/bin/world-agent"
-  elif [[ -x "${version_dir}/bin/linux/world-agent" ]]; then
-    world_agent="${version_dir}/bin/linux/world-agent"
+  if [[ -x "${version_dir}/bin/world-service" ]]; then
+    world_service="${version_dir}/bin/world-service"
+  elif [[ -x "${version_dir}/bin/linux/world-service" ]]; then
+    world_service="${version_dir}/bin/linux/world-service"
   fi
 
   if [[ -x "${version_dir}/bin/substrate-gateway" ]]; then
@@ -2050,12 +2050,12 @@ provision_linux_world() {
     gateway_binary="${version_dir}/bin/linux/substrate-gateway"
   fi
 
-  if [[ -z "${world_agent}" ]]; then
+  if [[ -z "${world_service}" ]]; then
     if [[ "${DRY_RUN}" -eq 1 ]]; then
-      world_agent="${version_dir}/bin/world-agent"
-      warn "Linux world-agent binary not found in release bundle; using placeholder path for dry run."
+      world_service="${version_dir}/bin/world-service"
+      warn "Linux world-service binary not found in release bundle; using placeholder path for dry run."
     else
-      fatal "Linux world-agent binary not found in release bundle under ${version_dir}/bin."
+      fatal "Linux world-service binary not found in release bundle under ${version_dir}/bin."
     fi
   fi
 
@@ -2070,18 +2070,18 @@ provision_linux_world() {
 
   log "Installing Linux world agent systemd service and substrate-gateway binary..."
 
-  local service_path="/etc/systemd/system/substrate-world-agent.service"
+  local service_path="/etc/systemd/system/substrate-world-service.service"
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '[%s][dry-run] sudo install -Dm0755 %s /usr/local/bin/substrate-world-agent\n' "${INSTALLER_NAME}" "${world_agent}" >&2
+    printf '[%s][dry-run] sudo install -Dm0755 %s /usr/local/bin/substrate-world-service\n' "${INSTALLER_NAME}" "${world_service}" >&2
     printf '[%s][dry-run] sudo install -Dm0755 %s /usr/local/bin/substrate-gateway\n' "${INSTALLER_NAME}" "${gateway_binary}" >&2
     printf '[%s][dry-run] sudo install -d -m0750 -o root -g substrate /run/substrate && sudo install -d -m0750 /var/lib/substrate\n' "${INSTALLER_NAME}" >&2
     printf '[%s][dry-run] Write systemd unit to %s\n' "${INSTALLER_NAME}" "${service_path}" >&2
-    printf '[%s][dry-run] sudo systemctl daemon-reload && sudo systemctl enable --now substrate-world-agent\n' "${INSTALLER_NAME}" >&2
+    printf '[%s][dry-run] sudo systemctl daemon-reload && sudo systemctl enable --now substrate-world-service\n' "${INSTALLER_NAME}" >&2
     return
   fi
 
-  run_cmd sudo install -Dm0755 "${world_agent}" /usr/local/bin/substrate-world-agent
+  run_cmd sudo install -Dm0755 "${world_service}" /usr/local/bin/substrate-world-service
   run_cmd sudo install -Dm0755 "${gateway_binary}" /usr/local/bin/substrate-gateway
   run_cmd sudo install -d -m0750 -o root -g substrate /run/substrate
   run_cmd sudo install -d -m0750 /var/lib/substrate
@@ -2094,20 +2094,20 @@ provision_linux_world() {
   fi
 
   local unit_file
-  unit_file="${TMPDIR}/substrate-world-agent.service"
+  unit_file="${TMPDIR}/substrate-world-service.service"
   local netfilter_env_line=""
   if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
     netfilter_env_line="Environment=WORLD_NETFILTER_ENABLE=1"
   fi
   cat > "${unit_file}" <<UNIT
 [Unit]
-Description=Substrate World Agent
+Description=Substrate World Service
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/substrate-world-agent
+ExecStart=/usr/local/bin/substrate-world-service
 Restart=always
 RestartSec=5
 Environment=RUST_LOG=info
@@ -2136,11 +2136,11 @@ WantedBy=multi-user.target
 UNIT
 
   local socket_unit
-  socket_unit="${TMPDIR}/substrate-world-agent.socket"
+  socket_unit="${TMPDIR}/substrate-world-service.socket"
   cat > "${socket_unit}" <<UNIT
 [Unit]
-Description=Substrate World Agent Socket
-PartOf=substrate-world-agent.service
+Description=Substrate World Service Socket
+PartOf=substrate-world-service.service
 
 [Socket]
 ListenStream=/run/substrate.sock
@@ -2149,24 +2149,30 @@ SocketUser=root
 SocketGroup=substrate
 DirectoryMode=0750
 RemoveOnStop=yes
-Service=substrate-world-agent.service
+Service=substrate-world-service.service
 
 [Install]
 WantedBy=sockets.target
 UNIT
 
   run_cmd sudo install -Dm0644 "${unit_file}" "${service_path}"
-  run_cmd sudo install -Dm0644 "${socket_unit}" /etc/systemd/system/substrate-world-agent.socket
+  run_cmd sudo install -Dm0644 "${socket_unit}" /etc/systemd/system/substrate-world-service.socket
+  local legacy_world_unit_prefix="substrate-world"
+  local legacy_service="${legacy_world_unit_prefix}-agent.service"
+  local legacy_socket="${legacy_world_unit_prefix}-agent.socket"
+  run_cmd sudo systemctl stop "${legacy_service}" "${legacy_socket}" || true
+  run_cmd sudo systemctl disable "${legacy_service}" "${legacy_socket}" || true
+  run_cmd sudo rm -f "/etc/systemd/system/${legacy_service}" "/etc/systemd/system/${legacy_socket}"
   run_cmd sudo systemctl daemon-reload
-  run_cmd sudo systemctl enable substrate-world-agent.service
-  run_cmd sudo systemctl enable --now substrate-world-agent.socket
-  run_cmd sudo systemctl stop substrate-world-agent.service substrate-world-agent.socket || true
+  run_cmd sudo systemctl enable substrate-world-service.service
+  run_cmd sudo systemctl enable --now substrate-world-service.socket
+  run_cmd sudo systemctl stop substrate-world-service.service substrate-world-service.socket || true
   run_cmd sudo install -d -m0750 -o root -g substrate /run/substrate
   run_cmd sudo rm -f /run/substrate.sock
-  run_cmd sudo systemctl start substrate-world-agent.socket
-  run_cmd sudo systemctl start substrate-world-agent.service
-  run_cmd sudo systemctl status substrate-world-agent.socket --no-pager --lines=10 || true
-  run_cmd sudo systemctl status substrate-world-agent.service --no-pager --lines=10 || true
+  run_cmd sudo systemctl start substrate-world-service.socket
+  run_cmd sudo systemctl start substrate-world-service.service
+  run_cmd sudo systemctl status substrate-world-service.socket --no-pager --lines=10 || true
+  run_cmd sudo systemctl status substrate-world-service.service --no-pager --lines=10 || true
 }
 
 run_world_checks() {

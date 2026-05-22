@@ -66,7 +66,7 @@ managers:
     let output = substrate_command_for_home(&fixture)
         .env("PATH", &host_path_str)
         .env("BASH_ENV", &host_bash_env)
-        // Ensure we don't accidentally route the command through a host-installed world-agent
+        // Ensure we don't accidentally route the command through a host-installed world-service
         // (e.g., /run/substrate.sock) which would bypass host-side env injection.
         .env(
             "SUBSTRATE_WORLD_SOCKET",

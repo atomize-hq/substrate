@@ -76,7 +76,7 @@ Standard:
   - The checkpoint also catches vocabulary drift against `docs/project_management/packs/draft/best-effort-distro-package-manager/contract.md`, which remains authoritative for selected-manager and `pkg_manager.source` values.
 - Gate choice:
   - `feature_smoke = true` because the impact map selects `tests/installers/install_state_smoke.sh` as a direct touch surface and `PDLDPM2` exists specifically to lock smoke coverage and evidence.
-  - `ci_testing = "quick"` because the canonical impact map excludes `crates/`, `src/`, `crates/world*`, `crates/shim`, `crates/shell`, and `crates/world-agent` from the touch set. If full planning expands the touch set into those areas, update this plan first and then raise the checkpoint gate to `full`.
+  - `ci_testing = "quick"` because the canonical impact map excludes `crates/`, `src/`, `crates/world*`, `crates/shim`, `crates/shell`, and `crates/world-service` from the touch set. If full planning expands the touch set into those areas, update this plan first and then raise the checkpoint gate to `full`.
 
 ## Tasks.json wiring
 

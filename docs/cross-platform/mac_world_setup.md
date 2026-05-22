@@ -32,7 +32,7 @@ This guide walks through setting up the Lima-based Linux world backend for Subst
    command -v envsubst
    ```
 
-4. **Ensure Rust toolchain is installed** (for building world-agent):
+4. **Ensure Rust toolchain is installed** (for building world-service):
    ```sh
    # If not installed:
    curl https://sh.rustup.rs -sSf | sh
@@ -65,7 +65,7 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
    This script will:
    - Create a new Lima VM named "substrate" with Ubuntu 24.04
    - Install required packages (nftables, iproute2, dnsmasq, etc.)
-   - Configure the systemd service for substrate-world-agent
+   - Configure the systemd service for substrate-world-service
    - Mount your home directory (read-only) and project directory (read-write)
    - Configure `/var/lib/substrate`, `/run/substrate`, and `/tmp` as guest writeable paths via `ReadWritePaths` (handled automatically by the provisioning script; no manual edits required)
 
@@ -77,43 +77,43 @@ limactl start --tty=false --name substrate /tmp/substrate-dev.yaml
   # Should show status: Running
   ```
 
-### Step 2: Build and Deploy World Agent
+### Step 2: Build and Deploy World Service
 
 1. **Compile inside the Lima guest** (recommended):
    ```sh
    # Build from the mounted project directory
-   limactl shell substrate bash -lc 'cd /src && cargo build -p world-agent --release'
+   limactl shell substrate bash -lc 'cd /src && cargo build -p world-service --release'
    ```
 
 2. **Install the binary inside the VM**:
    ```sh
-   limactl shell substrate sudo install -m755 /src/target/release/world-agent /usr/local/bin/substrate-world-agent
+   limactl shell substrate sudo install -m755 /src/target/release/world-service /usr/local/bin/substrate-world-service
    ```
 
    > **Alternative:** Cross-compile on the host using a Linux target (e.g.
-   > `cargo build -p world-agent --release --target aarch64-unknown-linux-gnu`) and
+   > `cargo build -p world-service --release --target aarch64-unknown-linux-gnu`) and
    > copy the resulting binary into the guest. Avoid copying the default macOS
    > build—Mach-O binaries cannot run inside the Linux VM.
 
 3. **Verify the binary works**:
    ```sh
-   limactl shell substrate substrate-world-agent --version
+   limactl shell substrate substrate-world-service --version
    ```
 
-### Step 3: Start World Agent Service
+### Step 3: Start World Service
 
 1. **Enable and start the systemd service**:
    ```sh
    limactl shell substrate sudo systemctl daemon-reload
-   limactl shell substrate sudo systemctl enable substrate-world-agent.service
-   limactl shell substrate sudo systemctl enable --now substrate-world-agent.socket
-   limactl shell substrate sudo systemctl restart substrate-world-agent.service
+   limactl shell substrate sudo systemctl enable substrate-world-service.service
+   limactl shell substrate sudo systemctl enable --now substrate-world-service.socket
+   limactl shell substrate sudo systemctl restart substrate-world-service.service
    ```
 
 2. **Verify service is running**:
    ```sh
-   limactl shell substrate systemctl status substrate-world-agent.socket
-   limactl shell substrate systemctl status substrate-world-agent.service
+   limactl shell substrate systemctl status substrate-world-service.socket
+   limactl shell substrate systemctl status substrate-world-service.service
    ```
 
 3. **Test the agent API**:
@@ -145,7 +145,7 @@ All critical checks should show `[PASS]`. If any show `[FAIL]`, see the troubles
 
 2. **Check agent logs** for any issues:
    ```sh
-   limactl shell substrate journalctl -u substrate-world-agent -n 50
+   limactl shell substrate journalctl -u substrate-world-service -n 50
    ```
 
 ### Substrate CLI Smoke Script
@@ -194,7 +194,7 @@ target/debug/substrate world doctor
 target/debug/substrate world doctor --json | jq .
 ```
 
-`substrate host doctor` is host-scoped (limactl + virtualization + VM/service reachability). `substrate world doctor` includes the host report plus world-agent-reported “in-world” facts (guest-kernel Landlock support/ABI + world fs strategy probe) via `/v1/doctor/world`. The legacy `scripts/mac/lima-doctor.sh` script remains available for deeper troubleshooting but the CLI commands are the canonical entry points.
+`substrate host doctor` is host-scoped (limactl + virtualization + VM/service reachability). `substrate world doctor` includes the host report plus world-service-reported “in-world” facts (guest-kernel Landlock support/ABI + world fs strategy probe) via `/v1/doctor/world`. The legacy `scripts/mac/lima-doctor.sh` script remains available for deeper troubleshooting but the CLI commands are the canonical entry points.
 
 ## Helper Scripts
 
@@ -211,19 +211,19 @@ target/debug/substrate world doctor --json | jq .
 | Virtualization not available | `sysctl kern.hv_support` returns 0 | Enable virtualization in System Settings → Privacy & Security → Developer Tools |
 | Lima VM fails to start | Check `limactl start substrate` output | Ensure sufficient disk space; check `~/Library/Logs/lima/` for detailed logs |
 | SSH connection fails | `limactl shell substrate` fails | Run `limactl shell substrate` once to accept host key |
-| Agent not responding | `substrate host doctor` shows agent unreachable | Check systemd: `limactl shell substrate systemctl status substrate-world-agent.socket` and `.service`, then probe directly in-guest: `limactl shell substrate sudo -n curl --fail --unix-socket /run/substrate.sock http://localhost/v1/doctor/world | jq .` |
+| Agent not responding | `substrate host doctor` shows agent unreachable | Check systemd: `limactl shell substrate systemctl status substrate-world-service.socket` and `.service`, then probe directly in-guest: `limactl shell substrate sudo -n curl --fail --unix-socket /run/substrate.sock http://localhost/v1/doctor/world | jq .` |
 | Agent binary missing | Service fails to start | Rebuild and copy binary as shown in Step 2 |
 | Permission errors | Socket operations fail | Ensure directories exist with correct permissions: `/run/substrate` (0750) |
 | DNS resolution issues | Network operations fail in VM | Check dnsmasq: `limactl shell substrate systemctl status dnsmasq` |
 | `sudo: unable to resolve host lima-substrate` | Sudo emits warning due to missing host mapping | `limactl shell substrate sudo bash -lc "grep -q 'lima-substrate' /etc/hosts || echo '127.0.1.1 lima-substrate' >> /etc/hosts"` |
-| `Exec format error` starting agent | Copied host-compiled binary into guest | Build inside VM: `limactl shell substrate` → `cargo build -p world-agent --release` → copy to `/usr/local/bin/substrate-world-agent` |
+| `Exec format error` starting agent | Copied host-compiled binary into guest | Build inside VM: `limactl shell substrate` → `cargo build -p world-service --release` → copy to `/usr/local/bin/substrate-world-service` |
 | SSH UDS not creating local socket | SSH ControlMaster multiplexing interferes | Disable ControlMaster: add `-o ControlMaster=no -o ControlPath=none` |
 | TCP forwarding resets | SSH cannot forward TCP→UDS directly | Use SSH UDS; TCP fallback requires a guest TCP↔UDS bridge (e.g., `socat`) |
 
 ### Viewing Logs
 
 - **VM provisioning logs**: `limactl start substrate --debug`
-- **Agent service logs**: `limactl shell substrate journalctl -u substrate-world-agent -f`
+- **Agent service logs**: `limactl shell substrate journalctl -u substrate-world-service -f`
 - **System logs**: `limactl shell substrate journalctl -n 100`
 
 ### Resetting the Environment
@@ -249,7 +249,7 @@ The shell manages transport detection automatically. The only knobs you should n
 - `SUBSTRATE_WORLD=disabled`: Temporarily bypass the world (defaults to `enabled`).
 - `SUBSTRATE_WORLD_ID`: Set by the shell; useful for correlating spans while debugging.
 - `SUBSTRATE_WORLD_NETFILTER_ENABLE=1`: Host-side input for `scripts/mac/lima-warm.sh`; writes
-  `WORLD_NETFILTER_ENABLE=1` into the guest `substrate-world-agent.service` unit so requested
+  `WORLD_NETFILTER_ENABLE=1` into the guest `substrate-world-service.service` unit so requested
   netfilter enforcement can be honored.
 
 For a quick guest-env check without reprovisioning, run:
@@ -263,7 +263,7 @@ The output should say whether the guest systemd service currently includes
 
 ## Next Steps
 
-Once the Lima VM and world-agent are running:
+Once the Lima VM and world-service are running:
 
 1. The Substrate shell will automatically detect and use the Lima backend on macOS
 2. All commands will execute inside the isolated Linux world

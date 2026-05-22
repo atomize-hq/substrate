@@ -346,4 +346,4 @@ Record missing/ambiguous ADR intent here (do not patch ADRs from this step).
 
 5) “Skip probes” needs a testable operational definition
    - Issue: ADR-0036 requires diagnostics to skip world-backend probes and world-deps “applied” probing when disabled, but does not define the exact boundary of “probe”.
-   - Required fix: `slices/WDD0/WDD0-spec.md` MUST define which operations are forbidden when disabled (e.g., world-agent socket calls, snapshot collection, world-deps applied computation) and how unit/integration tests prove the short-circuit.
+   - Required fix: `slices/WDD0/WDD0-spec.md` MUST define which operations are forbidden when disabled (e.g., world-service socket calls, snapshot collection, world-deps applied computation) and how unit/integration tests prove the short-circuit.

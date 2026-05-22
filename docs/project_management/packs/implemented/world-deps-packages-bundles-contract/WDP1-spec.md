@@ -19,7 +19,7 @@ Constraints enforced in this slice:
   - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md`
 - `global add` validates names only against the global available inventory view (built-ins + `$SUBSTRATE_HOME/deps/`).
 - `workspace add` validates names against the current available inventory view for `cwd` (subject to `world.deps.inventory_mode`).
-- `current list enabled` MUST NOT make world-agent calls.
+- `current list enabled` MUST NOT make world-service calls.
 
 ## Acceptance criteria
 - Global/workspace add/remove/reset mutate only their scoped patch file and preserve existing comment headers.

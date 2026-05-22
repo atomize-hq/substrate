@@ -44,15 +44,15 @@ open_remediations: []
 - **Scope**
   - In:
     - publish an additive doctor JSON netfilter block for requested vs enabled status, `WORLD_NETFILTER_ENABLE` presence, and last failure reason
-    - keep the doctor response aligned across world-agent output and shell-side `substrate world doctor --json` rendering
+    - keep the doctor response aligned across world-service output and shell-side `substrate world doctor --json` rendering
     - preserve the upstream fail-closed/runtime taxonomy as actionable diagnostics instead of collapsing to generic readiness
   - Out:
     - new runtime enforcement behavior (`SEAM-2`)
     - host gate policy/config ownership (`SEAM-3`)
     - terminal smoke and conformance coverage (`SEAM-5`)
 - **Touch surface**:
-  - `crates/agent-api-types/src/lib.rs`
-  - `crates/world-agent/src/handlers.rs`
+  - `crates/transport-api-types/src/lib.rs`
+  - `crates/world-service/src/handlers.rs`
   - `crates/shell/src/execution/platform/linux.rs`
   - `crates/shell/src/execution/platform/macos.rs`
   - `crates/shell/src/execution/platform/windows.rs`
@@ -98,7 +98,7 @@ open_remediations: []
 
 ## Post-exec outcome
 
-- `S1` and `S2` landed the additive doctor netfilter block in `crates/agent-api-types`, `crates/world-agent`, and the shell-side doctor surfaces.
+- `S1` and `S2` landed the additive doctor netfilter block in `crates/transport-api-types`, `crates/world-service`, and the shell-side doctor surfaces.
 - `C-07` is now published with the final landed field names `requested`, `enabled`, `world_netfilter_enable_present`, and `last_failure_reason`.
 - `THR-05` is now published as the downstream handoff `SEAM-5` consumes for conformance and smoke revalidation.
 - No seam-local remediations remain open; downstream work continues in `SEAM-5`.
@@ -116,11 +116,11 @@ open_remediations: []
   - any change to runtime failure taxonomy or `WORLD_NETFILTER_ENABLE` wording surfaced from `SEAM-2`
   - any change to request derivation semantics inherited from `SEAM-1` / `SEAM-3`
 - **Expected closeout evidence**:
-  - landed world-agent doctor fields and schema updates
+  - landed world-service doctor fields and schema updates
   - landed shell-side world doctor JSON passthrough/rendering updates
   - focused tests pinning additive field shape and actionable failure-reason output
 - **Actual closeout disposition**:
-  - `S1` landed the additive `C-07` schema in `crates/agent-api-types` and world-agent doctor population in `crates/world-agent`.
+  - `S1` landed the additive `C-07` schema in `crates/transport-api-types` and world-service doctor population in `crates/world-service`.
   - `S2` landed shell/shim doctor preservation of the netfilter block plus actionable failure-reason coverage in focused shell tests.
   - `S3` now records the published `C-07` / `THR-05` handoff in `../../governance/seam-4-closeout.md`.
 

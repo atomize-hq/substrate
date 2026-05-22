@@ -1,10 +1,4 @@
 use crate::execution::socket_activation;
-use agent_api_client::AgentClient;
-use agent_api_types::{
-    ExecuteRequest, WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1, WorldDoctorReportV1,
-    WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
-    WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1, WorldFsMode,
-};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde_json::json;
@@ -16,6 +10,12 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use substrate_broker::{detect_profile, world_fs_policy};
+use transport_api_client::AgentClient;
+use transport_api_types::{
+    ExecuteRequest, WorldDoctorLandlockV1, WorldDoctorNetfilterStatusV1, WorldDoctorReportV1,
+    WorldDoctorWorldFsStrategyKindV1, WorldDoctorWorldFsStrategyProbeResultV1,
+    WorldDoctorWorldFsStrategyProbeV1, WorldDoctorWorldFsStrategyV1, WorldFsMode,
+};
 use which::which;
 
 pub(crate) fn host_doctor_main(
@@ -168,7 +168,7 @@ pub(crate) fn host_doctor_main(
             "socket_exists": activation_report.socket_exists,
             "authorization_boundary": {
                 "kind": "unix_socket_acl",
-                "description": "Socket ACL is the caller authorization boundary; any local user that can open the socket can issue world-agent requests."
+                "description": "Socket ACL is the caller authorization boundary; any local user that can open the socket can issue world-service requests."
             },
             "socket_acl": socket_acl.as_ref().map(|acl| json!({
                 "is_socket": acl.is_socket,
@@ -287,7 +287,7 @@ pub(crate) fn host_doctor_main(
             None
         };
 
-        info("authorization boundary: socket ACL (local users with RW access to the socket can issue world-agent requests)");
+        info("authorization boundary: socket ACL (local users with RW access to the socket can issue world-service requests)");
         if activation_report.socket_exists {
             if let Some(acl) = &socket_acl {
                 let owner = acl
@@ -299,19 +299,19 @@ pub(crate) fn host_doctor_main(
                     .clone()
                     .unwrap_or_else(|| acl.group_gid.to_string());
                 info(&format!(
-                    "world-agent socket ACL: owner={owner} group={group} mode={}",
+                    "world-service socket ACL: owner={owner} group={group} mode={}",
                     acl.mode_octal,
                 ));
             }
             match (activation_report.is_socket_activated(), socket_probe_ok) {
-                (true, true) => pass("world-agent socket: systemd-managed and reachable"),
-                (true, false) => fail("world-agent socket: systemd-managed but unreachable"),
-                (false, true) => pass("world-agent socket: reachable"),
-                (false, false) => fail("world-agent socket: present but unreachable"),
+                (true, true) => pass("world-service socket: systemd-managed and reachable"),
+                (true, false) => fail("world-service socket: systemd-managed but unreachable"),
+                (false, true) => pass("world-service socket: reachable"),
+                (false, false) => fail("world-service socket: present but unreachable"),
             }
         } else {
             fail(&format!(
-                "world-agent socket: missing at {}",
+                "world-service socket: missing at {}",
                 activation_report.socket_path
             ));
         }
@@ -477,7 +477,7 @@ pub(crate) fn world_doctor_main(
             "socket_exists": activation_report.socket_exists,
             "authorization_boundary": {
                 "kind": "unix_socket_acl",
-                "description": "Socket ACL is the caller authorization boundary; any local user that can open the socket can issue world-agent requests."
+                "description": "Socket ACL is the caller authorization boundary; any local user that can open the socket can issue world-service requests."
             },
             "socket_acl": socket_acl.as_ref().map(|acl| json!({
                 "is_socket": acl.is_socket,
@@ -533,11 +533,11 @@ pub(crate) fn world_doctor_main(
         if json_mode {
             let detail = socket_probe_error
                 .as_deref()
-                .unwrap_or("world-agent socket probe failed");
+                .unwrap_or("world-service socket probe failed");
             if activation_report.is_socket_activated() {
-                eprintln!("world-agent readiness (socket activation) probe failed: {detail}");
+                eprintln!("world-service readiness (socket activation) probe failed: {detail}");
             } else {
-                eprintln!("world-agent readiness probe failed: {detail}");
+                eprintln!("world-service readiness probe failed: {detail}");
             }
         }
         exit_code = 3;
@@ -587,9 +587,9 @@ pub(crate) fn world_doctor_main(
                 Err(_) => {
                     if json_mode {
                         if activation_report.is_socket_activated() {
-                            eprintln!("world-agent readiness (socket activation) request failed");
+                            eprintln!("world-service readiness (socket activation) request failed");
                         } else {
-                            eprintln!("world-agent readiness request failed");
+                            eprintln!("world-service readiness request failed");
                         }
                     }
                     exit_code = 3;
@@ -680,7 +680,7 @@ pub(crate) fn world_doctor_main(
             None
         };
 
-        info("authorization boundary: socket ACL (local users with RW access to the socket can issue world-agent requests)");
+        info("authorization boundary: socket ACL (local users with RW access to the socket can issue world-service requests)");
         if activation_report.socket_exists {
             if let Some(acl) = &socket_acl {
                 let owner = acl
@@ -692,19 +692,19 @@ pub(crate) fn world_doctor_main(
                     .clone()
                     .unwrap_or_else(|| acl.group_gid.to_string());
                 info(&format!(
-                    "world-agent socket ACL: owner={owner} group={group} mode={}",
+                    "world-service socket ACL: owner={owner} group={group} mode={}",
                     acl.mode_octal
                 ));
             }
             match (activation_report.is_socket_activated(), socket_probe_ok) {
-                (true, true) => pass("world-agent socket: systemd-managed and reachable"),
-                (true, false) => fail("world-agent socket: systemd-managed but unreachable"),
-                (false, true) => pass("world-agent socket: reachable"),
-                (false, false) => fail("world-agent socket: present but unreachable"),
+                (true, true) => pass("world-service socket: systemd-managed and reachable"),
+                (true, false) => fail("world-service socket: systemd-managed but unreachable"),
+                (false, true) => pass("world-service socket: reachable"),
+                (false, false) => fail("world-service socket: present but unreachable"),
             }
         } else {
             fail(&format!(
-                "world-agent socket: missing at {}",
+                "world-service socket: missing at {}",
                 activation_report.socket_path
             ));
         }

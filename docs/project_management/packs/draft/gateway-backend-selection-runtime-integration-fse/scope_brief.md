@@ -15,10 +15,10 @@ execution_horizon:
   - Consume the landed `SEAM-1` selection/policy handoff and use it to drive runtime realization in `SEAM-2`, then later parity proof in `SEAM-3`.
 - **Why now**:
   - ADR-0046 already defines the intended implementation seam, and the repo already has canonical selection, policy, protocol, and runtime-parity contracts.
-  - The actual gap was execution: `world-agent` and shell needed to move beyond a Codex-specific runtime path, so the pack drove implementation rather than more contract/governance scaffolding.
+  - The actual gap was execution: `world-service` and shell needed to move beyond a Codex-specific runtime path, so the pack drove implementation rather than more contract/governance scaffolding.
 - **Primary user(s) + JTBD**:
   - Substrate maintainers who need one execution spine for moving from a Codex-only integrated lifecycle to an inventory-backed multi-adapter posture.
-  - Shell, world-agent, broker, and docs owners who need one agreed handoff from selection/policy truth into runtime realization and then into validation.
+  - Shell, world-service, broker, and docs owners who need one agreed handoff from selection/policy truth into runtime realization and then into validation.
   - Reviewers who need the pack to distinguish the small amount of remaining contract-alignment work from the much larger implementation and rollout work.
 - **In-scope**:
   - `SEAM-1`: backend selection and policy evaluation for the integrated gateway lifecycle, including selected-backend source of truth, deny-by-default allowlisting, trusted-input boundary, auth-source precedence, and the remaining inventory-root / filename-id alignment needed for implementation surfaces.
@@ -64,10 +64,10 @@ execution_horizon:
   - `crates/shell/src/execution/config_model.rs`
   - `crates/shell/src/execution/policy_model.rs`
   - `crates/broker/src/policy.rs`
-  - `crates/world-agent/src/gateway_runtime.rs`
-  - `crates/world-agent/src/service.rs`
-  - `crates/agent-api-types/src/lib.rs`
-  - `crates/world-agent/tests/gateway_runtime_parity.rs`
+  - `crates/world-service/src/gateway_runtime.rs`
+  - `crates/world-service/src/service.rs`
+  - `crates/transport-api-types/src/lib.rs`
+  - `crates/world-service/tests/gateway_runtime_parity.rs`
   - `crates/shell/tests/world_gateway.rs`
 - **Known unknowns / risks**:
   - The first supported non-`cli:codex` integrated backend proof target is now `api:openai`, but broader rollout compatibility beyond that proof target remains later downstream rollout work.
@@ -76,8 +76,8 @@ execution_horizon:
   - macOS remains guest-managed for runtime lifecycle even though the host control path works; parity proof still has to account for that posture.
 - **Assumptions**:
   - Current integrated runtime code now proves one bounded multi-backend handoff:
-    - `crates/world-agent/src/gateway_runtime.rs` resolves explicit bindings for `cli:codex` and `api:openai`
+    - `crates/world-service/src/gateway_runtime.rs` resolves explicit bindings for `cli:codex` and `api:openai`
     - `crates/shell/src/builtins/world_gateway.rs` constructs either `integrated_auth.cli_codex` or bounded `integrated_auth.api_env` from the resolved inventory-backed backend entry
-    - `crates/agent-api-types/src/lib.rs` publishes a closed `GatewayIntegratedAuthPayloadV1` that validates both supported auth facets before runtime execution
+    - `crates/transport-api-types/src/lib.rs` publishes a closed `GatewayIntegratedAuthPayloadV1` that validates both supported auth facets before runtime execution
   - The selection and policy contracts already own most of the normative truth this feature needs; the remaining contract work is narrow alignment, not a fresh publication phase.
   - The pre-planning pack remains valid lineage, but this pack is now execution-oriented rather than extraction-oriented.

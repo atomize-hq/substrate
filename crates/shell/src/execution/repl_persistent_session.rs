@@ -1,7 +1,7 @@
 //! Pure protocol core for the world-first REPL persistent session (PROTOCOL v1).
 //!
 //! This is intentionally transport-agnostic so we can unit test fail-closed behavior without
-//! standing up a world-agent WebSocket.
+//! standing up a world-service WebSocket.
 
 #![allow(dead_code)]
 
@@ -279,7 +279,7 @@ impl PersistentSessionClientCore {
                     ));
                 }
                 let seq_note = seq.map(|s| format!(" seq={s}")).unwrap_or_default();
-                Err(self.latch_fatal(format!("world-agent error ({code}{seq_note}): {message}")))
+                Err(self.latch_fatal(format!("world-service error ({code}{seq_note}): {message}")))
             }
             ServerFrame::Unknown => Err(self
                 .latch_fatal("protocol error: unknown server frame type (protocol fail-closed)")),

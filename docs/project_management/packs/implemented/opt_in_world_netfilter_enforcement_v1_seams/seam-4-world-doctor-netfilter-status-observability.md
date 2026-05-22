@@ -43,7 +43,7 @@ open_remediations: []
 - **Scope**
   - In:
     - Extend `world doctor --json` with an additive netfilter status block that records requested vs enabled state, `WORLD_NETFILTER_ENABLE` presence, and the last actionable failure reason.
-    - Keep the doctor surface aligned across world-agent output and shell-side JSON rendering so operators can distinguish host-gate, service-env, and runtime failure causes.
+    - Keep the doctor surface aligned across world-service output and shell-side JSON rendering so operators can distinguish host-gate, service-env, and runtime failure causes.
   - Out:
     - Implementing the enforcement itself (`SEAM-2`).
     - Core host gate semantics (`SEAM-3`) or Snapshot V3 routing ownership (`SEAM-1`) beyond consuming their published handoffs.
@@ -65,8 +65,8 @@ open_remediations: []
   - Direct consumers:
     - `SEAM-5` smoke playbooks and regression tests
 - **Touch surface**:
-  - `crates/agent-api-types`
-  - `crates/world-agent` doctor endpoint / handlers
+  - `crates/transport-api-types`
+  - `crates/world-service` doctor endpoint / handlers
   - `crates/shell` world doctor JSON rendering on Linux, macOS, and Windows
 - **Verification**:
   - doctor JSON shape tests and focused rendering coverage

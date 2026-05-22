@@ -195,7 +195,7 @@ run_world_pty() {
     local logfile="$2"
     local program="$3"
 
-    # Force PTY route; world-agent strips the leading ":pty ".
+    # Force PTY route; world-service strips the leading ":pty ".
     # Pass the program via env (not inline shell quoting) to avoid host-side
     # interpolation/expansion issues (e.g., `$i`, `$((..))`, `$(...)`).
     run_capture "${logfile}" \

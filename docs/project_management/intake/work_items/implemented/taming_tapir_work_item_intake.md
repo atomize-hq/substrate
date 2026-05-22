@@ -86,7 +86,7 @@ When Substrate is running interactively and the controlling TTY becomes invalid 
 Non-goals:
 - Do not attempt to keep the REPL running “headless” after terminal loss.
 - Do not add new CLI flags/config keys for this behavior.
-- Do not widen scope into world-agent, shim, or backend transport changes.
+- Do not widen scope into world-service, shim, or backend transport changes.
 
 ### 4.5 Recommended implementation shape
 

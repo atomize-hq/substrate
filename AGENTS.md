@@ -8,8 +8,8 @@ Substrate is the secure execution layer that sits between AI agents and a develo
 - `crates/shell`: interactive REPL, PTY plumbing, shim deployment, and world orchestration.
 - `crates/shim`: PATH interception, depth tracking (`SHIM_DEPTH`), and structured logging of every spawned process.
 - `crates/common`: shared log schema, redaction helpers, filesystem diff types.
-- `crates/world*`: platform-specific backends. `world` uses namespaces/cgroups/nftables on Linux; `world-mac-lima` boots a Lima VM and tunnels to `world-agent`; `world-windows-wsl` warms a WSL distro and brokers named-pipe/TCP access (functional but experimental).
-- `crates/world-agent`: the in-world daemon exposing REST (`/v1/execute`) and WebSocket (`/v1/stream`) APIs with fs diff collection.
+- `crates/world*`: platform-specific backends. `world` uses namespaces/cgroups/nftables on Linux; `world-mac-lima` boots a Lima VM and tunnels to `world-service`; `world-windows-wsl` warms a WSL distro and brokers named-pipe/TCP access (functional but experimental).
+- `crates/world-service`: the in-world daemon exposing REST (`/v1/execute`) and WebSocket (`/v1/stream`) APIs with fs diff collection.
 - `crates/agent-api-*`: shared request/response models, async client, and host proxy helpers for third-party agents.
 - `crates/broker`, `forwarder`, `host-proxy`, `telemetry-lib`, `replay`, `substrate-graph`: policy decisions, transport glue, telemetry pipelines, replay tooling, and optional graph analytics.
 - `docs/`: deep dives (`WORLD.md`, `TRACE.md`, `REPLAY.md`, `TELEMETRY.md`, `CONFIGURATION.md`, `cross-platform/…`).
@@ -19,8 +19,8 @@ Substrate is the secure execution layer that sits between AI agents and a develo
 ## Execution Architecture
 1. Shell loads policy via the broker (`substrate_broker::evaluate`), ensures shims are deployed (`ShimDeployer`), and initializes tracing (`substrate_trace::init_trace`).
 2. The shim intercepts PATH lookups, writes structured execution events (via `logger::log_execution`), performs fast policy checks, and forwards invocation metadata to trace spans.
-3. The shell consults the world backend selected by `world-backend-factory`, issuing `/v1/execute` for non-PTY runs or upgrading to `/v1/stream` for interactive workloads. On Linux/macOS this depends on the `substrate-world-agent` service (systemd on Linux, Lima guest on macOS); provisioning scripts install and start that service.
-4. `world-agent` executes inside a per-session world: Linux uses cgroup v2 + netns + overlayfs; macOS proxies into a Lima VM via VSock/SSH; Windows calls into WSL using named pipes or a TCP forwarder.
+3. The shell consults the world backend selected by `world-backend-factory`, issuing `/v1/execute` for non-PTY runs or upgrading to `/v1/stream` for interactive workloads. On Linux/macOS this depends on the `substrate-world-service` service (systemd on Linux, Lima guest on macOS); provisioning scripts install and start that service.
+4. `world-service` executes inside a per-session world: Linux uses cgroup v2 + netns + overlayfs; macOS proxies into a Lima VM via VSock/SSH; Windows calls into WSL using named pipes or a TCP forwarder.
 5. Results, filesystem diffs, and policy decisions are recorded by `crates/trace`, producing JSONL spans in `~/.substrate/trace.jsonl` (or `SHIM_TRACE_LOG`). Replay (`crates/replay`) re-runs spans through the same world backend (Linux replays require CAP_SYS_ADMIN for namespaces/overlay; use `--no-world` / `SUBSTRATE_REPLAY_USE_WORLD=disabled` only if you want to opt out).
 
 ## Local Environment & Core Tools
@@ -55,14 +55,14 @@ cargo bench                                 # exercise hotspots when touching pe
 - Replay and diff analysis live in `docs/REPLAY.md` and `docs/TRACE.md`; update those docs when schema changes. See `docs/REPLAY.md` for privileged requirements (`SUBSTRATE_REPLAY_USE_WORLD`) and how to use `--no-world` when isolation isn’t available.
 
 ## Platform Worlds & Provisioning
-- **Linux**: Run `scripts/linux/world-provision.sh --profile release` to install `world-agent` plus the matching `.service`/`.socket` units so systemd manages `/run/substrate.sock`. Dev installs invoke this script automatically (sudo prompts expected). The installers now create the `substrate` group, add the invoking user, and reload the socket units so `/run/substrate.sock` is `root:substrate 0660` just like the provisioning script. After provisioning, run `id -nG "$USER"` to confirm the new membership and `loginctl enable-linger "$USER"` so the socket-activated service is available after logout/reboot. Validate with `systemctl status substrate-world-agent.socket`, `systemctl status substrate-world-agent.service`, and `substrate world doctor --json | jq '.world_socket'`.
+- **Linux**: Run `scripts/linux/world-provision.sh --profile release` to install `world-service` plus the matching `.service`/`.socket` units so systemd manages `/run/substrate.sock`. Dev installs invoke this script automatically (sudo prompts expected). The installers now create the `substrate` group, add the invoking user, and reload the socket units so `/run/substrate.sock` is `root:substrate 0660` just like the provisioning script. After provisioning, run `id -nG "$USER"` to confirm the new membership and `loginctl enable-linger "$USER"` so the socket-activated service is available after logout/reboot. Validate with `systemctl status substrate-world-service.socket`, `systemctl status substrate-world-service.service`, and `substrate world doctor --json | jq '.world_socket'`.
 - **macOS**: `scripts/mac/lima-warm.sh` provisions the `substrate` Lima VM, installs dependencies, and ensures forwarding. `scripts/mac/lima-doctor.sh` and `scripts/mac/smoke.sh` validate PTY, REST, and replay flows.
 - **Windows**: Warm the WSL backend via `pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl -ProjectPath (Resolve-Path .)`; verify with `scripts/windows/wsl-smoke.ps1`. The backend prefers named-pipe transport but can fall back to TCP (`SUBSTRATE_FORWARDER_PORT`).
 - Always capture doctor/smoke output in PRs touching `world-*`, `forwarder`, or `host-proxy` crates.
 
 ## Testing & Validation Expectations
 - Unit tests live alongside sources (`#[cfg(test)] mod tests`); integration suites sit in `crates/*/tests/` (e.g., `crates/shell/tests/integration.rs`, `crates/replay/tests/`). Use `test_<behavior>` naming.
-- Run `cargo test -p world-agent`, `cargo test -p substrate-shim`, and targeted `cargo test --test shim_deployment` when editing those components.
+- Run `cargo test -p world-service`, `cargo test -p substrate-shim`, and targeted `cargo test --test shim_deployment` when editing those components.
 - When touching shell/world/shim logic, capture `substrate world doctor --json`, `substrate shim doctor --json`, and `substrate health --json` output in the PR.
 - Privileged checks (netns, nftables, cgroups) require `docs/HOWTO_PRIVILEGED_TESTS.md`; document platform coverage in PR descriptions.
 - Validate shim lifecycle on every OS touched: `substrate --shim-status`, `substrate --shim-deploy`, `substrate --shim-remove`.
@@ -95,7 +95,7 @@ cargo bench                                 # exercise hotspots when touching pe
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **substrate** (49012 symbols, 75513 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **substrate** (49108 symbols, 75625 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

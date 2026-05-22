@@ -45,7 +45,7 @@ open_remediations:
   - `C-01`
   - `C-03`
 - **Verification**:
-  - targeted world-agent tests around backend binding lookup, unsupported capability handling, and failure-bucket separation
+  - targeted world-service tests around backend binding lookup, unsupported capability handling, and failure-bucket separation
 - **Rollout/safety**:
   - fail closed before spawn when capability requirements are not met; do not silently route unsupported backends through the current Codex-only path
 - **Review surface refs**:
@@ -57,7 +57,7 @@ open_remediations:
 - **Outcome**:
   - runtime request preparation and binding resolution consume the selected backend id directly rather than treating `cli:codex` as the only integrated binding.
 - **Inputs/outputs**:
-  - Inputs: `THR-01`, `docs/contracts/substrate-gateway-backend-adapter-protocol.md`, `crates/world-agent/src/service.rs`, `crates/world-agent/src/gateway_runtime.rs`
+  - Inputs: `THR-01`, `docs/contracts/substrate-gateway-backend-adapter-protocol.md`, `crates/world-service/src/service.rs`, `crates/world-service/src/gateway_runtime.rs`
   - Outputs: binding-resolution implementation, failure-class updates, targeted tests
 - **Thread/contract refs**:
   - `THR-01`
@@ -88,7 +88,7 @@ Checklist:
 - **Outcome**:
   - capability validation happens before runtime spawn and aligns to the canonical adapter protocol.
 - **Inputs/outputs**:
-  - Inputs: protocol/schema contracts, runtime request preparation, world-agent tests
+  - Inputs: protocol/schema contracts, runtime request preparation, world-service tests
   - Outputs: capability-gate implementation and pre-spawn failure coverage
 - **Thread/contract refs**:
   - `THR-02`

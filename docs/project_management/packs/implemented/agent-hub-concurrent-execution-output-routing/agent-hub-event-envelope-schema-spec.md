@@ -108,7 +108,7 @@ Tuple-compatible metadata (optional; semantics delegated to newer ADRs):
 - `protocol`
   - Type: string
   - Required: no
-  - Meaning: contract surface being spoken when known (for example `uaa.agent.session`, `mcp.toolbox.v1`, `openai.responses`).
+  - Meaning: contract surface being spoken when known (for example `substrate.agent.session`, `mcp.toolbox.v1`, `openai.responses`).
 
 Delegation boundary (non-negotiable):
 

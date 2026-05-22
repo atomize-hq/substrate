@@ -146,7 +146,7 @@ fn world_doctor_fails_when_socket_activation_unresponsive() {
         .failure();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
-        stderr.contains("socket activation") || stderr.contains("world-agent readiness"),
+        stderr.contains("socket activation") || stderr.contains("world-service readiness"),
         "expected socket activation error messaging in doctor stderr: {stderr}"
     );
 }
@@ -227,7 +227,7 @@ fn world_doctor_text_reports_socket_activation_summary() {
         .success();
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     assert!(
-        stdout.contains("agent socket: systemd-managed"),
+        stdout.contains("world-service socket: systemd-managed"),
         "doctor text output missing socket activation summary: {stdout}"
     );
 }

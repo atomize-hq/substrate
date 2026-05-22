@@ -31,7 +31,7 @@ Build an evidence-backed decision record (and follow-up plan) for how preexec tr
 We have two separate “tracing” concerns that currently look similar in the planning pack, but behave differently in the codebase:
 
 1) World process telemetry (`world_process_start` / `world_process_exit`)
-   - Generated inside the world backend (Linux-backed ptrace capture) and returned to the host via world-agent.
+   - Generated inside the world backend (Linux-backed ptrace capture) and returned to the host via world-service.
    - Persisted into canonical host trace (`~/.substrate/trace.jsonl` or `SHIM_TRACE_LOG`) by the host shell.
    - Joinability via `parent_span == shell command_complete.span_id`.
    - Does not require `SUBSTRATE_ENABLE_PREEXEC`.

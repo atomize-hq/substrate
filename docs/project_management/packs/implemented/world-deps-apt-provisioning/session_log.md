@@ -227,7 +227,7 @@
 - Base HEAD: `eed1863c6c2827893ced4177cc01690bfcd53874`
 - Summary of changes (exhaustive):
   - Kept the shell-side `SUBSTRATE_WORLD_REQUEST_PROFILE` guard that rejects reserved internal WDAP profiles in `crates/shell/src/execution/routing/dispatch/world_ops.rs`.
-  - Kept the `world-agent` transient `systemd-run` wrapper for `profile=world-deps-provision` in `crates/world-agent/src/service.rs`.
+  - Kept the `world-service` transient `systemd-run` wrapper for `profile=world-deps-provision` in `crates/world-service/src/service.rs`.
   - Updated `docs/CONFIGURATION.md`, `docs/WORLD.md`, and `docs/internals/world/deps.md` so the internal WDAP profiles are explicitly reserved and not selectable through the generic env override.
   - Folded the real supported-guest non-dry-run validation requirement into `AC-WDAP0-07` in `slices/WDAP0/WDAP0-spec.md` and refreshed `manual_testing_playbook.md` / `pre-planning/ci_checkpoint_plan.md` to match the validator-clean contract.
   - Fixed `docs/project_management/system/scripts/triad/feature_cleanup.sh` so the documented cleanup target runs on macOS bash (no `mapfile` dependency) and normalizes relative-vs-absolute worktree paths during dry-run cleanup accounting.
@@ -235,7 +235,7 @@
   - `cargo test -p shell current_world_request_profile --lib` → `PASS`
   - `cargo test -p shell --test world_enable_provision_deps_wdap0` → `PASS`
   - `cargo test -p shell --test world_deps_apt_fail_early_wdap1` → `PASS`
-  - `cargo test -p world-agent --lib` → `PASS`
+  - `cargo test -p world-service --lib` → `PASS`
   - `cargo fmt --all -- --check` → `PASS`
   - `cargo clippy --workspace --all-targets -- -D warnings` → `PASS`
   - `make integ-checks` → `PASS`

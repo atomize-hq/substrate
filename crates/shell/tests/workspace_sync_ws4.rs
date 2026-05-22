@@ -137,7 +137,7 @@ fn workspace_sync_dry_run_reports_pty_and_non_pty_pending_diff_summaries_when_su
         .prefix("substrate-ws4-sock-")
         .tempdir_in("/tmp")
         .expect("create ws4 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let pending = json!({
         "schema_version": 1,
         "session_started_at": "2026-02-10T18:38:23Z",
@@ -236,7 +236,7 @@ fn workspace_sync_dry_run_reports_pty_pending_diffs_unsupported_explicitly() {
         .prefix("substrate-ws4-sock-")
         .tempdir_in("/tmp")
         .expect("create ws4 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let pending = json!({
         "schema_version": 1,
         "session_started_at": "2026-02-10T18:38:23Z",

@@ -19,8 +19,8 @@ uuid = { workspace = true }
 thiserror = "1"
 which = "4"
 world-api = { path = "../world-api" }
-agent-api-client = { path = "../agent-api-client" }
-agent-api-types = { path = "../agent-api-types" }
+transport-api-client = { path = "../transport-api-client" }
+transport-api-types = { path = "../transport-api-types" }
 dirs = "6.0.0"
 
 [dev-dependencies]

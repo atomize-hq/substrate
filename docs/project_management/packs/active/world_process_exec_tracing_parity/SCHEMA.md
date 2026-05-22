@@ -26,7 +26,7 @@ Shell emits command summary events via `log_command_event`:
 - `event_type: command_complete`
 
 ### Process telemetry diagnostics (world executions)
-For any world execution summary (`component: "shell"` and `event_type: "command_complete"` where the command ran via world-agent):
+For any world execution summary (`component: "shell"` and `event_type: "command_complete"` where the command ran via world-service):
 - Shell MUST include:
   - `process_events_status`: `"ok" | "unavailable" | "truncated" | "error"`
   - `process_events_reason`: string when status != `"ok"`
@@ -55,7 +55,7 @@ This family is the canonical schema for the world subprocess telemetry path. Lin
 - `ts` (timestamp)
 - `ts_unix_ns` (integer nanoseconds since Unix epoch (UTC))
 - `event_type` (one of the above)
-- `component: "world-agent"`
+- `component: "world-service"`
 - `session_id`
 - `world_id`
 - `pid`, `ppid`

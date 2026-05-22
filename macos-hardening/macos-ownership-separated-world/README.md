@@ -53,7 +53,7 @@ separation while preserving the already-landed operator surfaces.
 
 - Full productionization of macOS service packaging, notarization, or MDM
   deployment.
-- Replacing the Linux guest or the in-guest `world-agent` API itself.
+- Replacing the Linux guest or the in-guest `world-service` API itself.
 - Redesigning Linux or Windows world ownership models in this workstream.
 - Broad product work unrelated to the macOS control-plane ownership boundary.
 
@@ -114,7 +114,7 @@ in place. The intent is to remove them from the standard runtime path.
 - `crates/shell/src/builtins/world_gateway.rs`
   Current macOS gateway lifecycle/status client that still rides the same
   Lima-backed forwarded path.
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
   Current managed gateway runtime root, lifecycle execution, and auth-bundle
   handoff inside the guest.
 - `scripts/mac/lima-warm.sh`

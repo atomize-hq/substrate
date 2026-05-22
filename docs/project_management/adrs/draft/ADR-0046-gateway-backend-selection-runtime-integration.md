@@ -50,10 +50,10 @@ ADR_BODY_SHA256: 0c49fe896ae4eebf17fad20a6079dffa13006612a50c40496f0edec500ad843
   - New: the integrated lifecycle resolves the selected backend through config, policy, and inventory, looks up one adapter binding, validates required capabilities fail-closed, and renders runtime config/auth handoff from adapter-owned metadata.
   - Why: ADR-0041 already established stable backend ids and one-backend-id-to-one-adapter semantics, but the current implementation still realizes only the first proof path.
   - Links:
-    - `crates/world-agent/src/gateway_runtime.rs#L34`
-    - `crates/world-agent/src/gateway_runtime.rs#L91`
-    - `crates/world-agent/src/gateway_runtime.rs#L548`
-    - `crates/world-agent/src/gateway_runtime.rs#L766`
+    - `crates/world-service/src/gateway_runtime.rs#L34`
+    - `crates/world-service/src/gateway_runtime.rs#L91`
+    - `crates/world-service/src/gateway_runtime.rs#L548`
+    - `crates/world-service/src/gateway_runtime.rs#L766`
     - `crates/shell/src/builtins/world_gateway.rs#L323`
 - Keep tuple-policy, widened status metadata, and secret-channel redesign out of this implementation ADR
   - Existing: the repo has adjacent draft ADRs for identity tuple posture and tuple-axis policy, but those surfaces are not yet implemented and are separable from the immediate backend-selection/runtime gap.
@@ -68,8 +68,8 @@ ADR_BODY_SHA256: 0c49fe896ae4eebf17fad20a6079dffa13006612a50c40496f0edec500ad843
 
 ## Problem / Context
 - ADR-0041 established the contract that Substrate selects one stable backend id in `<kind>:<name>` form, applies deny-by-default allowlisting, and hands one allowed backend id to a gateway adapter/runtime boundary.
-- The integrated lifecycle and world-agent plumbing have landed, but the current implementation is still effectively a single-path proof:
-  - `crates/world-agent/src/gateway_runtime.rs` hardcodes `cli:codex` as the only supported integrated backend.
+- The integrated lifecycle and world-service plumbing have landed, but the current implementation is still effectively a single-path proof:
+  - `crates/world-service/src/gateway_runtime.rs` hardcodes `cli:codex` as the only supported integrated backend.
   - integrated runtime config generation is static and Codex-specific.
   - integrated auth handoff is Codex-specific.
   - the shell only synthesizes integrated auth payloads for `cli:codex`.
@@ -140,7 +140,7 @@ ADR_BODY_SHA256: 0c49fe896ae4eebf17fad20a6079dffa13006612a50c40496f0edec500ad843
   - `crates/shell/src/execution/config_model.rs`: continues to own `llm.routing.default_backend` as the selected backend surface.
   - `crates/shell/src/execution/policy_model.rs` and `crates/broker`: continue to own allowlist and auth-read policy gates.
   - `crates/shell/src/builtins/world_gateway.rs`: resolves the integrated auth payload and passes only allowed, adapter-specific auth material into lifecycle requests.
-  - `crates/world-agent/src/gateway_runtime.rs`: owns integrated adapter registry lookup, capability gating, runtime config rendering, and process launch for the selected backend.
+  - `crates/world-service/src/gateway_runtime.rs`: owns integrated adapter registry lookup, capability gating, runtime config rendering, and process launch for the selected backend.
   - backend inventory and adapter registry metadata: together define whether a backend is realizable, which capability set it requires, and which config/auth renderer it uses.
 - End-to-end flow:
   - Inputs:
@@ -207,7 +207,7 @@ ADR_BODY_SHA256: 0c49fe896ae4eebf17fad20a6079dffa13006612a50c40496f0edec500ad843
     "migration_or_backfill": false,
     "unknowns_high": false
   },
-  "notes": "Implementation-focused follow-on to ADR-0041. Primary lift is in shell/world-agent adapter realization and verification, not in new config or operator-surface design."
+  "notes": "Implementation-focused follow-on to ADR-0041. Primary lift is in shell/world-service adapter realization and verification, not in new config or operator-surface design."
 }
 ```
 <!-- PM_LIFT_VECTOR:END -->
@@ -228,7 +228,7 @@ ADR_BODY_SHA256: 0c49fe896ae4eebf17fad20a6079dffa13006612a50c40496f0edec500ad843
 
 ### Tests
 - Unit tests:
-  - `crates/world-agent/src/gateway_runtime.rs`:
+  - `crates/world-service/src/gateway_runtime.rs`:
     - selected backend resolves through one adapter binding
     - unsupported backend ids fail with invalid-integration classification
     - missing adapter bindings fail with dependency-unavailable classification
@@ -238,7 +238,7 @@ ADR_BODY_SHA256: 0c49fe896ae4eebf17fad20a6079dffa13006612a50c40496f0edec500ad843
     - integrated auth payload resolution is backend-aware
     - env-read and host-credential-read gates remain enforced per backend
 - Integration tests:
-  - `crates/world-agent/tests/gateway_runtime_parity.rs`:
+  - `crates/world-service/tests/gateway_runtime_parity.rs`:
     - `status -> unavailable`, `sync -> available`, `status -> available` works for at least one non-`cli:codex` integrated backend fixture
     - restart semantics preserve backend binding and runtime-id stability
   - shell command-path tests:

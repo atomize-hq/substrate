@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use super::mapping::{protocol_validation_error, PURE_AGENT_PROTOCOL};
 use super::session::AgentRuntimeSessionManifest;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -226,6 +227,13 @@ impl OrchestrationSessionRecord {
     }
 
     pub(crate) fn validate_persisted_invariants(&self) -> anyhow::Result<()> {
+        if self.orchestrator_protocol != PURE_AGENT_PROTOCOL {
+            anyhow::bail!(
+                "orchestration session {}",
+                protocol_validation_error("it", Some(self.orchestrator_protocol.as_str()))
+            );
+        }
+
         match self.posture {
             OrchestrationSessionPosture::ActiveAttached => {
                 if self.attached_participant_id.is_none() {
@@ -373,7 +381,7 @@ mod tests {
                 agent_id: "codex".to_string(),
                 backend_id: "cli:codex".to_string(),
                 backend_kind: AgentRuntimeBackendKind::Codex,
-                protocol: "uaa.agent.session".to_string(),
+                protocol: "substrate.agent.session".to_string(),
                 execution_scope: AgentExecutionScope::Host,
                 binary_path: PathBuf::from("/usr/bin/codex"),
             },

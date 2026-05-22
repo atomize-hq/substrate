@@ -98,10 +98,10 @@ if limactl list "${VM_NAME}" >/dev/null 2>&1; then
         fi
 
         # Check systemd service
-        if limactl shell "${VM_NAME}" systemctl is-active substrate-world-agent >/dev/null 2>&1; then
-            printf '\033[32m[PASS]\033[0m substrate-world-agent service is active\n'
+        if limactl shell "${VM_NAME}" systemctl is-active substrate-world-service >/dev/null 2>&1; then
+            printf '\033[32m[PASS]\033[0m substrate-world-service service is active\n'
         else
-            printf '\033[31m[FAIL]\033[0m substrate-world-agent service is not active\n'
+            printf '\033[31m[FAIL]\033[0m substrate-world-service service is not active\n'
             failures=$((failures+1))
         fi
 

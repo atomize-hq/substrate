@@ -1,4 +1,4 @@
-//! Socket activation detection helpers for Linux world-agent integration.
+//! Socket activation detection helpers for Linux world-service integration.
 
 use std::env;
 use std::io::Read;
@@ -10,8 +10,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 const SOCKET_PATH: &str = "/run/substrate.sock";
-const SOCKET_UNIT: &str = "substrate-world-agent.socket";
-const SERVICE_UNIT: &str = "substrate-world-agent.service";
+const SOCKET_UNIT: &str = "substrate-world-service.socket";
+const SERVICE_UNIT: &str = "substrate-world-service.service";
 const DEFAULT_SYSTEMCTL_SHOW_TIMEOUT_MS: u64 = 2_000;
 
 static REPORT_CACHE: OnceLock<Mutex<Option<SocketActivationReport>>> = OnceLock::new();

@@ -34,9 +34,9 @@
   - Tasks: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/tasks.json`
   - Manual playbook: `docs/project_management/_archived/world-fs-granular-allow-deny-APPENDIX-addon-v3-alignment/manual_testing_playbook.md`
 - Related ADRs / grounding:
-  - Policy snapshot direction and threat model: `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+  - Policy snapshot direction and threat model: `docs/project_management/adrs/implemented/ADR-0014-world-service-policy-resolution-and-concurrency.md`
   - Full isolation mount/exec chokepoint: `crates/world/src/exec.rs`
-  - Landlock exec wrapper: `crates/world-agent/src/internal_exec.rs`
+  - Landlock exec wrapper: `crates/world-service/src/internal_exec.rs`
   - Snapshot resolution on host + drift handling (REPL): `crates/shell/src/execution/policy_snapshot.rs`, `crates/shell/src/repl/async_repl.rs`
   - Full isolation Landlock overlayfs compatibility: `docs/project_management/adrs/implemented/ADR-0015-full-isolation-landlock-overlayfs-backing-dirs.md`
 
@@ -72,10 +72,10 @@ ADR_BODY_SHA256: 2666072c19bbbc3e87633e97c357fc93ef0617688c518b83a1dd6debdb7b489
 - Operators need “deny overrides allow” (e.g., allow `.` but deny `./secrets/**`) to prevent accidental or malicious access to sensitive project content.
 - Landlock (allowlist-only) cannot express “allow everything except X” once broad allows are granted.
 - The current codebase has a known foot-gun: allowlist patterns containing `..` can be accepted by higher layers but are silently ignored during allowlist resolution, which can disable enforcement while policy *appears* set.
-  - See: `crates/world-agent/src/service.rs` (`resolve_landlock_allowlist_paths` drops `..` segments).
+  - See: `crates/world-service/src/service.rs` (`resolve_landlock_allowlist_paths` drops `..` segments).
 - Full isolation command execution routes through a single chokepoint:
   - `unshare --mount … sh -c PROJECT_BIND_MOUNT_ENFORCEMENT_SCRIPT` → conditional Landlock exec wrapper (`__substrate_world_landlock_exec`) → `sh -c/-lc $SUBSTRATE_INNER_CMD`.
-  - See: `crates/world/src/exec.rs`, `crates/world-agent/src/internal_exec.rs`.
+  - See: `crates/world/src/exec.rs`, `crates/world-service/src/internal_exec.rs`.
 - If Substrate introduces mount-based deny masking without preventing later mount/umount by the workload, deny rules are bypassable in an adversarial model.
 
 ## Goals
@@ -133,9 +133,9 @@ ADR_BODY_SHA256: 2666072c19bbbc3e87633e97c357fc93ef0617688c518b83a1dd6debdb7b489
 ## Architecture Shape
 - Components:
   - `crates/broker`: policy YAML schema update to V2 (no compat); validation of pattern grammar and isolation constraints.
-  - `crates/agent-api-types`: introduce `PolicySnapshotV2` and update `ExecuteRequest` and WS `start_session` payloads (no compat).
-  - `crates/shell`: emit `PolicySnapshotV2` for world-agent requests; REPL drift continues via snapshot hash.
-  - `crates/world-agent`:
+  - `crates/transport-api-types`: introduce `PolicySnapshotV2` and update `ExecuteRequest` and WS `start_session` payloads (no compat).
+  - `crates/shell`: emit `PolicySnapshotV2` for world-service requests; REPL drift continues via snapshot hash.
+  - `crates/world-service`:
     - Convert V2 snapshot to env inputs for the mount script + helper.
     - Extend the exec helper to:
       1) apply deny mounts (masking) inside the per-command mount namespace,
@@ -196,10 +196,10 @@ ADR_BODY_SHA256: 2666072c19bbbc3e87633e97c357fc93ef0617688c518b83a1dd6debdb7b489
 ## Rollout / Backwards Compatibility
 - No backwards compatibility is provided:
   - Old policy YAML keys are invalid and MUST hard error.
-  - `PolicySnapshotV1` is rejected by world-agent once this ADR is implemented.
+  - `PolicySnapshotV1` is rejected by world-service once this ADR is implemented.
 - Operators must update:
   - policy patch file schema to V2, and
-  - host shell + world-agent together (version lockstep).
+  - host shell + world-service together (version lockstep).
 
 ## Decision Summary
 - Decision Register: `docs/project_management/_archived/world-fs-granular-allow-deny/decision_register.md`
@@ -404,7 +404,7 @@ world_fs:
 **Meaning (zero ambiguity):**
 
 - `routing=false`: if Substrate cannot route an execution to a world backend (backend unavailable,
-  handshake fails, world-agent unreachable), Substrate MAY fall back to host execution.
+  handshake fails, world-service unreachable), Substrate MAY fall back to host execution.
 - `routing=true`: if Substrate cannot route an execution to a world backend for any reason, Substrate
   MUST NOT fall back to host execution. It MUST fail closed.
 
@@ -435,7 +435,7 @@ Rules:
 
 - This env var is derived from the effective policy and is **output-only** (it MUST NOT be consumed as
   an override input; override inputs remain `SUBSTRATE_OVERRIDE_*` per ADR-0006).
-- It MUST be set consistently for shell, shimmed subprocesses, and world-agent requests so telemetry,
+- It MUST be set consistently for shell, shimmed subprocesses, and world-service requests so telemetry,
   replay, and diagnostics observe the same effective state.
 
 #### B.2.3 Failure taxonomy for routing fail-closed
@@ -443,7 +443,7 @@ Rules:
   (e.g., `--no-world`, `SUBSTRATE_WORLD=disabled`, or an equivalent effective-config disable), this is
   a policy/config incompatibility and MUST hard error before execution (host exit code `2`).
 - If `world_fs.fail_closed.routing=true` and the world is enabled but routing fails at runtime:
-  - If routing fails because a required world dependency is unavailable (for example: world-agent socket unreachable,
+  - If routing fails because a required world dependency is unavailable (for example: world-service socket unreachable,
     handshake failure, transport unavailable), Substrate MUST fail closed with host exit code `3` (“required dependency
     unavailable”).
   - If routing fails because the selected world mode/feature is not supported or prerequisites are missing (for example:

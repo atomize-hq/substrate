@@ -5,8 +5,8 @@ This is a practical “what to set + what to try” guide for the newer `world_f
 ## 0) Preconditions (so tests are meaningful)
 
 - The deny/strict behavior is a **Linux** implementation detail:
-  - Linux host: world-agent runs on the host.
-  - macOS host: world-agent runs inside a **Lima VM** (Linux in VM).
+  - Linux host: world-service runs on the host.
+  - macOS host: world-service runs inside a **Lima VM** (Linux in VM).
 - Verify world backend health before testing:
   - `substrate world doctor`
   - If that fails, run `substrate world enable` (or on macOS: `scripts/mac/lima-warm.sh`).

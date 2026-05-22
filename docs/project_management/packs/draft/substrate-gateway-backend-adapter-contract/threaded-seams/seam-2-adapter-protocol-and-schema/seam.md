@@ -64,9 +64,9 @@ open_remediations:
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/workstream_triage.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/alignment_report.md`
   - likely downstream code surfaces once execution begins:
-    - `crates/agent-api-types/src/lib.rs`
-    - `crates/agent-api-client/src/lib.rs`
-    - `crates/world-agent/src/handlers.rs`
+    - `crates/transport-api-types/src/lib.rs`
+    - `crates/transport-api-client/src/lib.rs`
+    - `crates/world-service/src/handlers.rs`
     - `crates/shell/src/builtins/world_gateway.rs`
 - **Verification**:
   - This seam **consumes** `C-01` and `C-02` from `../../governance/seam-1-closeout.md`.

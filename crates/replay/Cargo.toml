@@ -21,8 +21,8 @@ regex = "1.10"
 base64 = "0.22"
 
 # Internal dependencies
-agent-api-client = { path = "../agent-api-client", version = "0.2.3" }
-agent-api-types = { path = "../agent-api-types", version = "0.2.3" }
+transport-api-client = { path = "../transport-api-client", version = "0.2.3" }
+transport-api-types = { path = "../transport-api-types", version = "0.2.3" }
 substrate-common = { path = "../common" }
 substrate-trace = { path = "../trace" }
 substrate-broker = { path = "../broker" }

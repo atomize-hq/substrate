@@ -31,7 +31,7 @@ candidate_subslices: []
 - **User/system value**: make `net_allowed` an explicit cross-boundary input so the world does not rely on hidden in-guest broker state for allowlists.
 - **Scope (in/out)**:
   - In: Snapshot V3 schema field + canonicalization/validation helpers + unit tests.
-  - Out: host/world-agent plumbing (covered in `S2`/`S3`).
+  - Out: host/world-service plumbing (covered in `S2`/`S3`).
 - **Acceptance criteria**:
   - `PolicySnapshotV3.net_allowed: Vec<String>` exists with `#[serde(default)]`.
   - Canonicalization rules are explicit and test-locked, including:
@@ -43,7 +43,7 @@ candidate_subslices: []
 - **Dependencies**:
   - `../../threading.md` (`C-01`, `THR-01`)
 - **Verification**:
-  - `cargo test -p agent-api-types` (unit tests for canonicalization/validation)
+  - `cargo test -p transport-api-types` (unit tests for canonicalization/validation)
 - **Rollout/safety**:
   - Additive-only: missing `net_allowed` in older snapshots defaults via serde to `[]` (or an explicitly decided default), with no behavior change unless downstream opt-in gating requests isolation.
 - **Review surface refs**:
@@ -55,7 +55,7 @@ candidate_subslices: []
 - **Outcome**: explicit rules for casefolding + IDNA posture that every consumer uses.
 - **Inputs/outputs**:
   - In: `REM-001`, `scope_brief.md` assumptions, current broker semantics (evidence).
-  - Out: a single normalization helper used by snapshot builder + world-agent plumbing.
+  - Out: a single normalization helper used by snapshot builder + world-service plumbing.
 - **Thread/contract refs**: `THR-01`, `C-01`
 - **Contract decision (C-01): `net_allowed` hostname normalization posture**
   - **Trim/drop**: for each entry, `trim()` leading/trailing whitespace; drop entries that become empty.
@@ -75,7 +75,7 @@ candidate_subslices: []
   - **Deduping**: de-dupe after canonicalization, preserving first-seen order.
   - **Wildcard posture**: unchanged from S1 acceptance criteria (literal `"*"` means allow-all and collapses the list to exactly `["*"]`; other wildcard forms are rejected when enforcement is requested).
 - **Verification plan (unit tests, planning-only)**:
-  - Add unit tests in `crates/agent-api-types` that lock the above behavior:
+  - Add unit tests in `crates/transport-api-types` that lock the above behavior:
     - `policy_snapshot_v3_net_allowed_casefolds_and_strips_trailing_dot`
     - `policy_snapshot_v3_net_allowed_rejects_unicode_idna_input`
     - `policy_snapshot_v3_net_allowed_rejects_urls_ports_and_paths`

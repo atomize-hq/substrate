@@ -47,7 +47,7 @@ open_remediations: []
   - In:
     - Unit tests for Snapshot V3 canonicalization/validation.
     - Tests for host snapshot builder populating `net_allowed`.
-    - Tests that world-agent uses snapshot allowlists (not broker state).
+    - Tests that world-service uses snapshot allowlists (not broker state).
     - Logic-level tests for deny-all implying no DNS allow rule.
     - Privileged integration tests (ignored) for actual nft/cgroup behavior.
     - Manual smoke playbook for macOS Lima: deny-all fails ping (both command and REPL), allow-all succeeds.
@@ -67,7 +67,7 @@ open_remediations: []
   - Transitive blockers:
     - none
 - **Touch surface**:
-  - `agent-api-types` tests
+  - `transport-api-types` tests
   - `crates/shell` tests around snapshot builder and routing decisions
   - `crates/world` tests around rule generation
   - `docs/manual_verification` or related smoke areas

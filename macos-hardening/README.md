@@ -101,7 +101,7 @@ inputs:
 - `crates/world-mac-lima/src/forwarding.rs`
 - `crates/world-mac-lima/src/transport.rs`
 - `crates/shell/src/builtins/world_gateway.rs`
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
 - `scripts/mac/lima-warm.sh`
 - `scripts/mac/lima/substrate.yaml`
 - `scripts/mac/smoke.sh`

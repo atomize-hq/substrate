@@ -159,7 +159,7 @@ fn write_orchestrator_runtime_config(home_substrate: &Path, fake_codex: &Path) {
     fs::write(
         home_substrate.join("agents/codex.yaml"),
         format!(
-            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+            "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
             fake_codex.display()
         ),
     )

@@ -238,7 +238,7 @@
       ],
       "notes": [
         "Clarifies what is host readiness vs in-world enforcement readiness, especially on macOS (Lima guest kernel facts).",
-        "Introduces a world-agent doctor endpoint to avoid requiring a guest-installed substrate CLI for world diagnostics."
+        "Introduces a world-service doctor endpoint to avoid requiring a guest-installed substrate CLI for world diagnostics."
       ]
     },
     {
@@ -322,7 +322,7 @@
         }
       ],
       "notes": [
-        "Implements ADR-0013 contract: patch-only policy + broker-canonical effective resolution across shell/shim/world-agent.",
+        "Implements ADR-0013 contract: patch-only policy + broker-canonical effective resolution across shell/shim/world-service.",
         "Removes silent fallback on policy resolution errors for broker-dependent execution paths."
       ]
     },
@@ -675,7 +675,7 @@
         }
       ],
       "notes": [
-        "Closes contract gaps discovered post-automation: effective policy show output is still V2-shaped, and snapshot schema/protocol remains V2 in the host + world-agent pipeline."
+        "Closes contract gaps discovered post-automation: effective policy show output is still V2-shaped, and snapshot schema/protocol remains V2 in the host + world-service pipeline."
       ]
     },
     {
@@ -778,24 +778,24 @@
     },
     {
       "order": 41.2,
-      "id": "dev_install_world_agent_staging",
-      "title": "Dev install world-agent staging (enable later workflow)",
-      "branch": "feat/dev-install-world-agent-staging",
-      "directory": "docs/project_management/packs/implemented/dev-install-world-agent-staging",
-      "plan": "docs/project_management/packs/implemented/dev-install-world-agent-staging/plan.md",
+      "id": "dev_install_world_service_staging",
+      "title": "Dev install world-service staging (enable later workflow)",
+      "branch": "feat/dev-install-world-service-staging",
+      "directory": "docs/project_management/packs/implemented/dev-install-world-service-staging",
+      "plan": "docs/project_management/packs/implemented/dev-install-world-service-staging/plan.md",
       "status": "completed",
       "sequence": [
         {
           "id": "DIWAS0",
-          "spec": "docs/project_management/packs/implemented/dev-install-world-agent-staging/slices/DIWAS0/DIWAS0-spec.md"
+          "spec": "docs/project_management/packs/implemented/dev-install-world-service-staging/slices/DIWAS0/DIWAS0-spec.md"
         },
         {
           "id": "DIWAS1",
-          "spec": "docs/project_management/packs/implemented/dev-install-world-agent-staging/slices/DIWAS1/DIWAS1-spec.md"
+          "spec": "docs/project_management/packs/implemented/dev-install-world-service-staging/slices/DIWAS1/DIWAS1-spec.md"
         }
       ],
       "notes": [
-        "Implements ADR-0035: Linux dev-install with --no-world stages world-agent and substrate world enable fails fast with a deterministic remediation when the staged artifact is missing.",
+        "Implements ADR-0035: Linux dev-install with --no-world stages world-service and substrate world enable fails fast with a deterministic remediation when the staged artifact is missing.",
         "Coordinates with ADR-0034 helper discovery robustness; prefer landing helper staging first to reduce merge conflict risk on shared installer/world-enable surfaces."
       ]
     },

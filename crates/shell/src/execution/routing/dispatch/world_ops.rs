@@ -16,14 +16,6 @@ use crate::execution::routing::{get_term_size, RawModeGuard};
 use crate::execution::world_env_guard;
 #[cfg(target_os = "linux")]
 use crate::execution::{policy_snapshot::bootstrap_world_spec, socket_activation};
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-use agent_api_client::AgentClient;
-#[cfg(not(target_os = "windows"))]
-use agent_api_types::ExecuteCancelRequestV1;
-use agent_api_types::{
-    ExecuteRequest, ExecuteStreamFrame, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
-    ProcessTelemetry, ResolvedMemberRuntimeDescriptorV1, WorldFsMode,
-};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use std::env;
@@ -36,6 +28,14 @@ use tokio::net::UnixStream;
 use tokio::signal::unix::{signal, SignalKind};
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use tokio_tungstenite as tungs;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use transport_api_client::AgentClient;
+#[cfg(not(target_os = "windows"))]
+use transport_api_types::ExecuteCancelRequestV1;
+use transport_api_types::{
+    ExecuteRequest, ExecuteStreamFrame, MemberDispatchRequestV1, MemberRuntimeBackendKindV1,
+    ProcessTelemetry, ResolvedMemberRuntimeDescriptorV1, WorldFsMode,
+};
 #[cfg(target_os = "linux")]
 use world::LinuxLocalBackend;
 #[cfg(target_os = "linux")]
@@ -119,7 +119,7 @@ pub(super) fn normalize_env_for_linux_guest(
     }
 
     // Note: SUBSTRATE_WORLD_DEPS_GUEST_BIN_DIR is set above and may be overridden by tests/fixtures
-    // that use a host-exec world-agent stub.
+    // that use a host-exec world-service stub.
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -239,8 +239,8 @@ struct ExecuteRequestInput {
     cwd: String,
     env_map: std::collections::HashMap<String, String>,
     agent_id: String,
-    policy_snapshot: agent_api_types::PolicySnapshotV3,
-    world_network: agent_api_types::WorldNetworkRoutingV1,
+    policy_snapshot: transport_api_types::PolicySnapshotV3,
+    world_network: transport_api_types::WorldNetworkRoutingV1,
     world_fs_mode: WorldFsMode,
     member_dispatch: Option<MemberDispatchRequestV1>,
 }
@@ -280,7 +280,7 @@ pub(super) fn execute_world_pty_over_ws(
     use futures::{SinkExt, StreamExt};
 
     // Ensure agent is ready
-    ensure_world_agent_ready()?;
+    ensure_world_service_ready()?;
 
     // Connect UDS and do WS handshake
     let rt = tokio::runtime::Runtime::new()?;
@@ -299,7 +299,7 @@ pub(super) fn execute_world_pty_over_ws(
         let sink = std::sync::Arc::new(tokio::sync::Mutex::new(sink));
 
         if std::env::var("SUBSTRATE_WS_DEBUG").ok().as_deref() == Some("1") {
-            eprintln!("using world-agent PTY WS");
+            eprintln!("using world-service PTY WS");
         }
 
         // Prepare start frame (strip optional ":pty " prefix used in REPL to force PTY)
@@ -523,9 +523,9 @@ pub(super) fn execute_world_pty_over_ws(
                                         },
                                     ));
                                 }
-                                return Err(anyhow::anyhow!("world-agent error: {}", message));
+                                return Err(anyhow::anyhow!("world-service error: {}", message));
                             }
-                            return Err(anyhow::anyhow!("world-agent error"));
+                            return Err(anyhow::anyhow!("world-service error"));
                         }
                         _ => {}
                     }
@@ -554,7 +554,7 @@ pub(super) fn execute_world_pty_over_ws(
 }
 
 #[cfg(target_os = "linux")]
-pub(super) fn ensure_world_agent_ready() -> anyhow::Result<()> {
+pub(super) fn ensure_world_service_ready() -> anyhow::Result<()> {
     use std::path::Path;
     use std::path::PathBuf;
     use std::thread;
@@ -609,8 +609,8 @@ pub(super) fn ensure_world_agent_ready() -> anyhow::Result<()> {
             thread::sleep(Duration::from_millis(100));
         }
         anyhow::bail!(
-            "world-agent socket activation detected but {} did not respond. \
-             Run 'systemctl status substrate-world-agent.socket' for details.",
+            "world-service socket activation detected but {} did not respond. \
+             Run 'systemctl status substrate-world-service.socket' for details.",
             socket_path.display()
         );
     }
@@ -636,24 +636,24 @@ pub(super) fn ensure_world_agent_ready() -> anyhow::Result<()> {
     // Try to spawn agent
     let candidate_bins = [
         std::env::var("SUBSTRATE_WORLD_AGENT_BIN").ok(),
-        which::which("substrate-world-agent")
+        which::which("substrate-world-service")
             .ok()
             .map(|p| p.display().to_string()),
-        Some("target/release/world-agent".to_string()),
-        Some("target/debug/world-agent".to_string()),
+        Some("target/release/world-service".to_string()),
+        Some("target/debug/world-service".to_string()),
     ];
     let bin = candidate_bins
         .into_iter()
         .flatten()
         .find(|p| std::path::Path::new(p).exists())
-        .ok_or_else(|| anyhow::anyhow!("world-agent binary not found"))?;
+        .ok_or_else(|| anyhow::anyhow!("world-service binary not found"))?;
 
     std::process::Command::new(&bin)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|e| anyhow::anyhow!("spawn world-agent: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("spawn world-service: {}", e))?;
 
     // Wait up to ~1s for readiness
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1000);
@@ -663,7 +663,7 @@ pub(super) fn ensure_world_agent_ready() -> anyhow::Result<()> {
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
-    anyhow::bail!("world-agent readiness probe failed")
+    anyhow::bail!("world-service readiness probe failed")
 }
 
 #[cfg(target_os = "linux")]
@@ -677,7 +677,7 @@ pub(crate) enum LinuxWorldInit {
 
 #[cfg(target_os = "linux")]
 pub(crate) fn init_linux_world(world_disabled: bool) -> LinuxWorldInit {
-    init_linux_world_with_probe(world_disabled, ensure_world_agent_ready)
+    init_linux_world_with_probe(world_disabled, ensure_world_service_ready)
 }
 
 #[cfg(target_os = "linux")]
@@ -912,11 +912,11 @@ pub(super) fn execute_world_pty_over_ws_macos(
                                         ));
                                     }
                                     return Err(anyhow::anyhow!(
-                                        "world-agent error: {}",
+                                        "world-service error: {}",
                                         message
                                     ));
                                 }
-                                return Err(anyhow::anyhow!("world-agent error"));
+                                return Err(anyhow::anyhow!("world-service error"));
                             }
                             _ => {}
                         }
@@ -1055,8 +1055,8 @@ fn extract_process_telemetry_from_ws_exit(value: &serde_json::Value) -> ProcessT
 pub(crate) fn build_agent_client_and_request(
     cmd: &str,
 ) -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::ExecuteRequest,
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
     String,
 )> {
     build_agent_client_and_request_with_trace_metadata(cmd, None, None)
@@ -1067,8 +1067,8 @@ pub(crate) fn build_agent_client_and_request_with_trace_metadata(
     parent_span_id: Option<&str>,
     parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::ExecuteRequest,
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
     String,
 )> {
     build_agent_client_and_request_impl(cmd, parent_span_id, parent_cmd_id)
@@ -1078,16 +1078,16 @@ pub(crate) fn build_agent_client_and_request_with_trace_metadata(
 pub(crate) fn build_agent_client_and_member_dispatch_request(
     request: &MemberDispatchTransportRequest,
 ) -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::ExecuteRequest,
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
     String,
 )> {
     build_agent_client_and_member_dispatch_request_impl(request)
 }
 
 pub(crate) fn build_agent_client_and_pending_diff_request() -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::PendingDiffRequestV1,
+    transport_api_client::AgentClient,
+    transport_api_types::PendingDiffRequestV1,
     String,
 )> {
     build_agent_client_and_pending_diff_request_impl()
@@ -1110,8 +1110,8 @@ fn current_world_request_profile() -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn validate_execute_response_shared_world(
-    requested: Option<&agent_api_types::SharedWorldOwnerSpec>,
-    response: &agent_api_types::ExecuteResponse,
+    requested: Option<&transport_api_types::SharedWorldOwnerSpec>,
+    response: &transport_api_types::ExecuteResponse,
 ) -> anyhow::Result<()> {
     crate::execution::repl_persistent_session::validate_shared_world_echo(
         requested,
@@ -1129,11 +1129,11 @@ fn build_agent_client_and_request_impl(
     parent_span_id: Option<&str>,
     parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::ExecuteRequest,
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
     String,
 )> {
-    ensure_world_agent_ready()?;
+    ensure_world_service_ready()?;
 
     let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
         .map(std::path::PathBuf::from)
@@ -1178,8 +1178,8 @@ fn build_agent_client_and_request_impl(
 fn build_agent_client_and_member_dispatch_request_impl(
     dispatch: &MemberDispatchTransportRequest,
 ) -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::ExecuteRequest,
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
     String,
 )> {
     let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
@@ -1229,11 +1229,11 @@ fn preserve_world_project_dir_override(env_map: &mut std::collections::HashMap<S
 
 #[cfg(target_os = "linux")]
 fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::PendingDiffRequestV1,
+    transport_api_client::AgentClient,
+    transport_api_types::PendingDiffRequestV1,
     String,
 )> {
-    ensure_world_agent_ready()?;
+    ensure_world_service_ready()?;
 
     let socket_path = std::env::var_os("SUBSTRATE_WORLD_SOCKET")
         .map(std::path::PathBuf::from)
@@ -1253,7 +1253,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
     )?;
     ensure_world_deps_bin_on_path(&mut env_map);
 
-    let request = agent_api_types::PendingDiffRequestV1 {
+    let request = transport_api_types::PendingDiffRequestV1 {
         profile: current_world_request_profile(),
         cwd: Some(cwd),
         env: Some(env_map),
@@ -1271,8 +1271,8 @@ fn build_agent_client_and_request_impl(
     parent_span_id: Option<&str>,
     parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::ExecuteRequest,
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
     String,
 )> {
     // Allow explicit socket overrides (used by tests/fixtures and advanced setups).
@@ -1370,8 +1370,8 @@ fn build_agent_client_and_request_impl(
 fn build_agent_client_and_member_dispatch_request_impl(
     dispatch: &MemberDispatchTransportRequest,
 ) -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::ExecuteRequest,
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
     String,
 )> {
     if let Some(socket_path) = std::env::var_os("SUBSTRATE_WORLD_SOCKET") {
@@ -1458,8 +1458,8 @@ fn build_agent_client_and_member_dispatch_request_impl(
 
 #[cfg(target_os = "macos")]
 fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::PendingDiffRequestV1,
+    transport_api_client::AgentClient,
+    transport_api_types::PendingDiffRequestV1,
     String,
 )> {
     // Allow explicit socket overrides (used by tests/fixtures and advanced setups).
@@ -1481,7 +1481,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
             &mut env_map,
         )?;
 
-        let request = agent_api_types::PendingDiffRequestV1 {
+        let request = transport_api_types::PendingDiffRequestV1 {
             profile: current_world_request_profile(),
             cwd: Some(cwd),
             env: Some(env_map),
@@ -1524,7 +1524,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         &mut env_map,
     )?;
 
-    let request = agent_api_types::PendingDiffRequestV1 {
+    let request = transport_api_types::PendingDiffRequestV1 {
         profile: current_world_request_profile(),
         cwd: Some(cwd),
         env: Some(env_map),
@@ -1542,8 +1542,8 @@ fn build_agent_client_and_request_impl(
     parent_span_id: Option<&str>,
     parent_cmd_id: Option<&str>,
 ) -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::ExecuteRequest,
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
     String,
 )> {
     use crate::execution::platform_world::windows;
@@ -1609,8 +1609,8 @@ fn build_agent_client_and_request_impl(
 fn build_agent_client_and_member_dispatch_request_impl(
     dispatch: &MemberDispatchTransportRequest,
 ) -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::ExecuteRequest,
+    transport_api_client::AgentClient,
+    transport_api_types::ExecuteRequest,
     String,
 )> {
     use crate::execution::platform_world::windows;
@@ -1671,8 +1671,8 @@ fn build_agent_client_and_member_dispatch_request_impl(
 
 #[cfg(target_os = "windows")]
 fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
-    agent_api_client::AgentClient,
-    agent_api_types::PendingDiffRequestV1,
+    transport_api_client::AgentClient,
+    transport_api_types::PendingDiffRequestV1,
     String,
 )> {
     use crate::execution::platform_world::windows;
@@ -1700,7 +1700,7 @@ fn build_agent_client_and_pending_diff_request_impl() -> anyhow::Result<(
         &mut env_map,
     )?;
 
-    let request = agent_api_types::PendingDiffRequestV1 {
+    let request = transport_api_types::PendingDiffRequestV1 {
         profile,
         cwd: Some(cwd),
         env: Some(env_map),
@@ -1770,12 +1770,12 @@ pub(crate) fn stream_non_pty_via_agent(
                 client
                     .execute(request)
                     .await
-                    .context("world-agent /v1/execute request failed")
+                    .context("world-service /v1/execute request failed")
             })
             .await
             .with_context(|| {
                 format!(
-                    "Timed out after {}s waiting for world-agent /v1/execute (transport: {}).\nHint: ensure the Windows named-pipe forwarder is running (\\\\.\\pipe\\substrate-agent) and the WSL agent is healthy (try `pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl`).",
+                    "Timed out after {}s waiting for world-service /v1/execute (transport: {}).\nHint: ensure the Windows named-pipe forwarder is running (\\\\.\\pipe\\substrate-agent) and the WSL agent is healthy (try `pwsh -File scripts/windows/wsl-warm.ps1 -DistroName substrate-wsl`).",
                     timeout.as_secs(),
                     client.transport().description()
                 )
@@ -1813,7 +1813,7 @@ pub(crate) fn stream_non_pty_via_agent(
 
         #[cfg(not(target_os = "windows"))]
         {
-            use agent_api_types::ApiError;
+            use transport_api_types::ApiError;
             use http_body_util::BodyExt;
 
             let response = client.execute_stream(request).await?;
@@ -2127,7 +2127,7 @@ fn consume_agent_stream_buffer_with_context(
                         fallback_reason: parse_world_fs_strategy_unavailable_reason(&message),
                     }));
                 }
-                eprintln!("world-agent error: {}", message);
+                eprintln!("world-service error: {}", message);
                 anyhow::bail!(message);
             }
         }
@@ -2212,11 +2212,6 @@ mod tests {
         acquire_event_test_guard, clear_agent_event_sender, init_event_channel,
         ShellCommandEventContext, ShellEventEmissionContext,
     };
-    use agent_api_types::{
-        ExecuteStreamFrame, MemberRuntimeBackendKindV1, PolicySnapshotV3,
-        PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
-        ResolvedMemberRuntimeDescriptorV1, WorldFsMode, WorldNetworkRoutingV1,
-    };
     use base64::Engine;
     use futures::stream;
     use http_body_util::StreamBody;
@@ -2225,6 +2220,11 @@ mod tests {
     use std::sync::{Arc, Mutex, OnceLock};
     use std::time::Duration;
     use substrate_common::agent_events::AgentEventKind;
+    use transport_api_types::{
+        ExecuteStreamFrame, MemberRuntimeBackendKindV1, PolicySnapshotV3,
+        PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+        ResolvedMemberRuntimeDescriptorV1, WorldFsMode, WorldNetworkRoutingV1,
+    };
 
     fn with_env_var<T>(key: &str, value: &str, f: impl FnOnce() -> T) -> T {
         let _guard = test_env_lock().lock().expect("test env mutex poisoned");
@@ -2351,7 +2351,7 @@ mod tests {
             parent_participant_id: Some("ash_parent_123".to_string()),
             resumed_from_participant_id: Some("ash_prev_123".to_string()),
             backend_id: "cli:codex".to_string(),
-            protocol: "uaa.agent.session".to_string(),
+            protocol: "substrate.agent.session".to_string(),
             run_id: "run_123".to_string(),
             world_id: "world_123".to_string(),
             world_generation: 9,
@@ -2373,7 +2373,7 @@ mod tests {
             Some("ash_prev_123")
         );
         assert_eq!(payload.backend_id, "cli:codex");
-        assert_eq!(payload.protocol, "uaa.agent.session");
+        assert_eq!(payload.protocol, "substrate.agent.session");
         assert_eq!(payload.run_id, "run_123");
         assert_eq!(payload.world_id, "world_123");
         assert_eq!(payload.world_generation, 9);
@@ -2425,7 +2425,7 @@ mod tests {
                     parent_participant_id: None,
                     resumed_from_participant_id: None,
                     backend_id: "cli:codex".to_string(),
-                    protocol: "uaa.agent.session".to_string(),
+                    protocol: "substrate.agent.session".to_string(),
                     run_id: "run_123".to_string(),
                     world_id: "world_123".to_string(),
                     world_generation: 9,
@@ -2484,7 +2484,7 @@ mod tests {
                     span_id: "spn_interrupt".to_string(),
                     scopes_used: Vec::new(),
                     fs_diff: None,
-                    process_telemetry: agent_api_types::ProcessTelemetry::default(),
+                    process_telemetry: transport_api_types::ProcessTelemetry::default(),
                 }),
             ];
 
@@ -2596,7 +2596,7 @@ mod tests {
                     span_id: "spn-world".to_string(),
                     scopes_used: Vec::new(),
                     fs_diff: None,
-                    process_telemetry: agent_api_types::ProcessTelemetry::default(),
+                    process_telemetry: transport_api_types::ProcessTelemetry::default(),
                 }),
             ];
             let body = StreamBody::new(stream::iter(

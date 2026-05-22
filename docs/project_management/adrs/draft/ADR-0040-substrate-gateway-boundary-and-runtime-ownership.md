@@ -110,7 +110,7 @@ ADR_BODY_SHA256: 8c69b5599428dc1e6d1d488999e3bfb8a35485187cbef0da67cdb52ebb958a4
   - This ADR intentionally preserves only the ownership rule that Substrate owns policy-gated host secret sourcing and host-to-world secret delivery for integrated operation.
   - Exact secret transport mechanics, canonical auth field naming, and compatibility-path details remain governed by ADR-0027 and the referenced gateway secret-delivery/decision docs rather than being redefined here.
 - Managed diagnostic artifact boundary:
-  - When Substrate-managed lifecycle persists gateway runtime artifacts on the host, those artifacts must be readable through the same managed host authorization boundary Substrate uses for the world-agent socket rather than being left as root-only implementation details.
+  - When Substrate-managed lifecycle persists gateway runtime artifacts on the host, those artifacts must be readable through the same managed host authorization boundary Substrate uses for the world-service socket rather than being left as root-only implementation details.
   - On Linux that authorization boundary is the `substrate` group; provisioning and runtime file creation must preserve group-readable diagnostics without making them world-readable.
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (unless explicitly overridden here)
@@ -145,7 +145,7 @@ ADR_BODY_SHA256: 8c69b5599428dc1e6d1d488999e3bfb8a35485187cbef0da67cdb52ebb958a4
 
 ## Architecture Shape
 - Components:
-  - `crates/world-agent` and the world backend layers: own lifecycle orchestration, placement, and transport into the world boundary.
+  - `crates/world-service` and the world backend layers: own lifecycle orchestration, placement, and transport into the world boundary.
   - `crates/broker` and config/policy resolution: own allowlists, fail-closed posture, and policy explanation.
   - `crates/trace`: owns canonical trace persistence and the Substrate trace vocabulary.
   - `substrate-gateway` runtime: owns the in-world gateway front door, provider normalization, planner/executor routing, and normalized event generation.

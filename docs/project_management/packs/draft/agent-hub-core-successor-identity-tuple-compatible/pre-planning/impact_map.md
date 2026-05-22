@@ -86,10 +86,10 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/common/tests/agent_hub_event_envelope_schema.rs`
 - `crates/trace/src/span.rs`
 - `crates/trace/src/tests.rs`
-- `crates/world-agent/src/service.rs`
-- `crates/agent-api-types/src/lib.rs`
-- `crates/agent-api-client/src/lib.rs`
-- `crates/agent-api-core/src/lib.rs`
+- `crates/world-service/src/service.rs`
+- `crates/transport-api-types/src/lib.rs`
+- `crates/transport-api-client/src/lib.rs`
+- `crates/transport-api-core/src/lib.rs`
 - `crates/shell/src/execution/invocation/plan.rs`
 - `crates/shell/src/execution/mod.rs`
 - `crates/shell/tests/agents_validate.rs`

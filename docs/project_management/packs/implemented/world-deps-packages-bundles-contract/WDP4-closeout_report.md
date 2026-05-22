@@ -58,4 +58,4 @@ Record run ids/URLs for required platforms:
 
 Notes:
 
-- WDP4 validates script install + wrapper generation via a host-execute world-agent stub and ensures wrappers are deterministic and fail with actionable stderr when wrapper sources are invalid.
+- WDP4 validates script install + wrapper generation via a host-execute world-service stub and ensures wrappers are deterministic and fail with actionable stderr when wrapper sources are invalid.
