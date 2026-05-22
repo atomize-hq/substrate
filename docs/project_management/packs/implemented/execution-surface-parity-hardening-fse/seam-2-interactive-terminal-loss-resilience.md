@@ -44,7 +44,7 @@ open_remediations: []
     - add a macOS-targeted regression proof that exercises the Reedline path and reaps the child on failure
     - update the small authoritative set of docs that describe REPL exit semantics
   - Out:
-    - world-agent, shim, or backend transport changes
+    - world-service, shim, or backend transport changes
     - new CLI flags or config keys
     - a general prompt-backend rewrite or fallback strategy beyond what is required to fix the bounded failure mode
 - **Primary interfaces**

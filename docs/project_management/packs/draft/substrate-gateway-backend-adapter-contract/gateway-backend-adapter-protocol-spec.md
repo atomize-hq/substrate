@@ -78,9 +78,9 @@ These are planning and verification anchors only. They describe where later impl
 - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/codex/harness.rs`
 - `/Users/spensermcconnell/atomize-hq/unified-agent-api/crates/agent_api/src/backends/claude_code/harness.rs`
 - `/Users/spensermcconnell/__Active_Code/kimi-claude-adapter/gateway/src/structured_events.rs`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-types/src/lib.rs`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/agent-api-client/src/lib.rs`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-agent/src/handlers.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/transport-api-types/src/lib.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/transport-api-client/src/lib.rs`
+- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/world-service/src/handlers.rs`
 - `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/builtins/world_gateway.rs`
 
 ### Verification plan

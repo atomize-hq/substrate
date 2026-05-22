@@ -57,10 +57,10 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/shell/src/builtins/world_deps/errors.rs`
 - `crates/shell/src/builtins/world_deps/surfaces.rs`
 - `crates/replay/src/replay/executor.rs`
-- `crates/world-agent/src/service.rs`
-- `crates/world-agent/src/handlers.rs`
-- `crates/world-agent/tests/repl_persistent_session_bootstrap_v1.rs`
-- `crates/world-agent/tests/repl_persistent_session_exec_v1.rs`
+- `crates/world-service/src/service.rs`
+- `crates/world-service/src/handlers.rs`
+- `crates/world-service/tests/repl_persistent_session_bootstrap_v1.rs`
+- `crates/world-service/tests/repl_persistent_session_exec_v1.rs`
 - `crates/world-mac-lima/src/forwarding.rs`
 - `crates/world-windows-wsl/src/warm.rs`
 - `crates/world/src/exec.rs`
@@ -77,7 +77,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `tests/mac/installer_parity_fixture.sh`
 - `scripts/linux/world-provision.sh`
 - `scripts/mac/lima-warm.sh`
-- `scripts/mac/substrate-world-agent.service`
+- `scripts/mac/substrate-world-service.service`
 - `scripts/mac/lima/substrate.yaml`
 - `scripts/mac/lima/substrate-dev.yaml`
 - `scripts/windows/wsl-warm.ps1`
@@ -147,7 +147,7 @@ For each externally visible change, list:
     - Platform-specific provisioning scripts and service hardening must remain coherent with the chosen posture (systemd unit sandboxing vs in-world isolation; no “runtime hardening regression”).
     - Validation must include at least one supported guest-backend non-dry-run success path with a real APT package; dry-run-only evidence is insufficient for the provisioning seam.
   - Contradiction risks:
-    - Active work in `docs/project_management/packs/active/world_process_exec_tracing_parity/` touches `crates/world-agent/src/service.rs` and systemd capability posture; provisioning-profile changes must not break tracing/process-capture invariants.
+    - Active work in `docs/project_management/packs/active/world_process_exec_tracing_parity/` touches `crates/world-service/src/service.rs` and systemd capability posture; provisioning-profile changes must not break tracing/process-capture invariants.
 
 ### Operator-doc update targets (exact paths + headings)
 
@@ -196,7 +196,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
     - `crates/shell/src/builtins/world_enable/` error/remediation shape
   - Conflict: yes
   - Resolution (explicit):
-    - Keep missing-artifact “enable later” fixes and world-deps provisioning semantics separable: provisioning logic must not introduce new late failures that obscure the “world-agent missing” remediation path.
+    - Keep missing-artifact “enable later” fixes and world-deps provisioning semantics separable: provisioning logic must not introduce new late failures that obscure the “world-service missing” remediation path.
 
 - ADR: `docs/project_management/adrs/draft/ADR-0036-quieting-lemur.md`
   - Overlap surfaces:
@@ -207,10 +207,10 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
 
 - ADR: `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
   - Overlap surfaces:
-    - `crates/world-agent/src/service.rs` execution semantics and guard rails (security-sensitive)
+    - `crates/world-service/src/service.rs` execution semantics and guard rails (security-sensitive)
   - Conflict: yes
   - Resolution (explicit):
-    - Coordinate provisioning-profile changes with process-exec tracing work so provisioning executions remain traceable and do not break the world-agent request/response invariants assumed by tracing parity.
+    - Coordinate provisioning-profile changes with process-exec tracing work so provisioning executions remain traceable and do not break the world-service request/response invariants assumed by tracing parity.
 
 - ADR: `docs/project_management/adrs/draft/ADR-0031-detecting-badger.md`
   - Overlap surfaces:
@@ -239,7 +239,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
   - Overlap surfaces:
     - shared provisioning entrypoint (`substrate world enable --provision-deps`)
     - shared runtime fail-early/remediation posture for system-package methods
-    - `crates/world-agent/src/service.rs` provisioning execution isolation seam
+    - `crates/world-service/src/service.rs` provisioning execution isolation seam
     - shared doc update targets and shared scripts (`scripts/substrate/world-enable.sh`, `scripts/substrate/install-substrate.sh`)
   - Conflict: yes
   - Resolution (explicit):
@@ -269,7 +269,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
   - Resolution (explicit):
     - Ensure helper discovery/staging changes and `--provision-deps` semantics do not drift: any helper interface change required by provisioning must be reflected in the staged artifacts and tests for dev-install flows.
 
-- Planning Pack: `docs/project_management/packs/draft/dev-install-world-agent-staging/`
+- Planning Pack: `docs/project_management/packs/draft/dev-install-world-service-staging/`
   - Overlap surfaces:
     - `scripts/substrate/install-substrate.sh` and `scripts/substrate/world-enable.sh` “enable later” workflows
   - Conflict: yes
@@ -278,8 +278,8 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
 
 - Planning Pack: `docs/project_management/packs/active/world_process_exec_tracing_parity/`
   - Overlap surfaces:
-    - `crates/world-agent/src/service.rs`
-    - systemd unit hardening/capabilities for world-agent (Linux + macOS guest)
+    - `crates/world-service/src/service.rs`
+    - systemd unit hardening/capabilities for world-service (Linux + macOS guest)
   - Conflict: yes
   - Resolution (explicit):
     - Coordinate provisioning posture changes (profile/guard rails/unit sandbox choices) with tracing parity so new provisioning executions remain observable and do not break capability assumptions (e.g., added capabilities, unit templates).

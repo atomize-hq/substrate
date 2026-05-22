@@ -42,7 +42,7 @@ related_seam: SEAM-1
 related_slice: S1
 related_thread: THR-01
 related_contract: C-01
-related_artifact: crates/agent-api-types
+related_artifact: crates/transport-api-types
 severity: blocking
 status: resolved
 owner_seam: SEAM-1

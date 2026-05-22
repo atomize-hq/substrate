@@ -10,19 +10,19 @@
 
 - macOS 13.0+ with Virtualization.framework enabled (`sysctl kern.hv_support` → `1`).
 - Homebrew packages: `lima jq openssh coreutils gnused gnu-tar gettext` (ensure `envsubst` and `vsock-proxy` are on `PATH`).
-- Rust toolchain installed for building `substrate-world-agent`.
+- Rust toolchain installed for building `substrate-world-service`.
 
 ## Setup Flow
 
 1. From the repo root run `scripts/mac/lima-warm.sh` to create or start the `substrate` Lima VM. The helper script applies the default profile with writable mounts (`/src`, `/tmp`), installs required packages, and deploys the systemd unit.
-2. Build the agent on the host (`cargo build -p world-agent --release`) and copy it into the guest (`limactl copy ...`, `sudo mv /usr/local/bin/substrate-world-agent`).
-3. Enable the service: `limactl shell substrate sudo systemctl enable --now substrate-world-agent`.
+2. Build the agent on the host (`cargo build -p world-service --release`) and copy it into the guest (`limactl copy ...`, `sudo mv /usr/local/bin/substrate-world-service`).
+3. Enable the service: `limactl shell substrate sudo systemctl enable --now substrate-world-service`.
 4. Validate with `scripts/mac/lima-doctor.sh`; all critical checks must return `[PASS]`.
 
 ## Smoke & Diagnostics
 
 - End-to-end verification: `PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh` (expects replay `fs_diff` to include `world-mac-smoke/file.txt`).
-- Guest logs: `substrate sudo journalctl -u substrate-world-agent -n 200` (the CLI shells into Lima automatically); manual fallback `limactl shell substrate sudo journalctl -u substrate-world-agent -n 200`.
+- Guest logs: `substrate sudo journalctl -u substrate-world-service -n 200` (the CLI shells into Lima automatically); manual fallback `limactl shell substrate sudo journalctl -u substrate-world-service -n 200`.
 - Transport order and fallback: VSock → SSH UDS (`~/.substrate/sock/agent.sock`) → SSH TCP. The shell logs the chosen transport; on failure it emits a single warning and runs the command on the host.
 
 ## Environment & Compatibility

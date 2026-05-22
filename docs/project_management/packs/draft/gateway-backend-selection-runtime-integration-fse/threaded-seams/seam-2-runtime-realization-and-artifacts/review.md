@@ -34,7 +34,7 @@ flowchart LR
 flowchart TB
   SHELL["shell request builder"] --> REQ["bounded lifecycle request"]
   REQ --> TYPES["shared request/auth schema"]
-  TYPES --> SERVICE["world-agent request preparation"]
+  TYPES --> SERVICE["world-service request preparation"]
   SERVICE --> CFG["rendered runtime config"]
   SERVICE --> MAN["runtime manifest"]
   SERVICE --> LOG["managed stdout/stderr logs"]
@@ -46,8 +46,8 @@ flowchart TB
 ## Likely mismatch hotspots
 
 - `crates/shell/src/builtins/world_gateway.rs` now validates backend selection pre-dispatch, but request construction still emits `GatewayIntegratedAuthPayloadV1 { cli_codex: ... }`, so the active seam must widen the runtime-owned payload shape without reintroducing shell-owned selection logic.
-- `crates/world-agent/src/service.rs` currently narrows `integrated_auth` to `payload.cli_codex.clone()` inside request preparation, which makes the world-agent behave as if only one integrated backend can exist.
-- `crates/world-agent/src/gateway_runtime.rs` still hard-rejects any default backend other than `cli:codex` and resolves auth handoff only through the Codex-specific path, so adapter lookup and capability gating are not yet implemented as the protocol contract requires.
+- `crates/world-service/src/service.rs` currently narrows `integrated_auth` to `payload.cli_codex.clone()` inside request preparation, which makes the world-service behave as if only one integrated backend can exist.
+- `crates/world-service/src/gateway_runtime.rs` still hard-rejects any default backend other than `cli:codex` and resolves auth handoff only through the Codex-specific path, so adapter lookup and capability gating are not yet implemented as the protocol contract requires.
 - `docs/contracts/substrate-gateway-backend-adapter-protocol.md` and `docs/contracts/substrate-gateway-backend-adapter-schema.md` already publish the owned contract baseline for this seam, so the remaining work is landing behavior and tests, not inventing a new contract phase.
 
 ## Pre-exec findings
@@ -56,9 +56,9 @@ flowchart TB
 - The contract gate passes. Canonical `C-03` and `C-04` already exist under `docs/contracts/`, while `C-01` and `C-02` were published upstream by `SEAM-1`.
 - Revalidation passes against current repo evidence:
   - `crates/shell/src/builtins/world_gateway.rs` now hands the runtime boundary one selected backend id after inventory and policy validation instead of leaving selection ambiguous.
-  - `crates/agent-api-types/src/lib.rs` still exposes only `GatewayIntegratedAuthPayloadV1.cli_codex`, which keeps the schema gap concrete and bounded for this seam.
-  - `crates/world-agent/src/service.rs` still prepares requests by cloning only `payload.cli_codex`, which matches the seam's planned request-preparation and binding-lookup work.
-  - `crates/world-agent/src/gateway_runtime.rs` still rejects non-`cli:codex` backends and resolves auth through a Codex-specific path, which confirms the seam basis is current rather than stale.
+  - `crates/transport-api-types/src/lib.rs` still exposes only `GatewayIntegratedAuthPayloadV1.cli_codex`, which keeps the schema gap concrete and bounded for this seam.
+  - `crates/world-service/src/service.rs` still prepares requests by cloning only `payload.cli_codex`, which matches the seam's planned request-preparation and binding-lookup work.
+  - `crates/world-service/src/gateway_runtime.rs` still rejects non-`cli:codex` backends and resolves auth through a Codex-specific path, which confirms the seam basis is current rather than stale.
 - `REM-003` and `REM-004` remain deferred implementation follow-through under this seam, not pre-exec blockers on the `decomposed -> exec-ready` transition.
 - No blocking pre-exec remediations remain open against the active seam, so execution may begin.
 - The likeliest failure mode is mixing selection-owned invalid-integration behavior with runtime-owned dependency-unavailable or unsupported-capability behavior once adapter lookup is generalized.

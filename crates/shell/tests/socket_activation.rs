@@ -146,7 +146,7 @@ fn world_doctor_fails_when_socket_activation_unresponsive() {
         .failure();
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
     assert!(
-        stderr.contains("socket activation") || stderr.contains("world-agent readiness"),
+        stderr.contains("socket activation") || stderr.contains("world-service readiness"),
         "expected socket activation error messaging in doctor stderr: {stderr}"
     );
 }

@@ -35,9 +35,9 @@ No LAITDP2 spec changes were made during final integration.
 - `cargo fmt`: PASS locally in `wt/llm-and-agent-identity-tuple-and-deployment-posture-laitdp2-integ`
 - `cargo clippy --workspace --all-targets -- -D warnings`: PASS locally
 - Relevant tests:
-  - `cargo test -p agent-api-types laitdp2_ -- --nocapture`: PASS
-  - `cargo test -p agent-api-types gateway_integrated_auth_validation -- --nocapture`: PASS
-  - `cargo test -p world-agent default_backend -- --nocapture`: PASS
+  - `cargo test -p transport-api-types laitdp2_ -- --nocapture`: PASS
+  - `cargo test -p transport-api-types gateway_integrated_auth_validation -- --nocapture`: PASS
+  - `cargo test -p world-service default_backend -- --nocapture`: PASS
   - `cargo test -p substrate-common --test agent_hub_event_envelope_schema -- --nocapture`: PASS
   - `SUBSTRATE_SMOKE_SLICE_ID=LAITDP2 SUBSTRATE_SMOKE_REPO_ROOT="$PWD" bash scripts/ci/feature-smoke/llm-and-agent-identity-tuple-and-deployment-posture/linux-smoke.sh`: PASS locally on Linux
   - `SUBSTRATE_SMOKE_SLICE_ID=LAITDP2 SUBSTRATE_SMOKE_REPO_ROOT="$PWD" bash scripts/ci/feature-smoke/llm-and-agent-identity-tuple-and-deployment-posture/macos-smoke.sh`: PASS as Linux-host skip; macOS execution covered by CI smoke evidence below

@@ -34,7 +34,7 @@ Likely touch surfaces (non-authoritative):
 ### Disabled short-circuit boundary (“no probes”)
 When `effective_world_enabled=false`, shim doctor MUST NOT:
 - spawn `substrate world doctor --json` (or any world-doctor subprocess),
-- probe the world backend via world-agent socket calls for diagnostics,
+- probe the world backend via world-service socket calls for diagnostics,
 - compute world-deps “applied” state (probe-backed package presence checks).
 
 ### Text output (disabled mode)

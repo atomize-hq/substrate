@@ -87,7 +87,7 @@ pub enum SocketResponse {
         process_events_dropped: Option<u64>,
     },
     /// Executes `/v1/execute` and `/v1/execute/stream` requests on the host, using
-    /// the request's `cwd` and `env` for a lightweight world-agent simulation.
+    /// the request's `cwd` and `env` for a lightweight world-service simulation.
     CapabilitiesAndHostExecute { scopes: Vec<String> },
     /// Like `CapabilitiesAndHostExecute`, but also records each `/v1/execute` and
     /// `/v1/execute/stream` request JSON payload.
@@ -123,7 +123,7 @@ pub enum SocketResponse {
     },
 }
 
-/// Minimal Unix socket server used to simulate socket-activated world-agent
+/// Minimal Unix socket server used to simulate socket-activated world-service
 /// listeners.
 pub struct AgentSocket {
     path: PathBuf,
@@ -900,7 +900,7 @@ fn write_capabilities_with_features(stream: &mut UnixStream, features: &[String]
     let body = json!({
         "version": "v1",
         "features": features,
-        "backend": "world-agent",
+        "backend": "world-service",
         "platform": "linux",
         "listener_mode": "socket_activation"
     })
@@ -998,7 +998,7 @@ fn record_execute_request(records: &Arc<Mutex<Vec<JsonValue>>>, request: &HttpRe
 
 pub fn decode_recorded_execute_requests(
     records: &Arc<Mutex<Vec<JsonValue>>>,
-) -> anyhow::Result<Vec<agent_api_types::ExecuteRequest>> {
+) -> anyhow::Result<Vec<transport_api_types::ExecuteRequest>> {
     let guard = records
         .lock()
         .map_err(|_| anyhow::anyhow!("recorded execute request mutex poisoned"))?;
@@ -1118,11 +1118,11 @@ struct ExecuteRequestStub {
     cwd: Option<String>,
     env: Option<std::collections::HashMap<String, String>>,
     #[serde(default)]
-    member_dispatch: Option<agent_api_types::MemberDispatchRequestV1>,
+    member_dispatch: Option<transport_api_types::MemberDispatchRequestV1>,
 }
 
 fn assert_member_dispatch_capture(
-    dispatch: &agent_api_types::MemberDispatchRequestV1,
+    dispatch: &transport_api_types::MemberDispatchRequestV1,
 ) -> anyhow::Result<()> {
     anyhow::ensure!(
         Path::new(&dispatch.resolved_runtime.binary_path).is_absolute(),

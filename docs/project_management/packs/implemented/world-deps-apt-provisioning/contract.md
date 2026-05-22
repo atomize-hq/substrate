@@ -106,7 +106,7 @@ When `--verbose` is present, stdout MUST include:
 Mapping for `substrate world enable --provision-deps`:
 - `0`: success (including no-op)
 - `2`: user/config error (including DR-0001 version-pin conflict)
-- `3`: required dependency unavailable (world backend unavailable / cannot connect to world-agent when execution is required)
+- `3`: required dependency unavailable (world backend unavailable / cannot connect to world-service when execution is required)
 - `4`: not supported / missing prerequisites (includes: unsupported backend/platform for provisioning)
 - `5`: safety / protected-path violation (reserved for fail-closed safety violations)
 - `1`: unexpected internal error

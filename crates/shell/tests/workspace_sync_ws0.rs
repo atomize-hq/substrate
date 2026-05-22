@@ -221,7 +221,7 @@ fn workspace_sync_dry_run_from_world_prints_pending_diff_summary_and_preview() {
         .prefix("substrate-ws1-sock-")
         .tempdir_in("/tmp")
         .expect("create ws1 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let pending = json!({
         "session_started_at": "2026-02-10T18:38:23Z",
         "diff_id": "diff_test_01",
@@ -337,7 +337,7 @@ fn workspace_sync_dry_run_supports_from_host_and_both_directions_in_ws5() {
         .prefix("substrate-ws0-sock-")
         .tempdir_in("/tmp")
         .expect("create ws0 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let pending = json!({
         "schema_version": 1,
         "session_started_at": "2100-01-01T00:00:00Z",
@@ -510,7 +510,7 @@ fn workspace_sync_dry_run_exits_4_when_backend_lacks_pending_diff_discovery() {
         .prefix("substrate-ws1-sock-")
         .tempdir_in("/tmp")
         .expect("create ws1 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let _socket = AgentSocket::start(&socket_path, SocketResponse::Capabilities);
 
     let mut cmd = fixture.command();
@@ -563,7 +563,7 @@ fn workspace_sync_dry_run_exits_3_when_pending_diff_fails_after_capabilities_suc
         .prefix("substrate-ws1-sock-")
         .tempdir_in("/tmp")
         .expect("create ws1 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let _socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndPendingDiffHttpError {

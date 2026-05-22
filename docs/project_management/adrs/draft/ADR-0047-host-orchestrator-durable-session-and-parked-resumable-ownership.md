@@ -316,7 +316,7 @@ These decisions are no longer open in this ADR. They are pinned here so the dura
     - owns world-to-host message durability when no client is attached.
   - attachable execution client:
     - a Codex session or equivalent backend client that may attach, run, exit, and later resume against the same orchestration session.
-  - world-agent and world-member submit path:
+  - world-service and world-member submit path:
     - continue to own world-member turn execution and typed request submission for Linux world follow-up.
 - End-to-end flow:
   - Inputs:

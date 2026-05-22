@@ -36,7 +36,7 @@ crates. Phase 0 prevents that failure mode.
 ## Out-of-Scope
 
 - Shipping the daemon, service, or broker implementation.
-- Changing guest-side `world-agent` behavior beyond what is needed to specify
+- Changing guest-side `world-service` behavior beyond what is needed to specify
   the control contract.
 - Finalizing distribution packaging or update delivery.
 
@@ -75,7 +75,7 @@ to preserve. The phase documents a new control path:
 - `crates/shell/src/builtins/world_gateway.rs`
   Current same-user gateway lifecycle/status client path that phase 0 must
   preserve semantically while replacing operationally.
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
   Current managed gateway runtime and auth-bundle launch model that future
   ownership separation must route through a new host owner.
 - `scripts/mac/lima-warm.sh`

@@ -664,7 +664,7 @@ fn run_workspace_sync_impl(
     macro_rules! build_pending_diff_state {
         ($record:expr) => {{
             (|| -> std::result::Result<PendingDiffState, i32> {
-                let record: &agent_api_types::PendingDiffRecordV1 = $record;
+                let record: &transport_api_types::PendingDiffRecordV1 = $record;
                 let mut offending_protected: Vec<String> = Vec::new();
                 let mut raw_for_decisions: Vec<RawPendingPath> = Vec::new();
 
@@ -961,7 +961,7 @@ fn run_workspace_sync_impl(
         }
 
         if conflict_policy == SyncConflictPolicy::PreferHost && !from_host_conflicts.is_empty() {
-            let reconcile_request = agent_api_types::PendingDiffReconcileRequestV1 {
+            let reconcile_request = transport_api_types::PendingDiffReconcileRequestV1 {
                 profile: request.profile.clone(),
                 cwd: request.cwd.clone(),
                 env: request.env.clone(),
@@ -1036,7 +1036,7 @@ fn run_workspace_sync_impl(
 
     let meta_paths: Vec<String> = out_writes.iter().chain(out_mods.iter()).cloned().collect();
 
-    let base_request = agent_api_types::WorldFsReadRequestV1 {
+    let base_request = transport_api_types::WorldFsReadRequestV1 {
         profile: request.profile.clone(),
         cwd: request.cwd.clone(),
         env: request.env.clone(),
@@ -1047,11 +1047,12 @@ fn run_workspace_sync_impl(
         include_contents: false,
     };
 
-    let world_meta: HashMap<String, agent_api_types::WorldFsReadResponseV1> =
+    let world_meta: HashMap<String, transport_api_types::WorldFsReadResponseV1> =
         match rt.block_on(async {
-            let mut out: HashMap<String, agent_api_types::WorldFsReadResponseV1> = HashMap::new();
+            let mut out: HashMap<String, transport_api_types::WorldFsReadResponseV1> =
+                HashMap::new();
             for path in &meta_paths {
-                let req = agent_api_types::WorldFsReadRequestV1 {
+                let req = transport_api_types::WorldFsReadRequestV1 {
                     path: path.clone(),
                     include_contents: false,
                     ..base_request.clone()
@@ -1077,14 +1078,14 @@ fn run_workspace_sync_impl(
         };
 
         match meta.entry_type {
-            agent_api_types::WorldFsEntryTypeV1::RegularFile => {
+            transport_api_types::WorldFsEntryTypeV1::RegularFile => {
                 let Some(size) = meta.size else {
                     errln!("substrate: workspace sync failed: missing size for {path}");
                     return Ok(1);
                 };
                 observed_bytes_to_copy = observed_bytes_to_copy.saturating_add(size);
             }
-            agent_api_types::WorldFsEntryTypeV1::Directory => {}
+            transport_api_types::WorldFsEntryTypeV1::Directory => {}
             _ => {
                 errln!("substrate: workspace sync refused: unsupported file type in apply set");
                 errln!("  path: {path}");
@@ -1221,7 +1222,7 @@ fn run_workspace_sync_impl(
     }
 
     for (_is_write, path) in &writes_mods_sorted {
-        let meta_req = agent_api_types::WorldFsReadRequestV1 {
+        let meta_req = transport_api_types::WorldFsReadRequestV1 {
             path: path.clone(),
             include_contents: false,
             ..base_request.clone()
@@ -1240,7 +1241,7 @@ fn run_workspace_sync_impl(
 
         let host_path = workspace_root.join(path);
         match meta.entry_type {
-            agent_api_types::WorldFsEntryTypeV1::Directory => {
+            transport_api_types::WorldFsEntryTypeV1::Directory => {
                 if let Err(err) = fs::create_dir_all(&host_path) {
                     errln!(
                         "substrate: workspace sync failed: failed to create directory {}",
@@ -1257,8 +1258,8 @@ fn run_workspace_sync_impl(
                     }
                 }
             }
-            agent_api_types::WorldFsEntryTypeV1::RegularFile => {
-                let read_req = agent_api_types::WorldFsReadRequestV1 {
+            transport_api_types::WorldFsEntryTypeV1::RegularFile => {
+                let read_req = transport_api_types::WorldFsReadRequestV1 {
                     path: path.clone(),
                     include_contents: true,
                     ..base_request.clone()
@@ -1309,7 +1310,7 @@ fn run_workspace_sync_impl(
         }
     }
 
-    let clear_request = agent_api_types::PendingDiffClearRequestV1 {
+    let clear_request = transport_api_types::PendingDiffClearRequestV1 {
         profile: request.profile.clone(),
         cwd: request.cwd.clone(),
         env: request.env.clone(),

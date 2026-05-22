@@ -69,7 +69,7 @@ Not owned here:
 
 ## Allowed hidden divergences
 
-- Linux may realize world-scoped member execution through native namespaces, cgroups, overlayfs, nftables, and a local `substrate-world-agent` systemd socket.
+- Linux may realize world-scoped member execution through native namespaces, cgroups, overlayfs, nftables, and a local `substrate-world-service` systemd socket.
 - macOS may realize world-scoped member execution through a Lima guest, forwarding, and warm-flow orchestration.
 - Windows may realize world-scoped member execution through the WSL-backed world path with named-pipe or TCP forwarding.
 - Platform-specific warm scripts, doctor helpers, artifact paths, and service managers may differ.
@@ -88,9 +88,9 @@ The following rules are mandatory on every platform:
 
 Platform evidence examples:
 
-- Linux: missing socket activation, unavailable namespace or overlay prerequisites, or broken world-agent bootstrap is a world-boundary unavailability case.
-- macOS: missing or unhealthy Lima guest, forwarding breakage, or world-agent bootstrap failure inside the guest is a world-boundary unavailability case.
-- Windows: missing or unhealthy WSL world path, broken named-pipe or TCP forwarding, or unavailable world-agent bootstrap inside WSL is a world-boundary unavailability case.
+- Linux: missing socket activation, unavailable namespace or overlay prerequisites, or broken world-service bootstrap is a world-boundary unavailability case.
+- macOS: missing or unhealthy Lima guest, forwarding breakage, or world-service bootstrap failure inside the guest is a world-boundary unavailability case.
+- Windows: missing or unhealthy WSL world path, broken named-pipe or TCP forwarding, or unavailable world-service bootstrap inside WSL is a world-boundary unavailability case.
 
 ## Validation evidence
 

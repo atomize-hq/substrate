@@ -54,7 +54,7 @@ open_remediations: []
     - status-schema widening, tuple-surface changes, or a new top-level operator command family
     - treating a new compatibility contract as a prerequisite for validation
 - **Touch surface**:
-  - `crates/world-agent/tests/gateway_runtime_parity.rs`
+  - `crates/world-service/tests/gateway_runtime_parity.rs`
   - `crates/shell/tests/world_gateway.rs`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/platform-parity-spec.md`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/compatibility-spec.md`
@@ -68,10 +68,10 @@ open_remediations: []
     - `docs/contracts/substrate-gateway-runtime-parity.md`
   - Readiness means execution may start without inventing new upstream truth:
     - `SEAM-2` closeout already names `api:openai` as the first landed non-`cli:codex` proof target
-    - live shell, world-agent, and shared request/auth surfaces still expose `api:openai`, `api_env`, and explicit unsupported-backend behavior
+    - live shell, world-service, and shared request/auth surfaces still expose `api:openai`, `api_env`, and explicit unsupported-backend behavior
     - remaining work is parity evidence, platform validation, and rollout publication, not new contract definition
   - Verification for this seam centers on:
-    - keeping `cli:codex` as the regression floor in `crates/world-agent/tests/gateway_runtime_parity.rs` and `crates/shell/tests/world_gateway.rs`
+    - keeping `cli:codex` as the regression floor in `crates/world-service/tests/gateway_runtime_parity.rs` and `crates/shell/tests/world_gateway.rs`
     - exercising `api:openai` end to end as the first additional-backend proof target
     - proving unsupported backends fail explicitly without silent fallback across Linux/macOS/Windows evidence surfaces
     - keeping rollout evidence subordinate to canonical operator/runtime contracts

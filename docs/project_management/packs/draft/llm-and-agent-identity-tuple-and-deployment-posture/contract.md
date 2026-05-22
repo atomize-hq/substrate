@@ -46,7 +46,7 @@ This pack locks:
 
 - `protocol`
   - Meaning: the request and response contract or capability surface spoken by the routed request.
-  - Examples: `openai.responses`, `anthropic.messages`, `uaa.agent.session`
+  - Examples: `openai.responses`, `anthropic.messages`, `substrate.agent.session`
 
 Field invariants:
 - `backend_id` remains an adapter selector only in the existing `<kind>:<name>` grammar. It does not replace any tuple field.

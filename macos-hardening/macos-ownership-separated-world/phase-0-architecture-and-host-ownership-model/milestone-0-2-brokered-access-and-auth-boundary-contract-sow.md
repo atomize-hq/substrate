@@ -27,10 +27,10 @@ written.
 
 - Define the single routine broker endpoint exposed to the CLI and any other
   host-side clients.
-- Define how the daemon reaches the guest `world-agent` without exposing the
+- Define how the daemon reaches the guest `world-service` without exposing the
   guest agent directly to the developer user.
 - Define authentication and attestation expectations between daemon/broker and
-  `world-agent`.
+  `world-service`.
 - Define how the existing gateway lifecycle/status contract is preserved while
   its transport is rehomed under the daemon.
 - Define which current diagnostics and setup flows must be rewritten because
@@ -40,7 +40,7 @@ written.
 ## Out-of-Scope
 
 - Implementing the broker transport or token machinery.
-- Rewriting the `world-agent` protocol in detail.
+- Rewriting the `world-service` protocol in detail.
 - Finalizing long-term cryptographic material handling if the prototype uses a
   simpler trust bootstrap.
 
@@ -99,7 +99,7 @@ The milestone should also define how the existing transport candidates change:
 - `crates/shell/src/builtins/world_gateway.rs`
   Current gateway lifecycle/status client that must keep its stable CLI surface
   while changing its trust and transport boundary.
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
   Current auth-bundle and managed-runtime path that must remain Substrate-owned
   while moving behind the new macOS host owner.
 - `scripts/mac/lima-warm.sh`

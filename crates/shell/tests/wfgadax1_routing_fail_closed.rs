@@ -138,7 +138,7 @@ fn wfgadax1_runtime_routing_fail_closed_strategy_unavailable_maps_to_exit_4() {
         .prefix("substrate-wfgadax1-sock-")
         .tempdir_in("/tmp")
         .expect("create socket tempdir");
-    let socket_path: PathBuf = socket_dir.path().join("world-agent.sock");
+    let socket_path: PathBuf = socket_dir.path().join("world-service.sock");
     let _socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndExecuteStreamError {
@@ -180,7 +180,7 @@ fn wfgadax1_exports_fail_closed_routing_state_env_var_and_deletes_require_world(
         .prefix("substrate-wfgadax1-sock-")
         .tempdir_in("/tmp")
         .expect("create socket tempdir");
-    let socket_path: PathBuf = socket_dir.path().join("world-agent.sock");
+    let socket_path: PathBuf = socket_dir.path().join("world-service.sock");
     let _socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
@@ -225,7 +225,7 @@ fn wfgadax1_exports_fail_closed_routing_state_false_is_0_and_output_only() {
         .prefix("substrate-wfgadax1-sock-")
         .tempdir_in("/tmp")
         .expect("create socket tempdir");
-    let socket_path: PathBuf = socket_dir.path().join("world-agent.sock");
+    let socket_path: PathBuf = socket_dir.path().join("world-service.sock");
     let _socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },

@@ -18,13 +18,13 @@ execution_horizon:
   - The pre-planning pack already narrowed the work into a stable authority set; extracting seams now gives downstream planners a governed critical path without forcing slice-level detail into future seams.
 - **Primary user(s) + JTBD**:
   - Substrate operators who need one stable command family and one authoritative wiring/status surface for gateway availability and lifecycle actions.
-  - Maintainers of `crates/shell`, `crates/world-agent`, shared agent API crates, and operator docs who need one ownership boundary before implementing typed runtime behavior.
+  - Maintainers of `crates/shell`, `crates/world-service`, shared agent API crates, and operator docs who need one ownership boundary before implementing typed runtime behavior.
   - Documentation and quality-gate maintainers who need deterministic one-owner-per-surface validation across ADR-0040, ADR-0027, ADR-0017, ADR-0028, ADR-0041, and ADR-0042.
 - **In-scope**:
   - The operator-facing contract for `substrate world gateway sync`, `status`, and `restart`, including absent-state behavior and exit-code boundaries.
   - The `status --json` envelope and `client_wiring.*` field family as the authoritative machine-readable wiring surface.
   - Gateway-integration policy evaluation over existing ADR-0027 inputs, including fail-closed placement and host-to-world secret-delivery trust boundaries.
-  - The typed world-agent lifecycle/status direction selected in pre-planning and the Linux/macOS/Windows parity guarantees it must honor.
+  - The typed world-service lifecycle/status direction selected in pre-planning and the Linux/macOS/Windows parity guarantees it must honor.
   - Manual validation, cross-doc alignment, task/checkpoint wiring, and quality-gate evidence for one-owner-per-surface coverage.
 - **Out-of-scope**:
   - New config families, new policy file families, or gateway-local config/admin/persistence as trusted Substrate inputs.
@@ -35,7 +35,7 @@ execution_horizon:
   - One authoritative operator boundary exists for the command family, ownership split, stable wiring env semantics, and exit-code mapping.
   - `status --json` stays the single Substrate-owned machine-readable wiring authority, with a locked `client_wiring.*` family and explicit absence semantics.
   - Policy evaluation is defined as reuse of existing ADR-0027 inputs with fail-closed no-host-fallback behavior and no trust in gateway-local config/admin/persistence.
-  - Typed world-agent lifecycle/status ownership is specified without letting shell probing or platform-specific quirks become user-facing contract.
+  - Typed world-service lifecycle/status ownership is specified without letting shell probing or platform-specific quirks become user-facing contract.
   - Linux, macOS, and Windows parity requirements and validation evidence are explicit.
   - Manual playbook, docs, plan/task wiring, and quality-gate evidence prove one owner per surface.
 - **Constraints**:
@@ -53,7 +53,7 @@ execution_horizon:
   - `docs/project_management/adrs/draft/ADR-0028-in-world-process-execution-tracing-parity.md`
   - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
   - `docs/project_management/adrs/draft/ADR-0042-llm-and-agent-identity-tuple-and-deployment-posture.md`
-  - `crates/shell`, `crates/world-agent`, `crates/agent-api-types`, `crates/agent-api-client`
+  - `crates/shell`, `crates/world-service`, `crates/transport-api-types`, `crates/transport-api-client`
   - `docs/CONFIGURATION.md`, `docs/USAGE.md`, `docs/WORLD.md`, `docs/TRACE.md`
 - **Known unknowns / risks**:
   - Manual validation, docs, and quality-gate artifacts can still drift from the now-landed operator, schema, policy, and runtime/parity contracts.

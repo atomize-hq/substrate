@@ -60,7 +60,7 @@
 - Confirm the final feature-local doc set against `pre-planning/impact_map.md` and keep the touch set aligned with the same ownership split.
 - Pin the exact field list and absence semantics for `status --json`, including the hard boundary between `client_wiring.*` and ADR-0042 metadata.
 - Pin the exact CLI text-output posture for `status`, `sync`, and `restart`, including the rule for abbreviated human-readable wiring versus full JSON wiring.
-- Pin the exact world-agent/runtime transport decision for lifecycle and status operations and place the contract wording in the owning spec.
+- Pin the exact world-service/runtime transport decision for lifecycle and status operations and place the contract wording in the owning spec.
 - ADR-0040 related-doc references now point at `packs/implemented/llm_and_agent_config_policy_surface/*`; keep them aligned if the external owner moves again.
 - Decide whether provisioning evidence remains deferred to a later runtime pack or enters this pack as explicit planning scope.
 

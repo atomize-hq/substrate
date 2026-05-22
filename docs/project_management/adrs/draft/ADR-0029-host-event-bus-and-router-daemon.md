@@ -59,7 +59,7 @@ ADR_BODY_SHA256: af9cb004268a0a6cbf00a7981662d531b51f11c2afca77201becae5583feb9d
   - tails `trace.jsonl` using durable cursors,
   - matches events against global + workspace-scoped routing rules,
   - produces durable, policy-gated requests/actions.
-- Ensure the router daemon is a host service (not world-agent) so it remains available when worlds are disabled or when a VM/WSL backend is down.
+- Ensure the router daemon is a host service (not world-service) so it remains available when worlds are disabled or when a VM/WSL backend is down.
 - Support cross-workspace routing by introducing an explicit workspace registry under `SUBSTRATE_HOME` updated by `substrate workspace init|enable|disable`.
 - Support selective file-operation triggers based on Substrate-collected fs diffs, scoped to specific file paths/directories (workspace-relative matching).
 
@@ -149,7 +149,7 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
 - The workflow router MUST re-resolve effective config/policy for workspace B at execution time (not reuse workspace A’s).
 
 ### Daemon behavior (Authoritative)
-- The workflow router service MUST be host-level and MUST run independently of world-agent availability.
+- The workflow router service MUST be host-level and MUST run independently of world-service availability.
 - It runs as a `substrate` subcommand:
   - `substrate workflow serve [--foreground]`
 - It MUST degrade gracefully:
@@ -275,7 +275,7 @@ Only an explicit allowlist of event families is triggerable. v1 supports:
   - If no enabled workspace is resolvable for an event `cwd`, the router MUST treat it as non-routable (emit a derived deny/failure event with a stable reason code).
 - Service boundary:
   - the workflow router is a host service (not in-world) and must remain available in host-only mode.
-  - it MAY reuse transport patterns and code organization from world-agent, but must not depend on world-agent being available.
+  - it MAY reuse transport patterns and code organization from world-service, but must not depend on world-service being available.
 - Event recursion guard:
   - workflow-router-emitted events MUST be identifiable (e.g., `component=workflow_router`) and MUST be excluded from re-trigger evaluation by default to avoid infinite loops.
 - FS trigger derivation:

@@ -24,7 +24,7 @@ execution_horizon:
   - manual validation, smoke parity expectations, and checkpoint-aware sequencing context
 - **Out-of-scope**:
   - any change to `world.enabled` precedence, enable/disable semantics, or exit codes
-  - world-agent readiness, provisioning behavior, or replay warnings beyond doctor/health attribution
+  - world-service readiness, provisioning behavior, or replay warnings beyond doctor/health attribution
   - new environment variables, new host<->agent protocol surfaces, new policy broker surfaces, or new telemetry schema fields
   - adding Windows host-doctor support
   - seam-local slices or `threaded-seams/.../review.md` artifacts in this extractor pack

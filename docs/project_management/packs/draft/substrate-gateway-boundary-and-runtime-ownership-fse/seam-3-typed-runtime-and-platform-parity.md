@@ -17,7 +17,7 @@ basis:
     - THR-02
     - THR-03
   stale_triggers:
-    - typed world-agent endpoint ownership changes
+    - typed world-service endpoint ownership changes
     - published `status --json` envelope or `client_wiring.*` semantics change
     - published fail-closed policy or trust-boundary rules change
     - shell-side exec probing is reintroduced
@@ -41,11 +41,11 @@ open_remediations: []
 # SEAM-3 - Typed runtime and platform parity
 
 - **Goal / value**:
-  - Define the typed world-agent lifecycle/status path and platform guarantees that keep gateway lifecycle behavior stable across Linux, macOS, and Windows.
+  - Define the typed world-service lifecycle/status path and platform guarantees that keep gateway lifecycle behavior stable across Linux, macOS, and Windows.
   - Prevent raw exec probing, backend-private quirks, or provisioning assumptions from becoming the operator contract.
 - **Scope**
   - In:
-    - typed world-agent lifecycle/status ownership
+    - typed world-service lifecycle/status ownership
     - shell builtin consumption path
     - shared API type/client alignment
     - Linux/macOS/Windows parity guarantees for placement, lifecycle visibility, and status semantics
@@ -85,17 +85,17 @@ open_remediations: []
     - parity docs and quality-gate evidence
 - **Touch surface**:
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`
-  - `crates/world-agent/src/handlers.rs`
-  - `crates/world-agent/src/service.rs`
-  - `crates/agent-api-types/src/lib.rs`
-  - `crates/agent-api-client/src/lib.rs`
+  - `crates/world-service/src/handlers.rs`
+  - `crates/world-service/src/service.rs`
+  - `crates/transport-api-types/src/lib.rs`
+  - `crates/transport-api-client/src/lib.rs`
   - `crates/shell/src/builtins/world_gateway.rs`
   - `docs/WORLD.md`
 - **Verification**:
   - This seam consumes upstream contracts `C-01`, `C-02`, and `C-03`; verification may depend on accepted upstream evidence for command behavior, status schema, and fail-closed policy rules.
   - This seam produces owned contract `C-04`. The contract baseline and owner execution checklist now live in `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/platform-parity-spec.md`, `docs/contracts/substrate-gateway-runtime-parity.md`, and the threaded `S00` owner slice, so the remaining work is execution and publication rather than pre-exec contract discovery.
   - Later seam-local verification should prove:
-    - the typed world-agent path is authoritative for lifecycle/status operations
+    - the typed world-service path is authoritative for lifecycle/status operations
     - shell and shared clients consume the same runtime contract
     - Linux, macOS, and Windows guarantees are explicit and testable
     - provisioning remains correctly deferred outside this pack

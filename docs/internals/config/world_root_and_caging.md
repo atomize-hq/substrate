@@ -75,9 +75,9 @@ In the async REPL, the shell also updates these env vars when starting/restartin
     session env.
   - The REPL restarts a persistent world session when the policy snapshot or workspace root changes (the “drift restart”).
 
-The world-agent uses `SUBSTRATE_ANCHOR_MODE/PATH` + the request cwd to compute `project_dir`:
+The world-service uses `SUBSTRATE_ANCHOR_MODE/PATH` + the request cwd to compute `project_dir`:
 
-- `crates/world-agent/src/service.rs` (`resolve_project_dir`)
+- `crates/world-service/src/service.rs` (`resolve_project_dir`)
   - `workspace`: `project_dir = SUBSTRATE_ANCHOR_PATH || cwd`
   - `follow-cwd`: `project_dir = cwd`
   - `custom`: `project_dir = SUBSTRATE_ANCHOR_PATH` (required)
@@ -139,7 +139,7 @@ If the workspace root is `/work` and you are currently in `/work/testdir`:
   - `touch ./file` in `/work/testdir` is denied
   - `touch ./testdir/file` is allowed
 
-This is observable in the computed Landlock env vars that world-agent passes into the world backend (Linux):
+This is observable in the computed Landlock env vars that world-service passes into the world backend (Linux):
 
 - `SUBSTRATE_WORLD_FS_WRITE_ALLOWLIST`: write prefixes (root-relative)
 - `SUBSTRATE_WORLD_FS_LANDLOCK_WRITE_ALLOWLIST`: absolute paths that Landlock should allow writing to

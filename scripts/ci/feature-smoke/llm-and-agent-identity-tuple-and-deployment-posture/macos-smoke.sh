@@ -57,15 +57,15 @@ run_test "world_gateway_status_human_output_uses_contract_label_order"
 run_test "world_gateway_status_human_output_omits_missing_optional_fields_without_placeholders"
 
 if [[ "$slice_id" == "LAITDP2" ]]; then
-  echo "INFO: running agent-api-types LAITDP2 parity tests"
+  echo "INFO: running transport-api-types LAITDP2 parity tests"
   (
     cd "$repo_root"
-    cargo test -p agent-api-types laitdp2_ -- --nocapture
+    cargo test -p transport-api-types laitdp2_ -- --nocapture
   )
   echo "INFO: running gateway integrated auth validation tests"
   (
     cd "$repo_root"
-    cargo test -p agent-api-types gateway_integrated_auth_validation -- --nocapture
+    cargo test -p transport-api-types gateway_integrated_auth_validation -- --nocapture
   )
 fi
 

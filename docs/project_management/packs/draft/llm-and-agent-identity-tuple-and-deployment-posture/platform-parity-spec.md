@@ -99,8 +99,8 @@ Parity review for this pack consumes these surfaces:
 - implementation and verification surfaces that execute against these guarantees:
   - `crates/shell/src/builtins/world_gateway.rs`
   - `crates/shell/tests/world_gateway.rs`
-  - `crates/world-agent/src/gateway_runtime.rs`
-  - `crates/world-agent/tests/gateway_runtime_parity.rs`
+  - `crates/world-service/src/gateway_runtime.rs`
+  - `crates/world-service/tests/gateway_runtime_parity.rs`
   - `scripts/mac/lima-doctor.sh`
   - `scripts/mac/smoke.sh`
   - Windows compile-parity and targeted test evidence captured by the checkpoint tasks

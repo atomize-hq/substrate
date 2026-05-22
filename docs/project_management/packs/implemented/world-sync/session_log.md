@@ -439,7 +439,7 @@
   - `make ci-compile-parity CI_WORKFLOW_REF="feat/world-sync" CI_REMOTE=origin CI_CLEANUP=1 CI_CHECKOUT_REF="3c31d2b768feb368316cc02f139242e45b2171c2"`
   - `make feature-smoke FEATURE_DIR="docs/project_management/packs/active/world-sync" PLATFORM=behavior SMOKE_SLICE_ID="WS5" SMOKE_CHECKOUT_REF="3c31d2b768feb368316cc02f139242e45b2171c2" RUNNER_KIND=self-hosted WORKFLOW_REF="feat/world-sync" REMOTE=origin CLEANUP=1 RUN_INTEG_CHECKS=0`
 - Local preflight note:
-  - Linux smoke WS5 is blocked on this host by the system world-agent missing `pending_diff_v1` (cannot run `sudo` provisioning in this environment).
+  - Linux smoke WS5 is blocked on this host by the system world-service missing `pending_diff_v1` (cannot run `sudo` provisioning in this environment).
 
 ## START — 2026-02-12T04:27:15Z — integration — WS5-integ-linux
 - Trigger: Feature Smoke run `21933493196` failed `linux,macos`.
@@ -464,7 +464,7 @@
 - Compile parity: `21933430366` → `success` → `https://github.com/atomize-hq/substrate/actions/runs/21933430366`
 - Feature Smoke (behavior) attempts:
   - `21933493196` → `failure` → `https://github.com/atomize-hq/substrate/actions/runs/21933493196` (runner world backend missing `pending_diff_v1`)
-  - `21933649387` → `failure` → `https://github.com/atomize-hq/substrate/actions/runs/21933649387` (runner `sudo -n` unavailable; cannot provision world-agent)
+  - `21933649387` → `failure` → `https://github.com/atomize-hq/substrate/actions/runs/21933649387` (runner `sudo -n` unavailable; cannot provision world-service)
   - `21933824948` → `failure` → `https://github.com/atomize-hq/substrate/actions/runs/21933824948` (macOS backend missing `pending_diff_reconcile_v1`)
   - `21933919268` → `success` → `https://github.com/atomize-hq/substrate/actions/runs/21933919268`
 - Workflow follow-ups on `feat/world-sync` to keep Feature Smoke useful even when runner provisioning is limited:

@@ -71,7 +71,7 @@ CLI additions/changes (locked surface; see Options for alternatives we rejected)
 Likely implementation touchpoints (non-exhaustive; helps keep this slice execution-ready):
 - Shell apt installer / hardening detection: `crates/shell/src/builtins/world_deps/surfaces.rs`
 - Existing apt tests: `crates/shell/tests/world_deps_apt_install_wdp5.rs`
-- World-agent request profile behavior (provisioning vs always-isolate): `crates/world-agent/src/service.rs` (`should_always_isolate`)
+- World-agent request profile behavior (provisioning vs always-isolate): `crates/world-service/src/service.rs` (`should_always_isolate`)
 - Internals reference: `docs/internals/world/deps.md`
 
 Docs:
@@ -120,7 +120,7 @@ runtime application. Runtime `current sync|install` still fails early for apt it
 ### Option C — Keep `current sync|install` installing apt, but run apt in a special provisioning profile
 
 **Description:** `current sync|install` detects apt requirements and performs them via a special execution profile that
-is permitted to mutate the guest OS (either by using a different world-agent service sandbox, or bypassing the sandbox).
+is permitted to mutate the guest OS (either by using a different world-service service sandbox, or bypassing the sandbox).
 
 **Pros**
 - Preserves the “sync does everything” mental model for some operators.
@@ -154,7 +154,7 @@ command.
 Recommend **Option A**.
 
 Choose Option A when:
-- The world-agent runtime sandbox must remain hardened by default, and
+- The world-service runtime sandbox must remain hardened by default, and
 - We want a deterministic, explicit operator workflow for OS mutation.
 
 ## 10. Slice Decomposition (required)

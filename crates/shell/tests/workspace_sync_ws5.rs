@@ -108,7 +108,7 @@ fn workspace_sync_apply_from_world_includes_pty_deletes() {
         .prefix("substrate-ws5-sock-")
         .tempdir_in("/tmp")
         .expect("create ws5 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
 
     let state = PendingDiffAckState {
         features: vec![
@@ -194,7 +194,7 @@ fn workspace_sync_dry_run_from_host_reports_conflicts_and_per_path_decisions() {
         .prefix("substrate-ws5-sock-")
         .tempdir_in("/tmp")
         .expect("create ws5 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
 
     let pending = json!({
         "schema_version": 1,
@@ -280,7 +280,7 @@ fn workspace_sync_from_host_mutates_world_but_not_host() {
         .prefix("substrate-ws5-sock-")
         .tempdir_in("/tmp")
         .expect("create ws5 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
 
     let state = PendingDiffAckState {
         features: vec![
@@ -389,7 +389,7 @@ fn workspace_sync_direction_both_applies_non_pty_and_pty_deletes() {
         .prefix("substrate-ws5-sock-")
         .tempdir_in("/tmp")
         .expect("create ws5 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
 
     let state = PendingDiffAckState {
         features: vec![

@@ -79,12 +79,12 @@ substrate --replay --replay-verbose --no-world <SPAN_ID>
 # [replay] scopes: []
 ```
 
-Shell-side fallbacks emit `substrate: warn: shell world-agent path (<endpoint>) ...` so you can
+Shell-side fallbacks emit `substrate: warn: shell world-service path (<endpoint>) ...` so you can
 distinguish them from `[replay] warn: ...` messages that come from the replay runtime.
 
 
 By default on Linux, replay will:
-- Prefer the world-agent path when `/run/substrate.sock` responds; fall back once to the local world backend/copy-diff with a single warning when the agent is unavailable
+- Prefer the world-service path when `/run/substrate.sock` responds; fall back once to the local world backend/copy-diff with a single warning when the agent is unavailable
 - Configure the world with `always_isolate: true`, forcing isolation for ALL commands (even simple ones like `echo` that normally wouldn't be isolated)
 - Carry world-root/caging env into the replay so cwd/path alignment matches the original span when isolation is active
 - Return `fs_diff` (writes/mods/deletes) and `scopes_used` from the isolated execution

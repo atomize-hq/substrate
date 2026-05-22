@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Output;
 use tempfile::{Builder, TempDir};
 
-const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
+const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
 
 #[derive(Clone, Copy)]
 enum CapabilityOverride<'a> {
@@ -1346,7 +1346,7 @@ fn agent_list_json_locks_backend_id_derivation_role_and_omission_rules() {
     );
     assert_eq!(
         orchestrator.pointer("/protocol").and_then(Value::as_str),
-        Some("uaa.agent.session")
+        Some("substrate.agent.session")
     );
 
     let member = agents
@@ -1537,7 +1537,7 @@ fn agent_toolbox_env_trace_history_does_not_authorize_active_session() {
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "data": { "message": "orchestrator session is live" }
         }),
@@ -1553,7 +1553,7 @@ fn agent_toolbox_env_trace_history_does_not_authorize_active_session() {
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "data": { "message": "newer orchestrator session is live" }
         }),
@@ -1604,7 +1604,7 @@ fn agent_toolbox_env_prefers_live_manifest_over_trace_fallback() {
         "backend_id": "cli:claude_code",
         "client": "claude_code",
         "router": "agent_hub",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "role": "orchestrator",
         "data": { "message": "trace fallback should lose to live manifest" }
     })]);
@@ -1956,7 +1956,7 @@ fn agent_toolbox_env_invalidated_manifest_and_trace_still_fail_closed() {
         "backend_id": "cli:claude_code",
         "client": "claude_code",
         "router": "agent_hub",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "role": "orchestrator",
         "data": { "message": "historical trace must not resurrect an invalidated session" }
     })]);
@@ -2386,7 +2386,7 @@ fn agent_status_preserves_member_roles_and_filters_them_by_contract_label() {
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "data": { "message": "orchestrator session is live" }
         }),
@@ -2402,7 +2402,7 @@ fn agent_status_preserves_member_roles_and_filters_them_by_contract_label() {
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "member",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -2549,7 +2549,7 @@ fn agent_status_prefers_live_manifest_over_trace_fallback_for_selected_orchestra
         "backend_id": "cli:claude_code",
         "client": "claude_code",
         "router": "agent_hub",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "role": "orchestrator",
         "data": { "message": "trace fallback should lose to live manifest" }
     })]);
@@ -2775,7 +2775,7 @@ fn agent_status_json_trace_fallback_rows_emit_explicit_null_posture_fields() {
         "backend_id": "cli:claude_code",
         "client": "claude_code",
         "router": "agent_hub",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "role": "orchestrator",
         "data": { "message": "trace fallback row should keep durable posture fields null" }
     })]);
@@ -2851,7 +2851,7 @@ fn agent_status_human_output_includes_durable_session_fields_for_live_rows() {
             "backend_id=cli:claude_code",
             "client=claude_code",
             "router=agent_hub",
-            "protocol=uaa.agent.session",
+            "protocol=substrate.agent.session",
             "execution.scope=host",
             "role=orchestrator",
             "posture=active_attached",
@@ -2880,7 +2880,7 @@ fn agent_status_human_output_marks_fallback_rows_unknown_for_durable_session_fie
         "backend_id": "cli:claude_code",
         "client": "claude_code",
         "router": "agent_hub",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "role": "orchestrator",
         "data": { "message": "trace fallback row should keep text durable posture fields unknown" }
     })]);
@@ -2903,7 +2903,7 @@ fn agent_status_human_output_marks_fallback_rows_unknown_for_durable_session_fie
             "backend_id=cli:claude_code",
             "client=claude_code",
             "router=agent_hub",
-            "protocol=uaa.agent.session",
+            "protocol=substrate.agent.session",
             "execution.scope=host",
             "role=orchestrator",
             "posture=<unknown>",
@@ -2942,7 +2942,7 @@ fn agent_status_tombstone_suppression_beats_stale_trace_fallback_for_world_membe
         "backend_id": "cli:codex",
         "client": "codex",
         "router": "agent_hub",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "role": "member",
         "world_id": "wld_old_0001",
         "world_generation": 6,
@@ -3057,7 +3057,7 @@ fn agent_status_keeps_same_agent_concurrent_sessions_visible_across_orchestratio
         "backend_id": "cli:claude_code",
         "client": "claude_code",
         "router": "agent_hub",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "role": "orchestrator",
         "data": { "message": "distinct orchestration_session_id values must remain independently visible" }
     })]);
@@ -3227,7 +3227,7 @@ fn agent_status_trace_only_participant_aware_fallback_keeps_same_agent_siblings_
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "member",
             "world_id": "wld_trace_0001",
             "world_generation": 9,
@@ -3246,7 +3246,7 @@ fn agent_status_trace_only_participant_aware_fallback_keeps_same_agent_siblings_
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "member",
             "world_id": "wld_trace_0001",
             "world_generation": 9,
@@ -3317,7 +3317,7 @@ fn agent_status_sibling_specific_suppression_keeps_other_trace_participants_visi
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "member",
             "world_id": "wld_trace_0002",
             "world_generation": 10,
@@ -3336,7 +3336,7 @@ fn agent_status_sibling_specific_suppression_keeps_other_trace_participants_visi
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "member",
             "world_id": "wld_trace_0002",
             "world_generation": 10,
@@ -3386,7 +3386,7 @@ fn agent_status_nested_parent_correlation_prefers_parent_participant_id_when_sib
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_nested_0001",
             "world_generation": 11,
@@ -3405,7 +3405,7 @@ fn agent_status_nested_parent_correlation_prefers_parent_participant_id_when_sib
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_nested_0001",
             "world_generation": 11,
@@ -3689,7 +3689,7 @@ fn agent_status_json_prefers_live_runtime_member_manifest_with_top_level_world_i
         "backend_id": "cli:codex",
         "client": "codex",
         "router": "agent_hub",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "role": "member",
         "world_id": "wld_trace_member_should_lose",
         "world_generation": 3,
@@ -3807,7 +3807,7 @@ fn agent_status_keeps_stale_terminal_member_trace_rows_auditable_without_revivin
         "backend_id": "cli:codex",
         "client": "codex",
         "router": "agent_hub",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "role": "member",
         "world_id": "wld_terminal_old_0008",
         "world_generation": 5,
@@ -3869,7 +3869,7 @@ fn agent_status_prefers_newest_pure_session_event_when_trace_lines_are_out_of_or
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "member",
             "data": { "message": "newest member session event intentionally omits world fields" }
         }),
@@ -3885,7 +3885,7 @@ fn agent_status_prefers_newest_pure_session_event_when_trace_lines_are_out_of_or
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "member",
             "world_id": "wld_stale_0001",
             "world_generation": 6,
@@ -3918,7 +3918,7 @@ fn agent_status_fails_when_newest_world_scoped_event_omits_top_level_world_id() 
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "member",
             "world_generation": 8,
             "data": { "message": "newest member session event omits top-level world_id" }
@@ -3935,7 +3935,7 @@ fn agent_status_fails_when_newest_world_scoped_event_omits_top_level_world_id() 
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "member",
             "world_id": "wld_stale_0001",
             "world_generation": 7,
@@ -3965,7 +3965,7 @@ fn agent_status_scope_host_ignores_filtered_out_malformed_world_rows() {
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "member",
             "data": { "message": "filtered-out world row is malformed" }
         }),
@@ -3981,7 +3981,7 @@ fn agent_status_scope_host_ignores_filtered_out_malformed_world_rows() {
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "data": { "message": "host-scoped orchestrator row remains valid" }
         }),
@@ -4027,7 +4027,7 @@ fn agent_status_ignores_non_selected_trace_orchestrator_roles() {
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "data": { "message": "selected orchestrator session is live" }
         }),
@@ -4043,7 +4043,7 @@ fn agent_status_ignores_non_selected_trace_orchestrator_roles() {
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -4151,7 +4151,7 @@ fn agent_status_keeps_selected_orchestrator_host_scoped_when_trace_posture_says_
         "backend_id": "cli:claude_code",
         "client": "claude_code",
         "router": "agent_hub",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "role": "orchestrator",
         "placement_posture": {
             "execution": "in_world"
@@ -4227,7 +4227,7 @@ fn agent_status_unsupported_event_roles_fall_back_to_contract_roles() {
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "unexpected",
             "data": { "message": "unsupported role should not leak" }
         }),
@@ -4243,7 +4243,7 @@ fn agent_status_unsupported_event_roles_fall_back_to_contract_roles() {
             "backend_id": "cli:codex",
             "client": "codex",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "unexpected",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -4426,7 +4426,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_missing() {
     let output = fixture.run(&["agent", "doctor", "--json"]);
     assert_doctor_fails_at_orchestrator_selection(
         &output,
-        "orchestrator agent 'claude_code' does not advertise protocol 'uaa.agent.session'",
+        "orchestrator agent 'claude_code' does not advertise protocol 'substrate.agent.session'",
     );
 }
 
@@ -4458,7 +4458,7 @@ fn agent_doctor_fails_at_orchestrator_selection_when_protocol_is_wrong() {
     let output = fixture.run(&["agent", "doctor", "--json"]);
     assert_doctor_fails_at_orchestrator_selection(
         &output,
-        "orchestrator agent 'claude_code' does not advertise protocol 'uaa.agent.session'",
+        "orchestrator agent 'claude_code' does not advertise protocol 'substrate.agent.session'",
     );
 }
 
@@ -5190,7 +5190,7 @@ metadata: {}
         "backend_id": "cli:claude_code",
         "client": "claude_code",
         "router": "agent_hub",
-        "protocol": "uaa.agent.session",
+        "protocol": "substrate.agent.session",
         "data": { "message": "trace says the orchestrator is healthy" }
     })]);
 
@@ -5282,7 +5282,7 @@ metadata: {}
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -5334,7 +5334,7 @@ metadata: {}
     );
     assert_eq!(
         session.pointer("/protocol").and_then(Value::as_str),
-        Some("uaa.agent.session")
+        Some("substrate.agent.session")
     );
     assert_eq!(
         session.pointer("/world_id").and_then(Value::as_str),
@@ -5450,7 +5450,7 @@ metadata: {}
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -5579,7 +5579,7 @@ fn agent_status_ignores_stale_nested_rows_from_historical_parent_runs() {
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0001",
             "world_generation": 6,
@@ -5615,7 +5615,7 @@ fn agent_status_ignores_stale_nested_rows_from_historical_parent_runs() {
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -5680,7 +5680,7 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_parent_run_id() {
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -5733,7 +5733,7 @@ fn agent_status_fails_closed_when_selected_nested_row_has_empty_parent_run_id() 
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -5788,7 +5788,7 @@ fn agent_status_fails_closed_when_selected_nested_row_has_unknown_parent_run_id(
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -5842,7 +5842,7 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider() {
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -5895,7 +5895,7 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_auth_authority() {
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -5948,7 +5948,7 @@ fn agent_status_fails_closed_when_selected_nested_row_omits_provider_and_auth_au
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0002",
             "world_generation": 7,
@@ -5999,7 +5999,7 @@ fn agent_status_ignores_malformed_nested_rows_when_parent_surface_is_filtered_ou
             "backend_id": "cli:claude_code",
             "client": "claude_code",
             "router": "agent_hub",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "role": "orchestrator",
             "world_id": "wld_active_0002",
             "world_generation": 7,

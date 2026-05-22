@@ -45,7 +45,7 @@ fn world_doctor_json_includes_strategy_keys_per_adr_0004() {
         .prefix("substrate-wo0-sock-")
         .tempdir_in("/tmp")
         .expect("create wo0 socket tempdir");
-    let socket_path: PathBuf = socket_dir.path().join("world-agent.sock");
+    let socket_path: PathBuf = socket_dir.path().join("world-service.sock");
     let _socket = AgentSocket::start(&socket_path, SocketResponse::Capabilities);
 
     let output = get_substrate_binary()

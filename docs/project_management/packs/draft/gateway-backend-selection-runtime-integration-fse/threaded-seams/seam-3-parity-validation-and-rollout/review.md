@@ -22,7 +22,7 @@ flowchart LR
   COD["cli:codex regression floor"] --> MATRIX["parity verification matrix"]
   API["api:openai proof target"] --> MATRIX
   UNSUP["unsupported backend negative cases"] --> MATRIX
-  MATRIX --> RUNTIME["world-agent parity tests"]
+  MATRIX --> RUNTIME["world-service parity tests"]
   MATRIX --> SHELL["shell lifecycle tests"]
 ```
 
@@ -41,7 +41,7 @@ flowchart LR
 
 ## Likely mismatch hotspots
 
-- `crates/world-agent/tests/gateway_runtime_parity.rs` already names `api:openai` and explicit unsupported-backend cases, but the seam still has to make the proof matrix readable and durable enough that closeout can publish `THR-03` without re-reading test internals.
+- `crates/world-service/tests/gateway_runtime_parity.rs` already names `api:openai` and explicit unsupported-backend cases, but the seam still has to make the proof matrix readable and durable enough that closeout can publish `THR-03` without re-reading test internals.
 - `crates/shell/tests/world_gateway.rs` already proves bounded `api_env` emission and explicit unsupported-integrated-backend failures, but this seam still has to align those assertions with rollout and platform evidence rather than treating them as isolated test trivia.
 - `docs/contracts/substrate-gateway-runtime-parity.md` owns lifecycle/status parity semantics already, so rollout proof must attach evidence to that canonical contract instead of inventing a seam-local compatibility taxonomy.
 - The active seam references pack-local parity, compatibility, manual-testing, and smoke surfaces that do not yet exist in this pack directory, so execution must create only the minimum evidence surfaces needed to make platform proof and closeout deterministic.
@@ -52,8 +52,8 @@ flowchart LR
 - The contract gate passes. Canonical `C-05` already exists under `docs/contracts/substrate-gateway-runtime-parity.md`, while upstream `C-01` through `C-04` were published and revalidated through `SEAM-1` and `SEAM-2`.
 - Revalidation passes against current repo evidence:
   - `governance/seam-2-closeout.md` publishes `THR-02` and names `api:openai` as the first landed non-`cli:codex` proof target.
-  - `crates/agent-api-types/src/lib.rs` still exposes the bounded `api_env` auth facet for `api:openai`.
-  - `crates/world-agent/tests/gateway_runtime_parity.rs` still exercises `api:openai`, preserves the `cli:codex` floor, and carries explicit unsupported-backend/no-fallback behavior.
+  - `crates/transport-api-types/src/lib.rs` still exposes the bounded `api_env` auth facet for `api:openai`.
+  - `crates/world-service/tests/gateway_runtime_parity.rs` still exercises `api:openai`, preserves the `cli:codex` floor, and carries explicit unsupported-backend/no-fallback behavior.
   - `crates/shell/tests/world_gateway.rs` still proves backend-aware request construction and explicit unsupported integrated backend failures.
 - No blocking pre-exec remediations remain open against the active seam, so execution may begin.
 - The likeliest failure mode is proving `api:openai` in code while leaving platform evidence or rollout notes vague enough that downstream consumers would have to infer the contract shape again.

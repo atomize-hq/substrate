@@ -42,7 +42,7 @@ Slice spec:
   - PASS on `2026-04-23`.
 - Relevant tests:
   - `cargo test -p substrate-common --test agent_hub_event_envelope_schema -- --nocapture` → PASS
-  - `cargo test -p agent-api-types gateway_lifecycle_response -- --nocapture` → PASS
+  - `cargo test -p transport-api-types gateway_lifecycle_response -- --nocapture` → PASS
   - `cargo test -p shell world_gateway -- --nocapture` → PASS
 - `make integ-checks`:
   - PASS on `2026-04-23` before finish, then PASS again inside `make triad-task-finish TASK_ID="LAITDP0-integ"`.

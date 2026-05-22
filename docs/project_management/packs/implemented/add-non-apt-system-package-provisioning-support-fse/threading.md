@@ -74,7 +74,7 @@
     - `SEAM-6`
   - **Derived consumers**:
     - provisioning operators
-    - world-agent/request-profile maintainers
+    - world-service/request-profile maintainers
   - **Thread IDs**:
     - `THR-04`
   - **Definition**:
@@ -165,7 +165,7 @@
     - Carry provisioning-time normalization, mixed-manager rejection, request-profile routing, and exact pacman execution shape into runtime remediation and cross-platform validation.
   - **State**: revalidated
   - **Revalidation trigger**:
-    - requirement normalization rules, pacman command shape, mixed-manager posture, or shared `world_enable` / `world-agent` touch surfaces change
+    - requirement normalization rules, pacman command shape, mixed-manager posture, or shared `world_enable` / `world-service` touch surfaces change
   - **Satisfied by**:
     - `SEAM-4` closeout publishing provisioning-routing evidence and exact manager-aware dry-run/verbose rendering, with `SEAM-5` seam-local review revalidating the runtime fail-early plan against that published basis
   - **Notes**:

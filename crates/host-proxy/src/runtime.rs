@@ -4,15 +4,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use agent_api_client::AgentClient;
-use agent_api_core::AgentService;
-use agent_api_types::{ApiError, ExecuteRequest, ExecuteResponse};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use axum::{body::Body, response::Response};
 use http_body_util::BodyExt;
 use tokio::sync::RwLock;
 use tracing::debug;
+use transport_api_client::AgentClient;
+use transport_api_core::AgentService;
+use transport_api_types::{ApiError, ExecuteRequest, ExecuteResponse};
 
 use crate::auth::AuthService;
 use crate::config::ProxyConfig;
@@ -23,7 +23,7 @@ use crate::transport::AgentTransportConfig;
 #[cfg(unix)]
 use crate::transport::DEFAULT_AGENT_TCP_PORT;
 
-/// Host proxy service that forwards requests to world-agent.
+/// Host proxy service that forwards requests to world-service.
 #[derive(Clone)]
 pub struct HostProxyService {
     client: Arc<AgentClient>,
@@ -203,13 +203,13 @@ pub async fn cleanup_socket(socket_path: &Path) -> Result<()> {
 
 #[cfg(unix)]
 pub async fn run_host_proxy() -> Result<()> {
-    use agent_api_core::build_router;
     use axum::routing::get;
     use tower::ServiceBuilder;
     use tower::ServiceExt;
     use tower_http::limit::RequestBodyLimitLayer;
     use tracing::info;
     use tracing_subscriber::prelude::*;
+    use transport_api_core::build_router;
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())
@@ -255,7 +255,7 @@ pub async fn run_host_proxy() -> Result<()> {
     }
 
     info!("Host proxy listening on: {:?}", socket_path);
-    info!("Ready to forward requests to world-agent");
+    info!("Ready to forward requests to world-service");
 
     loop {
         let (stream, _addr) = listener

@@ -9,14 +9,14 @@ Last updated: 2026-05-19
 ## Purpose / outcome
 
 Remove the default guest TCP listener posture from macOS/Lima so the hardened
-default is one world-agent transport contract: the Unix domain socket at
+default is one world-service transport contract: the Unix domain socket at
 `/run/substrate.sock`, preferably inherited through socket activation.
 
 ## Why this milestone exists
 
 The current macOS warm flow writes `Environment=SUBSTRATE_AGENT_TCP_PORT=61337`
 into the guest service in `scripts/mac/lima-warm.sh`. In
-`crates/world-agent/src/lib.rs`, that environment variable enables a loopback
+`crates/world-service/src/lib.rs`, that environment variable enables a loopback
 TCP listener whenever one was not inherited from socket activation. That widens
 the guest attack surface even though the actual transport story is already
 UDS-backed and centered on `/run/substrate.sock`.
@@ -42,12 +42,12 @@ This milestone exists to make the listener surface match the intended contract b
 ## Out-of-scope
 
 - Reworking the full host-to-guest forwarding implementation.
-- Removing TCP support from `world-agent` globally or for Windows/WSL.
+- Removing TCP support from `world-service` globally or for Windows/WSL.
 - Solving mount breadth or service-unit duplication beyond what is required to remove the extra listener default.
 
 ## Architectural approach
 
-- Keep `world-agent` support for optional TCP listeners in shared runtime code, but stop enabling it in the macOS hardened default.
+- Keep `world-service` support for optional TCP listeners in shared runtime code, but stop enabling it in the macOS hardened default.
 - Treat TCP on macOS as a breakglass-only exception, not as background service
   behavior or a supported compatibility mode.
 - Treat host TCP `17788` probing as separate from guest TCP listener posture:
@@ -66,7 +66,7 @@ This milestone exists to make the listener surface match the intended contract b
 - `scripts/mac/lima-warm.sh`
   - remove the service-level `SUBSTRATE_AGENT_TCP_PORT=61337` default
   - update check-only output if it currently assumes that env exists
-- `crates/world-agent/src/lib.rs`
+- `crates/world-service/src/lib.rs`
   - confirm the runtime behavior when the TCP env var is absent
   - preserve explicit opt-in semantics if shared platforms still need TCP
 - `crates/world-mac-lima/src/forwarding.rs`
@@ -92,7 +92,7 @@ This milestone exists to make the listener surface match the intended contract b
 ## Acceptance criteria
 
 - The macOS warm/provision flow no longer injects `SUBSTRATE_AGENT_TCP_PORT=61337` by default.
-- A fresh or repaired Lima guest starts `world-agent` successfully with only `/run/substrate.sock` exposed by default.
+- A fresh or repaired Lima guest starts `world-service` successfully with only `/run/substrate.sock` exposed by default.
 - macOS doctor and smoke evidence remains green without depending on the guest TCP listener.
 - `substrate world gateway sync|status|restart` and gateway lifecycle smoke
   coverage remain green without depending on the guest TCP listener.
@@ -107,10 +107,10 @@ This milestone exists to make the listener surface match the intended contract b
 - Run `scripts/mac/smoke.sh` and any transport-specific smoke needed to prove replay, PTY, and gateway flows still work.
 - Run `substrate world gateway status --json` and confirm the managed gateway
   path still resolves through the supported routed transport surface.
-- Inspect `world-agent` startup logs for `listener_kind = "tcp"` and `listener_mode` changes to prove the hardened default no longer enables direct-bind TCP.
+- Inspect `world-service` startup logs for `listener_kind = "tcp"` and `listener_mode` changes to prove the hardened default no longer enables direct-bind TCP.
 
 ## Risks / open questions
 
 - Some SSH forwarding or gateway flows may still assume a guest TCP bridge exists even if the documented contract does not.
 - There may be macOS-local debugging workflows that currently rely on port `61337`; those need explicit migration guidance instead of quiet breakage.
-- The shared `world-agent` runtime supports TCP for valid cross-platform reasons, so the macOS-specific hardening must avoid regressing WSL or other callers.
+- The shared `world-service` runtime supports TCP for valid cross-platform reasons, so the macOS-specific hardening must avoid regressing WSL or other callers.

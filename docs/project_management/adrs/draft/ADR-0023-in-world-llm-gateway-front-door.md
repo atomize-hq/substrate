@@ -69,7 +69,7 @@ Supersession note:
 ### CLI
 - Commands:
   - Gateway lifecycle is owned by the world subsystem (session world management + deps provisioning).
-    - v1 requirement (legacy): the “ensure gateway running” path MUST pass any required secret values to the in-world gateway/engine spawn request over the existing world-agent transport (see `docs/project_management/_archived/next/llm_gateway_in_world/specs/env_injection.md`).
+    - v1 requirement (legacy): the “ensure gateway running” path MUST pass any required secret values to the in-world gateway/engine spawn request over the existing world-service transport (see `docs/project_management/_archived/next/llm_gateway_in_world/specs/env_injection.md`).
     - Phase 8 additive upgrade (preferred): secret values MUST NOT live in the in-world gateway/manager process environment by default. Host→world secret delivery SHOULD use a secret-channel payload and an inherited one-time FD/pipe bundle into the gateway/manager (see `docs/project_management/_archived/next/llm_gateway_in_world/decision_register.md` (DR-0018)).
   - `substrate world gateway status`:
     - Behavior: prints per-world-session gateway state (running/not), bind endpoints inside the world, active backend kind, and policy mode.
@@ -135,17 +135,17 @@ Non-negotiable rules (Phase 8):
   - Gateway runs inside the world network namespace; outbound egress is subject to world-level enforcement.
   - Fail-closed: when effective policy has `llm.fail_closed.routing=true`, do not fall back to a host-level gateway when `SUBSTRATE_WORLD=enabled`.
 - macOS:
-  - Gateway runs inside the Lima guest world. Host talks to it via the existing Substrate transport to world-agent.
+  - Gateway runs inside the Lima guest world. Host talks to it via the existing Substrate transport to world-service.
   - Fail-closed: if the guest is not available, gateway use fails with exit code `5` when `llm.fail_closed.routing=true`.
 - Windows:
-  - Gateway runs inside the WSL world distribution. Host talks to it via the existing Substrate transport to world-agent.
+  - Gateway runs inside the WSL world distribution. Host talks to it via the existing Substrate transport to world-service.
   - Fail-closed: same as macOS (when `llm.fail_closed.routing=true`).
 
 ## Architecture Shape
 - Components:
   - `crates/llm-gateway` (new): binary “front door” HTTP server for OpenAI+Anthropic dialects; minimal parsing; emits structured events/spans.
   - `crates/llm-manager` (new): backend router + policy gate + logging abstraction; selects engine by config.
-  - `crates/world-agent` (existing): supervises starting/stopping gateway inside the world session; exposes health/status over existing agent transport.
+  - `crates/world-service` (existing): supervises starting/stopping gateway inside the world session; exposes health/status over existing agent transport.
   - `crates/trace` (existing): stores canonical spans/events for LLM requests in JSONL; optional fs diff integration not required here.
   - `crates/broker` (existing): optional policy decision integration point (allow/deny/require-approval) for LLM operations.
 

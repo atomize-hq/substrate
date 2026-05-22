@@ -6,12 +6,6 @@ use crate::execution::policy_snapshot::{
 #[cfg(target_os = "windows")]
 use crate::execution::pw;
 use crate::execution::{WorldGatewayAction, WorldGatewayCmd, WorldGatewayStatusArgs};
-use agent_api_client::AgentClient;
-use agent_api_types::{
-    GatewayApiEnvIntegratedAuthV1, GatewayCliCodexIntegratedAuthV1, GatewayIntegratedAuthPayloadV1,
-    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, GatewayStatusV1, IdentityTuple,
-    PlacementExecution, PlacementPosture,
-};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
@@ -22,6 +16,12 @@ use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 #[cfg(target_os = "macos")]
 use std::time::Duration;
+use transport_api_client::AgentClient;
+use transport_api_types::{
+    GatewayApiEnvIntegratedAuthV1, GatewayCliCodexIntegratedAuthV1, GatewayIntegratedAuthPayloadV1,
+    GatewayLifecycleRequestV1, GatewayLifecycleResponseV1, GatewayStatusV1, IdentityTuple,
+    PlacementExecution, PlacementPosture,
+};
 
 #[cfg(target_os = "linux")]
 const DEFAULT_WORLD_SOCKET_PATH: &str = "/run/substrate.sock";

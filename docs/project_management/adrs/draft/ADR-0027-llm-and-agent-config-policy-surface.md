@@ -86,7 +86,7 @@ ADR_BODY_SHA256: 36c3baa794d0878fae02ffa4dfa7bb9dbeed355c4aa7e4a0a554df7dd116443
   - and compatibility with the existing layered resolution system (workspace/global, CLI/env overrides, profiles).
 - If we create new config/policy files ad hoc per feature, we will:
   - multiply precedence rules,
-  - create drift between shell/shim/world-agent, and
+  - create drift between shell/shim/world-service, and
   - increase the probability of boundary errors (e.g., LLM egress happening outside the world boundary without an explicit operator decision).
 
 ## Goals
@@ -306,7 +306,7 @@ This `workflow.router` namespace is unrelated to the LLM identity-tuple field `r
   - `crates/broker`:
     - extend policy schema + patch schema to include `llm.*` and `agents.*`
     - ensure effective policy resolution and `--explain` provenance include the new keys
-  - `crates/world-agent` / world backends:
+  - `crates/world-service` / world backends:
     - continue to enforce network allowlists via `net_allowed` (used by LLM egress paths)
   - LLM gateway/manager + agent hub components (defined in other ADRs):
     - consume effective config/policy and enforce fail-closed rules described above

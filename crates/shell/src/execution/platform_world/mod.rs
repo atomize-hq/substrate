@@ -11,7 +11,6 @@ pub fn detect() -> Result<PlatformWorldContext> {
 use crate::execution::policy_snapshot::bootstrap_world_spec;
 #[cfg(not(target_os = "windows"))]
 use crate::execution::settings;
-use agent_api_types::SharedWorldOwnerSpec;
 #[cfg(target_os = "linux")]
 use anyhow::Context;
 use anyhow::Result;
@@ -21,6 +20,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use transport_api_types::SharedWorldOwnerSpec;
 use world_api::WorldBackend;
 
 #[derive(Clone, Debug)]

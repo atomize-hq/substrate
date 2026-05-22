@@ -37,18 +37,18 @@ unsupported and unbound backends explicit with no fallback.
     - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
     - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
   - landed runtime and shell evidence on the current tree:
-    - `crates/agent-api-types/src/lib.rs` now defines a closed backend-neutral `api_env` auth facet beside `cli_codex`, hardens `GatewayLifecycleRequestV1` with `deny_unknown_fields`, and validates backend/facet coherence before runtime execution.
-    - `crates/world-agent/src/service.rs` now uses the shared request/auth validator, preserves selected-backend continuity, and exposes the Linux-only runtime inspection helpers that the parity suite exercises as a real integration test.
-    - `crates/world-agent/src/gateway_runtime.rs` now resolves an explicit runtime registry for `cli:codex` and `api:openai`, renders binding-driven runtime config, injects binding-specific auth env, and keeps unsupported/unbound backends explicit with no fallback.
+    - `crates/transport-api-types/src/lib.rs` now defines a closed backend-neutral `api_env` auth facet beside `cli_codex`, hardens `GatewayLifecycleRequestV1` with `deny_unknown_fields`, and validates backend/facet coherence before runtime execution.
+    - `crates/world-service/src/service.rs` now uses the shared request/auth validator, preserves selected-backend continuity, and exposes the Linux-only runtime inspection helpers that the parity suite exercises as a real integration test.
+    - `crates/world-service/src/gateway_runtime.rs` now resolves an explicit runtime registry for `cli:codex` and `api:openai`, renders binding-driven runtime config, injects binding-specific auth env, and keeps unsupported/unbound backends explicit with no fallback.
     - `crates/shell/src/builtins/world_gateway.rs` now carries the resolved inventory entry into request construction and emits backend-aware integrated auth without reopening selection or auth-precedence ownership.
-    - `crates/world-agent/tests/gateway_runtime_parity.rs` now proves `api:openai` through unavailable-before-sync, sync, status, idempotent sync, restart, manifest recovery, and explicit no-fallback behavior while preserving the existing `cli:codex` regression floor.
+    - `crates/world-service/tests/gateway_runtime_parity.rs` now proves `api:openai` through unavailable-before-sync, sync, status, idempotent sync, restart, manifest recovery, and explicit no-fallback behavior while preserving the existing `cli:codex` regression floor.
     - `crates/shell/tests/world_gateway.rs` now proves bounded `api_env` emission for `api:openai`, preserves the no-Codex-fallback negative case when API env auth is absent, and keeps policy and invalid-integration failure buckets explicit.
   - validation commands that passed on the landed state:
     - `cargo fmt --all`
-    - `cargo test -p agent-api-types -- --nocapture`
+    - `cargo test -p transport-api-types -- --nocapture`
     - `cargo test -p shell --test world_gateway -- --nocapture`
-    - `cargo test -p world-agent --lib -- --nocapture`
-    - `limactl shell substrate -- bash -lc 'cd /Users/spensermcconnell/__Active_Code/atomize-hq/substrate && CARGO_TARGET_DIR=/tmp/substrate-target cargo test -p world-agent --test gateway_runtime_parity -- --nocapture'`
+    - `cargo test -p world-service --lib -- --nocapture`
+    - `limactl shell substrate -- bash -lc 'cd /Users/spensermcconnell/__Active_Code/atomize-hq/substrate && CARGO_TARGET_DIR=/tmp/substrate-target cargo test -p world-service --test gateway_runtime_parity -- --nocapture'`
   - subordinate planning-pack prose may support implementation context when present, but canonical contract truth remains the authoritative evidence baseline
 - **Contracts consumed or narrowly aligned**:
   - expected: `C-03`, `C-04`

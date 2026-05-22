@@ -25,7 +25,7 @@ execution_horizon:
   - Introducing new config keys, config files, config precedence, or environment-precedence rules.
   - Changing production install layout under `$SUBSTRATE_HOME/versions/...`.
   - Broadening cleanup outside the fixed helper-bundle surface.
-  - Expanding dev-install into ADR-0035-style world-agent staging or full macOS bundle parity.
+  - Expanding dev-install into ADR-0035-style world-service staging or full macOS bundle parity.
 - **Success criteria**:
   - After dev-install, the documented helper/runtime bundle exists under `$SUBSTRATE_HOME`, including helper scripts, `world-deps.yaml`, macOS Lima support files, and best-effort Linux guest binaries.
   - `substrate world enable` resolves helpers in the exact order `SUBSTRATE_WORLD_ENABLE_SCRIPT` → `$SUBSTRATE_HOME/scripts/substrate/world-enable.sh` → `<inferred version dir>/scripts/substrate/world-enable.sh`.

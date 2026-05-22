@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Provision the Substrate world-agent systemd service + socket on a Linux host.
+# Provision the Substrate world-service systemd service + socket on a Linux host.
 #
-# This script builds the world-agent and substrate-gateway binaries (unless
+# This script builds the world-service and substrate-gateway binaries (unless
 # --skip-build is set), installs them under /usr/local/bin, writes both the
 # .service and .socket unit files, and enables/starts the listener so
 # /run/substrate.sock is owned by root. Pass --dry-run to print the actions
@@ -425,9 +425,9 @@ Usage: scripts/linux/world-provision.sh [options]
 
 Options:
   --profile <name>   Cargo profile to build (default: release)
-  --skip-build       Assume target/<profile>/world-agent already exists
+  --skip-build       Assume target/<profile>/world-service already exists
   --dry-run          Print the provisioning steps without executing them
-  --world-netfilter  Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-agent.service)
+  --world-netfilter  Enable Linux nftables egress scoping (sets WORLD_NETFILTER_ENABLE=1 for substrate-world-service.service)
   --sudo-noninteractive  Use sudo -n (fail fast if password required)
   -h, --help         Show this help
 USAGE
@@ -484,26 +484,26 @@ INVOKING_USER="$(detect_invoking_user)"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd)
-WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/world-agent"
+WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/world-service"
 GATEWAY_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate-gateway"
 SUBSTRATE_CLI_BIN_PATH="${REPO_ROOT}/target/${PROFILE}/substrate"
 
 if [[ ${SKIP_BUILD} -eq 0 ]]; then
-    echo "==> Building substrate + world-agent + substrate-gateway (profile: ${PROFILE})"
+    echo "==> Building substrate + world-service + substrate-gateway (profile: ${PROFILE})"
     if [[ "${PROFILE}" == "release" ]]; then
-        WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/release/world-agent"
+        WORLD_AGENT_BIN_PATH="${REPO_ROOT}/target/release/world-service"
         GATEWAY_BIN_PATH="${REPO_ROOT}/target/release/substrate-gateway"
         SUBSTRATE_CLI_BIN_PATH="${REPO_ROOT}/target/release/substrate"
         if [[ ${DRY_RUN} -eq 1 ]]; then
-            show_cmd cargo build -p substrate --bin substrate -p world-agent -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
+            show_cmd cargo build -p substrate --bin substrate -p world-service -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
         else
-            cargo build -p substrate --bin substrate -p world-agent -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
+            cargo build -p substrate --bin substrate -p world-service -p substrate-gateway --release --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
     else
         if [[ ${DRY_RUN} -eq 1 ]]; then
-            show_cmd cargo build -p substrate --bin substrate -p world-agent -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            show_cmd cargo build -p substrate --bin substrate -p world-service -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         else
-            cargo build -p substrate --bin substrate -p world-agent -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
+            cargo build -p substrate --bin substrate -p world-service -p substrate-gateway --profile "${PROFILE}" --manifest-path "${REPO_ROOT}/Cargo.toml"
         fi
     fi
 else
@@ -511,7 +511,7 @@ else
 fi
 
 if [[ ${DRY_RUN} -eq 0 && ! -x "${WORLD_AGENT_BIN_PATH}" ]]; then
-    echo "world-agent binary not found at ${WORLD_AGENT_BIN_PATH}. Did the build succeed?" >&2
+    echo "world-service binary not found at ${WORLD_AGENT_BIN_PATH}. Did the build succeed?" >&2
     exit 1
 fi
 
@@ -524,8 +524,8 @@ echo "==> Ensuring ${SUBSTRATE_GROUP} group and membership"
 ensure_substrate_group_exists
 ensure_user_in_group "${INVOKING_USER}"
 
-SERVICE_PATH="/etc/systemd/system/substrate-world-agent.service"
-SOCKET_PATH="/etc/systemd/system/substrate-world-agent.socket"
+SERVICE_PATH="/etc/systemd/system/substrate-world-service.service"
+SOCKET_PATH="/etc/systemd/system/substrate-world-service.socket"
 
 SUBSTRATE_HOME_FOR_AGENT="${SUBSTRATE_HOME:-}"
 if [[ -z "${SUBSTRATE_HOME_FOR_AGENT}" ]]; then
@@ -547,13 +547,13 @@ fi
 
 read -r -d '' SERVICE_UNIT_CONTENT <<UNIT || true
 [Unit]
-Description=Substrate World Agent
+Description=Substrate World Service
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/substrate-world-agent
+ExecStart=/usr/local/bin/substrate-world-service
 Restart=always
 RestartSec=5
 Environment=RUST_LOG=info
@@ -583,8 +583,8 @@ UNIT
 
 read -r -d '' SOCKET_UNIT_CONTENT <<'UNIT' || true
 [Unit]
-Description=Substrate World Agent Socket
-PartOf=substrate-world-agent.service
+Description=Substrate World Service Socket
+PartOf=substrate-world-service.service
 
 [Socket]
 ListenStream=/run/substrate.sock
@@ -593,14 +593,14 @@ SocketUser=root
 SocketGroup=substrate
 DirectoryMode=0750
 RemoveOnStop=yes
-Service=substrate-world-agent.service
+Service=substrate-world-service.service
 
 [Install]
 WantedBy=sockets.target
 UNIT
 
-echo "==> Installing world-agent to /usr/local/bin (sudo will prompt if needed)"
-sudo_cmd install -Dm0755 "${WORLD_AGENT_BIN_PATH}" /usr/local/bin/substrate-world-agent
+echo "==> Installing world-service to /usr/local/bin (sudo will prompt if needed)"
+sudo_cmd install -Dm0755 "${WORLD_AGENT_BIN_PATH}" /usr/local/bin/substrate-world-service
 echo "==> Installing substrate-gateway to /usr/local/bin (no dedicated service)"
 sudo_cmd install -Dm0755 "${GATEWAY_BIN_PATH}" /usr/local/bin/substrate-gateway
 
@@ -614,27 +614,35 @@ install_unit "${SERVICE_PATH}" "${SERVICE_UNIT_CONTENT}"
 install_unit "${SOCKET_PATH}" "${SOCKET_UNIT_CONTENT}"
 
 echo "==> Reloading systemd and enabling socket activation"
+LEGACY_WORLD_UNIT_PREFIX="substrate-world"
+LEGACY_SERVICE="${LEGACY_WORLD_UNIT_PREFIX}-agent.service"
+LEGACY_SOCKET="${LEGACY_WORLD_UNIT_PREFIX}-agent.socket"
+sudo_cmd systemctl stop "${LEGACY_SERVICE}" || true
+sudo_cmd systemctl stop "${LEGACY_SOCKET}" || true
+sudo_cmd systemctl disable "${LEGACY_SERVICE}" || true
+sudo_cmd systemctl disable "${LEGACY_SOCKET}" || true
+sudo_cmd rm -f "/etc/systemd/system/${LEGACY_SERVICE}" "/etc/systemd/system/${LEGACY_SOCKET}" || true
 sudo_cmd systemctl daemon-reload
-sudo_cmd systemctl enable substrate-world-agent.service
-sudo_cmd systemctl enable substrate-world-agent.socket
+sudo_cmd systemctl enable substrate-world-service.service
+sudo_cmd systemctl enable substrate-world-service.socket
 
 echo "==> Restarting socket/service to enforce ${SOCKET_FS_PATH} ownership"
-sudo_cmd systemctl stop substrate-world-agent.service
-sudo_cmd systemctl stop substrate-world-agent.socket
+sudo_cmd systemctl stop substrate-world-service.service
+sudo_cmd systemctl stop substrate-world-service.socket
 sudo_cmd install -d -m0750 -o root -g "${SUBSTRATE_GROUP}" /run/substrate
 sudo_cmd rm -f "${SOCKET_FS_PATH}"
-sudo_cmd systemctl start substrate-world-agent.socket
-sudo_cmd systemctl start substrate-world-agent.service
+sudo_cmd systemctl start substrate-world-service.socket
+sudo_cmd systemctl start substrate-world-service.service
 
 echo "==> ${SOCKET_FS_PATH} listing (should be root:${SUBSTRATE_GROUP} 0660)"
 sudo_cmd ls -l "${SOCKET_FS_PATH}"
 echo "==> Installed gateway binary"
 sudo_cmd ls -l /usr/local/bin/substrate-gateway
 
-echo "==> substrate-world-agent.socket status (last 10 log lines)"
-sudo_cmd systemctl status substrate-world-agent.socket --no-pager --lines=10 || true
-echo "==> substrate-world-agent.service status (last 10 log lines)"
-sudo_cmd systemctl status substrate-world-agent.service --no-pager --lines=10 || true
+echo "==> substrate-world-service.socket status (last 10 log lines)"
+sudo_cmd systemctl status substrate-world-service.socket --no-pager --lines=10 || true
+echo "==> substrate-world-service.service status (last 10 log lines)"
+sudo_cmd systemctl status substrate-world-service.service --no-pager --lines=10 || true
 
 if [[ ${DRY_RUN} -eq 1 ]]; then
     substrate_cli="$(resolve_substrate_cli 2>/dev/null || true)"

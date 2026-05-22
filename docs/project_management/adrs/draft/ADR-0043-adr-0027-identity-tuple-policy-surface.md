@@ -166,7 +166,7 @@ ADR_BODY_SHA256: ab38102c3d0c2de20c9a6ae9236523c865e18cb9b3966725e2e4f93b9c42245
 - Components:
   - `crates/shell`: config/policy surfaces and `--explain` presentation.
   - `crates/broker`: policy evaluation and allow/deny decisions.
-  - `crates/world-agent` and world backends: secret delivery and boundary enforcement.
+  - `crates/world-service` and world backends: secret delivery and boundary enforcement.
   - `substrate_gateway`: consumes router/provider/protocol/auth-authority constraints when routing requests.
 - End-to-end flow:
   - Inputs:

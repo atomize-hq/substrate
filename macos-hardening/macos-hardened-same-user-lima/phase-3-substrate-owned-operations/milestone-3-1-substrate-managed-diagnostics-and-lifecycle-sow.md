@@ -103,7 +103,7 @@ single-session happy paths.
 - `crates/world-mac-lima/src/lib.rs`
   - backend surface that must honor the owned command contract once lifecycle
     and sync behavior are driven through the CLI
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
   - authoritative managed runtime state and artifact model under
     `/run/substrate/substrate-gateway-runtime/`
 - `scripts/mac/lima-warm.sh`

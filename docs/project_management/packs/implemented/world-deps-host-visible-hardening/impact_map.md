@@ -43,7 +43,7 @@ Execution triads under this Planning Pack are expected to edit:
   - any shared env-building helpers used by macOS/Windows request builders
 - World-deps apply/probe logic:
   - `crates/shell/src/builtins/world_deps/*` (presence semantics and wrapper reconciliation)
-  - `crates/world-agent/*` (probe execution environment; wrapper install steps if in-world)
+  - `crates/world-service/*` (probe execution environment; wrapper install steps if in-world)
 - Policy/config surfaces for env mode + exec guard:
   - `crates/broker/*` (policy schema + snapshot) and/or `crates/common/*` models, as required by existing policy plumbing
 - Installer / first-run initialization:

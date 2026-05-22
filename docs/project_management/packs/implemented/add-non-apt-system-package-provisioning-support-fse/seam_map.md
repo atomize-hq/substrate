@@ -90,7 +90,7 @@ This keeps the seams cohesive without collapsing the contract authority problem 
   - `crates/shell/src/builtins/world_enable/runner.rs`
   - `crates/shell/src/builtins/world_enable/runner/helper_script.rs`
   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-  - `crates/world-agent/src/service.rs`
+  - `crates/world-service/src/service.rs`
 - **Natural boundary**:
   - This seam is about selecting or rejecting the world manager, not about inventory shape or package-manager execution.
 - **Likely verification path**:
@@ -133,7 +133,7 @@ This keeps the seams cohesive without collapsing the contract authority problem 
   - `scripts/substrate/world-enable.sh`
   - `crates/shell/src/builtins/world_enable/runner/log_ops.rs`
   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-  - `crates/world-agent/src/service.rs`
+  - `crates/world-service/src/service.rs`
 - **Natural boundary**:
   - This seam is the provisioning-time execution seam. It does not own schema definition or runtime fail-early semantics.
 - **Likely verification path**:

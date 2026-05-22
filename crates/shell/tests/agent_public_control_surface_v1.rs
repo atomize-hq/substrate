@@ -23,7 +23,7 @@ use support::{
 use support::{MemberDispatchStreamScript, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
 
-const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
+const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
 #[cfg(unix)]
 const PRIVATE_STOP_UNIX_PATH_MAX: usize = 100;
 
@@ -3333,7 +3333,7 @@ fn public_turn_routes_linux_world_member_follow_up_through_typed_submit_path() {
         Some("active")
     );
 
-    let guard = records.lock().expect("lock world-agent records");
+    let guard = records.lock().expect("lock world-service records");
     assert_eq!(
         guard.member_turn_submit_requests.len(),
         1,

@@ -379,7 +379,7 @@ fn probe_requirements(requirements: &[AptSpecV1]) -> Result<HashMap<String, bool
 fn execute_with_profile(
     cmd: &str,
     profile: &str,
-) -> Result<agent_api_types::ExecuteResponse, String> {
+) -> Result<transport_api_types::ExecuteResponse, String> {
     let (client, mut request, _) =
         build_agent_client_and_request(cmd).map_err(|err| format!("{err:#}"))?;
     request.profile = Some(profile.to_string());
@@ -392,7 +392,7 @@ fn execute_with_profile(
         client
             .execute(request)
             .await
-            .map_err(|err| format!("world-agent /v1/execute request failed: {err}"))
+            .map_err(|err| format!("world-service /v1/execute request failed: {err}"))
     })
 }
 
@@ -546,7 +546,7 @@ fn build_pacman_install_command(requirements: &[String]) -> String {
     format!("sh -lc {}", sh_quote(&script))
 }
 
-fn response_snippet(response: &agent_api_types::ExecuteResponse) -> String {
+fn response_snippet(response: &transport_api_types::ExecuteResponse) -> String {
     let stderr = decode_output(&response.stderr_b64);
     if !stderr.trim().is_empty() {
         return stderr.trim().to_string();

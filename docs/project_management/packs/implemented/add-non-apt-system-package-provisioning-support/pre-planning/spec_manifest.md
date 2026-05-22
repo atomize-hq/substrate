@@ -41,7 +41,7 @@ Canonical slice IDs selected for this feature:
 This ADR requires one user-facing contract doc, one schema spec, one platform-parity spec, one decision register, one impact map, one CI checkpoint plan, one execution plan, one manual validation playbook, three platform smoke scripts, and five canonical slice specs.
 
 No separate protocol, env-vars, telemetry, filesystem-semantics, or compatibility doc is selected.
-- ADR-0033 reuses the existing world-agent execute/stream protocol and existing request `profile` field; it does not require a new endpoint or request/response field.
+- ADR-0033 reuses the existing world-service execute/stream protocol and existing request `profile` field; it does not require a new endpoint or request/response field.
 - ADR-0033 introduces no new `SUBSTRATE_*`, `SHIM_*`, or `WORLD_*` environment variable.
 - ADR-0033 does not require new structured log fields or trace span fields.
 - Filesystem/path invariants remain limited to `/etc/os-release` probe behavior, “no host OS mutation,” and provisioning mutation boundaries inside the world OS; those surfaces are owned by `contract.md`, `platform-parity-spec.md`, and the slice specs.
@@ -330,7 +330,7 @@ Every surface touched by ADR-0033 appears here.
 | Slice acceptance for runtime fail-early | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP3/NASP3-spec.md` | scope and acceptance criteria IDs |
 | Slice acceptance for validation evidence and doc reconciliation | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/slices/NASP4/NASP4-spec.md` | scope and acceptance criteria IDs |
 | Decision A/B selections required by ADR-0033 | `docs/project_management/packs/draft/add-non-apt-system-package-provisioning-support/decision_register.md` | exactly two options and one selection for DR-0001, DR-0002, DR-0003, and DR-0004 |
-| Existing world-agent execute/stream protocol baseline | `docs/WORLD.md` | existing endpoint/request semantics and request `profile` field existence |
+| Existing world-service execute/stream protocol baseline | `docs/WORLD.md` | existing endpoint/request semantics and request `profile` field existence |
 | Existing env-var surface `SUBSTRATE_WORLD_REQUEST_PROFILE` | `docs/CONFIGURATION.md` | name, meaning, default, and advanced/testing scope |
 | Existing world-deps inventory/enabled baseline (`install.method=apt`, `install.apt`, enabled-set resolution) | `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md` | existing schema and enabled-resolution rules reused by ADR-0033 |
 | Baseline provisioning-time APT posture and runtime fail-early direction | `docs/project_management/adrs/draft/ADR-0030-provisioning-otter.md` | the APT baseline that ADR-0033 extends and must reconcile with |

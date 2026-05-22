@@ -50,7 +50,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 
 Implementation surface note:
 - ADR-0032 stays inside installer scripts, installer smoke coverage, and operator/planning docs.
-- No `crates/`, `src/`, `crates/world*`, `crates/shim`, `crates/shell`, or `crates/world-agent` path enters this touch set.
+- No `crates/`, `src/`, `crates/world*`, `crates/shim`, `crates/shell`, or `crates/world-service` path enters this touch set.
 
 ## Cascading implications (behavior/UX)
 
@@ -158,7 +158,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
     - `scripts/substrate/dev-install-substrate.sh`
   - Conflict: yes
   - Resolution (explicit):
-    - Keep world-agent staging and missing-artifact remediation separate from install-state write semantics.
+    - Keep world-service staging and missing-artifact remediation separate from install-state write semantics.
     - Dev-install metadata writes must not change the world-enable artifact contract owned by ADR-0035.
 
 - ADR: `docs/project_management/adrs/queued/ADR-0003-policy-and-config-mental-model-simplification.md`
@@ -211,12 +211,12 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
     - This pack’s dev-install metadata changes must remain orthogonal to helper staging/discovery changes.
     - Shared-file edits need sequencing because both packs touch the same script for different reasons.
 
-- Planning Pack: `docs/project_management/packs/draft/dev-install-world-agent-staging/`
+- Planning Pack: `docs/project_management/packs/draft/dev-install-world-service-staging/`
   - Overlap surfaces:
     - `scripts/substrate/dev-install-substrate.sh`
   - Conflict: yes
   - Resolution (explicit):
-    - Keep install-state write semantics separate from world-agent build/stage semantics.
+    - Keep install-state write semantics separate from world-service build/stage semantics.
     - Shared-file edits need sequencing because both packs touch the same dev-install script.
 
 ### Relevant Archived Packs

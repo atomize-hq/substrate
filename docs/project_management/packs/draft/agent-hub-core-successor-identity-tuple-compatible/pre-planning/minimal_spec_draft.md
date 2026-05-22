@@ -88,7 +88,7 @@ All slice specs and downstream planning artifacts align on these cross-cutting c
 - The pure-agent record and the nested gateway-backed LLM record stay separate artifacts.
 - `router=agent_hub` identifies pure agent orchestration records.
 - `router=substrate_gateway` identifies nested LLM records triggered by an agent.
-- `protocol=uaa.agent.session` remains the pure-agent session protocol token unless the protocol spec records a narrower additive extension.
+- `protocol=substrate.agent.session` remains the pure-agent session protocol token unless the protocol spec records a narrower additive extension.
 - Host-scoped orchestrator selection and world-scoped member dispatch remain distinct roles.
 - `world_id` and `world_generation` remain operator-visible on world-scoped member records.
 - No slice creates a new config root, policy root, inventory family, or gateway ownership surface.
@@ -132,9 +132,9 @@ Workstream triage may propose edits to this slice skeleton as recommendations in
 - `likely touch surfaces`:
   - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/agent-hub-session-protocol-spec.md`
   - `docs/project_management/packs/draft/agent-hub-core-successor-identity-tuple-compatible/slices/AHCSITC1/AHCSITC1-spec.md`
-  - `crates/agent-api-types/src/lib.rs`
-  - `crates/agent-api-client/src/lib.rs`
-  - `crates/agent-api-core/src/lib.rs`
+  - `crates/transport-api-types/src/lib.rs`
+  - `crates/transport-api-client/src/lib.rs`
+  - `crates/transport-api-core/src/lib.rs`
   - `crates/shell/src/execution/agent_inventory.rs`
 
 #### `AHCSITC2`

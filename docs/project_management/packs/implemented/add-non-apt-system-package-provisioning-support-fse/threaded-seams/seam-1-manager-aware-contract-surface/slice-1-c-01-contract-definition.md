@@ -92,7 +92,7 @@ Make `C-01` explicit enough that every downstream seam can plan and implement wi
 - Feature-specific mapping:
   - `0`: success; or “no system-package requirements” no-op by contract
   - `2`: invalid inventory/config/schema (including invalid `install.method`, invalid `install.pacman` shape, or enabling an unknown item)
-  - `3`: world backend unavailable when required (cannot reach world-agent to probe or provision)
+  - `3`: world backend unavailable when required (cannot reach world-service to probe or provision)
   - `4`: unsupported operation / missing prerequisites (includes: provisioning unsupported on this backend; detected world manager unsupported; mixed-manager requirement set; detected manager mismatches required methods; runtime system-package requirements missing)
   - `5`: safety/policy violation (reserved; this seam does not introduce new safety surfaces)
 

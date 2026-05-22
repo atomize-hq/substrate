@@ -93,7 +93,7 @@ Canonical slice ids selected for this feature:
 - `docs/TRACE.md`
 - `docs/USAGE.md`
 - `.github/workflows/feature-smoke.yml`
-- `crates/agent-api-types/src/lib.rs`
+- `crates/transport-api-types/src/lib.rs`
 - `crates/broker/src/effective_policy.rs`
 - `crates/broker/src/lib.rs`
 - `crates/broker/src/policy.rs`
@@ -106,9 +106,9 @@ Canonical slice ids selected for this feature:
 - `crates/common/tests/agent_hub_event_envelope_schema.rs`
 - `crates/shell/tests/replay_world.rs`
 - `crates/shell/tests/world_gateway.rs`
-- `crates/world-agent/src/gateway_runtime.rs`
-- `crates/world-agent/src/service.rs`
-- `crates/world-agent/tests/gateway_runtime_parity.rs`
+- `crates/world-service/src/gateway_runtime.rs`
+- `crates/world-service/src/service.rs`
+- `crates/world-service/tests/gateway_runtime_parity.rs`
 - `crates/trace/src/span.rs`
 - `crates/trace/src/tests.rs`
 

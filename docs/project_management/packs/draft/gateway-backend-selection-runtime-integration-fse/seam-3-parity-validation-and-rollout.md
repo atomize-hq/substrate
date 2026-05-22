@@ -61,10 +61,10 @@ open_remediations: []
     - `C-03`
     - `C-04`
     - `docs/contracts/substrate-gateway-runtime-parity.md`
-    - current parity tests in `crates/world-agent/tests/gateway_runtime_parity.rs`
+    - current parity tests in `crates/world-service/tests/gateway_runtime_parity.rs`
     - current shell command-path tests in `crates/shell/tests/world_gateway.rs`
   - Outputs:
-    - automated parity coverage and regression evidence in `crates/world-agent/tests/gateway_runtime_parity.rs` and `crates/shell/tests/world_gateway.rs`
+    - automated parity coverage and regression evidence in `crates/world-service/tests/gateway_runtime_parity.rs` and `crates/shell/tests/world_gateway.rs`
     - updated smoke/manual validation expectations in the ADR-0046 implementation pack surfaces
     - rollout evidence and proof artifacts carried by `THR-03`
     - one named additional-backend proof target
@@ -94,7 +94,7 @@ open_remediations: []
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/smoke/linux-smoke.sh`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/smoke/macos-smoke.sh`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration-fse/smoke/windows-smoke.ps1`
-  - `crates/world-agent/tests/gateway_runtime_parity.rs`
+  - `crates/world-service/tests/gateway_runtime_parity.rs`
   - `crates/shell/tests/world_gateway.rs`
 - **Verification**:
   - This seam consumes upstream contracts `C-01`, `C-02`, `C-03`, and `C-04` plus the existing lifecycle/status parity contract in `docs/contracts/substrate-gateway-runtime-parity.md`.

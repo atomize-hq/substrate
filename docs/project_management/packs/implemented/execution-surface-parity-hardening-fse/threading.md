@@ -37,7 +37,7 @@
   - **Direct consumers**: `SEAM-3`
   - **Derived consumers**: future replay-related packs, operator docs, and any code path that constructs replay `world_network` or policy snapshots
   - **Thread IDs**: `THR-01`
-  - **Definition**: Replay request construction uses the same four-case routing matrix as the normal shell and world-agent path:
+  - **Definition**: Replay request construction uses the same four-case routing matrix as the normal shell and world-service path:
     - gate off plus restrictive `net_allowed` means no requested isolation
     - gate on plus allow-all `["*"]` means no requested isolation
     - gate on plus deny-all `[]` means requested isolation with an empty allowlist

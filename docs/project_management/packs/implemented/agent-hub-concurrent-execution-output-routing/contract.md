@@ -26,7 +26,7 @@ This document is the operator-facing contract summary for:
 
 1. **PTY byte stream**
 
-- Source: world-agent streaming (`/v1/stream`) or host PTY passthrough.
+- Source: world-service streaming (`/v1/stream`) or host PTY passthrough.
 - Handling: forwarded as raw bytes to the terminal (no UTF-8 assumptions).
 
 2. **Structured agent events**

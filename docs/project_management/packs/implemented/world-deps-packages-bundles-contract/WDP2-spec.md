@@ -16,7 +16,7 @@ Constraints enforced in this slice:
 - `current list applied --all` is valid only for `applied` and includes every visible inventory item.
 - `show --explain` prints enabled provenance and a single-line remediation command when world status is not `present`.
 - World-agent enforcement inputs remain concurrency-safe and policy-home agnostic:
-  - host-resolved policy snapshot input to world-agent: `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md`
+  - host-resolved policy snapshot input to world-service: `docs/project_management/adrs/implemented/ADR-0014-world-service-policy-resolution-and-concurrency.md`
   - policy schema invariants (full isolation): `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md`
 
 ## Acceptance criteria

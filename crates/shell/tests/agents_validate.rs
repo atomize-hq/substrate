@@ -83,11 +83,11 @@ fn valid_cli_agent_file(agent_id: &str, policy_overlay: Option<&str>) -> String 
     let overlay = policy_overlay.unwrap_or("");
     if overlay.is_empty() {
         format!(
-            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: codex\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n"
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: codex\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n"
         )
     } else {
         format!(
-            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: uaa.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: codex\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\npolicy_overlay:\n{overlay}"
+            "version: 1\nid: {agent_id}\nconfig:\n  kind: cli\n  enabled: true\n  protocol: substrate.agent.session\n  execution:\n    scope: world\n  cli:\n    binary: codex\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\npolicy_overlay:\n{overlay}"
         )
     }
 }
@@ -187,7 +187,7 @@ id: bad_protocol
 config:
   kind: cli
   enabled: true
-  protocol: " uaa.agent.session "
+  protocol: " substrate.agent.session "
   execution:
     scope: world
   cli:

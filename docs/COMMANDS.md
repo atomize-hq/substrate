@@ -13,7 +13,7 @@ This document mirrors the mental model of the CLI parser in `crates/shell/src/ex
 | Version metadata | `--version-json` | `--world`, `--no-world`, `--shim-skip` | `-c`, `-f`, shim mgmt, trace/replay | Information-only request (`cli.rs:62`). |
 | Trace inspect | `--trace <SPAN>` | `--world`, `--no-world`, anchor/caging flags | `-c`, `-f`, shim mgmt, `--replay` | Pull span metadata (`cli.rs:94`). |
 | Replay | `--replay <SPAN>` | `--replay-verbose`, world + anchor toggles | `-c`, `-f`, `--trace`, shim mgmt | Agent-first replay on Linux with a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run \`substrate world doctor --json\` (or \`substrate host doctor --json\` for transport-only checks) or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket` warning before switching to the local backend/copy-diff. Replay-local opt-outs keep their fixed host fragments (`--no-world flag`, `SUBSTRATE_REPLAY_USE_WORLD=disabled`), and config-based host fallbacks use the tokenized reason fragments from `docs/REPLAY.md`. |
-| Replay verbose | `--replay <SPAN> --replay-verbose` | Same as replay | Requires `--replay` | Adds command/cwd/mode diagnostics, the active world toggle summary, exact origin/warning text, strategy/scopes lines, and replay warnings (agent fallback, copy-diff retries). Shell transport probes still use the `shell world-agent path ...` prefix so you can distinguish them from `[replay] warn:` entries. |
+| Replay verbose | `--replay <SPAN> --replay-verbose` | Same as replay | Requires `--replay` | Adds command/cwd/mode diagnostics, the active world toggle summary, exact origin/warning text, strategy/scopes lines, and replay warnings (agent fallback, copy-diff retries). Shell transport probes still use the `shell world-service path ...` prefix so you can distinguish them from `[replay] warn:` entries. |
 
 ## Root Command: Order-Independent Flags
 
@@ -78,7 +78,7 @@ Once you type `graph`, `host`, `world`, `config`, `policy`, `workspace`, `shim`,
 
 | Invocation | Positional Arguments | Subcommand Flags | Notes |
 | --- | --- | --- | --- |
-| `substrate world doctor` | — | `--json` | World-scoped readiness report (host + world-agent facts). |
+| `substrate world doctor` | — | `--json` | World-scoped readiness report (host + world-service facts). |
 | `substrate world enable` | — | `--prefix`, `--profile`, `--provision-deps`, `--dry-run`, `--verbose`, `--force`, `--timeout` | Provisioning control per `cli.rs:197`; `--provision-deps` is the operator-facing APT workflow. See `docs/reference/world/deps/README.md` and `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`. |
 | `substrate world deps current list [VIEW]` | `view` (`available`, `enabled`, `applied`) | `--all`, `--json` | `available/enabled` are host-only; `applied` queries the world backend. |
 | `substrate world deps current show <ITEM>` | `item` name | `--json`, `--explain` | `--explain` queries the world backend and prints remediation/manual instructions when blocked. |

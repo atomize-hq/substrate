@@ -2,13 +2,13 @@
 name = "world-windows-wsl"
 version = "0.1.0"
 edition = "2021"
-description = "Windows world backend delegating to WSL world-agent"
+description = "Windows world backend delegating to WSL world-service"
 license = "MIT"
 
 [dependencies]
 anyhow = { workspace = true }
-agent-api-client = { path = "../agent-api-client" }
-agent-api-types = { path = "../agent-api-types" }
+transport-api-client = { path = "../transport-api-client" }
+transport-api-types = { path = "../transport-api-types" }
 base64 = "0.22"
 serde_json = { workspace = true }
 substrate-common = { path = "../common" }

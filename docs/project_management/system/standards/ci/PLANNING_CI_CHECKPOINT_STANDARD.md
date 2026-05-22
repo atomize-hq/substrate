@@ -53,7 +53,7 @@ Use `impact_map.md`, `spec_manifest.md`, and the slice specs to choose boundarie
 
 Prefer boundaries at:
 - **Contract completion seams**: after an end-to-end contract surface is fully defined + implemented + tested (CLI/config/env vars/schema/protocol).
-- **Subsystem seams**: before crossing into a new major subsystem (shim ↔ broker ↔ world-agent ↔ world backend).
+- **Subsystem seams**: before crossing into a new major subsystem (shim ↔ broker ↔ world-service ↔ world backend).
 - **Enabling refactor seams**: after “refactor enabling change” lands, before “new behavior” starts.
 - **UX seams**: after a user-visible workflow becomes coherent enough to be validated.
 

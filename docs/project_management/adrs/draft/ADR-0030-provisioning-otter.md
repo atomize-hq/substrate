@@ -98,7 +98,7 @@ Add a `substrate world deps provision` command that provisions APT/system packag
 - Exit codes:
   - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (authoritative unless explicitly overridden here)
   - `0`: success
-  - `3`: world backend unavailable / cannot connect to world-agent
+  - `3`: world backend unavailable / cannot connect to world-service
   - `4`: unmet prerequisites or unsupported operation (includes: APT provisioning not supported on this backend; runtime sync/install encountered APT items and requires provisioning)
   - `5`: hardening conflict / fail-closed safety violation (reserved; runtime flow should avoid triggering this for APT by failing early)
 
@@ -122,7 +122,7 @@ Add a `substrate world deps provision` command that provisions APT/system packag
 - Components:
   - `crates/shell/src/builtins/world_enable/…`: extend `world enable` to derive APT requirements from the effective enabled world-deps set and run a provisioning-time install step (guest worlds only).
   - `crates/shell/src/builtins/world_deps/surfaces.rs`: change runtime `current sync|install` path to preflight-detect APT items and fail early with remediation instead of building/running APT commands.
-  - `crates/world-agent/src/service.rs`: ensure provisioning execution is possible without weakening hardened runtime execution (e.g., distinct request profile or explicit guard rails).
+  - `crates/world-service/src/service.rs`: ensure provisioning execution is possible without weakening hardened runtime execution (e.g., distinct request profile or explicit guard rails).
   - Docs: add operator-facing explanation that APT-backed world-deps are provisioning-time under hardening (`docs/reference/world/deps/…`).
 - End-to-end flow:
   - Inputs:

@@ -9,7 +9,7 @@ basis:
   currentness: current
   basis_ref: seam.md#basis
   stale_triggers:
-  - shared-file changes in world_enable or world-agent invalidate the provisioning execution basis
+  - shared-file changes in world_enable or world-service invalidate the provisioning execution basis
   - request-profile routing changes widen operator control or host-environment influence
   - dry-run or verbose rendering drifts from the normalized requirement contract
 gates:
@@ -42,7 +42,7 @@ candidate_subslices: []
     - reject mixed-manager enabled sets before mutation
     - preserve the internal `world-deps-provision` request-profile boundary
     - execute the exact pacman command shape in normalized order
-    - keep dry-run, verbose, and no-op rendering stable across runner, dispatch, world-agent, and helper layers
+    - keep dry-run, verbose, and no-op rendering stable across runner, dispatch, world-service, and helper layers
   - Out:
     - redefining the probe/support-gate contract
     - redefining pacman inventory schema or view rendering
@@ -75,7 +75,7 @@ candidate_subslices: []
   - Inputs: effective enabled world-deps set, `C-02`, `C-03`
   - Outputs: concrete `C-04` behavior for routing and request-profile handling
 - **Implementation notes**:
-  - Keep the shared touch surface centered on `provision_deps.rs`, `dispatch/world_ops.rs`, `world-agent/src/service.rs`, and `scripts/substrate/world-enable.sh`.
+  - Keep the shared touch surface centered on `provision_deps.rs`, `dispatch/world_ops.rs`, `world-service/src/service.rs`, and `scripts/substrate/world-enable.sh`.
 - **Acceptance criteria**:
   - No partial provisioning and no host-environment routing override.
 

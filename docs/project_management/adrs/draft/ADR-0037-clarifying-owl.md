@@ -60,7 +60,7 @@ ADR_BODY_SHA256: 371c0fb08267e913c4537d53c2ad18f5dddfee23535d26760886fc06faa5552
 ## Non-Goals
 
 - Changing when/why world isolation is enabled or disabled (no precedence changes; no new knobs).
-- Reworking world-agent readiness checks, provisioning, or failure modes.
+- Reworking world-service readiness checks, provisioning, or failure modes.
 - Applying the same attribution to replay warnings or other world-adjacent UX beyond doctor/health (explicit follow-up: `replaying_raccoon` intake).
 - Changing exit code behavior for doctor/health commands (additive fields + messaging only).
 
@@ -248,7 +248,7 @@ ASSUMPTION: `path_display` intentionally uses a stable tokenized display path ra
 
 ### Smoke scripts
 
-- None required for this ADR (no platform provisioning or world-agent changes).
+- None required for this ADR (no platform provisioning or world-service changes).
 
 ## Rollout / Backwards Compatibility
 

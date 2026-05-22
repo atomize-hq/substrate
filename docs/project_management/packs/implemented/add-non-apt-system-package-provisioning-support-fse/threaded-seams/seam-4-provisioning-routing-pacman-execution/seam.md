@@ -19,7 +19,7 @@ basis:
   stale_triggers:
   - C-02 changes probe/support-gate outcomes
   - C-03 changes pacman schema semantics or derived requirement assumptions
-  - shared-file changes in world_enable or world-agent invalidate the provisioning execution basis
+  - shared-file changes in world_enable or world-service invalidate the provisioning execution basis
 gates:
   pre_exec:
     review: passed
@@ -58,7 +58,7 @@ open_remediations: []
   - `crates/shell/src/builtins/world_enable/runner/provision_deps.rs`
   - `crates/shell/src/builtins/world_enable/runner/log_ops.rs`
   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-  - `crates/world-agent/src/service.rs`
+  - `crates/world-service/src/service.rs`
   - `scripts/substrate/world-enable.sh`
   - `crates/shell/tests/world_enable_provision_deps_wdap0.rs`
 - **Verification**:
@@ -77,7 +77,7 @@ open_remediations: []
   - Stale triggers:
     - `C-02` changes probe/support-gate outcomes
     - `C-03` changes pacman schema semantics or derived requirement assumptions
-    - shared-file changes in `world_enable` or `world-agent` invalidate the provisioning execution basis
+    - shared-file changes in `world_enable` or `world-service` invalidate the provisioning execution basis
 - **Threading constraints**
   - Upstream blockers:
     - none; `SEAM-1`, `SEAM-2`, and `SEAM-3` have all published the inbound threads this seam consumes

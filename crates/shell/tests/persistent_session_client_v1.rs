@@ -1,6 +1,6 @@
-use agent_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
 use serde_json::json;
 use substrate_shell::execution::repl_persistent_session::PersistentSessionClientCore;
+use transport_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
 
 fn ready_frame(protocol_version: u32) -> serde_json::Value {
     json!({

@@ -54,7 +54,7 @@ Execution landed and the producer contract is now published.
     - `docs/project_management/packs/active/world_process_exec_tracing_parity/manual_testing_playbook.md`
     - `docs/project_management/packs/active/world_process_exec_tracing_parity/smoke/_core.sh`
   - validation commands:
-    - `cargo test -p agent-api-types policy_snapshot_v3_resolve_world_network_routing_matches_four_case_matrix -- --nocapture`
+    - `cargo test -p transport-api-types policy_snapshot_v3_resolve_world_network_routing_matches_four_case_matrix -- --nocapture`
     - `cargo test -p shell world_network_policy_ -- --nocapture`
     - `cargo test -p substrate-replay build_agent_execute_request_populates_world_network_from_shared_helper -- --nocapture`
     - `cargo test -p substrate-replay world_net_filter_from_process_env_reads_exported_runtime_state -- --nocapture`

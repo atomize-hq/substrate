@@ -64,7 +64,7 @@ Standard:
 ### CP1 (`WDAP0`) — provisioning surface + isolation/guard-rail seam
 
 - Code-grounded boundary (high-risk mutation + subsystem seam):
-  - `WDAP0` introduces a new operator-facing provisioning surface and ties together multiple subsystems (`shell` CLI + world-op routing + `world-agent` execution posture + platform provisioning scripts).
+  - `WDAP0` introduces a new operator-facing provisioning surface and ties together multiple subsystems (`shell` CLI + world-op routing + `world-service` execution posture + platform provisioning scripts).
   - This is a safety-sensitive seam (“no host OS mutation” on Linux host-native) with platform/backends branching that is high risk for cross-platform drift.
 - Surfaces stabilized at this checkpoint (from `spec_manifest.md` + `minimal_spec_draft.md` + `impact_map.md` touch set):
   - Provisioning entrypoint: `substrate world enable --provision-deps [--dry-run] [--verbose]` (guest backends only)
@@ -72,7 +72,7 @@ Standard:
   - Primary code surfaces:
     - `crates/shell/src/builtins/world_enable/runner.rs`
     - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-    - `crates/world-agent/src/service.rs`
+    - `crates/world-service/src/service.rs`
   - Platform provisioning integration points (planned):
     - `scripts/linux/world-provision.sh`
     - `scripts/mac/lima-warm.sh`
@@ -101,7 +101,7 @@ Standard:
 - Risk reduced by running cross-platform CI here (from `impact_map.md`):
   - Ensures the runtime fail-early behavior is consistent across platforms/backends and doesn’t regress provisioning safety guard rails.
   - Ensures cross-document contract updates remain coherent and don’t reintroduce runtime APT semantics.
-  - Full CI testing provides broader regression coverage because this feature touches shared scripts + world-agent behavior + shell builtins.
+  - Full CI testing provides broader regression coverage because this feature touches shared scripts + world-service behavior + shell builtins.
 - CP2 execution note:
   - Treat GitHub-hosted Ubuntu as the authoritative Linux smoke environment for `WDAP1`.
   - Rationale: this slice validates the APT-backed fail-early/operator contract, and a distro-specific self-hosted Linux runner can introduce drift unrelated to the slice contract.

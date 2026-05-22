@@ -139,6 +139,6 @@ fn cmd_denied_enforcement_is_host_only_even_when_world_enabled() {
     assert_eq!(
         socket.execute_request_count(),
         0,
-        "expected cmd_denied enforcement to occur before any world-agent execution request"
+        "expected cmd_denied enforcement to occur before any world-service execution request"
     );
 }

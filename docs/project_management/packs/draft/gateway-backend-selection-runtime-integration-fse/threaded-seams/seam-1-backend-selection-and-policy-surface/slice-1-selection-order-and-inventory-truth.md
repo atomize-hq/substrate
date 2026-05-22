@@ -30,7 +30,7 @@ open_remediations:
 ### S1 - Land selection order and inventory truth at the shell boundary
 
 - **User/system value**:
-  - Makes the shell adopt published `C-01` rules before the world-agent sees the request, instead of letting invalid or ambiguous backend selection leak downstream.
+  - Makes the shell adopt published `C-01` rules before the world-service sees the request, instead of letting invalid or ambiguous backend selection leak downstream.
 - **Scope (in/out)**:
   - In: shell selection validation, inventory-backed backend resolution posture, deny-by-default allowlisting, and invalid-integration classification
   - Out: auth precedence, runtime config rendering, adapter lookup, and process launch

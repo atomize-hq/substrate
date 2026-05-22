@@ -32,7 +32,7 @@ Scope:
   - Requires Linux-specific implementation and careful hardening to avoid performance cliffs.
   - Some environments may restrict ptrace (requires degrade behavior + explicit diagnostics).
 - **Cascading implications:**
-  - Requires Linux-only capture implementation in the world backend and a stable transport contract from world-agent to host.
+  - Requires Linux-only capture implementation in the world backend and a stable transport contract from world-service to host.
   - Requires explicit caps/truncation and diagnostics to prevent large dependency graphs from exploding response sizes.
 - **Risks:**
   - Overhead for process-heavy workloads if not carefully capped.
@@ -70,7 +70,7 @@ Scope:
 **Follow-up tasks (explicit)**
 
 - WPEP2: extend world backend execution path to capture exec/exit events (ptrace) with caps + truncation summaries and explicit `argv_omitted: true`.
-- WPEP1/WPEP2: extend world-agent response types to return `process_events` plus deterministic diagnostics.
+- WPEP1/WPEP2: extend world-service response types to return `process_events` plus deterministic diagnostics.
 - WPEP2: add a Linux-backed smoke command that deterministically spawns children and asserts parent/child relationships are present.
 
 ---
@@ -152,7 +152,7 @@ Scope:
 - **Cons:**
   - Observability is not guaranteed; some runs will lack process events.
 - **Cascading implications:**
-  - Requires deterministic diagnostics in the world-agent response and stable logging to trace.jsonl.
+  - Requires deterministic diagnostics in the world-service response and stable logging to trace.jsonl.
   - Requires tests that distinguish “no subprocesses spawned” vs “tracing unavailable”.
 - **Risks:**
   - Operators may misinterpret missing events if diagnostics are not surfaced clearly.
@@ -284,7 +284,7 @@ Scope:
   - Requires a cross-repo refactor and migration of existing traces/consumers.
   - Easy to accidentally break joinability during the transition.
 - **Cascading implications:**
-  - Touches shell, shim, world-agent, replay tooling, docs, and any downstream analytics.
+  - Touches shell, shim, world-service, replay tooling, docs, and any downstream analytics.
 - **Risks:**
   - High coordination cost for limited immediate value.
 - **Unlocks:**
@@ -508,7 +508,7 @@ Scope:
   - Requires stronger redaction than currently exists (especially for token/header/URL patterns and “flag consumes next arg” semantics inside shell commands).
   - Higher risk surface: any redaction miss becomes a secret leak in the canonical trace.
 - **Cascading implications:**
-  - Requires a shared, well-tested redaction engine usable across shim/shell/world-agent/preexec (not ad-hoc).
+  - Requires a shared, well-tested redaction engine usable across shim/shell/world-service/preexec (not ad-hoc).
   - Requires a clear “raw capture is on” trace meta signal (future) and/or per-record marker.
 - **Risks:**
   - Elevated risk of leaking secrets into canonical trace files even with best-effort redaction.

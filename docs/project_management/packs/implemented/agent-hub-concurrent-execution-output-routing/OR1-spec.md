@@ -20,7 +20,7 @@ Implement and validate:
 
 ## Out of scope (explicit)
 
-- Changing the world-agent PTY transport framing.
+- Changing the world-service PTY transport framing.
 - Adding new CLI flags for this feature.
 - Adding new policy surfaces (no broker changes).
 

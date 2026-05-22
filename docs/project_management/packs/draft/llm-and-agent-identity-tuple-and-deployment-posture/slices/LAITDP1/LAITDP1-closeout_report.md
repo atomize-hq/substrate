@@ -28,7 +28,7 @@ Slice spec:
 
 - `cargo fmt`: passed in `LAITDP1-integ-core`, `LAITDP1-integ-linux`, `LAITDP1-integ-macos`, and `LAITDP1-integ`.
 - `cargo clippy --workspace --all-targets -- -D warnings`: passed in `LAITDP1-integ-core`, `LAITDP1-integ-linux`, `LAITDP1-integ-macos`, and `LAITDP1-integ`.
-- Relevant tests: `cargo test -p shell --test world_gateway -- --nocapture`, `cargo test -p world-agent --test gateway_runtime_parity -- --nocapture`, `cargo test -p substrate-broker`, `cargo test -p agent-api-types`, `cargo test -p substrate-common --test agent_hub_event_envelope_schema`, and `cargo test -p shell --test replay_world replay_retries_copydiff_roots_and_dedupes_warnings -- --nocapture` passed in the relevant task branches.
+- Relevant tests: `cargo test -p shell --test world_gateway -- --nocapture`, `cargo test -p world-service --test gateway_runtime_parity -- --nocapture`, `cargo test -p substrate-broker`, `cargo test -p transport-api-types`, `cargo test -p substrate-common --test agent_hub_event_envelope_schema`, and `cargo test -p shell --test replay_world replay_retries_copydiff_roots_and_dedupes_warnings -- --nocapture` passed in the relevant task branches.
 - `make integ-checks`: passed in `LAITDP1-integ-core` and final `LAITDP1-integ` merged worktree.
 
 ## Cross-Platform Smoke (if applicable)

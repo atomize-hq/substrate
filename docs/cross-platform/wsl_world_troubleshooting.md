@@ -160,27 +160,27 @@ Get-Content "$env:LOCALAPPDATA\Substrate\logs\forwarder.log" -Tail 20
 ### T-006 Agent service not running
 
 - **Symptom**: Doctor shows FAIL for `Agent Socket` or `Agent Capabilities`.
-- **Likely cause**: `substrate-world-agent` service crashed or the binary is
+- **Likely cause**: `substrate-world-service` service crashed or the binary is
   outdated.
 - **Remediation**:
 
   1. Inspect logs inside WSL:
 
   ```powershell
-  wsl -d substrate-wsl -- bash -lc 'journalctl -u substrate-world-agent -n 200'
+  wsl -d substrate-wsl -- bash -lc 'journalctl -u substrate-world-service -n 200'
   ```
 
-  1. Rebuild `world-agent` on Windows and rerun warm if the binary changed.
+  1. Rebuild `world-service` on Windows and rerun warm if the binary changed.
   1. Restart the service inside WSL:
 
   ```powershell
-  wsl -d substrate-wsl -- bash -lc 'sudo systemctl restart substrate-world-agent'
+  wsl -d substrate-wsl -- bash -lc 'sudo systemctl restart substrate-world-service'
   ```
 
 - **Verify**:
 
 ```powershell
-wsl -d substrate-wsl -- bash -lc 'systemctl is-active substrate-world-agent'
+wsl -d substrate-wsl -- bash -lc 'systemctl is-active substrate-world-service'
 ```
 
 ### T-007 Doctor nftables failure
@@ -217,7 +217,7 @@ wsl -d substrate-wsl -- bash -lc 'nft list tables'
   1. Capture PTY logs inside WSL:
 
   ```powershell
-  wsl -d substrate-wsl -- bash -lc 'journalctl -u substrate-world-agent -n 200' |
+  wsl -d substrate-wsl -- bash -lc 'journalctl -u substrate-world-service -n 200' |
     Select-String -Pattern pty
   ```
 

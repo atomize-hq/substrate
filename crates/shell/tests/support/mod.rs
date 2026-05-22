@@ -14,8 +14,8 @@ pub use common::{binary_path, ensure_substrate_built, substrate_shell_driver, te
 pub use substrate_common::dedupe_path;
 mod socket;
 pub use socket::{AgentSocket, PendingDiffAckError, PendingDiffAckState, SocketResponse};
-mod repl_world_agent;
-pub use repl_world_agent::{
+mod repl_world_service;
+pub use repl_world_service::{
     MemberDispatchStreamScript, PersistentExecRecord, PersistentExecStdoutOverride,
     PersistentStartSessionRecord, ReplWorldAgentRecords, ReplWorldAgentStub, StreamBehavior,
 };

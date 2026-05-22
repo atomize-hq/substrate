@@ -49,7 +49,7 @@ Given the in-scope set:
      - If two or more distinct non-empty `version` values exist for `name`, the command MUST:
        - exit `2`,
        - print a deterministic conflict report to stderr, and
-       - perform no world-agent execution and no non-APT installs.
+       - perform no world-service execution and no non-APT installs.
 
 APT requirement rendering (when printed):
 - Render each normalized entry as `name` (unpinned) or `name=version` (pinned).
@@ -62,7 +62,7 @@ When the normalized APT requirement set is non-empty, Substrate MUST perform a r
   - Unpinned requirement `name` is satisfied iff `dpkg-query` reports `install ok installed` for `name`.
   - Pinned requirement `name=version` is satisfied iff `dpkg-query` reports `install ok installed` AND the installed version equals `version` (exact match).
 - If `dpkg-query` cannot be executed inside the world, the requirement is unsatisfied (fail closed).
-- If world-agent connectivity is required to run the probe and cannot be established, the command MUST exit `3` with actionable stderr.
+- If world-service connectivity is required to run the probe and cannot be established, the command MUST exit `3` with actionable stderr.
 
 ### Fail-early rule (runtime)
 For `deps current sync|install`:
@@ -120,7 +120,7 @@ instead of restating contract tables.
 - AC-WDAP1-04: With `--dry-run`, `deps current sync|install` performs no mutation, still exits `4` when APT requirements are unsatisfied, and prints the normalized APT requirement rendering to stdout (stable order; `name` or `name=version`).
 - AC-WDAP1-05: With `--verbose` and exit `4` due to unsatisfied APT requirements, stderr includes the normalized APT requirement rendering (stable order; `name` or `name=version`).
 - AC-WDAP1-06: Fail-early remediation includes backend-specific guidance: Linux host-native includes the exact phrase `Substrate will not mutate the host OS`, and Windows includes the exact phrase `unsupported on Windows`.
-- AC-WDAP1-07: Error-path determinism remains fail-closed: if normalized requirement derivation encounters a version-pin conflict, `deps current sync|install` exits `2` and performs no world-agent execution or non-APT installs; if world-agent connectivity is required for the read-only presence probe and cannot be established, `deps current sync|install` exits `3` with actionable stderr.
+- AC-WDAP1-07: Error-path determinism remains fail-closed: if normalized requirement derivation encounters a version-pin conflict, `deps current sync|install` exits `2` and performs no world-service execution or non-APT installs; if world-service connectivity is required for the read-only presence probe and cannot be established, `deps current sync|install` exits `3` with actionable stderr.
 - AC-WDAP1-08: The required operator-doc and upstream contract targets listed in this spec are updated so they state runtime APT is prohibited, identify `substrate world enable --provision-deps` as the operator remediation, and link to `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md` instead of duplicating contract tables.
 
 ## Out of scope

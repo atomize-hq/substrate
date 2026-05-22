@@ -14,7 +14,7 @@ use log_ops::{append_log_line, initialize_log_file, print_dry_run_plan};
 use manager_env::update_manager_env_exports;
 use paths::{
     locate_helper_script, next_log_path, resolve_version_dir, resolve_world_socket_path,
-    select_accepted_staged_world_agent,
+    select_accepted_staged_world_service,
 };
 use provision_deps::{
     ensure_supported_backend_or_exit, exit_probe_result_not_supported, print_pacman_requirements,
@@ -58,27 +58,27 @@ fn enforce_standard_version_dir_preflight(
         return;
     };
 
-    if select_accepted_staged_world_agent(version_dir).is_none() {
+    if select_accepted_staged_world_service(version_dir).is_none() {
         eprintln!(
             "{}",
-            render_missing_accepted_staged_world_agent_remediation(version_dir)
+            render_missing_accepted_staged_world_service_remediation(version_dir)
         );
         std::process::exit(3);
     }
 }
 
-fn render_missing_accepted_staged_world_agent_remediation(version_dir: &Path) -> String {
-    let root_candidate = version_dir.join("bin").join("world-agent");
-    let linux_candidate = version_dir.join("bin").join("linux").join("world-agent");
+fn render_missing_accepted_staged_world_service_remediation(version_dir: &Path) -> String {
+    let root_candidate = version_dir.join("bin").join("world-service");
+    let linux_candidate = version_dir.join("bin").join("linux").join("world-service");
 
     format!(
-        "substrate: accepted staged world-agent artifact missing under {}\n\
+        "substrate: accepted staged world-service artifact missing under {}\n\
          substrate: expected one of:\n\
            - {}\n\
            - {}\n\
          substrate: remediation:\n\
            - scripts/substrate/dev-install-substrate.sh --no-world\n\
-           - cargo build -p world-agent",
+           - cargo build -p world-service",
         version_dir.display(),
         root_candidate.display(),
         linux_candidate.display(),
@@ -174,7 +174,7 @@ pub fn run_enable(args: &WorldEnableArgs) -> Result<()> {
                         .socket_unit
                         .as_ref()
                         .map(|u| u.name)
-                        .unwrap_or("substrate-world-agent.socket"),
+                        .unwrap_or("substrate-world-service.socket"),
                     activation_report
                         .socket_unit
                         .as_ref()
@@ -349,7 +349,7 @@ fn run_enable_with_provision_deps(args: &WorldEnableArgs) -> Result<()> {
                         .socket_unit
                         .as_ref()
                         .map(|u| u.name)
-                        .unwrap_or("substrate-world-agent.socket"),
+                        .unwrap_or("substrate-world-service.socket"),
                     activation_report
                         .socket_unit
                         .as_ref()
@@ -459,16 +459,16 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn render_missing_accepted_staged_world_agent_remediation_includes_paths_and_commands() {
+    fn render_missing_accepted_staged_world_service_remediation_includes_paths_and_commands() {
         let temp = tempdir().unwrap();
         let version_dir = temp.path().join("version");
 
-        let message = render_missing_accepted_staged_world_agent_remediation(&version_dir);
+        let message = render_missing_accepted_staged_world_service_remediation(&version_dir);
 
         assert!(message.contains(
             &version_dir
                 .join("bin")
-                .join("world-agent")
+                .join("world-service")
                 .display()
                 .to_string()
         ));
@@ -476,11 +476,11 @@ mod tests {
             &version_dir
                 .join("bin")
                 .join("linux")
-                .join("world-agent")
+                .join("world-service")
                 .display()
                 .to_string()
         ));
         assert!(message.contains("scripts/substrate/dev-install-substrate.sh --no-world"));
-        assert!(message.contains("cargo build -p world-agent"));
+        assert!(message.contains("cargo build -p world-service"));
     }
 }

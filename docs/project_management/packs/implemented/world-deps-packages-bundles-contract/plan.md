@@ -8,7 +8,7 @@
   - `docs/project_management/packs/active/world-deps-packages-bundles-contract/contract.md`
 - Upstream dependency ADRs (constraints; incorporated into slice acceptance criteria):
   - `docs/project_management/adrs/implemented/ADR-0013-policy-patch-only-broker-canonical-effective-resolution.md` (patch-only format + broker-canonical effective resolution)
-  - `docs/project_management/adrs/implemented/ADR-0014-world-agent-policy-resolution-and-concurrency.md` (host-resolved policy snapshot input to world-agent)
+  - `docs/project_management/adrs/implemented/ADR-0014-world-service-policy-resolution-and-concurrency.md` (host-resolved policy snapshot input to world-service)
   - `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md` (interactive REPL semantics + evaluator shell contract)
   - `docs/project_management/adrs/draft/ADR-0017-agent-hub-concurrent-execution-and-output-routing.md` (PTY bytes vs structured output routing in REPL)
   - `docs/project_management/adrs/implemented/ADR-0018-world-fs-granular-allow-deny-and-strict-deny.md` (full isolation world-fs deny semantics + policy schema invariants)

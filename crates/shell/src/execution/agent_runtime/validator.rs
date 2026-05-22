@@ -9,7 +9,10 @@ use crate::execution::agent_inventory::{
 };
 use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
 
-use super::mapping::{orchestrator_backend_kind, AgentRuntimeBackendKind, PURE_AGENT_PROTOCOL};
+use super::mapping::{
+    orchestrator_backend_kind, protocol_validation_error, AgentRuntimeBackendKind,
+    PURE_AGENT_PROTOCOL,
+};
 
 #[derive(Clone, Debug)]
 pub(crate) struct RuntimeSelectionDescriptor {
@@ -74,9 +77,9 @@ pub(crate) fn validate_orchestrator_selection<'a>(
     }
 
     if entry.file.config.protocol.as_deref() != Some(PURE_AGENT_PROTOCOL) {
-        return Err(format!(
-            "orchestrator agent '{}' does not advertise protocol '{}'",
-            orchestrator_agent_id, PURE_AGENT_PROTOCOL
+        return Err(protocol_validation_error(
+            &format!("orchestrator agent '{orchestrator_agent_id}'"),
+            entry.file.config.protocol.as_deref(),
         ));
     }
 
@@ -196,8 +199,9 @@ pub(crate) fn validate_member_selection(
             return Err(MemberSelectionError {
                 exit_code: 2,
                 reason: format!(
-                    "world-scoped member '{}' is not eligible because it does not advertise protocol '{}'",
-                    entry.file.id, PURE_AGENT_PROTOCOL
+                    "world-scoped member '{}' is not eligible because {}",
+                    entry.file.id,
+                    protocol_validation_error("it", entry.file.config.protocol.as_deref())
                 ),
             });
         }
@@ -292,11 +296,15 @@ fn validate_exact_backend_entry(
         return Err(ExactBackendSelectionError {
             exit_code: 2,
             reason: format!(
-                "selected {} runtime '{}' for backend '{}' does not advertise protocol '{}'",
+                "selected {} runtime '{}' for backend '{}' {}",
                 runtime_scope_label(scope),
                 entry.file.id,
                 backend_id,
-                PURE_AGENT_PROTOCOL,
+                protocol_validation_error(
+                    "does not advertise",
+                    entry.file.config.protocol.as_deref()
+                )
+                .replacen("does not advertise ", "", 1),
             ),
         });
     }
@@ -359,6 +367,7 @@ mod tests {
         AgentCapabilitiesV1, AgentCliConfigV1, AgentConfigKind, AgentConfigV1,
         AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
+    use crate::execution::agent_runtime::mapping::LEGACY_PURE_AGENT_PROTOCOL;
     use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
     use std::collections::BTreeMap;
     use std::path::PathBuf;
@@ -522,7 +531,32 @@ mod tests {
         assert!(
             error
                 .reason
-                .contains("does not advertise protocol 'uaa.agent.session'"),
+                .contains("does not advertise protocol 'substrate.agent.session'"),
+            "unexpected reason: {}",
+            error.reason
+        );
+    }
+
+    #[test]
+    fn validate_member_selection_rejects_legacy_protocol_with_rename_guidance() {
+        let config = SubstrateConfig::default();
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry(
+                "codex",
+                AgentExecutionScope::World,
+                Some(LEGACY_PURE_AGENT_PROTOCOL),
+                AgentCliMode::Persistent,
+                required_capabilities(),
+            ),
+        );
+
+        let error = validate_member_selection(&config, &inventory).expect_err("must fail closed");
+        assert_eq!(error.exit_code, 2);
+        assert!(
+            error.reason.contains(LEGACY_PURE_AGENT_PROTOCOL)
+                && error.reason.contains(PURE_AGENT_PROTOCOL),
             "unexpected reason: {}",
             error.reason
         );
@@ -614,7 +648,7 @@ mod tests {
         assert!(
             error
                 .reason
-                .contains("selected host-scoped runtime 'claude_code' for backend 'cli:claude_code' does not advertise protocol 'uaa.agent.session'"),
+                .contains("selected host-scoped runtime 'claude_code' for backend 'cli:claude_code' does not advertise protocol 'substrate.agent.session'"),
             "unexpected reason: {}",
             error.reason
         );

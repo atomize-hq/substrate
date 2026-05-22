@@ -110,7 +110,7 @@ span_id="$(
 test -n "$span_id"
 
 jq -s -e --arg sp "$span_id" '
-  any(select(.component=="world-agent" and .event_type=="world_process_start" and .parent_span==$sp))
+  any(select(.component=="world-service" and .event_type=="world_process_start" and .parent_span==$sp))
 ' "$trace" >/dev/null
 ```
 

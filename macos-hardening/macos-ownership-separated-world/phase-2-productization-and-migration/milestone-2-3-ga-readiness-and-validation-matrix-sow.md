@@ -105,7 +105,7 @@ Likely supporting surfaces:
 - `scripts/mac/lima-warm.sh`
 - `scripts/mac/lima/substrate.yaml`
 - `scripts/mac/lima/substrate-dev.yaml`
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
 
 ## Deliverables
 

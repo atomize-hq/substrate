@@ -166,26 +166,26 @@ if [[ "$platform" == "linux" ]]; then
   test -n "$span_id"
 
   expect_jq --arg sp "$span_id" '
-    any(select(.component=="world-agent" and .event_type=="world_process_start" and .parent_span==$sp))
+    any(select(.component=="world-service" and .event_type=="world_process_start" and .parent_span==$sp))
   '
   expect_jq --arg sp "$span_id" '
-    any(select(.component=="world-agent" and .event_type=="world_process_exit" and .parent_span==$sp))
+    any(select(.component=="world-service" and .event_type=="world_process_exit" and .parent_span==$sp))
   '
 
   if [[ "$slice_id" == "WPEP2" ]]; then
     echo "== Case E: WPEP2 publishes argv_omitted = true =="
     expect_jq --arg sp "$span_id" '
-      all(select(.component=="world-agent" and (.event_type=="world_process_start" or .event_type=="world_process_exit") and .parent_span==$sp) | (.argv_omitted==true))
+      all(select(.component=="world-service" and (.event_type=="world_process_start" or .event_type=="world_process_exit") and .parent_span==$sp) | (.argv_omitted==true))
     '
   fi
 
   if [[ "$slice_id" == "WPEP3" ]]; then
     echo "== Case E: WPEP3 publishes argv with redaction =="
     expect_jq --arg sp "$span_id" '
-      any(select(.component=="world-agent" and .event_type=="world_process_start" and .parent_span==$sp) | (has("argv") and (.argv|type=="array")))
+      any(select(.component=="world-service" and .event_type=="world_process_start" and .parent_span==$sp) | (has("argv") and (.argv|type=="array")))
     '
     expect_jq --arg sp "$span_id" '
-      (any(select(.component=="world-agent" and (.event_type=="world_process_start" or .event_type=="world_process_exit") and .parent_span==$sp) | has("argv_omitted"))) | not
+      (any(select(.component=="world-service" and (.event_type=="world_process_start" or .event_type=="world_process_exit") and .parent_span==$sp) | has("argv_omitted"))) | not
     '
   fi
 fi

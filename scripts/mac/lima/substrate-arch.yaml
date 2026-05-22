@@ -60,15 +60,15 @@ provision:
       (hostnamectl set-hostname lima-substrate-arch || true)
       grep -q 'lima-substrate-arch' /etc/hosts || echo '127.0.1.1 lima-substrate-arch' >> /etc/hosts
 
-      cat >/etc/systemd/system/substrate-world-agent.service <<'EOF'
+      cat >/etc/systemd/system/substrate-world-service.service <<'EOF'
       [Unit]
-      Description=Substrate World Agent
+      Description=Substrate World Service
       After=network-online.target
       Wants=network-online.target
 
       [Service]
       Type=simple
-      ExecStart=/usr/local/bin/substrate-world-agent
+      ExecStart=/usr/local/bin/substrate-world-service
       Restart=always
       RestartSec=5
       Environment=RUST_LOG=info
@@ -91,12 +91,12 @@ provision:
       [Install]
       WantedBy=multi-user.target
       EOF
-      chmod 644 /etc/systemd/system/substrate-world-agent.service
+      chmod 644 /etc/systemd/system/substrate-world-service.service
 
-      cat >/etc/systemd/system/substrate-world-agent.socket <<'EOF'
+      cat >/etc/systemd/system/substrate-world-service.socket <<'EOF'
       [Unit]
-      Description=Substrate World Agent Socket
-      PartOf=substrate-world-agent.service
+      Description=Substrate World Service Socket
+      PartOf=substrate-world-service.service
 
       [Socket]
       ListenStream=/run/substrate.sock
@@ -105,11 +105,11 @@ provision:
       SocketGroup=substrate
       DirectoryMode=0750
       RemoveOnStop=yes
-      Service=substrate-world-agent.service
+      Service=substrate-world-service.service
 
       [Install]
       WantedBy=sockets.target
       EOF
-      chmod 644 /etc/systemd/system/substrate-world-agent.socket
+      chmod 644 /etc/systemd/system/substrate-world-service.socket
       systemctl daemon-reload
       # Binary copied later; leave service disabled until Phase 0.4

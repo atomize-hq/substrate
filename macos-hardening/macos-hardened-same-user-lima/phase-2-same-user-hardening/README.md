@@ -40,7 +40,7 @@ Phase 2 exists to reduce that spread before Phase 3 finishes the operator-surfac
 
 Phase 2 keeps the same-user Lima architecture but narrows it in three successive steps:
 
-1. Remove listener sprawl so `world-agent` is consumed through the Unix socket and inherited socket-activation path by default.
+1. Remove listener sprawl so `world-service` is consumed through the Unix socket and inherited socket-activation path by default.
 2. Replace "mount broad host state and rely on convention" with an explicit ingress contract that names what the guest is allowed to see and why.
 3. Collapse duplicated guest service definitions into one generated contract so hardening changes apply identically whether the VM is created from the profile or repaired by the warm script.
 
@@ -63,8 +63,8 @@ The core rule for the phase is that macOS should behave like Linux wherever beha
 - `scripts/mac/lima/substrate.yaml`
   - defines current guest mounts
   - still includes broad host visibility
-  - embeds a second copy of the `substrate-world-agent` unit
-- `crates/world-agent/src/lib.rs`
+  - embeds a second copy of the `substrate-world-service` unit
+- `crates/world-service/src/lib.rs`
   - binds the Unix socket by default
   - conditionally enables loopback TCP via `SUBSTRATE_AGENT_TCP_PORT`
   - already supports inherited socket-activation listeners
@@ -84,7 +84,7 @@ The core rule for the phase is that macOS should behave like Linux wherever beha
 - One phase packet that sequences the same-user hardening work into milestones 2.1 through 2.3.
 - A hardened listener contract for macOS that removes default TCP exposure.
 - A mount and ingress contract for the Lima guest that is narrower than "broad `$HOME` plus project convenience mounts."
-- One source of truth for guest `substrate-world-agent` unit and socket definitions.
+- One source of truth for guest `substrate-world-service` unit and socket definitions.
 - Updated evidence expectations for doctor, gateway, smoke, orchestration, and doc review.
 
 ## Acceptance criteria
@@ -99,7 +99,7 @@ The core rule for the phase is that macOS should behave like Linux wherever beha
 
 - Diff and review the rendered or generated guest unit contents to prove the TCP listener default is gone and the sandbox settings are unified.
 - Capture `scripts/mac/lima-warm.sh --check-only`, `scripts/mac/lima-doctor.sh`, `scripts/mac/smoke.sh`, and `scripts/mac/orchestration-smoke.sh` evidence before and after the changes.
-- Probe `world-agent` listener mode through logs or explicit checks so the evidence distinguishes socket-activation-only operation from TCP-enabled operation.
+- Probe `world-service` listener mode through logs or explicit checks so the evidence distinguishes socket-activation-only operation from TCP-enabled operation.
 - Review `docs/WORLD.md` and `docs/cross-platform/mac_world_setup.md` for direct-admin guidance that still contradicts the hardened default.
 
 ## Risks / open questions

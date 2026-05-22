@@ -20,7 +20,7 @@ basis:
   stale_triggers:
   - C-02 changes probe/support-gate outcomes
   - C-03 changes pacman schema semantics or derived requirement assumptions
-  - shared-file changes in world_enable or world-agent invalidate the provisioning
+  - shared-file changes in world_enable or world-service invalidate the provisioning
     execution basis
 gates:
   pre_exec:
@@ -78,13 +78,13 @@ This seam has landed. Its authoritative post-exec record lives in `governance/se
     - `SEAM-2` publishing `C-02`
     - `SEAM-3` publishing `C-03`
   - Transitive blockers:
-    - adjacent shared-file work in `world_enable` and `world-agent` can stale the execution basis before decomposition
+    - adjacent shared-file work in `world_enable` and `world-service` can stale the execution basis before decomposition
   - Direct consumers:
     - `SEAM-5`
     - `SEAM-6`
   - Derived consumers:
     - provisioning operators
-    - request-profile and world-agent maintainers
+    - request-profile and world-service maintainers
 - **Touch surface**:
   - Primary planning surface:
     - `slices/NASP2/NASP2-spec.md`
@@ -92,7 +92,7 @@ This seam has landed. Its authoritative post-exec record lives in `governance/se
     - `scripts/substrate/world-enable.sh`
     - `crates/shell/src/builtins/world_enable/runner/log_ops.rs`
     - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-    - `crates/world-agent/src/service.rs`
+    - `crates/world-service/src/service.rs`
     - `crates/shell/tests/world_enable.rs`
 - **Verification**:
   - Because this seam **consumes** upstream contracts, verification may depend on accepted upstream evidence for `C-02` and `C-03`.
@@ -103,7 +103,7 @@ This seam has landed. Its authoritative post-exec record lives in `governance/se
   - A passing pre-exec posture should leave runtime remediation and validation seams able to consume one exact provisioning story.
 - **Risks / unknowns**:
   - Risk:
-    - shared-file overlap with staging/tracing work can stale `world_enable` and `world-agent` assumptions before this seam decomposes.
+    - shared-file overlap with staging/tracing work can stale `world_enable` and `world-service` assumptions before this seam decomposes.
   - De-risk plan:
     - keep `REM-003` open until seam-local revalidation proves the shared touch surface is still current.
   - Risk:
@@ -125,7 +125,7 @@ This seam has landed. Its authoritative post-exec record lives in `governance/se
     - `THR-04` from `defined` to `published`
   - Review-surface areas likely to shift after landing:
     - the provisioning branch in the workflow diagram
-    - the service/data-flow edge between dispatch/world-agent and package-manager execution
+    - the service/data-flow edge between dispatch/world-service and package-manager execution
   - Downstream seams most likely to require revalidation:
     - `SEAM-5`
     - `SEAM-6`

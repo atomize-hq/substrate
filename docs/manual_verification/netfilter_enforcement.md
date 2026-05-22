@@ -17,7 +17,7 @@ When all three gates line up for a restrictive posture, the runtime must enforce
 
 - `requested`: whether the last run asked the backend to enforce outbound filtering.
 - `enabled`: whether the backend was both requested and allowed to enforce.
-- `world_netfilter_enable_present`: whether the world-agent service currently has `WORLD_NETFILTER_ENABLE=1`.
+- `world_netfilter_enable_present`: whether the world-service service currently has `WORLD_NETFILTER_ENABLE=1`.
 - `last_failure_reason`: the last actionable enforcement failure for a requested run, if any.
 
 ## Linux privileged verification

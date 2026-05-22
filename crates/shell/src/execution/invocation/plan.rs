@@ -755,7 +755,7 @@ fn shim_status_socket_json() -> serde_json::Value {
                     "substrate",
                     "systemctl",
                     "is-active",
-                    "substrate-world-agent.socket",
+                    "substrate-world-service.socket",
                 ])
                 .output()
                 .ok()
@@ -767,7 +767,7 @@ fn shim_status_socket_json() -> serde_json::Value {
                     "substrate",
                     "systemctl",
                     "is-active",
-                    "substrate-world-agent",
+                    "substrate-world-service",
                 ])
                 .output()
                 .ok()
@@ -812,7 +812,7 @@ fn print_socket_activation_summary() {
                 .socket_unit
                 .as_ref()
                 .map(|u| u.name)
-                .unwrap_or("substrate-world-agent.socket"),
+                .unwrap_or("substrate-world-service.socket"),
             report
                 .socket_unit
                 .as_ref()
@@ -826,7 +826,7 @@ fn print_socket_activation_summary() {
                 .socket_unit
                 .as_ref()
                 .map(|u| u.name)
-                .unwrap_or("substrate-world-agent.socket"),
+                .unwrap_or("substrate-world-service.socket"),
             report
                 .socket_unit
                 .as_ref()
@@ -889,7 +889,7 @@ fn print_socket_activation_summary() {
             "substrate",
             "systemctl",
             "is-active",
-            "substrate-world-agent.socket",
+            "substrate-world-service.socket",
         ])
         .output()
         .ok()
@@ -897,7 +897,7 @@ fn print_socket_activation_summary() {
         .unwrap_or(false);
 
     if socket_unit_active {
-        println!("World socket: socket activation (substrate-world-agent.socket active in Lima)");
+        println!("World socket: socket activation (substrate-world-service.socket active in Lima)");
     } else if socket_exists {
         println!("World socket: manual forwarded listener present");
     } else {

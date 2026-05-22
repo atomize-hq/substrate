@@ -21,7 +21,7 @@ Standard:
 Checkpoint planning applies to this feature because the authoritative inputs define:
 - cross-platform parity guarantees for Linux, macOS, and Windows,
 - fail-closed policy and capability validation behavior,
-- operator-facing status and contract boundaries that cross shell, gateway, world-agent, and trace-adjacent surfaces,
+- operator-facing status and contract boundaries that cross shell, gateway, world-service, and trace-adjacent surfaces,
 - a dedicated parity-and-validation draft seam (`SGBA-03`) that exists to prove platform and compatibility behavior.
 
 The checkpoint cadence stays lightweight during pre-planning:

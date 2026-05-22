@@ -30,13 +30,13 @@ pub(super) fn resolve_version_dir(prefix: &Path) -> Result<PathBuf> {
     Ok(version_dir.to_path_buf())
 }
 
-pub(super) fn select_accepted_staged_world_agent(version_dir: &Path) -> Option<PathBuf> {
-    let root_candidate = version_dir.join("bin").join("world-agent");
+pub(super) fn select_accepted_staged_world_service(version_dir: &Path) -> Option<PathBuf> {
+    let root_candidate = version_dir.join("bin").join("world-service");
     if root_candidate.exists() {
         return Some(root_candidate);
     }
 
-    let linux_candidate = version_dir.join("bin").join("linux").join("world-agent");
+    let linux_candidate = version_dir.join("bin").join("linux").join("world-service");
     if linux_candidate.exists() {
         return Some(linux_candidate);
     }
@@ -247,38 +247,38 @@ mod tests {
     }
 
     #[test]
-    fn select_accepted_staged_world_agent_prefers_root_path() {
+    fn select_accepted_staged_world_service_prefers_root_path() {
         let temp = tempdir().unwrap();
         let version_dir = temp.path().join("version");
-        let root_candidate = version_dir.join("bin").join("world-agent");
-        let linux_candidate = version_dir.join("bin").join("linux").join("world-agent");
+        let root_candidate = version_dir.join("bin").join("world-service");
+        let linux_candidate = version_dir.join("bin").join("linux").join("world-service");
         std::fs::create_dir_all(root_candidate.parent().unwrap()).unwrap();
         std::fs::create_dir_all(linux_candidate.parent().unwrap()).unwrap();
         std::fs::write(&root_candidate, "root").unwrap();
         std::fs::write(&linux_candidate, "linux").unwrap();
 
-        let selected = select_accepted_staged_world_agent(&version_dir).expect("world-agent");
+        let selected = select_accepted_staged_world_service(&version_dir).expect("world-service");
         assert_eq!(selected, root_candidate);
     }
 
     #[test]
-    fn select_accepted_staged_world_agent_falls_back_to_linux_path() {
+    fn select_accepted_staged_world_service_falls_back_to_linux_path() {
         let temp = tempdir().unwrap();
         let version_dir = temp.path().join("version");
-        let linux_candidate = version_dir.join("bin").join("linux").join("world-agent");
+        let linux_candidate = version_dir.join("bin").join("linux").join("world-service");
         std::fs::create_dir_all(linux_candidate.parent().unwrap()).unwrap();
         std::fs::write(&linux_candidate, "linux").unwrap();
 
-        let selected = select_accepted_staged_world_agent(&version_dir).expect("world-agent");
+        let selected = select_accepted_staged_world_service(&version_dir).expect("world-service");
         assert_eq!(selected, linux_candidate);
     }
 
     #[test]
-    fn select_accepted_staged_world_agent_returns_none_when_missing() {
+    fn select_accepted_staged_world_service_returns_none_when_missing() {
         let temp = tempdir().unwrap();
         let version_dir = temp.path().join("version");
         std::fs::create_dir_all(version_dir.join("bin")).unwrap();
 
-        assert!(select_accepted_staged_world_agent(&version_dir).is_none());
+        assert!(select_accepted_staged_world_service(&version_dir).is_none());
     }
 }

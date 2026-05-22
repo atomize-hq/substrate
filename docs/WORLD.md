@@ -16,7 +16,7 @@ A “world” is a reusable Linux execution context providing:
 
 Two cooperating components:
 - `substrate` (shell): orchestrates execution, tracing, and routing (non‑PTY via REST, PTY via WS)
-- `world-agent`: runs inside the target Linux environment and exposes a small API over a Unix domain socket (`/run/substrate.sock`)
+- `world-service`: runs inside the target Linux environment and exposes a small API over a Unix domain socket (`/run/substrate.sock`)
 
 On Linux the agent runs directly on the host. On macOS the agent runs inside a Lima VM; the shell ensures transport forwarding (VSock → SSH UDS → SSH TCP) back to the guest socket.
 
@@ -28,7 +28,7 @@ Helper scripts (`scripts/mac/lima-*.sh`, `scripts/mac/smoke.sh`) keep the Lima e
 
 These socket ACL details are runtime transport facts, not a second operator contract.
 
-- The authorization boundary for world-agent requests is the OS-level transport ACL (Linux: Unix socket ownership/mode for `/run/substrate.sock`).
+- The authorization boundary for world-service requests is the OS-level transport ACL (Linux: Unix socket ownership/mode for `/run/substrate.sock`).
 - On Linux, `/run/substrate.sock` MUST be owned by `root:substrate` with mode `0660` (`srw-rw----`).
 - Managed gateway runtime diagnostics under `/run/substrate/substrate-gateway-runtime/` use that same `substrate` group boundary on Linux and in the macOS Lima guest path: directories remain `0750`, runtime files remain `0640`, and they are not expected to be world-readable.
 - Access to the socket is granted by membership in the `substrate` group; verify with `id -nG "$USER"`, grant with `sudo usermod -aG substrate <user>`, and re-login so the new group membership takes effect.
@@ -42,11 +42,11 @@ These socket ACL details are runtime transport facts, not a second operator cont
 Always-on by default (unless disabled via `SUBSTRATE_WORLD=disabled`):
 
 - Non-PTY commands
-  - Shell POSTs to `world-agent /v1/execute` over a Unix socket (Linux) or forwarded socket (macOS). The shell auto-starts or ensures availability before sending the request.
+  - Shell POSTs to `world-service /v1/execute` over a Unix socket (Linux) or forwarded socket (macOS). The shell auto-starts or ensures availability before sending the request.
   - Response returns `exit`, `stdout_b64`, `stderr_b64`, `scopes_used`, and `fs_diff` (when available). The shell attaches `fs_diff` to the span on both platforms.
 
 - PTY commands (interactive/TUIs)
-  - Shell connects a WebSocket to `world-agent /v1/stream` over the active transport.
+  - Shell connects a WebSocket to `world-service /v1/stream` over the active transport.
   - The agent allocates a PTY and spawns the child inside the session world, forwarding I/O, window resize, and signals.
 
 - REPL integration
@@ -113,7 +113,7 @@ Deliberate boundary for later lanes:
 ### Native Linux provisioning helper
 
 - Run `scripts/linux/world-provision.sh` from the repository root (without `sudo`) to install the
-  world-agent under `/usr/local/bin`, write the `.service` **and** `.socket` units,
+  world-service under `/usr/local/bin`, write the `.service` **and** `.socket` units,
   and enable socket activation. The script uses `sudo` for filesystem and systemd operations and
   will prompt if elevated credentials are required.
 - The generated service unit exports `SUBSTRATE_HOME` (default: `<invoking-user-home>/.substrate`,
@@ -130,9 +130,9 @@ Deliberate boundary for later lanes:
   status) so socket activation survives logout or reboot.
 - After provisioning, verify the listener, units, and capabilities:
   ```bash
-  systemctl status substrate-world-agent.socket --no-pager
-  systemctl status substrate-world-agent.service --no-pager
-  systemctl show substrate-world-agent.service -p CapabilityBoundingSet -p AmbientCapabilities
+  systemctl status substrate-world-service.socket --no-pager
+  systemctl status substrate-world-service.service --no-pager
+  systemctl show substrate-world-service.service -p CapabilityBoundingSet -p AmbientCapabilities
   sudo ls -l /run/substrate.sock
   sudo curl --unix-socket /run/substrate.sock http://localhost/v1/capabilities | jq .
   substrate host doctor --json | jq '.host.world_socket'
@@ -152,12 +152,12 @@ Deliberate boundary for later lanes:
     "probe_error": null,
     "systemd_error": null,
     "systemd_socket": {
-      "name": "substrate-world-agent.socket",
+      "name": "substrate-world-service.socket",
       "active_state": "listening",
       "unit_file_state": "enabled"
     },
     "systemd_service": {
-      "name": "substrate-world-agent.service",
+      "name": "substrate-world-service.service",
       "active_state": "active",
       "unit_file_state": "enabled"
     }
@@ -182,15 +182,15 @@ Deliberate boundary for later lanes:
 
 ## 3) macOS Architecture (Lima)
 
-Substrate on macOS uses a Lima VM (“substrate”) to host the world-agent. The shell guarantees the VM, agent, and forwarding layer are ready before routing commands.
-Hosted installer behavior coverage on macOS flows through this Lima-backed Linux guest/world-agent path; package-manager selection itself remains Linux-only and does not define native macOS package-manager selection.
+Substrate on macOS uses a Lima VM (“substrate”) to host the world-service. The shell guarantees the VM, agent, and forwarding layer are ready before routing commands.
+Hosted installer behavior coverage on macOS flows through this Lima-backed Linux guest/world-service path; package-manager selection itself remains Linux-only and does not define native macOS package-manager selection.
 
 - Provisioning & lifecycle
 - `scripts/mac/lima-warm.sh` starts or creates the VM from `scripts/mac/lima/substrate.yaml`, installs required packages, and ensures the systemd unit writes to `/run/substrate.sock` and managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/` with the same `substrate`-group boundary inside the guest, exports `SUBSTRATE_HOME=<guest-home>/.substrate`, and keeps that path plus `/tmp` in `ReadWritePaths`.
   - `scripts/mac/lima-stop.sh` shuts the VM down cleanly; `scripts/mac/lima-doctor.sh` reports health (virtualization, agent socket, service status, forwarding tools).
   - The helper scripts substitute the active project path so `/src` inside the VM mirrors the host repo checkout.
   - If full isolation writable allowlists fail with `EPERM` in the guest, confirm the guest service has `cap_chown`:
-    `limactl shell substrate systemctl show substrate-world-agent.service -p CapabilityBoundingSet -p AmbientCapabilities`
+    `limactl shell substrate systemctl show substrate-world-service.service -p CapabilityBoundingSet -p AmbientCapabilities`
 
 - Transport selection (host ⇄ guest)
   1. VSock via `vsock-proxy` (preferred when Virtualization.framework exposes VSock)
@@ -202,7 +202,7 @@ Hosted installer behavior coverage on macOS flows through this Lima-backed Linux
     overriding the transport.
 
 - Logs & diagnostics
-  - Agent logs live in the guest: `substrate sudo journalctl -u substrate-world-agent -n 200` (the CLI shells into Lima automatically) or manually via `limactl shell substrate sudo journalctl -u substrate-world-agent -n 200`.
+  - Agent logs live in the guest: `substrate sudo journalctl -u substrate-world-service -n 200` (the CLI shells into Lima automatically) or manually via `limactl shell substrate sudo journalctl -u substrate-world-service -n 200`.
   - Forwarding issues surface in shell `DEBUG` logs with the selected transport. `scripts/mac/lima-doctor.sh` mirrors doctor CLI checks.
 
 - Validation
@@ -234,7 +234,7 @@ Per session world (identified by `WORLD_ID`, e.g., `wld_01994…`):
 
 ## 5) Agent API (over UDS)
 
-This section describes Substrate's local host/world transport API over the `world-agent` socket. It is not the external Unified Agent API (`unified-agent-api` on crates.io; imported in Rust code as `agent_api`) used for CLI-agent runtime abstraction.
+This section describes Substrate's local host/world transport API over the `world-service` socket. It is not the external Unified Agent API (`unified-agent-api` on crates.io; imported in Rust code as `agent_api`) used for CLI-agent runtime abstraction.
 
 Socket: `/run/substrate.sock`
 
@@ -275,8 +275,8 @@ Notes
 - PTY shared-world requests must use `start_session`; the agent rejects `shared_world` on legacy `start`.
 - `profile` is an advanced request field used for backend-specific execution posture. For example,
   `substrate world enable --provision-deps` sets `profile=world-deps-provision` so provisioning can
-  run with the expected world-agent behavior. On guest Linux agents, that profile is executed via a
-  transient `systemd-run` unit so the normal `substrate-world-agent.service` sandbox can stay
+  run with the expected world-service behavior. On guest Linux agents, that profile is executed via a
+  transient `systemd-run` unit so the normal `substrate-world-service.service` sandbox can stay
   hardened. Internal world-deps profiles are reserved for Substrate’s built-in flows and are not
   selected through `SUBSTRATE_WORLD_REQUEST_PROFILE`. Runtime `substrate world deps current ...`
   commands do not use the provisioning profile and never perform runtime APT mutation.
@@ -302,7 +302,7 @@ Notes
   - The REPL wraps PTY runs in `reedline::suspend_guard()` to avoid prompt corruption during external output.
 - Readiness & auto‑spawn
   - The shell probes `/v1/capabilities`; if stale socket is found, it removes it.
-  - If the agent isn’t running, the shell attempts to spawn it (Linux dev flow: `target/debug/world-agent`).
+  - If the agent isn’t running, the shell attempts to spawn it (Linux dev flow: `target/debug/world-service`).
   - macOS invokes the Lima backend ensure path to boot the VM and wire up its tunnel.
   - Windows/WSL helper flows are intentionally fail-closed in this slice; see `docs/cross-platform/wsl_world_setup.md`.
 - Fallback
@@ -336,10 +336,10 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
 ## 7) Logging & Telemetry
 
 - Policy snapshot behavior and the trace fields `policy_resolution_mode`, `policy_snapshot_schema`, and `policy_snapshot_hash` are documented in `docs/TRACE.md`.
-- The archived `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md` remains historical background only.
+- The archived `docs/project_management/_archived/world-service-policy-snapshot/policy-snapshot-spec.md` remains historical background only.
 - Windows spans include an optional `fs_diff.display_path` map pairing canonical WSL paths with native Windows paths for telemetry consumers.
 
-- world-agent (PTY)
+- world-service (PTY)
   - Logs: client connected; `start cmd=… cwd=… span_id=… cols=… rows=…`;
   - In‑world details: `world_id=… ns=… cgroup=… in_world=true` on PTY start
   - Forwarded signals: `ws_pty: forwarded signal <SIG> to pid <PID>`
@@ -356,7 +356,7 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
   - `SUBSTRATE_WORLD_ID` (set by the shell on ensure)
   - `SUBSTRATE_AGENT_ID` (tracing/attribution; defaults to "human")
 - PTY/WS
-  - `SUBSTRATE_WS_DEBUG=1` (prints “using world-agent PTY WS” on connect)
+  - `SUBSTRATE_WS_DEBUG=1` (prints “using world-service PTY WS” on connect)
   - `SUBSTRATE_FORCE_PTY` / `SUBSTRATE_DISABLE_PTY` (developer toggles)
 - GC Configuration
   - `SUBSTRATE_NETNS_GC_INTERVAL_SECS` (default 600; 0 disables periodic)
@@ -367,8 +367,8 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
 ## 9) Validation (Quick Start)
 
 - Build & run agent
-  - `cargo build && cargo build -p world-agent`
-  - `RUST_LOG=info target/debug/world-agent &`
+  - `cargo build && cargo build -p world-service`
+  - `RUST_LOG=info target/debug/world-service &`
   - `ls -l /run/substrate.sock`
 
 - Non‑interactive PTY over WS
@@ -393,7 +393,7 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
   - `scripts/mac/lima-doctor.sh`
   - `PATH="$(pwd)/target/debug:$PATH" scripts/mac/smoke.sh` (non‑PTY, PTY, replay + fs_diff assertion)
   - `PATH="$(pwd)/target/debug:$PATH" scripts/mac/orchestration-smoke.sh` (Lima warm + live backend reachability + shared-owner/member-runtime orchestration contract regressions)
-  - `substrate sudo journalctl -u substrate-world-agent -n 200` (or `limactl shell substrate sudo journalctl -u substrate-world-agent -n 200`) to review guest logs
+  - `substrate sudo journalctl -u substrate-world-service -n 200` (or `limactl shell substrate sudo journalctl -u substrate-world-service -n 200`) to review guest logs
 
 ---
 
@@ -401,7 +401,7 @@ Legacy `world-deps.yaml` overlay plumbing and `SUBSTRATE_WORLD_DEPS_MANIFEST` ar
 
 - No WS debug line / no agent logs
   - The shell fell back to host PTY. Ensure `SUBSTRATE_WORLD=enabled` or start the agent (`/run/substrate.sock` must exist) and re‑run.
-- “Exec format error” running `world-agent`
+- “Exec format error” running `world-service`
   - You’re trying to run a binary built for a different arch/OS. Build within the container/host you’re running on.
 - `stty -a` fails in REPL without PTY
   - Use the PTY path (`:pty …` in REPL or `--pty -c` on CLI). `stty` requires a real TTY.
@@ -447,7 +447,7 @@ Implemented features:
   - Primary path installs nft rules inside the dedicated netns.
   - If the host refuses `ip netns add`, the code falls back to socket cgroup matching and scopes nft rules to `/sys/fs/cgroup/substrate/<WORLD_ID>` so host processes are not impacted.
   - When neither netns nor writable cgroups are available, nft scoping is disabled and warnings point to `substrate world cleanup --purge` to remove leftovers before retrying.
-- These logs surface in `--replay-verbose` output (`[replay] warn: using socket cgroup fallback...`) and in world-agent traces (`[agent] netns ... unavailable`).
+- These logs surface in `--replay-verbose` output (`[replay] warn: using socket cgroup fallback...`) and in world-service traces (`[agent] netns ... unavailable`).
 - Replay stays agent-first on Linux; when `/run/substrate.sock` is unhealthy it emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run `substrate world doctor --json` (or `substrate host doctor --json` for transport-only checks) or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket before switching to the local backend/copy-diff. Copy-diff retries log `[replay] warn: copy-diff ...` with the attempted scratch root so you can adjust disk space or set `SUBSTRATE_COPYDIFF_ROOT`.
 
 ---

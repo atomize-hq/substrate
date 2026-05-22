@@ -17,7 +17,7 @@ basis:
   stale_triggers:
     - `SEAM-1` publishes selection, precedence, or inventory rules that differ from current assumptions
     - integrated auth payload/request types change outside this seam before execution planning starts
-    - world-agent runtime launch or artifact management changes before this seam lands
+    - world-service runtime launch or artifact management changes before this seam lands
 gates:
   pre_exec:
     review: passed
@@ -59,13 +59,13 @@ open_remediations: []
     - `C-02`
     - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
     - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
-    - current world-agent runtime manager behavior in `crates/world-agent/src/gateway_runtime.rs`
+    - current world-service runtime manager behavior in `crates/world-service/src/gateway_runtime.rs`
     - current shell-side integrated auth construction in `crates/shell/src/builtins/world_gateway.rs`
-    - current lifecycle request shape in `crates/agent-api-types/src/lib.rs`
+    - current lifecycle request shape in `crates/transport-api-types/src/lib.rs`
   - Outputs:
-    - generalized integrated auth/request payload support in `crates/agent-api-types/src/lib.rs`
+    - generalized integrated auth/request payload support in `crates/transport-api-types/src/lib.rs`
     - shell-side backend-aware request construction in `crates/shell/src/builtins/world_gateway.rs`
-    - adapter-driven runtime realization in `crates/world-agent/src/gateway_runtime.rs` and `crates/world-agent/src/service.rs`
+    - adapter-driven runtime realization in `crates/world-service/src/gateway_runtime.rs` and `crates/world-service/src/service.rs`
     - execution evidence and implementation notes carried by `THR-02`
 - **Key invariants / rules**:
   - one selected backend resolves to one integrated adapter binding
@@ -83,16 +83,16 @@ open_remediations: []
   - Direct consumers:
     - `SEAM-3`
   - Derived consumers:
-    - world-agent runtime launch code
+    - world-service runtime launch code
     - shared request/response shapes
     - parity and smoke tests
 - **Touch surface**:
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-protocol-spec.md`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/gateway-runtime-adapter-schema-spec.md`
   - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/filesystem-semantics-spec.md`
-  - `crates/world-agent/src/gateway_runtime.rs`
-  - `crates/world-agent/src/service.rs`
-  - `crates/agent-api-types/src/lib.rs`
+  - `crates/world-service/src/gateway_runtime.rs`
+  - `crates/world-service/src/service.rs`
+  - `crates/transport-api-types/src/lib.rs`
   - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
   - `docs/contracts/substrate-gateway-backend-adapter-schema.md`
 - **Verification**:
@@ -102,7 +102,7 @@ open_remediations: []
     - `contract: passed` because `docs/contracts/substrate-gateway-backend-adapter-protocol.md`, `docs/contracts/substrate-gateway-backend-adapter-schema.md`, and `docs/contracts/substrate-gateway-policy-evaluation.md` already cover lookup order, capability gating, bounded error kinds, and env-primary/file-fallback auth precedence.
     - `revalidation: passed` because `SEAM-1` published `THR-01`, the new seam-local review rechecked the active basis against that closeout, and current repo evidence still shows the exact Codex-only runtime gaps this seam is planned to land.
   - Later seam-local verification should prove:
-    - selected non-Codex backends no longer disappear behind the current `cli:codex` checks in `crates/shell/src/builtins/world_gateway.rs` and `crates/world-agent/src/gateway_runtime.rs`
+    - selected non-Codex backends no longer disappear behind the current `cli:codex` checks in `crates/shell/src/builtins/world_gateway.rs` and `crates/world-service/src/gateway_runtime.rs`
     - adapter lookup and capability gating happen against the selected backend before launch
     - invalid integration, dependency unavailable, and unsupported capability/backend outcomes map to the correct runtime behavior without silent fallback
     - adapter-driven config render replaces the static Codex-only render path
@@ -127,7 +127,7 @@ open_remediations: []
   - De-risk plan:
     - keep carrier redesign explicitly out of scope and execute against the current policy contract's env-primary/file-fallback rule
   - Risk:
-    - runtime artifact semantics can drift between shell, world-agent, and operator documentation
+    - runtime artifact semantics can drift between shell, world-service, and operator documentation
   - De-risk plan:
     - treat config path, manifest path, and managed log inspectability as one owned runtime-artifact surface
 - **Rollout / safety**:

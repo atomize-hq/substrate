@@ -120,7 +120,7 @@ STRICT Touch Set rules (for `## Touch set (explicit)` only):
 
 ### Directory/prefix entries (advisory lift semantics)
 
-- Directory/prefix allow entries MUST end with `/` (e.g., `` `crates/world-agent/` ``).
+- Directory/prefix allow entries MUST end with `/` (e.g., `` `crates/world-service/` ``).
 - Directory/prefix entries are allowed for triad/task-finish strict packs as a fallback only; the directory MUST already exist and the impact map MUST record a follow-up to tighten the entry later.
 - Directory/prefix entries count as **1** Touch Set token for raw derived counts.
 - Directory/prefix presence is surfaced to downstream tooling via `validate_impact_map.py --emit-json` as:

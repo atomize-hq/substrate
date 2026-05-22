@@ -278,16 +278,16 @@ impl WorldEnableFixture {
         version_dir
     }
 
-    fn install_accepted_staged_world_agent(&self, version_dir: &Path, relative_path: &str) {
+    fn install_accepted_staged_world_service(&self, version_dir: &Path, relative_path: &str) {
         let path = version_dir.join(relative_path);
-        fs::create_dir_all(path.parent().expect("world-agent parent"))
-            .expect("create staged world-agent dir");
-        fs::write(&path, "#!/usr/bin/env bash\nexit 0\n").expect("write staged world-agent");
+        fs::create_dir_all(path.parent().expect("world-service parent"))
+            .expect("create staged world-service dir");
+        fs::write(&path, "#!/usr/bin/env bash\nexit 0\n").expect("write staged world-service");
         let mut perms = fs::metadata(&path)
-            .expect("staged world-agent metadata")
+            .expect("staged world-service metadata")
             .permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(&path, perms).expect("chmod staged world-agent");
+        fs::set_permissions(&path, perms).expect("chmod staged world-service");
     }
 }
 
@@ -505,7 +505,7 @@ fn world_enable_uses_prefix_runtime_bundle_when_version_binary_is_missing() {
 }
 
 #[test]
-fn world_enable_exits_3_when_accepted_staged_world_agent_missing() {
+fn world_enable_exits_3_when_accepted_staged_world_service_missing() {
     let fixture = WorldEnableFixture::new();
     fixture.install_prefix_runtime_scripts();
     let _version_dir = fixture.install_version_dir_binary();
@@ -513,16 +513,16 @@ fn world_enable_exits_3_when_accepted_staged_world_agent_missing() {
     let output = fixture
         .command_without_override()
         .output()
-        .expect("failed to run substrate world enable with missing staged world-agent");
+        .expect("failed to run substrate world enable with missing staged world-service");
 
     assert!(
         !output.status.success(),
-        "missing accepted staged world-agent should fail closed: {output:?}"
+        "missing accepted staged world-service should fail closed: {output:?}"
     );
     assert_eq!(
         output.status.code(),
         Some(3),
-        "missing accepted staged world-agent should exit 3: {output:?}"
+        "missing accepted staged world-service should exit 3: {output:?}"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -538,15 +538,15 @@ fn world_enable_exits_3_when_accepted_staged_world_agent_missing() {
         "preflight failure should not create env.sh"
     );
     assert!(
-        stderr.contains("accepted staged world-agent artifact missing"),
+        stderr.contains("accepted staged world-service artifact missing"),
         "stderr should identify the missing staged artifact: {stderr}"
     );
     assert!(
-        stderr.contains("bin/world-agent"),
+        stderr.contains("bin/world-service"),
         "stderr should list the root staged path suffix: {stderr}"
     );
     assert!(
-        stderr.contains("bin/linux/world-agent"),
+        stderr.contains("bin/linux/world-service"),
         "stderr should list the linux fallback staged path suffix: {stderr}"
     );
     assert!(
@@ -554,13 +554,13 @@ fn world_enable_exits_3_when_accepted_staged_world_agent_missing() {
         "stderr should point operators at the staging remediation: {stderr}"
     );
     assert!(
-        stderr.contains("cargo build -p world-agent"),
-        "stderr should point operators at rebuilding world-agent: {stderr}"
+        stderr.contains("cargo build -p world-service"),
+        "stderr should point operators at rebuilding world-service: {stderr}"
     );
 }
 
 #[test]
-fn world_enable_dry_run_exits_3_when_accepted_staged_world_agent_missing() {
+fn world_enable_dry_run_exits_3_when_accepted_staged_world_service_missing() {
     let fixture = WorldEnableFixture::new();
     fixture.install_prefix_runtime_scripts();
     let _version_dir = fixture.install_version_dir_binary();
@@ -569,28 +569,28 @@ fn world_enable_dry_run_exits_3_when_accepted_staged_world_agent_missing() {
         .command_without_override()
         .arg("--dry-run")
         .output()
-        .expect("failed to run substrate world enable dry-run with missing staged world-agent");
+        .expect("failed to run substrate world enable dry-run with missing staged world-service");
 
     assert!(
         !output.status.success(),
-        "missing accepted staged world-agent should fail closed in dry-run: {output:?}"
+        "missing accepted staged world-service should fail closed in dry-run: {output:?}"
     );
     assert_eq!(
         output.status.code(),
         Some(3),
-        "missing accepted staged world-agent should exit 3 in dry-run: {output:?}"
+        "missing accepted staged world-service should exit 3 in dry-run: {output:?}"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("accepted staged world-agent artifact missing"),
+        stderr.contains("accepted staged world-service artifact missing"),
         "stderr should identify the missing staged artifact: {stderr}"
     );
     assert!(
-        stderr.contains("bin/world-agent"),
+        stderr.contains("bin/world-service"),
         "stderr should list the root staged path suffix: {stderr}"
     );
     assert!(
-        stderr.contains("bin/linux/world-agent"),
+        stderr.contains("bin/linux/world-service"),
         "stderr should list the linux fallback staged path suffix: {stderr}"
     );
     assert!(
@@ -598,8 +598,8 @@ fn world_enable_dry_run_exits_3_when_accepted_staged_world_agent_missing() {
         "stderr should point operators at the staging remediation: {stderr}"
     );
     assert!(
-        stderr.contains("cargo build -p world-agent"),
-        "stderr should point operators at rebuilding world-agent: {stderr}"
+        stderr.contains("cargo build -p world-service"),
+        "stderr should point operators at rebuilding world-service: {stderr}"
     );
     assert!(
         fixture.log_contents().is_none(),
@@ -616,21 +616,21 @@ fn world_enable_dry_run_exits_3_when_accepted_staged_world_agent_missing() {
 }
 
 #[test]
-fn world_enable_dry_run_accepts_root_staged_world_agent() {
+fn world_enable_dry_run_accepts_root_staged_world_service() {
     let fixture = WorldEnableFixture::new();
     fixture.install_prefix_runtime_scripts();
     let version_dir = fixture.install_version_dir_binary();
-    fixture.install_accepted_staged_world_agent(&version_dir, "bin/world-agent");
+    fixture.install_accepted_staged_world_service(&version_dir, "bin/world-service");
 
     let output = fixture
         .command_without_override()
         .arg("--dry-run")
         .output()
-        .expect("failed to run substrate world enable dry-run with root staged world-agent");
+        .expect("failed to run substrate world enable dry-run with root staged world-service");
 
     assert!(
         output.status.success(),
-        "root staged world-agent should satisfy dry-run preflight: {output:?}"
+        "root staged world-service should satisfy dry-run preflight: {output:?}"
     );
     assert!(
         fixture.log_contents().is_none(),
@@ -641,21 +641,21 @@ fn world_enable_dry_run_accepts_root_staged_world_agent() {
 }
 
 #[test]
-fn world_enable_dry_run_accepts_linux_fallback_staged_world_agent() {
+fn world_enable_dry_run_accepts_linux_fallback_staged_world_service() {
     let fixture = WorldEnableFixture::new();
     fixture.install_prefix_runtime_scripts();
     let version_dir = fixture.install_version_dir_binary();
-    fixture.install_accepted_staged_world_agent(&version_dir, "bin/linux/world-agent");
+    fixture.install_accepted_staged_world_service(&version_dir, "bin/linux/world-service");
 
     let output = fixture
         .command_without_override()
         .arg("--dry-run")
         .output()
-        .expect("failed to run substrate world enable dry-run with linux staged world-agent");
+        .expect("failed to run substrate world enable dry-run with linux staged world-service");
 
     assert!(
         output.status.success(),
-        "linux fallback staged world-agent should satisfy dry-run preflight: {output:?}"
+        "linux fallback staged world-service should satisfy dry-run preflight: {output:?}"
     );
     assert!(
         fixture.log_contents().is_none(),

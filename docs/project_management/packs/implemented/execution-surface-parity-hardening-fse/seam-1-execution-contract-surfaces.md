@@ -13,7 +13,7 @@ basis:
   required_threads:
     - THR-01
   stale_triggers:
-    - world-network routing semantics change in the shell or world-agent path
+    - world-network routing semantics change in the shell or world-service path
     - replay request construction changes without updating the four-case routing matrix
     - SUBSTRATE_ENABLE_PREEXEC forwarding, builtin telemetry generation, or canonical trace omission rules change
     - the active world_process_exec_tracing_parity playbook changes Case B expectations outside this pack
@@ -44,7 +44,7 @@ open_remediations: []
     - identify any minimal shared helper extraction needed to keep replay thin and contract-driven
   - Out:
     - interactive REPL terminal-loss runtime handling
-    - world-agent or shim architectural changes
+    - world-service or shim architectural changes
     - broad trace-schema redesign beyond the surfaces needed to publish the contract
 - **Primary interfaces**
   - Inputs:

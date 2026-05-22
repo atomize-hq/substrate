@@ -6,7 +6,7 @@ use crate::execution::policy_snapshot::bootstrap_world_spec;
 use crate::execution::world_env_guard;
 use crate::execution::ShellConfig;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-use agent_api_types::SharedWorldOwnerSpec;
+use transport_api_types::SharedWorldOwnerSpec;
 
 #[cfg(target_os = "linux")]
 use super::dispatch::init_linux_world;
@@ -128,8 +128,8 @@ fn init_linux_world_default(config: &ShellConfig) {
 #[cfg(all(test, any(target_os = "macos", target_os = "windows")))]
 mod tests {
     use super::bootstrap_platform_world;
-    use agent_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use transport_api_types::{SharedWorldOwnerAction, SharedWorldOwnerSpec};
 
     #[cfg(target_os = "macos")]
     #[test]

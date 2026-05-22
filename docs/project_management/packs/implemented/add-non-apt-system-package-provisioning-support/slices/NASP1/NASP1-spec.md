@@ -44,7 +44,7 @@
 
 ### Pacman-specific validation and exit behavior
 - Any invalid pacman-backed package definition is a schema/config error and MUST exit `2`.
-- Invalid pacman-backed package definitions MUST fail before any world-agent call, provisioning probe, or system-package command execution.
+- Invalid pacman-backed package definitions MUST fail before any world-service call, provisioning probe, or system-package command execution.
 - Invalid pacman-backed package definitions include:
   - missing or empty `install.pacman` when `install.method=pacman`
   - non-string, empty, or version-pinned `install.pacman[]` entries
@@ -81,7 +81,7 @@
 
 ## Acceptance criteria
 - AC-NASP1-01: A package definition with `install.method=pacman`, a non-empty `install.pacman` list of package-name strings, `runnable: false`, and no conflicting install fields is accepted as valid inventory input and is surfaced by `substrate world deps current list available --json` with `"method": "pacman"`.
-- AC-NASP1-02: A package definition with `install.method=pacman` and either missing `install.pacman` or `install.pacman: []` fails inventory validation with exit `2` before any world-agent or provisioning execution is attempted.
+- AC-NASP1-02: A package definition with `install.method=pacman` and either missing `install.pacman` or `install.pacman: []` fails inventory validation with exit `2` before any world-service or provisioning execution is attempted.
 - AC-NASP1-03: A package definition with `install.method=pacman` and any `install.pacman[]` entry that is non-string, empty after trimming, or contains `=` fails inventory validation with exit `2`.
 - AC-NASP1-04: A package definition with `install.method=pacman` and any of `install.apt`, `install.script`, `install.script_path`, or `install.manual_instructions` present in violation of the schema fails inventory validation with exit `2`.
 - AC-NASP1-05: A package definition with `install.method=pacman` and `runnable: true`, non-empty `entrypoints`, or non-empty `wrappers` fails inventory validation with exit `2`, enforcing the v1 non-runnable prerequisite scope.

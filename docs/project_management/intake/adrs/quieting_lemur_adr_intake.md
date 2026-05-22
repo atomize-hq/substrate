@@ -27,7 +27,7 @@ Treat “world disabled” as a first-class status in `substrate health` / `subs
 
 - When `world.enabled: false` in `$SUBSTRATE_HOME/config.yaml` (e.g., after installs with `--no-world`), Substrate is intentionally host-only.
 - Today, `substrate health` can still report “World backend: needs attention” and “World deps: unavailable …” because the shim-doctor report attempts to compute world deps “applied” state even though the world is disabled.
-- This produces misleading errors (e.g., “world-agent readiness probe failed”) that look like a broken setup rather than an intentionally disabled backend.
+- This produces misleading errors (e.g., “world-service readiness probe failed”) that look like a broken setup rather than an intentionally disabled backend.
 - The noisy/incorrect diagnostics make it harder to tell whether there’s a real provisioning issue vs. an intentional configuration choice.
 - Note: world-deps install state is designed to persist across world sessions (stable prefix `/var/lib/substrate/world-deps` bind-mounted into worlds), so treating “disabled” as a non-error should not imply that deps were lost—just that Substrate isn’t probing them right now.
 
@@ -42,7 +42,7 @@ Treat “world disabled” as a first-class status in `substrate health` / `subs
 
 - Changing `substrate world enable` provisioning behavior.
 - Changing world-deps inventory semantics or adding new inventory items.
-- Reworking the world-agent readiness probe logic.
+- Reworking the world-service readiness probe logic.
 - Changing enforcement/routing behavior for normal command execution.
 
 ## 6. Constraints / Invariants

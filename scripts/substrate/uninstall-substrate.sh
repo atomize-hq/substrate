@@ -401,7 +401,7 @@ pgrep -fl substrate || true
 pkill -x substrate || true
 pkill -f '/substrate/bin/substrate-shim' || true
 pkill -f '/substrate-forwarder' || true
-pkill -f '/substrate-world-agent' || true
+pkill -f '/substrate-world-service' || true
 
 log "Removing PATH snippet from shell rc files (if present)..."
 remove_shell_path_snippets || true
@@ -428,27 +428,27 @@ for target in [
 PY
 
 if command -v systemctl >/dev/null 2>&1; then
-    log "Stopping substrate-world-agent service..."
-    maybe_sudo systemctl stop substrate-world-agent.service 2>/dev/null || true
-    maybe_sudo systemctl stop substrate-world-agent.socket 2>/dev/null || true
-    maybe_sudo systemctl disable substrate-world-agent.service 2>/dev/null || true
-    maybe_sudo systemctl disable substrate-world-agent.socket 2>/dev/null || true
+    log "Stopping substrate-world-service service..."
+    maybe_sudo systemctl stop substrate-world-service.service 2>/dev/null || true
+    maybe_sudo systemctl stop substrate-world-service.socket 2>/dev/null || true
+    maybe_sudo systemctl disable substrate-world-service.service 2>/dev/null || true
+    maybe_sudo systemctl disable substrate-world-service.socket 2>/dev/null || true
 
     log "Removing systemd unit + runtime directories..."
-    maybe_sudo rm -f /etc/systemd/system/substrate-world-agent.service || true
-    maybe_sudo rm -f /etc/systemd/system/substrate-world-agent.socket || true
+    maybe_sudo rm -f /etc/systemd/system/substrate-world-service.service || true
+    maybe_sudo rm -f /etc/systemd/system/substrate-world-service.socket || true
     maybe_sudo rm -rf /var/lib/substrate || true
     maybe_sudo rm -rf /run/substrate || true
     maybe_sudo rm -f /run/substrate.sock || true
     maybe_sudo systemctl daemon-reload 2>/dev/null || true
 
-    log "Verifying substrate-world-agent units are absent after uninstall (missing is ok)..."
-    maybe_sudo systemctl status substrate-world-agent.service 2>/dev/null || true
-    maybe_sudo systemctl status substrate-world-agent.socket 2>/dev/null || true
+    log "Verifying substrate-world-service units are absent after uninstall (missing is ok)..."
+    maybe_sudo systemctl status substrate-world-service.service 2>/dev/null || true
+    maybe_sudo systemctl status substrate-world-service.socket 2>/dev/null || true
 fi
 
-log "Removing world-agent binary from /usr/local/bin (if present)..."
-maybe_sudo rm -f /usr/local/bin/substrate-world-agent || true
+log "Removing world-service binary from /usr/local/bin (if present)..."
+maybe_sudo rm -f /usr/local/bin/substrate-world-service || true
 
 if command -v limactl >/dev/null 2>&1; then
   # Only relevant on macOS hosts where Lima is installed.

@@ -14,7 +14,7 @@ This artifact feeds `gates.pre_exec.review`.
 - Can `substrate world doctor --json` still report generic backend readiness while hiding that filtering was requested but not actually enabled?
 - Can the doctor surface omit whether `WORLD_NETFILTER_ENABLE` is present, leaving operators unable to tell host-gate mistakes from service-env mistakes?
 - Can distinct fail-closed causes from `SEAM-2` collapse into a low-signal or transport-specific message instead of one actionable `last_failure_reason` surface?
-- Can Linux/macOS/Windows doctor rendering diverge enough that the same world-agent truth produces inconsistent operator guidance?
+- Can Linux/macOS/Windows doctor rendering diverge enough that the same world-service truth produces inconsistent operator guidance?
 
 ## R1 - Operator troubleshooting flow
 

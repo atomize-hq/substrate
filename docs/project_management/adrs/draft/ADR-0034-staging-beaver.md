@@ -29,7 +29,7 @@ ADR_BODY_SHA256: eeac9675069d6bb9816517edb5a7b66846dd48204e4a1002a6341010ee562c8
 ### Changes (operator-facing)
 - Dev installs stage a stable runtime bundle for `substrate world enable` under `$SUBSTRATE_HOME`.
   - Existing: `dev-install-substrate.sh` links `~/.substrate/bin/substrate` directly to `<repo>/target/<profile>/substrate`, and helper/runtime assets are inferred from `<repo>/target/...`; that can break after `cargo clean` and can leave macOS `world enable` unable to find `scripts/mac/lima-warm.sh`.
-  - New: `dev-install-substrate.sh` stages `world-enable.sh`, `install-substrate.sh`, `world-deps.yaml`, `scripts/mac/lima-warm.sh`, the `scripts/mac/lima/{substrate.yaml,substrate-dev.yaml}` profile subtree, and Linux guest binaries under `$SUBSTRATE_HOME/{scripts,bin/linux}/…`. On macOS, the normal world-enabled dev-install path now persists copied Linux `substrate` and `world-agent` ELFs from Lima into `$SUBSTRATE_HOME/bin/linux/`, so later `substrate world enable` can succeed from the prefix bundle without depending on repo sources.
+  - New: `dev-install-substrate.sh` stages `world-enable.sh`, `install-substrate.sh`, `world-deps.yaml`, `scripts/mac/lima-warm.sh`, the `scripts/mac/lima/{substrate.yaml,substrate-dev.yaml}` profile subtree, and Linux guest binaries under `$SUBSTRATE_HOME/{scripts,bin/linux}/…`. On macOS, the normal world-enabled dev-install path now persists copied Linux `substrate` and `world-service` ELFs from Lima into `$SUBSTRATE_HOME/bin/linux/`, so later `substrate world enable` can succeed from the prefix bundle without depending on repo sources.
   - Why: Decouple `world enable` runtime assets from `<repo>/target/*` build artifacts while keeping `$SUBSTRATE_HOME/bin/substrate` pointed at the live host build output.
   - Links:
     - `crates/shell/src/builtins/world_enable/runner/paths.rs#L33` (helper search order includes `$SUBSTRATE_HOME/scripts/…`)
@@ -50,7 +50,7 @@ ADR_BODY_SHA256: eeac9675069d6bb9816517edb5a7b66846dd48204e4a1002a6341010ee562c8
 - Changing how the Substrate binaries are built (still `cargo build` from the repo).
 - Changing production install layout under `$SUBSTRATE_HOME/versions/…`.
 - Changing `substrate world enable` version-directory inference logic (it may continue to infer `<repo>/target/` for dev installs).
-- Solving other `<repo>/target/*` coupling beyond helper discovery (example: staging or discovering world-agent artifacts).
+- Solving other `<repo>/target/*` coupling beyond helper discovery (example: staging or discovering world-service artifacts).
 
 ## Out of Scope
 - Full “bundle parity” dev installs under `$SUBSTRATE_HOME/versions/<label>/{bin,scripts,config}` (follow-up ADR).
@@ -71,7 +71,7 @@ Adopt a production-like bundle root (`bin/`, `scripts/`, `config/`) under `$SUBS
 
 ## Slice Decomposition
 - C0 — Stage the `world enable` runtime bundle under `$SUBSTRATE_HOME`.
-  - `dev-install-substrate.sh` ensures `$SUBSTRATE_HOME/scripts/substrate/{world-enable.sh,install-substrate.sh,world-deps.yaml}`, `$SUBSTRATE_HOME/scripts/mac/lima-warm.sh`, `$SUBSTRATE_HOME/scripts/mac/lima/{substrate.yaml,substrate-dev.yaml}`, and best-effort `$SUBSTRATE_HOME/bin/linux/{substrate,world-agent}` symlinks exist after dev install.
+  - `dev-install-substrate.sh` ensures `$SUBSTRATE_HOME/scripts/substrate/{world-enable.sh,install-substrate.sh,world-deps.yaml}`, `$SUBSTRATE_HOME/scripts/mac/lima-warm.sh`, `$SUBSTRATE_HOME/scripts/mac/lima/{substrate.yaml,substrate-dev.yaml}`, and best-effort `$SUBSTRATE_HOME/bin/linux/{substrate,world-service}` symlinks exist after dev install.
 - C1 — Uninstall cleanup for staged runtime bundle artifacts.
   - `dev-uninstall-substrate.sh` removes only staged symlinks owned by the invoking repo, leaving user-managed scripts or binaries untouched.
 

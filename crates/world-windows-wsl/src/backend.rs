@@ -1,12 +1,6 @@
 use crate::paths::{normalize_diff, to_wsl_path};
 use crate::transport::{detect_tcp_forwarder, DEFAULT_AGENT_PIPE, DEFAULT_DISTRO};
 use crate::warm::WarmCmd;
-use agent_api_client::{AgentClient, Transport};
-use agent_api_types::{
-    ExecuteRequest, ExecuteResponse, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
-    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
-    ProcessTelemetry, WorldFsMode,
-};
 use anyhow::{anyhow, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
@@ -17,6 +11,12 @@ use std::time::Duration;
 use substrate_common::FsDiff;
 use tokio::runtime::{self, Runtime};
 use tracing::{debug, warn};
+use transport_api_client::{AgentClient, Transport};
+use transport_api_types::{
+    ExecuteRequest, ExecuteResponse, PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3,
+    PolicySnapshotWorldFsFailClosedV3, PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
+    ProcessTelemetry, WorldFsMode,
+};
 use uuid::Uuid;
 use world_api::{ExecRequest, ExecResult, WorldBackend, WorldHandle, WorldSpec};
 
@@ -27,7 +27,7 @@ pub(crate) trait AgentApiMock: Send + Sync {
     fn get_trace(&self, span_id: &str) -> Result<Value>;
 }
 
-/// Windows backend delegating to world-agent inside WSL.
+/// Windows backend delegating to world-service inside WSL.
 pub struct WindowsWslBackend {
     pub(crate) distro: String,
     pub(crate) project_path: PathBuf,

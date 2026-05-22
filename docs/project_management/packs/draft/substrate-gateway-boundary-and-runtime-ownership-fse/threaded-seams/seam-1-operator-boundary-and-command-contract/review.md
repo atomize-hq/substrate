@@ -23,7 +23,7 @@ flowchart LR
   CMD --> SUB["Substrate-owned boundary"]
   SUB --> POL["Policy / placement / lifecycle / secret delivery"]
   SUB --> ST["status --json + stable env discovery"]
-  POL --> WA["world-agent + world boundary"]
+  POL --> WA["world-service + world boundary"]
   WA --> GW["substrate-gateway runtime"]
   ST --> DOC["contract.md / docs/USAGE.md / shell tests"]
 ```

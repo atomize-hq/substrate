@@ -45,7 +45,7 @@ External source-of-truth docs reused by this feature:
 3. Effective policy from `$SUBSTRATE_HOME/policy.yaml` and `<workspace_root>/.substrate/policy.yaml` gates `llm.allowed_backends`, `llm.secrets.env_allowed`, and `agents.host_credentials.read.allowed_backends`.
 4. Backend inventory lookup validates backend existence and filename-to-id consistency before integrated adapter realization.
 5. Integrated adapter registry metadata resolves one binding for the selected backend after config, policy, and inventory all pass.
-6. Internal env vars used between shell and world-agent are derived transport outputs from the earlier steps. They do not override config, policy, or inventory truth.
+6. Internal env vars used between shell and world-service are derived transport outputs from the earlier steps. They do not override config, policy, or inventory truth.
 
 ### Source-of-truth posture
 
@@ -136,13 +136,13 @@ Draft seam prefix: GBSRI
 - `draft_seam_id`: `GBSRI-02`
 - `name`: `runtime-realization-and-artifacts`
 - `intent`: Freeze the integrated adapter binding flow, capability gating, auth handoff resolution, runtime config rendering, and filesystem artifact rules for the selected backend.
-- `likely owned or touched surfaces`: `gateway-runtime-adapter-protocol-spec.md`, `gateway-runtime-adapter-schema-spec.md`, `filesystem-semantics-spec.md`, `crates/world-agent/src/gateway_runtime.rs`, `crates/world-agent/src/service.rs`, `crates/agent-api-types/src/lib.rs`, `crates/gateway/src/auth/`, `crates/gateway/src/providers/`, `crates/gateway/tests/`
+- `likely owned or touched surfaces`: `gateway-runtime-adapter-protocol-spec.md`, `gateway-runtime-adapter-schema-spec.md`, `filesystem-semantics-spec.md`, `crates/world-service/src/gateway_runtime.rs`, `crates/world-service/src/service.rs`, `crates/transport-api-types/src/lib.rs`, `crates/gateway/src/auth/`, `crates/gateway/src/providers/`, `crates/gateway/tests/`
 
 ### Seam 3
 - `draft_seam_id`: `GBSRI-03`
 - `name`: `parity-validation-and-rollout`
 - `intent`: Freeze parity guarantees, compatibility promises, validation evidence, smoke assertions, and rollout proof for `cli:codex` plus one additional integrated backend.
-- `likely owned or touched surfaces`: `platform-parity-spec.md`, `compatibility-spec.md`, `manual_testing_playbook.md`, `docs/USAGE.md`, `docs/CONFIGURATION.md`, `crates/world-agent/tests/gateway_runtime_parity.rs`, `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/smoke/linux-smoke.sh`, `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/smoke/macos-smoke.sh`, `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/smoke/windows-smoke.ps1`
+- `likely owned or touched surfaces`: `platform-parity-spec.md`, `compatibility-spec.md`, `manual_testing_playbook.md`, `docs/USAGE.md`, `docs/CONFIGURATION.md`, `crates/world-service/tests/gateway_runtime_parity.rs`, `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/smoke/linux-smoke.sh`, `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/smoke/macos-smoke.sh`, `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/smoke/windows-smoke.ps1`
 
 `ci_checkpoint_plan.md` may use this draft seam list when proposing checkpoint groups.
 

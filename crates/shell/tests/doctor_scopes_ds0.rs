@@ -232,7 +232,7 @@ fn run_world_doctor_json(report: Value) -> Value {
         .prefix("substrate-ds0-sock-")
         .tempdir_in("/tmp")
         .expect("create ds0 socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let _socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndDoctorWorld { report },

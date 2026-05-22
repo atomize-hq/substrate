@@ -169,7 +169,7 @@ Agent-hub successor telemetry keeps adapter identity separate from semantic iden
 - `backend_id`: derived adapter identifier in `<kind>:<agent_id>` form. This remains the allowlist and adapter-selection token.
 - `client`: pure-agent client identity for successor agent-hub records.
 - `router`: routing surface for the record. Pure-agent records use `agent_hub`; nested gateway-backed records use `substrate_gateway`.
-- `protocol`: protocol family for the record, such as `uaa.agent.session`.
+- `protocol`: protocol family for the record, such as `substrate.agent.session`.
 - `provider`: nested gateway-backed provider identity only; pure-agent records omit it.
 - `auth_authority`: nested gateway-backed auth authority only; pure-agent records omit it.
 - `parent_run_id`: nested gateway-backed trace correlation only; points at the parent pure-agent `run_id`.
@@ -181,11 +181,11 @@ Boundary note:
 - Projection of the active shared-world binding into shell-owned runtime state remains PLAN-04.
 - Replacement/invalidation semantics for prior generations remain PLAN-05; consumers must not infer global invalidation from trace fields alone.
 
-`uaa.agent.session` is currently a Substrate-local normalized protocol-family id, not an automatic claim of upstream Unified Agent API wire or API compatibility. In the current repo, pure-agent records are stamped with that label by [agent_events.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/common/src/agent_events.rs:17), and `substrate agent status` / orchestrator-selection logic consumes the same label in [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:25).
+`substrate.agent.session` is currently a Substrate-local normalized protocol-family id, not an automatic claim of upstream Unified Agent API wire or API compatibility. In the current repo, pure-agent records are stamped with that label by [agent_events.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/common/src/agent_events.rs:17), and `substrate agent status` / orchestrator-selection logic consumes the same label in [agents_cmd.rs](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs:25).
 
 The shell-owned UAA runtime translates external `agent_api` wrapper events into canonical `agent_event` trace rows with:
 - `router=agent_hub`
-- `protocol=uaa.agent.session`
+- `protocol=substrate.agent.session`
 - `provider` omitted
 - `auth_authority` omitted
 
@@ -292,12 +292,12 @@ jq 'select(.kind == "alert" and .data.code? and (.data.code == "world_restarted"
 ### Policy Snapshot Metadata (No Raw Policy Content)
 
 The current field semantics for `policy_resolution_mode` and related snapshot metadata are defined in this document. The archived
-`docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md` is historical background only.
+`docs/project_management/_archived/world-service-policy-snapshot/policy-snapshot-spec.md` is historical background only.
 See the field notes below for the current consumer-facing meaning.
 
 Command completion spans record snapshot metadata without logging raw policy contents:
 
-- `policy_resolution_mode` (string): always present on `command_complete` spans; `snapshot_v1` when the host attached a `PolicySnapshotV1` to a world-agent request, otherwise `legacy_local`.
+- `policy_resolution_mode` (string): always present on `command_complete` spans; `snapshot_v1` when the host attached a `PolicySnapshotV1` to a world-service request, otherwise `legacy_local`.
 - `policy_snapshot_schema` (number, optional): snapshot schema version when `policy_resolution_mode == "snapshot_v1"`.
 - `policy_snapshot_hash` (string, optional): stable SHA-256 hex digest of the serialized snapshot when `policy_resolution_mode == "snapshot_v1"`.
 
@@ -314,9 +314,9 @@ Command completion spans record snapshot metadata without logging raw policy con
 
 Verbose replay outputs (`--replay-verbose` or JSON mode) print `[replay] scopes: [...]` adjacent
 to the world strategy line so the CLI summary mirrors the `scopes_used` array above. When the
-shell falls back to host execution it now prefixes warnings with `shell world-agent path (...)`
+shell falls back to host execution it now prefixes warnings with `shell world-service path (...)`
 to keep them distinct from `[replay] warn: ...` diagnostics emitted by the replay runtime
-(agent fallback, copy-diff retries, isolation opt-outs). Replay prefers the world-agent path
+(agent fallback, copy-diff retries, isolation opt-outs). Replay prefers the world-service path
 (`/run/substrate.sock`) when it responds; verbose output shows `[replay] world strategy: agent (...)` and
 the runtime emits a single `[replay] warn: agent replay unavailable (<cause>); falling back to local backend. Run `substrate world doctor --json` or set SUBSTRATE_WORLD_SOCKET to point at a healthy agent socket. The warning appears before falling back to local isolation/copy-diff when the socket is unhealthy. Replay appends a
 `replay_strategy` telemetry entry for each run so traces capture the chosen backend and any
@@ -357,7 +357,7 @@ fields appear only when that fallback is used.
 
 - Windows adds an optional `fs_diff.display_path` map that pairs canonical paths (e.g., `/mnt/c/...`) with native Windows representations; Linux and macOS omit this field. The map is populated by the `world-windows-wsl` backend and available whenever a diff is returned.
 - `transport.mode` reflects the active connector: `unix` for native Linux and Lima guests, `named_pipe` when routed through the Windows forwarder, and `tcp` only when an explicit fallback is selected.
-- `transport.socket_activation` is emitted on Linux when the world-agent socket originated from systemd socket activation (`true`) versus direct/manual binds (`false`). Non-Linux transports omit this field.
+- `transport.socket_activation` is emitted on Linux when the world-service socket originated from systemd socket activation (`true`) versus direct/manual binds (`false`). Non-Linux transports omit this field.
 - `execution_origin` on command_complete spans identifies where the command actually ran (`host` vs `world`). `replay_context` also includes the recorded origin/transport plus host/user/shell/term and anchor/world-root/caging hints (`SUBSTRATE_ANCHOR_*`, `SUBSTRATE_WORLD_ROOT_*`, `SUBSTRATE_CAGED`) so replays can honor the original environment.
 
 ## Architecture

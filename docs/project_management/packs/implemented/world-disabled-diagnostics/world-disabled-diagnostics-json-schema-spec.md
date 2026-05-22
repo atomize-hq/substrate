@@ -152,7 +152,7 @@ Examples below show only the fields relevant to this feature. Other fields in th
     "ok": false,
     "platform": "linux",
     "source": "command",
-    "error": "failed to gather world doctor output: world-agent socket probe failed"
+    "error": "failed to gather world doctor output: world-service socket probe failed"
   },
   "world_deps": {
     "status": "error",
@@ -255,7 +255,7 @@ Examples below show only the fields relevant to this feature. Other fields in th
       "ok": false,
       "platform": "linux",
       "source": "command",
-      "error": "failed to gather world doctor output: world-agent socket probe failed"
+      "error": "failed to gather world doctor output: world-service socket probe failed"
     },
     "world_deps": {
       "status": "error",
@@ -268,13 +268,13 @@ Examples below show only the fields relevant to this feature. Other fields in th
     "missing_managers": [],
     "skip_manager_init": false,
     "world_ok": false,
-    "world_error": "failed to gather world doctor output: world-agent socket probe failed",
+    "world_error": "failed to gather world doctor output: world-service socket probe failed",
     "world_deps_missing": [],
     "world_deps_blocked": [],
     "world_deps_error": "failed to collect world deps snapshot: world backend unavailable",
     "failures": [
       "world backend health check failed",
-      "world backend error: failed to gather world doctor output: world-agent socket probe failed",
+      "world backend error: failed to gather world doctor output: world-service socket probe failed",
       "world deps unavailable: failed to collect world deps snapshot: world backend unavailable"
     ]
   }

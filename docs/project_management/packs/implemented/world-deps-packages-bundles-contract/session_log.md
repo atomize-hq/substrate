@@ -208,7 +208,7 @@ Policy:
   - `linux_self_hosted`: success
   - `macos_self_hosted`: success
   - `wsl`: failure (runner misprovisioned: missing `/run/substrate.sock`)
-  - Preflight failure message (from run logs): “WSL runner is missing required world-agent socket: `/run/substrate.sock`”
+  - Preflight failure message (from run logs): “WSL runner is missing required world-service socket: `/run/substrate.sock`”
 
 ## UPDATE — 2026-02-14T15:37:30Z — checkpoint — CP1-ci-checkpoint (WDP2) — WSL runner permission gate
 - Feature Smoke re-dispatch: run `22019947173` — https://github.com/atomize-hq/substrate/actions/runs/22019947173 (conclusion: failure)

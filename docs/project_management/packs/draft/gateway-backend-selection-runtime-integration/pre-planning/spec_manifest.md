@@ -47,7 +47,7 @@ This manifest does not require `plan.md`, `tasks.json`, kickoff prompts, executi
   - Role: pre-planning artifact produced in this lane
   - Owns:
     - the touch set for the selected doc set
-    - the downstream implications across shell, broker, world-agent, and cross-platform validation
+    - the downstream implications across shell, broker, world-service, and cross-platform validation
   - Must define:
     - every feature-local doc expected to be authored
     - every external doc that this pack constrains or depends on
@@ -118,7 +118,7 @@ This manifest does not require `plan.md`, `tasks.json`, kickoff prompts, executi
 - `docs/project_management/packs/draft/gateway-backend-selection-runtime-integration/env-vars-spec.md`
   - Role: topic-specific spec required by the ADR
   - Owns:
-    - the internal env-var boundary used by shell request construction and world-agent runtime launch
+    - the internal env-var boundary used by shell request construction and world-service runtime launch
     - the adapter-specific auth env-var family used by integrated auth handoff
     - the redaction and absence rules for all env-driven auth material
   - Must define:
@@ -216,7 +216,7 @@ This manifest does not require `plan.md`, `tasks.json`, kickoff prompts, executi
   - Role: downstream seam-planning artifact deferred until after pre-planning
   - Intended ownership scope:
     - planning for `gateway-runtime-adapter-protocol-spec.md`, `gateway-runtime-adapter-schema-spec.md`, and `filesystem-semantics-spec.md`
-    - planning for world-agent adapter binding, config rendering, auth handoff, and runtime artifact management
+    - planning for world-service adapter binding, config rendering, auth handoff, and runtime artifact management
   - Must define:
     - the implementation seam for adapter binding lookup, capability gating, readiness probing, and artifact lifecycle
     - the acceptance boundary against external adapter-protocol drift

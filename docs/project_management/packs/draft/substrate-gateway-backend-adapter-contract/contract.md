@@ -39,7 +39,7 @@ Evidence already present:
 - backend-id grammar validation exists in `crates/broker/src/policy.rs`
 - effective-policy validation reuses the same backend-id rules in `crates/broker/src/effective_policy.rs`
 - the current runtime status shape is limited to `status` plus `client_wiring` in
-  `crates/agent-api-types/src/lib.rs`
+  `crates/transport-api-types/src/lib.rs`
 - `crates/shell/tests/world_gateway.rs` currently proves the available and unavailable JSON shapes
 
 Execution checklist for landing this seam:
@@ -50,7 +50,7 @@ Execution checklist for landing this seam:
 - Add or update tests:
   - extend `crates/broker/src/policy/tests.rs` when backend-id grammar or invalid-selection rules change
   - extend `crates/shell/tests/world_gateway.rs` if gateway status output is widened after the schema owner is updated
-  - extend `crates/world-agent/tests/gateway_runtime_parity.rs` if runtime unavailable/available status posture changes
+  - extend `crates/world-service/tests/gateway_runtime_parity.rs` if runtime unavailable/available status posture changes
 - Pass/fail conditions:
   - pass when one backend-id contract, one failure taxonomy, and one status-publication boundary are reflected consistently in docs and consuming tests
   - fail when any new status field family appears without a status-schema owner update, or when selection semantics diverge from the backend-id grammar and allowlist contract

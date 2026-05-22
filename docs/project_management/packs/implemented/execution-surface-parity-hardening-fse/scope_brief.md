@@ -23,7 +23,7 @@ execution_horizon:
   - harden async REPL behavior on controlling-TTY revoke or disconnect, including exit code and diagnostic posture
   - reserve downstream conformance work that locks docs, tests, smoke scripts, and playbooks to the landed behavior
 - **Out-of-scope**:
-  - world-agent, shim, or backend transport redesign
+  - world-service, shim, or backend transport redesign
   - a broad Reedline replacement or general REPL architecture rewrite
   - new public CLI flags or config keys unless a later ADR or follow-on work item explicitly justifies them
   - unrelated trace-schema expansion beyond what is required to make the chosen contracts explicit

@@ -316,7 +316,7 @@
       "type": "code",
       "phase": "WPEP1",
       "status": "completed",
-      "description": "Implement world-agent API/types + shell persistence plumbing for process event diagnostics per WPEP1.",
+      "description": "Implement world-service API/types + shell persistence plumbing for process event diagnostics per WPEP1.",
       "references": [
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md",
         "docs/project_management/packs/active/world_process_exec_tracing_parity/PROTOCOL.md",
@@ -355,7 +355,7 @@
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md"
       ],
       "acceptance_criteria": [
-        "Run: cargo test -p world-agent --tests --no-run → exit 0"
+        "Run: cargo test -p world-service --tests --no-run → exit 0"
       ],
       "start_checklist": [
         "Do not edit planning docs inside the worktree.",
@@ -459,7 +459,7 @@
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP2-spec.md"
       ],
       "acceptance_criteria": [
-        "Run: cargo test -p world-agent → exit 0"
+        "Run: cargo test -p world-service → exit 0"
       ],
       "start_checklist": [
         "Do not edit planning docs inside the worktree.",
@@ -560,7 +560,7 @@
         "docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP3-spec.md"
       ],
       "acceptance_criteria": [
-        "Run: cargo test -p world-agent → exit 0"
+        "Run: cargo test -p world-service → exit 0"
       ],
       "start_checklist": [
         "Do not edit planning docs inside the worktree.",
@@ -591,7 +591,7 @@
       "acceptance_criteria": [
         "Run: cargo fmt → exit 0",
         "Run: cargo clippy --workspace --all-targets -- -D warnings → exit 0",
-        "Run: cargo test -p world-agent → exit 0",
+        "Run: cargo test -p world-service → exit 0",
         "Run: make integ-checks → exit 0"
       ],
       "start_checklist": [

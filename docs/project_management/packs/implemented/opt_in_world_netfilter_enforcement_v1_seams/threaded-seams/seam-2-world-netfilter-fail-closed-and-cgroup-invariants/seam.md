@@ -15,7 +15,7 @@ basis:
     - THR-02
     - THR-04
   stale_triggers:
-    - "Any change to WorldSpec.isolate_network/allowed_domains routing semantics or world-agent request parity"
+    - "Any change to WorldSpec.isolate_network/allowed_domains routing semantics or world-service request parity"
     - "Any new process-spawn path that bypasses cgroup attach or weakens attach-or-fail behavior under isolate_network"
     - "Any change to WORLD_NETFILTER_ENABLE guard semantics or nftables ruleset shape"
 gates:

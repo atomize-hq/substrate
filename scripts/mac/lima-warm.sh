@@ -135,14 +135,14 @@ check_only_status() {
             else
                 echo "[check-only] Agent socket missing inside guest."
             fi
-            if limactl shell "${VM_NAME}" sudo -n test -f /etc/systemd/system/substrate-world-agent.service >/dev/null 2>&1; then
-                if limactl shell "${VM_NAME}" sudo -n grep -q '^Environment=WORLD_NETFILTER_ENABLE=1$' /etc/systemd/system/substrate-world-agent.service >/dev/null 2>&1; then
+            if limactl shell "${VM_NAME}" sudo -n test -f /etc/systemd/system/substrate-world-service.service >/dev/null 2>&1; then
+                if limactl shell "${VM_NAME}" sudo -n grep -q '^Environment=WORLD_NETFILTER_ENABLE=1$' /etc/systemd/system/substrate-world-service.service >/dev/null 2>&1; then
                     echo "[check-only] Guest systemd env includes WORLD_NETFILTER_ENABLE=1."
                 else
                     echo "[check-only] Guest systemd env does not include WORLD_NETFILTER_ENABLE=1."
                 fi
             else
-                echo "[check-only] Guest systemd service file for substrate-world-agent is missing."
+                echo "[check-only] Guest systemd service file for substrate-world-service is missing."
             fi
             if limactl shell "${VM_NAME}" sudo -n test -x /usr/local/bin/substrate-gateway >/dev/null 2>&1; then
                 echo "[check-only] Guest gateway binary present at /usr/local/bin/substrate-gateway."
@@ -263,7 +263,7 @@ ensure_repo_mount() {
     #
     # Lima mounts are fixed at VM creation time. In CI and multi-checkout dev setups, it's easy for
     # an existing VM to still be mounted to an older checkout, which silently causes the guest to
-    # build/run the wrong world-agent version. That manifests as schema mismatches (e.g. V2 policy
+    # build/run the wrong world-service version. That manifests as schema mismatches (e.g. V2 policy
     # fields rejected by an older agent).
     local sentinel
     sentinel=".substrate-lima-mount-sentinel.$RANDOM.$RANDOM"
@@ -303,11 +303,11 @@ EOF
 host_agent_candidate() {
     local base="${PROJECT_PATH}"
     local candidates=(
-        "${base}/bin/linux/world-agent"
-        "${base}/bin/world-agent-linux"
-        "${base}/bin/world-agent"
-        "${base}/target/release/world-agent"
-        "${base}/target/debug/world-agent"
+        "${base}/bin/linux/world-service"
+        "${base}/bin/world-service-linux"
+        "${base}/bin/world-service"
+        "${base}/target/release/world-service"
+        "${base}/target/debug/world-service"
     )
     local path
     for path in "${candidates[@]}"; do
@@ -325,12 +325,12 @@ host_agent_candidate() {
 
 install_agent_from_host() {
     local agent_path="$1"
-    log "Installing Linux world-agent from ${agent_path}"
-    limactl copy "${agent_path}" "${VM_NAME}:/tmp/world-agent"
+    log "Installing Linux world-service from ${agent_path}"
+    limactl copy "${agent_path}" "${VM_NAME}:/tmp/world-service"
     limactl shell "${VM_NAME}" bash <<'EOF'
 set -euo pipefail
-sudo install -Dm0755 /tmp/world-agent /usr/local/bin/substrate-world-agent
-sudo rm -f /tmp/world-agent
+sudo install -Dm0755 /tmp/world-service /usr/local/bin/substrate-world-service
+sudo rm -f /tmp/world-service
 EOF
 }
 
@@ -418,7 +418,7 @@ build_missing_components_inside_vm() {
     fi
 
     if [[ "${build_agent}" -eq 1 ]]; then
-        log "Building Linux world-agent inside Lima (profile: ${BUILD_PROFILE})"
+        log "Building Linux world-service inside Lima (profile: ${BUILD_PROFILE})"
     fi
     if [[ "${build_cli}" -eq 1 ]]; then
         log "Building Linux substrate CLI inside Lima for diagnostics (profile: ${BUILD_PROFILE})"
@@ -429,7 +429,7 @@ build_missing_components_inside_vm() {
 
     if [[ ! -f "${PROJECT_PATH}/Cargo.toml" ]]; then
         if [[ "${build_agent}" -eq 1 ]]; then
-            fatal "Linux world-agent missing and ${PROJECT_PATH} does not contain Cargo sources. Provide bin/linux/world-agent or rerun from a source checkout."
+            fatal "Linux world-service missing and ${PROJECT_PATH} does not contain Cargo sources. Provide bin/linux/world-service or rerun from a source checkout."
         fi
         if [[ "${build_gateway}" -eq 1 ]]; then
             fatal "Linux substrate-gateway missing and ${PROJECT_PATH} does not contain Cargo sources. Provide bin/linux/substrate-gateway or rerun from a source checkout."
@@ -582,8 +582,8 @@ WORLD
     sudo chmod 0755 /usr/local/bin/world
 fi
 if [[ "${build_agent}" == "1" ]]; then
-    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p world-agent "${BUILD_PROFILE_FLAG[@]}" --locked
-    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/world-agent" /usr/local/bin/substrate-world-agent
+    CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p world-service "${BUILD_PROFILE_FLAG[@]}" --locked
+    sudo install -Dm0755 "${BUILD_DIR}/${BUILD_OUTPUT_DIR}/world-service" /usr/local/bin/substrate-world-service
 fi
 if [[ "${build_gateway}" == "1" ]]; then
     CARGO_TARGET_DIR="${BUILD_DIR}" "${cargo_bin}" build -p substrate-gateway "${BUILD_PROFILE_FLAG[@]}" --locked
@@ -593,7 +593,7 @@ rm -rf "${BUILD_DIR}"
 EOF
         local status=$?
         if [[ "${build_agent}" -eq 1 ]]; then
-            fatal "Failed to build Linux world-agent inside Lima (exit ${status}). Provide a prebuilt agent under bin/linux/world-agent or rerun from a source checkout."
+            fatal "Failed to build Linux world-service inside Lima (exit ${status}). Provide a prebuilt agent under bin/linux/world-service or rerun from a source checkout."
         fi
         if [[ "${build_gateway}" -eq 1 ]]; then
             fatal "Failed to build Linux substrate-gateway inside Lima (exit ${status}). Provide a prebuilt gateway under bin/linux/substrate-gateway or rerun from a source checkout."
@@ -625,7 +625,7 @@ install_guest_binaries() {
     if [[ -n "${agent_candidate:-}" ]]; then
         install_agent_from_host "${agent_candidate}"
     else
-        log "Linux world-agent binary not found or invalid in ${PROJECT_PATH}; falling back to an in-guest build."
+        log "Linux world-service binary not found or invalid in ${PROJECT_PATH}; falling back to an in-guest build."
         need_agent_build=1
     fi
 
@@ -640,7 +640,7 @@ install_guest_binaries() {
     if [[ "${need_cli_build}" -eq 1 || "${need_agent_build}" -eq 1 || "${need_gateway_build}" -eq 1 ]]; then
         if [[ "${SKIP_GUEST_BUILD}" -eq 1 ]]; then
             if [[ "${need_agent_build}" -eq 1 ]]; then
-                warn "Linux world-agent missing but SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1; skipping guest build. Ensure another step installs /usr/local/bin/substrate-world-agent."
+                warn "Linux world-service missing but SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1; skipping guest build. Ensure another step installs /usr/local/bin/substrate-world-service."
             fi
             if [[ "${need_gateway_build}" -eq 1 ]]; then
                 warn "Linux substrate-gateway missing but SUBSTRATE_LIMA_SKIP_GUEST_BUILD=1; skipping guest build. Ensure another step installs /usr/local/bin/substrate-gateway."
@@ -657,7 +657,7 @@ install_guest_binaries() {
 verify_guest_binaries() {
     limactl shell "${VM_NAME}" bash <<'EOF'
 set -euo pipefail
-test -x /usr/local/bin/substrate-world-agent
+test -x /usr/local/bin/substrate-world-service
 test -x /usr/local/bin/substrate-gateway
 EOF
 }
@@ -683,15 +683,15 @@ case "${SUBSTRATE_WORLD_NETFILTER_ENABLE:-}" in
     ;;
 esac
 
-cat <<UNIT | sudo tee /etc/systemd/system/substrate-world-agent.service >/dev/null
+cat <<UNIT | sudo tee /etc/systemd/system/substrate-world-service.service >/dev/null
 [Unit]
-Description=Substrate World Agent
+Description=Substrate World Service
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/substrate-world-agent
+ExecStart=/usr/local/bin/substrate-world-service
 Restart=always
 RestartSec=5
 Environment=RUST_LOG=info
@@ -719,10 +719,10 @@ AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_SYS_ADMIN CAP_SYS_CHR
 WantedBy=multi-user.target
 UNIT
 
-cat <<'UNIT' | sudo tee /etc/systemd/system/substrate-world-agent.socket >/dev/null
+cat <<'UNIT' | sudo tee /etc/systemd/system/substrate-world-service.socket >/dev/null
 [Unit]
-Description=Substrate World Agent Socket
-PartOf=substrate-world-agent.service
+Description=Substrate World Service Socket
+PartOf=substrate-world-service.service
 
 [Socket]
 ListenStream=/run/substrate.sock
@@ -731,7 +731,7 @@ SocketUser=root
 SocketGroup=substrate
 DirectoryMode=0750
 RemoveOnStop=yes
-Service=substrate-world-agent.service
+Service=substrate-world-service.service
 
 [Install]
 WantedBy=sockets.target
@@ -743,18 +743,24 @@ enable_socket_activation() {
     local guest_substrate_home="$1"
     limactl shell "${VM_NAME}" env SUBSTRATE_GUEST_HOME="${guest_substrate_home}" bash <<'EOF'
 set -euo pipefail
+legacy_unit_prefix="substrate-world"
+legacy_service="${legacy_unit_prefix}-agent.service"
+legacy_socket="${legacy_unit_prefix}-agent.socket"
 sudo install -d -m0755 "${SUBSTRATE_GUEST_HOME}"
 sudo install -d -m0750 /var/lib/substrate
 sudo install -d -m0750 -o root -g substrate /run/substrate
+sudo systemctl stop "${legacy_service}" "${legacy_socket}" >/dev/null 2>&1 || true
+sudo systemctl disable "${legacy_service}" "${legacy_socket}" >/dev/null 2>&1 || true
+sudo rm -f "/etc/systemd/system/${legacy_service}" "/etc/systemd/system/${legacy_socket}"
 sudo systemctl daemon-reload
-sudo systemctl enable substrate-world-agent.service >/dev/null
-sudo systemctl enable substrate-world-agent.socket >/dev/null
-sudo systemctl stop substrate-world-agent.service >/dev/null 2>&1 || true
-sudo systemctl stop substrate-world-agent.socket >/dev/null 2>&1 || true
+sudo systemctl enable substrate-world-service.service >/dev/null
+sudo systemctl enable substrate-world-service.socket >/dev/null
+sudo systemctl stop substrate-world-service.service >/dev/null 2>&1 || true
+sudo systemctl stop substrate-world-service.socket >/dev/null 2>&1 || true
 sudo install -d -m0750 -o root -g substrate /run/substrate
 sudo rm -f /run/substrate.sock
-sudo systemctl start substrate-world-agent.socket
-sudo systemctl start substrate-world-agent.service
+sudo systemctl start substrate-world-service.socket
+sudo systemctl start substrate-world-service.service
 EOF
 }
 
@@ -822,5 +828,5 @@ render_profile
 ensure_vm_ready
 configure_guest
 
-log "Lima world backend '${VM_NAME}' is ready. Verify with: limactl shell ${VM_NAME} sudo systemctl status substrate-world-agent.socket"
+log "Lima world backend '${VM_NAME}' is ready. Verify with: limactl shell ${VM_NAME} sudo systemctl status substrate-world-service.socket"
 log "Optional orchestration parity proof: scripts/mac/orchestration-smoke.sh"

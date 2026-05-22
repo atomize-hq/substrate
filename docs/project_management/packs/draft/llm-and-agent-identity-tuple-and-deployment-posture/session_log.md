@@ -312,7 +312,7 @@
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP2/test/last_message.md`
 - Checks:
   - `cargo fmt`
-  - `cargo test -p agent-api-types laitdp2_ -- --nocapture`
+  - `cargo test -p transport-api-types laitdp2_ -- --nocapture`
   - `make triad-task-finish TASK_ID="LAITDP2-test"`
 - Resume note:
   - `LAITDP2-code` was already marked `completed` before this resume but no `logs/LAITDP2/code/` artifacts or local `laitdp2-code` branch were present.
@@ -323,9 +323,9 @@
 - Checks:
   - `cargo fmt`
   - `cargo clippy --workspace --all-targets -- -D warnings`
-  - `cargo test -p agent-api-types gateway_integrated_auth_validation`
+  - `cargo test -p transport-api-types gateway_integrated_auth_validation`
   - `cargo test -p substrate-common --test agent_hub_event_envelope_schema`
-  - `cargo test -p world-agent default_backend`
+  - `cargo test -p world-service default_backend`
   - `make triad-task-finish TASK_ID="LAITDP2-code"`
 - Resume note:
   - The task was force-started after discovering that prior completed bookkeeping had no code branch or `logs/LAITDP2/code/` artifacts.
@@ -335,9 +335,9 @@
 - Codex last message: `/home/spenser/__Active_code/substrate/docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/logs/LAITDP2/integ-core/last_message.md`
 - Checks:
   - `cargo fmt`
-  - `cargo test -p agent-api-types laitdp2_ -- --nocapture`
-  - `cargo test -p agent-api-types gateway_integrated_auth_validation`
-  - `cargo test -p world-agent default_backend`
+  - `cargo test -p transport-api-types laitdp2_ -- --nocapture`
+  - `cargo test -p transport-api-types gateway_integrated_auth_validation`
+  - `cargo test -p world-service default_backend`
   - `make integ-checks`
   - `make triad-task-finish TASK_ID="LAITDP2-integ-core"`
 - Result: `LAITDP2-code` and `LAITDP2-test` are merged into `LAITDP2-integ-core`; core integration is ready for `CP2-ci-checkpoint`.
@@ -376,8 +376,8 @@
 - GitHub smoke evidence: run `24856162669` — `https://github.com/atomize-hq/substrate/actions/runs/24856162669` — `success` on `macos`
 - Checks:
   - `SUBSTRATE_SMOKE_SLICE_ID=LAITDP2 SUBSTRATE_SMOKE_REPO_ROOT="$PWD" bash scripts/ci/feature-smoke/llm-and-agent-identity-tuple-and-deployment-posture/macos-smoke.sh` (local Linux host correctly skipped Darwin-only execution)
-  - `cargo test -p agent-api-types laitdp2_ -- --nocapture`
-  - `cargo test -p agent-api-types gateway_integrated_auth_validation -- --nocapture`
+  - `cargo test -p transport-api-types laitdp2_ -- --nocapture`
+  - `cargo test -p transport-api-types gateway_integrated_auth_validation -- --nocapture`
   - `make triad-task-finish TASK_ID="LAITDP2-integ-macos"`
 
 ## END — 2026-04-23T20:19:55Z — checkpoint — CP2-ci-checkpoint

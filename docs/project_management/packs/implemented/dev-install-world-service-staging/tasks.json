@@ -1,0 +1,624 @@
+{
+  "meta": {
+    "schema_version": 4,
+    "cross_platform": true,
+    "ci_parity_platforms_required": [
+      "linux",
+      "macos",
+      "windows"
+    ],
+    "behavior_platforms_required": [
+      "linux"
+    ],
+    "checkpoint_boundaries": [
+      "DIWAS1"
+    ],
+    "automation": {
+      "enabled": true,
+      "orchestration_branch": "feat/dev-install-world-service-staging"
+    },
+    "slice_spec_version": 2,
+    "feature": "dev-install-world-service-staging",
+    "adr_paths": [
+      "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "DIWAS0-code",
+      "name": "DIWAS0 slice (code)",
+      "type": "code",
+      "phase": "DIWAS0",
+      "status": "pending",
+      "description": "Implement DIWAS0 production changes for the standard missing-artifact preflight.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/contract.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md",
+        "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS0/DIWAS0-spec.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/decision_register.md"
+      ],
+      "acceptance_criteria": [
+        "DIWAS0 acceptance criteria are implemented and traceable through the slice spec.",
+        "The work stays scoped to the standard version-dir flow."
+      ],
+      "start_checklist": [
+        "git checkout feat/dev-install-world-service-staging && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, contract.md, slice spec, and kickoff prompt.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Record a targeted before-and-after command for the handoff.",
+        "Run the task-specific validation commands from the kickoff prompt.",
+        "Run `make triad-task-finish TASK_ID=\"DIWAS0-code\"` from inside the worktree."
+      ],
+      "worktree": "wt/dev-install-world-service-staging-diwas0-code",
+      "integration_task": "DIWAS0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS0/kickoff_prompts/DIWAS0-code.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "DIWAS0-test"
+      ],
+      "git_branch": "dev-install-world-service-staging-diwas0-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "ac_ids": [
+        "AC-DIWAS0-01",
+        "AC-DIWAS0-02",
+        "AC-DIWAS0-03",
+        "AC-DIWAS0-04",
+        "AC-DIWAS0-05",
+        "AC-DIWAS0-06",
+        "AC-DIWAS0-07"
+      ]
+    },
+    {
+      "id": "DIWAS0-test",
+      "name": "DIWAS0 slice (test)",
+      "type": "test",
+      "phase": "DIWAS0",
+      "status": "pending",
+      "description": "Add or update tests for the DIWAS0 missing-artifact preflight contract.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/contract.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md",
+        "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS0/DIWAS0-spec.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/decision_register.md"
+      ],
+      "acceptance_criteria": [
+        "DIWAS0 acceptance criteria are implemented and traceable through the slice spec.",
+        "The work stays scoped to test coverage for the standard version-dir flow."
+      ],
+      "start_checklist": [
+        "git checkout feat/dev-install-world-service-staging && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, contract.md, slice spec, and kickoff prompt.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Record a targeted before-and-after command for the handoff.",
+        "Run the task-specific validation commands from the kickoff prompt.",
+        "Run `make triad-task-finish TASK_ID=\"DIWAS0-test\"` from inside the worktree."
+      ],
+      "worktree": "wt/dev-install-world-service-staging-diwas0-test",
+      "integration_task": "DIWAS0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS0/kickoff_prompts/DIWAS0-test.md",
+      "depends_on": [],
+      "concurrent_with": [
+        "DIWAS0-code"
+      ],
+      "git_branch": "dev-install-world-service-staging-diwas0-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "ac_ids": [
+        "AC-DIWAS0-01",
+        "AC-DIWAS0-02",
+        "AC-DIWAS0-03",
+        "AC-DIWAS0-04",
+        "AC-DIWAS0-05",
+        "AC-DIWAS0-06",
+        "AC-DIWAS0-07"
+      ]
+    },
+    {
+      "id": "DIWAS0-integ",
+      "name": "DIWAS0 slice (integration)",
+      "type": "integration",
+      "phase": "DIWAS0",
+      "status": "pending",
+      "description": "Merge DIWAS0 code and tests and make the slice green.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/contract.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md",
+        "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS0/DIWAS0-spec.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/manual_testing_playbook.md"
+      ],
+      "acceptance_criteria": [
+        "Local integration gates are green for DIWAS0.",
+        "DIWAS0 is merged back to the orchestration branch."
+      ],
+      "start_checklist": [
+        "git checkout feat/dev-install-world-service-staging && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, slice spec, and kickoff prompt.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Merge `DIWAS0-code` and `DIWAS0-test`.",
+        "Run `cargo fmt`.",
+        "Run `cargo clippy --workspace --all-targets -- -D warnings`.",
+        "Run `cargo test -p shell --test world_enable -- --nocapture`.",
+        "Run `make integ-checks`.",
+        "Run `make triad-task-finish TASK_ID=\"DIWAS0-integ\"` from inside the worktree."
+      ],
+      "worktree": "wt/dev-install-world-service-staging-diwas0-integ",
+      "integration_task": "DIWAS0-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS0/kickoff_prompts/DIWAS0-integ.md",
+      "depends_on": [
+        "DIWAS0-code",
+        "DIWAS0-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "dev-install-world-service-staging-diwas0-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true,
+      "ac_ids": [
+        "AC-DIWAS0-01",
+        "AC-DIWAS0-02",
+        "AC-DIWAS0-03",
+        "AC-DIWAS0-04",
+        "AC-DIWAS0-05",
+        "AC-DIWAS0-06",
+        "AC-DIWAS0-07"
+      ]
+    },
+    {
+      "id": "DIWAS1-code",
+      "name": "DIWAS1 slice (code)",
+      "type": "code",
+      "phase": "DIWAS1",
+      "status": "pending",
+      "description": "Implement DIWAS1 production changes for Linux dev-install staging.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/contract.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md",
+        "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/DIWAS1-spec.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/decision_register.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/manual_testing_playbook.md"
+      ],
+      "acceptance_criteria": [
+        "DIWAS1 acceptance criteria are implemented and traceable through the slice spec.",
+        "The work keeps Linux staging and refresh behavior aligned with the contract."
+      ],
+      "start_checklist": [
+        "git checkout feat/dev-install-world-service-staging && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, contract.md, slice spec, and kickoff prompt.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Record a targeted before-and-after command for the handoff.",
+        "Run the task-specific validation commands from the kickoff prompt.",
+        "Run `make triad-task-finish TASK_ID=\"DIWAS1-code\"` from inside the worktree."
+      ],
+      "worktree": "wt/dev-install-world-service-staging-diwas1-code",
+      "integration_task": "DIWAS1-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/kickoff_prompts/DIWAS1-code.md",
+      "depends_on": [
+        "DIWAS0-integ"
+      ],
+      "concurrent_with": [
+        "DIWAS1-test"
+      ],
+      "git_branch": "dev-install-world-service-staging-diwas1-code",
+      "required_make_targets": [
+        "triad-code-checks"
+      ],
+      "ac_ids": [
+        "AC-DIWAS1-01",
+        "AC-DIWAS1-02",
+        "AC-DIWAS1-03",
+        "AC-DIWAS1-04",
+        "AC-DIWAS1-05"
+      ]
+    },
+    {
+      "id": "DIWAS1-test",
+      "name": "DIWAS1 slice (test)",
+      "type": "test",
+      "phase": "DIWAS1",
+      "status": "pending",
+      "description": "Add or update tests for the DIWAS1 Linux staging contract.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/contract.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md",
+        "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/DIWAS1-spec.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/decision_register.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/manual_testing_playbook.md"
+      ],
+      "acceptance_criteria": [
+        "DIWAS1 acceptance criteria are implemented and traceable through the slice spec.",
+        "The work keeps Linux staging tests aligned with the contract."
+      ],
+      "start_checklist": [
+        "git checkout feat/dev-install-world-service-staging && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, contract.md, slice spec, and kickoff prompt.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Record a targeted before-and-after command for the handoff.",
+        "Run the task-specific validation commands from the kickoff prompt.",
+        "Run `make triad-task-finish TASK_ID=\"DIWAS1-test\"` from inside the worktree."
+      ],
+      "worktree": "wt/dev-install-world-service-staging-diwas1-test",
+      "integration_task": "DIWAS1-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/kickoff_prompts/DIWAS1-test.md",
+      "depends_on": [
+        "DIWAS0-integ"
+      ],
+      "concurrent_with": [
+        "DIWAS1-code"
+      ],
+      "git_branch": "dev-install-world-service-staging-diwas1-test",
+      "required_make_targets": [
+        "triad-test-checks"
+      ],
+      "ac_ids": [
+        "AC-DIWAS1-01",
+        "AC-DIWAS1-02",
+        "AC-DIWAS1-03",
+        "AC-DIWAS1-04",
+        "AC-DIWAS1-05"
+      ]
+    },
+    {
+      "id": "DIWAS1-integ-core",
+      "name": "DIWAS1 slice (integration core)",
+      "type": "integration",
+      "phase": "DIWAS1",
+      "status": "pending",
+      "description": "Merge DIWAS1 code and tests on the primary platform before the checkpoint runs.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/contract.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md",
+        "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/DIWAS1-spec.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Local integration gates are green for the boundary slice.",
+        "The core integration branch is ready for `CP1-ci-checkpoint`."
+      ],
+      "start_checklist": [
+        "git checkout feat/dev-install-world-service-staging && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, checkpoint plan, slice spec, and kickoff prompt.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Run `cargo fmt`.",
+        "Run `cargo clippy --workspace --all-targets -- -D warnings`.",
+        "Run `bash tests/installers/install_smoke.sh`.",
+        "Run `bash docs/project_management/packs/draft/dev-install-world-service-staging/smoke/linux-smoke.sh`.",
+        "Run `make integ-checks`.",
+        "Run `make triad-task-finish TASK_ID=\"DIWAS1-integ-core\"` from inside the worktree."
+      ],
+      "worktree": "wt/dev-install-world-service-staging-diwas1-integ-core",
+      "integration_task": "DIWAS1-integ-core",
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/kickoff_prompts/DIWAS1-integ-core.md",
+      "depends_on": [
+        "DIWAS1-code",
+        "DIWAS1-test"
+      ],
+      "concurrent_with": [],
+      "git_branch": "dev-install-world-service-staging-diwas1-integ-core",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "CP1-ci-checkpoint",
+      "name": "CP1 CI checkpoint (cross-platform validation)",
+      "type": "ops",
+      "phase": "CP1",
+      "status": "pending",
+      "description": "Run compile parity, feature smoke, and quick CI testing for the checkpoint boundary slice.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/smoke/linux-smoke.sh",
+        "docs/project_management/system/standards/ci/PLANNING_CI_CHECKPOINT_STANDARD.md"
+      ],
+      "acceptance_criteria": [
+        "Checkpoint CI evidence is recorded for the checkpoint SHA.",
+        "Compile parity and Linux feature smoke are green for the checkpoint SHA.",
+        "Quick CI testing evidence is recorded for the checkpoint SHA."
+      ],
+      "start_checklist": [
+        "git checkout feat/dev-install-world-service-staging && git pull --ff-only",
+        "Read the checkpoint plan, tasks.json, session_log.md, and the kickoff prompt.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Run ci-audit and record the result lines or skip evidence.",
+        "Dispatch compile parity, feature smoke, and quick CI testing for the checkpoint SHA.",
+        "Mark `CP1-ci-checkpoint` completed in tasks.json on the orchestration checkout."
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/kickoff_prompts/CP1-ci-checkpoint.md",
+      "depends_on": [
+        "DIWAS1-integ-core"
+      ],
+      "concurrent_with": []
+    },
+    {
+      "id": "DIWAS1-integ-linux",
+      "name": "DIWAS1 slice (integration linux)",
+      "type": "integration",
+      "phase": "DIWAS1",
+      "status": "pending",
+      "description": "linux parity or smoke follow-up task for the checkpoint boundary slice.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/contract.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md",
+        "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/DIWAS1-spec.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md"
+      ],
+      "acceptance_criteria": [
+        "linux evidence for the boundary slice is green or recorded as unchanged by the checkpoint."
+      ],
+      "start_checklist": [
+        "Start this task only after the checkpoint completes and reports a platform issue or follow-up.",
+        "Read platform-parity-spec.md, tasks.json, session_log.md, and the kickoff prompt.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Run the platform-specific validation named in the kickoff prompt.",
+        "Run `make triad-task-finish TASK_ID=\"DIWAS1-integ-linux\"` from inside the worktree.",
+        "Record the platform evidence in the handoff and the orchestration session log."
+      ],
+      "worktree": "wt/dev-install-world-service-staging-diwas1-integ-linux",
+      "integration_task": "DIWAS1-integ-linux",
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/kickoff_prompts/DIWAS1-integ-linux.md",
+      "depends_on": [
+        "DIWAS1-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "linux",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/feature-smoke.yml",
+      "git_branch": "dev-install-world-service-staging-diwas1-integ-linux",
+      "required_make_targets": [
+        "feature-smoke"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "DIWAS1-integ-macos",
+      "name": "DIWAS1 slice (integration macos)",
+      "type": "integration",
+      "phase": "DIWAS1",
+      "status": "pending",
+      "description": "macos parity or smoke follow-up task for the checkpoint boundary slice.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/contract.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md",
+        "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/DIWAS1-spec.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md"
+      ],
+      "acceptance_criteria": [
+        "macos evidence for the boundary slice is green or recorded as unchanged by the checkpoint."
+      ],
+      "start_checklist": [
+        "Start this task only after the checkpoint completes and reports a platform issue or follow-up.",
+        "Read platform-parity-spec.md, tasks.json, session_log.md, and the kickoff prompt.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Run the platform-specific validation named in the kickoff prompt.",
+        "Run `make triad-task-finish TASK_ID=\"DIWAS1-integ-macos\"` from inside the worktree.",
+        "Record the platform evidence in the handoff and the orchestration session log."
+      ],
+      "worktree": "wt/dev-install-world-service-staging-diwas1-integ-macos",
+      "integration_task": "DIWAS1-integ-macos",
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/kickoff_prompts/DIWAS1-integ-macos.md",
+      "depends_on": [
+        "DIWAS1-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "macos",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/ci-compile-parity.yml",
+      "git_branch": "dev-install-world-service-staging-diwas1-integ-macos",
+      "required_make_targets": [
+        "ci-compile-parity"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "DIWAS1-integ-windows",
+      "name": "DIWAS1 slice (integration windows)",
+      "type": "integration",
+      "phase": "DIWAS1",
+      "status": "pending",
+      "description": "windows parity or smoke follow-up task for the checkpoint boundary slice.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/contract.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md",
+        "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/DIWAS1-spec.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md"
+      ],
+      "acceptance_criteria": [
+        "windows evidence for the boundary slice is green or recorded as unchanged by the checkpoint."
+      ],
+      "start_checklist": [
+        "Start this task only after the checkpoint completes and reports a platform issue or follow-up.",
+        "Read platform-parity-spec.md, tasks.json, session_log.md, and the kickoff prompt.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Run the platform-specific validation named in the kickoff prompt.",
+        "Run `make triad-task-finish TASK_ID=\"DIWAS1-integ-windows\"` from inside the worktree.",
+        "Record the platform evidence in the handoff and the orchestration session log."
+      ],
+      "worktree": "wt/dev-install-world-service-staging-diwas1-integ-windows",
+      "integration_task": "DIWAS1-integ-windows",
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/kickoff_prompts/DIWAS1-integ-windows.md",
+      "depends_on": [
+        "DIWAS1-integ-core",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": [],
+      "platform": "windows",
+      "runner": "github-actions",
+      "workflow": ".github/workflows/ci-compile-parity.yml",
+      "git_branch": "dev-install-world-service-staging-diwas1-integ-windows",
+      "required_make_targets": [
+        "ci-compile-parity"
+      ],
+      "merge_to_orchestration": false
+    },
+    {
+      "id": "DIWAS1-integ",
+      "name": "DIWAS1 slice (integration final)",
+      "type": "integration",
+      "phase": "DIWAS1",
+      "status": "pending",
+      "description": "Finalize the boundary slice after checkpoint CI and any platform-fix work.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/contract.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/platform-parity-spec.md",
+        "docs/project_management/adrs/draft/ADR-0035-summoning-wombat.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/DIWAS1-spec.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/smoke/linux-smoke.sh"
+      ],
+      "acceptance_criteria": [
+        "Checkpoint CI evidence is complete and recorded in session_log.md.",
+        "Boundary-slice platform follow-up tasks are complete or confirmed as no-op.",
+        "The final boundary slice state is green locally and merged back to the orchestration branch."
+      ],
+      "start_checklist": [
+        "git checkout feat/dev-install-world-service-staging && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, checkpoint plan, slice spec, and kickoff prompt.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Merge any platform-fix branches that produced commits.",
+        "Run `cargo fmt`.",
+        "Run `cargo clippy --workspace --all-targets -- -D warnings`.",
+        "Run `bash docs/project_management/packs/draft/dev-install-world-service-staging/smoke/linux-smoke.sh`.",
+        "Run `make integ-checks`.",
+        "Run `make triad-task-finish TASK_ID=\"DIWAS1-integ\"` from inside the worktree."
+      ],
+      "worktree": "wt/dev-install-world-service-staging-diwas1-integ",
+      "integration_task": "DIWAS1-integ",
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/kickoff_prompts/DIWAS1-integ.md",
+      "depends_on": [
+        "DIWAS1-integ-core",
+        "CP1-ci-checkpoint",
+        "DIWAS1-integ-linux",
+        "DIWAS1-integ-macos",
+        "DIWAS1-integ-windows"
+      ],
+      "concurrent_with": [],
+      "git_branch": "dev-install-world-service-staging-diwas1-integ",
+      "required_make_targets": [
+        "integ-checks"
+      ],
+      "merge_to_orchestration": true,
+      "ac_ids": [
+        "AC-DIWAS1-01",
+        "AC-DIWAS1-02",
+        "AC-DIWAS1-03",
+        "AC-DIWAS1-04",
+        "AC-DIWAS1-05"
+      ]
+    },
+    {
+      "id": "FZ-feature-cleanup",
+      "name": "Feature cleanup (worktrees and local branches)",
+      "type": "ops",
+      "phase": "FZ",
+      "status": "pending",
+      "description": "Remove retained worktrees and close the feature after the final integration and checkpoint complete.",
+      "references": [
+        "docs/project_management/packs/draft/dev-install-world-service-staging/plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/tasks.json",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/session_log.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/pre-planning/ci_checkpoint_plan.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS0/DIWAS0-spec.md",
+        "docs/project_management/packs/draft/dev-install-world-service-staging/slices/DIWAS1/DIWAS1-spec.md"
+      ],
+      "acceptance_criteria": [
+        "All slice and checkpoint tasks are complete.",
+        "Feature planning surfaces are aligned for promotion or execution review.",
+        "Retained worktrees are removed by the cleanup script."
+      ],
+      "start_checklist": [
+        "git checkout feat/dev-install-world-service-staging && git pull --ff-only",
+        "Confirm every task is complete and merged as intended.",
+        "Set the task status to in_progress and add a START entry in session_log.md."
+      ],
+      "end_checklist": [
+        "Run `make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/packs/draft/dev-install-world-service-staging\" DRY_RUN=1 REMOVE_WORKTREES=1 PRUNE_LOCAL=1`.",
+        "Run `make triad-feature-cleanup FEATURE_DIR=\"docs/project_management/packs/draft/dev-install-world-service-staging\" REMOVE_WORKTREES=1 PRUNE_LOCAL=1`.",
+        "Paste the cleanup summary into the END entry in session_log.md and mark the task complete."
+      ],
+      "worktree": null,
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/packs/draft/dev-install-world-service-staging/kickoff_prompts/FZ-feature-cleanup.md",
+      "depends_on": [
+        "DIWAS1-integ",
+        "CP1-ci-checkpoint"
+      ],
+      "concurrent_with": []
+    }
+  ]
+}

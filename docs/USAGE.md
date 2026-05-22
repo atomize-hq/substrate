@@ -166,8 +166,8 @@ substrate --shim-remove   # delete ~/.substrate/shims
 SUBSTRATE_NO_SHIMS=1 substrate   # skip deployment for this invocation
 ```
 
-On Linux, `substrate --shim-status[ --json]` also reports whether the world-agent
-socket is managed by systemd socket activation (`substrate-world-agent.socket`)
+On Linux, `substrate --shim-status[ --json]` also reports whether the world-service
+socket is managed by systemd socket activation (`substrate-world-service.socket`)
 or a manual listener, making it easier to distinguish provisioned services from
 legacy bindings.
 
@@ -297,7 +297,7 @@ manager and point `BASH_ENV` at `~/.substrate_bashenv` explicitly.
 ### World Commands
 
 - `substrate host doctor [--json]` – host readiness for world routing (host prerequisites + transport readiness)
-- `substrate world doctor [--json]` – world readiness report (includes host doctor + world-agent facts)
+- `substrate world doctor [--json]` – world readiness report (includes host doctor + world-service facts)
 - `substrate world gateway sync|status|restart` – operator gateway lifecycle/status entrypoints.
 - `substrate world gateway status` is the stable operator entrypoint for gateway availability and discovery.
 - `substrate world gateway status --json` is the authoritative machine-readable status surface for that entrypoint.

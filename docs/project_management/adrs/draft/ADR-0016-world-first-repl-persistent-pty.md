@@ -57,7 +57,7 @@ ADR_BODY_SHA256: 339caac9c2e14856e07f9f2d2af15038207bc67717c1b81d736717267a279c4
 
 ## Problem / Context
 - The current interactive REPL mixes execution contexts:
-  - Many commands are executed “in world” (overlay view) via world-agent request/response paths.
+  - Many commands are executed “in world” (overlay view) via world-service request/response paths.
   - A small set of “lightweight builtins” (`cd`, `pwd`, `export`, `unset`) are executed by the host process to mutate host cwd/env.
 - This yields a user-visible inconsistency: a path can exist in the world overlay view (e.g., created during a prior in-world command), but a subsequent `cd <path>` fails because the host cannot resolve the path on the host filesystem.
 - The workaround (`:pty bash`) works because it enters a real shell inside the world, but it is:
@@ -96,7 +96,7 @@ ADR_BODY_SHA256: 339caac9c2e14856e07f9f2d2af15038207bc67717c1b81d736717267a279c4
   - Auto-PTY is preserved: interactive/TUI commands run in PTY passthrough mode automatically, using the existing “needs PTY” heuristic; `:pty` forces PTY passthrough for a line when heuristics are wrong (see `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md`).
     - If a command is misclassified into line mode but reads from the controlling TTY (e.g., via `/dev/tty`), it may block; `Ctrl+C` is the supported escape, then rerun with `:pty <cmd>`.
     - Operator recovery contract (no fallback): if a line-mode command appears “hung” due to needing a TTY, abort with `Ctrl+C` and rerun with `:pty <cmd>`. Implementations MAY print a non-fatal hint after a short delay (guidance only; not a completion fallback).
-  - The prompt is line-editor driven (no interactive PS2 continuation prompts), but a single submission MAY contain embedded newlines (e.g., pastes/multiline input). Submissions are sent to world-agent via explicit `exec` messages (not as raw PTY stdin bytes), and completion is reported via `command_complete`. Job control/backgrounding remains out of scope (see `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md` and decision register DR-13).
+  - The prompt is line-editor driven (no interactive PS2 continuation prompts), but a single submission MAY contain embedded newlines (e.g., pastes/multiline input). Submissions are sent to world-service via explicit `exec` messages (not as raw PTY stdin bytes), and completion is reported via `command_complete`. Job control/backgrounding remains out of scope (see `docs/project_management/_archived/world-first-repl-persistent-pty/STATE_MACHINE.md` and decision register DR-13).
     - Output note: PTY `stdout` bytes MAY still arrive while the REPL is idle (e.g., from background writers); Substrate forwards/renders them, but they are **unattributed** to a specific command by default.
     - Output ordering note (MUST): for a given `exec`, `command_complete` MUST NOT be emitted until all foreground Session PTY output bytes for that command have been forwarded to the host. v1 uses a watermark-based post-exit drain barrier (Linux: `ioctl(FIONREAD)`); if the platform cannot support the watermark query, v1 persistent sessions MUST fail closed (see `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`).
     - Concurrent output note (MUST): Session PTY `stdout` frames are raw PTY bytes only (stdout+stderr combined). Substrate-managed concurrent output (e.g., `:demo-agent`, future AgentHub events) MUST NOT be injected into PTY bytes; during PTY passthrough, such structured events SHOULD be buffered and rendered only after the foreground PTY command completes to avoid corrupting TUIs (see `docs/project_management/_archived/world-first-repl-persistent-pty/PROTOCOL.md`).
@@ -157,10 +157,10 @@ ADR_BODY_SHA256: 339caac9c2e14856e07f9f2d2af15038207bc67717c1b81d736717267a279c4
 
 ### Platform guarantees
 - Linux:
-  - Interactive REPL uses the Linux world backend (world-agent over UDS) when enabled and available.
+  - Interactive REPL uses the Linux world backend (world-service over UDS) when enabled and available.
   - When world execution is enabled (e.g., `--world` or effective config enables world), the REPL must fail closed on startup if the world backend is not available (no implicit host fallback). `world_fs.require_world=true` strengthens this by ensuring world execution cannot be disabled by policy/config.
 - macOS:
-  - Interactive REPL uses Lima-backed world-agent streaming when enabled and available.
+  - Interactive REPL uses Lima-backed world-service streaming when enabled and available.
   - When world execution is enabled (e.g., `--world` or effective config enables world), the REPL must fail closed on startup if the world backend is not available (no implicit host fallback). `world_fs.require_world=true` strengthens this by ensuring world execution cannot be disabled by policy/config.
 - Windows:
   - No changes required by this ADR; world PTY parity is explicitly out of scope.
@@ -173,8 +173,8 @@ ADR_BODY_SHA256: 339caac9c2e14856e07f9f2d2af15038207bc67717c1b81d736717267a279c4
 
 - World session abstraction (new):
   - A long-lived PTY-backed session exists inside the world for the duration of the REPL session (Session PTY + trusted driver component).
-  - Substrate submits each REPL “submission” to world-agent as an explicit `exec` request (not as raw PTY stdin bytes) and receives streamed PTY output.
-  - Substrate derives per-submission exit status and updates its in-world cwd tracking from world-agent `command_complete` messages.
+  - Substrate submits each REPL “submission” to world-service as an explicit `exec` request (not as raw PTY stdin bytes) and receives streamed PTY output.
+  - Substrate derives per-submission exit status and updates its in-world cwd tracking from world-service `command_complete` messages.
 
 - World backend requirements (Linux/macOS):
   - The world backend must support a long-lived interactive session (PTY stream) with:
@@ -187,7 +187,7 @@ ADR_BODY_SHA256: 339caac9c2e14856e07f9f2d2af15038207bc67717c1b81d736717267a279c4
   - A command that mutates state (cwd/env) in the world session must have effects visible to subsequent unprefixed commands.
 
 ## Sequencing / Dependencies
-- This ADR depends on the existing world-agent streaming (`/v1/stream`) and REPL routing layers but introduces a new “persistent session” requirement.
+- This ADR depends on the existing world-service streaming (`/v1/stream`) and REPL routing layers but introduces a new “persistent session” requirement.
 - No explicit triad dependencies are declared in this Draft; once scheduled, this work must be integrated into:
   - `docs/project_management/packs/sequencing.json`
   - `docs/project_management/_archived/world-first-repl-persistent-pty/tasks.json`

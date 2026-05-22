@@ -11,19 +11,12 @@ use tokio::time::{timeout, Duration};
 
 use super::{ExecutionResult, ExecutionState};
 use crate::replay::helpers::replay_verbose;
-use agent_api_types::{ExecuteRequest, PolicySnapshotV3};
 #[cfg(target_os = "linux")]
 use substrate_common::FsDiff;
 use substrate_common::{log_schema, WorldRootMode};
 use substrate_trace::append_to_trace;
+use transport_api_types::{ExecuteRequest, PolicySnapshotV3};
 
-#[cfg(target_os = "linux")]
-use agent_api_client::AgentClient;
-#[cfg(target_os = "linux")]
-use agent_api_types::{
-    ExecuteResponse, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
-    PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldFsDenyEnforcementV3,
-};
 #[cfg(target_os = "linux")]
 use base64::engine::general_purpose::STANDARD as BASE64;
 #[cfg(target_os = "linux")]
@@ -32,6 +25,13 @@ use base64::Engine;
 use std::process as stdprocess;
 #[cfg(target_os = "linux")]
 use std::sync::OnceLock;
+#[cfg(target_os = "linux")]
+use transport_api_client::AgentClient;
+#[cfg(target_os = "linux")]
+use transport_api_types::{
+    ExecuteResponse, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
+    PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3, WorldFsDenyEnforcementV3,
+};
 #[cfg(target_os = "linux")]
 use world::{copydiff, overlayfs};
 use world_api::WorldReuseMode;
@@ -1043,12 +1043,12 @@ fn agent_socket_path(state: &ExecutionState) -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_api_types::{
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    use transport_api_types::{
         PolicySnapshotV3, PolicySnapshotWorldFsDimensionV3, PolicySnapshotWorldFsFailClosedV3,
         PolicySnapshotWorldFsV3, PolicySnapshotWorldFsWriteV3,
     };
-    use std::collections::HashMap;
-    use std::sync::{Mutex, OnceLock};
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();

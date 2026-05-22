@@ -3,7 +3,9 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::execution::config_model::AgentExecutionScope;
 
-use super::mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE};
+use super::mapping::{
+    protocol_validation_error, MEMBER_ROLE, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL,
+};
 use super::orchestration_session::OrchestrationSessionRecord;
 use super::validator::RuntimeSelectionDescriptor;
 
@@ -375,6 +377,12 @@ impl AgentRuntimeParticipantRecord {
         if self.handle.orchestration_session_id.trim().is_empty() {
             anyhow::bail!("orchestration_session_id must not be empty");
         }
+        if self.handle.protocol != PURE_AGENT_PROTOCOL {
+            anyhow::bail!(
+                "participant record {}",
+                protocol_validation_error("it", Some(self.handle.protocol.as_str()))
+            );
+        }
 
         let world_fields_present =
             self.handle.world_id.is_some() || self.handle.world_generation.is_some();
@@ -689,14 +697,16 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
+    use crate::execution::agent_runtime::mapping::{
+        AgentRuntimeBackendKind, LEGACY_PURE_AGENT_PROTOCOL,
+    };
 
     fn descriptor(scope: AgentExecutionScope) -> RuntimeSelectionDescriptor {
         RuntimeSelectionDescriptor {
             agent_id: "codex".to_string(),
             backend_id: "cli:codex".to_string(),
             backend_kind: AgentRuntimeBackendKind::Codex,
-            protocol: "uaa.agent.session".to_string(),
+            protocol: "substrate.agent.session".to_string(),
             execution_scope: scope,
             binary_path: PathBuf::from("/usr/bin/codex"),
         }
@@ -913,7 +923,7 @@ mod tests {
             "agent_id": "codex",
             "backend_id": "cli:codex",
             "role": "orchestrator",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "execution": { "scope": "host" },
             "state": "allocating",
             "opened_at": "2026-04-24T18:30:00Z",
@@ -970,7 +980,7 @@ mod tests {
             "agent_id": "codex",
             "backend_id": "cli:codex",
             "role": "orchestrator",
-            "protocol": "uaa.agent.session",
+            "protocol": "substrate.agent.session",
             "execution": { "scope": "world" },
             "state": "allocating",
             "opened_at": "2026-04-24T18:30:00Z",
@@ -994,5 +1004,42 @@ mod tests {
         assert!(err
             .to_string()
             .contains("orchestrator participants must use execution.scope=host"));
+    }
+
+    #[test]
+    fn deserialize_rejects_legacy_protocol_row() {
+        let payload = json!({
+            "participant_id": "ash_001",
+            "orchestration_session_id": "sess_001",
+            "agent_id": "codex",
+            "backend_id": "cli:codex",
+            "role": ORCHESTRATOR_ROLE,
+            "protocol": LEGACY_PURE_AGENT_PROTOCOL,
+            "execution": { "scope": "host" },
+            "state": "ready",
+            "opened_at": "2026-05-21T00:00:00Z",
+            "last_transition_at": "2026-05-21T00:00:00Z",
+            "internal": {
+                "resolved_agent_kind": "codex",
+                "resolved_binary_path": "/usr/bin/codex",
+                "shell_owner_pid": 1,
+                "lease_token": "lease_001",
+                "cancel_supported": true,
+                "control_owner_retained": false,
+                "event_stream_active": false,
+                "completion_observer_retained": false,
+                "ownership_valid": false,
+                "attached_client_present": false,
+                "resume_eligible": false
+            }
+        });
+
+        let error = serde_json::from_value::<AgentRuntimeParticipantRecord>(payload)
+            .expect_err("legacy protocol rows must fail closed");
+        assert!(
+            error.to_string().contains(LEGACY_PURE_AGENT_PROTOCOL)
+                && error.to_string().contains(PURE_AGENT_PROTOCOL),
+            "unexpected error: {error}"
+        );
     }
 }

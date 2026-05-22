@@ -10,10 +10,10 @@ Related Spike: docs/SPIKE_TRANSPORT_PARITY_PLAN.md
 This document captures the transport architecture needed for cross-platform parity.
 
 - Host binaries (`substrate-shell`, `host-proxy`, tooling)
-  communicate only through the `agent-api-client` transport abstraction.
+  communicate only through the `transport-api-client` transport abstraction.
 - The Windows forwarder mediates between host Named Pipes and the world
   agent running in WSL.
-- `world-agent` exposes both its canonical Unix domain socket and a
+- `world-service` exposes both its canonical Unix domain socket and a
   gated loopback TCP listener.
 - Telemetry records the active transport in every span to aid
   troubleshooting and parity verification.
@@ -25,7 +25,7 @@ This document captures the transport architecture needed for cross-platform pari
 
 ```text
 +-------------------+            +-----------------------+
-| Host CLI (all OS) |--HTTP----->| agent-api-client      |
+| Host CLI (all OS) |--HTTP----->| transport-api-client      |
 | substrate, proxy  |            | - Connector trait     |
 +-------------------+            | - Endpoint enum       |
                                   +-----------+-----------+
@@ -44,7 +44,7 @@ This document captures the transport architecture needed for cross-platform pari
        |                  |
        v                  v
 +-------------+    +-------------------+
-| world-agent |    | world-agent       |
+| world-service |    | world-service       |
 | Unix socket |    | Loopback TCP      |
 | /run/...    |    | 127.0.0.1:<port> |
 +-------------+    +-------------------+
@@ -93,7 +93,7 @@ This document captures the transport architecture needed for cross-platform pari
 - Forwarder → agent (inside WSL) defaults to loopback TCP `127.0.0.1:61337`
   (enabled by systemd unit via `SUBSTRATE_AGENT_TCP_PORT`).
 
-## World Agent Dual Listener
+## World Service Dual Listener
 
 - Unix socket remains `/run/substrate.sock` with permissions 0666 inside
   the world.

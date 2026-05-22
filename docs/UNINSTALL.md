@@ -40,19 +40,19 @@ sudo env HOME="$HOME" ./scripts/substrate/uninstall.sh
 
 Additional automated steps on systemd hosts:
 
-- Stops and disables the `substrate-world-agent` systemd service.
-- Stops/disables `substrate-world-agent.socket` as well.
-- Removes `/etc/systemd/system/substrate-world-agent.{service,socket}` and reloads
+- Stops and disables the `substrate-world-service` systemd service.
+- Stops/disables `substrate-world-service.socket` as well.
+- Removes `/etc/systemd/system/substrate-world-service.{service,socket}` and reloads
   systemd.
-- Deletes `/usr/local/bin/substrate-world-agent`, `/var/lib/substrate`, and the
+- Deletes `/usr/local/bin/substrate-world-service`, `/var/lib/substrate`, and the
   `/run/substrate` runtime directory.
 
 ### Manual Verification
 
 ```bash
-systemctl status substrate-world-agent.socket   # Should be "Unit not found"
-systemctl status substrate-world-agent.service  # Should be "Unit not found"
-ls -l /usr/local/bin | grep substrate        # No world-agent binary
+systemctl status substrate-world-service.socket   # Should be "Unit not found"
+systemctl status substrate-world-service.service  # Should be "Unit not found"
+ls -l /usr/local/bin | grep substrate        # No world-service binary
 ls ~/.substrate                              # Should report "No such file"
 ```
 

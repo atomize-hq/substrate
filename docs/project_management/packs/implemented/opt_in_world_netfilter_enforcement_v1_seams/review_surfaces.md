@@ -13,7 +13,7 @@ flowchart LR
   U -->|"runs command"| SH["substrate shell"]
   SH -->|"policy eval"| BR["broker (policy)"]
   BR -->|"effective policy"| SNAP["PolicySnapshotV3 (net_allowed)"]
-  SH -->|"execute request (WorldSpec)"| WA["world-agent"]
+  SH -->|"execute request (WorldSpec)"| WA["world-service"]
   WA -->|"spawns inside world"| W["world backend (cgroup/netns)"]
   W -->|"nftables/netfilter install (opt-in)"| NF["egress enforcement"]
 ```
@@ -28,7 +28,7 @@ flowchart TB
     CFG["config gate: world.net.filter"]
   end
   subgraph World["World / Data plane"]
-    WA["world-agent service"]
+    WA["world-service service"]
     NF["netfilter (nftables)"]
     EX["executed process"]
   end
@@ -46,8 +46,8 @@ flowchart TB
 flowchart TB
   CLI["src/substrate (CLI)"] --> SCFG["crates/shell::config_model"]
   CLI --> SSNAP["crates/shell::policy_snapshot"]
-  SSNAP --> AT["crates/agent-api-types::PolicySnapshotV3"]
-  SSNAP --> WAX["crates/world-agent (service + pty)"]
+  SSNAP --> AT["crates/transport-api-types::PolicySnapshotV3"]
+  SSNAP --> WAX["crates/world-service (service + pty)"]
   WAX --> WLIB["crates/world (session + netfilter)"]
   WAX --> DOCT["world doctor endpoint"]
   SCFG --> DOCS["docs/reference/config/world.md + CONFIGURATION.md"]

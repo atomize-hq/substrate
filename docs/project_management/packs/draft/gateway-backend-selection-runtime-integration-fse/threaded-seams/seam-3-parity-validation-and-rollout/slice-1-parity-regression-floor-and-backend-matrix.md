@@ -46,7 +46,7 @@ open_remediations: []
   - `C-04`
   - `C-05`
 - **Verification**:
-  - targeted updates or confirmations in `crates/world-agent/tests/gateway_runtime_parity.rs` and `crates/shell/tests/world_gateway.rs`
+  - targeted updates or confirmations in `crates/world-service/tests/gateway_runtime_parity.rs` and `crates/shell/tests/world_gateway.rs`
 - **Rollout/safety**:
   - do not let parity coverage imply support for any backend beyond `cli:codex` and the named `api:openai` proof target
 - **Review surface refs**:

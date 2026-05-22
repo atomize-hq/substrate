@@ -51,7 +51,7 @@ pub(crate) fn build_world_env_map_for_cwd(
     env_map.insert("XDG_CACHE_HOME".to_string(), "/root/.cache".to_string());
     env_map.insert("TERM".to_string(), "xterm-256color".to_string());
 
-    // Preserve Substrate/WORLD control-plane env so policy/config state is visible to world-agent
+    // Preserve Substrate/WORLD control-plane env so policy/config state is visible to world-service
     // and downstream shims, without inheriting arbitrary host user environment.
     for (key, value) in std::env::vars() {
         let keep = key.starts_with("SUBSTRATE_") || key.starts_with("WORLD_");

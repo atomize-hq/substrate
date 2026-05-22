@@ -51,7 +51,7 @@
 - Grounding code references:
   - Concurrent structured output in REPL: `crates/shell/src/execution/agent_events.rs`, `crates/shell/src/repl/async_repl.rs`
   - Example command that emits concurrent events: search for `:demo-agent`
-  - World PTY byte streaming plumbing: `crates/world-agent/src/pty.rs`
+  - World PTY byte streaming plumbing: `crates/world-service/src/pty.rs`
 
 ## Executive Summary (Operator)
 
@@ -101,7 +101,7 @@ ADR_BODY_SHA256: f0d3b640100a78346549730cb1bb9a2051e2875038315f4f7e1b0ada4cd52ff
 - Designing the full agent hub configuration model (providers, credentials, tool installation).
 - Providing a full block-based terminal UI as part of this ADR.
 - Solving job control/backgrounding in the REPL (out of scope for ADR-0016 and remains out of scope here).
-- Adding new world-agent wire protocols beyond what ADR-0016 requires.
+- Adding new world-service wire protocols beyond what ADR-0016 requires.
 
 ## User Contract (Authoritative)
 
@@ -258,7 +258,7 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
 - All platforms:
   - The output routing and rendering rules in this ADR are required anywhere PTY passthrough and structured agent events can occur concurrently.
 - Linux/macOS:
-  - PTY passthrough is expected to use world-agent streaming (`/v1/stream`) per ADR-0016; structured event printing must remain out-of-band (no PTY injection).
+  - PTY passthrough is expected to use world-service streaming (`/v1/stream`) per ADR-0016; structured event printing must remain out-of-band (no PTY injection).
 - Windows:
   - This ADR introduces no platform-specific exceptions; if PTY passthrough is supported on Windows, the same non-injection rule applies.
 
@@ -271,7 +271,7 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
     - PTY-bytes rendering path (binary-safe).
     - Structured-event rendering path (typed messages; existing external-printer style).
   - Ensures structured-event output is not injected into PTY passthrough.
-- `crates/world-agent`:
+- `crates/world-service`:
   - Continues to treat `stdout` as a raw PTY byte stream.
 - `crates/common` / `crates/trace`:
   - Structured agent events MUST be traceable with stable correlation identifiers (persisted to canonical `trace.jsonl`).
@@ -282,7 +282,7 @@ Fail-closed drift posture (`agents.hub.world_restart.on_drift=fail_closed`)
 ### End-to-end flow
 
 - Inputs:
-  - PTY byte stream from world-agent streaming (`/v1/stream`) or host PTY passthrough.
+  - PTY byte stream from world-service streaming (`/v1/stream`) or host PTY passthrough.
   - Structured agent events emitted by agent hub wrappers/orchestration and/or internal REPL tasks.
   - Effective config (`repl.max_pty_buffered_lines`) from config layering.
 - Derived state:

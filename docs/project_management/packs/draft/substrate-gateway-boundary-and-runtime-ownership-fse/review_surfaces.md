@@ -10,7 +10,7 @@ They do not, by themselves, satisfy seam-local pre-exec review.
 flowchart LR
   OP["Operator"] --> CMD["substrate world gateway sync | status | restart"]
   CMD --> SUB["Substrate-owned boundary<br/>policy / placement / lifecycle / secret delivery / operator UX / tracing"]
-  SUB --> WA["world-agent lifecycle + status surface"]
+  SUB --> WA["world-service lifecycle + status surface"]
   WA --> GW["substrate-gateway inside the world"]
   GW --> P["provider / planner / executor internals"]
 ```
@@ -19,7 +19,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  CMD["substrate world gateway status --json"] --> WA["typed world-agent status surface"]
+  CMD["substrate world gateway status --json"] --> WA["typed world-service status surface"]
   WA --> ST["Substrate-owned status object"]
   ST --> CW["client_wiring.*"]
   ST --> AV["gateway availability + absence semantics"]
@@ -37,7 +37,7 @@ flowchart TB
   DEC -->|"No: policy or safety denial"| EC5["Exit 5"]
   DEC -->|"No: dependency unavailable"| EC4["Exit 4"]
   DEC -->|"Yes"| SD["Substrate-owned host-to-world secret delivery"]
-  SD --> WA["typed world-agent lifecycle orchestration"]
+  SD --> WA["typed world-service lifecycle orchestration"]
   WA --> GW["substrate-gateway in-world runtime"]
   GW --> RS["status / sync / restart result"]
 ```

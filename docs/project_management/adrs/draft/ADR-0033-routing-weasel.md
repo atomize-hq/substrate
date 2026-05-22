@@ -122,7 +122,7 @@ Introduce an abstract system-packages method and have Substrate translate packag
   - Exit code taxonomy: `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md` (authoritative unless explicitly overridden here)
   - `0`: success
   - `2`: invalid inventory/config schema (including unsupported `install.method` / invalid `install.pacman` shape)
-  - `3`: world backend unavailable / cannot connect to world-agent
+  - `3`: world backend unavailable / cannot connect to world-service
   - `4`: unmet prerequisites or unsupported operation (includes: provisioning unsupported on this backend; enabled set contains system-package items requiring provisioning; detected world OS manager does not match required install methods)
   - `5`: safety / policy violation (reserved; runtime flow should avoid triggering this by failing early)
 
@@ -153,7 +153,7 @@ Introduce an abstract system-packages method and have Substrate translate packag
   - `crates/shell/src/builtins/world_enable/…`: extend provisioning-time flow to:
     - probe the world OS family/manager, and
     - execute the correct system-package provisioning path (APT per `ADR-0030`; pacman per this ADR) when supported.
-  - `crates/world-agent/src/service.rs` (and/or execution plumbing): ensure provisioning execution is possible without weakening hardened runtime execution (distinct request profile or explicit guard rails).
+  - `crates/world-service/src/service.rs` (and/or execution plumbing): ensure provisioning execution is possible without weakening hardened runtime execution (distinct request profile or explicit guard rails).
   - Docs: update operator reference and error text (`docs/reference/world/deps/…`) to reflect manager-aware provisioning guidance without overriding the pack-root contract.
 - End-to-end flow:
   - Inputs:

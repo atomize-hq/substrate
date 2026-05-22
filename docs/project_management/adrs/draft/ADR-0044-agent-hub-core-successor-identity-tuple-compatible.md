@@ -180,7 +180,7 @@ Concrete example:
   - Agent Hub records the pure orchestration run as:
     - `client=claude_code`
     - `router=agent_hub`
-    - `protocol=uaa.agent.session`
+    - `protocol=substrate.agent.session`
     - `backend_id=cli:claude_code`
     - `provider`: absent
     - `auth_authority`: absent
@@ -188,7 +188,7 @@ Concrete example:
     - `backend_id=cli:codex`
     - `client=codex`
     - `router=agent_hub`
-    - `protocol=uaa.agent.session`
+    - `protocol=substrate.agent.session`
     - `world_id=world-17`
     - `world_generation=3`
     - `provider`: absent
@@ -234,7 +234,7 @@ Concrete example:
 - Components:
   - `crates/shell`: operator-facing list/status/doctor presentation, host-scoped orchestrator evaluation, and successor command wiring.
   - `crates/common`: shared command-surface projection helpers plus shared agent-event and identity-field helpers reused by shell and telemetry code.
-  - `crates/agent-api-types`, `crates/agent-api-client`, and `crates/agent-api-core`: capability, session-handle, and lifecycle contract surfaces for successor Agent Hub semantics.
+  - `crates/transport-api-types`, `crates/transport-api-client`, and `crates/transport-api-core`: capability, session-handle, and lifecycle contract surfaces for successor Agent Hub semantics.
   - `crates/trace`: canonical event and trace attribution sink.
   - `substrate_gateway`: nested LLM fulfillment boundary for agent-triggered model calls.
   - A dedicated `crates/agent-hub` package is optional future refactor territory only; this ADR does not require or introduce one.

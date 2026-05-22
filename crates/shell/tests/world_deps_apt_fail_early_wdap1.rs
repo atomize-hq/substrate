@@ -836,7 +836,7 @@ fn current_install_conflicting_apt_pins_exits_2_before_world_execution() {
     let cmds = recorded_cmds(&records);
     assert!(
         cmds.is_empty(),
-        "expected conflicts to fail before any world-agent execution; cmds={cmds:?}"
+        "expected conflicts to fail before any world-service execution; cmds={cmds:?}"
     );
 }
 

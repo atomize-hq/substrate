@@ -15,7 +15,7 @@ basis:
   stale_triggers:
   - /etc/os-release family mapping, contradiction policy, or pacman presence handling changes
   - supported backend posture changes for Linux host-native, macOS Lima, or Windows WSL
-  - shared-file refactors in world_enable or world-agent move the in-world execution boundary
+  - shared-file refactors in world_enable or world-service move the in-world execution boundary
   - exit `4` semantics or deterministic reason labels change
 gates:
   post_exec:

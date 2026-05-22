@@ -128,7 +128,7 @@ function New-HostGatewaySmokeAuthFixture {
   "account_id": "acct_smoke",
   "access_token": "header.payload.signature"
 }
- '@ | Set-Content -LiteralPath $authPath -NoNewline
+'@ | Set-Content -LiteralPath $authPath -NoNewline
         $created = $true
     }
 
@@ -273,10 +273,10 @@ Write-Host "[INFO] Using substrate.exe at: $SubstrateExe" -ForegroundColor Yello
 $projectHasCargo = Test-Path (Join-Path $ProjectPath 'Cargo.toml')
 if (-not $projectHasCargo) {
     Invoke-Step "Packaged guest world artifacts present" {
-        $worldAgentArtifact = Join-Path $ProjectPath 'bin\linux\world-agent'
+        $worldAgentArtifact = Join-Path $ProjectPath 'bin\linux\world-service'
         $gatewayArtifact = Join-Path $ProjectPath 'bin\linux\substrate-gateway'
         if (-not (Test-Path -LiteralPath $worldAgentArtifact)) {
-            throw "expected packaged guest world-agent artifact at $worldAgentArtifact"
+            throw "expected packaged guest world-service artifact at $worldAgentArtifact"
         }
         if (-not (Test-Path -LiteralPath $gatewayArtifact)) {
             throw "expected packaged guest gateway artifact at $gatewayArtifact"

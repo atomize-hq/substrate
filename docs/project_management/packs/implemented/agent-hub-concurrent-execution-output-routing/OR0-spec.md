@@ -16,7 +16,7 @@ This slice is the minimal contract seam needed before any PTY passthrough buffer
 
 - PTY passthrough buffering, drop behavior, and suppression summary emission (implemented in OR1).
 - `repl.max_pty_buffered_lines` config key plumbing (implemented in OR1).
-- Any changes to world-agent PTY transport (`/v1/stream`).
+- Any changes to world-service PTY transport (`/v1/stream`).
 
 ## Behavior (authoritative)
 

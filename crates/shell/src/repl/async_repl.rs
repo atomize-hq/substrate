@@ -8,13 +8,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-use agent_api_client::AgentClient;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-use agent_api_types::{
-    ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1,
-    MemberTurnSubmitRequestV1,
-};
 use anyhow::{anyhow, Context, Result};
 use futures::{pin_mut, FutureExt, StreamExt};
 use reedline::{ExternalPrinter, Prompt, Reedline, Signal};
@@ -22,6 +15,13 @@ use serde::Deserialize;
 use tokio::runtime::Builder as TokioRuntimeBuilder;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use transport_api_client::AgentClient;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+use transport_api_types::{
+    ExecuteCancelRequestV1, ExecuteStreamFrame, MemberRuntimeBackendKindV1,
+    MemberTurnSubmitRequestV1,
+};
 use uuid::Uuid;
 
 use crate::execution::agent_events::{
@@ -6526,7 +6526,7 @@ struct WorldDriftRequest<'a> {
     requested_cwd: String,
     startup_context: Option<&'a RuntimeOrchestrationContext>,
     live_runtime_established: bool,
-    policy_snapshot: agent_api_types::PolicySnapshotV3,
+    policy_snapshot: transport_api_types::PolicySnapshotV3,
     snapshot_hash: String,
     workspace_root: Option<PathBuf>,
     agent_printer: &'a ReplPrinter,
@@ -6636,8 +6636,8 @@ async fn handle_detected_world_drift(
 struct OpenWorldSessionRequest<'a> {
     requested_cwd: String,
     requested_path: &'a Path,
-    resolved_policy_snapshot: agent_api_types::PolicySnapshotV3,
-    shared_world_request: Option<agent_api_types::SharedWorldOwnerSpec>,
+    resolved_policy_snapshot: transport_api_types::PolicySnapshotV3,
+    shared_world_request: Option<transport_api_types::SharedWorldOwnerSpec>,
     snapshot_hash: String,
     workspace_root: Option<PathBuf>,
     on_stdout: StdoutCallback,
@@ -6727,9 +6727,9 @@ async fn restart_world_session(
     let shared_world_request =
         orchestration_session_id
             .clone()
-            .map(|id| agent_api_types::SharedWorldOwnerSpec {
+            .map(|id| transport_api_types::SharedWorldOwnerSpec {
                 orchestration_session_id: id,
-                action: agent_api_types::SharedWorldOwnerAction::ReplaceExpectedGeneration {
+                action: transport_api_types::SharedWorldOwnerAction::ReplaceExpectedGeneration {
                     expected_generation: previous_world_generation,
                     reason: reason.message().to_string(),
                 },
@@ -6945,9 +6945,9 @@ async fn start_world_session(
     let start_hash = resolved_start.snapshot_hash.clone();
     let start_workspace_root = find_workspace_root(requested_path);
     let shared_world_request =
-        startup_context.map(|context| agent_api_types::SharedWorldOwnerSpec {
+        startup_context.map(|context| transport_api_types::SharedWorldOwnerSpec {
             orchestration_session_id: context.orchestration_session_id(),
-            action: agent_api_types::SharedWorldOwnerAction::AttachOrCreate,
+            action: transport_api_types::SharedWorldOwnerAction::AttachOrCreate,
         });
     let session = open_world_session(OpenWorldSessionRequest {
         requested_cwd: requested_cwd.clone(),

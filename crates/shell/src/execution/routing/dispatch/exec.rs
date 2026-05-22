@@ -50,7 +50,7 @@ use substrate_trace::{create_span_builder, ExecutionOrigin, PolicyDecision};
 
 #[cfg(target_os = "linux")]
 const WORLD_BACKEND_UNAVAILABLE_HINT: &str =
-    "hint: run 'substrate world doctor --json' and check 'systemctl status substrate-world-agent.socket'";
+    "hint: run 'substrate world doctor --json' and check 'systemctl status substrate-world-service.socket'";
 #[cfg(not(target_os = "linux"))]
 const WORLD_BACKEND_UNAVAILABLE_HINT: &str = "hint: run 'substrate world doctor --json'";
 
@@ -491,7 +491,7 @@ pub(crate) fn execute_command(
     let start_time = std::time::Instant::now();
 
     if should_use_pty {
-        // Attempt world-agent PTY WS route on Linux when world is enabled or agent socket exists
+        // Attempt world-service PTY WS route on Linux when world is enabled or agent socket exists
         #[cfg(target_os = "linux")]
         {
             let socket_path = world_socket_path();
@@ -688,7 +688,7 @@ pub(crate) fn execute_command(
             }
         }
 
-        // Attempt world-agent PTY WS route on mac when world is enabled
+        // Attempt world-service PTY WS route on mac when world is enabled
         #[cfg(target_os = "macos")]
         {
             let context = pw::get_context();
@@ -1000,7 +1000,7 @@ pub(crate) fn execute_command(
                 Err(e) => {
                     if world_required {
                         anyhow::bail!(
-                            "world execution required ({}); world-agent exec failed: {}",
+                            "world execution required ({}); world-service exec failed: {}",
                             world_required_reason,
                             e
                         );
@@ -1082,7 +1082,7 @@ pub(crate) fn execute_command(
                 Err(e) => {
                     if world_required {
                         anyhow::bail!(
-                            "world execution required ({}); world-agent exec failed: {}",
+                            "world execution required ({}); world-service exec failed: {}",
                             world_required_reason,
                             e
                         );
@@ -1276,7 +1276,7 @@ pub(crate) fn execute_command(
                     } else {
                         if world_required {
                             anyhow::bail!(
-                                "world execution required ({}); world-agent exec failed: {}",
+                                "world execution required ({}); world-service exec failed: {}",
                                 world_required_reason,
                                 e
                             );

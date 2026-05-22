@@ -36,13 +36,13 @@ Standard:
 ### World process exec/exit event family (new)
 
 - Edit/create (planned by WPEP1/WPEP2):
-  - `crates/world-agent` request/response/stream frame models (carry `process_events` + diagnostics)
-  - `crates/agent-api-types` transport additions for `process_events`
+  - `crates/world-service` request/response/stream frame models (carry `process_events` + diagnostics)
+  - `crates/transport-api-types` transport additions for `process_events`
   - `crates/shell` parsing + trace append for `world_process_*`
   - `crates/world` Linux backend capture + session storage (ptrace)
   - `crates/common` log schema constants + shared redaction helpers
   - Provisioning (Linux-backed backends):
-    - `scripts/linux/world-provision.sh` (add `CAP_SYS_PTRACE` to world-agent systemd unit)
+    - `scripts/linux/world-provision.sh` (add `CAP_SYS_PTRACE` to world-service systemd unit)
     - `scripts/mac/lima-warm.sh` (add `CAP_SYS_PTRACE` to guest systemd unit)
     - `scripts/mac/lima/substrate.yaml` and `scripts/mac/lima/substrate-dev.yaml` (keep unit templates aligned)
 

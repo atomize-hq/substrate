@@ -5,7 +5,7 @@ usage() {
   cat << 'USAGE'
 usage: scripts/linux/world-socket-verify.sh [--profile PROFILE] [--log-dir DIR] [--skip-cleanup]
 
-Provision the systemd-managed substrate world-agent socket via scripts/linux/world-provision.sh,
+Provision the systemd-managed substrate world-service socket via scripts/linux/world-provision.sh,
 run `substrate world doctor --json` to capture the `host.world_socket` block, run
 `substrate --shim-status-json`, and optionally uninstall the units afterward. This script requires
 sudo privileges and will write logs/artifacts under the specified log directory (defaults to
@@ -110,8 +110,8 @@ log "Running Linux world provisioner (requires sudo)"
 run "${REPO_ROOT}/scripts/linux/world-provision.sh" --profile "${PROFILE}"
 
 log "Capturing systemctl status for socket/service"
-run sudo systemctl status substrate-world-agent.socket --no-pager --lines=20 > "${SYSTEMCTL_SOCKET_LOG}"
-run sudo systemctl status substrate-world-agent.service --no-pager --lines=20 > "${SYSTEMCTL_SERVICE_LOG}"
+run sudo systemctl status substrate-world-service.socket --no-pager --lines=20 > "${SYSTEMCTL_SOCKET_LOG}"
+run sudo systemctl status substrate-world-service.service --no-pager --lines=20 > "${SYSTEMCTL_SERVICE_LOG}"
 
 log "Recording ${SOCKET_FS_PATH} ownership/perms"
 if ! sudo sh -c 'stat -c "path:%n mode:%a user:%U group:%G" "$1" >"$2"' _ "${SOCKET_FS_PATH}" "${SOCKET_STAT_LOG}"; then

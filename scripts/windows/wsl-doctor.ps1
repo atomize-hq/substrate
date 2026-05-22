@@ -291,7 +291,7 @@ $results += Invoke-Check 'Agent Socket' {
     & wsl -d $DistroName -- bash -lc 'test -S /run/substrate.sock'
     if ($LASTEXITCODE -ne 0) { throw '/run/substrate.sock missing' }
     '/run/substrate.sock present'
-} 'Verify substrate-world-agent systemd service is running'
+} 'Verify substrate-world-service systemd service is running'
 
 # Agent capabilities
 $results += Invoke-Check 'Agent Capabilities' {
@@ -299,7 +299,7 @@ $results += Invoke-Check 'Agent Capabilities' {
     if ($LASTEXITCODE -ne 0) { throw $output }
     $json = $output | ConvertFrom-Json
     "version=$($json.version) features=$($json.features -join ',')"
-} 'Inspect agent logs via journalctl -u substrate-world-agent'
+} 'Inspect agent logs via journalctl -u substrate-world-service'
 
 # nftables
 $results += Invoke-Check 'nftables' {
@@ -317,7 +317,7 @@ $results += Invoke-Check 'Disk (/)' {
 
 # agent logs tail
 $results += Invoke-Check 'Agent Logs' {
-    $output = & wsl -d $DistroName -- bash -lc 'journalctl -u substrate-world-agent -n 20 --no-pager'
+    $output = & wsl -d $DistroName -- bash -lc 'journalctl -u substrate-world-service -n 20 --no-pager'
     $text = if ($output -is [System.Array]) { ($output | Out-String).Trim() } else { [string]$output }
     $clean = $text -replace "`0", ''
     if ($LASTEXITCODE -ne 0 -or $clean -match 'There is no distribution') { throw $clean }

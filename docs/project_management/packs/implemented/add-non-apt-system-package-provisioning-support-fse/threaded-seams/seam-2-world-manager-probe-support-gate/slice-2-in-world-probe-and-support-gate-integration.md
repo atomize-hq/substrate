@@ -11,7 +11,7 @@ basis:
   stale_triggers:
   - upstream THR-01 publication changes “in-world only” posture or probe inputs
   - world_enable helper-script staging changes relocate probe execution out of the world
-  - world-agent execution plumbing changes alter exit-code translation or stderr/stdout capture
+  - world-service execution plumbing changes alter exit-code translation or stderr/stdout capture
 gates:
   pre_exec:
     review: passed
@@ -92,7 +92,7 @@ Checklist:
 - **Outcome**:
   - `substrate world enable --provision-deps` (and dry-run) reaches the in-world probe and converts it into a stable routing input.
 - **Inputs/outputs**:
-  - Inputs: existing world backend selection and `world-agent` execute/stream plumbing
+  - Inputs: existing world backend selection and `world-service` execute/stream plumbing
   - Outputs: manager decision becomes a single routing input for downstream provisioning (`SEAM-4`)
 - **Thread/contract refs**:
   - Inbound: `THR-01` / `C-01`
@@ -102,7 +102,7 @@ Checklist:
     - `crates/shell/src/builtins/world_enable/runner.rs`
     - `crates/shell/src/builtins/world_enable/runner/helper_script.rs`
     - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-    - `crates/world-agent/src/service.rs`
+    - `crates/world-service/src/service.rs`
 - **Acceptance criteria**:
   - Probe executes in-world and never uses host-derived routing inputs.
   - Unsupported lanes exit `4` before any mutating command path is reached.

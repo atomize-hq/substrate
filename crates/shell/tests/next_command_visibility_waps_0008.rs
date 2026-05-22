@@ -125,7 +125,7 @@ fn waps_0008_policy_patch_edits_visible_to_next_command() {
     let fixture = Waps0008Fixture::new();
 
     // Workspace marker file + initial config. Keep policy.mode non-disabled so policy resolution
-    // always runs before sending a world-agent request.
+    // always runs before sending a world-service request.
     fixture.write_workspace_config_patch("{}\n");
     fixture.write_global_config_patch(
         "world:\n  enabled: true\n  anchor_mode: follow-cwd\n  anchor_path: \"\"\n  caged: false\n\npolicy:\n  mode: observe\n\nsync:\n  auto_sync: false\n  direction: from_world\n  conflict_policy: prefer_host\n  exclude: []\n",
@@ -174,7 +174,7 @@ fn waps_0008_policy_patch_edits_visible_to_next_command() {
     assert_eq!(
         records.len(),
         2,
-        "expected exactly two world-agent execute requests"
+        "expected exactly two world-service execute requests"
     );
     let write_enabled_1 = records[0]
         .pointer("/policy_snapshot/world_fs/write/enabled")
@@ -245,7 +245,7 @@ fn waps_0008_config_edits_visible_to_next_command() {
     assert_eq!(
         records.len(),
         2,
-        "expected exactly two world-agent execute requests"
+        "expected exactly two world-service execute requests"
     );
 
     let mode_1 = records[0]

@@ -137,14 +137,14 @@ if ($dry) {
         ForEach-Object { Remove-Item -Recurse -Force -Path $_.FullName -ErrorAction SilentlyContinue }
 }
 
-Write-Log "Stopping substrate-world-agent inside WSL (if present)"
+Write-Log "Stopping substrate-world-service inside WSL (if present)"
 if ($dry) {
-    Write-Log "[dry-run] wsl -d $DistroName -- bash -lc 'sudo systemctl disable --now substrate-world-agent.socket substrate-world-agent.service'"
+    Write-Log "[dry-run] wsl -d $DistroName -- bash -lc 'sudo systemctl disable --now substrate-world-service.socket substrate-world-service.service'"
 } else {
     try {
-        & wsl -d $DistroName -- bash -lc "sudo systemctl disable --now substrate-world-agent.socket substrate-world-agent.service" | Out-Null
+        & wsl -d $DistroName -- bash -lc "sudo systemctl disable --now substrate-world-service.socket substrate-world-service.service" | Out-Null
     } catch {
-        Write-Warn ("Unable to disable substrate-world-agent inside {0}: {1}" -f $DistroName, $_.Exception.Message)
+        Write-Warn ("Unable to disable substrate-world-service inside {0}: {1}" -f $DistroName, $_.Exception.Message)
     }
 }
 

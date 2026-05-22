@@ -1,7 +1,6 @@
 use super::backend::AgentApiMock;
 use super::warm::WarmCmd;
 use super::WindowsWslBackend;
-use agent_api_types::{ExecuteRequest, ExecuteResponse, FsDiff as AgentFsDiff, ProcessTelemetry};
 use anyhow::anyhow;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
@@ -10,6 +9,9 @@ use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use transport_api_types::{
+    ExecuteRequest, ExecuteResponse, FsDiff as AgentFsDiff, ProcessTelemetry,
+};
 use world_api::{ExecRequest, WorldBackend, WorldSpec};
 
 struct MockAgent {

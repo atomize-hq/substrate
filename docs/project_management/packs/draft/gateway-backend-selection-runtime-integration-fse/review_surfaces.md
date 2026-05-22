@@ -31,7 +31,7 @@ Review focus:
 ```mermaid
 flowchart TB
   SRC["authorized auth source<br/>env or host credential file"] --> AUTH["integrated auth handoff"]
-  AUTH --> WA["world-agent gateway runtime manager"]
+  AUTH --> WA["world-service gateway runtime manager"]
   WA --> CFG["rendered runtime config"]
   WA --> MAN["runtime manifest"]
   WA --> LOG["managed stdout/stderr logs"]

@@ -105,7 +105,7 @@ Related implementation surfaces likely touched by downstream execution:
 - `crates/world-mac-lima/src/lib.rs`
 - `crates/world-mac-lima/src/forwarding.rs`
 - `crates/world-mac-lima/src/transport.rs`
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
 - `scripts/mac/lima-warm.sh`
 
 ## Deliverables
@@ -115,7 +115,7 @@ Related implementation surfaces likely touched by downstream execution:
   - ownership model
   - install/migration state
   - broker reachability
-  - world-agent reachability through the supported path
+  - world-service reachability through the supported path
   - breakglass requirement when normal-path repair is exhausted
 - operator-facing health output with actionable remediation text
 - a support evidence collection recipe rooted in CLI outputs and bounded logs
@@ -149,7 +149,7 @@ Related implementation surfaces likely touched by downstream execution:
   - healthy clean install
   - healthy migrated install
   - broken broker path
-  - broken world-agent path
+  - broken world-service path
   - incomplete migration state
 - Capture `substrate world gateway status --json` in the same scenarios above,
   plus after `substrate world gateway sync` and `restart`.

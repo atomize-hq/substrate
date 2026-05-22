@@ -24,13 +24,13 @@ Authoring standard:
 
 - Slice specs:
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP0-spec.md` — span correctness + joinability + preexec safety
-  - `docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md` — world-agent API + types + shell persistence for process events
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP1-spec.md` — world-service API + types + shell persistence for process events
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP2-spec.md` — Linux in-world process capture + provisioning/caps/truncation
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/WPEP3-spec.md` — redaction hardening + argv/env capture
 
 - Contracts:
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/contract.md` — operator-facing contract summary + invariants
-  - `docs/project_management/packs/active/world_process_exec_tracing_parity/PROTOCOL.md` — host↔world-agent API and transport payloads
+  - `docs/project_management/packs/active/world_process_exec_tracing_parity/PROTOCOL.md` — host↔world-service API and transport payloads
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/SCHEMA.md` — trace event families + fields + redaction/caps schema
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/SECURITY.md` — security posture, redaction, fail/degrade rules
   - `docs/project_management/packs/active/world_process_exec_tracing_parity/decision_register.md` — A/B decisions with explicit selection

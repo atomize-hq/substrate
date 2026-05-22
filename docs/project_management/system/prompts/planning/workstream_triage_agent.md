@@ -107,7 +107,7 @@ Draft requirements (must be explicit and actionable):
        - `schema_inventory`
        - `provisioning_wiring`
        - `runtime_fail_early`
-       - `world_agent_profile`
+       - `world_service_profile`
        - `installer`
        - `tests_ci`
        - `docs_validation`

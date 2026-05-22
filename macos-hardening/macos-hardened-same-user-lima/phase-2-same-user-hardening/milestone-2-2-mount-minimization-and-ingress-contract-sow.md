@@ -88,14 +88,14 @@ Specific ingress guidance for current repo truth:
   - depends on the mounted repo and may expose additional ingress assumptions
 - `crates/shell/src/builtins/world_gateway.rs`
   - already constructs integrated auth handoff and managed gateway lifecycle requests
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
   - owns managed gateway runtime artifacts under `/run/substrate/substrate-gateway-runtime/`
 - `docs/WORLD.md`
   - currently states that `/src` mirrors the active checkout
   - should be tightened to describe only the allowed ingress
 - `docs/cross-platform/mac_world_setup.md`
   - currently documents the full-home mount as part of normal setup
-- `crates/world-agent/src/lib.rs`
+- `crates/world-service/src/lib.rs`
   - not a mount definition point, but a useful anchor for separating transport hardening from guest-visible filesystem scope
 
 ## Deliverables

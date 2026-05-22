@@ -191,7 +191,7 @@ List overlaps/conflicts with other in-flight work and resolve them deterministic
   - Resolution (explicit):
     - Ensure provisioning packs branch on WDD’s disabled/skipped status and do not print provisioning guidance in disabled mode.
 
-- Planning Pack: `docs/project_management/packs/draft/dev-install-world-agent-staging/`
+- Planning Pack: `docs/project_management/packs/draft/dev-install-world-service-staging/`
   - Overlap surfaces:
     - “disabled by design” workflows created by `--no-world` dev installs
   - Conflict: no

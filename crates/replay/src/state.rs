@@ -63,17 +63,25 @@ pub async fn load_span_from_trace(trace_file: &Path, span_id: &str) -> Result<Tr
             serde_json::from_str(&line).context("Failed to parse trace line as JSON")?;
 
         // Check if this is the span we're looking for
-        if let Some(sid) = value.get("span_id").and_then(|v| v.as_str()) {
-            if sid == span_id {
-                // Parse into our TraceSpan structure
-                let span: TraceSpan =
-                    serde_json::from_value(value).context("Failed to deserialize trace span")?;
+        if value.get("event_type").and_then(|v| v.as_str()) != Some("command_complete") {
+            continue;
+        }
 
-                // Only return completed spans
-                if span.event_type == "command_complete" {
-                    return Ok(span);
+        if let Some(sid) = value.get("span_id").and_then(|v| v.as_str()) {
+            if sid != span_id {
+                continue;
+            }
+
+            let mut value = value;
+            if value.get("cmd").is_none() {
+                if let Some(command) = value.get("command").cloned() {
+                    value["cmd"] = command;
                 }
             }
+
+            let span: TraceSpan =
+                serde_json::from_value(value).context("Failed to deserialize trace span")?;
+            return Ok(span);
         }
     }
 
@@ -364,6 +372,27 @@ mod tests {
 {"ts":"2024-01-01T00:00:00Z","event_type":"command_start","span_id":"test-span-1","session_id":"session-1","component":"shell","cmd":"echo test"}
 {"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"test-span-1","session_id":"session-1","component":"shell","cmd":"echo test","exit_code":0}
 {"ts":"2024-01-01T00:00:02Z","event_type":"command_complete","span_id":"test-span-2","session_id":"session-1","component":"shell","cmd":"ls","exit_code":0}
+"#;
+
+        let mut file = tokio::fs::File::create(temp_file.path()).await.unwrap();
+        file.write_all(trace_content.as_bytes()).await.unwrap();
+        file.flush().await.unwrap();
+        drop(file);
+
+        let span = load_span_from_trace(temp_file.path(), "test-span-1")
+            .await
+            .unwrap();
+        assert_eq!(span.span_id, "test-span-1");
+        assert_eq!(span.cmd, "echo test");
+        assert_eq!(span.exit_code, Some(0));
+    }
+
+    #[tokio::test]
+    async fn test_load_span_from_trace_prefers_command_complete_and_accepts_command_alias() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let trace_content = r#"
+{"ts":"2024-01-01T00:00:00Z","event_type":"command_start","span_id":"test-span-1","session_id":"session-1","component":"shell"}
+{"ts":"2024-01-01T00:00:01Z","event_type":"command_complete","span_id":"test-span-1","session_id":"session-1","component":"shell","command":"echo test","exit_code":0}
 "#;
 
         let mut file = tokio::fs::File::create(temp_file.path()).await.unwrap();

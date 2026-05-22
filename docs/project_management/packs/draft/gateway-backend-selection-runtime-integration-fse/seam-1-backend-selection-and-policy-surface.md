@@ -46,7 +46,7 @@ open_remediations: []
     - minimum supporting ADR-0046 alignment needed so implementation docs defer to canonical `docs/contracts/` refs
   - Out:
     - new canonical contract publication for `C-01` or `C-02`
-    - integrated adapter binding metadata and capability gates inside `crates/world-agent/src/gateway_runtime.rs`
+    - integrated adapter binding metadata and capability gates inside `crates/world-service/src/gateway_runtime.rs`
     - runtime config rendering, managed artifact naming, or process lifecycle ownership
     - tuple metadata, tuple-policy keys, status-schema widening, or secret-channel redesign
 - **Primary interfaces**

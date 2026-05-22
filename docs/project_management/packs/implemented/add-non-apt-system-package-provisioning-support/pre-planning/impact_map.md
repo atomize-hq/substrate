@@ -50,7 +50,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
 - `crates/shell/src/builtins/world_enable/runner/helper_script.rs`
 - `crates/shell/src/builtins/world_enable/runner/log_ops.rs`
 - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-- `crates/world-agent/src/service.rs`
+- `crates/world-service/src/service.rs`
 - `crates/shell/tests/world_deps_inventory_validation_wdp0.rs`
 - `crates/shell/tests/world_deps_inventory_views.rs`
 - `crates/shell/tests/world_deps_current_dry_run_wdp3.rs`
@@ -128,7 +128,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
   - Direct impact:
     - manager selection must use in-world `/etc/os-release` plus in-world `command -v pacman`, not host detection.
   - Cascading impact:
-    - `crates/shell/src/builtins/world_enable/runner.rs`, `scripts/substrate/world-enable.sh`, `crates/shell/src/execution/routing/dispatch/world_ops.rs`, and `crates/world-agent/src/service.rs` must all preserve the “probe inside the world” invariant.
+    - `crates/shell/src/builtins/world_enable/runner.rs`, `scripts/substrate/world-enable.sh`, `crates/shell/src/execution/routing/dispatch/world_ops.rs`, and `crates/world-service/src/service.rs` must all preserve the “probe inside the world” invariant.
     - platform smoke and manual validation must cover at least one supported Arch-family path and one mismatch or unsupported path.
   - Contradiction risks:
     - `tests/installers/pkg_manager_container_smoke.sh` and ADR-0031 validate host installer detection by reading host/container `/etc/os-release`; that is similar vocabulary but a different contract surface.
@@ -139,11 +139,11 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
     - `world-deps-provision` remains the only request profile allowed to escape the default always-isolated runtime path for OS mutation.
     - Linux host-native still must not mutate the host OS.
   - Cascading impact:
-    - `crates/world-agent/src/service.rs` must generalize the existing profile commentary and guard rails from APT-only language to manager-agnostic system-package provisioning language.
+    - `crates/world-service/src/service.rs` must generalize the existing profile commentary and guard rails from APT-only language to manager-agnostic system-package provisioning language.
     - `crates/shell/tests/world_enable.rs` must keep exercising the “no writes on dry-run / unsupported path” guarantees after the new routing is added.
     - `platform-parity-spec.md`, `manual_testing_playbook.md`, and the three smoke scripts must make supported-vs-unsupported platform behavior explicit.
   - Contradiction risks:
-    - active tracing work also touches `crates/world-agent/src/service.rs`, so provisioning-profile changes can silently regress trace coverage or request semantics if they are not kept orthogonal.
+    - active tracing work also touches `crates/world-service/src/service.rs`, so provisioning-profile changes can silently regress trace coverage or request semantics if they are not kept orthogonal.
     - ADR-0010 expects capability divergence to be surfaced clearly; silent fallback from pacman to apt or host mutation would violate that posture.
 
 ## Cross-queue scan (ADRs + Planning Packs)
@@ -198,7 +198,7 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
     - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
     - `scripts/substrate/world-enable.sh`
     - `crates/shell/src/builtins/world_deps/surfaces.rs`
-    - `crates/world-agent/src/service.rs`
+    - `crates/world-service/src/service.rs`
   - Conflict: yes
   - Resolution (explicit):
     - Option A: leave the APT pack as the shared contract owner and make this pack APT-aware by reference only.
@@ -216,19 +216,19 @@ Strict packs (`tasks.json` → `meta.slice_spec_version >= 2`) requirements:
     - Keep host install-state persistence and in-world provisioning routing separate.
     - Shared files can rebase cleanly if this feature avoids touching installer-state persistence helpers.
 
-- Planning Pack: `docs/project_management/packs/draft/dev-install-world-agent-staging/`
+- Planning Pack: `docs/project_management/packs/draft/dev-install-world-service-staging/`
   - Overlap surfaces:
     - `scripts/substrate/world-enable.sh`
     - `crates/shell/src/builtins/world_enable/runner.rs`
     - `crates/shell/tests/world_enable.rs`
   - Conflict: yes
   - Resolution (explicit):
-    - Keep `--provision-deps` flag plumbing and world-agent-staging preflight orthogonal.
+    - Keep `--provision-deps` flag plumbing and world-service-staging preflight orthogonal.
     - Sequence helper/staging changes first when possible; otherwise rebase this feature as a narrow flag-and-routing change rather than a helper-discovery refactor.
 
 - Planning Pack: `docs/project_management/packs/active/world_process_exec_tracing_parity/`
   - Overlap surfaces:
-    - `crates/world-agent/src/service.rs`
+    - `crates/world-service/src/service.rs`
   - Conflict: yes
   - Resolution (explicit):
     - Preserve existing request/response and trace assumptions while broadening the provisioning-profile commentary from APT-only to system-package-manager-agnostic language.

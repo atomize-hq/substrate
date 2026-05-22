@@ -36,7 +36,7 @@ flowchart LR
 ```mermaid
 flowchart LR
   CLI["substrate (shell)"] --> WorldBackend["World backend (host proxy)"]
-  WorldBackend --> Agent["world-agent (/v1/execute or /v1/stream)"]
+  WorldBackend --> Agent["world-service (/v1/execute or /v1/stream)"]
   CLI -->|"policy evaluation"| Broker["Broker policy (no new fields)"]
 
   CLI -->|"inventory/enabled resolution"| BundlesContract["Bundles contract semantics"]

@@ -121,7 +121,7 @@ ADR_BODY_SHA256: 303e62553b96905fe574f3a0257d4295ac845c9926dad20c91ccc67e5db2ab1
   - `crates/world`:
     - Own the Linux world filesystem strategy selection (overlayfs vs fuse-overlayfs vs other) and health checking.
     - Ensure mounts are created in a topology that is stable under bind mounts and mount namespaces.
-  - `crates/world-agent`:
+  - `crates/world-service`:
     - Carry strategy metadata into execution responses/trace context.
     - Surface health/strategy diagnostics through doctor endpoints.
   - `crates/shell` + `crates/trace`:

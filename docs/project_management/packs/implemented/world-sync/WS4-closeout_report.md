@@ -30,8 +30,8 @@ Slice spec:
   - Implement WS4 spec: PTY pending diff discovery + explicit dry-run reporting semantics.
 - Links:
   - `crates/shell/src/execution/workspace_cmd.rs`
-  - `crates/world-agent/src/service.rs`
-  - `crates/world-agent/src/pty.rs`
+  - `crates/world-service/src/service.rs`
+  - `crates/world-service/src/pty.rs`
   - `crates/shell/tests/workspace_sync_ws4.rs`
 
 ## Spec Parity (No Drift)
@@ -45,7 +45,7 @@ Slice spec:
 - `cargo clippy --workspace --all-targets -- -D warnings`: pass
 - Relevant tests: pass
   - `cargo test -p shell --test workspace_sync_ws4 -- --nocapture`
-  - `cargo test -p world-agent -- --nocapture`
+  - `cargo test -p world-service -- --nocapture`
 - `make integ-checks`: pass
 
 ## Cross-Platform Smoke (if applicable)

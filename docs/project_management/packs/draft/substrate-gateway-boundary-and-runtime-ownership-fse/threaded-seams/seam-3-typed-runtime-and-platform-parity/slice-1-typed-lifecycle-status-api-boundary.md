@@ -31,11 +31,11 @@ candidate_subslices: []
 ---
 ### S1 - Typed lifecycle/status API boundary
 
-- **User/system value**: world-agent and shared clients converge on one typed lifecycle/status contract before shell behavior or docs bake in backend-private assumptions.
+- **User/system value**: world-service and shared clients converge on one typed lifecycle/status contract before shell behavior or docs bake in backend-private assumptions.
 - **Scope (in/out)**:
   - In:
-    - typed world-agent lifecycle/status ownership
-    - shared `agent-api-types` and `agent-api-client` alignment
+    - typed world-service lifecycle/status ownership
+    - shared `transport-api-types` and `transport-api-client` alignment
     - the boundary between published schema/policy inputs and the typed runtime contract
   - Out:
     - operator command-family wording

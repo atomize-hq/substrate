@@ -8,7 +8,7 @@ This document is the supported, operator-facing environment variable contract fo
 - Config resolution: `crates/shell/src/execution/config_model.rs`
 - Invocation planning + env preparation: `crates/shell/src/execution/invocation/plan.rs`
 - Shim behavior: `crates/shim/**`
-- World backends + services: `crates/world-agent/**`, `crates/world-*/**`, `crates/forwarder/**`, `crates/host-proxy/**`
+- World backends + services: `crates/world-service/**`, `crates/world-*/**`, `crates/forwarder/**`, `crates/host-proxy/**`
 - Install/provision scripts: `scripts/substrate/**`, `scripts/mac/**`, `scripts/windows/**`
 
 Only environment variables listed under **Supported Variables** are supported operator interfaces. Any variable not listed here is unsupported unless explicitly documented as “not supported”.
@@ -60,7 +60,7 @@ Failure behavior for config-shaped env vars:
 - On that abnormal path, Substrate may attempt one best-effort stderr diagnostic before exit. The supported operator contract is the bounded `0` versus `1` split, not a broader guarantee about how every platform surfaces the diagnostic.
 
 ### Other binaries/services
-Components such as `substrate-shim`, `substrate-world-agent`, `host-proxy`, and `forwarder` do not consult the Substrate YAML config. Their behavior is controlled by their own supported environment variables listed below.
+Components such as `substrate-shim`, `substrate-world-service`, `host-proxy`, and `forwarder` do not consult the Substrate YAML config. Their behavior is controlled by their own supported environment variables listed below.
 
 ## Supported Variables
 
@@ -389,7 +389,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Type / allowed values | Enabled only when the value is exactly `1` |
 | Default if unset | Off |
 | Precedence | Env only |
-| Scope | Run-only (Linux world-agent PTY WS route) |
+| Scope | Run-only (Linux world-service PTY WS route) |
 | Examples | `SUBSTRATE_WS_DEBUG=1 substrate --pty -c 'bash'` |
 | Security notes | Prints routing diagnostics to stderr. |
 
@@ -492,7 +492,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Examples | `SHIM_TRACE_LOG_MAX_MB=50 substrate` |
 | Security notes | Legacy alias for `TRACE_LOG_MAX_MB`. |
 
-### Config Override Inputs (world-agent service)
+### Config Override Inputs (world-service service)
 
 #### `SUBSTRATE_AGENT_TCP_PORT`
 | Field | Value |
@@ -502,7 +502,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Default if unset | TCP listener disabled (UDS via `/run/substrate.sock` remains) |
 | Precedence | Env only; ignored when TCP listeners are inherited via socket activation |
 | Scope | Global (service process) |
-| Examples | `SUBSTRATE_AGENT_TCP_PORT=61337 substrate-world-agent` |
+| Examples | `SUBSTRATE_AGENT_TCP_PORT=61337 substrate-world-service` |
 | Security notes | Binds a loopback TCP listener; treat as local-only unless you intentionally expose it. |
 
 #### `SUBSTRATE_NETNS_GC_TTL_SECS`
@@ -513,7 +513,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Default if unset | `0` (TTL disabled) |
 | Precedence | Env only |
 | Scope | Global (service process) |
-| Examples | `SUBSTRATE_NETNS_GC_TTL_SECS=3600 substrate-world-agent` |
+| Examples | `SUBSTRATE_NETNS_GC_TTL_SECS=3600 substrate-world-service` |
 | Security notes | Not sensitive. |
 
 #### `SUBSTRATE_NETNS_GC_INTERVAL_SECS`
@@ -524,7 +524,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Default if unset | `600` (10 minutes); `0` disables periodic sweeps |
 | Precedence | Env only |
 | Scope | Global (service process) |
-| Examples | `SUBSTRATE_NETNS_GC_INTERVAL_SECS=0 substrate-world-agent` |
+| Examples | `SUBSTRATE_NETNS_GC_INTERVAL_SECS=0 substrate-world-service` |
 | Security notes | Not sensitive. |
 
 ### Config Override Inputs (host-proxy service)
@@ -1005,7 +1005,7 @@ Each entry below is a stability promise: the variable name, parsing rules, and s
 | Field | Value |
 | --- | --- |
 | Bucket | Exported state variable |
-| Type / allowed values | String world identifier; unset when the world-agent backend is used on Linux |
+| Type / allowed values | String world identifier; unset when the world-service backend is used on Linux |
 | Default if unset | Unset until a local backend session is created |
 | Precedence | Written by Substrate; operator-set values are overwritten/cleared |
 | Scope | Run-only |

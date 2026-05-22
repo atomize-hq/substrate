@@ -9,52 +9,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
-name = "agent-api-client"
-version = "0.2.8"
-dependencies = [
- "agent-api-types",
- "anyhow",
- "async-trait",
- "dirs 5.0.1",
- "hex",
- "http-body-util",
- "hyper 1.9.0",
- "hyper-util",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "agent-api-core"
-version = "0.2.8"
-dependencies = [
- "agent-api-types",
- "async-trait",
- "axum 0.7.9",
- "http 1.4.0",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tower 0.5.3",
-]
-
-[[package]]
-name = "agent-api-types"
-version = "0.2.8"
-dependencies = [
- "serde",
- "serde_json",
- "substrate-common",
- "thiserror 1.0.69",
- "world-api",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2598,9 +2552,6 @@ dependencies = [
 name = "host-proxy"
 version = "0.2.8"
 dependencies = [
- "agent-api-client",
- "agent-api-core",
- "agent-api-types",
  "anyhow",
  "async-trait",
  "axum 0.7.9",
@@ -2620,6 +2571,9 @@ dependencies = [
  "tower-http 0.5.2",
  "tracing",
  "tracing-subscriber",
+ "transport-api-client",
+ "transport-api-core",
+ "transport-api-types",
  "uuid",
 ]
 
@@ -5142,8 +5096,6 @@ dependencies = [
 name = "shell"
 version = "0.2.8"
 dependencies = [
- "agent-api-client",
- "agent-api-types",
  "anyhow",
  "assert_cmd",
  "base64 0.22.1",
@@ -5189,6 +5141,8 @@ dependencies = [
  "tokio-tungstenite 0.21.0",
  "toml",
  "tracing",
+ "transport-api-client",
+ "transport-api-types",
  "unified-agent-api",
  "url",
  "uuid",
@@ -5516,8 +5470,6 @@ dependencies = [
 name = "substrate-replay"
 version = "0.1.0"
 dependencies = [
- "agent-api-client",
- "agent-api-types",
  "anyhow",
  "base64 0.22.1",
  "chrono",
@@ -5535,6 +5487,8 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "transport-api-client",
+ "transport-api-types",
  "uuid",
  "world",
  "world-api",
@@ -6195,6 +6149,52 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
+]
+
+[[package]]
+name = "transport-api-client"
+version = "0.2.8"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "dirs 5.0.1",
+ "hex",
+ "http-body-util",
+ "hyper 1.9.0",
+ "hyper-util",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tower-service",
+ "tracing",
+ "transport-api-types",
+]
+
+[[package]]
+name = "transport-api-core"
+version = "0.2.8"
+dependencies = [
+ "async-trait",
+ "axum 0.7.9",
+ "http 1.4.0",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tower 0.5.3",
+ "transport-api-types",
+]
+
+[[package]]
+name = "transport-api-types"
+version = "0.2.8"
+dependencies = [
+ "serde",
+ "serde_json",
+ "substrate-common",
+ "thiserror 1.0.69",
+ "world-api",
 ]
 
 [[package]]
@@ -7256,42 +7256,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "world-agent"
-version = "0.2.8"
-dependencies = [
- "agent-api-core",
- "agent-api-types",
- "anyhow",
- "axum 0.6.20",
- "base64 0.22.1",
- "chrono",
- "futures-util",
- "hyper 0.14.32",
- "libc",
- "once_cell",
- "portable-pty 0.8.1",
- "rand 0.8.6",
- "serde",
- "serde_json",
- "sha2",
- "substrate-broker",
- "substrate-common",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tokio-stream",
- "tokio-tungstenite 0.21.0",
- "tokio-util",
- "tower 0.4.13",
- "tracing",
- "tracing-subscriber",
- "unified-agent-api",
- "uuid",
- "world",
- "world-api",
-]
-
-[[package]]
 name = "world-api"
 version = "0.1.1"
 dependencies = [
@@ -7318,8 +7282,6 @@ dependencies = [
 name = "world-mac-lima"
 version = "0.1.1"
 dependencies = [
- "agent-api-client",
- "agent-api-types",
  "anyhow",
  "base64 0.22.1",
  "dirs 6.0.0",
@@ -7330,6 +7292,8 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "transport-api-client",
+ "transport-api-types",
  "ureq",
  "uuid",
  "which 4.4.2",
@@ -7337,17 +7301,53 @@ dependencies = [
 ]
 
 [[package]]
+name = "world-service"
+version = "0.2.8"
+dependencies = [
+ "anyhow",
+ "axum 0.6.20",
+ "base64 0.22.1",
+ "chrono",
+ "futures-util",
+ "hyper 0.14.32",
+ "libc",
+ "once_cell",
+ "portable-pty 0.8.1",
+ "rand 0.8.6",
+ "serde",
+ "serde_json",
+ "sha2",
+ "substrate-broker",
+ "substrate-common",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-stream",
+ "tokio-tungstenite 0.21.0",
+ "tokio-util",
+ "tower 0.4.13",
+ "tracing",
+ "tracing-subscriber",
+ "transport-api-core",
+ "transport-api-types",
+ "unified-agent-api",
+ "uuid",
+ "world",
+ "world-api",
+]
+
+[[package]]
 name = "world-windows-wsl"
 version = "0.1.0"
 dependencies = [
- "agent-api-client",
- "agent-api-types",
  "anyhow",
  "base64 0.22.1",
  "serde_json",
  "substrate-common",
  "tokio",
  "tracing",
+ "transport-api-client",
+ "transport-api-types",
  "uuid",
  "world-api",
 ]

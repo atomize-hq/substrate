@@ -1,6 +1,6 @@
 # Protocol — World process exec/exit telemetry (ADR-0028) (Authoritative)
 
-This document defines the authoritative host↔world-agent protocol surfaces introduced by ADR-0028.
+This document defines the authoritative host↔world-service protocol surfaces introduced by ADR-0028.
 
 ## Scope
 - Endpoints:
@@ -8,13 +8,13 @@ This document defines the authoritative host↔world-agent protocol surfaces int
   - WebSocket `GET /v1/stream` (Exit frame only for v1; no per-event streaming)
 - Platforms:
   - Linux (native): process capture supported (ptrace-based; backend-dependent).
-  - macOS (Lima): process capture supported because world-agent runs inside a Linux guest (`docs/WORLD.md`).
+  - macOS (Lima): process capture supported because world-service runs inside a Linux guest (`docs/WORLD.md`).
     - Transport differences (VSock vs SSH UDS/TCP) MUST NOT change payload semantics; caps/truncation MUST bound payload size for all transports.
   - Windows: process capture is out of scope for this feature; responses MUST degrade explicitly (never omit silently).
 
 ## 1) Data model: process event payload
 
-`process_events` is a list of normalized process lifecycle records emitted by world-agent and persisted by the host shell.
+`process_events` is a list of normalized process lifecycle records emitted by world-service and persisted by the host shell.
 
 ### 1.1 ProcessEvent (base fields; required)
 - `event_type`: `"world_process_start" | "world_process_exit"`
@@ -109,12 +109,12 @@ Exit frame MUST include:
 ## 5) Host persistence contract
 
 The host shell MUST persist each ProcessEvent as a JSONL record in canonical trace:
-- `component: "world-agent"`
+- `component: "world-service"`
 - `event_type` copied from ProcessEvent
 - all required ProcessEvent fields preserved after host-side normalization (no additional secrets introduced)
 
 Host MUST NOT synthesize raw argv/env:
-- if `argv`/`env` are absent or redacted by world-agent, host persists them as-is.
+- if `argv`/`env` are absent or redacted by world-service, host persists them as-is.
 
 Additionally, the host shell MUST persist the diagnostics summary for each world execution on the corresponding shell completion record:
 - `component: "shell"`, `event_type: "command_complete"` MUST include:

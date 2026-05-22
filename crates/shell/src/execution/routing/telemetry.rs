@@ -290,7 +290,7 @@ pub(crate) fn append_process_events_to_trace(process_telemetry: &ProcessTelemetr
     for event in &process_telemetry.process_events {
         let mut entry = serde_json::to_value(event)?;
         if let Some(obj) = entry.as_object_mut() {
-            obj.insert(log_schema::COMPONENT.to_string(), json!("world-agent"));
+            obj.insert(log_schema::COMPONENT.to_string(), json!("world-service"));
         }
         append_to_trace(&entry)?;
     }

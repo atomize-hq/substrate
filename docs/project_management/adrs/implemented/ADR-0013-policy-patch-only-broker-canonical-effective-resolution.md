@@ -32,7 +32,7 @@ Run `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0013-policy-p
 
 ### Changes (operator-facing)
 - Policy resolution becomes consistent across CLI + runtime execution
-  - Existing: `substrate policy current show` can succeed with patch-form `policy.yaml`, while interactive runs/shims/world-agent can fail or silently fall back when the broker parses the same file as a full strict document.
+  - Existing: `substrate policy current show` can succeed with patch-form `policy.yaml`, while interactive runs/shims/world-service can fail or silently fall back when the broker parses the same file as a full strict document.
   - New: `policy.yaml` is patch-only everywhere; the broker resolves the effective policy via patch merge (defaults → global patch → workspace patch), and all execution surfaces consume that single effective policy.
   - Why: prevents “valid effective policy shown, but execution disagrees” drift and eliminates silent fallbacks that undermine isolation expectations.
   - Links:
@@ -63,7 +63,7 @@ Run `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0013-policy-p
 
 ## Goals
 - Make `policy.yaml` patch-only across the entire repo (code + docs + tests).
-- Make the broker the canonical effective-policy resolver used by shell/shim/world-agent execution flows.
+- Make the broker the canonical effective-policy resolver used by shell/shim/world-service execution flows.
 - Define a single effective resolution rule for policy:
   - Effective policy = defaults overlaid by global policy patch overlaid by workspace policy patch.
 - Ensure broker workspace discovery honors `.substrate/workspace.disabled` exactly as in the shell contract.
@@ -107,19 +107,19 @@ Run `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0013-policy-p
 
 ### Platform guarantees
 - Linux/macOS/Windows:
-  - The same patch-only policy resolution semantics apply to shell execution, shim execution, and world-agent execution paths.
+  - The same patch-only policy resolution semantics apply to shell execution, shim execution, and world-service execution paths.
   - Policy resolution errors are not ignored on any platform-specific path that relies on the broker for execution decisions.
 
 ## Architecture Shape
 - Components:
   - `crates/broker`:
     - Owns policy patch schema, patch parsing, patch merge, and policy invariant validation for effective policy.
-    - Exposes a single API used by shell/shim/world-agent to resolve effective policy for a cwd.
+    - Exposes a single API used by shell/shim/world-service to resolve effective policy for a cwd.
     - Removes legacy “full strict policy file” parse/write surfaces from the crate.
   - `crates/shell`:
     - CLI surfaces for rendering/editing policy patches remain in the shell.
     - `policy current show` delegates effective resolution to the broker (no duplicate merge logic).
-  - `crates/shim` and `crates/world-agent`:
+  - `crates/shim` and `crates/world-service`:
     - Continue to call `substrate_broker::detect_profile` (or a successor API), but those calls now resolve patch-only policies and must not ignore policy resolution errors.
   - `crates/common`:
     - Hosts shared workspace discovery utilities (including disabled marker semantics) used by broker and shell.
@@ -168,7 +168,7 @@ Run `make adr-fix ADR=docs/project_management/adrs/implemented/ADR-0013-policy-p
     - not break `detect_profile`-dependent execution paths.
   - Regression coverage for previously “ignored error” call sites:
     - shim execution (`crates/shim`)
-    - world-agent full isolation paths (`crates/world-agent`)
+    - world-service full isolation paths (`crates/world-service`)
 
 ### Manual validation
 - Manual playbook: `docs/project_management/_archived/policy-patch-only-broker-effective-resolution/manual_testing_playbook.md`

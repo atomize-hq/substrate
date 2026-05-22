@@ -1,7 +1,7 @@
-# WPEP1 — spec — world-agent API + persistence plumbing for process events
+# WPEP1 — spec — world-service API + persistence plumbing for process events
 
 ## Scope (explicit)
-- Land the host↔world-agent transport shape for process telemetry diagnostics:
+- Land the host↔world-service transport shape for process telemetry diagnostics:
   - `process_events_status`
   - `process_events_reason`
   - `process_events_dropped` (when truncated)

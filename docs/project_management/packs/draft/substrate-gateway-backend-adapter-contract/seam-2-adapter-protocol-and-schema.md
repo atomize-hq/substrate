@@ -88,9 +88,9 @@ open_remediations:
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-schema-spec.md`
   - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/pre-planning/workstream_triage.md`
   - likely downstream code surfaces once execution begins:
-    - `crates/agent-api-types/src/lib.rs`
-    - `crates/agent-api-client/src/lib.rs`
-    - `crates/world-agent/src/handlers.rs`
+    - `crates/transport-api-types/src/lib.rs`
+    - `crates/transport-api-client/src/lib.rs`
+    - `crates/world-service/src/handlers.rs`
     - `crates/shell/src/builtins/world_gateway.rs`
 - **Verification**:
   - This seam consumes upstream contracts `C-01` and `C-02`, so verification may depend on accepted upstream evidence for the stable selection and publication boundary.

@@ -92,10 +92,10 @@ Future remediation entries must use the canonical fields from the extractor gove
   summary: adapter lookup, capability gating, and missing-binding handling are implementation work under the already-published protocol contract
   required_fix: none inside the current execution target
   resolution_evidence:
-    - `crates/world-agent/src/gateway_runtime.rs` now binds both `cli:codex` and `api:openai` through an explicit runtime registry with binding-driven config render and auth injection
-    - `crates/world-agent/tests/gateway_runtime_parity.rs` now proves `api:openai` through unavailable-before-sync, sync/status/idempotent, restart, manifest recovery, and explicit no-fallback behavior
-    - `cargo test -p world-agent --lib -- --nocapture`
-    - `limactl shell substrate -- bash -lc 'cd /Users/spensermcconnell/__Active_Code/atomize-hq/substrate && CARGO_TARGET_DIR=/tmp/substrate-target cargo test -p world-agent --test gateway_runtime_parity -- --nocapture'`
+    - `crates/world-service/src/gateway_runtime.rs` now binds both `cli:codex` and `api:openai` through an explicit runtime registry with binding-driven config render and auth injection
+    - `crates/world-service/tests/gateway_runtime_parity.rs` now proves `api:openai` through unavailable-before-sync, sync/status/idempotent, restart, manifest recovery, and explicit no-fallback behavior
+    - `cargo test -p world-service --lib -- --nocapture`
+    - `limactl shell substrate -- bash -lc 'cd /Users/spensermcconnell/__Active_Code/atomize-hq/substrate && CARGO_TARGET_DIR=/tmp/substrate-target cargo test -p world-service --test gateway_runtime_parity -- --nocapture'`
 
 - remediation_id: REM-004
   origin_phase: exec
@@ -112,10 +112,10 @@ Future remediation entries must use the canonical fields from the extractor gove
   summary: shared payload and artifact surfaces needed schema hardening to support more than the current `cli_codex` integrated auth path
   required_fix: none inside the current execution target
   resolution_evidence:
-    - `crates/agent-api-types/src/lib.rs` now hardens `GatewayLifecycleRequestV1` with `deny_unknown_fields` and adds the closed backend-neutral `api_env` auth facet beside `cli_codex`
-    - `crates/world-agent/src/service.rs` now validates request-provided auth at the shared boundary before runtime execution
+    - `crates/transport-api-types/src/lib.rs` now hardens `GatewayLifecycleRequestV1` with `deny_unknown_fields` and adds the closed backend-neutral `api_env` auth facet beside `cli_codex`
+    - `crates/world-service/src/service.rs` now validates request-provided auth at the shared boundary before runtime execution
     - `crates/shell/src/builtins/world_gateway.rs` now emits backend-aware integrated auth from resolved inventory instead of suppressing all non-`cli:codex` auth handoff
-    - `cargo test -p agent-api-types -- --nocapture`
+    - `cargo test -p transport-api-types -- --nocapture`
     - `cargo test -p shell --test world_gateway -- --nocapture`
 
 - remediation_id: REM-005

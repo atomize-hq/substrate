@@ -16,7 +16,7 @@ basis:
   stale_triggers:
   - C-01 changes manager-selection semantics, supported families, or unsupported-backend
     wording
-  - world_enable or world-agent shared-file changes alter where the in-world probe
+  - world_enable or world-service shared-file changes alter where the in-world probe
     runs
   - platform parity assumptions change and require different support-gate outcomes
 gates:
@@ -57,7 +57,7 @@ This seam has landed. Its authoritative post-exec record lives in `governance/se
   - Inputs:
     - `C-01` from `SEAM-1`
     - accepted probe-precedence decision DR-0002
-    - existing world-enable / dispatch / world-agent touch surfaces
+    - existing world-enable / dispatch / world-service touch surfaces
   - Outputs:
     - `C-02` deterministic world-manager probe and support-gate contract
     - closeout-backed support-gate evidence for provisioning and parity validation
@@ -85,18 +85,18 @@ This seam has landed. Its authoritative post-exec record lives in `governance/se
     - `crates/shell/src/builtins/world_enable/runner.rs`
     - `crates/shell/src/builtins/world_enable/runner/helper_script.rs`
     - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-    - `crates/world-agent/src/service.rs`
+    - `crates/world-service/src/service.rs`
     - `crates/shell/tests/world_enable.rs`
 - **Verification**:
   - Because this seam **consumes** `C-01`, verification should prove the producer contract still matches the probe boundary before implementation begins.
   - The first seam-local review should try to falsify:
     - whether any host-side manager detection still leaks into world provisioning
     - whether contradiction handling can still silently fall back to the wrong manager
-    - whether unsupported backend messaging and exit `4` posture drift across shell, dispatch, and world-agent layers
+    - whether unsupported backend messaging and exit `4` posture drift across shell, dispatch, and world-service layers
   - A passing pre-exec posture should leave `SEAM-4` able to plan against one stable support-gate outcome model.
 - **Risks / unknowns**:
   - Risk:
-    - adjacent work on `world_enable` or `world-agent` can move helper/staging boundaries and stale this seam's touch surface before decomposition.
+    - adjacent work on `world_enable` or `world-service` can move helper/staging boundaries and stale this seam's touch surface before decomposition.
   - De-risk plan:
     - revalidate the shared files at seam-local review time and keep probe changes orthogonal to any staging/tracing work.
   - Risk:

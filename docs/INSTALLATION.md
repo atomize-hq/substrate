@@ -10,8 +10,8 @@ until it matches the Linux-first placement contract.
 - **Linux**: systemd-based distributions with `sudo`, `curl`, `tar`, and `jq`
   available. When world provisioning is enabled, the installer also provisions
   the host `libseccomp` runtime package needed for seccomp-backed hardening. The
-  world backend runs via the `substrate-world-agent.service` +
-  `substrate-world-agent.socket` units.
+  world backend runs via the `substrate-world-service.service` +
+  `substrate-world-service.socket` units.
 - **macOS 14+ (arm64)**: requires Apple Virtualization Framework and Lima (the
   installer verifies both).
 - **Windows / WSL**: world provisioning is intentionally fail-closed in this
@@ -80,8 +80,8 @@ The installer will:
    (`install.world_enabled: true` unless `--no-world` is provided). The
    metadata is consumed by `substrate world enable` and shims/CLI commands that
    need to detect pass-through mode.
-7. Install `substrate-world-agent` and `substrate-gateway` under `/usr/local/bin` and manage the
-   systemd `.service` + `.socket` units (`/etc/systemd/system/substrate-world-agent.{service,socket}`)
+7. Install `substrate-world-service` and `substrate-gateway` under `/usr/local/bin` and manage the
+   systemd `.service` + `.socket` units (`/etc/systemd/system/substrate-world-service.{service,socket}`)
 8. Run `substrate world doctor --json` for a final readiness report
 9. Ensure the `substrate` group exists on Linux hosts, add the invoking user,
    and reload the socket/service units so `/run/substrate` is recreated as
@@ -139,7 +139,7 @@ During installation the script:
 - Records the host PATH (for use as `SHIM_ORIGINAL_PATH`) without mutating it.
 - Deploys fresh shims and appends a small PATH snippet (between `# >>> substrate >>>`
   markers) so `substrate` is callable from your terminal.
-- Installs `substrate-world-agent` as a systemd service plus socket, places
+- Installs `substrate-world-service` as a systemd service plus socket, places
   `substrate-gateway` beside it under `/usr/local/bin`, and runs
   `substrate world doctor --json` (inspect the `host.world_socket` block) without
   adding the shim directory to PATH to avoid self-referential lookups.
@@ -182,7 +182,7 @@ The macOS flow mirrors the Linux installer but additionally:
 - Requires the Lima CLI (`limactl`) to be installed beforehand
 - Requires `envsubst` (install via `brew install gettext` to provide it)
 - Provisions the Lima VM (`scripts/mac/lima-warm.sh`) and copies the Linux
-  `world-agent` and `substrate-gateway` binaries into the guest
+  `world-service` and `substrate-gateway` binaries into the guest
 - Writes the guest systemd unit with `SUBSTRATE_HOME=<guest-home>/.substrate`
   and keeps that path writable in `ReadWritePaths`, matching the Linux placement
   contract for runtime state and manager/config files
@@ -217,7 +217,7 @@ substrate world doctor --json | jq '{ok, world_enabled, host_ok: .host.ok, world
 (The installer already ran the doctor without the shim directory in PATH, so
 your output should match unless the host environment changed.)
 
-Snapshot-specific behavior (including `policy_resolution_mode` and snapshot-related trace fields) is specified in `docs/project_management/_archived/world-agent-policy-snapshot/policy-snapshot-spec.md`.
+Snapshot-specific behavior (including `policy_resolution_mode` and snapshot-related trace fields) is specified in `docs/project_management/_archived/world-service-policy-snapshot/policy-snapshot-spec.md`.
 
 ### Windows
 
@@ -301,7 +301,7 @@ scripts/substrate/dev-uninstall-substrate.sh
 ```
 
 These scripts build `substrate`, `substrate-shim`, `substrate-forwarder`,
-`host-proxy`, `substrate-gateway`, and (on supported platforms) `world-agent`,
+`host-proxy`, `substrate-gateway`, and (on supported platforms) `world-service`,
 symlink them into `~/.substrate/bin`, and deploy shim wrappers that point back to
 `target/<profile>`. The generated `~/.substrate/dev-shim-env.sh` prepends both
 the bin and shim directories to `PATH` while preserving `SHIM_ORIGINAL_PATH`, so
@@ -330,8 +330,8 @@ It also reports whether `loginctl enable-linger <user>` still needs to be run.
   `substrate world doctor --json`; attach both to bug reports so we can spot
   PATH vs kernel/virtualization gaps quickly.
 - **World agent inactive (Linux)**: confirm `systemctl status
-  substrate-world-agent.socket` reports `listening`, `systemctl status
-  substrate-world-agent.service` reports `active` (or restarts cleanly), and that `/run/substrate.sock`
+  substrate-world-service.socket` reports `listening`, `systemctl status
+  substrate-world-service.service` reports `active` (or restarts cleanly), and that `/run/substrate.sock`
   exists as `root substrate 0660` (`sudo ls -l /run/substrate.sock`). If the socket
   shows another group, rerun the installer to refresh the units. Permission issues
   usually mean your user is missing from the `substrate` group—check with

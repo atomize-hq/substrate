@@ -48,7 +48,7 @@ Authoritative inputs:
 - The selected existing-crate owner set is:
   - `crates/shell` for CLI parsing, inventory rendering, status rendering, and doctor evaluation
   - `crates/common` for shared command-surface projection helpers and shared identity-field projection helpers reused across shell and telemetry work
-  - `crates/agent-api-types`, `crates/agent-api-client`, and `crates/agent-api-core` for capability, session, and lifecycle models
+  - `crates/transport-api-types`, `crates/transport-api-client`, and `crates/transport-api-core` for capability, session, and lifecycle models
 - `substrate_gateway` remains the owner of nested LLM fulfillment.
 - `crates/trace` remains outside this contract file's ownership. Trace placement is locked by `telemetry-spec.md`.
 
@@ -66,7 +66,7 @@ Authoritative inputs:
 - `backend_id` remains the adapter identifier in `<kind>:<agent_id>` form.
 - `execution.scope` remains the visibility and placement indicator for agent inventory and session rows.
 - `role` remains a command-surface attribution label. The required core label in this feature is `orchestrator`.
-- Pure-agent session rows use `router=agent_hub` and `protocol=uaa.agent.session`.
+- Pure-agent session rows use `router=agent_hub` and `protocol=substrate.agent.session`.
 - Pure-agent rows omit `provider` and `auth_authority`.
 - Nested gateway-backed rows use `router=substrate_gateway` and carry `provider` plus `auth_authority`.
 - `substrate agent doctor` fails closed whenever orchestrator state, allowlist posture, or required world-boundary posture is invalid.
@@ -114,7 +114,7 @@ Human-readable render rules:
 - `capabilities` renders the enabled capability tokens in this order: `llm`, `mcp_client`.
 - If no capability token is enabled, `capabilities` renders `none`.
 - `eligibility` renders `allowed` or `denied: <reason>`.
-- `protocol` renders `uaa.agent.session`.
+- `protocol` renders `substrate.agent.session`.
 - `provider`, `auth_authority`, `world_id`, and `world_generation` do not appear in list output.
 
 #### `--json` contract
@@ -141,7 +141,7 @@ Human-readable render rules:
         "state": "allowed",
         "reason": null
       },
-      "protocol": "uaa.agent.session"
+      "protocol": "substrate.agent.session"
     }
   ]
 }
@@ -192,7 +192,7 @@ Pure-agent session render rules:
   16. `world_generation`
 - `client` renders exactly as the executing session's `agent_id`.
 - `router` renders `agent_hub`.
-- `protocol` renders `uaa.agent.session`.
+- `protocol` renders `substrate.agent.session`.
 - `participant_id` renders the canonical child identity for the live participant row.
 - `source_kind` renders `live_runtime` or `trace_fallback`.
 - `posture`, `attached_participant_id`, and `pending_inbox_count` render authoritative live session-root values only on `source_kind=live_runtime` pure-agent rows.
@@ -237,7 +237,7 @@ Nested LLM render rules:
       "backend_id": "cli:codex",
       "client": "codex",
       "router": "agent_hub",
-      "protocol": "uaa.agent.session",
+      "protocol": "substrate.agent.session",
       "execution": {
         "scope": "world"
       },

@@ -3,7 +3,7 @@ id: codex
 config:
   kind: cli
   enabled: true
-  protocol: uaa.agent.session
+  protocol: substrate.agent.session
   execution:
     scope: host
   cli:

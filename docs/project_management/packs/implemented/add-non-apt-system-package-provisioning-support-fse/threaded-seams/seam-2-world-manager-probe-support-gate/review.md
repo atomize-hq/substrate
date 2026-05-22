@@ -34,7 +34,7 @@ flowchart TD
 flowchart LR
   CLI["substrate (shell)"] --> Runner["world_enable runner"]
   Runner --> Dispatch["dispatch/world_ops"]
-  Dispatch --> Agent["world-agent (/v1/execute or /v1/stream)"]
+  Dispatch --> Agent["world-service (/v1/execute or /v1/stream)"]
   Agent --> Probe["/etc/os-release + command -v pacman"]
   Probe --> Gate["C-02 support gate decision"]
   Gate -->|"apt/pacman"| Next["Downstream provisioning routing (SEAM-4)"]
@@ -46,7 +46,7 @@ flowchart LR
 - “In-world only” rule drift:
   - `crates/shell/src/builtins/world_enable/runner/helper_script.rs`
   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-  - `crates/world-agent/src/service.rs`
+  - `crates/world-service/src/service.rs`
 - `/etc/os-release` parsing and normalization drift (tokenization of `ID_LIKE`, whitespace/quoting quirks, empty/missing fields)
 - Unsupported backend posture drift (Linux host-native, Windows WSL) versus “probe still runs for dry-run diagnostics”
 

@@ -118,7 +118,7 @@ State and runtime surfaces likely affected:
 - `scripts/mac/lima/substrate-dev.yaml`
 - `crates/shell/src/execution/platform/macos.rs`
 - `crates/shell/src/builtins/world_gateway.rs`
-- `crates/world-agent/src/gateway_runtime.rs`
+- `crates/world-service/src/gateway_runtime.rs`
 
 Legacy-state evidence to account for:
 

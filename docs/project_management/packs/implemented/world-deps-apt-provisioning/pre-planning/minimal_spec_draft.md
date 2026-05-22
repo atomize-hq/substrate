@@ -107,7 +107,7 @@ Downstream notes:
 - likely touch surfaces:
   - `crates/shell/src/builtins/world_enable/`
   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-  - `crates/world-agent/src/service.rs`
+  - `crates/world-service/src/service.rs`
   - `scripts/substrate/world-enable.sh`
   - `scripts/linux/world-provision.sh`
   - `scripts/mac/lima-warm.sh`

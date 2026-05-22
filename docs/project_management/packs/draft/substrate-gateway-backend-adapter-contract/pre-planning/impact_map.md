@@ -41,10 +41,10 @@ Authoring standards:
 - `docs/contracts/substrate-gateway-runtime-parity.md`
 - `docs/WORLD.md`
 - `docs/USAGE.md`
-- `crates/agent-api-types/src/lib.rs`
-- `crates/agent-api-client/src/lib.rs`
-- `crates/world-agent/src/service.rs`
-- `crates/world-agent/tests/gateway_runtime_parity.rs`
+- `crates/transport-api-types/src/lib.rs`
+- `crates/transport-api-client/src/lib.rs`
+- `crates/world-service/src/service.rs`
+- `crates/world-service/tests/gateway_runtime_parity.rs`
 - `crates/shell/src/builtins/world_gateway.rs`
 - `crates/shell/tests/world_gateway.rs`
 
@@ -170,7 +170,7 @@ Authoring standards:
 ## Follow-ups
 
 - Decision or clarification follow-ups:
-  - Define the owning document for any additive adapter metadata on `substrate world gateway status --json` before editing `crates/agent-api-types/src/lib.rs`.
+  - Define the owning document for any additive adapter metadata on `substrate world gateway status --json` before editing `crates/transport-api-types/src/lib.rs`.
   - Scaffold pre-planning packs for `docs/project_management/packs/draft/llm-and-agent-identity-tuple-and-deployment-posture/` and `docs/project_management/packs/draft/adr-0027-identity-tuple-policy-surface/` before parallel planning starts on ADR-0042 or ADR-0043.
 
 - Spec updates required:

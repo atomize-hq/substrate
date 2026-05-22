@@ -192,7 +192,7 @@ fn first_index_containing(cmds: &[String], needle: &str) -> Option<usize> {
 }
 
 #[test]
-fn test_current_install_manual_exits_4_and_does_not_call_world_agent() {
+fn test_current_install_manual_exits_4_and_does_not_call_world_service() {
     let fixture = ShellEnvFixture::new();
     let ws_root = workspace_root(&fixture);
     fs::create_dir_all(ws_root.join(".substrate")).expect("create workspace .substrate");
@@ -332,7 +332,7 @@ fn test_current_install_probes_apt_before_scripts_and_does_not_mutate_enabled_pa
 
     assert!(
         probe_idx.is_some(),
-        "expected a dpkg-query probe to be sent to world-agent; cmds={cmds:?}"
+        "expected a dpkg-query probe to be sent to world-service; cmds={cmds:?}"
     );
     assert!(
         script_idx.is_some(),

@@ -84,7 +84,7 @@ fn wfgadax2_control_caged_required_allows_caged_workspace_execution() {
         .prefix("substrate-wfgadax2-sock-")
         .tempdir_in("/tmp")
         .expect("create socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
@@ -104,7 +104,7 @@ fn wfgadax2_control_caged_required_allows_caged_workspace_execution() {
     );
     assert!(
         socket.execute_request_count() > 0,
-        "expected control run to reach world-agent execution"
+        "expected control run to reach world-service execution"
     );
 }
 
@@ -126,7 +126,7 @@ fn wfgadax2_caged_required_rejects_world_caged_false_exit_2() {
         .prefix("substrate-wfgadax2-sock-")
         .tempdir_in("/tmp")
         .expect("create socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
@@ -147,7 +147,7 @@ fn wfgadax2_caged_required_rejects_world_caged_false_exit_2() {
     assert_eq!(
         socket.execute_request_count(),
         0,
-        "expected incompatibility to fail before any world-agent execution request"
+        "expected incompatibility to fail before any world-service execution request"
     );
 
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);
@@ -177,7 +177,7 @@ fn wfgadax2_caged_required_rejects_anchor_mode_follow_cwd_exit_2() {
         .prefix("substrate-wfgadax2-sock-")
         .tempdir_in("/tmp")
         .expect("create socket tempdir");
-    let socket_path = socket_dir.path().join("world-agent.sock");
+    let socket_path = socket_dir.path().join("world-service.sock");
     let socket = AgentSocket::start(
         &socket_path,
         SocketResponse::CapabilitiesAndHostExecute { scopes: vec![] },
@@ -198,7 +198,7 @@ fn wfgadax2_caged_required_rejects_anchor_mode_follow_cwd_exit_2() {
     assert_eq!(
         socket.execute_request_count(),
         0,
-        "expected incompatibility to fail before any world-agent execution request"
+        "expected incompatibility to fail before any world-service execution request"
     );
 
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr);

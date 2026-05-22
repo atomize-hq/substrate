@@ -2,7 +2,7 @@
 
 ## Behavior delta (single)
 - Existing: `substrate world deps current sync|install` may invoke APT/dpkg at runtime for `install.method=apt` items, which can fail under hardened worlds and can violate the “no host OS mutation” posture on Linux host-native backends. `substrate world enable` provisions the world backend via a helper script and does not provide an explicit, deterministic provisioning-time APT workflow.
-- New: `substrate world enable --provision-deps` derives a normalized APT requirement set from the effective enabled world-deps set, validates conflicts deterministically, probes presence read-only, and installs missing APT packages **only** inside supported guest worlds using world-agent request `profile=world-deps-provision`. Linux host-native and Windows remain fail-closed (no host OS mutation) and exit `4` for provisioning.
+- New: `substrate world enable --provision-deps` derives a normalized APT requirement set from the effective enabled world-deps set, validates conflicts deterministically, probes presence read-only, and installs missing APT packages **only** inside supported guest worlds using world-service request `profile=world-deps-provision`. Linux host-native and Windows remain fail-closed (no host OS mutation) and exit `4` for provisioning.
 - Why: Make OS package mutation explicit, auditable, and compatible with hardened runtime while preserving “no host OS mutation” guard rails.
 
 ## Scope
@@ -34,7 +34,7 @@ Given the extracted `install.apt[]` entries:
    - If two or more distinct non-empty `version` values exist for `name`, the command MUST:
      - exit `2`, and
      - print a deterministic conflict report to stderr, and
-     - perform no world-agent execution (no probe, no APT/dpkg).
+     - perform no world-service execution (no probe, no APT/dpkg).
 
 ### APT requirement rendering (operator-visible)
 When the normalized requirement set is printed (see `--dry-run` / `--verbose`):
@@ -66,7 +66,7 @@ When invoked as `substrate world enable --provision-deps --dry-run`:
   - print it to stdout using the APT requirement rendering rules above.
 - The command MUST NOT:
   - run the world enable helper script,
-  - connect to world-agent, or
+  - connect to world-service, or
   - execute any in-world commands (no probe, no APT/dpkg).
 - Exit codes:
   - `0` on supported platforms/backends when derivation succeeds (including empty requirement set),
@@ -105,7 +105,7 @@ Validation requirement:
   validation is insufficient for this slice.
 
 #### Dependency-unavailable handling
-If world-agent connectivity is required (probe or install) and cannot be established:
+If world-service connectivity is required (probe or install) and cannot be established:
 - The command MUST exit `3` and emit an actionable stderr message indicating the world backend is unavailable.
 
 ### `--verbose`
@@ -133,14 +133,14 @@ Installer rule:
 - The installer MUST still exit `0` after emitting the remediation note.
 
 ## Acceptance criteria
-- AC-WDAP0-01: `substrate world enable --provision-deps --dry-run` prints the normalized APT requirement set to stdout with one entry per line rendered as `name` or `name=version`, in sorted-by-name order, and performs no helper, world-agent, APT, or mutating `dpkg` execution.
-- AC-WDAP0-02: If two enabled items require the same APT `name` with two distinct non-empty `version` pins, `substrate world enable --provision-deps` exits `2`, prints a deterministic conflict report to stderr, and performs no helper or world-agent execution.
+- AC-WDAP0-01: `substrate world enable --provision-deps --dry-run` prints the normalized APT requirement set to stdout with one entry per line rendered as `name` or `name=version`, in sorted-by-name order, and performs no helper, world-service, APT, or mutating `dpkg` execution.
+- AC-WDAP0-02: If two enabled items require the same APT `name` with two distinct non-empty `version` pins, `substrate world enable --provision-deps` exits `2`, prints a deterministic conflict report to stderr, and performs no helper or world-service execution.
 - AC-WDAP0-03: On Linux host-native and Windows, `substrate world enable --provision-deps` exits `4`; Linux stderr includes the exact phrase `Substrate will not mutate the host OS`, and Windows stderr includes the exact phrase `unsupported on Windows`.
 - AC-WDAP0-04: On supported guest backends, provisioning probe and install requests use Agent API `profile=world-deps-provision` even when `SUBSTRATE_WORLD_REQUEST_PROFILE` is set to a different value.
 - AC-WDAP0-05: When the normalized APT requirement set is empty, `substrate world enable --provision-deps` exits `0` and the APT provisioning phase is a no-op.
 - AC-WDAP0-06: When all normalized APT requirements are already satisfied, `substrate world enable --provision-deps` exits `0` without invoking `apt-get` or mutating `dpkg`.
 - AC-WDAP0-07: With `substrate world enable --provision-deps` (non-dry-run), `scripts/substrate/world-enable.sh` is invoked with `--no-sync-deps`, the helper emits `Skipping world deps sync (--no-sync-deps)`, runtime `substrate world deps current sync` runs only after provisioning-time APT completes, and WDAP0 validation includes at least one supported guest-backend run (macOS Lima minimum for this pack) where a real APT-backed dep is absent before the run and installed afterward.
-- AC-WDAP0-08: If world-agent connectivity is required for probe or install and cannot be established, `substrate world enable --provision-deps` exits `3` with actionable stderr; when `scripts/substrate/install-substrate.sh --sync-deps` observes downstream exit `4`, it prints remediation containing `substrate world enable --provision-deps` and still exits `0`.
+- AC-WDAP0-08: If world-service connectivity is required for probe or install and cannot be established, `substrate world enable --provision-deps` exits `3` with actionable stderr; when `scripts/substrate/install-substrate.sh --sync-deps` observes downstream exit `4`, it prints remediation containing `substrate world enable --provision-deps` and still exits `0`.
 
 ## Out of scope
 - Runtime fail-early behavior for `substrate world deps current sync|install` (owned by `WDAP1`).

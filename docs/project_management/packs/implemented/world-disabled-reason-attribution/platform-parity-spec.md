@@ -22,7 +22,7 @@ Owner standard:
 - Agent-socket details outside the effective-disable fragment may differ by platform.
 
 ## Known platform hazards
-- Linux can exercise world-agent transport paths that do not exist on macOS or Windows.
+- Linux can exercise world-service transport paths that do not exist on macOS or Windows.
 - macOS and Windows may hit local-backend replay paths more often during smoke.
 - The validation seam uses replay tests and feature-local smoke wrappers so attribution assertions stay backend-agnostic.
 

@@ -16,7 +16,7 @@ pub const AGENT_EVENT_CHANNEL_MAX_BYTES: usize = 64;
 const PURE_AGENT_ROUTER: &str = "agent_hub";
 // Substrate-local normalized protocol-family id for current pure-agent records.
 // This label is not, by itself, a claim of upstream UAA wire/API compatibility.
-const PURE_AGENT_PROTOCOL: &str = "uaa.agent.session";
+const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
 
 /// Canonical set of agent event categories.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

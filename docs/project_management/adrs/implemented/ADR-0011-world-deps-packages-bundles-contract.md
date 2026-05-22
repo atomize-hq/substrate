@@ -120,7 +120,7 @@ Replacement completeness requirement:
 
 ### Key Terms
 - **Host**: the developer workstation environment running `substrate`.
-- **World**: the isolated execution environment behind world-agent (Linux host, macOS Lima VM, Windows WSL).
+- **World**: the isolated execution environment behind world-service (Linux host, macOS Lima VM, Windows WSL).
 - **Inventory**: definitions of available **packages** and **bundles**.
 - **Enabled**: the desired set of inventory items for the **current directory** (resolved via sparse config merge).
 - **World image** install: mutates OS-managed state in the world (e.g. apt/dpkg under `/usr`, `/var/lib/dpkg`).
@@ -130,7 +130,7 @@ Replacement completeness requirement:
 Substrate world execution is intentionally conservative and does not behave like an interactive login shell.
 
 Contract:
-- World commands executed via non-interactive pathways (e.g., `substrate -c`, automation, world-agent `/v1/execute`) execute under `/bin/sh -c` in the world, with no user shell rc sourcing.
+- World commands executed via non-interactive pathways (e.g., `substrate -c`, automation, world-service `/v1/execute`) execute under `/bin/sh -c` in the world, with no user shell rc sourcing.
 - Interactive REPL sessions (`substrate>`) execute under the world-first persistent-session model and evaluate submissions under `/bin/bash --noprofile --norc -c` (still no user rc sourcing).
 - Therefore, runnable deps MUST expose real executable entrypoints (files) and MUST NOT rely on shell functions, aliases, or `~/.bashrc`-style initialization. If a tool requires shell init, it MUST be made runnable via a generated wrapper entrypoint (e.g., `bash_function` / `bash_source_exec` wrappers).
 
@@ -435,18 +435,18 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - Output SHOULD be a table.
   - Table columns MUST include: `source`, `kind`, `name`, `runnable`, `method`, `entrypoints`, `platforms`, `description`.
     - `source` MUST be one of: `builtin`, `global`, `workspace` and indicates which scope contributed the **effective definition** after inventory merge + platform filtering + `world.deps.inventory_mode` (full-replace by item name).
-  - It MUST NOT make world-agent calls.
+  - It MUST NOT make world-service calls.
   - Hints (stderr, only if empty):
     - `substrate: note: no deps inventory items visible for this directory; add definitions under $SUBSTRATE_HOME/deps/ or <workspace_root>/.substrate/deps/`
 - `enabled`:
-  - Prints the **current enabled list** (effective merged enabled list for `cwd`) without querying world-agent.
+  - Prints the **current enabled list** (effective merged enabled list for `cwd`) without querying world-service.
   - If any enabled name does not exist in the effective available inventory view, it MUST fail with exit `2` and list the unknown names.
   - Stderr (always):
     - `substrate: note: showing current effective enabled deps list for this directory`
   - Hints (stderr, when empty):
     - `substrate: hint: add deps with 'substrate world deps workspace add ...' (or '... global add ...') then apply with 'substrate world deps current sync'`
 - `applied`:
-  - Prints world-agent-backed status for items.
+  - Prints world-service-backed status for items.
   - Default scope: the current enabled set.
   - `--all`: include every currently available inventory item (debug/bring-up only). Valid only with `applied`.
   - Stderr (always):
@@ -612,11 +612,11 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - reading/writing YAML patch files (`$SUBSTRATE_HOME/config.yaml`, `<workspace_root>/.substrate/workspace.yaml`),
   - resolving inventory directories (built-ins + global + workspace chain),
   - enforcing merge rules, collision rules, and platform filters,
-  - routing world-agent-backed operations for `applied`, `install`, `sync`.
+  - routing world-service-backed operations for `applied`, `install`, `sync`.
 - Shared models/parsing:
   - Replace/extend `crates/common/src/world_deps_manifest.rs` (currently manager-manifest-backed) with package/bundle inventory parsing and validation as specified in the contract.
 - World execution (in-world):
-  - `crates/world-agent/` owns in-world probes and installs (apt + script execution + `manual` blocked behavior).
+  - `crates/world-service/` owns in-world probes and installs (apt + script execution + `manual` blocked behavior).
 - Legacy plumbing removal (host + installer):
   - `crates/shim/src/exec/logging.rs` and install scripts that read/copy `manager_hooks.yaml` / `world-deps.yaml` / selection files must be updated so `world deps` is not influenced by any legacy paths.
 
@@ -647,7 +647,7 @@ This section mirrors the **scope and “current vs patch”** style used by `ADR
   - Enabled list validation enforces “must exist in effective inventory” and de-duplicates preserving order.
   - Platform filtering hides non-matching items (treated as non-existent).
 - Integration tests (CLI contract):
-  - `current list available|enabled` makes no world-agent calls.
+  - `current list available|enabled` makes no world-service calls.
   - World-backend-unavailable paths return exit `3` only where allowed by contract.
   - Replacement completeness: tests MUST fail if any legacy world-deps file path influences `world deps` behavior.
 - Manual playbook and smoke:
@@ -674,7 +674,7 @@ This appendix tightens the contract and enumerates the additional work required 
 - `substrate world deps current list available` MAY show items even when `$SUBSTRATE_HOME/deps/` does not exist. Those “available” items can come from **built-in inventory defaults** shipped with Substrate (compiled-in / embedded), not from the host.
 - To make provenance obvious, `substrate world deps current list available` MUST include a `source` column (and `--json` field) with one of: `builtin`, `global`, `workspace` indicating where the **effective** definition came from after inventory merge + platform filtering + `world.deps.inventory_mode`.
 - The **shim** remains a host-side interception layer. It MUST NOT be assumed to be “the first PATH entry” inside the world:
-  - World execution is performed by the world backend/world-agent, and the in-world environment must be built explicitly.
+  - World execution is performed by the world backend/world-service, and the in-world environment must be built explicitly.
   - The hardening lever inside the world is **environment construction** (especially `PATH`) plus **world-deps wrappers** under `/var/lib/substrate/world-deps/bin`, not the host shim.
 
 ### A.2 Contract tightening: command resolution must not depend on host PATH

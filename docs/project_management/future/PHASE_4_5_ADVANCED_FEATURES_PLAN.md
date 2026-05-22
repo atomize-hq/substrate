@@ -35,7 +35,7 @@ During Phase 4, the ExternalPrinter implementation for concurrent output caused 
 ### Current State
 - **Standard sync REPL**: Working perfectly with 0% idle CPU usage
 - **Agent API Infrastructure**: Complete and ready for integration
-- **Communication Channels**: host-proxy ↔ world-agent architecture operational
+- **Communication Channels**: host-proxy ↔ world-service architecture operational
 
 ### Path A: Non‑Polling Renderer with Reedline
 

@@ -52,7 +52,7 @@ execution_horizon:
   - `docs/project_management/system/standards/shared/EXIT_CODE_TAXONOMY.md`
   - `docs/project_management/packs/draft/world-deps-apt-provisioning/contract.md`
   - `docs/project_management/packs/implemented/world-deps-packages-bundles-contract/contract.md`
-  - Shared code surfaces in `crates/shell`, `crates/world-agent`, and `scripts/substrate/world-enable.sh`
+  - Shared code surfaces in `crates/shell`, `crates/world-service`, and `scripts/substrate/world-enable.sh`
 - **Known unknowns / risks**:
   - Overlapping ADR and planning-pack docs can still present a second truth until reconciliation lands
   - Shared-file overlap with adjacent staging/tracing work can stale the provisioning-wiring basis before seam-local planning begins

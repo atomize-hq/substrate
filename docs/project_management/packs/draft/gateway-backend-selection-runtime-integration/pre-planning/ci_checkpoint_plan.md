@@ -77,7 +77,7 @@ Checkpoint planning applies to this feature.
 
 Reasons:
 - ADR-0046 declares Linux, macOS, and Windows platform guarantees for the same selected-backend realization contract.
-- `impact_map.md` ties the feature to shell, world-agent, gateway auth, gateway providers, parity tests, and per-platform smoke scripts.
+- `impact_map.md` ties the feature to shell, world-service, gateway auth, gateway providers, parity tests, and per-platform smoke scripts.
 - `spec_manifest.md` reserves one explicit parity-validation surface and one explicit CI checkpoint planning artifact.
 - The feature is security-sensitive and fail-closed, which raises the cost of late cross-platform surprises.
 
@@ -95,7 +95,7 @@ Surfaces stabilized:
 - runtime config rendering, launch, readiness, and restart wiring
 
 Risk reduced:
-- catches cross-platform compile or type-shape drift across shell, world-agent, gateway, and shared types before the parity-proof seam starts
+- catches cross-platform compile or type-shape drift across shell, world-service, gateway, and shared types before the parity-proof seam starts
 - catches end-to-end lifecycle regressions before the pack invests in the heavier rollout and smoke-script evidence pass
 
 Downstream confirmation still required:

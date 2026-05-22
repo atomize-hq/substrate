@@ -45,7 +45,7 @@ open_remediations: []
     - update the narrow authoritative doc set that describes interactive REPL exit semantics once runtime behavior is evidenced
   - Out:
     - replay-routing or tracing-validation contract publication owned by `SEAM-1`
-    - backend transport, world-agent, shim, or general prompt-backend rewrites
+    - backend transport, world-service, shim, or general prompt-backend rewrites
     - downstream cross-surface lock-in and drift-guard work owned by `SEAM-3`
 - **Touch surface**: `crates/shell/src/repl/async_repl.rs`, optionally `crates/shell/src/repl/editor.rs`, existing PTY-based REPL harnesses in `crates/shell/tests/repl_world_first_routing_v1.rs` and `crates/shell/tests/repl_world_first_rendering_v1.rs`, an adjacent or new macOS-targeted revoke regression test under `crates/shell/tests/`, `docs/project_management/adrs/draft/ADR-0016-world-first-repl-persistent-pty.md`, `docs/reference/env/contract.md`, and `docs/USAGE.md`.
 - **Verification**:

@@ -38,7 +38,7 @@ open_remediations: []
     - name the publication and verification surfaces for `C-02` and `C-03`
   - Out:
     - field-by-field examples beyond the owned schema surface
-    - typed world-agent transport and parity guarantees
+    - typed world-service transport and parity guarantees
     - terminal docs-validation lock-in
 - **Acceptance criteria**:
   - `C-02` names the owned top-level envelope, `client_wiring.*` boundary, and absence-semantics ownership

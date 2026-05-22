@@ -48,7 +48,7 @@ open_remediations: []
     - the ban on trusting gateway-local config, admin, or persistence surfaces as policy inputs
   - Out:
     - command spelling and ownership-table wording
-    - typed world-agent lifecycle/status endpoint shape
+    - typed world-service lifecycle/status endpoint shape
     - provisioning changes
     - manual validation/playbook lock-in and final docs alignment
 - **Primary interfaces**
@@ -84,8 +84,8 @@ open_remediations: []
 - **Touch surface**:
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/gateway-status-schema-spec.md`
   - `docs/project_management/packs/draft/substrate-gateway-boundary-and-runtime-ownership/policy-spec.md`
-  - `crates/agent-api-types/src/lib.rs`
-  - `crates/agent-api-client/src/lib.rs`
+  - `crates/transport-api-types/src/lib.rs`
+  - `crates/transport-api-client/src/lib.rs`
   - `docs/CONFIGURATION.md`
 - **Verification**:
   - This seam consumes upstream contract `C-01`; verification may depend on accepted upstream evidence for the command family and ownership boundary.

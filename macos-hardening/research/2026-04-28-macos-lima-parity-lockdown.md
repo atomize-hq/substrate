@@ -63,7 +63,7 @@ separation.
   - optional TCP via `SUBSTRATE_AGENT_TCP_PORT`
 - The agent API itself is still protected primarily by transport reachability:
   whoever can reach the socket or port can talk to the listener:
-  `crates/world-agent/src/lib.rs`
+  `crates/world-service/src/lib.rs`
 - This same forwarded transport path now also carries the current gateway
   lifecycle/status traffic on macOS. `substrate world gateway sync`,
   `substrate world gateway status --json`, and `substrate world gateway restart`
@@ -91,7 +91,7 @@ separation.
 - Managed gateway runtime artifacts under
   `/run/substrate/substrate-gateway-runtime/` already matter for diagnostics and
   supportability:
-  `crates/world-agent/src/gateway_runtime.rs`,
+  `crates/world-service/src/gateway_runtime.rs`,
   `docs/WORLD.md`, and `docs/INSTALLATION.md`
 
 ### 5. Integrated auth handoff is now landed, but not sufficient for ownership separation
@@ -101,9 +101,9 @@ separation.
   Substrate-owned auth bundle delivered over an inherited FD via
   `SUBSTRATE_LLM_AUTH_BUNDLE_FD`:
   `docs/contracts/substrate-gateway-policy-evaluation.md`
-- `world-agent` now owns gateway runtime launch and hands the auth bundle to the
+- `world-service` now owns gateway runtime launch and hands the auth bundle to the
   in-world gateway through the managed runtime path:
-  `crates/world-agent/src/gateway_runtime.rs`
+  `crates/world-service/src/gateway_runtime.rs`
 - Gateway status now exposes non-secret lifecycle metadata through the existing
   machine-readable surface, especially `status` and `client_wiring.*`:
   `docs/contracts/substrate-gateway-status-schema.md`

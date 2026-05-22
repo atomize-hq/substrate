@@ -15,7 +15,7 @@ basis:
   stale_triggers:
   - C-01 changes manager-selection semantics, supported families, or unsupported-backend
     wording
-  - world_enable or world-agent shared-file changes alter where the in-world probe
+  - world_enable or world-service shared-file changes alter where the in-world probe
     runs
   - platform parity assumptions change and require different support-gate outcomes
 gates:
@@ -59,20 +59,20 @@ open_remediations: []
     - `crates/shell/src/builtins/world_enable/runner.rs`
     - `crates/shell/src/builtins/world_enable/runner/helper_script.rs`
     - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-    - `crates/world-agent/src/service.rs`
+    - `crates/world-service/src/service.rs`
     - `crates/shell/tests/world_enable.rs`
 - **Verification**:
   - Because this seam **consumes** `C-01` (`THR-01`), pre-exec verification must revalidate that:
     - no host-side manager detection leaks into the provisioning flow
     - contradiction handling cannot silently fall back to the wrong manager
-    - unsupported backend posture and exit `4` remain fail-closed and consistent across shell, dispatch, and world-agent layers
+    - unsupported backend posture and exit `4` remain fail-closed and consistent across shell, dispatch, and world-service layers
 - **Basis posture**:
   - Currentness: `current`
   - Upstream closeouts assumed: `../../governance/seam-1-closeout.md`
   - Required threads (inbound): `THR-01` (published and revalidated)
   - Stale triggers:
     - `C-01` changes manager-selection semantics, supported families, or unsupported-backend wording
-    - `world_enable` or `world-agent` shared-file changes alter where the in-world probe runs
+    - `world_enable` or `world-service` shared-file changes alter where the in-world probe runs
     - platform parity assumptions change and require different support-gate outcomes
 - **Threading constraints**
   - Upstream blockers:

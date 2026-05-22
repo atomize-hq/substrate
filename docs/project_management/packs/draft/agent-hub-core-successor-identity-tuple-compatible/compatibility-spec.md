@@ -113,7 +113,7 @@ Later work, including ADR-0045 follow-on tooling, must preserve all of these inv
 
 - `backend_id` remains the agent-side adapter identifier and allowlist token
 - role assignment stays separate from `backend_id`
-- pure-agent records keep `router=agent_hub` and `protocol=uaa.agent.session`
+- pure-agent records keep `router=agent_hub` and `protocol=substrate.agent.session`
 - pure-agent records omit `provider` and `auth_authority`
 - nested gateway-backed LLM records carry `router=substrate_gateway` plus `provider` and `auth_authority`
 - `world_id` and `world_generation` remain attached to world-scoped pure-agent records rather than nested records
