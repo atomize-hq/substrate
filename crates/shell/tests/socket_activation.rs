@@ -227,7 +227,7 @@ fn world_doctor_text_reports_socket_activation_summary() {
         .success();
     let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
     assert!(
-        stdout.contains("agent socket: systemd-managed"),
+        stdout.contains("world-service socket: systemd-managed"),
         "doctor text output missing socket activation summary: {stdout}"
     );
 }
