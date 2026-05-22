@@ -660,6 +660,7 @@ fn session_participant_manifests(
     };
     let mut manifests = entries
         .filter_map(Result::ok)
+        .filter(|entry| entry.path().extension().and_then(|value| value.to_str()) == Some("json"))
         .map(|entry| read_json_file(&entry.path()))
         .collect::<Vec<_>>();
     manifests.sort_by(|left, right| {
