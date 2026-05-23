@@ -577,14 +577,37 @@ pub(crate) fn run_hidden_owner_helper_startup_prompt_stream(
     listener: StartupPromptTransportListener,
     json: bool,
 ) -> Result<()> {
+    run_hidden_owner_helper_startup_prompt_stream_with_action(
+        listener,
+        json,
+        PublicPromptAction::Start,
+    )
+}
+
+#[cfg(unix)]
+pub(crate) fn run_hidden_owner_helper_startup_prompt_stream_with_action(
+    listener: StartupPromptTransportListener,
+    json: bool,
+    action: PublicPromptAction,
+) -> Result<()> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .context("failed to initialize startup prompt transport runtime")?;
     let mut renderer = PublicPromptRenderer::new(json);
+    let mut stream_started = false;
+    let mut saw_terminal = false;
     let result = rt.block_on(async {
         consume_hidden_owner_helper_startup_prompt_stream(listener, |envelope| {
-            renderer.render(envelope)
+            stream_started = true;
+            if matches!(
+                envelope,
+                PublicPromptEnvelope::Completed { .. } | PublicPromptEnvelope::Failed { .. }
+            ) {
+                saw_terminal = true;
+            }
+            let rewritten = rewrite_startup_prompt_envelope_action(envelope, action);
+            renderer.render(&rewritten)
         })
         .await
     });
@@ -594,7 +617,64 @@ pub(crate) fn run_hidden_owner_helper_startup_prompt_stream(
         Ok(code) => Err(anyhow::Error::new(PublicPromptRenderedExit {
             exit_code: code,
         })),
+        Err(err) if stream_started && action == PublicPromptAction::Turn => {
+            if !saw_terminal {
+                renderer.render(&failed_prompt_envelope(
+                    "bridge",
+                    "owner_unreachable",
+                    err.to_string(),
+                ))?;
+            }
+            Err(anyhow::Error::new(PublicPromptRenderedExit {
+                exit_code: 1,
+            }))
+        }
         Err(err) => Err(err),
+    }
+}
+
+fn rewrite_startup_prompt_envelope_action(
+    envelope: &PublicPromptEnvelope,
+    action: PublicPromptAction,
+) -> PublicPromptEnvelope {
+    match envelope {
+        PublicPromptEnvelope::Accepted {
+            version,
+            orchestration_session_id,
+            backend_id,
+            participant_id,
+            scope,
+            ..
+        } => PublicPromptEnvelope::Accepted {
+            version: *version,
+            action,
+            orchestration_session_id: orchestration_session_id.clone(),
+            backend_id: backend_id.clone(),
+            participant_id: participant_id.clone(),
+            scope: scope.clone(),
+        },
+        PublicPromptEnvelope::Completed {
+            version,
+            orchestration_session_id,
+            backend_id,
+            participant_id,
+            turn_outcome,
+            session_posture,
+            state,
+            warnings,
+            ..
+        } => PublicPromptEnvelope::Completed {
+            version: *version,
+            action,
+            orchestration_session_id: orchestration_session_id.clone(),
+            backend_id: backend_id.clone(),
+            participant_id: participant_id.clone(),
+            turn_outcome: turn_outcome.clone(),
+            session_posture: *session_posture,
+            state: state.clone(),
+            warnings: warnings.clone(),
+        },
+        _ => envelope.clone(),
     }
 }
 
@@ -1257,11 +1337,8 @@ pub(crate) async fn submit_host_prompt_turn<F>(
 where
     F: FnMut(SubmittedPromptStreamEvent),
 {
-    let gateway = super::build_gateway_for_descriptor(&runtime.descriptor)
+    let prompt_fulfillment = super::build_gateway_for_descriptor(&runtime.descriptor)
         .context("build host targeted-turn gateway")?;
-    let agent_kind =
-        agent_api::AgentWrapperKind::new(runtime.descriptor.backend_kind.as_agent_kind_str())
-            .map_err(|err| anyhow::anyhow!("substrate: error: {err}"))?;
 
     let request = agent_api::AgentWrapperRunRequest {
         prompt: prompt.to_string(),
@@ -1273,8 +1350,8 @@ where
             build_session_resume_extension(&runtime.uaa_session_handle_id),
         )]),
     };
-    let control = gateway
-        .run_control(&agent_kind, request)
+    let control = prompt_fulfillment
+        .run_control(request)
         .await
         .map_err(|err| anyhow::anyhow!("substrate: error: {}", err))?;
     let agent_api::AgentWrapperRunControl { handle, cancel: _ } = control;

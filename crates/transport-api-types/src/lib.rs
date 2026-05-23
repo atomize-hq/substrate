@@ -1376,7 +1376,7 @@ pub fn validate_gateway_integrated_auth_payload(
     }
 
     if let Some(api_env) = api_env {
-        if !backend_id.starts_with("api:") {
+        if !backend_id.starts_with("api:") && backend_id != "cli:claude_code" {
             return Err(format!(
                 "request-provided integrated auth payload for '{}' uses incompatible auth facet 'api_env'",
                 backend_id
@@ -2241,6 +2241,19 @@ mod tests {
         valid_api_openai_payload()
             .validate()
             .expect("valid api:openai");
+    }
+
+    #[test]
+    fn gateway_integrated_auth_validation_accepts_cli_claude_code_api_env() {
+        GatewayIntegratedAuthPayloadV1 {
+            backend_id: "cli:claude_code".to_string(),
+            cli_codex: None,
+            api_env: Some(GatewayApiEnvIntegratedAuthV1 {
+                env: HashMap::from([("ANTHROPIC_API_KEY".to_string(), "sk-ant-test".to_string())]),
+            }),
+        }
+        .validate()
+        .expect("valid cli:claude_code api_env");
     }
 
     #[test]

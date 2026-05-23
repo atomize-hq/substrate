@@ -76,6 +76,7 @@ chrono = { workspace = true }  # Timestamps
 url = "2"                  # URL parsing
 secrecy = "0.8"            # Secure secret handling
 substrate-common = { path = "../common" }
+agent_api = { package = "unified-agent-api", version = "=0.3.5", default-features = false, features = ["codex", "claude_code"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["signal"] }  # Unix signals

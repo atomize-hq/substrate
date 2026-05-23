@@ -29,6 +29,7 @@ const EXIT_INVALID_INTEGRATION: i32 = 2;
 const EXIT_TRANSIENT_FAILURE: i32 = 3;
 const EXIT_COMPONENT_UNAVAILABLE: i32 = 4;
 const EXIT_POLICY_FAILURE: i32 = 5;
+const CLI_CLAUDE_CODE_BACKEND: &str = "cli:claude_code";
 const CLI_CODEX_BACKEND: &str = "cli:codex";
 const API_OPENAI_BACKEND: &str = "api:openai";
 const API_ANTHROPIC_BACKEND: &str = "api:anthropic";
@@ -380,7 +381,7 @@ fn derive_gateway_identity_tuple(
 ) -> anyhow::Result<IdentityTuple> {
     let protocol = match selected_backend {
         CLI_CODEX_BACKEND | API_OPENAI_BACKEND => "openai.responses",
-        API_ANTHROPIC_BACKEND => "anthropic.messages",
+        CLI_CLAUDE_CODE_BACKEND | API_ANTHROPIC_BACKEND => "anthropic.messages",
         other => {
             return Err(gateway_invalid_integration_error(format!(
                 "unsupported backend '{}' for gateway identity tuple publication",
@@ -390,7 +391,7 @@ fn derive_gateway_identity_tuple(
     };
     let provider = match selected_backend {
         CLI_CODEX_BACKEND | API_OPENAI_BACKEND => Some("openai".to_string()),
-        API_ANTHROPIC_BACKEND => Some("anthropic".to_string()),
+        CLI_CLAUDE_CODE_BACKEND | API_ANTHROPIC_BACKEND => Some("anthropic".to_string()),
         _ => None,
     };
     let tuple = IdentityTuple {
@@ -657,11 +658,35 @@ fn resolve_integrated_auth_payload(
                 api_env: None,
             }))
         }
+        agent_inventory::AgentConfigKind::Cli if selected_backend == CLI_CLAUDE_CODE_BACKEND => {
+            resolve_claude_code_integrated_auth(selected_backend, effective_policy)
+        }
         agent_inventory::AgentConfigKind::Cli => Ok(None),
         agent_inventory::AgentConfigKind::Api => {
             resolve_api_env_integrated_auth(selected_backend, backend_entry, effective_policy)
         }
     }
+}
+
+fn resolve_claude_code_integrated_auth(
+    selected_backend: &str,
+    effective_policy: &substrate_broker::Policy,
+) -> anyhow::Result<Option<GatewayIntegratedAuthPayloadV1>> {
+    let Some(api_key) = read_trimmed_env(ANTHROPIC_API_KEY_ENV)
+        .map_err(|err| gateway_invalid_integration_error(err.to_string()))?
+    else {
+        return Ok(None);
+    };
+
+    ensure_env_name_allowed(effective_policy, ANTHROPIC_API_KEY_ENV)?;
+
+    Ok(Some(GatewayIntegratedAuthPayloadV1 {
+        backend_id: selected_backend.to_string(),
+        cli_codex: None,
+        api_env: Some(GatewayApiEnvIntegratedAuthV1 {
+            env: HashMap::from([(ANTHROPIC_API_KEY_ENV.to_string(), api_key)]),
+        }),
+    }))
 }
 
 fn resolve_cli_codex_integrated_auth(

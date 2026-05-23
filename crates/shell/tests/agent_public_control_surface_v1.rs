@@ -268,7 +268,7 @@ fn write_fake_codex_script_turn_requires_helper_cancel_after_prompt(dir: &Path) 
     let path = dir.join("fake-codex-turn-requires-helper-cancel.sh");
     let count_path = dir.join("fake-codex-turn-requires-helper-cancel.count");
     let body = format!(
-        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  trap 'exit 0' INT TERM\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-bootstrap\"}}\\r\\n'\n  while :; do sleep 1; done\nfi\nif [ \"$count\" -eq 2 ]; then\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\n  exit 0\nfi\ntrap 'exit 0' INT TERM\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nwhile :; do sleep 1; done\n",
+        "#!/bin/sh\nSTATE_FILE='{}'\nSCRIPT_DIR='{}'\ncount=0\nif [ -f \"$STATE_FILE\" ]; then\n  count=$(cat \"$STATE_FILE\")\nfi\ncount=$((count + 1))\nprintf '%s' \"$count\" > \"$STATE_FILE\"\nprintf '%s\\n' \"$@\" > \"$SCRIPT_DIR/fake-codex-$count.args\"\ncat > \"$SCRIPT_DIR/fake-codex-$count.stdin\"\nif [ \"$count\" -eq 1 ]; then\n  printf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\n  printf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\n  printf '{{\"type\":\"item.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\",\"item_id\":\"msg-%s\",\"status\":\"completed\",\"item_type\":\"agent_message\",\"content\":{{\"text\":\"follow-up prompt success\"}}}}\\r\\n' \"$count\" \"$count\"\n  printf '{{\"type\":\"turn.completed\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\n  exit 0\nfi\ntrap 'exit 0' INT TERM\nprintf '{{\"type\":\"thread.resumed\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-%s\"}}\\r\\n' \"$count\"\nwhile :; do sleep 1; done\n",
         count_path.display(),
         dir.display(),
     );
@@ -1626,6 +1626,11 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
         pid_is_alive(resumed_owner_pid),
         "reattach must leave a live owner loop"
     );
+    let reattach_stdin = fixture.read_fake_codex_stdin(1);
+    assert!(
+        reattach_stdin.trim().is_empty(),
+        "reattach must not send a hidden bootstrap prompt or any other user prompt payload: {reattach_stdin:?}"
+    );
 
     fixture.reset_fake_codex_state();
     let fork_output = fixture.run(&["agent", "fork", "--session", "sess_resume_source", "--json"]);
@@ -1681,6 +1686,11 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
     assert!(
         pid_is_alive(fork_owner_pid),
         "fork must leave a live owner loop"
+    );
+    let fork_stdin = fixture.read_fake_codex_stdin(1);
+    assert!(
+        fork_stdin.trim().is_empty(),
+        "fork successor launch must not send a hidden bootstrap prompt or any other user prompt payload: {fork_stdin:?}"
     );
 
     terminate_pid(resumed_owner_pid);

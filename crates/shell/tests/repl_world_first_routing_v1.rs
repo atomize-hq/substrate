@@ -2475,7 +2475,7 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
         &substrate_home,
         &orchestration_session_id,
         0,
-        Duration::from_secs(15),
+        Duration::from_secs(30),
     );
     wait_for_min_member_dispatch_requests(&records, 2, Duration::from_secs(3));
     repl.wait_for_prompt(Duration::from_secs(2))

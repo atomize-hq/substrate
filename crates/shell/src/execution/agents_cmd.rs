@@ -18,7 +18,8 @@ use crate::execution::agent_runtime::control::{
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::{
     private_stop_transport_path, register_hidden_owner_helper_startup_prompt_listener,
-    run_hidden_owner_helper_startup_prompt_stream, HiddenOwnerHelperStartupPromptPlan,
+    run_hidden_owner_helper_startup_prompt_stream,
+    run_hidden_owner_helper_startup_prompt_stream_with_action, HiddenOwnerHelperStartupPromptPlan,
 };
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, OrchestrationSessionRecord,
@@ -617,24 +618,48 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
     let orchestration_session_id = target.session.orchestration_session_id.clone();
     let backend_id = target.participant.handle.backend_id.clone();
 
-    let resumed_receipt = match target.session_posture {
+    #[cfg(unix)]
+    if target.session_posture == PublicSessionPosture::DetachedReattachable
+        && target.target_kind == PublicTurnTargetKind::Host
+    {
+        let mut plan =
+            build_successor_launch_plan(cli, &args.session, OwnerHelperMode::ResumeOneTurn)?;
+        if plan.descriptor.backend_id != backend_id {
+            anyhow::bail!(config_model::user_error(format!(
+                "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
+                args.session, args.backend
+            )));
+        }
+        let startup_listener = register_hidden_owner_helper_startup_prompt_listener(
+            &store,
+            plan.orchestration_session_id(),
+            plan.participant_id(),
+        )
+        .map_err(runtime_start_error)?;
+        plan.startup_prompt = Some(HiddenOwnerHelperStartupPromptPlan {
+            prompt_text: prompt.prompt_text.clone(),
+            stream_path: startup_listener.path().to_path_buf(),
+        });
+        let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
+        run_hidden_owner_helper_startup_prompt_stream_with_action(
+            startup_listener,
+            args.json,
+            PublicPromptAction::Turn,
+        )
+        .map_err(normalize_public_prompt_error)?;
+        wait_for_resumed_public_turn_detach(
+            &store,
+            &receipt.orchestration_session_id,
+            &receipt.participant_id,
+        )
+        .map_err(runtime_start_error)?;
+        return Ok(());
+    }
+
+    let resumed_receipt: Option<HiddenOwnerHelperLaunchReceipt> = match target.session_posture {
         PublicSessionPosture::Active => None,
         PublicSessionPosture::DetachedReattachable => match target.target_kind {
-            PublicTurnTargetKind::Host => {
-                let plan = build_successor_launch_plan(
-                    cli,
-                    &args.session,
-                    OwnerHelperMode::ResumeOneTurn,
-                )?;
-                if plan.descriptor.backend_id != backend_id {
-                    anyhow::bail!(config_model::user_error(format!(
-                        "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
-                        args.session,
-                        args.backend
-                    )));
-                }
-                Some(launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?)
-            }
+            PublicTurnTargetKind::Host => unreachable!("detached host turns are handled above"),
             PublicTurnTargetKind::World => {
                 anyhow::bail!(config_model::user_error(format!(
                     "unsupported_platform_or_posture: orchestration session {} backend {} is detached and cannot be recovered through the retained world-member seam without an active host owner; run `substrate agent reattach --session {}` first",

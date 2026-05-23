@@ -61,6 +61,7 @@ rand = "0.8"
 agent_api = { package = "unified-agent-api", version = "=0.3.5", default-features = false, features = ["codex", "claude_code"] }
 transport-api-client = { version = "0.2.8", path = "../transport-api-client" }
 transport-api-types = { version = "0.2.8", path = "../transport-api-types" }
+substrate-gateway = { version = "0.2.8", path = "../gateway" }
 http-body-util = "0.1"
 hyper = "1"
 

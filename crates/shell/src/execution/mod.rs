@@ -20,6 +20,7 @@ pub(crate) mod platform_world;
 mod policy_cmd;
 pub(crate) mod policy_model;
 pub(crate) mod policy_snapshot;
+pub(crate) mod prompt_fulfillment;
 mod pty;
 pub mod repl_persistent_session;
 mod routing;

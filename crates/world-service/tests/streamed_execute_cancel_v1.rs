@@ -102,7 +102,7 @@ fn make_member_dispatch_request_with_backend(
         run_id: run_id.to_string(),
         world_id: world_id.to_string(),
         world_generation,
-        initial_prompt: None,
+        initial_prompt: Some("first turn".to_string()),
         resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
             backend_kind,
             binary_path: binary_path.display().to_string(),

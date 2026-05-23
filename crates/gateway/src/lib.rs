@@ -1,3 +1,4 @@
+pub mod adapter_runtime;
 pub mod auth;
 pub mod cli;
 pub mod core;

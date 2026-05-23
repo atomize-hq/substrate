@@ -6,7 +6,9 @@ use crate::providers::ProviderConfig;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use substrate_common::SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY;
+use substrate_common::{
+    SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY, SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+};
 
 /// Application configuration
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -77,6 +79,7 @@ fn referenced_env_var(value: &str) -> Option<&str> {
 }
 
 const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
+const ANTHROPIC_API_KEY_ENV: &str = "ANTHROPIC_API_KEY";
 
 impl Default for ServerConfig {
     fn default() -> Self {
@@ -374,7 +377,9 @@ default = "placeholder-model"
         self.resolve_env_vars_with_blocked_secrets(&[
             SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCOUNT_ID,
             SUBSTRATE_LLM_BACKEND_AUTH_CLI_CODEX_ACCESS_TOKEN,
+            SUBSTRATE_LLM_BACKEND_AUTH_API_ANTHROPIC_API_KEY,
             SUBSTRATE_LLM_BACKEND_AUTH_API_OPENAI_API_KEY,
+            ANTHROPIC_API_KEY_ENV,
             OPENAI_API_KEY_ENV,
         ])
     }

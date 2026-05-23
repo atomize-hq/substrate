@@ -78,6 +78,9 @@ sha2 = "0.10"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[patch.crates-io]
+unified-agent-api = { path = "../unified-agent-api/crates/agent_api" }
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"

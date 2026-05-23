@@ -69,7 +69,7 @@ fn make_member_dispatch_request(
             run_id: "run-member-world-placement-test".to_string(),
             world_id: world_id.to_string(),
             world_generation,
-            initial_prompt: None,
+            initial_prompt: Some("first turn".to_string()),
             resolved_runtime: ResolvedMemberRuntimeDescriptorV1 {
                 backend_kind: MemberRuntimeBackendKindV1::Codex,
                 binary_path: binary_path.display().to_string(),

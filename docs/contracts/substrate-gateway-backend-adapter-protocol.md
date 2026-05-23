@@ -18,6 +18,9 @@ Concrete rules:
 
 - Adapter dispatch starts only after the stable `<kind>:<name>` backend id from the selection
   contract has been accepted as a fixed input.
+- Prompt-bearing host orchestration and world-member execution must reach adapter dispatch through
+  the gateway-owned runtime seam rather than by rebuilding direct backend-registration tables in
+  shell-local or world-local runtime code.
 - One selected backend id maps to one adapter dispatch target for the duration of a run. Internal
   provider or wrapper mechanics remain hidden behind that adapter identity.
 - If adapter resolution fails for a backend id that has already passed selection and allowlist
@@ -86,5 +89,8 @@ The implementation and verification surfaces for this contract are expected to s
 
 - `docs/project_management/packs/draft/substrate-gateway-backend-adapter-contract/gateway-backend-adapter-protocol-spec.md`
 - `docs/project_management/adrs/draft/ADR-0041-substrate-gateway-backend-adapter-contract.md`
+- `crates/gateway/src/adapter_runtime.rs`
+- `crates/shell/src/execution/prompt_fulfillment.rs`
+- `crates/world-service/src/prompt_fulfillment.rs`
 - the Unified Agent API normative specs and backend harnesses cited by ADR-0041
 - the standalone gateway structured-event normalization surfaces cited by ADR-0041

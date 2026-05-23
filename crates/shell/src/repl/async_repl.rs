@@ -71,6 +71,7 @@ use crate::execution::agent_runtime::{
 };
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
+use crate::execution::prompt_fulfillment::PromptFulfillmentBridge;
 use crate::execution::ReplSessionTelemetry;
 use crate::execution::WorldRootSettings;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1669,8 +1670,7 @@ impl RuntimeOrchestrationContext {
 
 struct PreparedAgentRuntime {
     descriptor: RuntimeSelectionDescriptor,
-    gateway: agent_api::AgentWrapperGateway,
-    agent_kind: agent_api::AgentWrapperKind,
+    prompt_fulfillment: Option<PromptFulfillmentBridge>,
     startup_context: RuntimeOrchestrationContext,
     manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
     run_id: String,
@@ -1681,8 +1681,7 @@ struct ResolvedHostOrchestratorBootstrap {
     cwd: PathBuf,
     shell_session_id: String,
     descriptor: RuntimeSelectionDescriptor,
-    gateway: agent_api::AgentWrapperGateway,
-    agent_kind: agent_api::AgentWrapperKind,
+    prompt_fulfillment: PromptFulfillmentBridge,
     state_store: AgentRuntimeStateStore,
     effective_config: crate::execution::config_model::SubstrateConfig,
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1698,6 +1697,7 @@ enum RuntimeStartupSignal {
 #[derive(Clone, Debug)]
 enum InitialExecPromptPlan {
     Replace(String),
+    NoPromptRecovery,
     StartupPrompt {
         prompt: String,
         stream_path: PathBuf,
@@ -1792,14 +1792,6 @@ fn runtime_task_start_message(role: &str) -> &'static str {
         "starting long-lived world-scoped member control turn"
     } else {
         "starting long-lived shell-owned orchestrator control turn"
-    }
-}
-
-fn runtime_bootstrap_prompt(role: &str) -> &'static str {
-    if role == MEMBER_ROLE {
-        "Enter persistent Substrate world-scoped member mode. Keep this control session attached for the lifetime of the parent REPL session and do not exit until the client cancels the run."
-    } else {
-        "Enter persistent Substrate host orchestrator mode. Keep this control session attached for the lifetime of the host REPL and do not exit until the client cancels the run."
     }
 }
 
@@ -2091,7 +2083,18 @@ async fn start_host_orchestrator_runtime(
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
     let prepared = prepare_host_orchestrator_runtime_startup(config)?;
-    start_host_orchestrator_runtime_with_prepared(prepared, None, agent_printer, telemetry).await
+    start_host_orchestrator_runtime_with_prepared_prompt(
+        prepared,
+        None,
+        Some(InitialExecPromptPlan::Replace(
+            "test retained host startup".to_string(),
+        )),
+        false,
+        false,
+        agent_printer,
+        telemetry,
+    )
+    .await
 }
 
 fn prepare_host_orchestrator_runtime_startup(
@@ -2112,8 +2115,7 @@ fn prepare_host_orchestrator_runtime_from_resolved(
         cwd,
         shell_session_id,
         descriptor,
-        gateway,
-        agent_kind,
+        prompt_fulfillment,
         state_store,
         effective_config,
         #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2151,8 +2153,7 @@ fn prepare_host_orchestrator_runtime_from_resolved(
 
     Ok(PreparedAgentRuntime {
         descriptor,
-        gateway,
-        agent_kind,
+        prompt_fulfillment: Some(prompt_fulfillment),
         startup_context: RuntimeOrchestrationContext {
             store: state_store,
             orchestration_session,
@@ -2230,23 +2231,17 @@ fn resolve_host_orchestrator_bootstrap(
         exit_code: 1,
         message: format!("failed to initialize shell runtime state store: {err:#}"),
     })?;
-    let gateway =
+    let prompt_fulfillment =
         build_gateway_for_descriptor(&descriptor).map_err(|err| RuntimeBootstrapFailure {
             exit_code: 1,
             message: format!("failed to build shell-owned UAA runtime registry: {err:#}"),
-        })?;
-    let agent_kind = agent_api::AgentWrapperKind::new(descriptor.backend_kind.as_agent_kind_str())
-        .map_err(|err| RuntimeBootstrapFailure {
-            exit_code: 2,
-            message: format!("failed to resolve runtime backend kind: {err}"),
         })?;
 
     Ok(Some(ResolvedHostOrchestratorBootstrap {
         cwd,
         shell_session_id: config.session_id.clone(),
         descriptor,
-        gateway,
-        agent_kind,
+        prompt_fulfillment,
         state_store,
         effective_config,
         #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2421,8 +2416,7 @@ fn prepare_hidden_owner_helper_runtime(
         cwd: _cwd,
         shell_session_id: _shell_session_id,
         descriptor: validated_descriptor,
-        gateway: _validated_gateway,
-        agent_kind: _validated_agent_kind,
+        prompt_fulfillment: _validated_prompt_fulfillment,
         state_store,
         effective_config,
         #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -2455,20 +2449,14 @@ fn prepare_hidden_owner_helper_runtime(
             message: format!("failed to persist hidden owner-helper session record: {err:#}"),
         })?;
 
-    let gateway =
+    let prompt_fulfillment =
         build_gateway_for_descriptor(&descriptor).map_err(|err| RuntimeBootstrapFailure {
             exit_code: 1,
             message: format!("failed to build hidden owner-helper gateway: {err:#}"),
         })?;
-    let agent_kind = agent_api::AgentWrapperKind::new(descriptor.backend_kind.as_agent_kind_str())
-        .map_err(|err| RuntimeBootstrapFailure {
-            exit_code: 2,
-            message: format!("failed to resolve hidden owner-helper backend kind: {err}"),
-        })?;
     Ok(PreparedAgentRuntime {
         descriptor,
-        gateway,
-        agent_kind,
+        prompt_fulfillment: Some(prompt_fulfillment),
         startup_context: RuntimeOrchestrationContext {
             store: state_store,
             orchestration_session,
@@ -2879,12 +2867,20 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
         let mut telemetry = ReplSessionTelemetry::new(config.clone(), "agent_owner_helper");
         let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
             .map_err(|failure| anyhow!(failure.message))?;
-        let initial_prompt = plan.startup_prompt.as_ref().map(|startup_prompt| {
-            InitialExecPromptPlan::StartupPrompt {
+        let initial_prompt = match plan.startup_prompt.as_ref() {
+            Some(startup_prompt) => Some(InitialExecPromptPlan::StartupPrompt {
                 prompt: startup_prompt.prompt_text.clone(),
                 stream_path: startup_prompt.stream_path.clone(),
+            }),
+            None if matches!(
+                plan.mode,
+                OwnerHelperMode::Resume | OwnerHelperMode::ResumeOneTurn | OwnerHelperMode::Fork
+            ) =>
+            {
+                Some(InitialExecPromptPlan::NoPromptRecovery)
             }
-        });
+            None => None,
+        };
         let runtime = start_host_orchestrator_runtime_with_prepared_prompt(
             Some(prepared),
             None,
@@ -2935,13 +2931,18 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     };
     let PreparedAgentRuntime {
         descriptor,
-        gateway,
-        agent_kind,
+        prompt_fulfillment,
         startup_context,
         manifest,
         run_id,
         startup_extensions,
     } = prepared;
+    let Some(prompt_fulfillment) = prompt_fulfillment else {
+        return Err(RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "missing host prompt-fulfillment bridge for retained startup".to_string(),
+        });
+    };
     let runtime_role = {
         manifest
             .lock()
@@ -3016,8 +3017,17 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     let request = agent_api::AgentWrapperRunRequest {
         prompt: match initial_prompt.as_ref() {
             Some(InitialExecPromptPlan::Replace(prompt)) => prompt.clone(),
+            Some(InitialExecPromptPlan::NoPromptRecovery) => String::new(),
             Some(InitialExecPromptPlan::StartupPrompt { prompt, .. }) => prompt.clone(),
-            None => runtime_bootstrap_prompt(&runtime_role).to_string(),
+            None => {
+                return Err(RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!(
+                        "missing explicit initial prompt plan for retained {} startup",
+                        runtime_role
+                    ),
+                });
+            }
         },
         working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
         timeout: None,
@@ -3059,7 +3069,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             scope: "host".to_string(),
         });
     }
-    let control = match gateway.run_control(&agent_kind, request).await {
+    let control = match prompt_fulfillment.run_control(request).await {
         Ok(control) => control,
         Err(err) => {
             let failure = runtime_bootstrap_failure_from_wrapper_error(err);
@@ -3097,6 +3107,12 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     let shutdown_requested = Arc::new(AtomicBool::new(false));
     let (startup_tx, startup_rx) = tokio::sync::oneshot::channel::<RuntimeStartupSignal>();
     let startup_signal = Arc::new(Mutex::new(Some(startup_tx)));
+    let (auto_park_tx, auto_park_rx) = if auto_park_after_public_turn {
+        let (tx, rx) = mpsc::unbounded_channel();
+        (Some(tx), Some(rx))
+    } else {
+        (None, None)
+    };
     let agent_id = {
         manifest
             .lock()
@@ -3113,6 +3129,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     let startup_backchannel_for_events = startup_backchannel.clone();
     let shutdown_for_events = Arc::clone(&shutdown_requested);
     let runtime_role_for_events = runtime_role.clone();
+    let auto_park_tx_for_events = auto_park_tx.clone();
     let mut events = events;
     let event_task = tokio::spawn(async move {
         let controls_parent_session = runtime_controls_parent_session(&runtime_role_for_events);
@@ -3226,6 +3243,11 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
                         )),
                         _ => {}
                     }
+                }
+            }
+            if matches!(startup_turn_phase.as_deref(), Some("completed" | "failed")) {
+                if let Some(park_after_turn_tx) = auto_park_tx_for_events.as_ref() {
+                    let _ = park_after_turn_tx.send(());
                 }
             }
             let _ = publish_agent_event(event);
@@ -3830,12 +3852,6 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         )
     };
     let (prompt_tx, prompt_rx) = private_prompt_request_channel();
-    let (auto_park_tx, auto_park_rx) = if auto_park_after_public_turn {
-        let (tx, rx) = mpsc::unbounded_channel();
-        (Some(tx), Some(rx))
-    } else {
-        (None, None)
-    };
     let prompt_transport = match register_private_prompt_transport(
         &startup_context.store,
         &stop_orchestration_session_id,
@@ -4357,21 +4373,9 @@ fn prepare_member_runtime_startup_for_descriptor(
     let mut manifest = manifest;
     manifest.internal.latest_run_id = Some(run_id.clone());
 
-    let gateway =
-        build_gateway_for_descriptor(&descriptor).map_err(|err| RuntimeBootstrapFailure {
-            exit_code: 1,
-            message: format!("failed to build world-scoped member UAA runtime registry: {err:#}"),
-        })?;
-    let agent_kind = agent_api::AgentWrapperKind::new(descriptor.backend_kind.as_agent_kind_str())
-        .map_err(|err| RuntimeBootstrapFailure {
-            exit_code: 2,
-            message: format!("failed to resolve member runtime backend kind: {err}"),
-        })?;
-
     Ok(PreparedAgentRuntime {
         descriptor,
-        gateway,
-        agent_kind,
+        prompt_fulfillment: None,
         startup_context: startup_context.clone(),
         manifest: Arc::new(Mutex::new(manifest)),
         run_id,
@@ -4381,11 +4385,37 @@ fn prepare_member_runtime_startup_for_descriptor(
 
 #[cfg(all(test, unix))]
 async fn start_member_runtime_with_prepared(
-    prepared: Option<PreparedAgentRuntime>,
+    mut prepared: Option<PreparedAgentRuntime>,
     agent_printer: &ReplPrinter,
     telemetry: &mut ReplSessionTelemetry,
 ) -> std::result::Result<Option<AsyncReplAgentRuntime>, RuntimeBootstrapFailure> {
-    start_host_orchestrator_runtime_with_prepared(prepared, None, agent_printer, telemetry).await
+    if let Some(prepared) = prepared.as_mut() {
+        if prepared.prompt_fulfillment.is_none() {
+            prepared.prompt_fulfillment = Some(
+                crate::execution::prompt_fulfillment::PromptFulfillmentBridge::for_descriptor(
+                    &prepared.descriptor,
+                )
+                .map_err(|err| RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!(
+                        "failed to build test member prompt-fulfillment bridge: {err:#}"
+                    ),
+                })?,
+            );
+        }
+    }
+    start_host_orchestrator_runtime_with_prepared_prompt(
+        prepared,
+        None,
+        Some(InitialExecPromptPlan::Replace(
+            "test retained member startup".to_string(),
+        )),
+        false,
+        false,
+        agent_printer,
+        telemetry,
+    )
+    .await
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -4523,8 +4553,7 @@ async fn start_remote_member_runtime_with_prepared(
     let transport_request = build_member_dispatch_transport_request(&prepared, initial_prompt)?;
     let PreparedAgentRuntime {
         descriptor,
-        gateway: _gateway,
-        agent_kind: _agent_kind,
+        prompt_fulfillment: _prompt_fulfillment,
         startup_context,
         manifest,
         run_id,
@@ -8829,7 +8858,9 @@ mod tests {
             let mut runtime = start_host_orchestrator_runtime_with_prepared_prompt(
                 Some(prepared),
                 None,
-                None,
+                Some(InitialExecPromptPlan::Replace(
+                    "test hidden helper startup".to_string(),
+                )),
                 true,
                 false,
                 &ReplPrinter::Stdout,
