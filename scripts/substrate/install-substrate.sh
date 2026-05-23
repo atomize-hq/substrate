@@ -479,11 +479,12 @@ ensure_linux_group_membership() {
   local target_user="$1"
   local target_group="substrate"
 
+  initialize_sudo
   record_group_existence
 
   if ! getent group "${target_group}" >/dev/null 2>&1; then
     log "Creating '${target_group}' group (sudo may prompt)..."
-    if ! run_cmd sudo groupadd --system "${target_group}"; then
+    if ! run_with_sudo groupadd --system "${target_group}"; then
       warn "Unable to create ${target_group} group automatically. Run 'sudo groupadd --system ${target_group}' and re-run the installer."
       return
     else
@@ -502,7 +503,7 @@ ensure_linux_group_membership() {
   fi
 
   log "Adding ${target_user} to ${target_group} (sudo may prompt)..."
-  if run_cmd sudo usermod -aG "${target_group}" "${target_user}"; then
+  if run_with_sudo usermod -aG "${target_group}" "${target_user}"; then
     warn "${target_user} added to ${target_group}. Log out/in or run 'newgrp ${target_group}' so group membership applies to new shells."
     record_user_added "${target_user}"
   else
@@ -565,6 +566,26 @@ initialize_sudo() {
       fatal "This installer requires 'sudo' when run as a non-root user. Install sudo or re-run the installer as root."
     fi
   fi
+}
+
+run_with_sudo() {
+  initialize_sudo
+
+  if [[ ${#SUDO_CMD[@]} -eq 0 ]]; then
+    run_cmd "$@"
+    return $?
+  fi
+
+  if "${SUDO_CMD[@]}" -n true >/dev/null 2>&1; then
+    run_cmd "${SUDO_CMD[@]}" -n "$@"
+    return $?
+  fi
+
+  if [[ ! -t 0 && ! -t 1 && ! -t 2 ]]; then
+    fatal "This installer requires interactive sudo for '$*', but no TTY is available. Re-run from a terminal or pre-authenticate with 'sudo -v'."
+  fi
+
+  run_cmd "${SUDO_CMD[@]}" "$@"
 }
 
 reset_os_release_input_state() {
@@ -2081,10 +2102,10 @@ provision_linux_world() {
     return
   fi
 
-  run_cmd sudo install -Dm0755 "${world_service}" /usr/local/bin/substrate-world-service
-  run_cmd sudo install -Dm0755 "${gateway_binary}" /usr/local/bin/substrate-gateway
-  run_cmd sudo install -d -m0750 -o root -g substrate /run/substrate
-  run_cmd sudo install -d -m0750 /var/lib/substrate
+  run_with_sudo install -Dm0755 "${world_service}" /usr/local/bin/substrate-world-service
+  run_with_sudo install -Dm0755 "${gateway_binary}" /usr/local/bin/substrate-gateway
+  run_with_sudo install -d -m0750 -o root -g substrate /run/substrate
+  run_with_sudo install -d -m0750 /var/lib/substrate
 
   local home_path
   if [[ -n "${HOME}" ]]; then
@@ -2155,24 +2176,24 @@ Service=substrate-world-service.service
 WantedBy=sockets.target
 UNIT
 
-  run_cmd sudo install -Dm0644 "${unit_file}" "${service_path}"
-  run_cmd sudo install -Dm0644 "${socket_unit}" /etc/systemd/system/substrate-world-service.socket
+  run_with_sudo install -Dm0644 "${unit_file}" "${service_path}"
+  run_with_sudo install -Dm0644 "${socket_unit}" /etc/systemd/system/substrate-world-service.socket
   local legacy_world_unit_prefix="substrate-world"
   local legacy_service="${legacy_world_unit_prefix}-agent.service"
   local legacy_socket="${legacy_world_unit_prefix}-agent.socket"
-  run_cmd sudo systemctl stop "${legacy_service}" "${legacy_socket}" || true
-  run_cmd sudo systemctl disable "${legacy_service}" "${legacy_socket}" || true
-  run_cmd sudo rm -f "/etc/systemd/system/${legacy_service}" "/etc/systemd/system/${legacy_socket}"
-  run_cmd sudo systemctl daemon-reload
-  run_cmd sudo systemctl enable substrate-world-service.service
-  run_cmd sudo systemctl enable --now substrate-world-service.socket
-  run_cmd sudo systemctl stop substrate-world-service.service substrate-world-service.socket || true
-  run_cmd sudo install -d -m0750 -o root -g substrate /run/substrate
-  run_cmd sudo rm -f /run/substrate.sock
-  run_cmd sudo systemctl start substrate-world-service.socket
-  run_cmd sudo systemctl start substrate-world-service.service
-  run_cmd sudo systemctl status substrate-world-service.socket --no-pager --lines=10 || true
-  run_cmd sudo systemctl status substrate-world-service.service --no-pager --lines=10 || true
+  run_with_sudo systemctl stop "${legacy_service}" "${legacy_socket}" || true
+  run_with_sudo systemctl disable "${legacy_service}" "${legacy_socket}" || true
+  run_with_sudo rm -f "/etc/systemd/system/${legacy_service}" "/etc/systemd/system/${legacy_socket}"
+  run_with_sudo systemctl daemon-reload
+  run_with_sudo systemctl enable substrate-world-service.service
+  run_with_sudo systemctl enable --now substrate-world-service.socket
+  run_with_sudo systemctl stop substrate-world-service.service substrate-world-service.socket || true
+  run_with_sudo install -d -m0750 -o root -g substrate /run/substrate
+  run_with_sudo rm -f /run/substrate.sock
+  run_with_sudo systemctl start substrate-world-service.socket
+  run_with_sudo systemctl start substrate-world-service.service
+  run_with_sudo systemctl status substrate-world-service.socket --no-pager --lines=10 || true
+  run_with_sudo systemctl status substrate-world-service.service --no-pager --lines=10 || true
 }
 
 run_world_checks() {

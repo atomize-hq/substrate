@@ -43,6 +43,14 @@ run_privileged() {
     return $?
   fi
   if command -v sudo >/dev/null 2>&1; then
+    if sudo -n true >/dev/null 2>&1; then
+      sudo -n "$@"
+      return $?
+    fi
+    if [[ ! -t 0 && ! -t 1 && ! -t 2 ]]; then
+      warn "Command requires elevated privileges but no interactive sudo prompt is possible: $*"
+      return 1
+    fi
     sudo "$@"
     return $?
   fi
@@ -1620,16 +1628,30 @@ stage_dev_world_runtime_bundle "${PREFIX}" "${REPO_ROOT}" "${TARGET_DIR}"
 
 if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
   ensure_linux_runtime_libraries libseccomp
+  use_noninteractive_world_provision=0
   if [[ ${EUID} -ne 0 ]] && command -v sudo >/dev/null 2>&1; then
-    log "Caching sudo credentials for world provisioning (you may be prompted)..."
-    if ! sudo -v; then
-      WORLD_PROVISION_FAILED=1
-      WORLD_ENABLED=0
-      write_install_metadata "${WORLD_ENABLED}"
-      write_env_sh_script "${WORLD_ENABLED}"
-      write_manager_env_script "${WORLD_ENABLED}"
-      warn "Unable to cache sudo credentials; world-service service not provisioned."
-      warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run 'substrate world enable --home \"${PREFIX}\"' to flip it back on."
+    if sudo -n true >/dev/null 2>&1; then
+      use_noninteractive_world_provision=1
+      log "Detected non-interactive sudo for world provisioning."
+    else
+      log "Checking sudo access for world provisioning (you may be prompted)..."
+      if [[ ! -t 0 && ! -t 1 && ! -t 2 ]]; then
+        WORLD_PROVISION_FAILED=1
+        WORLD_ENABLED=0
+        write_install_metadata "${WORLD_ENABLED}"
+        write_env_sh_script "${WORLD_ENABLED}"
+        write_manager_env_script "${WORLD_ENABLED}"
+        warn "World provisioning requires sudo, but no interactive prompt is available in this session."
+        warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning from a TTY, pre-authenticate with 'sudo -v', or run with --no-world."
+      elif ! sudo -v; then
+        WORLD_PROVISION_FAILED=1
+        WORLD_ENABLED=0
+        write_install_metadata "${WORLD_ENABLED}"
+        write_env_sh_script "${WORLD_ENABLED}"
+        write_manager_env_script "${WORLD_ENABLED}"
+        warn "Unable to cache sudo credentials; world-service service not provisioned."
+        warn "World has been disabled in ${INSTALL_CONFIG_PATH} to avoid confusing runtime failures. Re-run provisioning, then run 'substrate world enable --home \"${PREFIX}\"' to flip it back on."
+      fi
     fi
   fi
   if [[ "${WORLD_ENABLED}" -eq 0 ]]; then
@@ -1638,10 +1660,13 @@ if [[ "${WORLD_ENABLED}" -eq 1 && "${IS_LINUX}" -eq 1 ]]; then
   ensure_substrate_group_membership
 	  PROVISION_SCRIPT="${REPO_ROOT}/scripts/linux/world-provision.sh"
 	  if [[ -x "${PROVISION_SCRIPT}" ]]; then
-	    log "Provisioning Linux world-service service via ${PROVISION_SCRIPT} (sudo may prompt)..."
+	    log "Provisioning Linux world-service service via ${PROVISION_SCRIPT} (sudo may prompt if needed)..."
 	    provision_args=(--profile "${PROFILE}" --skip-build)
 	    if [[ "${ENABLE_WORLD_NETFILTER}" -eq 1 ]]; then
 	      provision_args+=(--world-netfilter)
+	    fi
+	    if [[ "${use_noninteractive_world_provision}" -eq 1 ]]; then
+	      provision_args+=(--sudo-noninteractive)
 	    fi
 	    if ! SUBSTRATE_HOME="${PREFIX}" "${PROVISION_SCRIPT}" "${provision_args[@]}"; then
 	      WORLD_PROVISION_FAILED=1
