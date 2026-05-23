@@ -764,7 +764,7 @@ import sys
 path = pathlib.Path(sys.argv[1])
 events = [line.strip() for line in os.environ.get("STATE_EVENTS", "").splitlines() if line.strip()]
 schema_version = 1
-timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+timestamp = datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
 
 base = {}
 parsed_existing = False
@@ -1753,6 +1753,17 @@ To add the dev binaries/shims to PATH for this shell, run:
   source ${ENV_FILE}
 
 MSG
+if [[ "${IS_LINUX}" -eq 1 && "${WORLD_ENABLED}" -eq 1 ]] && ((${#HOST_STATE_ADDED_USERS[@]} > 0)); then
+  cat <<MSG
+[${SCRIPT_NAME}][WARN] This install added your user to the 'substrate' group.
+[${SCRIPT_NAME}][WARN] The current shell still cannot access /run/substrate.sock until group membership refreshes.
+[${SCRIPT_NAME}][WARN] Start a fresh login shell or run:
+  newgrp substrate
+Then re-run:
+  source ${ENV_FILE}
+
+MSG
+fi
 if [[ "${WORLD_PROVISION_FAILED:-0}" -eq 1 ]]; then
   fatal "Substrate dev install finished, but world provisioning failed. Re-run with an interactive sudo session (or pass --no-world to skip provisioning)."
 fi
