@@ -17,7 +17,7 @@ Define and implement one shared internal dispatch contract that:
 This slice is done only when the repo has one deterministic contract that explains:
 
 1. how a worker launch is resolved,
-2. how a future host attach is reconstructed,
+2. how a future host attach is derived from persisted `HostAttachContract` truth,
 3. which capability overrides are allowed,
 4. why a requested override was accepted or rejected.
 
@@ -38,6 +38,20 @@ What is still missing is the broader shared dispatch-envelope layer above that s
 2. explicit override taxonomy for dispatch-time capability/scope shaping,
 3. explanation-ready provenance for why requested fields were accepted, narrowed, or denied,
 4. one unified contract surface that all future host/world launch planning reuses.
+
+## Landed Implementation Truth
+
+The merged runtime truth for this slice is now:
+
+1. `crates/shell/src/execution/agent_runtime/dispatch_contract.rs` is the single internal owner of shared dispatch resolution semantics.
+2. `DispatchRequestEnvelope` is the shared caller contract for both human control surfaces and orchestrator-controlled dispatch.
+3. The baseline domains are explicit:
+   - inventory-backed resolution for new dispatch,
+   - persisted-attach-backed resolution for later host attach, detached follow-up turn recovery, and successor allocation.
+4. `DispatchCapabilityOverrideSet` and `AttachLaunchKnobs` are the named override families consumed by runtime code.
+5. Runtime materialization flows from the resolved shared contract rather than from caller-specific launch planning.
+6. `HostAttachContract` persists the generalized resolved host launch truth, including continuity selector state when present, and no second durable attach object exists.
+7. Human `start` / `reattach` / `turn` / `fork` and orchestrator-controlled dispatch now consume the same contract semantics.
 
 ## Validated Architecture Assumptions
 

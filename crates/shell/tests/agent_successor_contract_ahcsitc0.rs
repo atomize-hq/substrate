@@ -740,6 +740,7 @@ struct OrchestrationSessionManifestOptions<'a> {
     last_parked_at: Option<Option<&'a str>>,
     last_attention_at: Option<Option<&'a str>>,
     parked_reason: Option<Option<&'a str>>,
+    host_attach_contract: Option<Option<&'a str>>,
 }
 
 fn write_orchestration_session_with_manifest_options(
@@ -851,6 +852,12 @@ fn orchestration_session_manifest_with_options(
         Some(None) => Value::Null,
         None => Value::Null,
     };
+    let host_attach_contract = match options.host_attach_contract {
+        Some(Some(continuity_uaa_session_id)) => {
+            host_attach_contract_manifest(agent_id, continuity_uaa_session_id)
+        }
+        Some(None) | None => Value::Null,
+    };
     json!({
         "orchestration_session_id": orchestration_session_id,
         "shell_trace_session_id": "ses_agent_hub",
@@ -874,7 +881,30 @@ fn orchestration_session_manifest_with_options(
         "world_id": world_id,
         "world_generation": world_generation,
         "invalidation_reason": if state == "active" { Value::Null } else { json!("fixture stopped parent") },
-        "closed_at": closed_at
+        "closed_at": closed_at,
+        "host_attach_contract": host_attach_contract
+    })
+}
+
+fn host_attach_contract_manifest(agent_id: &str, continuity_uaa_session_id: &str) -> Value {
+    let backend_kind = if agent_id == "claude_code" {
+        "claude_code"
+    } else {
+        "codex"
+    };
+    json!({
+        "backend_id": format!("cli:{agent_id}"),
+        "execution_scope": "host",
+        "protocol": PURE_AGENT_PROTOCOL,
+        "launch_descriptor": {
+            "agent_id": agent_id,
+            "backend_id": format!("cli:{agent_id}"),
+            "backend_kind": backend_kind,
+            "protocol": PURE_AGENT_PROTOCOL,
+            "execution_scope": "host",
+            "binary_path": "sh"
+        },
+        "continuity_uaa_session_id": continuity_uaa_session_id
     })
 }
 
@@ -2656,6 +2686,7 @@ fn agent_status_json_surfaces_parked_resumable_fields_from_parent_session_truth(
             last_parked_at: Some(Some("2026-04-05T00:00:02Z")),
             last_attention_at: Some(None),
             parked_reason: Some(Some("owner detached cleanly")),
+            host_attach_contract: Some(Some("external-session-1")),
         },
     );
 
@@ -2721,6 +2752,7 @@ fn agent_status_json_surfaces_awaiting_attention_fields_from_parent_session_trut
             last_parked_at: Some(None),
             last_attention_at: Some(Some("2026-04-05T00:00:03Z")),
             parked_reason: Some(None),
+            host_attach_contract: Some(Some("external-session-1")),
         },
     );
 
@@ -5107,12 +5139,16 @@ metadata: {}
 
 #[test]
 fn doctor_member_selection_contract_source_locks_ambiguous_fail_closed_path() {
-    let validator = read_repo_file("crates/shell/src/execution/agent_runtime/validator.rs");
+    let dispatch_contract =
+        read_repo_file("crates/shell/src/execution/agent_runtime/dispatch_contract.rs");
     assert!(
-        validator.contains(
-            "ambiguous world member selection: multiple eligible world-scoped members found"
-        ),
-        "validator.rs must retain the shared ambiguous world-member fail-closed reason"
+        dispatch_contract
+            .contains("ambiguous world member selection: multiple eligible {} members found"),
+        "dispatch_contract.rs must retain the shared ambiguous world-member fail-closed format"
+    );
+    assert!(
+        dispatch_contract.contains("AgentExecutionScope::World => \"world-scoped\""),
+        "dispatch_contract.rs must keep world member ambiguity locked to the world-scoped label"
     );
 
     let agents_cmd = read_repo_file("crates/shell/src/execution/agents_cmd.rs");

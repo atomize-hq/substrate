@@ -31,7 +31,10 @@ This slice is done only when all of the following are true:
 ## What This Slice Assumes Is Already Landed
 
 1. 28.5 has removed blank-prompt control semantics from Substrate architecture and split control-only attach from prompt-bearing launch.
-2. 29 has landed one resolved launch contract and one persisted host attach contract.
+2. 29 has landed one shared `DispatchRequestEnvelope`, one resolved launch contract, and one persisted host attach contract.
+3. 29 has frozen the two baseline domains:
+   - inventory-backed resolution for new dispatch,
+   - persisted-attach-backed resolution for later host attach and detached follow-up recovery.
 
 ## What This Slice Leaves To 31
 
@@ -48,7 +51,7 @@ This slice does not finish lazy host attach behavior. 31 owns:
 Required direction:
 
 1. `--scope host` preserves the current host-rooted start meaning.
-2. `--scope world` routes through the shared dispatch envelope from 29.
+2. `--scope world` routes through the same shared dispatch contract from 29; it does not invent a second CLI-only launch dialect.
 3. invalid scope/backend combinations fail closed.
 
 ### 2. Define the public world-start contract in operator-visible terms
@@ -66,7 +69,7 @@ Required direction:
 
 1. user-facing capability flags map onto the same resolved launch contract used by orchestrator-controlled dispatch,
 2. policy-denied flags fail closed,
-3. the command does not invent a CLI-only override model.
+3. the command does not invent a CLI-only override model or alternate attach-truth vocabulary.
 
 ### 4. Preserve current lifecycle boundaries
 

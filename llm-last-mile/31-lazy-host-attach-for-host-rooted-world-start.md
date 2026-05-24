@@ -7,7 +7,8 @@ This slice no longer tries to discover the architecture. The validated architect
 1. durable authority is the host-rooted orchestration session,
 2. the host attach contract is persisted at session birth,
 3. the attached host execution client is optional at birth,
-4. lazy host attach is a Substrate attach-worker concern, not a prompt trick.
+4. lazy host attach is a Substrate attach-worker concern, not a prompt trick,
+5. 29 owns the only shared dispatch contract and the only durable host-attach truth.
 
 ## Objective
 
@@ -47,7 +48,8 @@ Required direction:
 
 1. if a valid continuity selector exists, the attach worker may choose continuity attach;
 2. if no continuity selector exists, the attach worker must be able to perform fresh attach from the persisted host attach contract;
-3. attach-mode choice must be explicit and auditable.
+3. attach-mode choice must be explicit and auditable;
+4. neither mode may invent a second durable attach object or re-derive launch truth from the last live participant snapshot.
 
 ### 3. Define how lazy attach is triggered
 

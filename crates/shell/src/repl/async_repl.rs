@@ -6056,11 +6056,17 @@ fn can_park_host_runtime_after_detach(
         return false;
     };
     let participant_id = manifest.handle.participant_id.as_str();
-    if record.session.state != OrchestrationSessionState::Active
-        || record.session.posture != OrchestrationSessionPosture::ActiveAttached
-        || record.session.active_participant_id() != Some(participant_id)
-        || record.session.attached_participant_id() != Some(participant_id)
-    {
+    let persisted_attached_parent = record.session.state == OrchestrationSessionState::Active
+        && record.session.posture == OrchestrationSessionPosture::ActiveAttached
+        && record.session.active_participant_id() == Some(participant_id)
+        && record.session.attached_participant_id() == Some(participant_id);
+    let in_memory_completed_one_turn_handoff = orchestration_session.startup_prompt_state()
+        == Some(StartupPromptStreamState::Completed)
+        && orchestration_session.state == OrchestrationSessionState::Active
+        && orchestration_session.posture == OrchestrationSessionPosture::ActiveAttached
+        && orchestration_session.active_participant_id() == Some(participant_id)
+        && orchestration_session.attached_participant_id() == Some(participant_id);
+    if !persisted_attached_parent && !in_memory_completed_one_turn_handoff {
         return false;
     }
 
@@ -9419,6 +9425,75 @@ mod tests {
         unsafe {
             libc::kill(pid, libc::SIGTERM);
         }
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn can_park_host_runtime_after_detach_accepts_completed_one_turn_when_store_lags() {
+        let temp = TempDir::new().expect("tempdir");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+
+        let store = AgentRuntimeStateStore::new().expect("state store");
+        let descriptor = test_runtime_selection_descriptor();
+        let mut participant = AgentRuntimeParticipantRecord::new_replacement_participant(
+            &descriptor,
+            AgentRuntimeReplacementParticipantInit {
+                orchestration_session_id: "sess_one_turn_lag".to_string(),
+                participant_id: "ash_one_turn_lag".to_string(),
+                role: ORCHESTRATOR_ROLE.to_string(),
+                orchestrator_participant_id: None,
+                parent_participant_id: None,
+                resumed_from_participant_id: "ash_source".to_string(),
+                world: None,
+                lease_token: "lease_one_turn_lag".to_string(),
+            },
+        )
+        .expect("replacement participant");
+        participant.transition_state(AgentRuntimeSessionState::Ready);
+        participant.set_uaa_session_id("thread-test");
+        participant.mark_client_detached("owner detached cleanly");
+
+        let mut persisted_session = OrchestrationSessionRecord::new(
+            "sess_one_turn_lag".to_string(),
+            "trace_one_turn_lag".to_string(),
+            "/workspace".to_string(),
+            &participant,
+        );
+        persisted_session.transition_state(OrchestrationSessionState::Active);
+        persisted_session.bind_active_session_handle(participant.handle.participant_id.clone());
+        persisted_session.mark_parked_resumable("owner detached cleanly");
+
+        store
+            .persist_orchestration_session(&persisted_session)
+            .expect("persist stale orchestration");
+        store
+            .persist_participant(&participant)
+            .expect("persist participant");
+
+        let mut in_memory_session = persisted_session.clone();
+        in_memory_session.bind_active_session_handle(participant.handle.participant_id.clone());
+        in_memory_session.initialize_startup_prompt(participant.handle.participant_id.clone());
+        in_memory_session
+            .mark_startup_prompt_completed(participant.handle.participant_id.as_str(), "success");
+
+        let mut in_memory_manifest = participant.clone();
+        in_memory_manifest.mark_runtime_ownership_retained();
+
+        assert!(
+            can_park_host_runtime_after_detach(
+                &store,
+                true,
+                &in_memory_session,
+                &in_memory_manifest,
+                true,
+                true,
+            ),
+            "completed resume-one-turn handoff should park even if the persisted session row still lags behind the attached snapshot"
+        );
+
         std::env::remove_var("SUBSTRATE_HOME");
     }
 
