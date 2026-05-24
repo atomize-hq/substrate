@@ -2,7 +2,7 @@
 
 Status: implementation-ready follow-on slice. This SOW follows [28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md](28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md) and is the next execution slice after 28.5. It is anchored to [ADR-0025](../docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md), [ADR-0026](../docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md), [ADR-0027](../docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md), and the current inventory/runtime code in [crates/shell/src/execution/agent_inventory.rs](../crates/shell/src/execution/agent_inventory.rs).
 
-This slice is not a generic capability-injection exercise. It is the contract-definition slice that turns inventory defaults, dispatch-time overrides, and policy narrowing into one resolved launch contract and one persisted host attach contract that later slices can reuse without guessing.
+This slice is not a generic capability-injection exercise. It is the contract-definition slice that turns inventory defaults, dispatch-time overrides, and policy narrowing into one resolved launch contract and one generalized persisted host attach contract that later slices can reuse without guessing.
 
 ## Objective
 
@@ -11,7 +11,7 @@ Define and implement one shared internal dispatch contract that:
 1. starts from inventory/profile defaults,
 2. accepts strict dispatch-time overrides,
 3. resolves inventory plus overrides plus policy into one effective launch contract,
-4. persists the host-orchestrator portion of that contract under the durable orchestration session,
+4. generalizes the already-landed minimal persisted host-orchestrator attach contract under the durable orchestration session,
 5. is consumed by both human launch surfaces and orchestrator-controlled dispatch surfaces.
 
 This slice is done only when the repo has one deterministic contract that explains:
@@ -21,6 +21,24 @@ This slice is done only when the repo has one deterministic contract that explai
 3. which capability overrides are allowed,
 4. why a requested override was accepted or rejected.
 
+## Landed Floor From 28.5
+
+The current repo already has the minimum durable attach seam that 28.5 said it would land:
+
+1. exact backend/runtime selection already resolves through `RuntimeSelectionDescriptor`,
+2. durable launch-descriptor persistence already exists through `ResolvedRuntimeDescriptor` plus `HostAttachContract`,
+3. durable orchestration-session state already stores that contract under `OrchestrationSessionRecord.host_attach_contract`,
+4. session-birth persistence, continuity sync, and successor-copy behavior already exist through `HostAttachContract::from_manifest(...)`, `sync_host_attach_contract(...)`, and `fork_successor_attach_contract(...)`,
+5. public `reattach` already plans from the persisted attach contract and fails closed when required continuity is missing,
+6. public `fork` already allocates a successor durable session, copies the attach-contract shape forward, clears inherited continuity, and returns truthful `parked_resumable` posture.
+
+What is still missing is the broader shared dispatch-envelope layer above that seam:
+
+1. one first-class dispatch request envelope shared by human and orchestrator-controlled callers,
+2. explicit override taxonomy for dispatch-time capability/scope shaping,
+3. explanation-ready provenance for why requested fields were accepted, narrowed, or denied,
+4. one unified contract surface that all future host/world launch planning reuses.
+
 ## Validated Architecture Assumptions
 
 This SOW assumes the following from 28.5 and treats them as fixed floor:
@@ -29,7 +47,7 @@ This SOW assumes the following from 28.5 and treats them as fixed floor:
 2. public `reattach` is a Substrate control action;
 3. public `fork` is a Substrate successor allocator;
 4. public `--scope world` will mean host-rooted orchestration plus world worker, not standalone world-root continuity;
-5. the missing durable seam is the persisted host attach contract.
+5. the previously missing durable seam is now present as a minimal persisted host attach contract, and the remaining gap is the shared dispatch-envelope and override contract that generalizes it.
 
 ## Frozen Decisions
 
@@ -51,7 +69,7 @@ This slice must not bypass that layer.
 The same resolution engine must produce:
 
 1. the contract used to launch a host or world runtime now,
-2. the host attach contract persisted for later host attach or lazy attach.
+2. the generalized host attach contract persisted for later host attach or lazy attach.
 
 Later attach must not reconstruct launch truth from whatever participant happened to be active most recently.
 
@@ -72,7 +90,7 @@ Human CLI dispatch and orchestrator-controlled dispatch must resolve through the
 
 ### 5. This slice owns the persisted host attach contract generalization
 
-28.5 introduces the minimum durable host attach contract needed to break the hidden owner-helper coupling. This slice expands that into the stable resolved contract shape that 30 and 31 will reuse.
+28.5 already introduced the minimum durable host attach contract needed to break the hidden owner-helper coupling. This slice expands the existing `RuntimeSelectionDescriptor` / `ResolvedRuntimeDescriptor` plus `HostAttachContract` path into the stable shared resolved-contract shape that 30 and 31 will reuse.
 
 ## Ownership Boundaries
 
@@ -81,7 +99,7 @@ Human CLI dispatch and orchestrator-controlled dispatch must resolve through the
 1. dispatch request parsing,
 2. inventory-plus-override-plus-policy merge logic,
 3. the resolved launch contract,
-4. persistence of the host attach contract under the durable orchestration session,
+4. generalization of the already-persisted host attach contract under the durable orchestration session,
 5. caller parity between human and orchestrator-controlled dispatch.
 
 ### Inventory layer owns
@@ -114,7 +132,7 @@ Human CLI dispatch and orchestrator-controlled dispatch must resolve through the
 1. define the shared dispatch request envelope,
 2. define merge precedence between inventory defaults, dispatch overrides, and policy restrictions,
 3. define the resolved launch contract consumed by runtime code,
-4. define the persisted host attach contract derived from that resolved launch contract,
+4. define the generalized persisted host attach contract derived from that resolved launch contract,
 5. validate caller parity across human and orchestrator dispatch,
 6. make failures explicit and explainable.
 
@@ -227,8 +245,8 @@ Primary anchors:
 
 Required outcome:
 
-1. host-rooted session birth persists the exact host attach contract,
-2. successor allocation copies that contract forward,
+1. the existing host-rooted session-birth persistence path now writes the generalized exact host attach contract,
+2. the existing successor-allocation path now copies that generalized contract forward,
 3. later attach does not infer launch truth from ambient inventory or a stale participant record.
 
 ### 6. Enforce caller parity
@@ -245,7 +263,7 @@ Required outcome:
 2. Inventory remains the baseline source of defaults.
 3. Dispatch-time scope and capability overrides have explicit, fail-closed semantics.
 4. The resolved launch contract is deterministic and explainable.
-5. A persisted host attach contract is written under the orchestration session and copied across successors.
+5. The already-landed persisted host attach contract seam is generalized so the contract written under the orchestration session and copied across successors comes from the shared dispatch contract.
 6. Human and orchestrator-controlled callers consume the same resolution logic.
 
 ## Validation Plan
@@ -273,7 +291,7 @@ When this slice closes:
 
 1. update [ADR-0027](../docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md) or successor truth docs if they still underspecify dispatch-time override resolution,
 2. document the shared dispatch envelope and merge rules explicitly,
-3. document the persisted host attach contract as a Substrate durable-state concept,
+3. document the generalized persisted host attach contract as a Substrate durable-state concept without regressing the already-landed 28.5 floor,
 4. stop implying that future host attach can be reconstructed by guessing from the last attached participant.
 
 ## Sequencing
