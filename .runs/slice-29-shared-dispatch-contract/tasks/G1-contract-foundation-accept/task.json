@@ -1,0 +1,8 @@
+{
+  "task_id": "G1-contract-foundation-accept",
+  "status": "completed",
+  "owner": "parent",
+  "accepted_head_sha": "50a450a05f374e46c736f79f9b5c7fec5c0e54d9",
+  "started_at": "2026-05-24T18:29:42Z",
+  "completed_at": "2026-05-24T18:35:32Z"
+}

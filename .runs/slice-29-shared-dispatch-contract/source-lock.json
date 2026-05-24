@@ -1,0 +1,14 @@
+{
+  "authoritative_branch": "feat/gateway-mediated-llm-fulfillment",
+  "authoritative_head_sha": "4c61ab779752a9185c6b7558275d7fdb5880893c",
+  "repo_root": "/home/azureuser/__Active_Code/atomize-hq/substrate",
+  "plan_path": "/home/azureuser/__Active_Code/atomize-hq/substrate/PLAN.md",
+  "orch_path": "/home/azureuser/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md",
+  "plan_sha256": "9389b48a1d20f93c8411a7670f11e25ed0929b0cddce7dc4deeb5c5adb5182cc",
+  "git_status_short_plan_orch": "## feat/gateway-mediated-llm-fulfillment...origin/feat/gateway-mediated-llm-fulfillment",
+  "timestamp": "2026-05-24T18:13:37Z",
+  "notes": [
+    "ORCH_PLAN.md hard guard 4 expected PLAN.md to be dirty in the authoritative checkout, but the live checkout is clean for PLAN.md and ORCH_PLAN.md at source-lock time.",
+    "The parent locked the live working-tree PLAN.md bytes exactly as found and will stop the run if they change materially."
+  ]
+}

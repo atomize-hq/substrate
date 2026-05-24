@@ -1,0 +1,8 @@
+{
+  "depends_on": [
+    "G1-contract-foundation-accept"
+  ],
+  "unblocks": [
+    "G2-durable-attach-accept"
+  ]
+}

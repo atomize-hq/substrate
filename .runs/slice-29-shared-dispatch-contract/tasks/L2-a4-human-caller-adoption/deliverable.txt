@@ -1,0 +1,1 @@
+Adopt the frozen shared dispatch semantics in the human caller surfaces so start/reattach/fork flows resolve through inventory-backed or persisted-attach-backed truth without reopening the contract or durable-state owners.

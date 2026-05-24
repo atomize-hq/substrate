@@ -1,0 +1,4 @@
+crates/shell/src/execution/agent_inventory.rs
+crates/shell/src/execution/agent_runtime/dispatch_contract.rs
+crates/shell/src/execution/agent_runtime/mod.rs
+crates/shell/src/execution/agent_runtime/validator.rs

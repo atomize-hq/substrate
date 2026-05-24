@@ -1,0 +1,14 @@
+{
+  "npx gitnexus impact resolve_gateway_backend_inventory_entry --repo substrate --direction upstream": 0,
+  "npx gitnexus impact validate_runtime_realizability --repo substrate --direction upstream": 0,
+  "npx gitnexus impact validate_member_selection --repo substrate --direction upstream": 0,
+  "npx gitnexus impact validate_exact_backend_selection --repo substrate --direction upstream": 0,
+  "cargo test -p shell inventory_contract_tracks_workspace_origin_and_config_defaults -- --nocapture": 0,
+  "cargo test -p shell persisted_attach_contract_is_explicit_baseline_domain -- --nocapture": 0,
+  "cargo test -p shell validate_exact_backend_selection_bypasses_world_ambiguity_when_backend_matches_exactly -- --nocapture": 0,
+  "cargo test -p shell validate_member_selection_returns_descriptor_for_unique_world_member -- --nocapture": 0,
+  "cargo test -p shell dispatch_contract -- --nocapture": 0,
+  "cargo test -p shell validate_ -- --nocapture": 0,
+  "cargo fmt --all": 0,
+  "cargo clippy -p shell --lib --tests -- -D warnings": 0
+}

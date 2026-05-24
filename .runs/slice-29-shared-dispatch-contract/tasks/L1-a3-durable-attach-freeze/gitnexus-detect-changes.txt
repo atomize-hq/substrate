@@ -1,0 +1,35 @@
+GitNexus warning:
+
+- `Index for "substrate" was built at /home/azureuser/__Active_Code/atomize-hq/substrate; your cwd (/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-s29-shared-dispatch-contract/a3-durable-attach-freeze) is a sibling clone that is 2 commits ahead of the indexed commit. Results may be stale or incorrect — re-run gitnexus analyze to refresh the index.`
+
+`npx gitnexus detect-changes --repo substrate --scope compare --base-ref HEAD^` output:
+
+```text
+Changes: 5 files, 47 symbols
+Affected processes: 4
+Risk level: medium
+
+Changed symbols:
+  undefined GitNexus — Code Intelligence → AGENTS.md
+  undefined GitNexus — Code Intelligence → CLAUDE.md
+  undefined from_manifest → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined new → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined transition_state → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined mark_startup_prompt_completed → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined continuity_uaa_session_id → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined orchestration_session_id → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined shell_trace_session_id → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined workspace_root → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined shell_owner_pid → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined state → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined opened_at → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined last_active_at → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  undefined orchestrator_agent_id → crates/shell/src/execution/agent_runtime/orchestration_session.rs
+  ... and 32 more
+
+Affected execution flows:
+  • Hidden_owner_helper_launch_classifier_accepts_detached_attention_needed_session → RuntimeSelectionDescriptor (4 steps) — changed: hidden_owner_helper_launch_classifier_accepts_detached_attention_needed_session
+  • Hidden_owner_helper_launch_classifier_accepts_detached_attention_needed_session → New (4 steps) — changed: hidden_owner_helper_launch_classifier_accepts_detached_attention_needed_session
+  • Hidden_owner_helper_launch_classifier_accepts_detached_attention_needed_session → Transition_state (4 steps) — changed: hidden_owner_helper_launch_classifier_accepts_detached_attention_needed_session
+  • Hidden_owner_helper_launch_classifier_accepts_detached_attention_needed_session → Bind_active_session_handle (4 steps) — changed: hidden_owner_helper_launch_classifier_accepts_detached_attention_needed_session
+```

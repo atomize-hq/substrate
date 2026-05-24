@@ -1,0 +1,8 @@
+TMPDIR=/mnt/localssd/tmp CARGO_TARGET_DIR=/mnt/localssd/tmp/substrate-parent-a4-target cargo test -p shell public_turn_prompt_requests_require_exact_session_and_backend_contract -- --nocapture
+TMPDIR=/mnt/localssd/tmp CARGO_TARGET_DIR=/mnt/localssd/tmp/substrate-parent-a4-target cargo test -p shell public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_contracts --test agent_public_control_surface_v1 -- --nocapture
+TMPDIR=/mnt/localssd/tmp CARGO_TARGET_DIR=/mnt/localssd/tmp/substrate-parent-a4-target cargo test -p shell public_turn_uses_persisted_attach_continuity_selector_when_recovering_detached_host_turns --test agent_public_control_surface_v1 -- --nocapture
+TMPDIR=/mnt/localssd/tmp CARGO_TARGET_DIR=/mnt/localssd/tmp/substrate-parent-a4-target cargo test -p shell public_start_survives_slow_startup_prompt_completion_after_bootstrap_readiness --test agent_public_control_surface_v1 -- --nocapture
+TMPDIR=/mnt/localssd/tmp CARGO_TARGET_DIR=/mnt/localssd/tmp/substrate-parent-a4-target cargo test -p shell public_same_session_parked_status_turn_reattach_and_stop_stay_on_one_orchestration_session_id --test agent_public_control_surface_v1 -- --nocapture
+TMPDIR=/mnt/localssd/tmp CARGO_TARGET_DIR=/mnt/localssd/tmp/substrate-parent-a4-target cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
+cargo fmt --all
+cargo fmt --all -- --check

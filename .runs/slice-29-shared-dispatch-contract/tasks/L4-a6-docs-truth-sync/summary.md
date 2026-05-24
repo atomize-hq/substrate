@@ -1,0 +1,1 @@
+Parent updated the allowed truth surfaces in `ADR-0027` and `llm-last-mile/{29,30,31,README}.md` so they match the merged slice-29 runtime: one shared dispatch-contract owner, explicit baseline domains, persisted `HostAttachContract` launch truth, and caller parity.

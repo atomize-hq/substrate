@@ -1,0 +1,10 @@
+Authoritative compare result:
+
+- `npx gitnexus detect-changes --repo substrate --scope compare --base-ref HEAD^`
+- Exit code: `0`
+- Summary: `Changes: 6 files, 16 symbols`, `Affected processes: 0`, `Risk level: low`
+
+Limitations retained as evidence:
+
+- The compare output still lists unrelated `AGENTS.md` / `CLAUDE.md` drift because those files changed earlier outside this slice and are present in `HEAD^..HEAD`.
+- The stale index labels several entries as `undefined` and does not expose `dispatch_contract.rs` directly, so detect-changes is helpful but not authoritative for per-symbol coverage in this run.

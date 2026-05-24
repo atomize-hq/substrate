@@ -1,0 +1,6 @@
+Worker-side detect-changes evidence before commit was limited by the stale index and the inability to refresh it (`npx gitnexus analyze` crashed with `free(): invalid pointer`).
+
+Observed behavior before parent integration:
+
+- `npx gitnexus detect-changes --repo substrate --scope unstaged` and `--scope staged` returned either `No changes detected` or symbol output polluted by unrelated `AGENTS.md` / `CLAUDE.md` drift.
+- After integration, `npx gitnexus detect-changes --repo substrate --scope compare --base-ref HEAD^` produced a usable low-risk compare summary, but it still failed to classify `dispatch_contract.rs` directly because the index was stale.

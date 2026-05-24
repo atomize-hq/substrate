@@ -1,0 +1,14 @@
+.runs/slice-29-shared-dispatch-contract/run-state.json
+.runs/slice-29-shared-dispatch-contract/tasks.json
+.runs/slice-29-shared-dispatch-contract/source-lock.json
+.runs/slice-29-shared-dispatch-contract/contract-freeze.json
+.runs/slice-29-shared-dispatch-contract/durable-state-freeze.json
+.runs/slice-29-shared-dispatch-contract/branch-map.json
+.runs/slice-29-shared-dispatch-contract/lane-ownership.json
+.runs/slice-29-shared-dispatch-contract/merge-order.json
+.runs/slice-29-shared-dispatch-contract/validation-wall.md
+.runs/slice-29-shared-dispatch-contract/session-log.md
+.runs/slice-29-shared-dispatch-contract/final-summary.md
+.runs/slice-29-shared-dispatch-contract/sentinels/RUN_OPEN
+.runs/slice-29-shared-dispatch-contract/tasks/P0-parent-freeze/*
+.runs/slice-29-shared-dispatch-contract/gates/G0-run-freeze/*

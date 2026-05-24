@@ -1,0 +1,1 @@
+Own agents_cmd.rs, agent_runtime/control.rs, prompt_fulfillment.rs, agent_public_control_surface_v1.rs, and minimal directly related supporting tests only. Do not reopen dispatch_contract.rs, inventory/validator ownership, durable-state files, REPL files, docs, or .runs.

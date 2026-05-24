@@ -1,0 +1,1 @@
+Own persisted host attach truth and detached-planning state consumption only: generalize HostAttachContract in orchestration_session.rs, move detached continuity checks in state_store.rs onto persisted contract truth, keep migration additive and fail-closed, and do not reopen the L0 shared contract owner or public caller surfaces.

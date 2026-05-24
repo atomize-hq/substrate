@@ -1,0 +1,8 @@
+{
+  "task_id": "G4-docs-accept",
+  "status": "completed",
+  "owner": "parent",
+  "accepted_head_sha": "0d15fb2fe8902a9201c891eccd3d7a20325f9d72",
+  "started_at": "2026-05-24T20:35:44Z",
+  "completed_at": "2026-05-24T20:47:10Z"
+}
