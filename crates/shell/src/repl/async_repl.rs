@@ -1758,6 +1758,7 @@ enum RetainedRunControl {
 }
 
 const LOCAL_RETAINED_STOP_COMPLETION_TIMEOUT: Duration = Duration::from_secs(5);
+const LOCAL_RETAINED_AUTO_PARK_GRACE_TIMEOUT: Duration = Duration::from_millis(250);
 
 struct AsyncReplAgentRuntime {
     descriptor: RuntimeSelectionDescriptor,
@@ -2679,7 +2680,40 @@ async fn wait_for_hidden_owner_helper_local_runtime(
     let outcome = tokio::select! {
         result = &mut completion_task => {
             join_failed |= result.is_err();
-            HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed }
+            if !join_failed
+                && completed_hidden_owner_helper_should_auto_park(auto_park_rx).await
+            {
+                shutdown_host_orchestrator_runtime_with_mode(
+                    AsyncReplAgentRuntime {
+                        descriptor,
+                        orchestration_session: Arc::clone(orchestration_session),
+                        manifest: Arc::clone(manifest),
+                        store: store.clone(),
+                        uaa_session_handle_id: uaa_session_handle_id.to_string(),
+                        retained_control: RetainedRunControl::Local(LocalRetainedRunControl {
+                            cancel: retained_control.cancel.clone(),
+                            event_task: retained_control.event_task.take(),
+                            completion_task: None,
+                        }),
+                        shutdown_requested: Arc::clone(shutdown_requested),
+                        auto_park_rx: auto_park_rx.take(),
+                        private_stop_rx: private_stop_rx.take(),
+                        stop_transport: stop_transport.take(),
+                        stop_owner_task: stop_owner_task.take(),
+                        prompt_transport: prompt_transport.take(),
+                        prompt_owner_task: prompt_owner_task.take(),
+                        heartbeat_stop_tx: heartbeat_stop_tx.take(),
+                        heartbeat_task: heartbeat_task.take(),
+                    },
+                    HostRuntimeShutdownMode::ParkIfResumable,
+                    agent_printer,
+                    telemetry,
+                )
+                .await;
+                HiddenOwnerHelperLocalRuntimeOutcome::AutoParked
+            } else {
+                HiddenOwnerHelperLocalRuntimeOutcome::Joined { join_failed }
+            }
         }
         maybe_request = async {
             match private_stop_rx.as_mut() {
@@ -2817,6 +2851,25 @@ async fn wait_for_hidden_owner_helper_local_runtime(
     }
 
     outcome
+}
+
+async fn completed_hidden_owner_helper_should_auto_park(
+    auto_park_rx: &mut Option<UnboundedReceiver<()>>,
+) -> bool {
+    let Some(requests) = auto_park_rx.as_mut() else {
+        return false;
+    };
+
+    match requests.try_recv() {
+        Ok(_) => true,
+        Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+            matches!(
+                tokio::time::timeout(LOCAL_RETAINED_AUTO_PARK_GRACE_TIMEOUT, requests.recv()).await,
+                Ok(Some(_))
+            )
+        }
+        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => false,
+    }
 }
 
 fn persist_hidden_owner_helper_stop_failure(
@@ -6050,6 +6103,7 @@ fn build_parked_host_runtime_snapshots(
         }
     }
 
+    parked_orchestration.sync_host_attach_contract(&parked_manifest);
     valid_detached_host_continuity_posture(&parked_orchestration, &parked_manifest, true)?;
     Some((parked_orchestration, parked_manifest))
 }
