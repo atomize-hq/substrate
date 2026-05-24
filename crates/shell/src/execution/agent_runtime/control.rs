@@ -862,6 +862,103 @@ pub(crate) fn reconcile_hidden_owner_helper_start_timeout(
     Ok(HiddenOwnerHelperStartTimeoutReconciliation::FailureUnchanged)
 }
 
+#[cfg(unix)]
+pub(crate) fn reconcile_resumed_public_turn_detach_timeout(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    resumed_participant_id: &str,
+) -> Result<bool> {
+    if store
+        .resumed_public_turn_detach_posture(orchestration_session_id, resumed_participant_id)?
+        .is_some()
+    {
+        return Ok(true);
+    }
+
+    let Some(session) = store.load_orchestration_session(orchestration_session_id)? else {
+        return Ok(false);
+    };
+    let Some(participant) = store.load_participant(resumed_participant_id)? else {
+        return Ok(false);
+    };
+
+    let Some((next_session, next_participant)) =
+        build_resumed_public_turn_detach_reconciliation(&session, &participant)
+    else {
+        return Ok(false);
+    };
+
+    if next_session != session {
+        store.persist_orchestration_session(&next_session)?;
+    }
+    if next_participant != participant {
+        store.persist_participant(&next_participant)?;
+    }
+
+    Ok(store
+        .resumed_public_turn_detach_posture(orchestration_session_id, resumed_participant_id)?
+        .is_some())
+}
+
+#[cfg(unix)]
+fn build_resumed_public_turn_detach_reconciliation(
+    session: &OrchestrationSessionRecord,
+    participant: &AgentRuntimeSessionManifest,
+) -> Option<(OrchestrationSessionRecord, AgentRuntimeSessionManifest)> {
+    build_detached_start_reconciliation(session, participant, true)
+}
+
+#[cfg(unix)]
+pub(crate) fn reconcile_start_prompt_completion_timeout(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    participant_id: &str,
+) -> Result<bool> {
+    if matches!(
+        store.classify_hidden_owner_helper_launch_readiness(
+            orchestration_session_id,
+            participant_id,
+            true,
+        )?,
+        super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
+    ) {
+        return Ok(true);
+    }
+
+    let Some(session) = store.load_orchestration_session(orchestration_session_id)? else {
+        return Ok(false);
+    };
+    let Some(participant) = store.load_participant(participant_id)? else {
+        return Ok(false);
+    };
+
+    if !startup_prompt_is_terminal_for_participant(&session, participant_id) {
+        return Ok(false);
+    }
+
+    let Some((next_session, next_participant)) =
+        build_detached_start_reconciliation(&session, &participant, true)
+    else {
+        return Ok(false);
+    };
+
+    if next_session != session {
+        store.persist_orchestration_session(&next_session)?;
+    }
+    if next_participant != participant {
+        store.persist_participant(&next_participant)?;
+    }
+
+    Ok(matches!(
+        store.classify_hidden_owner_helper_launch_readiness(
+            orchestration_session_id,
+            participant_id,
+            true,
+        )?,
+        super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
+    ))
+}
+
 fn start_launch_startup_prompt_is_accepted_or_terminal(
     store: &AgentRuntimeStateStore,
     plan: &HiddenOwnerHelperLaunchPlan,

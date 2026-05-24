@@ -1746,6 +1746,67 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
 
 #[test]
 #[serial]
+fn public_reattach_uses_persisted_attach_continuity_selector_for_resume_args() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        "sess_resume_contract_args",
+        "ash_resume_contract_args",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_resume_contract_args",
+        "codex",
+        "sess_resume_contract_args",
+        "running",
+        false,
+        Some("uaa-ambient-detached"),
+        None,
+        ts,
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        "sess_resume_contract_args",
+        "--json",
+    ]);
+    assert!(
+        output.status.success(),
+        "public reattach should resume from the persisted attach contract: {output:?}"
+    );
+
+    let args = fixture.read_fake_codex_args(1);
+    assert!(
+        args.iter().any(|arg| arg == "resume"),
+        "reattach must issue a resume-backed invocation: {args:?}"
+    );
+    assert!(
+        args.iter()
+            .any(|arg| arg == "uaa-sess_resume_contract_args"),
+        "reattach must use the persisted continuity selector from host_attach_contract: {args:?}"
+    );
+    assert!(
+        !args.iter().any(|arg| arg == "uaa-ambient-detached"),
+        "reattach must not recover continuity from the detached participant snapshot: {args:?}"
+    );
+
+    let owner_pid = fixture.load_orchestration_session("sess_resume_contract_args")
+        ["shell_owner_pid"]
+        .as_u64()
+        .expect("reattach owner pid") as u32;
+    terminate_pid(owner_pid);
+}
+
+#[test]
+#[serial]
 fn public_stop_cleanly_closes_same_durable_session_after_reattach() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
@@ -1952,6 +2013,64 @@ fn public_turn_resumes_parked_host_session_and_preserves_exact_session_selector_
             .get("resumed_from_participant_id")
             .and_then(Value::as_str),
         Some("ash_parked")
+    );
+}
+
+#[test]
+#[serial]
+fn public_turn_uses_persisted_attach_continuity_selector_when_recovering_detached_host_turns() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        "sess_turn_contract_args",
+        "ash_turn_contract_args",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_turn_contract_args",
+        "codex",
+        "sess_turn_contract_args",
+        "running",
+        false,
+        Some("uaa-ambient-turn"),
+        None,
+        ts,
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "turn",
+        "--session",
+        "sess_turn_contract_args",
+        "--backend",
+        "cli:codex",
+        "--prompt",
+        "resume detached host turn via persisted contract",
+        "--json",
+    ]);
+    assert!(
+        output.status.success(),
+        "detached host turn should recover through the persisted attach contract: {output:?}"
+    );
+
+    let args = fixture.read_fake_codex_args(1);
+    assert!(
+        args.iter().any(|arg| arg == "resume"),
+        "detached host turn recovery must use a resume-backed invocation: {args:?}"
+    );
+    assert!(
+        args.iter().any(|arg| arg == "uaa-sess_turn_contract_args"),
+        "detached host turn recovery must use the persisted continuity selector: {args:?}"
+    );
+    assert!(
+        !args.iter().any(|arg| arg == "uaa-ambient-turn"),
+        "detached host turn recovery must not derive continuity from the detached participant snapshot: {args:?}"
     );
 }
 
@@ -3447,6 +3566,42 @@ fn public_root_start_rejects_world_scoped_backends_in_v1() {
     assert!(
         stderr.contains("public root start is host-only in v1"),
         "world-scoped root start failure must explain the Linux-first host-only contract: {stderr}"
+    );
+}
+
+#[test]
+#[serial]
+fn public_root_start_denials_name_field_layer_and_reason() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(true);
+
+    let output = fixture.run(&[
+        "agent",
+        "start",
+        "--backend",
+        "cli:claude_code",
+        "--prompt",
+        "hello",
+        "--json",
+    ]);
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "world-scoped root start must fail closed: {output:?}"
+    );
+    let stderr = stderr_text(&output);
+    assert!(
+        stderr.contains("unsupported_platform_or_posture"),
+        "start denial must keep the posture classifier: {stderr}"
+    );
+    assert!(
+        stderr.contains("baseline truth rejected field 'requested_execution_scope'"),
+        "start denial must name the rejecting layer and field: {stderr}"
+    );
+    assert!(
+        stderr.contains("public root start is host-only in v1"),
+        "start denial must preserve the concrete posture reason: {stderr}"
     );
 }
 

@@ -8,7 +8,8 @@ use crate::execution::agent_runtime::control::{
     hidden_owner_helper_readiness_timed_out, load_hidden_owner_helper_launch_plan,
     load_public_prompt_source, persist_hidden_owner_helper_launch_plan,
     persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
-    reconcile_hidden_owner_helper_start_timeout, remove_hidden_owner_helper_launch_plan,
+    reconcile_hidden_owner_helper_start_timeout, reconcile_resumed_public_turn_detach_timeout,
+    reconcile_start_prompt_completion_timeout, remove_hidden_owner_helper_launch_plan,
     run_public_prompt_command, wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
     HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
     HiddenOwnerHelperStartTimeoutReconciliation, OwnerHelperMode, PublicPromptAction,
@@ -28,16 +29,18 @@ use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipant
 #[cfg(unix)]
 use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
 use crate::execution::agent_runtime::validator::{
-    exact_backend_selection_error_exit_code, member_selection_error_exit_code,
-    validate_exact_backend_selection, validate_member_selection,
+    materialize_runtime_descriptor, member_selection_error_exit_code, validate_member_selection,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::StartupPromptReplayState;
 use crate::execution::agent_runtime::{
+    resolve_inventory_contract_for_exact_backend, resolve_persisted_host_attach_contract,
     runtime_realizability_error_exit_code, validate_orchestrator_selection,
     validate_runtime_realizability, AgentRuntimeParticipantRecord, AgentRuntimeSessionRecord,
-    AgentRuntimeStateStore, PublicControlAction, PublicTurnTargetKind, MEMBER_ROLE, NESTED_ROUTER,
-    ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
+    AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
+    DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRequestEnvelope,
+    HostExecutionClientStart, PublicControlAction, PublicTurnTargetKind, MEMBER_ROLE,
+    NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDoctorArgs, AgentOwnerHelperArgs, AgentScopeArg,
@@ -488,6 +491,20 @@ fn stabilize_hidden_owner_helper_start_return(
         }
 
         if normalization_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
+            match reconcile_hidden_owner_helper_start_timeout(store, plan) {
+                Ok(HiddenOwnerHelperStartTimeoutReconciliation::Success) => return Ok(()),
+                Ok(
+                    HiddenOwnerHelperStartTimeoutReconciliation::FailureMarkedTerminal
+                    | HiddenOwnerHelperStartTimeoutReconciliation::FailureUnchanged,
+                ) => {}
+                Err(reconcile_err) => {
+                    anyhow::bail!(
+                        "timed out waiting for detached start normalization for orchestration session {} after hidden owner-helper {} exited; additionally failed to reconcile persisted startup state: {reconcile_err:#}",
+                        plan.orchestration_session_id(),
+                        child.id(),
+                    );
+                }
+            }
             let snapshot_summary = store
                 .load_orchestration_session(plan.orchestration_session_id())?
                 .map(|session| {
@@ -539,6 +556,20 @@ fn wait_for_start_prompt_completion_normalization(
         }
 
         if normalization_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
+            match reconcile_start_prompt_completion_timeout(
+                store,
+                orchestration_session_id,
+                participant_id,
+            ) {
+                Ok(true) => return Ok(()),
+                Ok(false) => {}
+                Err(reconcile_err) => {
+                    anyhow::bail!(
+                        "timed out waiting for detached start normalization after startup prompt completion for orchestration session {}; additionally failed to reconcile persisted startup state: {reconcile_err:#}",
+                        orchestration_session_id,
+                    );
+                }
+            }
             let snapshot_summary = store
                 .load_orchestration_session(orchestration_session_id)?
                 .map(|session| {
@@ -618,6 +649,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
         .map_err(|err| config_model::user_error(err.to_string()))?;
     let orchestration_session_id = target.session.orchestration_session_id.clone();
     let backend_id = target.participant.handle.backend_id.clone();
+    let exact_backend_id = backend_id.clone();
 
     #[cfg(unix)]
     if target.session_posture == PublicSessionPosture::DetachedReattachable
@@ -651,6 +683,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
             &store,
             &receipt.orchestration_session_id,
             &receipt.participant_id,
+            &exact_backend_id,
         )
         .map_err(runtime_start_error)?;
         return Ok(());
@@ -699,6 +732,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
             &store,
             &receipt.orchestration_session_id,
             &receipt.participant_id,
+            &exact_backend_id,
         )
         .map_err(runtime_start_error)?;
     }
@@ -707,7 +741,12 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
 }
 
 fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
-    let plan = build_attach_launch_plan(&args.session)?;
+    let plan = build_attach_launch_plan(
+        &args.session,
+        DispatchCallerKind::HumanReattach,
+        OwnerHelperMode::Attach,
+        false,
+    )?;
     let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
     if receipt.orchestration_session_id != args.session {
         anyhow::bail!(runtime_start_error(anyhow::anyhow!(
@@ -788,6 +827,104 @@ fn runtime_start_error(err: anyhow::Error) -> anyhow::Error {
         return err;
     }
     config_model::user_error(format!("runtime_start_failed: {err}"))
+}
+
+fn dispatch_resolution_user_error(
+    classifier: &str,
+    err: crate::execution::agent_runtime::DispatchResolutionError,
+) -> anyhow::Error {
+    config_model::user_error(format!("{classifier}: {err}"))
+}
+
+fn runtime_materialization_user_error(
+    classifier: &str,
+    reason: impl Into<String>,
+) -> anyhow::Error {
+    let reason = reason.into();
+    let field = if reason.contains("config.kind=") {
+        "config.kind"
+    } else if reason.contains("cli.mode=") {
+        "cli.mode"
+    } else if reason.contains("config.cli.binary") {
+        "config.cli.binary"
+    } else {
+        "runtime_descriptor"
+    };
+    config_model::user_error(format!(
+        "{classifier}: runtime materialization rejected field '{field}': {reason}"
+    ))
+}
+
+fn start_dispatch_classifier(
+    err: &crate::execution::agent_runtime::DispatchResolutionError,
+) -> &'static str {
+    use crate::execution::agent_runtime::DispatchResolutionErrorKind;
+
+    match err.kind {
+        DispatchResolutionErrorKind::AmbiguousBaselineSelection => "ambiguous_backend",
+        DispatchResolutionErrorKind::OverrideDeniedByPolicy => "policy_disallow",
+        DispatchResolutionErrorKind::BaselineNotFound => "unknown_backend",
+        DispatchResolutionErrorKind::BaselineIneligible
+        | DispatchResolutionErrorKind::InvalidPolicyOverlay
+        | DispatchResolutionErrorKind::RuntimeUnrealizableAfterResolution
+        | DispatchResolutionErrorKind::UnknownOverrideFamily
+        | DispatchResolutionErrorKind::OverrideNotSupportedForCaller
+        | DispatchResolutionErrorKind::OverrideExceedsBaseline
+        | DispatchResolutionErrorKind::MissingRequiredAttachContinuity => "runtime_start_failed",
+    }
+}
+
+fn build_start_dispatch_envelope(backend_id: &str) -> DispatchRequestEnvelope {
+    DispatchRequestEnvelope {
+        caller_kind: DispatchCallerKind::HumanStart,
+        baseline_kind: DispatchBaselineKind::InventoryLaunch,
+        backend_id: Some(backend_id.to_string()),
+        orchestration_session_id: None,
+        requested_execution_scope_override: None,
+        capability_overrides: DispatchCapabilityOverrideSet::default(),
+        attach_launch_knobs: AttachLaunchKnobs {
+            requested_execution_scope: AgentExecutionScope::Host,
+            host_execution_client_start: HostExecutionClientStart::StartNow,
+            attach_mode_preference: AttachModePreference::ContinuityRequired,
+        },
+        has_prompt_payload: true,
+    }
+}
+
+fn build_persisted_attach_dispatch_envelope(
+    caller_kind: DispatchCallerKind,
+    orchestration_session_id: &str,
+    backend_id: &str,
+    host_execution_client_start: HostExecutionClientStart,
+    attach_mode_preference: AttachModePreference,
+    has_prompt_payload: bool,
+) -> DispatchRequestEnvelope {
+    DispatchRequestEnvelope {
+        caller_kind,
+        baseline_kind: DispatchBaselineKind::PersistedHostAttach,
+        backend_id: Some(backend_id.to_string()),
+        orchestration_session_id: Some(orchestration_session_id.to_string()),
+        requested_execution_scope_override: None,
+        capability_overrides: DispatchCapabilityOverrideSet::default(),
+        attach_launch_knobs: AttachLaunchKnobs {
+            requested_execution_scope: AgentExecutionScope::Host,
+            host_execution_client_start,
+            attach_mode_preference,
+        },
+        has_prompt_payload,
+    }
+}
+
+fn permissive_inventory_selection_policy(
+    inventory: &BTreeMap<String, AgentInventoryEntryV1>,
+) -> Policy {
+    Policy {
+        agents_allowed_backends: inventory
+            .values()
+            .map(AgentInventoryEntryV1::derived_backend_id)
+            .collect(),
+        ..Policy::default()
+    }
 }
 
 fn run_fork(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
@@ -918,53 +1055,52 @@ fn build_start_launch_plan(
         ));
     }
 
-    let descriptor = match validate_exact_backend_selection(
+    let cwd = current_dir();
+    let envelope = build_start_dispatch_envelope(backend_id);
+    let resolved = match resolve_inventory_contract_for_exact_backend(
+        &cwd,
         &context.effective_config,
         &context.inventory,
+        &context.base_policy,
+        &envelope,
         AgentExecutionScope::Host,
-        backend_id,
     ) {
-        Ok(Some(descriptor)) => descriptor,
+        Ok(Some(contract)) => contract,
         Ok(None) => {
-            if validate_exact_backend_selection(
+            let permissive_policy = permissive_inventory_selection_policy(&context.inventory);
+            match resolve_inventory_contract_for_exact_backend(
+                &cwd,
                 &context.effective_config,
                 &context.inventory,
+                &permissive_policy,
+                &envelope,
                 AgentExecutionScope::World,
-                backend_id,
-            )
-            .ok()
-            .flatten()
-            .is_some()
-            {
-                anyhow::bail!(config_model::user_error(format!(
-                    "unsupported_platform_or_posture: backend '{}' resolves only to a world-scoped runtime; public root start is host-only in v1",
-                    backend_id
-                )));
+            ) {
+                Ok(Some(_)) => {
+                    anyhow::bail!(config_model::user_error(format!(
+                        "unsupported_platform_or_posture: baseline truth rejected field 'requested_execution_scope': backend '{}' resolves only to a world-scoped runtime; public root start is host-only in v1",
+                        backend_id
+                    )));
+                }
+                Ok(None) => {
+                    anyhow::bail!(config_model::user_error(format!(
+                        "unknown_backend: baseline truth rejected field 'backend_id': no exact host-scoped backend match found for '{}'",
+                        backend_id
+                    )));
+                }
+                Err(err) => anyhow::bail!(dispatch_resolution_user_error(
+                    start_dispatch_classifier(&err),
+                    err,
+                )),
             }
-            anyhow::bail!(config_model::user_error(format!(
-                "unknown_backend: no exact host-scoped backend match found for '{}'",
-                backend_id
-            )));
         }
-        Err(err) => {
-            let prefix = if err.reason.contains("ambiguous exact backend selection") {
-                "ambiguous_backend"
-            } else {
-                "unknown_backend"
-            };
-            let _ = exact_backend_selection_error_exit_code(&err);
-            anyhow::bail!(config_model::user_error(format!(
-                "{prefix}: {}",
-                err.reason
-            )));
-        }
+        Err(err) => anyhow::bail!(dispatch_resolution_user_error(
+            start_dispatch_classifier(&err),
+            err,
+        )),
     };
-    if !backend_allowed(&context.base_policy, &descriptor.backend_id) {
-        anyhow::bail!(config_model::user_error(format!(
-            "policy_disallow: selected orchestrator backend '{}' is not allowlisted by effective policy agents.allowed_backends",
-            descriptor.backend_id
-        )));
-    }
+    let descriptor = materialize_runtime_descriptor(&resolved)
+        .map_err(|err| runtime_materialization_user_error("runtime_start_failed", err.reason))?;
 
     let orchestration_session_id = Uuid::now_v7().to_string();
     Ok(HiddenOwnerHelperLaunchPlan {
@@ -989,25 +1125,38 @@ fn build_start_launch_plan(
     })
 }
 
-fn build_attach_launch_plan(orchestration_session_id: &str) -> Result<HiddenOwnerHelperLaunchPlan> {
+fn build_attach_launch_plan(
+    orchestration_session_id: &str,
+    caller_kind: DispatchCallerKind,
+    mode: OwnerHelperMode,
+    has_prompt_payload: bool,
+) -> Result<HiddenOwnerHelperLaunchPlan> {
     let store = AgentRuntimeStateStore::new()?;
     let target = store
         .resolve_public_control_target(orchestration_session_id, PublicControlAction::Resume)
         .map_err(|err| config_model::user_error(err.to_string()))?;
-    let descriptor = target
-        .host_attach_contract
-        .as_ref()
-        .map(|contract| contract.launch_descriptor.clone())
-        .ok_or_else(|| {
-            config_model::user_error(format!(
-                "owner_unreachable: orchestration session {} is missing durable host attach contract state",
-                orchestration_session_id
-            ))
-        })?;
+    let attach_contract = target.host_attach_contract.clone().ok_or_else(|| {
+        config_model::user_error(format!(
+            "owner_unreachable: orchestration session {} is missing durable host attach contract state",
+            orchestration_session_id
+        ))
+    })?;
+    let envelope = build_persisted_attach_dispatch_envelope(
+        caller_kind,
+        orchestration_session_id,
+        &attach_contract.backend_id,
+        HostExecutionClientStart::StartNow,
+        AttachModePreference::ContinuityRequired,
+        has_prompt_payload,
+    );
+    let resolved = resolve_persisted_host_attach_contract(&envelope, &attach_contract)
+        .map_err(|err| dispatch_resolution_user_error("owner_unreachable", err))?;
+    let descriptor = materialize_runtime_descriptor(&resolved)
+        .map_err(|err| runtime_materialization_user_error("owner_unreachable", err.reason))?;
 
     Ok(HiddenOwnerHelperLaunchPlan {
-        mode: OwnerHelperMode::Attach,
-        descriptor,
+        mode,
+        descriptor: (&descriptor).into(),
         session: HiddenOwnerHelperSessionPlan {
             orchestration_session_id: target.session.orchestration_session_id.clone(),
             shell_trace_session_id: target.session.shell_trace_session_id.clone(),
@@ -1022,10 +1171,7 @@ fn build_attach_launch_plan(orchestration_session_id: &str) -> Result<HiddenOwne
             resumed_from_participant_id: Some(
                 target.active_participant.handle.participant_id.clone(),
             ),
-            internal_uaa_session_id: target
-                .host_attach_contract
-                .as_ref()
-                .and_then(|contract| contract.continuity_uaa_session_id.clone()),
+            internal_uaa_session_id: attach_contract.continuity_uaa_session_id.clone(),
         },
         startup_prompt: None,
         source_orchestration_session_id: None,
@@ -1035,9 +1181,12 @@ fn build_attach_launch_plan(orchestration_session_id: &str) -> Result<HiddenOwne
 fn build_resumed_turn_launch_plan(
     orchestration_session_id: &str,
 ) -> Result<HiddenOwnerHelperLaunchPlan> {
-    let mut plan = build_attach_launch_plan(orchestration_session_id)?;
-    plan.mode = OwnerHelperMode::ResumeOneTurn;
-    Ok(plan)
+    build_attach_launch_plan(
+        orchestration_session_id,
+        DispatchCallerKind::HumanTurn,
+        OwnerHelperMode::ResumeOneTurn,
+        true,
+    )
 }
 
 #[derive(Clone, Debug)]
@@ -1058,9 +1207,18 @@ fn allocate_fork_successor(orchestration_session_id: &str) -> Result<ForkSuccess
             orchestration_session_id
         ))
     })?;
-    let descriptor = (&attach_contract.launch_descriptor)
-        .try_into()
-        .map_err(|err| config_model::user_error(format!("owner_unreachable: {err:#}")))?;
+    let envelope = build_persisted_attach_dispatch_envelope(
+        DispatchCallerKind::HumanFork,
+        orchestration_session_id,
+        &attach_contract.backend_id,
+        HostExecutionClientStart::Defer,
+        AttachModePreference::FreshAllowed,
+        false,
+    );
+    let resolved = resolve_persisted_host_attach_contract(&envelope, &attach_contract)
+        .map_err(|err| dispatch_resolution_user_error("owner_unreachable", err))?;
+    let descriptor = materialize_runtime_descriptor(&resolved)
+        .map_err(|err| runtime_materialization_user_error("owner_unreachable", err.reason))?;
     let successor_session_id = Uuid::now_v7().to_string();
     let successor_participant_id = format!("ash_{}", Uuid::now_v7());
     let lease_token = Uuid::now_v7().to_string();
@@ -1120,7 +1278,7 @@ fn allocate_fork_successor(orchestration_session_id: &str) -> Result<ForkSuccess
 
     Ok(ForkSuccessorAllocation {
         orchestration_session_id: successor_session_id,
-        backend_id: attach_contract.backend_id,
+        backend_id: resolved.backend_id,
         source_orchestration_session_id: target.session.orchestration_session_id,
     })
 }
@@ -1130,45 +1288,114 @@ fn wait_for_resumed_public_turn_detach(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
     resumed_participant_id: &str,
+    backend_id: &str,
 ) -> Result<()> {
     let started_at = std::time::Instant::now();
     loop {
-        if store
-            .resumed_public_turn_detach_posture(orchestration_session_id, resumed_participant_id)?
-            .is_some()
-        {
+        if resumed_public_turn_detach_ready(
+            store,
+            orchestration_session_id,
+            resumed_participant_id,
+            backend_id,
+        )? && resumed_public_turn_detach_stable_after_grace(
+            store,
+            orchestration_session_id,
+            resumed_participant_id,
+            backend_id,
+        )? {
+            return Ok(());
+        }
+        if reconcile_resumed_public_turn_detach_timeout(
+            store,
+            orchestration_session_id,
+            resumed_participant_id,
+        )? && resumed_public_turn_detach_stable_after_grace(
+            store,
+            orchestration_session_id,
+            resumed_participant_id,
+            backend_id,
+        )? {
+            return Ok(());
+        }
+        if resumed_public_turn_detach_ready(
+            store,
+            orchestration_session_id,
+            resumed_participant_id,
+            backend_id,
+        )? && resumed_public_turn_detach_stable_after_grace(
+            store,
+            orchestration_session_id,
+            resumed_participant_id,
+            backend_id,
+        )? {
             return Ok(());
         }
 
-        let Some(record) = store.load_session(orchestration_session_id)? else {
-            anyhow::bail!(
-                "owner_unreachable: orchestration session {} disappeared before the resumed public turn could detach cleanly",
-                orchestration_session_id
-            );
+        let obstruction = match store.load_session(orchestration_session_id)? {
+            None => {
+                Some(format!(
+                    "orchestration session {} disappeared before the resumed public turn could detach cleanly",
+                    orchestration_session_id
+                ))
+            }
+            Some(record)
+                if record.session.state.is_terminal()
+                    || record.session.posture == OrchestrationSessionPosture::Terminal =>
+            {
+                let participant_summary = record
+                    .participants
+                    .iter()
+                    .find(|candidate| candidate.participant_id() == resumed_participant_id)
+                    .map(|participant| {
+                        format!(
+                            "participant_state={:?}, participant_reason={}",
+                            participant.handle.state,
+                            participant
+                                .internal
+                                .termination_reason
+                                .as_deref()
+                                .unwrap_or("<none>")
+                        )
+                    })
+                    .unwrap_or_else(|| "participant_state=<missing>".to_string());
+                Some(format!(
+                    "orchestration session {} became terminal before resumed participant {} could repark (session_state={:?}, session_reason={}, {})",
+                    orchestration_session_id,
+                    resumed_participant_id,
+                    record.session.state,
+                    record
+                        .session
+                        .invalidation_reason
+                        .as_deref()
+                        .unwrap_or("<none>"),
+                    participant_summary
+                ))
+            }
+            Some(record)
+                if record
+                    .session
+                    .active_participant_id()
+                    .is_some_and(|participant_id| participant_id != resumed_participant_id) =>
+            {
+                Some(format!(
+                    "orchestration session {} reassigned active ownership to {} before resumed participant {} could repark",
+                    orchestration_session_id,
+                    record.session.active_participant_id().unwrap_or_default(),
+                    resumed_participant_id
+                ))
+            }
+            Some(_) => None,
         };
-        if record.session.state.is_terminal()
-            || record.session.posture == OrchestrationSessionPosture::Terminal
-        {
-            anyhow::bail!(
-                "owner_unreachable: orchestration session {} became terminal before resumed participant {} could repark",
-                orchestration_session_id,
-                resumed_participant_id
-            );
-        }
-        if record
-            .session
-            .active_participant_id()
-            .is_some_and(|participant_id| participant_id != resumed_participant_id)
-        {
-            anyhow::bail!(
-                "owner_unreachable: orchestration session {} reassigned active ownership to {} before resumed participant {} could repark",
-                orchestration_session_id,
-                record.session.active_participant_id().unwrap_or_default(),
-                resumed_participant_id
-            );
-        }
 
         if started_at.elapsed() >= TURN_DETACH_NORMALIZATION_TIMEOUT {
+            if let Some(obstruction) = obstruction {
+                anyhow::bail!(
+                    "owner_unreachable: timed out waiting for orchestration session {} resumed participant {} to converge back to detached durable continuity; last observed obstruction: {}",
+                    orchestration_session_id,
+                    resumed_participant_id,
+                    obstruction
+                );
+            }
             anyhow::bail!(
                 "owner_unreachable: timed out waiting for orchestration session {} resumed participant {} to converge back to detached durable continuity",
                 orchestration_session_id,
@@ -1178,6 +1405,55 @@ fn wait_for_resumed_public_turn_detach(
 
         thread::sleep(TURN_DETACH_NORMALIZATION_POLL_INTERVAL);
     }
+}
+
+fn resumed_public_turn_detach_ready(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    resumed_participant_id: &str,
+    backend_id: &str,
+) -> Result<bool> {
+    Ok(store
+        .resumed_public_turn_detach_posture(orchestration_session_id, resumed_participant_id)?
+        .is_some()
+        || exact_detached_host_turn_target_ready(store, orchestration_session_id, backend_id)?)
+}
+
+fn resumed_public_turn_detach_stable_after_grace(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    resumed_participant_id: &str,
+    backend_id: &str,
+) -> Result<bool> {
+    thread::sleep(START_ATTACHED_GRACE_TIMEOUT);
+    Ok(resumed_public_turn_detach_ready(
+        store,
+        orchestration_session_id,
+        resumed_participant_id,
+        backend_id,
+    )? && resumed_public_turn_runtime_released(store, resumed_participant_id)?)
+}
+
+fn exact_detached_host_turn_target_ready(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    backend_id: &str,
+) -> Result<bool> {
+    match store.resolve_public_turn_target(orchestration_session_id, backend_id) {
+        Ok(target) => Ok(target.target_kind == PublicTurnTargetKind::Host
+            && target.session_posture == PublicSessionPosture::DetachedReattachable),
+        Err(_) => Ok(false),
+    }
+}
+
+fn resumed_public_turn_runtime_released(
+    store: &AgentRuntimeStateStore,
+    resumed_participant_id: &str,
+) -> Result<bool> {
+    let Some(participant) = store.load_participant(resumed_participant_id)? else {
+        return Ok(false);
+    };
+    Ok(!participant.has_valid_ownership() && participant.internal.shell_owner_pid == 0)
 }
 
 fn wait_for_terminal_session_state(
