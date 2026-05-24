@@ -83,7 +83,7 @@ pub(crate) struct AgentApiAuthConfigV1 {
     pub env: Vec<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct AgentCapabilitiesV1 {
     pub session_start: bool,
@@ -100,6 +100,36 @@ pub(crate) struct AgentCapabilitiesV1 {
 pub(crate) struct AgentInventoryEntryV1 {
     pub path: PathBuf,
     pub file: AgentFileV1,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AgentInventoryBaselineOrigin {
+    GlobalInventory,
+    WorkspaceInventory,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProjectedInventoryValueOrigin {
+    InventoryExplicit,
+    EffectiveConfigDefault,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProjectedInventoryEntryV1 {
+    pub origin: AgentInventoryBaselineOrigin,
+    pub path: PathBuf,
+    pub agent_id: String,
+    pub backend_id: String,
+    pub kind: AgentConfigKind,
+    pub protocol: Option<String>,
+    pub execution_scope: crate::execution::config_model::AgentExecutionScope,
+    pub execution_scope_origin: ProjectedInventoryValueOrigin,
+    pub cli_mode: crate::execution::config_model::AgentCliMode,
+    pub cli_mode_origin: ProjectedInventoryValueOrigin,
+    pub cli_binary: Option<String>,
+    pub capabilities: AgentCapabilitiesV1,
+    #[allow(dead_code)]
+    pub policy_overlay: Option<crate::execution::policy_model::PolicyPatch>,
 }
 
 impl AgentFileV1 {
@@ -160,6 +190,69 @@ impl AgentInventoryEntryV1 {
 
     pub(crate) fn effective_cli_binary(&self) -> Option<&str> {
         self.file.effective_cli_binary()
+    }
+}
+
+pub(crate) fn inventory_entry_origin(
+    cwd: &Path,
+    entry: &AgentInventoryEntryV1,
+) -> AgentInventoryBaselineOrigin {
+    let workspace_root = workspace::find_workspace_root(cwd);
+    let workspace_agents_root = workspace_root.map(|root| {
+        root.join(workspace::SUBSTRATE_DIR_NAME)
+            .join("agents")
+            .to_string_lossy()
+            .to_string()
+    });
+    let entry_path = entry.path.to_string_lossy();
+
+    if workspace_agents_root
+        .as_deref()
+        .is_some_and(|root| entry_path.starts_with(root))
+    {
+        AgentInventoryBaselineOrigin::WorkspaceInventory
+    } else {
+        AgentInventoryBaselineOrigin::GlobalInventory
+    }
+}
+
+pub(crate) fn project_inventory_entry(
+    cwd: &Path,
+    entry: &AgentInventoryEntryV1,
+    effective_config: &crate::execution::config_model::SubstrateConfig,
+) -> ProjectedInventoryEntryV1 {
+    let execution_scope_origin = if entry.file.config.execution.scope.is_some() {
+        ProjectedInventoryValueOrigin::InventoryExplicit
+    } else {
+        ProjectedInventoryValueOrigin::EffectiveConfigDefault
+    };
+    let cli_mode_origin = if entry
+        .file
+        .config
+        .cli
+        .as_ref()
+        .and_then(|cli| cli.mode)
+        .is_some()
+    {
+        ProjectedInventoryValueOrigin::InventoryExplicit
+    } else {
+        ProjectedInventoryValueOrigin::EffectiveConfigDefault
+    };
+
+    ProjectedInventoryEntryV1 {
+        origin: inventory_entry_origin(cwd, entry),
+        path: entry.path.clone(),
+        agent_id: entry.file.id.clone(),
+        backend_id: entry.derived_backend_id(),
+        kind: entry.file.config.kind,
+        protocol: entry.file.config.protocol.clone(),
+        execution_scope: entry.effective_scope(effective_config),
+        execution_scope_origin,
+        cli_mode: entry.effective_cli_mode(effective_config),
+        cli_mode_origin,
+        cli_binary: entry.effective_cli_binary().map(ToOwned::to_owned),
+        capabilities: entry.file.config.capabilities.clone(),
+        policy_overlay: entry.file.policy_overlay.clone(),
     }
 }
 

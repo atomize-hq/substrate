@@ -1,4 +1,5 @@
 pub(crate) mod control;
+pub(crate) mod dispatch_contract;
 pub(crate) mod mapping;
 pub(crate) mod orchestration_session;
 pub(crate) mod registry;
@@ -12,6 +13,14 @@ pub(crate) use control::{
     LoadedPublicPrompt, PromptSubmitRuntime, PublicPromptAction, PublicPromptCommandRequest,
     PublicPromptInput, PublicPromptRenderedExit, PublicSessionPosture, SubmittedPromptCompletion,
     SubmittedPromptStreamEvent,
+};
+#[allow(unused_imports)]
+pub(crate) use dispatch_contract::{
+    resolve_inventory_contract_for_exact_backend, resolve_inventory_contract_for_unique_scope,
+    resolve_persisted_host_attach_contract, AttachLaunchKnobs, AttachModePreference,
+    DispatchBaselineKind, DispatchCallerKind, DispatchCapabilityOverrideSet,
+    DispatchRequestEnvelope, DispatchResolutionError, DispatchResolutionErrorKind,
+    HostExecutionClientStart, ResolvedLaunchContract,
 };
 pub(crate) use mapping::{
     MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
