@@ -1,167 +1,222 @@
-# ORCH_PLAN: Gateway-Mediated LLM Fulfillment Execution Controller
+# ORCH_PLAN: Explicit Control-Only Recovery And Honest Successor Allocation Execution Controller
 
-Authoritative plan source: [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)  
-Source SOW: [28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/llm-last-mile/28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md)  
-Current workspace branch: `feat/gateway-mediated-llm-fulfillment`  
-Execution type: lifecycle-frozen seam replacement, parent-frozen contract, one short host/world parallel window, one serialized reconvergence lane, one docs lane, one parent-only validation wall  
-Live repo root: `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`  
-Fresh worktree root: `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-gateway-mediated-llm-fulfillment`  
-Run id: `plan-gateway-mediated-llm-fulfillment`  
+Authoritative execution branch: `feat/gateway-mediated-llm-fulfillment`  
+Plan source: [PLAN.md](PLAN.md)  
+Style reference only: [llm-last-mile/ORCH_PLAN-25.md](llm-last-mile/ORCH_PLAN-25.md)  
+Workspace root: `/home/azureuser/__Active_Code/atomize-hq/substrate`  
+Worktree root: `/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery`  
+Run id: `plan-control-only-session-recovery`  
 Worker model: `GPT-5.4` with `reasoning_effort=high`  
-Initial concurrent worker cap: `0` during parent-only freeze  
-Peak concurrent worker cap: `2` during the host/world cutover window  
-Parent role: sole integrator, sole gate owner, sole writer of `.runs/**` artifacts, sole launcher of worker lanes, sole merger of worker outputs, sole authority for GitNexus escalations, validation start, and final acceptance
+Initial concurrent worker cap: `0` during parent freeze  
+Peak concurrent worker cap: `2` after A2  
+Parent role: sole integrator, sole gate owner, sole writer of `.runs/**`, sole authority for merge order, hotspot ownership, acceptance, blockage, and final validation
 
 ## Summary
 
-This controller executes [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md). It is not a restatement of that plan. It is the parent-run execution script for how the plan is launched, split, merged, validated, and closed.
+This document executes the current [PLAN.md](PLAN.md). It is an execution controller, not a restatement of the plan.
 
-Frozen run shape:
+This run is complete only if one merged tree proves all of the following together:
 
-1. Parent freezes the lifecycle contract, seam boundary, grep wall, branch map, worker ownership map, and validation wall.
-2. Parent opens one short honest parallel window only:
-   - `H1` host prompt-bearing gateway cutover
-   - `W1` world-member gateway cutover
-3. Parent reconverges the merged runtime story in one serialized lane:
-   - `R1` bootstrap removal, `async_repl.rs` cleanup, shared routing assertion settlement
-4. Parent launches the docs truth-sync lane only after `R1` is accepted:
-   - `D1` runtime-truth and usage convergence
-5. Parent runs the full validation wall, final GitNexus scope check, and closeout on the merged tree only.
+1. A0 removes the local `unified-agent-api` patch override and the workspace resolves against the published dependency.
+2. A1 persists a durable host attach contract on the orchestration session.
+3. A2 removes the hidden owner-helper convergence and splits internal control-only attach, prompt-bearing turn launch, and successor allocation.
+4. A3 makes `reattach` continuity-only for this slice:
+   - no prompt,
+   - same durable session id,
+   - fail closed when continuity is absent.
+5. A4 makes `fork` a real successor allocator:
+   - successor copies attach-contract shape,
+   - successor clears `continuity_uaa_session_id`,
+   - successor returns `parked_resumable`,
+   - successor returns `attached_participant_id = null`,
+   - no synthetic prompt,
+   - no borrowed parent continuity.
+6. A5 is preserved:
+   - public `start` and `turn` remain the only prompt-bearing public verbs,
+   - detached-world follow-up remains fail-closed,
+   - no new public verb, schema, or policy surface appears.
+7. A6 truth-syncs docs and downstream slices 29/30/31 to the landed runtime architecture.
+8. A7 proves the whole tree with focused grep gates, focused tests, and full workspace validation.
 
-Ship this run only if the merged tree proves all of the following together:
+Frozen orchestration shape:
 
-1. host first prompt and host follow-up prompt fulfill through the gateway adapter seam,
-2. world first targeted prompt and resumed follow-up prompt fulfill through the gateway adapter seam,
-3. stable backend-id selection still happens before prompt-bearing execution begins,
-4. typed `MemberTurnSubmitRequestV1` plus `/v1/member_turn/stream` remain unchanged,
-5. the visible lifecycle contract from `start`, `turn`, `reattach`, `stop`, posture semantics, and `Accepted -> terminal` remains unchanged,
-6. integrated auth still uses the FD auth-bundle handoff,
-7. no production runtime path in the targeted shell or world surfaces directly instantiates `AgentWrapperGateway`, `CodexBackend`, or `ClaudeCodeBackend`,
-8. no production bootstrap prompt survives,
-9. docs and truth surfaces describe the bypass as removed steady-state behavior, not acceptable architecture,
-10. the final validation wall proves seam movement and lifecycle stability on the same merged tree.
+1. Parent-only freeze and source lock.
+2. `L0` executes A0 and A1 on one branch.
+3. Parent integrates A0/A1 and opens A2.
+4. `L1` executes A2 on one branch.
+5. Parent integrates A2 and then opens the only low-risk parallel window:
+   - `L2` executes A3 reattach work.
+   - `L3` drafts A6 docs sync in parallel.
+6. Parent merges `L2` first, then replays and merges `L3` onto the accepted runtime tree.
+7. `L4` executes A4 after `L2` is accepted and after the parent reassigns the `agents_cmd.rs` hotspot.
+8. Parent verifies A5 invariants on the merged runtime tree.
+9. Parent runs A7 validation and closeout last.
+
+Default rule: do not run A4 concurrently with A3. The real merge-risk seam is `crates/shell/src/execution/agents_cmd.rs`, and this controller treats that as a serialized ownership handoff instead of pretending it is safe parallelism.
 
 ## Hard Guards
 
 These are run-stopping invariants.
 
-1. This slice is a seam replacement only. It is not a public lifecycle redesign, not a selector redesign, not a shared envelope redesign, and not a backend-matrix expansion project.
-2. `substrate agent start`, `turn`, `reattach`, and `stop` keep their existing public meaning exactly.
-3. Stable backend ids remain the only public routing selector for prompt-bearing follow-up work.
-4. `MemberTurnSubmitRequestV1` and `POST /v1/member_turn/stream` remain the typed world follow-up seam.
-5. Integrated auth remains on `SUBSTRATE_LLM_AUTH_BUNDLE_FD` and the existing auth-bundle contract.
-6. No new auth fallback path through child secret env vars may be introduced.
-7. No hidden bootstrap prompt, fake agent prompt, warm-up prompt, or replay-visible synthetic first prompt may survive on a production path.
-8. No production code under `crates/shell/src/execution/agent_runtime/`, `crates/shell/src/repl/`, or `crates/world-service/src/member_runtime.rs` may remain a direct backend-registration table above the gateway seam.
-9. `reattach` remains recovery-only and must not become a prompt-bearing execution path.
-10. Detached world follow-up remains fail-closed.
-11. SOW 29 and SOW 30 remain out of scope:
-    - no shared dispatch-envelope expansion,
-    - no public world-scoped root start,
-    - no new capability-override surface.
-12. No worker may edit [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md), this controller, or `.runs/**`.
-13. Parent is the only actor allowed to reopen a gate, reinterpret the contract freeze, accept a `HIGH` or `CRITICAL` GitNexus blast radius, or decide final scope fit.
-14. Every symbol edit requires prior GitNexus impact analysis.
-15. Every worker handoff must include `mcp__gitnexus__.detect_changes()` output before parent acceptance.
-16. Parent runs a final `mcp__gitnexus__.detect_changes()` on the merged tree before closeout.
+1. The authoritative integration checkout remains `/home/azureuser/__Active_Code/atomize-hq/substrate` on `feat/gateway-mediated-llm-fulfillment`.
+2. The parent is the only integrator and the only approval authority.
+3. The parent is the only writer of `/home/azureuser/__Active_Code/atomize-hq/substrate/.runs/plan-control-only-session-recovery/**`.
+4. Public `start` and `turn` remain the only prompt-bearing public verbs.
+5. Public `reattach` is control-only in this slice and may use continuity privately only when that continuity already exists.
+6. Public `reattach` fails closed when `continuity_uaa_session_id` is absent, stale, or invalid.
+7. Public `fork` is successor durable-session allocation only:
+   - no prompt,
+   - no immediate attachment,
+   - no false `active` truth,
+   - no inherited live continuity token.
+8. Successor normalization is frozen:
+   - copy attach-contract shape,
+   - clear `continuity_uaa_session_id`,
+   - set `attached_participant_id = null`,
+   - set `posture = parked_resumable`,
+   - leave `pending_inbox_count = 0`.
+9. Detached-world follow-up remains fail-closed until valid host ownership returns.
+10. `MemberTurnSubmitRequestV1` and `/v1/member_turn/stream` remain unchanged.
+11. No new public verb, schema, selector grammar, policy surface, or capability flag may be introduced.
+12. No production path may use `prompt: ""` or `NoPromptRecovery` as the architectural meaning of public `reattach` or `fork`.
+13. No production `fork` path may route through `agent_api.session.resume.v1`.
+14. No worker may edit [PLAN.md](PLAN.md), this controller, or `.runs/**`.
+15. No docs lane may touch Rust or test files.
+16. No runtime lane may touch docs except where the parent explicitly replays or resolves merge drift after acceptance.
+17. `crates/shell/src/execution/agents_cmd.rs` is a single-owner hotspot with explicit parent-controlled ownership transfer.
+18. `crates/shell/src/execution/agent_runtime/state_store.rs` is foundation-owned in A1 and cannot be touched by A3 or A4 until A1 is merged.
+19. A6 may draft in parallel with A3, but docs may not merge before the accepted runtime truth exists.
+20. Every lane must run GitNexus impact analysis before editing any function, method, or other symbol it touches.
+21. Any `HIGH` or `CRITICAL` GitNexus impact result must be escalated to the parent before edits proceed; no worker may absorb that risk silently.
+22. Every worker handoff must include GitNexus `detect_changes` output.
+23. The parent must run a final GitNexus `detect_changes` pass on the merged tree before final acceptance.
+24. If `PLAN.md` changes materially during execution, stop the run and restart from parent freeze.
 
-Stop the run and write `blocked.json` if any of these become true:
+## Blocked-Run Conditions
 
-1. host and world cutover cannot be split into truly disjoint lanes without concurrent ownership of `async_repl.rs` or another shared hotspot,
-2. the seam move requires a new public CLI flag, new public verb, new world follow-up route, or new schema version,
-3. the only path to green requires retaining a production synthetic bootstrap prompt,
-4. the only path to green requires retaining a production shell-local or member-local backend-registration table,
-5. stable backend selection can no longer happen before execution begins,
-6. integrated auth can only be made to work by reopening secret-bearing env paths,
-7. docs can only be made truthful by contradicting the merged code,
-8. the validation wall cannot prove grep, focused runtime tests, auth continuity, and workspace gates on the same merged tree.
+Stop the run, write `blocked.json`, and do not advance if any of these occur:
 
-## Fresh Worktrees / Branches / Worker Model / Concurrency Cap
+1. A0 cannot resolve `unified-agent-api = "=0.3.5"` from the published source.
+2. A1 requires inventing a second durable attach-truth model instead of extending `OrchestrationSessionRecord`.
+3. A2 cannot remove the hidden convergence without adding a new public verb, new schema, or new policy/config surface.
+4. A3 can only pass by submitting a prompt or by guessing a fresh attach when continuity is absent.
+5. A4 can only pass by claiming the parent's continuity token, attaching a live client, or returning false `active` truth.
+6. The only path to green requires retaining `prompt: ""`, `NoPromptRecovery`, or `agent_api.session.resume.v1` as the implementation substrate for public `reattach` or `fork`.
+7. Docs can only be made truthful by contradicting the merged code.
+8. The validation wall cannot prove grep gates, focused tests, world fail-closed behavior, and full workspace gates on the same merged tree.
+9. Any worker touches files outside its frozen ownership set and the parent cannot cleanly quarantine the output.
+10. Any merge requires concurrent edits to `crates/shell/src/execution/agents_cmd.rs` from more than one live worker lane.
+
+`blocked.json` must include:
+
+1. `run_id`
+2. `authoritative_branch`
+3. `plan_source`
+4. `timestamp`
+5. `current_gate`
+6. `current_task`
+7. `stop_condition`
+8. `blocking_files`
+9. `accepted_tasks`
+10. `rejected_or_quarantined_tasks`
+11. `required_parent_action`
+
+## Fresh Worktrees And Branches
 
 Fresh worktree root:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-gateway-mediated-llm-fulfillment`
+- `/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery`
 
 Authoritative integration checkout:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate`
+- `/home/azureuser/__Active_Code/atomize-hq/substrate`
 - branch: `feat/gateway-mediated-llm-fulfillment`
 
 Worker worktrees:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-gateway-mediated-llm-fulfillment/host-cutover`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-gateway-mediated-llm-fulfillment/world-cutover`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-gateway-mediated-llm-fulfillment/reconvergence`
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-gateway-mediated-llm-fulfillment/docs-truth-sync`
+- `L0` A0/A1 foundation:
+  - `/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery/a0-a1-foundation`
+  - `codex/feat-gateway-mediated-llm-fulfillment-a0-a1-foundation`
+- `L1` A2 launch split:
+  - `/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery/a2-launch-split`
+  - `codex/feat-gateway-mediated-llm-fulfillment-a2-launch-split`
+- `L2` A3 control-only reattach:
+  - `/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery/a3-control-reattach`
+  - `codex/feat-gateway-mediated-llm-fulfillment-a3-control-reattach`
+- `L3` A6 docs and downstream sync:
+  - `/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery/a6-docs-sync`
+  - `codex/feat-gateway-mediated-llm-fulfillment-a6-docs-sync`
+- `L4` A4 fork successor allocator:
+  - `/home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery/a4-successor-allocator`
+  - `codex/feat-gateway-mediated-llm-fulfillment-a4-successor-allocator`
 
-Worker branches:
-
-- `codex/feat-gateway-mediated-llm-fulfillment-host-cutover`
-- `codex/feat-gateway-mediated-llm-fulfillment-world-cutover`
-- `codex/feat-gateway-mediated-llm-fulfillment-reconvergence`
-- `codex/feat-gateway-mediated-llm-fulfillment-docs-truth-sync`
-
-Exact setup order:
+Exact setup commands:
 
 ```bash
-mkdir -p /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-gateway-mediated-llm-fulfillment
+mkdir -p /home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery
 
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate fetch origin
+git -C /home/azureuser/__Active_Code/atomize-hq/substrate fetch origin
 ```
 
-Create the host and world worktrees only after `G0` is accepted:
+Create `L0` only after `G0` passes:
 
 ```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
-  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-gateway-mediated-llm-fulfillment/host-cutover \
-  -b codex/feat-gateway-mediated-llm-fulfillment-host-cutover \
-  feat/gateway-mediated-llm-fulfillment
-
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
-  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-gateway-mediated-llm-fulfillment/world-cutover \
-  -b codex/feat-gateway-mediated-llm-fulfillment-world-cutover \
-  feat/gateway-mediated-llm-fulfillment
-```
-
-Create the reconvergence worktree only after `G1` is accepted:
-
-```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
-  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-gateway-mediated-llm-fulfillment/reconvergence \
-  -b codex/feat-gateway-mediated-llm-fulfillment-reconvergence \
+git -C /home/azureuser/__Active_Code/atomize-hq/substrate worktree add \
+  /home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery/a0-a1-foundation \
+  -b codex/feat-gateway-mediated-llm-fulfillment-a0-a1-foundation \
   feat/gateway-mediated-llm-fulfillment
 ```
 
-Create the docs worktree only after `G2` is accepted:
+Create `L1` only after `G1` passes:
 
 ```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate worktree add \
-  /Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/substrate-gateway-mediated-llm-fulfillment/docs-truth-sync \
-  -b codex/feat-gateway-mediated-llm-fulfillment-docs-truth-sync \
+git -C /home/azureuser/__Active_Code/atomize-hq/substrate worktree add \
+  /home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery/a2-launch-split \
+  -b codex/feat-gateway-mediated-llm-fulfillment-a2-launch-split \
+  feat/gateway-mediated-llm-fulfillment
+```
+
+Create `L2` and `L3` only after `G2` passes:
+
+```bash
+git -C /home/azureuser/__Active_Code/atomize-hq/substrate worktree add \
+  /home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery/a3-control-reattach \
+  -b codex/feat-gateway-mediated-llm-fulfillment-a3-control-reattach \
+  feat/gateway-mediated-llm-fulfillment
+
+git -C /home/azureuser/__Active_Code/atomize-hq/substrate worktree add \
+  /home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery/a6-docs-sync \
+  -b codex/feat-gateway-mediated-llm-fulfillment-a6-docs-sync \
+  feat/gateway-mediated-llm-fulfillment
+```
+
+Create `L4` only after `G3` passes and only from the then-current authoritative branch tip:
+
+```bash
+git -C /home/azureuser/__Active_Code/atomize-hq/substrate worktree add \
+  /home/azureuser/__Active_Code/atomize-hq/.worktrees/substrate-control-only-session-recovery/a4-successor-allocator \
+  -b codex/feat-gateway-mediated-llm-fulfillment-a4-successor-allocator \
   feat/gateway-mediated-llm-fulfillment
 ```
 
 Concurrency contract:
 
-1. `P0` and `G0` are parent-only and fully serialized.
-2. `H1` and `W1` are the only honest parallel window.
-3. `R1` is single-owner and serialized because it owns the shared conflict zone:
-   - `crates/shell/src/repl/async_repl.rs`
-   - bootstrap semantics
-   - shared routing assertions
-4. `D1` starts only after `R1` is accepted.
-5. `P1`, `P2`, and `P3` are parent-only.
-6. Peak concurrency is `2`, not `3` or `4`, because the plan has one narrow host/world split and then forced reconvergence.
+1. Parent freeze and all gates are serialized.
+2. `L0` and `L1` are serialized.
+3. Peak low-risk parallelism is exactly `L2 + L3`.
+4. `L4` is serialized after `L2` by default.
+5. Worker cap is `2`; do not open a third active worker.
 
-## Parent-Owned Run-State Surface And Required Artifacts
+## Parent-Owned Run-State Surface
 
 Canonical run root:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-gateway-mediated-llm-fulfillment/`
+- `/home/azureuser/__Active_Code/atomize-hq/substrate/.runs/plan-control-only-session-recovery/`
 
-Required parent-owned top-level artifacts:
+Required top-level artifacts:
 
 - `run-state.json`
+- `tasks.json`
 - `source-lock.json`
 - `contract-freeze.json`
 - `branch-map.json`
@@ -175,46 +230,39 @@ Required parent-owned top-level artifacts:
 - `tasks/`
 - `gates/`
 
-Required sentinels:
+Required run sentinels:
 
 - `sentinels/RUN_OPEN`
 - `sentinels/RUN_BLOCKED` on blocked runs only
 - `sentinels/RUN_COMPLETE` on successful closeout only
 
-Frozen gate directories:
+Required task directories:
 
-- `gates/G0-parent-contract-freeze/`
-- `gates/G1-host-world-accept-and-reconvergence-launch/`
-- `gates/G2-reconvergence-accept-and-doc-launch/`
-- `gates/G3-doc-accept-and-validation-launch/`
-- `gates/G4-final-acceptance/`
-
-Every gate directory must contain all of the following before the gate may transition:
-
-- `gate.json`
-- `evidence.md`
-- one sentinel exactly one of:
-  - `OPEN`
-  - `PASSED`
-  - `FAILED`
-  - `REOPENED`
-
-Task map:
-
-- `tasks/P0-parent-contract-freeze-and-run-init/`
-- `tasks/H1-host-fulfillment-cutover/`
-- `tasks/W1-world-fulfillment-cutover/`
-- `tasks/G1-host-world-accept-and-reconvergence-launch/`
-- `tasks/R1-reconvergence-bootstrap-removal/`
-- `tasks/G2-reconvergence-accept-and-doc-launch/`
-- `tasks/D1-doc-truth-sync/`
-- `tasks/G3-doc-accept-and-validation-launch/`
-- `tasks/P1-parent-lane-integration/`
-- `tasks/P2-parent-validation-wall/`
-- `tasks/G4-final-acceptance/`
+- `tasks/P0-parent-freeze-and-run-init/`
+- `tasks/L0-a0-a1-foundation/`
+- `tasks/G1-foundation-accept/`
+- `tasks/L1-a2-launch-split/`
+- `tasks/G2-launch-split-accept/`
+- `tasks/L2-a3-control-reattach/`
+- `tasks/L3-a6-docs-sync/`
+- `tasks/G3-parallel-window-accept/`
+- `tasks/L4-a4-successor-allocator/`
+- `tasks/G4-fork-accept/`
+- `tasks/P1-a5-prompt-bearing-guard/`
+- `tasks/P2-a7-validation-wall/`
+- `tasks/G5-final-acceptance/`
 - `tasks/P3-parent-closeout/`
 
-Every task directory must contain all of the following before parent may mark the task accepted:
+Required gate directories:
+
+- `gates/G0-run-freeze/`
+- `gates/G1-foundation/`
+- `gates/G2-launch-split/`
+- `gates/G3-parallel-window/`
+- `gates/G4-fork/`
+- `gates/G5-final/`
+
+Each task directory must contain:
 
 - `task.json`
 - `owner.txt`
@@ -230,698 +278,335 @@ Every task directory must contain all of the following before parent may mark th
 - `handoff-notes.md`
 - `summary.md`
 - `HEAD_SHA.txt`
-- `blocker-notes.md` if blocked
-- one sentinel exactly one of:
+- `blocker-notes.md` when blocked
+- one sentinel:
   - `READY_FOR_REVIEW`
   - `ACCEPTED`
   - `REJECTED`
   - `BLOCKED`
 
-Artifact enforcement rule:
+Each gate directory must contain:
 
-1. Workers do not write `.runs/**`.
-2. Workers return handoff material to the parent and nothing is considered launched, reviewed, accepted, replayed, or blocked until the parent records it in `.runs/**`.
-3. Parent must transcribe every worker handoff into `.runs/**`, including changed files, commands, exit codes, GitNexus notes, detect-changes output, acceptance notes, rejections, and blockers.
-4. Parent creates or replaces task sentinels after transcription. Workers never create task sentinels.
-5. Parent must update the matching `task.json`, `status.txt`, `changed-files.txt`, `commands.txt`, `exit-codes.json`, `gitnexus-detect-changes.txt`, and `handoff-notes.md` in the same review step.
-6. Parent must update the matching gate `gate.json` and `evidence.md` at the moment a gate changes state.
-7. No task is complete until parent writes the artifacts and marks the task `ACCEPTED`.
-8. No gate is complete until parent writes the artifacts and marks the gate `PASSED`.
+- `gate.json`
+- `evidence.md`
+- one sentinel:
+  - `OPEN`
+  - `PASSED`
+  - `FAILED`
+  - `REOPENED`
+
+Artifact rules:
+
+1. Workers never write `.runs/**`.
+2. Workers return branch, head SHA, changed files, commands run, exit codes, and unresolved blockers to the parent.
+3. Workers must also return a GitNexus impact summary for every edited symbol and a `detect_changes` result for the lane branch.
+4. The parent writes or updates every task and gate artifact before a task or gate changes state.
+5. Parent transcription must include `impact-analysis-summary.md` and `gitnexus-detect-changes.txt` for every accepted or rejected worker lane.
+6. Nothing is accepted until the parent has transcribed the handoff and written the sentinel.
 
 `contract-freeze.json` must record at minimum:
 
 1. `authoritative_branch: "feat/gateway-mediated-llm-fulfillment"`
-2. locked public lifecycle:
+2. `plan_source: "/home/azureuser/__Active_Code/atomize-hq/substrate/PLAN.md"`
+3. the frozen public contract:
    - `start`
    - `turn`
    - `reattach`
+   - `fork`
    - `stop`
-3. locked routing and transport decisions:
-   - stable backend ids remain `<kind>:<name>`
-   - `MemberTurnSubmitRequestV1`
-   - `POST /v1/member_turn/stream`
-4. locked auth decision:
-   - `SUBSTRATE_LLM_AUTH_BUNDLE_FD`
-5. forbidden production symbols:
-   - `AgentWrapperGateway`
-   - `CodexBackend`
-   - `ClaudeCodeBackend`
-   - `runtime_bootstrap_prompt`
-6. preserved fail-closed rules:
-   - detached world follow-up stays fail-closed
-   - invalid backend selection stays invalid
-   - blocked env auth does not reopen fallback execution
-7. the exact validation wall commands
-8. the concurrency contract:
-   - initial worker cap `0`
-   - peak worker cap `2`
+4. `public_prompt_verbs: ["start", "turn"]`
+5. `reattach_mode: "continuity_only_fail_closed"`
+6. `successor_posture: "parked_resumable"`
+7. `successor_attached_participant_id: null`
+8. `successor_continuity_uaa_session_id: null`
+9. `world_follow_up_mode: "fail_closed_without_host_ownership"`
+10. `worker_cap: 2`
+11. `hotspot_file: "crates/shell/src/execution/agents_cmd.rs"`
 
-## GitNexus Workflow And Required Impact Targets
+## Parent-Only Critical Path
 
-GitNexus is a run-control requirement, not a best-effort check.
+The parent-only critical path is fixed:
 
-### Source-Lock Stage
+1. `P0` freeze the run:
+   - confirm branch,
+   - confirm plan source,
+   - write source lock,
+   - write contract freeze,
+   - write lane ownership,
+   - write merge order,
+   - open `RUN_OPEN`.
+2. `G0` authorize `L0`.
+3. Review and integrate `L0` A0/A1.
+4. `G1` authorize `L1`.
+5. Review and integrate `L1` A2.
+6. `G2` authorize the only parallel window:
+   - `L2` A3
+   - `L3` A6 draft
+7. Review and integrate `L2` first.
+8. Replay and integrate `L3` against the accepted runtime tree.
+9. `G3` authorize `L4`.
+10. Review and integrate `L4` A4.
+11. `P1` verify A5 invariants on the merged runtime tree.
+12. `P2` execute A7 validation wall.
+13. `G5` issue final acceptance or block.
+14. `P3` write closeout and `RUN_COMPLETE`.
 
-1. Parent verifies GitNexus repo selection and index freshness before any worker edits.
-2. If the index is stale, parent runs `npx gitnexus analyze` from the authoritative checkout before launching `H1` or `W1`.
-3. Parent records the freshness result in `tasks/P0-parent-contract-freeze-and-run-init/impact-analysis-summary.md`.
+The parent never delegates:
 
-### Minimum Required Targets By Task
+1. source lock updates,
+2. hotspot ownership changes,
+3. merge decisions,
+4. gate changes,
+5. final validation,
+6. blocked-run decisions.
 
-`H1` host fulfillment cutover
+## Worker Lanes
 
-1. Symbol targets that must be analyzed before edits:
-   - `submit_host_prompt_turn`
-   - `build_gateway_for_descriptor`
-   - `ResolvedHostOrchestratorBootstrap`
-   - `PreparedAgentRuntime`
-2. File-level seam targets that must be analyzed if symbol names drift:
-   - `crates/shell/src/execution/agent_runtime/control.rs`
-   - `crates/shell/src/execution/agent_runtime/registry.rs`
-   - `crates/shell/src/execution/agent_runtime/mapping.rs`
-   - `crates/shell/src/execution/agent_runtime/validator.rs`
-   - `crates/shell/src/repl/async_repl.rs`
-   - `crates/shell/tests/agent_public_control_surface_v1.rs`
-   - `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
+### Lane Ledger
 
-`W1` world fulfillment cutover
+| Lane | PLAN phases | Owner | Starts after | Ends at | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| `L0` | A0, A1 | worker | `G0` | `G1` review | dependency floor plus durable attach-contract foundation |
+| `L1` | A2 | worker | `G1` | `G2` review | split internal control-only attach, prompt turn, and successor allocation paths |
+| `L2` | A3 | worker | `G2` | `G3` review | make `reattach` continuity-only and fail closed |
+| `L3` | A6 | worker | `G2` | `G3` review | doc and downstream truth sync drafted against accepted A2 shape |
+| `L4` | A4 | worker | `G3` | `G4` review | honest successor allocation and normalization |
+| `P1` | A5 | parent | `G4` | `P2` | verify prompt-bearing invariants remain intact |
+| `P2` | A7 | parent | `P1` | `G5` | full validation wall |
 
-1. Symbol targets that must be analyzed before edits:
-   - `MemberRuntimeManager::launch`
-   - `MemberRuntimeManager::submit_turn`
-   - `build_gateway_for_backend`
-   - `runtime_bootstrap_prompt`
-2. File-level seam targets that must be analyzed if symbol names drift:
-   - `crates/world-service/src/member_runtime.rs`
-   - `crates/world-service/src/service.rs`
-   - `crates/world-service/src/lib.rs`
-   - `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-   - `crates/shell/tests/repl_world_first_routing_v1.rs`
-   - `crates/world-service/tests/streamed_execute_cancel_v1.rs`
-   - `crates/world-service/tests/member_runtime_world_placement_v1.rs`
+### File Ownership
 
-`R1` reconvergence bootstrap removal
-
-1. Symbol targets that must be analyzed before edits:
-   - `runtime_bootstrap_prompt`
-   - the shell-side startup helper in `crates/shell/src/repl/async_repl.rs` that prepares world-member execution state
-   - any new shared fulfillment helper introduced by `H1` or `W1`
-2. File-level seam targets that must be analyzed if symbol names drift:
-   - `crates/shell/src/repl/async_repl.rs`
-   - `crates/world-service/src/member_runtime.rs`
-   - `crates/shell/tests/repl_world_first_routing_v1.rs`
-   - `crates/shell/tests/support/repl_world_service.rs`
-
-`D1` docs truth-sync
-
-1. File-level seam targets:
-   - `llm-last-mile/28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md`
-   - `AGENT_ORCHESTRATION_GAP_MATRIX.md`
-   - `docs/contracts/substrate-gateway-runtime-parity.md`
-   - `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-   - `docs/USAGE.md`
-   - `HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`
-   - relevant ADR wording under `docs/project_management/adrs/draft/` only if implementation evidence requires sync
-2. This lane is docs-truth only. If no symbol-level targets are relevant, the worker must state that explicitly in the handoff.
-
-### Escalation Rule
-
-1. Any `HIGH` or `CRITICAL` impact result stops that worker before edits.
-2. The worker returns a blocker handoff instead of proceeding.
-3. Parent records the blocker, decides whether the run still fits the frozen contract, and either relaunches with a narrower brief or blocks the run.
-
-## Workstream Plan With Parent-Owned Gates And Worker-Owned Lanes
-
-### Workstream Map
-
-| PLAN.md workstream | Orchestration tasks | Ownership |
+| Lane | Allowed files | Forbidden touch surfaces |
 | --- | --- | --- |
-| Freeze lifecycle contract, seam boundary, grep wall, change budget | `P0`, `G0` | Parent only |
-| Host prompt-bearing gateway cutover | `H1` | Host lane |
-| World-member gateway cutover | `W1` | World lane |
-| Shared reconvergence, bootstrap removal, REPL cleanup | `G1`, `R1`, `G2` | Parent gate plus serialized reconvergence lane |
-| Truth docs and usage convergence | `D1`, `G3` | Docs lane plus parent gate |
-| Integration, validation, and closeout | `P1`, `P2`, `G4`, `P3` | Parent only |
+| `L0` | `Cargo.toml`, `Cargo.lock`, `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, directly related state-store/orchestration tests | `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/repl/async_repl.rs`, docs, `.runs/**` |
+| `L1` | `crates/shell/src/repl/async_repl.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agents_cmd.rs`, directly related `async_repl.rs` tests | docs, downstream packets, `.runs/**`, world-service files |
+| `L2` | `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/src/repl/async_repl.rs`, `crates/shell/tests/agent_public_control_surface_v1.rs`, any minimal supporting test helpers | docs, downstream packets, world-service files, `.runs/**` |
+| `L3` | `docs/USAGE.md`, `HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`, `docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md`, `UAA_PROMPTLESS_RESUME_FORK_SYNTHESIS.md`, `llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md`, `llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md`, `llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md` | all Rust files, all test files, `.runs/**` |
+| `L4` | `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`, successor-related control tests | docs, downstream packets, `.runs/**`, world-service transport schema changes |
 
-### Parent-Owned Gates
+Hotspot ownership rule:
 
-`G0`: Contract freeze
+1. `crates/shell/src/execution/agents_cmd.rs` belongs to exactly one live lane at a time.
+2. Ownership transitions:
+   - `L1` owns it during A2.
+   - `L2` owns it during A3 after `G2`.
+   - `L4` owns it during A4 after `G3`.
+3. `L4` must not start until the parent records the ownership transfer in `lane-ownership.json`.
 
-Intent: lock the run before any parallel work exists.
+## Gate Sequencing
 
-1. Parent locks the lifecycle contract, backend-selection contract, auth carrier, grep wall, validation wall, branch map, and lane ownership map.
-2. Parent confirms later workers do not need to guess whether a behavior change is allowed.
-3. Parent records the exact shared-hotspot no-split list before any code edits begin.
+### `G0` Run Freeze
 
-`G1`: Host/world acceptance and reconvergence launch
+Pass only if:
 
-Intent: prove the only parallel window is individually sound, then stop parallelism before the shared conflict zone.
+1. branch is `feat/gateway-mediated-llm-fulfillment`,
+2. `PLAN.md` is the source lock,
+3. worktree root is empty or intentionally prepared,
+4. parent artifacts and sentinels are initialized,
+5. lane ownership and merge order are written.
 
-1. `H1` and `W1` are both accepted or explicitly replayed onto the authoritative branch.
-2. Parent confirms the merged branch proves both cutovers independently before reconvergence work starts.
-3. Parent confirms that major edits to `async_repl.rs` and shared routing assertions remain unclaimed until `R1`.
-4. Only after `G1` is accepted may the reconvergence worktree be created.
+### `G1` Foundation Accept
 
-`G2`: Reconvergence acceptance and docs launch
+Pass only if `L0` proves:
 
-Intent: freeze one final runtime story before any truth-doc sync begins.
+1. no `[patch.crates-io]` override remains,
+2. no lockfile path points at `../unified-agent-api/crates/agent_api`,
+3. durable `host_attach_contract` exists on `OrchestrationSessionRecord`,
+4. backward-compatible deserialize behavior remains,
+5. successor-safe copy helper clears successor continuity,
+6. focused foundation checks pass.
 
-1. `R1` is accepted on the authoritative branch.
-2. Parent confirms:
-   - no production bootstrap prompt remains,
-   - `async_repl.rs` no longer prepares a discarded shell-local authoritative member gateway,
-   - shared routing assertions reflect the final runtime story.
-3. Only after `G2` is accepted may `D1` start.
+### `G2` Launch-Split Accept
 
-`G3`: Docs acceptance and validation launch
+Pass only if `L1` proves:
 
-Intent: freeze the reviewer candidate SHA and stop all content movement before validation begins.
+1. A2 lands on top of accepted A0/A1,
+2. `InitialExecPromptPlan::NoPromptRecovery` no longer carries public `reattach` or `fork` meaning,
+3. internal control flow explicitly separates:
+   - control-only attach,
+   - prompt-bearing resumed turn launch,
+   - successor allocation,
+4. `agents_cmd.rs` remains understandable and not broadened into a second hidden framework.
 
-1. `D1` is accepted on the authoritative branch.
-2. Parent confirms docs now describe direct wrapper/backend registration as historical bypass behavior rather than intended architecture.
-3. Parent freezes the validation candidate SHA and starts `P2`.
+### `G3` Parallel Window Accept
 
-`G4`: Final acceptance
+Pass only if:
 
-Intent: convert a validated candidate into a closed run with explicit evidence, or block it explicitly.
+1. `L2` proves `reattach` is continuity-only and fail-closed,
+2. `L2` does not introduce any prompt-bearing drift in `start` or `turn`,
+3. `L3` docs are replayed onto the accepted `L2` tree when needed,
+4. `L3` does not describe blank-prompt control semantics as live architecture,
+5. the parent records the ownership handoff from `L2` to `L4` before opening `L4`.
 
-1. Grep wall is green.
-2. Focused runtime tests are green.
-3. Auth continuity checks are green.
-4. Workspace gates are green or explicitly environment-blocked with evidence.
-5. Final GitNexus scope verification matches the frozen plan.
+### `G4` Fork Accept
 
-### Worker-Owned Lanes
+Pass only if `L4` proves:
 
-`H` host lane
+1. `fork` allocates successor durable truth first,
+2. successor copies attach-contract shape,
+3. successor clears `continuity_uaa_session_id`,
+4. successor returns `parked_resumable`,
+5. successor returns `attached_participant_id = null`,
+6. successor preserves source lineage truth,
+7. no synthetic prompt path exists,
+8. no `resume.v1` route remains for public `fork`.
 
-1. host first prompt cutover
-2. host follow-up prompt cutover
-3. host-local registry and bootstrap-state cleanup only within lane scope
+### `G5` Final Accept
 
-`W` world lane
+Pass only if the merged tree proves:
 
-1. launch-time world first-turn cutover
-2. resumed world follow-up cutover
-3. retained-member validation preservation
+1. A5 prompt-bearing invariants remain true,
+2. A7 focused grep gates are green,
+3. A7 focused tests are green,
+4. world fail-closed behavior remains intact,
+5. docs and downstream packets match the merged code,
+6. full workspace gates are green,
+7. the parent has reviewed worker `detect_changes` outputs and run a final merged-tree GitNexus `detect_changes` pass.
 
-`R` reconvergence lane
+## Workstream Plan
 
-1. bootstrap prompt removal
-2. `async_repl.rs` cleanup
-3. final shared routing and prompt-capture assertions
+| PLAN phase | Orchestration task | Owner | Merge rule | Required result |
+| --- | --- | --- | --- | --- |
+| A0 | `L0` foundation | worker | merge first | published `unified-agent-api` dependency floor only |
+| A1 | `L0` foundation | worker | merged with A0 | durable attach contract persisted and successor-safe copy helper present |
+| A2 | `L1` launch split | worker | merge second | explicit internal path split, no hidden control-via-prompt shaping |
+| A3 | `L2` reattach | worker | merge before docs and before fork | continuity-only attach, fail closed without continuity |
+| A4 | `L4` fork | worker | merge after `L2` by default | honest successor allocation and normalization |
+| A5 | `P1` prompt guard | parent | no lane | start/turn prompt-bearing behavior preserved exactly |
+| A6 | `L3` docs sync | worker | draft in parallel, merge after `L2` | docs and downstream packets match landed control architecture |
+| A7 | `P2` validation wall | parent | final only | same-tree proof across grep, focused tests, and workspace gates |
 
-`D` docs lane
+## Merge Order
 
-1. SOW and gap-matrix truth sync
-2. gateway-runtime and adapter-protocol doc sync
-3. usage and truth-surface cleanup
+The merge order is fixed unless the parent explicitly blocks and restarts:
 
-## Task Execution Contracts
+1. merge `L0` A0/A1,
+2. merge `L1` A2,
+3. merge `L2` A3,
+4. replay and merge `L3` A6 onto the accepted `L2` tree,
+5. create `L4` from the current authoritative tip,
+6. merge `L4` A4,
+7. run `P1` and `P2`.
 
-### `P0-parent-contract-freeze-and-run-init`
+Why this order is fixed:
 
-Primary owned surfaces:
+1. A0/A1 must land before any runtime fan-out.
+2. A2 is the shared launch-path split and must land before all later semantic work.
+3. A3 is the low-risk runtime lane after A2.
+4. A6 can draft in parallel after A2 but cannot merge before accepted runtime truth exists.
+5. A4 is the real merge-risk seam because it shares `crates/shell/src/execution/agents_cmd.rs` with A3.
+6. Creating `L4` only after `G3` eliminates fake parallelism and reduces rework.
 
-- [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md)
-- [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md)
-- `.runs/plan-gateway-mediated-llm-fulfillment/**`
+## Context-Control Rules
 
-Required actions:
+1. Every worker reads only the current accepted tree plus the parent-written task scope.
+2. Workers do not reopen the public contract.
+3. Workers do not reinterpret plan language; ambiguities escalate to the parent.
+4. Workers do not edit outside their lane ownership table.
+5. Workers do not write `.runs/**`, `PLAN.md`, or this controller.
+6. Workers do not create new helper abstractions that hide whether work is control-only or prompt-bearing.
+7. Workers keep changes small, phase-local, and ASCII unless the file already requires otherwise.
+8. Workers report blockers immediately instead of speculating around locked decisions.
+9. Parent resets context at each gate by writing accepted scope and current branch tip into the next task artifact.
+10. If a worker observes drift from `PLAN.md`, it returns blocked status instead of silently absorbing extra scope.
+11. If a worker receives a `HIGH` or `CRITICAL` GitNexus impact result, it stops, records the blast radius, and waits for explicit parent direction.
 
-1. Freeze the lifecycle contract, seam boundary, grep wall, validation wall, branch map, and lane ownership map from the current plan.
-2. Create `branch-map.json`, `lane-ownership.json`, `merge-order.json`, and `contract-freeze.json`.
-3. Record GitNexus freshness status and the concurrency contract.
-4. Create the gate and task directories and initial sentinels.
+## Worker Return Contract
 
-Verification commands:
+Every worker returns all of the following to the parent:
+
+1. branch name,
+2. head SHA,
+3. changed file list,
+4. concise summary of what changed,
+5. commands run,
+6. exit codes,
+7. tests run and results,
+8. grep gates run and results,
+9. GitNexus impact analysis summary for every edited symbol, including any elevated blast radius,
+10. GitNexus `detect_changes` output for the lane branch,
+11. unresolved blockers or uncertainties,
+12. explicit statement that no out-of-scope files were edited.
+
+Parent acceptance checklist for every worker:
+
+1. compare changed files against lane ownership,
+2. verify the branch tip is based on the expected authoritative parent tip,
+3. confirm GitNexus impact analysis was run before every edited symbol,
+4. escalate and explicitly accept or reject any `HIGH` or `CRITICAL` blast radius before merge,
+5. review for contract drift,
+6. transcribe `impact-analysis-summary.md` and `gitnexus-detect-changes.txt` into the task artifact root,
+7. review GitNexus `detect_changes` output for lane-scope drift,
+8. record artifacts in `.runs/**`,
+9. merge or quarantine,
+10. update gate state.
+
+## Validation Commands
+
+### A0 Dependency Floor Gates
 
 ```bash
-test -f /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md
-test -f /Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate branch --show-current
+rg -n "^\\[patch\\.crates-io\\]|unified-agent-api = \\{ path = " \
+  /home/azureuser/__Active_Code/atomize-hq/substrate/Cargo.toml
+
+rg -n "unified-agent-api|path\\+file:.*/unified-agent-api/crates/agent_api" \
+  /home/azureuser/__Active_Code/atomize-hq/substrate/Cargo.lock
+
+cargo tree -p shell | rg "unified-agent-api"
 ```
 
-Acceptance conditions:
+Expected result:
 
-1. No worker would need to guess scope, authority, or validation commands.
-2. `.runs/**` skeleton exists on paper with required artifacts and sentinel rules.
-3. Parent has recorded whether GitNexus freshness work is required before worker launch.
+1. no local patch override remains,
+2. no lockfile entry points at the neighboring checkout,
+3. the dependency still resolves.
 
-### `H1-host-fulfillment-cutover`
+### A2-A4 Static Control-Semantics Gates
 
-Primary owned surfaces or file families:
+```bash
+rg -n 'prompt: ""|NoPromptRecovery' \
+  /home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution \
+  /home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/repl \
+  /home/azureuser/__Active_Code/atomize-hq/substrate/crates/world-service/src
 
-- `crates/shell/src/execution/agent_runtime/**`
-- the narrowest necessary host-owned bootstrap metadata paths in `crates/shell/src/repl/async_repl.rs`
-- `crates/shell/tests/agent_public_control_surface_v1.rs`
-- `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
+rg -n 'agent_api.session.resume.v1' \
+  /home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution \
+  /home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/repl
 
-Required actions:
+rg -n 'continuity_uaa_session_id|parked_resumable|attached_participant_id' \
+  /home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agents_cmd.rs \
+  /home/azureuser/__Active_Code/atomize-hq/substrate/crates/shell/src/execution/agent_runtime
+```
 
-1. Replace the direct host prompt-bearing path so `submit_host_prompt_turn()` no longer builds a local authoritative gateway through `build_gateway_for_descriptor()`.
-2. Route host prompt-bearing execution through the gateway-mediated seam using the already-selected stable backend id and existing resume metadata.
-3. Remove shell-local `gateway` and `agent_kind` fields from host execution-state structures where they currently serve as runtime execution truth rather than routing metadata.
-4. Preserve host public meaning exactly:
-   - `start` uses the real user prompt as the first prompt,
-   - `turn` uses the real follow-up prompt,
-   - resume metadata still threads through execution,
-   - posture, completion, and trace publication semantics remain unchanged.
-5. Preserve failure buckets:
-   - invalid selection stays invalid selection,
-   - dependency unavailable stays dependency unavailable,
-   - policy denial stays policy denial.
+Expected result:
 
-Verification commands:
+1. no production `prompt: ""` or `NoPromptRecovery` path backs public `reattach` or `fork`,
+2. no public `fork` path routes through `agent_api.session.resume.v1`,
+3. successor normalization surfaces are explicit in the merged implementation.
+
+### Focused Test Gates
+
+Parent-resolved focused unit selectors:
+
+1. Resolve the exact focused unit selectors for `state_store.rs` attach-contract persistence coverage against the current tree at execution time.
+2. Resolve the exact focused unit selectors for `async_repl.rs` launch-path split coverage against the current tree at execution time.
+3. Record the exact selector strings the parent chose in the relevant task `commands.txt` before those checks run.
+4. Do not present placeholder filter strings as canonical if the repo's current test names differ.
+
+Candidate command shape only, to be refined by the parent at execution time:
+
+```bash
+cargo test -p shell <parent-resolved-state-store-selector> -- --nocapture
+cargo test -p shell <parent-resolved-async-repl-selector> -- --nocapture
+```
+
+Locked named suites from `PLAN.md`:
 
 ```bash
 cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
 cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
-rg -n "AgentWrapperGateway|CodexBackend|ClaudeCodeBackend" \
-  crates/shell/src/execution/agent_runtime \
-  crates/shell/src/repl
-```
-
-Acceptance conditions:
-
-1. No host prompt-bearing production path directly registers concrete backends above the gateway seam.
-2. Host `start` and host `turn` still behave the same from the CLI surface.
-3. Resume metadata still threads correctly through the new seam.
-4. Any `async_repl.rs` edits are narrow plumbing only and do not pre-empt `R1`.
-
-### `W1-world-fulfillment-cutover`
-
-Primary owned surfaces or file families:
-
-- `crates/world-service/src/member_runtime.rs`
-- `crates/world-service/src/service.rs`
-- `crates/world-service/src/lib.rs`
-- the narrowest required transport plumbing in `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-- `crates/shell/tests/repl_world_first_routing_v1.rs`
-- `crates/world-service/tests/streamed_execute_cancel_v1.rs`
-- `crates/world-service/tests/member_runtime_world_placement_v1.rs`
-
-Required actions:
-
-1. Replace both direct world execution call sites in member runtime:
-   - `launch()`
-   - `submit_turn()`
-2. Ensure both launch-time first turn and resumed follow-up traverse the same gateway-mediated fulfillment seam.
-3. Preserve the typed transport boundary exactly:
-   - launch-time world prompt still enters through `member_dispatch.initial_prompt`,
-   - resumed follow-up still enters through `MemberTurnSubmitRequestV1`,
-   - `/v1/member_turn/stream` remains unchanged.
-4. Preserve retained-member identity validation, world binding checks, participant/backend/world tuple validation, and detached-world fail-closed behavior.
-5. Keep member stream event translation and completion framing stable from the shell perspective.
-
-Verification commands:
-
-```bash
 cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
-cargo test -p world-service --test streamed_execute_cancel_v1 -- --nocapture
-cargo test -p world-service --test member_runtime_world_placement_v1 -- --nocapture
-rg -n "AgentWrapperGateway|CodexBackend|ClaudeCodeBackend|runtime_bootstrap_prompt" \
-  crates/world-service/src/member_runtime.rs
-```
-
-Acceptance conditions:
-
-1. World-member production execution no longer locally constructs wrappers or backends in the targeted surfaces.
-2. Launch-time first turn and resumed follow-up visibly use one fulfillment seam.
-3. Typed transport contracts remain unchanged.
-4. Retained-member invariants and detached-world fail-closed behavior still hold.
-
-### `R1-reconvergence-bootstrap-removal`
-
-Primary owned surfaces or file families:
-
-- `crates/shell/src/repl/async_repl.rs`
-- `crates/world-service/src/member_runtime.rs`
-- `crates/shell/tests/repl_world_first_routing_v1.rs`
-- `crates/shell/tests/support/repl_world_service.rs`
-
-Required actions:
-
-1. Delete or demote `runtime_bootstrap_prompt()` so it is no longer part of production prompt semantics.
-2. Ensure the first targeted world turn carries the real user prompt all the way to fulfillment.
-3. Remove shell-local authoritative gateway preparation in `async_repl.rs` when that state exists only to be discarded before real world-member execution.
-4. Update shared prompt-capture and routing assertions so the post-cutover runtime story settles in one lane.
-5. Harmonize any helper shapes introduced independently by `H1` and `W1` so the merged runtime story is singular and boring.
-
-Verification commands:
-
-```bash
-rg -n "runtime_bootstrap_prompt|Enter persistent Substrate world-scoped member mode" \
-  crates/world-service/src/member_runtime.rs \
-  crates/shell/src/repl \
-  crates/shell/tests \
-  crates/world-service/tests
-
-cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
-```
-
-Acceptance conditions:
-
-1. The first prompt-bearing execution is always the real user prompt.
-2. `async_repl.rs` no longer owns a discarded execution-time gateway for world members.
-3. Shared routing assertions prove the post-merge story end to end.
-4. `H1` and `W1` helper drift has been collapsed rather than layered.
-
-### `D1-doc-truth-sync`
-
-Primary owned surfaces or file families:
-
-- `llm-last-mile/28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md`
-- `AGENT_ORCHESTRATION_GAP_MATRIX.md`
-- `docs/contracts/substrate-gateway-runtime-parity.md`
-- `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-- `docs/USAGE.md`
-- `HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`
-- relevant descriptive ADR wording only if code evidence now exists and the ADR meaning stays unchanged
-
-Required actions:
-
-1. Update truth docs so they describe direct wrapper/backend registration as historical bypass behavior rather than steady-state architecture.
-2. Update the gap matrix so this seam is no longer described as outstanding once the code is landed.
-3. Keep ADR-0040, ADR-0041, and ADR-0047 stable in ownership and lifecycle meaning.
-4. Ensure usage text and truth docs reflect:
-   - start uses the real first prompt,
-   - turn uses the real follow-up prompt,
-   - `reattach` is recovery-only,
-   - gateway-mediated fulfillment is the production story for host and world prompt-bearing execution.
-
-Verification commands:
-
-```bash
-rg -n "AgentWrapperGateway|CodexBackend|ClaudeCodeBackend|runtime_bootstrap_prompt" \
-  llm-last-mile/28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md \
-  AGENT_ORCHESTRATION_GAP_MATRIX.md \
-  docs/contracts/substrate-gateway-runtime-parity.md \
-  docs/contracts/substrate-gateway-backend-adapter-protocol.md \
-  docs/USAGE.md \
-  HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md
-```
-
-Acceptance conditions:
-
-1. Live docs tell the same runtime story as the merged code.
-2. No truth doc implies the bypass is still intended steady-state behavior.
-3. ADR wording stays descriptive and does not reopen settled decisions.
-
-### `P1-parent-lane-integration`
-
-Primary owned surfaces:
-
-- authoritative branch `feat/gateway-mediated-llm-fulfillment`
-- `.runs/**`
-
-Required actions:
-
-1. Review worker handoffs against ownership boundaries and GitNexus scope evidence.
-2. Integrate lanes in the frozen order only:
-   - accept or reject `H1`
-   - accept or reject `W1`
-   - after both are accepted, launch and later integrate `R1`
-   - after `R1` is accepted, launch and later integrate `D1`
-3. For `H1` and `W1`, parent must review handoff evidence first, then diff file sets, then merge into `feat/gateway-mediated-llm-fulfillment`, then record the post-merge SHA.
-4. Replay or quarantine any lane that reopens a forbidden hotspot without approval.
-5. After every accepted lane merge, parent must update:
-   - `changed-files.txt`
-   - `commands.txt`
-   - `exit-codes.json`
-   - `gitnexus-detect-changes.txt`
-   - `handoff-notes.md`
-   - `summary.md`
-   - `HEAD_SHA.txt`
-6. Parent must update the active gate evidence immediately after each acceptance or rejection so the run log is reconstructable without external context.
-
-Verification commands:
-
-```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate status --short
-```
-
-Acceptance conditions:
-
-1. The authoritative branch contains exactly the accepted lane outputs.
-2. Any overlap is resolved by explicit replay or rejection, not silent manual blending.
-3. `.runs/**` reflects the real merge, replay, rejection, and quarantine history in order.
-
-### `P2-parent-validation-wall`
-
-Primary owned surfaces:
-
-- merged authoritative tree
-- `.runs/**`
-
-Required actions:
-
-1. Validate only the candidate SHA frozen at `G3`.
-2. Run the static seam-removal grep wall first.
-3. Run the focused runtime and auth continuity tests second.
-4. Run the workspace validation gates last.
-5. Record every command and exit code in execution order.
-6. Record environment blockers explicitly if any platform prerequisites are unavailable.
-7. Produce one reviewer-facing validation artifact naming:
-   - lifecycle invariants checked,
-   - host and world prompt-bearing scenarios checked,
-   - auth-bundle checks,
-   - static seam-removal checks.
-8. If any validation step fails, parent must stop the wall, record the failure point, and either reopen the relevant task or block the run. Parent must not continue to later validation stages as if the candidate were still clean.
-
-Verification commands:
-
-1. The exact grep, focused cargo, and workspace commands frozen in `Validation Wall`.
-
-Acceptance conditions:
-
-1. Validation is green or explicitly blocked by environment availability with no ambiguity about follow-up.
-2. The merged tree proves seam convergence and lifecycle stability together.
-3. Parent records exact commands, exit codes, evidence references, and follow-up disposition in `.runs/**`.
-
-### `P3-parent-closeout`
-
-Primary owned surfaces:
-
-- `.runs/**`
-- final authoritative branch state
-
-Required actions:
-
-1. Run final `mcp__gitnexus__.detect_changes()` on the merged tree.
-2. Confirm the changed scope matches the frozen plan and that no unexpected execution flows were pulled in during merge or replay.
-3. Write final parent-owned closeout artifacts in this order:
-   - update `run-state.json`
-   - update final task statuses
-   - update final gate statuses
-   - write `final-summary.md`
-   - write terminal sentinel
-4. If the run cannot close honestly, write `blocked.json` instead of `RUN_COMPLETE`.
-5. Parent must leave the run in exactly one terminal state and must not leave both closeout artifacts present.
-
-Verification commands:
-
-```bash
-git -C /Users/spensermcconnell/__Active_Code/atomize-hq/substrate status --short
-```
-
-Acceptance conditions:
-
-1. Final run-state artifacts match the actual merged result.
-2. Parent has recorded final scope verification and residual risks.
-3. The run ends with exactly one terminal sentinel:
-   - `RUN_COMPLETE`
-   - `RUN_BLOCKED`
-
-## Exact Lane Ownership Boundaries By Directories / Modules
-
-### Lane H: Host Ownership
-
-Owns these surfaces end to end:
-
-- `crates/shell/src/execution/agent_runtime/**`
-- host-owned metadata plumbing in `crates/shell/src/repl/async_repl.rs` only when unavoidable
-- `crates/shell/tests/agent_public_control_surface_v1.rs`
-- `crates/shell/tests/agent_successor_contract_ahcsitc0.rs`
-
-Lane H specifically owns:
-
-1. host first prompt gateway mediation,
-2. host follow-up prompt gateway mediation,
-3. removal of host-local authoritative backend-registration behavior,
-4. preservation of host lifecycle meanings and failure buckets.
-
-Lane H may not edit:
-
-- `crates/world-service/src/member_runtime.rs`
-- world-member tuple validation logic
-- `POST /v1/member_turn/stream` contract surfaces
-- docs and truth surfaces
-
-### Lane W: World Ownership
-
-Owns these surfaces end to end:
-
-- `crates/world-service/src/member_runtime.rs`
-- minimum required `crates/world-service/src/service.rs`
-- `crates/world-service/src/lib.rs`
-- minimal launch-time request plumbing in `crates/shell/src/execution/routing/dispatch/world_ops.rs`
-- `crates/shell/tests/repl_world_first_routing_v1.rs` only for world-routing assertions that do not pre-empt `R1`
-- `crates/world-service/tests/streamed_execute_cancel_v1.rs`
-- `crates/world-service/tests/member_runtime_world_placement_v1.rs`
-
-Lane W specifically owns:
-
-1. launch-time world first-turn cutover,
-2. resumed follow-up cutover,
-3. world-side gateway-mediated fulfillment seam convergence,
-4. retained-member validation preservation.
-
-Lane W may not edit:
-
-- host lifecycle semantics
-- host-only control tests
-- docs and truth surfaces
-- major `async_repl.rs` cleanup that belongs to `R1`
-
-### Lane R: Reconvergence Ownership
-
-Owns these surfaces after `G1`:
-
-- `crates/shell/src/repl/async_repl.rs`
-- final cleanup in `crates/world-service/src/member_runtime.rs`
-- `crates/shell/tests/repl_world_first_routing_v1.rs`
-- `crates/shell/tests/support/repl_world_service.rs`
-
-Lane R specifically owns:
-
-1. bootstrap prompt removal,
-2. removal of discarded shell-local authoritative gateway prep,
-3. final prompt-capture assertions for world first turn,
-4. harmonization of helper shapes created independently during `H1` and `W1`.
-
-Lane R may not edit:
-
-- docs
-- non-targeted public lifecycle semantics
-- typed world follow-up contract definitions
-
-### Lane D: Docs Ownership
-
-Owns these surfaces after `G2`:
-
-- `llm-last-mile/28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md`
-- `AGENT_ORCHESTRATION_GAP_MATRIX.md`
-- `docs/contracts/substrate-gateway-runtime-parity.md`
-- `docs/contracts/substrate-gateway-backend-adapter-protocol.md`
-- `docs/USAGE.md`
-- `HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`
-- relevant descriptive ADR wording only if required
-
-Lane D specifically owns:
-
-1. runtime-truth convergence,
-2. usage and operator guidance sync,
-3. gap-matrix completion wording,
-4. descriptive ADR sync that does not reopen decisions.
-
-Lane D may not edit:
-
-- code
-- tests
-- scripts
-- manifests
-
-### Hotspot No-Split List
-
-These surfaces must not be split across concurrent workers:
-
-1. `crates/shell/src/repl/async_repl.rs`
-2. shared prompt-capture assertions in `crates/shell/tests/repl_world_first_routing_v1.rs`
-3. any helper introduced to normalize host and world prompt-bearing inputs into the gateway seam
-4. any auth-bundle handoff logic under `crates/world-service/src/gateway_runtime.rs` or gateway server startup that would widen scope
-5. any file that redefines backend selection before execution begins
-
-## Merge / Integration Order
-
-Frozen integration order:
-
-1. `P0-parent-contract-freeze-and-run-init`
-2. `G0-parent-contract-freeze`
-3. parallel launch:
-   - `H1-host-fulfillment-cutover`
-   - `W1-world-fulfillment-cutover`
-4. `G1-host-world-accept-and-reconvergence-launch`
-5. `R1-reconvergence-bootstrap-removal`
-6. `G2-reconvergence-accept-and-doc-launch`
-7. `D1-doc-truth-sync`
-8. `G3-doc-accept-and-validation-launch`
-9. `P1-parent-lane-integration`
-10. `P2-parent-validation-wall`
-11. `G4-final-acceptance`
-12. `P3-parent-closeout`
-
-Integration rules:
-
-1. `H1` and `W1` must each merge into the authoritative branch before `R1` begins.
-2. Parent must diff the `H1` and `W1` file sets before acceptance. This is mandatory.
-3. Parent must merge `H1` first, then `W1`, unless the parent records a concrete reason to reverse them in `merge-order.json`. The default order is fixed because host lane scope is narrower and should settle first.
-4. If either `H1` or `W1` expands into the shared conflict zone without explicit approval, parent rejects that handoff and requires replay.
-5. `R1` must run on top of the accepted merged `H1` plus `W1` tree, not on one lane independently.
-6. `D1` must run on top of the accepted `R1` tree.
-7. Parent may not manually blend rejected worker fragments into the authoritative tree. Rejected lanes must replay as coherent passes.
-
-## Validation Wall
-
-Parent owns and runs the full validation wall on the merged tree only.
-
-### Grep Gates
-
-Zero-hit wall on the targeted production runtime surfaces:
-
-```bash
-rg -n "AgentWrapperGateway|CodexBackend|ClaudeCodeBackend" \
-  crates/shell/src/execution/agent_runtime \
-  crates/shell/src/repl \
-  crates/world-service/src/member_runtime.rs
-```
-
-Synthetic bootstrap prompt gate:
-
-```bash
-rg -n "runtime_bootstrap_prompt|Enter persistent Substrate world-scoped member mode" \
-  crates/world-service/src/member_runtime.rs \
-  crates/shell/src/repl \
-  crates/shell/tests \
-  crates/world-service/tests
-```
-
-Expected result after the slice:
-
-1. no production hits,
-2. any remaining hits must be in explicitly historical or non-production tests only.
-
-Positive guardrails that must still succeed:
-
-```bash
-rg -n "MemberTurnSubmitRequestV1|/v1/member_turn/stream|SUBSTRATE_LLM_AUTH_BUNDLE_FD" \
-  crates/shell \
-  crates/world-service \
-  crates/common \
-  crates/gateway \
-  docs
-```
-
-### Focused Cargo Gates
-
-```bash
-cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
-cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
-cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
-cargo test -p shell --test world_gateway -- --nocapture
-cargo test -p world-service --test streamed_execute_cancel_v1 -- --nocapture
-cargo test -p world-service --test member_runtime_world_placement_v1 -- --nocapture
-cargo test -p substrate-gateway --test openai_shared_parity -- --nocapture
+cargo test -p world-service -- --nocapture
 ```
 
 ### Full Workspace Gates
@@ -932,116 +617,71 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace -- --nocapture
 ```
 
-### Manual Validation Proof Points
+### Manual Proof Points
 
-Parent closeout must explicitly record proof of:
+Parent closeout must also record operator-legible proof for all of the following:
 
-1. host `start` uses the real user prompt as the first prompt-bearing execution,
-2. host `turn` uses the real user prompt as the follow-up prompt,
-3. world first targeted turn uses the real user prompt and not a bootstrap prompt,
-4. resumed world follow-up still travels through `/v1/member_turn/stream`,
-5. detached world follow-up still fails closed,
-6. gateway startup still consumes the FD auth bundle,
-7. runtime artifacts or traces provide evidence that fulfillment is gateway-mediated rather than shell-local or member-local wrapper construction.
+1. host `start` still submits the real first prompt,
+2. host `turn` still submits the real follow-up prompt,
+3. `reattach` restores the same durable session without submitting a prompt,
+4. `reattach` fails closed when continuity is absent,
+5. `fork` allocates a new durable session without submitting a prompt,
+6. the fork result is honest about parked successor posture,
+7. the successor does not retain the parent's continuity token,
+8. the successor preserves source lineage truth,
+9. the durable attach contract exists after host session birth and survives detach,
+10. detached-world follow-up still fails closed until host ownership returns,
+11. downstream slices 29/30/31 no longer describe blank-prompt control semantics as live architecture.
 
-## Blocked-Run Contract
+## Tests And Acceptance
 
-If the run blocks, parent writes:
+The acceptance wall is organized by area and each area must go green on the same merged tree:
 
-- `/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/.runs/plan-gateway-mediated-llm-fulfillment/blocked.json`
+1. Dependency floor:
+   - patch override removed,
+   - lockfile no longer points at the neighboring checkout,
+   - dependency resolution still works.
+2. Launch-path split:
+   - focused `async_repl.rs` and related launch-path coverage proves control-only attach, prompt-bearing turn launch, and successor allocation are separated.
+3. Reattach control-only truth:
+   - `agent_public_control_surface_v1` proves no-prompt reattach and fail-closed continuity behavior.
+4. Fork successor truth:
+   - `agent_successor_contract_ahcsitc0` plus related control checks prove successor normalization, honest posture, and no borrowed continuity token.
+5. Prompt-bearing invariants:
+   - `start`, `turn`, and world-member follow-up remain prompt-bearing and detached-world follow-up remains fail-closed.
+6. Docs and downstream sync:
+   - `docs/USAGE.md`, truth docs, ADR-0047, and slices 29/30/31 match the landed runtime architecture.
+7. Workspace health:
+   - grep gates, focused suites, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace -- --nocapture` all pass.
 
-Required fields:
+## Acceptance Criteria
 
-- `run_id`
-- `authoritative_branch`
-- `timestamp`
-- `current_task_id`
-- `gate_state`
-- `summary`
-- `stop_condition_id`
-- `worker_lane`
-- `blocking_files`
-- `accepted_outputs`
-- `quarantined_outputs`
-- `next_required_parent_action`
+The controller may close only if all of the following are true on the merged authoritative tree:
 
-Blocked-run rules:
-
-1. `blocked.json` is parent-written only.
-2. It is written exactly once at the stop point.
-3. No further worker launches occur after it is written.
-4. Existing worker outputs are either accepted and recorded or quarantined and named explicitly.
-
-## Context-Control Rules For Parent And Workers
-
-### Parent Rules
-
-1. Parent keeps the canonical run state in `.runs/**` only.
-2. Parent is the only actor allowed to reopen a gate or reinterpret the contract freeze.
-3. Parent must keep the locked decisions, grep wall, and no-split list visible in every worker brief.
-4. Parent owns all cross-lane rebases, merges, acceptance decisions, validation start, and closeout.
-5. Parent records GitNexus findings, handoffs, merge outcomes, validation commands, gate transitions, and final acceptance artifacts.
-6. Parent must be able to reconstruct the run from `.runs/**` alone without relying on chat history.
-
-### Worker Rules
-
-1. Read [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md), this controller, and only the lane-relevant files before editing.
-2. Do not widen scope beyond the lane boundary.
-3. Run GitNexus impact analysis before editing symbols in the owned lane.
-4. Stop and escalate on `HIGH` or `CRITICAL` impact.
-5. Do not write `.runs/**`.
-6. Do not edit [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md) or [ORCH_PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/ORCH_PLAN.md).
-7. Handoffs must include:
-   - changed files
-   - commands run
-   - exit codes
-   - GitNexus impact summary
-   - `mcp__gitnexus__.detect_changes()` output
-   - blockers or residual risks
-
-### Context Hygiene
-
-1. No worker loads broad unrelated surfaces just because the seam is cross-cutting.
-2. Lane H reads only host runtime files, host tests, and the smallest unavoidable bootstrap metadata surfaces.
-3. Lane W reads only world runtime files, world tests, and the typed launch/follow-up transport surfaces it owns.
-4. Lane R reads only the reconvergence conflict zone and shared routing assertions.
-5. Lane D reads only the named truth and usage documents.
-
-## Acceptance / Completion Criteria
-
-The run is complete only when all of the following are true on the merged tree:
-
-1. `P0`, `H1`, `W1`, `R1`, `D1`, `P1`, `P2`, and `P3` are accepted by the parent.
-2. The frozen contract in `.runs/**` still matches [PLAN.md](/Users/spensermcconnell/__Active_Code/atomize-hq/substrate/PLAN.md) exactly.
-3. The host/world parallel window happened only between `H1` and `W1`.
-4. `R1` happened only after both `H1` and `W1` were accepted.
-5. The production runtime grep wall is green in the targeted shell and world surfaces.
-6. Focused runtime and auth tests are green.
-7. Workspace validation gates are green or explicitly environment-blocked with evidence.
-8. Docs and truth surfaces match the merged code.
-9. No production bootstrap prompt remains.
-10. No production shell-local or member-local direct backend-registration table remains above the gateway seam in the targeted runtime files.
-11. Parent runs final `mcp__gitnexus__.detect_changes()` and confirms the changed scope matches the plan.
-12. Parent writes `final-summary.md` and marks `sentinels/RUN_COMPLETE`.
-
-## Task Acceptance Checklist
-
-| Task | Done means |
-| --- | --- |
-| `P0` | Lifecycle contract, seam boundary, grep wall, validation wall, branch map, lane ownership, and `.runs` artifact contract are frozen in parent-owned artifacts. |
-| `H1` | Host first prompt and follow-up prompt fulfill through the gateway seam, host lifecycle meaning is unchanged, and host-local direct backend registration is removed from owned production paths. |
-| `W1` | World launch-time first turn and resumed follow-up fulfill through the gateway seam, typed member transport is unchanged, and world-local direct backend registration is removed from owned production paths. |
-| `R1` | Production bootstrap prompt behavior is gone, `async_repl.rs` no longer prepares a discarded authoritative member gateway, and shared routing assertions prove the final runtime story. |
-| `D1` | Truth docs, usage text, and the gap matrix describe the same runtime story as the merged code and no longer present the bypass as intended architecture. |
-| `P1` | Parent has integrated accepted lane outputs in the frozen order and recorded the real merge history in `.runs/**`. |
-| `P2` | Grep, focused tests, auth checks, workspace gates, and manual proof points are executed and recorded against the merged validation candidate. |
-| `P3` | Final GitNexus scope verification, final summary, terminal sentinel, and residual-risk notes are written by the parent. |
+1. no `[patch.crates-io]` override remains,
+2. no live Substrate path treats public `reattach` as blank-prompt resume,
+3. no live Substrate path treats public `fork` as blank-prompt resume,
+4. runtime code clearly separates control-only attach, prompt-bearing turn launch, and successor allocation,
+5. `OrchestrationSessionRecord` persists the host attach contract,
+6. successor copies attach-contract shape but clears `continuity_uaa_session_id`,
+7. successor posture is `parked_resumable`,
+8. successor `attached_participant_id` is `null`,
+9. successor preserves source lineage truth,
+10. `start` and `turn` remain prompt-bearing only,
+11. detached-world follow-up remains fail-closed,
+12. no new public verb, schema, or policy surface exists,
+13. docs and downstream slices 29/30/31 tell the same story as the code,
+14. every edited symbol had GitNexus impact analysis recorded and any `HIGH` or `CRITICAL` result was explicitly parent-approved or blocked,
+15. the parent has reviewed worker `detect_changes` outputs and run a final merged-tree `detect_changes` pass before acceptance,
+16. focused tests, manual proof points, and full workspace gates pass,
+17. the parent has written closeout artifacts and `RUN_COMPLETE`.
 
 ## Assumptions
 
-1. The authoritative execution branch remains `feat/gateway-mediated-llm-fulfillment`.
-2. Fresh worker worktrees can be created under `/Users/spensermcconnell/__Active_Code/atomize-hq/.worktrees/`.
-3. GitNexus is available or can be refreshed before worker edits begin.
-4. The host/world split is honest only until the shared reconvergence zone. After that, the plan must serialize.
-5. The validation wall may depend on environment prerequisites already documented in the repo; if an environment is unavailable, parent records that explicitly rather than silently skipping it.
-6. This controller supersedes the stale UAA cleanup orchestration topic previously present in this file.
+1. `PLAN.md` remains the authoritative source for this slice throughout the run.
+2. The authoritative branch remains `feat/gateway-mediated-llm-fulfillment`.
+3. Published `unified-agent-api = "=0.3.5"` remains available during A0.
+4. Current paths under `/home/azureuser/__Active_Code/atomize-hq` remain stable for worktree creation.
+5. The doc and downstream packet paths named in `PLAN.md` still exist at launch time.
+6. The parent can refuse optional A4 parallelism and still satisfy schedule and scope.
+7. No follow-up slice work from 29, 30, or 31 is pulled into this controller beyond truth-sync wording.
