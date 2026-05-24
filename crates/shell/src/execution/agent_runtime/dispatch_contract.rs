@@ -471,6 +471,8 @@ fn resolve_inventory_projected_contract(
     validate_inventory_projected_candidate(&projected)?;
     validate_dispatch_overrides(envelope, projected.execution_scope)?;
     let effective_policy = resolve_inventory_effective_policy(base_policy, projected.policy_overlay.as_ref());
+    let (capabilities, capability_origins) =
+        resolve_inventory_capabilities(projected.capabilities.clone(), &envelope.capability_overrides)?;
     if !base_policy
         .agents_allowed_backends
         .iter()
@@ -546,6 +548,15 @@ fn resolve_inventory_projected_contract(
             },
         },
     );
+    for (field, value_origin) in capability_origins {
+        field_provenance.insert(
+            field,
+            FieldProvenance {
+                baseline_origin,
+                value_origin,
+            },
+        );
+    }
 
     let backend_kind = orchestrator_backend_kind(projected.agent_id.as_str()).map_err(|err| {
         DispatchResolutionError {
@@ -571,7 +582,7 @@ fn resolve_inventory_projected_contract(
             cli_mode: projected.cli_mode,
             cli_binary: projected.cli_binary,
         },
-        capabilities: projected.capabilities,
+        capabilities,
         attach_launch_knobs: envelope.attach_launch_knobs,
         effective_policy,
         baseline_source: BaselineSourceMetadata {
@@ -664,15 +675,138 @@ fn validate_dispatch_overrides(
         });
     }
 
-    if !envelope.capability_overrides.is_empty() {
-        return Err(DispatchResolutionError {
-            kind: DispatchResolutionErrorKind::OverrideNotSupportedForCaller,
-            field: "capability_overrides",
-            rejecting_layer: DispatchRejectingLayer::CallerContract,
-            reason: "dispatch-time capability overrides are frozen but not supported by the current caller surfaces in slice 29 foundation".to_string(),
-        });
+    validate_capability_override_shape(&envelope.capability_overrides)?;
+
+    Ok(())
+}
+
+fn validate_capability_override_shape(
+    overrides: &DispatchCapabilityOverrideSet,
+) -> Result<(), DispatchResolutionError> {
+    for (field, value) in [
+        ("session_start", overrides.session_start),
+        ("llm", overrides.llm),
+        ("mcp_client", overrides.mcp_client),
+    ] {
+        if value.is_some() {
+            return Err(DispatchResolutionError {
+                kind: DispatchResolutionErrorKind::OverrideNotSupportedForCaller,
+                field,
+                rejecting_layer: DispatchRejectingLayer::CallerContract,
+                reason: "dispatch-time capability override is unsupported for this field in slice 29.5; only session_resume, session_fork, session_stop, status_snapshot, and event_stream may narrow from true to false".to_string(),
+            });
+        }
     }
 
+    for (field, value) in [
+        ("session_resume", overrides.session_resume),
+        ("session_fork", overrides.session_fork),
+        ("session_stop", overrides.session_stop),
+        ("status_snapshot", overrides.status_snapshot),
+        ("event_stream", overrides.event_stream),
+    ] {
+        if value == Some(true) {
+            return Err(DispatchResolutionError {
+                kind: DispatchResolutionErrorKind::OverrideExceedsBaseline,
+                field,
+                rejecting_layer: DispatchRejectingLayer::CallerContract,
+                reason:
+                    "dispatch-time capability override must be narrowing-only; only true-to-false is supported in slice 29.5"
+                        .to_string(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn resolve_inventory_capabilities(
+    baseline: AgentCapabilitiesV1,
+    overrides: &DispatchCapabilityOverrideSet,
+) -> Result<(AgentCapabilitiesV1, BTreeMap<String, FieldValueOrigin>), DispatchResolutionError> {
+    let mut capabilities = baseline.clone();
+    let mut origins = BTreeMap::new();
+
+    origins.insert(
+        "session_start".to_string(),
+        FieldValueOrigin::InventoryExplicit,
+    );
+    origins.insert("llm".to_string(), FieldValueOrigin::InventoryExplicit);
+    origins.insert("mcp_client".to_string(), FieldValueOrigin::InventoryExplicit);
+
+    apply_supported_capability_override(
+        "session_resume",
+        baseline.session_resume,
+        overrides.session_resume,
+        &mut capabilities.session_resume,
+        &mut origins,
+    )?;
+    apply_supported_capability_override(
+        "session_fork",
+        baseline.session_fork,
+        overrides.session_fork,
+        &mut capabilities.session_fork,
+        &mut origins,
+    )?;
+    apply_supported_capability_override(
+        "session_stop",
+        baseline.session_stop,
+        overrides.session_stop,
+        &mut capabilities.session_stop,
+        &mut origins,
+    )?;
+    apply_supported_capability_override(
+        "status_snapshot",
+        baseline.status_snapshot,
+        overrides.status_snapshot,
+        &mut capabilities.status_snapshot,
+        &mut origins,
+    )?;
+    apply_supported_capability_override(
+        "event_stream",
+        baseline.event_stream,
+        overrides.event_stream,
+        &mut capabilities.event_stream,
+        &mut origins,
+    )?;
+
+    Ok((capabilities, origins))
+}
+
+fn apply_supported_capability_override(
+    field: &'static str,
+    baseline: bool,
+    override_value: Option<bool>,
+    target: &mut bool,
+    origins: &mut BTreeMap<String, FieldValueOrigin>,
+) -> Result<(), DispatchResolutionError> {
+    let value_origin = match override_value {
+        Some(false) if baseline => {
+            *target = false;
+            FieldValueOrigin::DispatchOverrideAccepted
+        }
+        Some(false) => {
+            return Err(DispatchResolutionError {
+                kind: DispatchResolutionErrorKind::OverrideExceedsBaseline,
+                field,
+                rejecting_layer: DispatchRejectingLayer::BaselineTruth,
+                reason: "dispatch-time capability override cannot narrow a baseline capability that is already false".to_string(),
+            });
+        }
+        Some(true) => {
+            return Err(DispatchResolutionError {
+                kind: DispatchResolutionErrorKind::OverrideExceedsBaseline,
+                field,
+                rejecting_layer: DispatchRejectingLayer::CallerContract,
+                reason:
+                    "dispatch-time capability override must be narrowing-only; only true-to-false is supported in slice 29.5"
+                        .to_string(),
+            });
+        }
+        None => FieldValueOrigin::InventoryExplicit,
+    };
+
+    origins.insert(field.to_string(), value_origin);
     Ok(())
 }
 
@@ -1179,5 +1313,160 @@ mod tests {
         assert!(error
             .to_string()
             .contains("policy rejected field 'backend_id'"));
+    }
+
+    #[test]
+    fn supported_capability_override_family_narrows_from_true_to_false() {
+        let cwd = PathBuf::from(".");
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry(
+                PathBuf::from("codex.yaml"),
+                "codex",
+                Some(AgentExecutionScope::Host),
+                Some(AgentCliMode::Persistent),
+                required_capabilities(),
+            ),
+        );
+        let policy = Policy {
+            agents_allowed_backends: vec!["cli:codex".to_string()],
+            ..Policy::default()
+        };
+        let config = SubstrateConfig::default();
+        let mut envelope = exact_backend_envelope(
+            DispatchCallerKind::HumanStart,
+            DispatchBaselineKind::InventoryLaunch,
+            "cli:codex",
+        );
+        envelope.capability_overrides.session_resume = Some(false);
+        envelope.capability_overrides.session_fork = Some(false);
+        envelope.capability_overrides.session_stop = Some(false);
+        envelope.capability_overrides.status_snapshot = Some(false);
+        envelope.capability_overrides.event_stream = Some(false);
+
+        let resolved = resolve_inventory_contract_for_exact_backend(
+            &cwd,
+            &config,
+            &inventory,
+            &policy,
+            &envelope,
+            AgentExecutionScope::Host,
+        )
+        .expect("resolution should succeed")
+        .expect("contract");
+
+        assert!(!resolved.capabilities.session_resume);
+        assert!(!resolved.capabilities.session_fork);
+        assert!(!resolved.capabilities.session_stop);
+        assert!(!resolved.capabilities.status_snapshot);
+        assert!(!resolved.capabilities.event_stream);
+        for field in [
+            "session_resume",
+            "session_fork",
+            "session_stop",
+            "status_snapshot",
+            "event_stream",
+        ] {
+            assert_eq!(
+                resolved
+                    .field_provenance
+                    .get(field)
+                    .expect("capability provenance")
+                    .value_origin,
+                FieldValueOrigin::DispatchOverrideAccepted
+            );
+        }
+    }
+
+    #[test]
+    fn unsupported_capability_override_fields_fail_closed_with_field_names() {
+        let cwd = PathBuf::from(".");
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry(
+                PathBuf::from("codex.yaml"),
+                "codex",
+                Some(AgentExecutionScope::Host),
+                Some(AgentCliMode::Persistent),
+                required_capabilities(),
+            ),
+        );
+        let policy = Policy {
+            agents_allowed_backends: vec!["cli:codex".to_string()],
+            ..Policy::default()
+        };
+        let config = SubstrateConfig::default();
+
+        for field in ["session_start", "llm", "mcp_client"] {
+            let mut envelope = exact_backend_envelope(
+                DispatchCallerKind::HumanStart,
+                DispatchBaselineKind::InventoryLaunch,
+                "cli:codex",
+            );
+            match field {
+                "session_start" => envelope.capability_overrides.session_start = Some(false),
+                "llm" => envelope.capability_overrides.llm = Some(false),
+                "mcp_client" => envelope.capability_overrides.mcp_client = Some(false),
+                _ => unreachable!(),
+            }
+
+            let error = resolve_inventory_contract_for_exact_backend(
+                &cwd,
+                &config,
+                &inventory,
+                &policy,
+                &envelope,
+                AgentExecutionScope::Host,
+            )
+            .expect_err("override must fail closed");
+
+            assert_eq!(error.field, field);
+            assert_eq!(
+                error.kind,
+                DispatchResolutionErrorKind::OverrideNotSupportedForCaller
+            );
+        }
+    }
+
+    #[test]
+    fn supported_capability_override_rejects_true_value() {
+        let cwd = PathBuf::from(".");
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry(
+                PathBuf::from("codex.yaml"),
+                "codex",
+                Some(AgentExecutionScope::Host),
+                Some(AgentCliMode::Persistent),
+                required_capabilities(),
+            ),
+        );
+        let policy = Policy {
+            agents_allowed_backends: vec!["cli:codex".to_string()],
+            ..Policy::default()
+        };
+        let config = SubstrateConfig::default();
+        let mut envelope = exact_backend_envelope(
+            DispatchCallerKind::HumanStart,
+            DispatchBaselineKind::InventoryLaunch,
+            "cli:codex",
+        );
+        envelope.capability_overrides.session_resume = Some(true);
+
+        let error = resolve_inventory_contract_for_exact_backend(
+            &cwd,
+            &config,
+            &inventory,
+            &policy,
+            &envelope,
+            AgentExecutionScope::Host,
+        )
+        .expect_err("override must fail closed");
+
+        assert_eq!(error.field, "session_resume");
+        assert_eq!(error.kind, DispatchResolutionErrorKind::OverrideExceedsBaseline);
     }
 }

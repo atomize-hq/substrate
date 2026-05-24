@@ -3581,6 +3581,87 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
+    fn resolve_public_control_target_respects_persisted_resume_narrowing() {
+        with_store(|store| {
+            let participant = detached_orchestrator("codex", "sess_resume_denied", "ash_detached");
+            let mut parent = parked_parent(&participant);
+            parent
+                .host_attach_contract
+                .as_mut()
+                .expect("durable contract")
+                .capabilities
+                .session_resume = false;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_control_target("sess_resume_denied", PublicControlAction::Resume)
+                .expect_err("resume must honor persisted capability narrowing");
+            assert!(err.to_string().contains("does not allow resume"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_respects_persisted_fork_narrowing() {
+        with_store(|store| {
+            let participant = detached_orchestrator("codex", "sess_fork_denied", "ash_detached");
+            let mut parent = parked_parent(&participant);
+            parent
+                .host_attach_contract
+                .as_mut()
+                .expect("durable contract")
+                .capabilities
+                .session_fork = false;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_control_target("sess_fork_denied", PublicControlAction::Fork)
+                .expect_err("fork must honor persisted capability narrowing");
+            assert!(err.to_string().contains("does not allow fork"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_respects_persisted_stop_narrowing() {
+        with_store(|store| {
+            let participant = detached_orchestrator("codex", "sess_stop_denied", "ash_detached");
+            let mut parent = parked_parent(&participant);
+            parent
+                .host_attach_contract
+                .as_mut()
+                .expect("durable contract")
+                .capabilities
+                .session_stop = false;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let err = store
+                .resolve_public_control_target("sess_stop_denied", PublicControlAction::Stop)
+                .expect_err("stop must honor persisted capability narrowing");
+            assert!(err.to_string().contains("does not allow stop"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn resolve_public_turn_target_reports_detached_posture_for_parked_host_session() {
         with_store(|store| {
             let participant = detached_orchestrator("codex", "sess_turn_parked", "ash_detached");
