@@ -294,6 +294,7 @@ pub(crate) struct ResolvedPublicTurnTarget {
     pub participant: AgentRuntimeParticipantRecord,
     pub target_kind: PublicTurnTargetKind,
     pub session_posture: PublicSessionPosture,
+    pub host_attach_contract: Option<HostAttachContract>,
 }
 
 impl ResolvedPublicTurnTarget {
@@ -815,11 +816,40 @@ impl AgentRuntimeStateStore {
                 orchestration_session_id
             );
         }
+        if matches!(action, PublicControlAction::Resume)
+            && host_attach_contract
+                .as_ref()
+                .is_some_and(|contract| !contract.supports_resume())
+        {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} durable host attach contract does not allow resume",
+                orchestration_session_id
+            );
+        }
+        if matches!(action, PublicControlAction::Fork)
+            && host_attach_contract
+                .as_ref()
+                .is_some_and(|contract| !contract.supports_fork())
+        {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} durable host attach contract does not allow fork",
+                orchestration_session_id
+            );
+        }
+        if matches!(action, PublicControlAction::Stop)
+            && host_attach_contract
+                .as_ref()
+                .is_some_and(|contract| !contract.supports_stop())
+        {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} durable host attach contract does not allow stop",
+                orchestration_session_id
+            );
+        }
         if action.requires_continuity_contract()
             && host_attach_contract
                 .as_ref()
-                .and_then(|contract| contract.continuity_uaa_session_id.as_deref())
-                .is_none()
+                .is_none_or(|contract| !contract.has_continuity_selector())
         {
             anyhow::bail!(
                 "owner_unreachable: orchestration session {} no longer has continuity required for control-only reattach",
@@ -935,11 +965,14 @@ impl AgentRuntimeStateStore {
             );
         }
 
+        let host_attach_contract = authoritative.session.host_attach_contract().cloned();
+
         Ok(ResolvedPublicTurnTarget {
             session: authoritative.session,
             participant: candidate.participant,
             target_kind: candidate.kind,
             session_posture: authoritative.session_posture,
+            host_attach_contract,
         })
     }
 
@@ -2329,6 +2362,7 @@ pub(crate) fn valid_detached_host_continuity_posture(
     participant: &AgentRuntimeParticipantRecord,
     require_internal_session_id: bool,
 ) -> Option<OrchestrationSessionPosture> {
+    let contract = session.host_attach_contract()?;
     if session.state.is_terminal() || !participant.handle.state.is_live() {
         return None;
     }
@@ -2344,7 +2378,10 @@ pub(crate) fn valid_detached_host_continuity_posture(
     if !participant.is_resume_eligible() {
         return None;
     }
-    if require_internal_session_id && participant.internal_uaa_session_id().is_none() {
+    if !contract.supports_resume() || !contract.supports_continuity_attach() {
+        return None;
+    }
+    if require_internal_session_id && !contract.has_continuity_selector() {
         return None;
     }
 
@@ -2365,6 +2402,9 @@ fn recoverable_stale_host_attachment(
     participant: &AgentRuntimeParticipantRecord,
     require_internal_session_id: bool,
 ) -> bool {
+    let Some(contract) = session.host_attach_contract() else {
+        return false;
+    };
     if session.state.is_terminal() || !participant.handle.state.is_live() {
         return false;
     }
@@ -2385,6 +2425,9 @@ fn recoverable_stale_host_attachment(
     if owner_process_is_alive(participant) || !participant.is_resume_eligible() {
         return false;
     }
+    if !contract.supports_resume() || !contract.supports_continuity_attach() {
+        return false;
+    }
     if record.participants.iter().any(|candidate| {
         candidate.participant_id() != participant.participant_id()
             && candidate.matches_public_parent_linkage(session)
@@ -2396,7 +2439,7 @@ fn recoverable_stale_host_attachment(
         return false;
     }
 
-    !require_internal_session_id || participant.internal_uaa_session_id().is_some()
+    !require_internal_session_id || contract.has_continuity_selector()
 }
 
 fn session_authoritative_participant_id(session: &OrchestrationSessionRecord) -> Option<&str> {
@@ -3498,6 +3541,41 @@ mod tests {
                 fork_target.host_attach_contract.is_some(),
                 "fork must still require the durable host attach contract"
             );
+            assert!(fork_target
+                .host_attach_contract
+                .as_ref()
+                .expect("durable contract")
+                .supports_fork());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_control_target_uses_persisted_continuity_truth() {
+        with_store(|store| {
+            let participant =
+                detached_orchestrator("codex", "sess_persisted_resume", "ash_detached");
+            let parent = active_parent(&participant);
+            let mut participant = participant;
+            participant.internal.uaa_session_id = None;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let target = store
+                .resolve_public_control_target("sess_persisted_resume", PublicControlAction::Resume)
+                .expect("persisted contract continuity should remain authoritative");
+            assert_eq!(
+                target
+                    .host_attach_contract
+                    .as_ref()
+                    .and_then(|contract| contract.continuity_uaa_session_id.as_deref()),
+                Some("uaa_session")
+            );
         });
     }
 
@@ -3521,6 +3599,41 @@ mod tests {
             assert_eq!(
                 target.session_posture,
                 PublicSessionPosture::DetachedReattachable
+            );
+            assert!(target.host_attach_contract.is_some());
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn resolve_public_turn_target_uses_persisted_continuity_truth() {
+        with_store(|store| {
+            let participant = detached_orchestrator("codex", "sess_turn_persisted", "ash_detached");
+            let mut parent = active_parent(&participant);
+            parent.mark_parked_resumable("owner detached cleanly");
+            let mut participant = participant;
+            participant.internal.uaa_session_id = None;
+
+            store
+                .persist_orchestration_session(&parent)
+                .expect("persist parent");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let target = store
+                .resolve_public_turn_target("sess_turn_persisted", "cli:codex")
+                .expect("persisted contract continuity should keep detached posture");
+            assert_eq!(
+                target.session_posture,
+                PublicSessionPosture::DetachedReattachable
+            );
+            assert_eq!(
+                target
+                    .host_attach_contract
+                    .as_ref()
+                    .and_then(|contract| contract.continuity_uaa_session_id.as_deref()),
+                Some("uaa_session")
             );
         });
     }
@@ -3686,6 +3799,55 @@ mod tests {
                 .load_session("sess_bad_detached")
                 .expect_err("invalid detached posture must fail closed during load");
             assert!(loaded.to_string().contains("invalid session record"));
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn load_session_backfills_generalized_attach_contract_defaults_for_legacy_json() {
+        with_store(|store| {
+            let participant = live_orchestrator("codex", "sess_legacy_attach", "ash_selected");
+            let parent = active_parent(&participant);
+            let mut payload = serde_json::to_value(&parent).expect("serialize session");
+            let contract = payload
+                .get_mut("host_attach_contract")
+                .and_then(Value::as_object_mut)
+                .expect("host attach contract");
+            contract.remove("capabilities");
+            contract.remove("attach_launch_knobs");
+
+            fs::create_dir_all(store.sessions_dir()).expect("create sessions dir");
+            fs::create_dir_all(store.canonical_session_dir("sess_legacy_attach"))
+                .expect("create canonical session dir");
+            fs::write(
+                store.orchestration_session_path("sess_legacy_attach"),
+                serde_json::to_vec_pretty(&payload).expect("serialize legacy flat session"),
+            )
+            .expect("write legacy flat session");
+            fs::write(
+                store.canonical_session_path("sess_legacy_attach"),
+                serde_json::to_vec_pretty(&payload).expect("serialize legacy canonical session"),
+            )
+            .expect("write legacy canonical session");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            let loaded = store
+                .load_session("sess_legacy_attach")
+                .expect("load legacy session")
+                .expect("legacy session exists");
+            let contract = loaded
+                .session
+                .host_attach_contract()
+                .expect("generalized attach contract");
+            assert!(contract.capabilities.session_resume);
+            assert!(contract.capabilities.session_fork);
+            assert!(contract.capabilities.session_stop);
+            assert_eq!(
+                contract.attach_launch_knobs.requested_execution_scope,
+                AgentExecutionScope::Host
+            );
         });
     }
 

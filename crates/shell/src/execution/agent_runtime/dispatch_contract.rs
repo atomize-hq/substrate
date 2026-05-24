@@ -838,6 +838,10 @@ mod tests {
                 execution_scope: AgentExecutionScope::Host,
                 binary_path: "cargo".to_string(),
             },
+            capabilities:
+                crate::execution::agent_runtime::orchestration_session::HostAttachCapabilities::default(),
+            attach_launch_knobs:
+                crate::execution::agent_runtime::orchestration_session::HostAttachLaunchKnobs::default(),
             continuity_uaa_session_id: Some("uaa_123".to_string()),
         };
 
