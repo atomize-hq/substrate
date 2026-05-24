@@ -1,57 +1,67 @@
-# PLAN: Explicit Control-Only Session Recovery And Host-Rooted World-Start Alignment
+# PLAN: Shared Agent Dispatch Envelope And Capability Override Contract
 
-Source SOW: [28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md](llm-last-mile/28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md)  
-Primary truth anchors: [docs/USAGE.md](docs/USAGE.md), [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md), [ADR-0047](docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)  
-Primary code anchors: [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs), [crates/shell/src/execution/agent_runtime/control.rs](crates/shell/src/execution/agent_runtime/control.rs), [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs), [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs), [crates/shell/src/repl/async_repl.rs](crates/shell/src/repl/async_repl.rs), [crates/world-service/src/member_runtime.rs](crates/world-service/src/member_runtime.rs)  
-Adjacent slices: [28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md](llm-last-mile/28-gateway-mediated-llm-fulfillment-without-lifecycle-regression.md), [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md), [30-public-world-scoped-agent-start-and-capability-flags.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md), [31-lazy-host-attach-for-host-rooted-world-start.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md)  
+Source SOW: [29-shared-agent-dispatch-envelope-and-capability-override-contract.md](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md)  
+Primary truth anchors: [ADR-0027](docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md), [ADR-0025](docs/project_management/adrs/draft/ADR-0025-agent-hub-core-role-swappable.md), [ADR-0026](docs/project_management/adrs/draft/ADR-0026-orchestration-toolbox-mcp.md)  
+Primary code anchors: [crates/shell/src/execution/agent_inventory.rs](crates/shell/src/execution/agent_inventory.rs), [crates/shell/src/execution/agent_runtime/validator.rs](crates/shell/src/execution/agent_runtime/validator.rs), [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs), [crates/shell/src/execution/agent_runtime/control.rs](crates/shell/src/execution/agent_runtime/control.rs), [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs), [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs), [crates/shell/src/repl/async_repl.rs](crates/shell/src/repl/async_repl.rs), [crates/shell/src/execution/prompt_fulfillment.rs](crates/shell/src/execution/prompt_fulfillment.rs)  
+Adjacent slices: [28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md](llm-last-mile/28.5-explicit-control-only-session-recovery-and-host-rooted-world-start-alignment.md), [30-public-world-scoped-agent-start-and-capability-flags.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md), [31-lazy-host-attach-for-host-rooted-world-start.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md)  
 Execution branch: `feat/gateway-mediated-llm-fulfillment`  
 Base branch: `main`  
-Plan type: control-plane seam split and downstream architecture freeze  
+Plan type: shared contract-definition and runtime convergence slice  
 Review posture: unified execution plan tightened to `/autoplan` and `/plan-eng-review` rigor  
 Status: implementation-ready planning pass on 2026-05-24
 
 ## Objective
 
-Make Substrate's public control contract truthful by removing the hidden owner-helper convergence that currently uses blank-prompt UAA resume semantics as the implementation substrate for `reattach` and `fork`.
+Land one internal dispatch contract that every launch surface can trust.
 
-This slice is complete only when all of the following are true:
+This slice is complete only when the repo has one deterministic, explanation-ready resolution path that:
 
-1. `start` and `turn` remain the only public prompt-bearing verbs.
-2. `reattach` is implemented as a Substrate-owned control-only attach action, not as public blank-prompt resume semantics.
-3. `fork` is implemented as a Substrate-owned successor durable-session allocator, not as a disguised backend resume path.
-4. each durable host orchestration session persists the minimum host attach contract required for later attach without guessing from the currently active participant,
-5. the runtime clearly separates control-only attach, prompt-bearing turn launch, and successor allocation,
-6. the downstream stack is frozen to one architecture:
-   - host-rooted durable orchestration authority,
-   - persisted host attach contract,
-   - world workers under that authority,
-   - lazy host attach later without synthetic prompts.
+1. starts from effective inventory truth for new launches,
+2. starts from persisted attach truth for attach/fork flows,
+3. accepts only explicitly supported dispatch-time overrides,
+4. applies policy as narrowing-only,
+5. produces one resolved launch contract for runtime execution,
+6. derives one generalized persisted host attach contract from that resolved contract,
+7. is consumed by human launch surfaces and orchestrator-controlled dispatch surfaces without caller-specific semantics drift.
 
-This is a control-plane correction and architecture freeze. It is not a gateway redesign, not a public lifecycle expansion, and not a UAA contract standardization project.
+This is a contract slice. It is not a public CLI expansion slice, not a world-root architecture debate, and not a generic "add capability flags everywhere" cleanup.
 
 ## Acceptance Criteria
 
 This plan is only done when all of the following are true in code, tests, and docs:
 
-1. the workspace no longer resolves `unified-agent-api` through the local `[patch.crates-io]` override in [Cargo.toml](Cargo.toml),
-2. no live Substrate path treats public `reattach` as `agent_api.session.resume.v1` plus `prompt: ""`,
-3. no live Substrate path treats public `fork` as `agent_api.session.resume.v1` plus `prompt: ""`,
-4. the runtime has explicit internal separation between:
-   - control-only attach,
-   - prompt-bearing resumed turn launch,
-   - successor durable-session allocation,
-5. [OrchestrationSessionRecord](crates/shell/src/execution/agent_runtime/orchestration_session.rs) persists a host attach contract that survives detach and is copied forward with successor-safe normalization,
-6. public `fork` returns honest successor truth:
-   - new orchestration session id,
-   - copied attach contract shape,
-   - `continuity_uaa_session_id = None` on the successor,
-   - `attached_participant_id = null`,
-   - `posture = parked_resumable`,
-   - no synthetic prompt submission,
-7. host `start` and host `turn` remain prompt-bearing,
-8. Linux world-member follow-up keeps the existing typed `MemberTurnSubmitRequestV1` plus `/v1/member_turn/stream` contract and still requires a non-empty prompt,
-9. detached-world follow-up remains fail-closed until valid host ownership is restored,
-10. [docs/USAGE.md](docs/USAGE.md), [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md), [ADR-0047](docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md), and slices 29/30/31 all tell the same story.
+1. one internal `DispatchRequestEnvelope`-style shape exists and becomes the only entrypoint for launch resolution;
+2. one internal `ResolvedLaunchContract`-style shape exists and becomes the only source of truth for:
+   - host prompt-bearing launch,
+   - detached host attach planning,
+   - successor attach-contract persistence,
+   - orchestrator-controlled world-member dispatch planning;
+3. inventory remains the baseline truth for new launches:
+   - workspace inventory still overrides global inventory,
+   - effective config still backfills omitted inventory fields,
+   - embedded inventory `policy_overlay` still validates as restriction-only;
+4. persisted `HostAttachContract` truth remains the baseline for reattach/fork and detached-turn attach planning;
+5. supported override families are explicit and fail closed when unknown or disallowed;
+6. policy narrowing is explicit and auditable:
+   - no silent coercion,
+   - no "close enough" fallback,
+   - no broadening through dispatch overrides;
+7. `HostAttachContract` is derived from the resolved host launch contract, not reconstructed from ambient participant state;
+8. equivalent human and orchestrator-controlled requests produce equivalent resolved contracts when they start from equivalent baseline truth;
+9. docs explain:
+   - baseline sources,
+   - merge precedence,
+   - supported override families,
+   - denial taxonomy,
+   - persisted attach truth,
+   - downstream dependencies for slices 30 and 31;
+10. targeted tests prove:
+    - baseline inventory resolution,
+    - persisted attach resolution,
+    - override acceptance and denial,
+    - attach-contract generalization,
+    - caller parity,
+    - truthful diagnostics and fail-closed behavior.
 
 ## Locked Decisions
 
@@ -59,791 +69,742 @@ These decisions are already made. Implementation does not reopen them.
 
 | Topic | Locked decision | Why |
 | --- | --- | --- |
-| Public prompt verbs | `start` and `turn` stay the only prompt-bearing public verbs | The operator contract is already frozen there |
-| Public `reattach` | Recovery only, no prompt | Public recovery must be control-only |
-| Public `fork` | Allocate successor durable session first, do not synthesize a backend turn | Successor allocation is Substrate lifecycle work |
-| UAA forward role | UAA stays prompt-bearing for real prompt execution only | Blank prompt is not durable contract meaning |
-| World follow-up seam | Keep `MemberTurnSubmitRequestV1` and `/v1/member_turn/stream` | That contract is already landed and proven |
-| Durable authority | Orchestration session remains the authority, not the currently attached backend process | Existing truth docs already commit to that model |
-| Reattach attach mode in this slice | `reattach` is continuity-only in this slice; missing continuity fails closed | Fresh attach is a later slice 31 concern, not part of this correction |
-| Successor continuity token | Successors inherit the attach contract shape but not the parent's live `continuity_uaa_session_id` | One backend-native continuity token cannot be dual-owned by source and successor durable sessions |
-| Successor posture | Successful public `fork` returns `parked_resumable` with `attached_participant_id = null` | A successor that has not attached a host client must not claim active attachment |
-| World-scoped root future | `--scope world` remains host-rooted only in the downstream stack | Standalone world-root continuity is not the chosen direction |
-| Scope boundary | 29 generalizes the attach contract, 30 adds public world-root start, 31 adds lazy attach | This slice must freeze their inputs, not absorb their work |
+| Baseline truth for new launch | Effective inventory plus effective config remains the source of default backend identity, scope, CLI mode, capabilities, and embedded restriction-only policy overlays | The repo already models backend truth there; a second baseline would rot immediately |
+| Baseline truth for attach/fork | Persisted `HostAttachContract` remains the source of exact host attach truth for reattach, detached-turn attach planning, and successor-copy behavior | Reconstructing attach truth from live participant state is exactly the drift 28.5 was meant to stop |
+| Runtime descriptor role | `RuntimeSelectionDescriptor` and `ResolvedRuntimeDescriptor` stay low-level runtime materialization artifacts | They are not rich enough to be the top-level policy and override contract |
+| Policy posture | Policy remains narrowing-only and fail-closed | ADR-0027 and existing inventory overlay validation already commit to that contract |
+| Caller parity | Human CLI and orchestrator-controlled dispatch must resolve through the same contract module | Two launch dialects guarantees downstream drift in 30 and 31 |
+| Persisted attach truth | `HostAttachContract` remains the durable attach object, but its payload is generalized from the resolved contract | Minimal diff, stable naming, no need for a second durable concept |
+| Public prompt verbs | `PublicPromptCommandRequest` stays a prompt-bearing transport shape, not the shared launch envelope | Mixing operator input transport with internal contract semantics is how hidden bootstrap behavior comes back |
+| World-root direction | `--scope world` remains future host-rooted orchestration plus world worker, not standalone world-root continuity | 30 and 31 already depend on that decision |
+| Wire contracts | Existing typed world-member follow-up transport stays intact unless this slice proves a missing field cannot be represented without additive change | Minimal diff and proven Linux-first behavior matter more than elegance |
 
 ## Scope
 
 ### In scope
 
-1. remove the local crates.io patch override for `unified-agent-api` and prove Substrate no longer depends on the neighboring promptless branch,
-2. split the hidden owner-helper convergence into explicit Substrate-owned control and prompt paths,
-3. introduce the minimal persisted host attach contract under durable session state,
-4. implement control-only `reattach` as a Substrate attach action,
-5. rework public `fork` into successor durable-session allocation with honest detached truth,
-6. preserve prompt-bearing `start` and `turn` behavior without widening any public prompt semantics,
-7. align docs and downstream slices 29/30/31 to the validated architecture,
-8. add regression coverage that proves no blank-prompt control semantics remain in live Substrate runtime code.
+1. define one shared internal dispatch request envelope;
+2. define one resolved launch contract with exact provenance and denial semantics;
+3. define the supported override taxonomy for this stage;
+4. implement one merge order across inventory defaults, persisted attach truth, dispatch overrides, and policy restrictions;
+5. generalize the persisted host attach contract from that resolved host contract;
+6. route both human launch surfaces and orchestrator-controlled dispatch surfaces through the same resolver or the same persisted resolved-truth subset;
+7. publish exact denial and narrowing behavior in docs and tests.
 
-### NOT in scope
+### Out of scope
 
-This slice explicitly does not include:
+1. public `substrate agent start --scope world` shipping;
+2. lazy host attach behavior;
+3. automatic attach-worker launch from pending work;
+4. public capability-flag UX design beyond reserving the internal contract;
+5. inventing a new crate or a second runtime subsystem;
+6. replacing the existing world-member dispatch wire contract unless additive fields are proven necessary;
+7. moving the orchestrator in-world;
+8. broadening policy semantics to allow dispatch-time privilege escalation.
 
-1. reopening SOW 28 gateway-mediated prompt fulfillment decisions,
-2. inventing a new public UAA control-only API,
-3. public world-root `start` shipping in this slice,
-4. lazy host attach shipping in this slice,
-5. standalone world-root continuity,
-6. public inbox workflow expansion or auto-resume semantics,
-7. new backend selector grammar, new policy surface, or new capability flags,
-8. moving durable authority into the world or making world participants public control authorities.
+## Scope Challenge
 
-## Step 0: Scope Challenge
+### What already exists and must be reused
 
-### What already exists
-
-| Sub-problem | Existing code or contract | Reuse decision |
+| Area | Existing code or contract | Reuse decision |
 | --- | --- | --- |
-| Public prompt-taking host lifecycle | [run_start(...)](crates/shell/src/execution/agents_cmd.rs), [run_turn(...)](crates/shell/src/execution/agents_cmd.rs), [run_public_prompt_command(...)](crates/shell/src/execution/agent_runtime/control.rs) | Reuse exactly. Do not widen prompt semantics. |
-| Public control target resolution | [resolve_public_control_target(...)](crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse as the authoritative control selector seam. |
-| Public turn target resolution | [resolve_public_turn_target(...)](crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse exactly. Detached host continuity and world-member routing rules stay intact. |
-| Public world follow-up transport | [MemberTurnSubmitRequestV1](crates/transport-api-types/src/lib.rs), [crates/world-service/src/member_runtime.rs](crates/world-service/src/member_runtime.rs), [crates/world-service/src/service.rs](crates/world-service/src/service.rs) | Reuse exactly. This seam is frozen. |
-| Durable orchestration posture truth | [OrchestrationSessionRecord](crates/shell/src/execution/agent_runtime/orchestration_session.rs) and posture helpers in [state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse and extend. Do not add a second durable truth model. |
-| Current runtime descriptor snapshot | [ResolvedRuntimeDescriptor](crates/shell/src/execution/agent_runtime/control.rs) | Reuse as the baseline launch descriptor payload for the attach contract. |
-| Current continuity selector | `internal_uaa_session_id` on retained participants and launch plans | Reuse as private continuity state, but stop treating it as the public contract itself. |
-| Existing lifecycle contract docs | [docs/USAGE.md](docs/USAGE.md), [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md), [ADR-0047](docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md) | Reuse as the public truth floor and sync them together. |
+| Effective inventory resolution | [`load_effective_agent_inventory(...)`](crates/shell/src/execution/agent_inventory.rs), [`AgentFileV1::effective_scope(...)`](crates/shell/src/execution/agent_inventory.rs), [`AgentFileV1::effective_cli_mode(...)`](crates/shell/src/execution/agent_inventory.rs) | Reuse exactly. This is the baseline truth layer for new launches. |
+| Gateway/backend identity from inventory | [`resolve_gateway_backend_inventory_entry(...)`](crates/shell/src/execution/agent_inventory.rs) | Reuse the inventory semantics, but move launch ownership above it into the shared resolver. |
+| Runtime realizability checks | [`validate_runtime_realizability(...)`](crates/shell/src/execution/agent_runtime/validator.rs), [`validate_exact_backend_selection(...)`](crates/shell/src/execution/agent_runtime/validator.rs), [`validate_member_selection(...)`](crates/shell/src/execution/agent_runtime/validator.rs) | Reuse, but demote them to materialization and selection helpers under the shared contract. |
+| Human prompt-bearing start/turn | [`run_start(...)`](crates/shell/src/execution/agents_cmd.rs), [`run_turn(...)`](crates/shell/src/execution/agents_cmd.rs), [`run_public_prompt_command(...)`](crates/shell/src/execution/agent_runtime/control.rs) | Reuse transport and prompt streaming. Replace ad hoc launch planning only. |
+| Durable attach seam | [`HostAttachContract`](crates/shell/src/execution/agent_runtime/orchestration_session.rs), [`sync_host_attach_contract(...)`](crates/shell/src/execution/agent_runtime/orchestration_session.rs), [`fork_successor_attach_contract(...)`](crates/shell/src/execution/agent_runtime/orchestration_session.rs) | Reuse the durable seam and generalize its payload. Do not create a second persisted object. |
+| Detached control targeting | [`resolve_public_control_target(...)`](crates/shell/src/execution/agent_runtime/state_store.rs), [`resolve_public_turn_target(...)`](crates/shell/src/execution/agent_runtime/state_store.rs) | Reuse exact-session and posture checks. Do not let the new contract weaken them. |
+| Attach execution path | [`build_attach_launch_plan(...)`](crates/shell/src/execution/agents_cmd.rs), [`PromptFulfillmentBridge::run_attach_control(...)`](crates/shell/src/execution/prompt_fulfillment.rs) | Reuse, but source the launch descriptor from persisted resolved truth instead of ambient state reconstruction. |
+| Orchestrator-controlled member dispatch | [`build_member_dispatch_transport_request(...)`](crates/shell/src/repl/async_repl.rs), [`MemberDispatchTransportRequest`](crates/shell/src/execution/routing/dispatch/world_ops.rs) | Reuse the typed transport. Feed it from the shared resolver instead of bespoke prepared-runtime assumptions. |
+| Existing proof floor | [`agent_public_control_surface_v1.rs`](crates/shell/tests/agent_public_control_surface_v1.rs), [`repl_world_first_routing_v1.rs`](crates/shell/tests/repl_world_first_routing_v1.rs), state-store tests in [`state_store.rs`](crates/shell/src/execution/agent_runtime/state_store.rs), orchestration-session tests in [`orchestration_session.rs`](crates/shell/src/execution/agent_runtime/orchestration_session.rs) | Reuse and extend. Do not create a second test harness for a contract slice. |
+
+### Exact gap being closed
+
+The repo already has:
+
+1. effective inventory truth,
+2. runtime selection/materialization helpers,
+3. durable host attach persistence,
+4. exact-session control semantics,
+5. typed world-member dispatch transport.
+
+What it does not have is one caller-neutral contract above those seams.
+
+Right now the shape is fragmented:
+
+1. `PublicPromptCommandRequest` models prompt-bearing human commands, not shared launch semantics;
+2. `HiddenOwnerHelperLaunchPlan` models owner-helper startup, not caller-neutral resolution;
+3. `MemberDispatchTransportRequest` models typed world-member transport, not shared dispatch intent;
+4. `RuntimeSelectionDescriptor` models runtime-realizable selection, not inventory plus override plus policy provenance;
+5. `HostAttachContract` persists exact host launch truth, but not a first-class resolved contract vocabulary that later slices can extend safely.
+
+Slice 30 needs public world-scoped start to use the same scope/capability/attach semantics.  
+Slice 31 needs continuity attach and fresh attach to use the same persisted truth.  
+If 29 does not freeze the contract now, 30 and 31 will each invent partial semantics and "align later." That is exactly the failure this slice exists to prevent.
 
 ### Minimum honest change
 
-The minimum honest implementation is still cross-cutting:
+The minimum honest implementation is:
 
-1. remove the local UAA patch override first so this slice proves it does not depend on unmerged promptless behavior,
-2. persist a real host attach contract on the durable session,
-3. split control-only attach from prompt-bearing turn launch,
-4. make `fork` allocate successor durable truth without performing a synthetic prompt-free backend turn,
-5. normalize successor attach state explicitly:
-   - copy reusable attach-contract fields,
-   - clear successor `continuity_uaa_session_id`,
-   - leave source continuity ownership unchanged,
-6. prove the behavior with targeted lifecycle, state-store, public-control, and world-member regression coverage,
-7. rewrite the downstream SOW stack so no later plan assumes blank-prompt control semantics are still available.
+1. add one internal dispatch contract module;
+2. define one explicit baseline model for inventory-backed launches and one explicit baseline mode for persisted-attach-backed launches;
+3. define supported override families and denial rules explicitly;
+4. produce one resolved contract with provenance and one denial taxonomy;
+5. derive the generalized host attach contract from that resolved contract;
+6. route current human and orchestrator-controlled call sites through it or through the persisted subset it already wrote;
+7. prove parity and fail-closed behavior with targeted tests.
 
-Anything smaller keeps the repo in its current contradictory state: the docs already say Substrate owns durable lifecycle truth, but the implementation still smuggles control work through prompt-shaped UAA semantics.
+Anything smaller keeps the branch in its current state where multiple launch shapes all look "obviously right" but disagree on who owns defaults, narrowing, and attach truth.
 
-### Complexity check
+### Complexity and fit
 
-This slice touches more than eight files and crosses shell runtime, durable state, tests, and docs. That is acceptable because the current contradiction already spans those layers.
+This slice is not small:
 
-The smell to avoid is not "touching many files." The smell to avoid is adding new architecture while fixing the old architecture. The plan must stay boring:
+1. it will touch persistent state, CLI entrypoints, runtime realization, and REPL-controlled world dispatch;
+2. it will add one new internal module and update multiple high-consequence seams;
+3. it will require additive session-state changes plus caller-parity tests.
 
-1. no new public verb,
-2. no new transport schema,
-3. no new policy or config surface,
-4. no second durable-session model,
-5. no new synthetic bootstrap prompt path,
-6. no new helper abstraction that hides whether work is control-only or prompt-bearing.
+It is still the correct scope because the alternative is worse:
 
-### Search and reuse conclusion
+1. letting 30 invent a CLI-only capability model;
+2. letting 31 invent a lazy-attach-only host contract;
+3. keeping `agents_cmd.rs`, `async_repl.rs`, and `state_store.rs` on parallel semantics.
 
-This is a straight Layer 1 reuse slice:
+The minimal-diff rule here is:
 
-1. reuse [ResolvedRuntimeDescriptor](crates/shell/src/execution/agent_runtime/control.rs) for the launch descriptor payload,
-2. reuse [OrchestrationSessionRecord](crates/shell/src/execution/agent_runtime/orchestration_session.rs) as the durable source of truth,
-3. reuse [resolve_public_control_target(...)](crates/shell/src/execution/agent_runtime/state_store.rs) for public control selection,
-4. reuse [run_public_prompt_command(...)](crates/shell/src/execution/agent_runtime/control.rs) and [submit_host_prompt_turn(...)](crates/shell/src/execution/agent_runtime/control.rs) for prompt-bearing host turns,
-5. reuse typed world-member follow-up exactly as-is.
+1. one new module, not a new crate;
+2. zero new public verbs;
+3. zero public wire changes unless proven necessary;
+4. no second persisted attach object;
+5. keep existing transport code and exact-session state-store rules intact.
 
-The missing seam is durable attach truth, not a different backend trick.
+## Architecture Review
 
-### Distribution check
+### Thesis
 
-This slice does not introduce a new distributable artifact. No new binary, package, or container publication work is required. The only distribution-sensitive requirement is that the workspace dependency graph resolves the published `unified-agent-api = "=0.3.5"` crate cleanly after the local patch override is removed.
+Create one shared resolution layer above runtime realization and below caller transport.
 
-## Current Repo Truth
+The new layer must answer this once:
 
-These facts are concrete in the repository today. This plan is anchored to them.
+> Given baseline truth, caller kind, requested target, requested scope/capability/attach overrides, effective policy, and workspace context, what launch contract is allowed right now, and why?
 
-1. [Cargo.toml](Cargo.toml) still contains `[patch.crates-io] unified-agent-api = { path = "../unified-agent-api/crates/agent_api" }`.
-2. [owner_helper_startup_extensions(...)](crates/shell/src/repl/async_repl.rs) still maps `Resume`, `ResumeOneTurn`, and `Fork` to the same `agent_api.session.resume.v1` extension path.
-3. [start_host_orchestrator_runtime_with_prepared_prompt(...)](crates/shell/src/repl/async_repl.rs) still converts `InitialExecPromptPlan::NoPromptRecovery` into `prompt: ""`.
-4. [run_reattach(...)](crates/shell/src/execution/agents_cmd.rs) still launches through the hidden owner-helper startup path rather than a distinct control-only attach action.
-5. [run_fork(...)](crates/shell/src/execution/agents_cmd.rs) still launches through that same helper path and reports the result as immediately active.
-6. [build_successor_launch_plan(...)](crates/shell/src/execution/agents_cmd.rs) still infers successor launch truth from the currently active participant and its `internal_uaa_session_id`, not from durable session-level attach state.
-7. [OrchestrationSessionRecord](crates/shell/src/execution/agent_runtime/orchestration_session.rs) does not yet persist a host attach contract.
-8. [resolve_public_control_target(...)](crates/shell/src/execution/agent_runtime/state_store.rs) still uses retained participant continuity as the live prerequisite for detached `reattach` and `fork`.
-9. [resolve_public_turn_target(...)](crates/shell/src/execution/agent_runtime/state_store.rs) already preserves detached host continuity and exact world-member linkage rules. Those must stay intact.
-10. [MemberTurnSubmitRequestV1](crates/transport-api-types/src/lib.rs) and `/v1/member_turn/stream` are already the real world follow-up seam and must not change.
-11. the repo is already conceptually host-rooted. The implementation bug is that control-only actions still tunnel through prompt-shaped runtime startup semantics.
+Everything after that is materialization:
 
-## Frozen Execution Contract
+1. host owner-helper launch,
+2. host attach launch,
+3. world-member typed dispatch request,
+4. durable attach persistence,
+5. diagnostics and tests.
 
-If implementation wants to do something else, revise this plan first.
+### Resolution domains
 
-### Public operator contract
+This slice has two legitimate baseline domains. They must be explicit in the contract.
 
-1. `substrate agent start --backend <backend_id> --prompt ... --json` remains the host-only root prompt surface.
-2. `substrate agent turn --session <orchestration_session_id> --backend <backend_id> --prompt ... --json` remains the prompt-bearing follow-up surface.
-3. `substrate agent reattach --session <orchestration_session_id> --json` remains recovery only. It does not submit a prompt.
-4. `substrate agent fork --session <orchestration_session_id> --json` allocates a successor durable session. It does not submit a prompt.
-5. `substrate agent stop --session <orchestration_session_id> --json` remains canonical closeout.
-6. detached host sessions remain valid durable sessions,
-7. detached-world follow-up remains fail-closed until host ownership is restored through the sanctioned control path.
+| Resolution domain | Used by | Baseline source | What may change in 29 |
+| --- | --- | --- | --- |
+| Inventory-backed resolution | human `start`, orchestrator-controlled member dispatch, future public world-scoped start | effective inventory + effective config + validated embedded `policy_overlay` | supported scope/capability/attach-knob overrides plus narrowing-only dispatch policy overlay |
+| Persisted-attach-backed resolution | `reattach`, `fork`, detached-turn attach planning, future lazy attach | persisted `HostAttachContract` under the orchestration session | continuity selector state and attach-mode selection only; no backend/scope/capability broadening |
 
-### Durable attach contract
+That split removes the current ambiguity where some flows act like inventory is always authoritative and others act like the last live participant is authoritative.
 
-The attach contract introduced in this slice is the minimum durable truth required to attach later. It is not a new user-facing object and it must not carry secrets or prompt text.
-
-Minimum required contents:
-
-1. baseline launch descriptor sufficient to reconstruct host runtime selection,
-2. explicit host execution scope and protocol truth,
-3. the resolved backend identity,
-4. the current private continuity selector when one exists on the owning durable session.
-
-Fields that do not belong in this contract:
-
-1. prompt text,
-2. auth material,
-3. mutable live participant identity as the sole source of truth,
-4. world binding, which stays on the orchestration session itself.
-
-### Reattach semantics in this slice
-
-`reattach` is continuity-only in this slice.
-
-That means:
-
-1. the attach worker reads the durable attach contract from the orchestration session,
-2. if `continuity_uaa_session_id` is present and valid for the selected session, the private attach action may use it internally,
-3. if `continuity_uaa_session_id` is absent, stale, or invalid, `reattach` fails closed,
-4. the failure class stays operator-legible:
-   - prefer preserving `owner_unreachable`-style failure wording unless a better existing public error category already exists,
-5. fresh attach from the baseline launch descriptor is explicitly deferred to slice 31,
-6. success means the same durable session returns to truthful attached ownership.
-
-### Fork semantics in this slice
-
-`fork` allocates durable successor truth only. It does not create or attach a host execution client.
-
-Success means:
-
-1. a new orchestration session id is allocated first,
-2. lineage is persisted on durable state first,
-3. the source session's reusable attach-contract fields are copied forward,
-4. the successor's `continuity_uaa_session_id` is cleared to `None`,
-5. the successor's `attached_participant_id` is `null`,
-6. the successor's `pending_inbox_count` is `0`,
-7. the successor's posture is `parked_resumable`,
-8. no prompt is submitted,
-9. no backend-native session is attached or claimed on behalf of the successor.
-
-### Prompt-bearing paths stay prompt-bearing
-
-1. host `start` must continue to send the real user prompt as the first prompt,
-2. host `turn` must continue to send the real user prompt as the follow-up prompt,
-3. world-member follow-up must continue to require a non-empty prompt through `MemberTurnSubmitRequestV1`,
-4. no control-only recovery action may reappear as an empty prompt or hidden bootstrap prompt.
-
-## Target Architecture
-
-### Canonical ownership model after this slice
+### Target architecture
 
 ```text
-Public lifecycle
-    start | turn | reattach | fork | stop
-                   |
-                   v
-        Substrate durable orchestration session
-        - session identity
-        - lineage
-        - posture
-        - world binding
-        - persisted host attach contract
-                   |
-      +------------+------------+
-      |                         |
-      v                         v
-control-only attach worker   prompt-turn launcher
-reattach only                start / turn only
-no prompt                    real prompt required
-      |                         |
-      +------------+------------+
-                   |
-                   v
-         attached host execution client
-         optional, replaceable, not authoritative
-                   |
-                   v
-               UAA runtime
-         prompt-bearing execution only
+TARGET
+======
 
-fork path:
-source durable session
+caller surface
     |
-    v
-successor allocator
-    |
-    v
-new durable session
-- copied attach contract shape
-- cleared successor continuity token
-- no attached participant
-- parked_resumable
+    +--> human start / turn / reattach / fork
+    +--> orchestrator-controlled world-member dispatch
+    `--> future world-scoped start / lazy attach
+            |
+            v
+    DispatchRequestEnvelope
+            |
+            v
+    DispatchContractResolver
+      1. load baseline truth
+         - inventory-backed for new launches
+         - persisted-attach-backed for attach/fork
+      2. validate caller kind and target identity
+      3. validate supported override families
+      4. merge baseline + overrides
+      5. apply effective policy as narrowing-only
+      6. emit provenance or exact denial reasons
+            |
+            v
+    ResolvedLaunchContract
+            |
+            +--> runtime materializer
+            |      `--> RuntimeSelectionDescriptor / ResolvedRuntimeDescriptor
+            |
+            +--> host attach persistence
+            |      `--> HostAttachContract
+            |
+            +--> world-member transport adapter
+            |      `--> MemberDispatchTransportRequest
+            |
+            `--> diagnostics / tests / docs
 ```
 
-### Current-to-target delta
+### Canonical contract vocabulary
 
-| Surface | Current state | Required target state |
-| --- | --- | --- |
-| Control attach | Hidden inside owner-helper startup using blank-prompt resume semantics | Explicit Substrate attach action that may use private continuity internally |
-| Prompt-bearing host follow-up | Shares launch shaping with control-only paths | Isolated prompt-bearing path only |
-| Successor allocation | Hidden helper resume path that returns `active` | Real durable successor allocation that returns honest successor posture |
-| Durable attach truth | Inferred from active participant plus `internal_uaa_session_id` | Persisted on the orchestration session itself |
-| Successor continuity truth | Implicitly copied by helper startup side effects | Explicitly normalized: copy structural contract, clear successor continuity token |
-| UAA role | Carries both prompt execution and control meaning | Carries prompt execution only |
-| Downstream 29/30/31 stack | Still partially shaped around hidden helper semantics | Frozen to the persisted attach-contract architecture |
+Exact Rust identifiers may differ slightly, but the concept split below is frozen.
 
-### Recommended durable data model
+#### 1. `DispatchRequestEnvelope`
 
-Implement the attach contract as a nested durable session field rather than a separate store:
+Required fields:
 
-```text
-OrchestrationSessionRecord
-  orchestration_session_id
-  posture
-  world binding
-  ...
-  host_attach_contract
-    - backend_id
-    - execution_scope
-    - launch_descriptor: ResolvedRuntimeDescriptor
-    - continuity_uaa_session_id: Option<String>
-```
+1. `caller_kind`
+   - `human_start`
+   - `human_turn`
+   - `human_reattach`
+   - `human_fork`
+   - `orchestrator_member_start`
+   - `orchestrator_member_turn`
+   - reserved now for future `human_start_world` and `lazy_attach`
+2. `baseline_kind`
+   - `inventory_launch`
+   - `persisted_host_attach`
+3. target identity
+   - exact `backend_id` when caller already knows it,
+   - exact `agent_id` only when the caller surface truly owns that abstraction,
+   - exact `orchestration_session_id` when the caller is resolving from persisted attach truth;
+4. requested execution-scope override;
+5. requested capability override set;
+6. requested attach-relevant launch knobs;
+7. requested narrowing-only policy overlay, if supported for that caller;
+8. workspace root and policy-resolution context;
+9. prompt-bearing payload marker when a prompt exists.
 
 Rules:
 
-1. make the field optional and backward-compatible on deserialize,
-2. persist it at host session birth,
-3. update its continuity selector only when a newly attached host client becomes authoritative for that same durable session,
-4. on fork:
-   - copy `backend_id`,
-   - copy `execution_scope`,
-   - copy `launch_descriptor`,
-   - set successor `continuity_uaa_session_id = None`,
-5. never treat a live participant record as a substitute for this durable field again.
+1. inventory-backed requests may select a backend or a unique eligible world member, but they must still resolve through effective inventory;
+2. persisted-attach-backed requests may not replace backend identity, scope, or capabilities with fresh inventory-driven values;
+3. `human_turn`, `human_reattach`, and `human_fork` must still pass through exact-session state-store checks before the resolver is allowed to materialize launch truth.
 
-Why the successor continuity token is cleared:
+#### 2. `DispatchCapabilityOverrideSet`
+
+Use the current inventory capability families. Keep it explicit and boring.
+
+This should be an `Option<bool>`-style override shape for the existing booleans:
+
+1. `session_start`
+2. `session_resume`
+3. `session_fork`
+4. `session_stop`
+5. `status_snapshot`
+6. `event_stream`
+7. `llm`
+8. `mcp_client`
+
+Rules:
 
-1. the parent session still owns the existing backend-native continuity token,
-2. copying that token unchanged would falsely let two durable sessions claim one backend-native lineage,
-3. slice 31 is the right place to introduce explicit fresh-attach or continuity-materialization logic for born-unattached successors.
-
-## Implementation Plan
-
-### A0. Remove the local UAA patch override first
-
-Primary files:
-
-1. [Cargo.toml](Cargo.toml)
-2. [Cargo.lock](Cargo.lock)
-3. [crates/shell/Cargo.toml](crates/shell/Cargo.toml)
-4. [crates/gateway/Cargo.toml](crates/gateway/Cargo.toml)
-5. [crates/world-service/Cargo.toml](crates/world-service/Cargo.toml)
-
-Required change:
-
-1. delete the `[patch.crates-io] unified-agent-api = { path = "../unified-agent-api/crates/agent_api" }` override,
-2. regenerate the lockfile so `unified-agent-api = "=0.3.5"` resolves from crates.io,
-3. prove the workspace still compiles and tests against the published dependency source.
-
-Why this lands first:
-
-1. the neighboring checkout is exactly where promptless control behavior lived,
-2. keeping the patch in place would let this slice accidentally depend on the wrong semantics and still appear green,
-3. every later regression result is untrustworthy unless the dependency floor is corrected first.
-
-Exit gate:
-
-1. no local path override remains in repo manifests,
-2. dependency inspection shows `unified-agent-api` is no longer sourced from `../unified-agent-api/crates/agent_api`.
-
-### A1. Persist the minimal host attach contract on the durable session
-
-Primary files:
-
-1. [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs)
-2. [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs)
-3. [crates/shell/src/execution/agent_runtime/control.rs](crates/shell/src/execution/agent_runtime/control.rs)
-
-Required change:
-
-1. add an optional durable `host_attach_contract` field to [OrchestrationSessionRecord](crates/shell/src/execution/agent_runtime/orchestration_session.rs),
-2. define a minimal serializable contract using the existing [ResolvedRuntimeDescriptor](crates/shell/src/execution/agent_runtime/control.rs),
-3. persist the contract at host session creation,
-4. update the continuity selector on successful host reattach or authoritative host runtime replacement,
-5. add a dedicated helper for successor-safe copy that clears the successor continuity token.
-
-Backward-compatibility rules:
-
-1. older session records without `host_attach_contract` must still deserialize,
-2. reads must fail closed with a clear user-facing error when a control operation requires a contract that is absent,
-3. migration logic must not fabricate contract state from ambiguous live runtime state.
-
-Exit gate:
-
-1. durable session JSON contains attach truth after host session birth,
-2. detach and restart preserve the contract,
-3. successor sessions inherit the contract shape with cleared successor continuity,
-4. no code path reconstructs attach truth from "whatever participant is active now."
-
-### A2. Split hidden owner-helper convergence into explicit internal launch paths
-
-Primary files:
-
-1. [crates/shell/src/repl/async_repl.rs](crates/shell/src/repl/async_repl.rs)
-2. [crates/shell/src/execution/agent_runtime/control.rs](crates/shell/src/execution/agent_runtime/control.rs)
-3. [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs)
-
-Required change:
-
-1. stop modeling `Resume`, `ResumeOneTurn`, and `Fork` as one hidden startup shape,
-2. introduce explicit internal paths for:
-   - control-only attach,
-   - prompt-bearing resumed turn launch,
-   - successor durable-session allocation,
-3. remove "blank prompt means control" as a shaping rule.
-
-Implementation guidance:
-
-1. keep public CLI verbs unchanged,
-2. prefer a narrow split over a large new framework,
-3. move decision-making higher, not lower:
-   - `agents_cmd.rs` chooses which path is needed,
-   - `control.rs` executes prompt-bearing paths,
-   - `async_repl.rs` must no longer invent control semantics from prompt plans.
-
-Explicit non-goals:
-
-1. do not add a second prompt launcher,
-2. do not widen `OwnerHelperMode` into more hidden states if that still leaves control and prompt meanings conflated.
-
-Exit gate:
-
-1. no launch path for `reattach` or `fork` depends on `InitialExecPromptPlan::NoPromptRecovery`,
-2. the code clearly separates the three responsibilities in type and control flow.
-
-### A3. Implement `reattach` as a control-only Substrate attach action
-
-Primary files:
-
-1. [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs)
-2. [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs)
-3. [crates/shell/src/repl/async_repl.rs](crates/shell/src/repl/async_repl.rs)
-
-Required change:
-
-1. make `run_reattach(...)` execute an attach action that consumes the persisted host attach contract,
-2. if a valid continuity selector exists, the private attach action may use it internally to resume backend-native continuity,
-3. if continuity is impossible, fail closed with an explicit user-facing error,
-4. on success, converge the same durable session back to truthful attached ownership.
-
-Important boundary:
-
-1. "private continuity attach" is acceptable,
-2. "public `reattach` means blank-prompt resume" is not,
-3. fresh attach from baseline descriptor is not part of this slice.
-
-Exit gate:
-
-1. public `reattach` submits no prompt,
-2. the same durable session id survives the round trip,
-3. the action is expressed as control work in code, tests, and docs,
-4. missing continuity fails closed rather than guessing.
-
-### A4. Rework `fork` into a real successor durable-session allocator
-
-Primary files:
-
-1. [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs)
-2. [crates/shell/src/execution/agent_runtime/orchestration_session.rs](crates/shell/src/execution/agent_runtime/orchestration_session.rs)
-3. [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs)
-
-Required change:
-
-1. `run_fork(...)` allocates a new orchestration session id up front,
-2. successor lineage is persisted on Substrate durable state first,
-3. the source session's attach-contract shape is copied to the successor,
-4. the successor continuity selector is cleared to `None`,
-5. no synthetic prompt-free backend turn is performed,
-6. the returned successor state is honest:
-   - `posture = parked_resumable`,
-   - `attached_participant_id = null`,
-   - `pending_inbox_count = 0`,
-   - `source_orchestration_session_id` preserved for lineage truth.
-
-Explicit non-goals:
-
-1. do not auto-attach a new host client,
-2. do not let the successor claim the parent's backend-native session,
-3. do not widen `fork` into a prompt-bearing operation.
-
-Recommended response truth:
-
-1. `action: "fork"`
-2. new `orchestration_session_id`
-3. `state: "parked_resumable"`
-4. `attached_participant_id: null`
-5. `source_orchestration_session_id: <source>`
-
-Exit gate:
-
-1. no live fork path routes through `agent_api.session.resume.v1`,
-2. fork no longer reports false `active` truth,
-3. successor lineage and attach truth are durable before any later attach,
-4. successor continuity is explicitly cleared rather than implicitly inherited.
-
-### A5. Preserve prompt-bearing `start` and `turn` semantics exactly
-
-Primary files:
-
-1. [crates/shell/src/execution/agent_runtime/control.rs](crates/shell/src/execution/agent_runtime/control.rs)
-2. [crates/shell/src/execution/agents_cmd.rs](crates/shell/src/execution/agents_cmd.rs)
-3. [crates/world-service/src/member_runtime.rs](crates/world-service/src/member_runtime.rs)
-
-Required change:
-
-1. host `start` continues to use the real user prompt as the first prompt,
-2. host `turn` continues to use the real user prompt as the follow-up prompt,
-3. world-member turns continue to use the existing non-empty prompt contract,
-4. no control-plane cleanup here may change `resolve_public_turn_target(...)` semantics,
-5. detached-world follow-up must remain fail-closed.
-
-This is a guardrail step, not a new feature step.
-
-Exit gate:
-
-1. prompt-bearing paths still look identical from the operator's point of view,
-2. the only changed behavior is that `reattach` and `fork` stop pretending to be prompt-shaped runtime work.
-
-### A6. Truth-sync docs and freeze the downstream stack
-
-Primary files:
-
-1. [docs/USAGE.md](docs/USAGE.md)
-2. [HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md](HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md)
-3. [ADR-0047](docs/project_management/adrs/draft/ADR-0047-host-orchestrator-durable-session-and-parked-resumable-ownership.md)
-4. [UAA_PROMPTLESS_RESUME_FORK_SYNTHESIS.md](UAA_PROMPTLESS_RESUME_FORK_SYNTHESIS.md)
-5. [llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md)
-6. [llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)
-7. [llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md)
-
-Required change:
-
-1. document `reattach` as control-only attach,
-2. document `fork` as successor allocation with honest detached truth,
-3. document the successor-normalization rule:
-   - reusable contract copies forward,
-   - successor continuity token is cleared,
-4. treat `UAA_PROMPTLESS_RESUME_FORK_SYNTHESIS.md` as migration evidence, not as ongoing architecture truth,
-5. rewrite slice 29 as the shared dispatch-envelope generalization of the persisted attach contract,
-6. keep slice 30 clearly scoped to public host-rooted world start only,
-7. keep slice 31 clearly scoped to lazy attach only.
-
-Exit gate:
-
-1. no doc or downstream slice still lists blank-prompt control semantics as a live option,
-2. no doc suggests standalone world-root continuity is still in the stack,
-3. no doc implies a forked successor can reattach to the parent's backend-native continuity token as-is.
-
-### A7. Final validation and closeout
-
-Required change:
-
-1. run targeted regression suites for control surfaces, successor truth, state-store persistence, and world-member routing,
-2. run static grep gates for patch override removal and promptless control elimination,
-3. run workspace formatting, clippy, and full tests,
-4. confirm docs and downstream packets match the landed runtime truth.
-
-Exit gate:
-
-1. all targeted gates pass,
-2. full workspace gates pass,
-3. the repo tells one coherent story from code to docs to downstream plan stack.
+1. `true` may only be requested if the baseline truth already allows it;
+2. `false` narrows or disables capability;
+3. unknown capability names fail closed;
+4. capability selection is part of the resolved contract and part of the explanation surface;
+5. persisted-attach-backed requests may not broaden a capability that the persisted contract already narrowed or omitted.
+
+#### 3. `AttachLaunchKnobs`
+
+Slice 29 must freeze the internal knob vocabulary that 30 and 31 depend on, even though 29 does not expose full public CLI syntax for it yet.
+
+Minimum required internal knobs:
+
+1. `requested_execution_scope`
+   - `host`
+   - `world`
+2. `host_execution_client_start`
+   - `start_now`
+   - `defer`
+3. `attach_mode_preference`
+   - `continuity_required`
+   - `continuity_preferred`
+   - `fresh_allowed`
+
+Rules:
+
+1. current public host start uses `host + start_now + continuity_required`;
+2. future world-scoped start in 30 uses `world + defer`;
+3. future lazy attach in 31 depends on `fresh_allowed`;
+4. unsupported combinations fail closed now;
+5. persisted `HostAttachContract` must retain the resolved attach knobs required to perform later continuity attach or fresh attach without guessing.
+
+#### 4. `ResolvedLaunchContract`
+
+Required contents:
+
+1. resolved `agent_id`;
+2. resolved `backend_id`;
+3. resolved backend kind;
+4. resolved protocol;
+5. resolved execution scope;
+6. resolved runtime-realizable descriptor payload;
+7. resolved capability set;
+8. resolved attach-launch knobs;
+9. effective policy restrictions actually applied;
+10. baseline source metadata;
+11. field-level provenance.
+
+Rules:
+
+1. this is the last place where merge semantics live;
+2. everything downstream consumes it or a deliberately derived subset of it;
+3. no caller-specific adapter may rewrite resolved scope/capability/attach semantics after the contract is emitted.
+
+#### 5. `FieldProvenance`
+
+The current plan needs more precision than a single flat enum. Provenance must distinguish:
+
+1. baseline origin
+   - `global_inventory`
+   - `workspace_inventory`
+   - `persisted_host_attach_contract`
+2. value origin
+   - `inventory_explicit`
+   - `effective_config_default`
+   - `dispatch_override_accepted`
+   - `dispatch_override_narrowed_by_policy`
+
+Rules:
+
+1. if a resolved field came from config backfill rather than an explicit inventory value, the contract must be able to say so;
+2. if a resolved field came from persisted attach truth, the contract must say that directly rather than pretending inventory was re-read;
+3. denial is not a provenance state; it is a resolution error category.
+
+#### 6. `DispatchResolutionError`
+
+Implementation may choose exact type names, but the denial taxonomy is frozen.
+
+Minimum categories:
+
+1. `unknown_override_family`
+2. `override_not_supported_for_caller`
+3. `override_exceeds_baseline`
+4. `invalid_policy_overlay`
+5. `override_denied_by_policy`
+6. `runtime_unrealizable_after_resolution`
+7. `missing_required_attach_continuity`
+
+Rules:
+
+1. every denial must name the field or override family that failed;
+2. every denial must name the rejecting layer:
+   - caller contract,
+   - baseline truth,
+   - policy,
+   - runtime materialization;
+3. no denial may degrade into a silent fallback.
+
+### Merge precedence and failure behavior
+
+The merge order is frozen:
+
+1. baseline truth
+   - inventory-backed requests:
+     - workspace inventory row wins over global row by existing repo rules,
+     - effective config backfills omitted inventory fields,
+     - embedded inventory `policy_overlay` validates as restriction-only;
+   - persisted-attach-backed requests:
+     - `HostAttachContract` is authoritative for backend, protocol, scope, launch descriptor, attach-relevant capabilities, and attach knobs;
+2. dispatch envelope overrides
+   - only supported families are accepted,
+   - unsupported or unknown families fail closed,
+   - persisted-attach-backed requests may not broaden contract fields;
+3. effective policy
+   - base policy plus any validated restriction-only overlay,
+   - policy narrows, denies, or leaves as-is,
+   - policy never broadens;
+4. runtime materialization
+   - only after the contract is resolved.
+
+Failure behavior is also frozen:
+
+1. unknown override family -> hard error;
+2. supported but disallowed override -> hard error;
+3. attempt to broaden beyond baseline truth -> hard error;
+4. policy-denied override -> hard error with field + rejecting layer + reason;
+5. policy-narrowed override -> resolved contract carries the narrowed value plus provenance;
+6. impossible runtime realization after merge -> hard error before launch;
+7. continuity-required attach with no valid continuity selector -> hard error before attach launch.
+
+No silent fallback.  
+No "host is close enough to world."  
+No "event_stream=true was ignored because backend probably does not need it."
 
 ## Code Quality Review
 
-1. keep one durable attach contract type. Do not create parallel "launch snapshot" structs in both `agents_cmd.rs` and `state_store.rs`.
-2. prefer explicit type names over mode flags. A narrow `AttachAction` or `SuccessorAllocationPlan` is better than more conditional branches on `OwnerHelperMode`.
-3. do not let [async_repl.rs](crates/shell/src/repl/async_repl.rs) keep architecture ownership it should not have. It should orchestrate runtime launch, not define public control meaning.
-4. keep backward-compatible serde fields optional on the durable session record. This is a state model extension, not a store migration project.
-5. do not duplicate continuity validation logic. Reuse the existing posture and selector validation helpers in [state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs).
-6. add an inline ASCII comment near the new durable attach contract explaining the authority split:
+### Module ownership rules
 
-```text
-orchestration session
-  owns: identity, posture, world binding, attach contract
-attached participant
-  owns: current live backend client only
-```
+1. [`agent_inventory.rs`](crates/shell/src/execution/agent_inventory.rs) owns raw inventory parsing, validation, and baseline projection helpers. It does not own caller semantics.
+2. New [`dispatch_contract.rs`](crates/shell/src/execution/agent_runtime/dispatch_contract.rs) owns:
+   - baseline normalization,
+   - override validation,
+   - policy narrowing merge,
+   - provenance,
+   - denial taxonomy,
+   - resolved contract output.
+3. [`validator.rs`](crates/shell/src/execution/agent_runtime/validator.rs) owns runtime realizability checks and conversion to runtime descriptors.
+4. [`orchestration_session.rs`](crates/shell/src/execution/agent_runtime/orchestration_session.rs) owns persisted attach truth shape and invariants.
+5. [`state_store.rs`](crates/shell/src/execution/agent_runtime/state_store.rs) owns authoritative session/posture checks, not launch-merge logic.
+6. [`agents_cmd.rs`](crates/shell/src/execution/agents_cmd.rs) and [`async_repl.rs`](crates/shell/src/repl/async_repl.rs) become thin adapters.
 
-7. add an inline ASCII comment near the public control entrypoints showing the verb split:
+### Compatibility rules
 
-```text
-start/turn -> prompt-bearing execution
-reattach   -> control-only attach
-fork       -> successor allocation
-stop       -> closeout
-```
+1. Do not rename `HostAttachContract` unless there is a hard serialization blocker.
+2. Persisted JSON changes must be additive or migration-safe.
+3. [`OrchestrationSessionRecord::validate_persisted_invariants(...)`](crates/shell/src/execution/agent_runtime/orchestration_session.rs) must remain the invariant gate for session reload.
+4. Do not persist the full provenance tree inside `HostAttachContract`.
+
+Persist only:
+
+1. exact resolved launch truth needed to attach later;
+2. resolved capability selections relevant to attach;
+3. resolved attach-launch knobs;
+4. continuity selector state when present.
+
+Why:
+
+1. session JSON is long-lived durable state;
+2. full provenance there would bloat files and future migrations;
+3. explanation is a command-time concern, not a session-serialization concern.
+
+### File-level implementation map
+
+| Area | Files | Planned change |
+| --- | --- | --- |
+| New contract module | `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`, [`mod.rs`](crates/shell/src/execution/agent_runtime/mod.rs) | Add the envelope, override set, attach knobs, resolved contract, provenance, denial taxonomy, and merge logic in one place |
+| Baseline projection | [`crates/shell/src/execution/agent_inventory.rs`](crates/shell/src/execution/agent_inventory.rs) | Add helpers that project effective inventory entries into baseline contract data without changing inventory semantics |
+| Runtime materialization | [`crates/shell/src/execution/agent_runtime/validator.rs`](crates/shell/src/execution/agent_runtime/validator.rs) | Keep realizability checks, but materialize them from `ResolvedLaunchContract` instead of letting selection helpers act as top-level contract |
+| Human caller adoption | [`crates/shell/src/execution/agents_cmd.rs`](crates/shell/src/execution/agents_cmd.rs), [`crates/shell/src/execution/agent_runtime/control.rs`](crates/shell/src/execution/agent_runtime/control.rs), [`crates/shell/src/execution/prompt_fulfillment.rs`](crates/shell/src/execution/prompt_fulfillment.rs) | Replace start/attach/resume/fork launch-plan assembly with shared resolver output or persisted attach truth derived from it |
+| Durable attach generalization | [`crates/shell/src/execution/agent_runtime/orchestration_session.rs`](crates/shell/src/execution/agent_runtime/orchestration_session.rs), [`crates/shell/src/execution/agent_runtime/state_store.rs`](crates/shell/src/execution/agent_runtime/state_store.rs) | Expand `HostAttachContract` to carry the resolved host launch truth needed for continuity attach and fresh attach later |
+| Orchestrator-controlled caller adoption | [`crates/shell/src/repl/async_repl.rs`](crates/shell/src/repl/async_repl.rs), [`crates/shell/src/execution/routing/dispatch/world_ops.rs`](crates/shell/src/execution/routing/dispatch/world_ops.rs) | Build world-member dispatch from the resolved contract, not from bespoke prepared-runtime assumptions |
+| Tests | [`crates/shell/tests/agent_public_control_surface_v1.rs`](crates/shell/tests/agent_public_control_surface_v1.rs), [`crates/shell/tests/repl_world_first_routing_v1.rs`](crates/shell/tests/repl_world_first_routing_v1.rs), unit tests in `dispatch_contract.rs`, `orchestration_session.rs`, `state_store.rs`, `control.rs`, and `validator.rs` | Prove parity, denial taxonomy, attach-contract persistence, and future-compat attach knobs |
+| Truth-doc sync | [ADR-0027](docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md), [llm-last-mile/29*.md](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md), [30*.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md), [31*.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md), [llm-last-mile/README.md](llm-last-mile/README.md) | Publish the contract once and point downstream slices at it |
+
+### Implementation phases
+
+#### A0. Freeze the contract vocabulary
+
+Files:
+
+1. `PLAN.md`
+2. [`llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md`](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md)
+3. truth docs that mention the downstream dependency
+
+Required outcome:
+
+1. one canonical vocabulary for baseline domains, override families, attach knobs, provenance, and denial taxonomy;
+2. slices 30 and 31 reference the frozen knob vocabulary instead of inventing synonyms.
+
+Exit criteria:
+
+1. this plan and the SOW say the same thing about baseline truth, attach truth, and policy narrowing;
+2. no downstream doc reopens world-root continuity or hidden bootstrap prompts.
+
+#### A1. Land the shared resolver module
+
+Files:
+
+1. `crates/shell/src/execution/agent_runtime/dispatch_contract.rs`
+2. [`crates/shell/src/execution/agent_runtime/mod.rs`](crates/shell/src/execution/agent_runtime/mod.rs)
+3. [`crates/shell/src/execution/agent_inventory.rs`](crates/shell/src/execution/agent_inventory.rs)
+
+Required outcome:
+
+1. the repo has one place that owns baseline normalization, override validation, narrowing-only merge, provenance, and denial taxonomy;
+2. inventory-backed and persisted-attach-backed baselines are both modeled explicitly;
+3. no caller surface is still defining its own merge precedence.
+
+Exit criteria:
+
+1. new unit tests cover both baseline domains;
+2. the resolver can emit a resolved contract or an exact denial without touching prompt transport code.
+
+#### A2. Materialize runtime descriptors from the resolved contract
+
+Files:
+
+1. [`crates/shell/src/execution/agent_runtime/validator.rs`](crates/shell/src/execution/agent_runtime/validator.rs)
+2. [`crates/shell/src/execution/agent_runtime/control.rs`](crates/shell/src/execution/agent_runtime/control.rs)
+
+Required outcome:
+
+1. `RuntimeSelectionDescriptor` and `ResolvedRuntimeDescriptor` are downstream materialization artifacts;
+2. runtime-realizability failures occur after the contract is resolved, not during ad hoc caller-specific planning.
+
+Exit criteria:
+
+1. runtime materialization can be invoked from `ResolvedLaunchContract`;
+2. error paths still preserve existing exit-code expectations.
+
+#### A3. Generalize the persisted host attach contract
+
+Files:
+
+1. [`crates/shell/src/execution/agent_runtime/orchestration_session.rs`](crates/shell/src/execution/agent_runtime/orchestration_session.rs)
+2. [`crates/shell/src/execution/agent_runtime/state_store.rs`](crates/shell/src/execution/agent_runtime/state_store.rs)
+
+Required outcome:
+
+1. session birth persists the generalized host attach contract derived from the resolved host launch contract;
+2. successor allocation copies that contract forward while clearing inherited continuity;
+3. detached attach planning consumes persisted resolved truth, not ambient participant state.
+
+Exit criteria:
+
+1. session reload validation remains additive and fail closed;
+2. `fork_successor_attach_contract(...)` preserves exact launch truth and clears only continuity-specific state.
+
+#### A4. Adopt the contract in human caller surfaces
+
+Files:
+
+1. [`crates/shell/src/execution/agents_cmd.rs`](crates/shell/src/execution/agents_cmd.rs)
+2. [`crates/shell/src/execution/agent_runtime/control.rs`](crates/shell/src/execution/agent_runtime/control.rs)
+3. [`crates/shell/src/execution/prompt_fulfillment.rs`](crates/shell/src/execution/prompt_fulfillment.rs)
+
+Required outcome:
+
+1. host `start` uses the inventory-backed resolver;
+2. `reattach`, detached-turn attach planning, and `fork` use persisted attach truth derived from the resolver;
+3. denial messages name field + layer + reason.
+
+Exit criteria:
+
+1. human caller code no longer rebuilds launch semantics outside the shared contract or the persisted contract it already wrote;
+2. prompt-bearing validation remains exact.
+
+#### A5. Adopt the contract in orchestrator-controlled dispatch
+
+Files:
+
+1. [`crates/shell/src/repl/async_repl.rs`](crates/shell/src/repl/async_repl.rs)
+2. [`crates/shell/src/execution/routing/dispatch/world_ops.rs`](crates/shell/src/execution/routing/dispatch/world_ops.rs) only if additive transport fields are required
+
+Required outcome:
+
+1. world-member launch planning comes from the inventory-backed shared resolver;
+2. orchestrator-controlled dispatch uses the same capability and policy semantics as human launch;
+3. no second hidden launch dialect survives in REPL-only code.
+
+Exit criteria:
+
+1. equivalent inventory-backed requests resolve to equivalent backend/scope/capability truth across CLI and REPL surfaces;
+2. transport changes, if any, are additive and justified by a concrete missing field.
+
+#### A6. Update docs and downstream slice references
+
+Files:
+
+1. [ADR-0027](docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md)
+2. [llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md)
+3. [llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)
+4. [llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md)
+5. [llm-last-mile/README.md](llm-last-mile/README.md)
+
+Required outcome:
+
+1. the repo explains the contract once;
+2. downstream slices depend on that explanation instead of restating it differently;
+3. no doc still implies attach truth can be reconstructed from the last live participant.
+
+#### A7. Validate and close out
+
+Required outcome:
+
+1. targeted unit and integration coverage is green;
+2. full workspace gates are green;
+3. doc wording and runtime semantics match.
 
 ## Test Review
 
-100 percent coverage is the goal for new and changed control paths. This slice changes lifecycle truth, so tests are non-negotiable.
+### Coverage floor
 
-### Coverage diagram
+The honest test floor for this slice is:
 
-```text
-CONTROL PATHS                                         REQUIRED TEST COVERAGE
+1. new unit tests in `dispatch_contract.rs`;
+2. unit updates in `orchestration_session.rs`;
+3. state-store resolution tests;
+4. command-surface integration tests in [`agent_public_control_surface_v1.rs`](crates/shell/tests/agent_public_control_surface_v1.rs);
+5. Linux-first world-member parity tests in [`repl_world_first_routing_v1.rs`](crates/shell/tests/repl_world_first_routing_v1.rs);
+6. full `cargo test --workspace -- --nocapture` before closeout.
 
-[+] agent start (host)
-  └── real user prompt -> host runtime start          [KEEP] existing public control coverage
+### Required test additions
 
-[+] agent turn (host attached)
-  └── real user prompt -> prompt-bearing resume       [KEEP] existing public control coverage
+1. Add resolver unit tests in `crates/shell/src/execution/agent_runtime/dispatch_contract.rs` covering:
+   - inventory-backed baseline projection,
+   - persisted-attach-backed baseline projection,
+   - supported override acceptance,
+   - unsupported override denial,
+   - baseline-broadening denial,
+   - policy narrowing provenance,
+   - impossible runtime-realization rejection.
+2. Extend [`crates/shell/src/execution/agent_runtime/orchestration_session.rs`](crates/shell/src/execution/agent_runtime/orchestration_session.rs) tests to prove:
+   - generalized `HostAttachContract` invariants,
+   - successor copy clears continuity but preserves resolved attach truth,
+   - host-scoped protocol/backend drift still fails invariant validation.
+3. Extend [`crates/shell/src/execution/agent_runtime/state_store.rs`](crates/shell/src/execution/agent_runtime/state_store.rs) tests to prove:
+   - `resolve_public_control_target(...)` requires generalized attach truth,
+   - continuity-required attach still fails closed when the selector is missing,
+   - fork can consume generalized attach truth without live continuity.
+4. Extend [`crates/shell/src/execution/agent_runtime/control.rs`](crates/shell/src/execution/agent_runtime/control.rs) tests to prove:
+   - shared resolver output feeds host launch plans,
+   - denial messages are explicit,
+   - prompt-bearing request validation remains exact.
+5. Extend [`crates/shell/tests/agent_public_control_surface_v1.rs`](crates/shell/tests/agent_public_control_surface_v1.rs) to prove:
+   - human `start` now uses the shared inventory-backed resolver,
+   - detached turn attach planning uses persisted attach truth,
+   - persisted attach truth after `start` and `fork` matches the resolved host contract,
+   - no silent capability broadening appears.
+6. Extend [`crates/shell/tests/repl_world_first_routing_v1.rs`](crates/shell/tests/repl_world_first_routing_v1.rs) to prove:
+   - orchestrator-controlled member dispatch consumes the same resolved backend/scope/capability rules,
+   - future `scope=world` knobs are reserved but still fail closed on unsupported public paths.
 
-[+] agent turn (host parked)
-  └── continuity-aware prompt-bearing follow-up       [KEEP] detached continuity coverage
+### Failure modes registry
 
-[+] agent reattach
-  └── control-only attach, no prompt                  [NEW] explicit no-prompt regression
-
-[+] agent reattach (missing continuity)
-  └── fail closed, no synthetic attach                [NEW] owner_unreachable regression
-
-[+] agent fork
-  └── successor durable session allocation            [NEW] no resume.v1, no prompt, honest posture
-
-[+] durable session birth
-  └── attach contract persisted                       [NEW] state-store persistence coverage
-
-[+] durable session detach / restart
-  └── attach contract survives                        [NEW] persistence regression
-
-[+] successor lineage
-  └── attach contract copied forward                  [NEW] successor-copy regression
-
-[+] successor normalization
-  └── continuity token cleared on child               [NEW] successor-safety regression
-
-[+] world follow-up
-  └── MemberTurnSubmitRequestV1 non-empty prompt      [KEEP] exact transport contract
-
-[+] detached world follow-up
-  └── fail closed until host ownership returns        [KEEP] fail-closed regression
-
-COVERAGE TARGET:
-- Control-only paths: 100 percent
-- Durable attach-contract persistence: 100 percent
-- Successor allocation semantics: 100 percent
-- World prompt-bearing contract: no regressions allowed
-```
-
-### Required test files
-
-| File or suite | Required additions | Type |
+| Codepath | Failure mode | Required proof |
 | --- | --- | --- |
-| `crates/shell/tests/agent_public_control_surface_v1.rs` | prove `reattach` performs control-only attach with no prompt submission; prove `reattach` fails closed when continuity is absent; prove `fork` returns successor parked truth and no synthetic prompt path | focused integration |
-| `crates/shell/tests/agent_successor_contract_ahcsitc0.rs` | extend successor-truth coverage so forked successors advertise honest posture and cleared successor continuity state | focused integration |
-| `crates/shell/src/execution/agent_runtime/state_store.rs` tests | persist and reload `host_attach_contract`; fail closed when absent; copy forward on fork; clear successor continuity token | focused unit |
-| `crates/shell/src/repl/async_repl.rs` tests | prove no remaining `NoPromptRecovery` path backs `reattach` or `fork` | focused unit/integration |
-| `crates/shell/tests/repl_world_first_routing_v1.rs` | prove world first-turn and resumed follow-up still require real prompts and still use typed member-turn submit | focused integration |
-| `crates/world-service/src/member_runtime.rs` tests | preserve retained-member tuple validation and fail-closed world semantics | focused unit |
-| static repo invariant | no production path uses `prompt: ""` for public `reattach` or `fork` | grep-backed invariant |
-| static repo invariant | no production path routes `fork` through `agent_api.session.resume.v1` | grep-backed invariant |
-| static repo invariant | no manifest or lockfile path resolves `unified-agent-api` from the neighboring checkout | grep-backed invariant |
+| Inventory baseline projection | Shared resolver ignores workspace override and launches the wrong backend | Resolver unit tests must prove workspace precedence survives the refactor |
+| Persisted attach baseline | Detached attach planning re-derives launch truth from inventory or live participant state | State-store and orchestration-session tests must prove persisted attach truth is authoritative |
+| Capability override | Caller asks for disallowed capability and resolver silently leaves baseline enabled | Resolver unit tests must fail closed and name the capability |
+| Policy narrowing | Policy removes `llm` or forbids backend and resolver still materializes runtime descriptor | Resolver + validator tests must stop before launch and name the rejecting policy field |
+| Session birth persistence | Session birth writes descriptor but omits attach knobs or attach-relevant capability truth | Orchestration-session tests must compare persisted attach truth to the resolved host contract |
+| Successor copy | Fork preserves parent continuity session id on successor | Successor tests must keep clearing continuity while preserving exact launch truth |
+| Caller parity | `agents_cmd.rs` and `async_repl.rs` resolve equivalent inventory-backed inputs differently | Integration parity tests must compare resolved contract fields across surfaces |
 
-### Regression rules
+Critical gap rule:
 
-These are mandatory blockers:
+If any resolved field can differ across callers for equivalent baseline input, or if persisted attach truth is still missing any field that 30 or 31 needs, this slice is not done.
 
-1. any change that causes `reattach` to submit a prompt,
-2. any change that causes `fork` to submit a prompt,
-3. any change that reports successor `active` truth without a real attached successor client,
-4. any change that lets a successor inherit and reuse the parent's continuity token unchanged,
-5. any change that widens or changes `MemberTurnSubmitRequestV1` follow-up semantics,
-6. any change that reintroduces local path resolution to `../unified-agent-api/crates/agent_api`,
-7. any change that fabricates attach truth from the current participant when the durable contract is absent.
+## Performance Review
 
-## Error & Rescue Registry
+This is a correctness slice, but two performance constraints are worth freezing now:
 
-| Situation | Expected behavior in this slice | Operator-visible result | Recovery path |
-| --- | --- | --- | --- |
-| `reattach` called on a parked host session with valid continuity | control-only private attach runs and restores attached ownership | success on same orchestration session id | normal `reattach` success |
-| `reattach` called on a parked host session without continuity | fail closed, do not guess, do not fresh-attach | explicit failure, preferably existing `owner_unreachable` class | slice 31 later adds explicit fresh-attach path |
-| `fork` called on a valid source session | allocate successor durable session only | success with `parked_resumable`, `attached_participant_id = null`, lineage included | later prompt-bearing work or later lazy attach slice |
-| source session disappears during fork allocation | fail closed | explicit control failure | operator retries against a valid live source session |
-| session record lacks `host_attach_contract` due to old persisted state | fail closed for control actions that require it | explicit missing-contract failure | re-create session through fresh `start`; do not synthesize state |
-| docs still imply blank-prompt control semantics | block ship | review failure | update docs in same slice |
+1. keep full provenance out of durable session JSON;
+2. do not turn resolution into repeated inventory scans inside one command path.
 
-## Failure Modes Registry
+Hard rules:
 
-| Failure mode | Where it happens | Required handling | Test requirement | Critical gap if missing |
-| --- | --- | --- | --- | --- |
-| `reattach` still tunnels through blank-prompt UAA resume | `agents_cmd.rs`, `async_repl.rs` | fail review and remove the convergence | explicit no-prompt reattach test plus grep gate | Yes |
-| `fork` still routes through `resume.v1` | `agents_cmd.rs`, `async_repl.rs` | fail review and replace with allocator | explicit fork regression plus grep gate | Yes |
-| attach contract missing on durable session birth | `orchestration_session.rs`, `state_store.rs` | fail closed and do not guess | persistence unit test | Yes |
-| successor does not copy attach contract shape | `state_store.rs`, `agents_cmd.rs` | fail review and fix lineage copy | successor-copy test | Yes |
-| successor retains parent's continuity token | `state_store.rs`, `agents_cmd.rs` | clear it during successor normalization | successor-safety test | Yes |
-| successor reported as active without a real attached client | `agents_cmd.rs` result rendering | fix response truth to detached posture | public control test | Yes |
-| world follow-up starts accepting promptless recovery semantics | `state_store.rs`, `member_runtime.rs` | fail closed and preserve typed prompt contract | world routing regression | Yes |
-| docs still tell two contradictory stories | docs and llm-last-mile packets | update in same slice | doc review | No, but unacceptable at ship |
+1. resolve effective inventory once per command path;
+2. build one resolved contract per launch action;
+3. materialize runtime descriptors from that result;
+4. persist only the attach-relevant subset.
 
-Any silent drift in control semantics, successor truth, or world follow-up routing is a release blocker for this slice.
+Potential footguns:
 
-## Performance And Complexity Review
+1. serializing giant provenance trees into session files;
+2. repeatedly reloading inventory in `agents_cmd.rs`, `state_store.rs`, and `async_repl.rs` separately;
+3. over-abstracting the resolver into a trait maze because "future callers might need it."
 
-1. this slice should add almost no CPU cost. The dominant risk is behavioral complexity, not runtime overhead.
-2. do not add new per-turn inventory or policy discovery when the resolved runtime descriptor can be persisted once and reused.
-3. do not add a second durable state lookup path for control actions. Reuse the existing session store and selector flow.
-4. do not introduce speculative fresh attach in this slice. Continuity-only attach is simpler and keeps the change budget honest.
-5. spend zero innovation tokens on new architecture. This is a truth-alignment slice. Boring is correct.
+The boring solution is correct:
 
-## Cross-Phase Themes
+1. plain structs;
+2. one resolver function or small resolver object;
+3. one additive durable-state update;
+4. one pass per launch.
 
-1. durable truth beats ambient inference: if a control action needs attach truth, it must read durable session state rather than guessing from the currently active participant,
-2. boring beats clever: this slice removes hidden meaning instead of introducing a more elaborate helper abstraction,
-3. freeze before extend: 29, 30, and 31 should build on a stable attach-contract seam, not on today's helper accident,
-4. fail closed beats guess-and-heal: missing continuity or missing attach contract is a hard stop in this slice,
-5. one durable session cannot dual-own one backend-native continuity token: that rule is what makes successor normalization non-negotiable,
-6. prompt-bearing flows stay sacred: `start`, `turn`, and world-member follow-up keep their existing prompt semantics exactly.
+## Docs And Truth Sync
 
-## Deferred Follow-Ups / TODO Candidates
+When this slice lands, update all of these surfaces together:
 
-These are real follow-ons, but they are not part of this slice:
+1. [ADR-0027](docs/project_management/adrs/draft/ADR-0027-llm-and-agent-config-policy-surface.md)
+   - document baseline domains,
+   - document supported override families,
+   - document merge precedence,
+   - document narrowing-only behavior for dispatch-time policy overlays;
+2. [llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md](llm-last-mile/29-shared-agent-dispatch-envelope-and-capability-override-contract.md)
+   - keep it aligned to the landed type split and denial taxonomy;
+3. [llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md](llm-last-mile/30-public-world-scoped-agent-start-and-capability-flags.md)
+   - point at the frozen internal scope and host-start knobs from this slice;
+4. [llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md](llm-last-mile/31-lazy-host-attach-for-host-rooted-world-start.md)
+   - point at the generalized persisted attach truth and attach-mode vocabulary from this slice;
+5. [llm-last-mile/README.md](llm-last-mile/README.md)
+   - explain the contract stack ordering cleanly.
 
-1. slice 29 generalization of the minimal attach contract into a shared dispatch envelope,
-2. slice 30 public `--scope world` root start above a world worker,
-3. slice 31 lazy host attach and explicit continuity-vs-fresh attach mode selection,
-4. any future generic UAA control-only primitive for non-Substrate consumers,
-5. any public inbox or auto-resume workflow that sits above durable pending work.
+Doc rule:
+
+The repo should explain the contract once, then reference it.  
+Do not write five slightly different descriptions of merge precedence.
 
 ## Worktree Parallelization Strategy
 
-This slice has limited honest parallelization. The runtime changes are coupled, but there is still a narrow safe split if module ownership stays disciplined.
+This slice has one real foundation lane, one durable-state freeze lane, and one safe parallel window after those land. Do not split the contract definition itself across multiple workers.
 
 ### Dependency table
 
 | Step | Modules touched | Depends on |
 | --- | --- | --- |
-| A0. Dependency floor cutover | workspace manifests, lockfile | - |
-| A1. Attach-contract data model | `crates/shell/src/execution/agent_runtime/orchestration_session.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs` | A0 |
-| A2. Launch-path split | `crates/shell/src/repl/async_repl.rs`, `crates/shell/src/execution/agent_runtime/control.rs`, `crates/shell/src/execution/agents_cmd.rs` | A1 |
-| A3. Control-only reattach path | `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/repl/async_repl.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs` | A1, A2 |
-| A4. Successor allocator and fork truth | `crates/shell/src/execution/agents_cmd.rs`, `crates/shell/src/execution/agent_runtime/state_store.rs`, control-surface tests, successor tests | A1, A2 |
-| A5. Downstream truth-doc sync | `docs/`, `HOST_ORCHESTRATOR_INTENDED_BEHAVIOR_TRUTH.md`, `llm-last-mile/29*.md`, `30*.md`, `31*.md` | A1 |
-| A6. Final validation and closeout | targeted tests, grep gates, full workspace gates | A3, A4, A5 |
+| A0. Contract vocabulary freeze | `PLAN.md`, `llm-last-mile/29*.md`, truth docs | - |
+| A1. Shared resolver module | `agent_runtime/dispatch_contract.rs`, `agent_runtime/mod.rs`, `agent_inventory.rs` | A0 |
+| A2. Runtime materialization convergence | `agent_runtime/validator.rs`, `agent_runtime/control.rs` | A1 |
+| A3. Generalized host attach contract | `agent_runtime/orchestration_session.rs`, `agent_runtime/state_store.rs` | A1, A2 |
+| A4. Human caller adoption | `agents_cmd.rs`, `agent_runtime/control.rs`, `prompt_fulfillment.rs` | A2, A3 |
+| A5. Orchestrator-controlled dispatch adoption | `async_repl.rs`, maybe `routing/dispatch/world_ops.rs` | A1, A2 |
+| A6. Truth-doc and downstream-slice sync | `docs/`, `llm-last-mile/` | A1; final wording waits for A3-A5 |
+| A7. Final validation and closeout | targeted tests, full workspace tests, final doc pass | A4, A5, A6 |
 
 ### Parallel lanes
 
-Lane 0: A0 -> A1  
-Reason: the dependency floor and durable attach-contract schema must stabilize first.
+Lane A: A0 -> A1 -> A2 -> A3  
+Reason: the contract shape, materialization boundary, and persisted attach schema must stabilize first.
 
-Lane R: A2 -> A3  
-Reason: the reattach lane depends on the explicit launch-path split and then owns the control-only attach behavior.
+Lane B: A4  
+Reason: once the contract and persisted attach truth are frozen, human CLI surfaces can adopt them without guessing.
 
-Lane F: A2 -> A4  
-Reason: the fork lane also depends on the launch-path split, but its distinct output is successor truth and normalization.
+Lane C: A5  
+Reason: orchestrator-controlled world-member dispatch can adopt the shared resolver after A2, as long as it does not reopen attach persistence semantics.
 
-Lane D: A5  
-Reason: once the attach-contract shape is frozen, the downstream docs can be rewritten in parallel with runtime work.
+Lane D: A6  
+Reason: docs can start after A1 freezes names, but wording must be finalized only after runtime semantics are confirmed.
 
-Lane V: A6  
+Lane V: A7  
 Reason: validation is the merge gate and must run after runtime and docs converge.
-
-### Safe parallel split
-
-The safest split is:
-
-1. land A0 and A1 first,
-2. land the shared launch-path split in A2 next,
-3. after A2, run A3 and A5 in parallel,
-4. run A4 in parallel with A3 only if one owner has exclusive merge authority over `agents_cmd.rs`,
-5. otherwise serialize A4 immediately after A3,
-6. run A6 last.
-
-### Conflict flags
-
-1. A3 and A4 both touch `crates/shell/src/execution/agents_cmd.rs`. That is the main merge-risk seam.
-2. A1, A3, and A4 all touch `state_store.rs`. Do not start A3 or A4 until A1's attach-contract schema is merged.
-3. docs must not merge before runtime truth is settled. A5 can draft early, but it should land only after A3/A4 semantics are confirmed.
-4. successor tests and public-control tests are shared validation surfaces. Keep one owner per file when parallelizing.
 
 ### Execution order
 
-1. A0 dependency floor cutover.
-2. A1 attach-contract schema and persistence.
-3. A2 launch-path split.
-4. Launch A3 and A5 in parallel.
-5. Launch A4 either in parallel with strict `agents_cmd.rs` ownership or immediately after A3.
-6. Merge runtime lanes.
-7. Run A6 validation and closeout.
+1. Land A0, A1, and A2 first.
+2. Land A3 next. This is the durable-state freeze.
+3. After A3, launch Lane B and Lane D in parallel.
+4. Launch Lane C in parallel with Lane B only if it stays inside `async_repl.rs` and optional dispatch transport adapters and does not reopen `orchestration_session.rs` or `state_store.rs`.
+5. Merge runtime lanes.
+6. Finalize docs.
+7. Run Lane V last.
+
+### Conflict boundaries
+
+1. `dispatch_contract.rs` belongs to Lane A only. Parallel edits there guarantee semantic drift.
+2. `orchestration_session.rs` and `state_store.rs` belong to Lane A through A3. Nobody else edits those files before A3 lands.
+3. `agents_cmd.rs`, `agent_runtime/control.rs`, and `prompt_fulfillment.rs` belong to Lane B after A3. Lane C does not touch them.
+4. `async_repl.rs` and optional additive `world_ops.rs` changes belong to Lane C. Lane B does not touch them.
+5. docs may draft early, but they do not merge before runtime semantics are confirmed.
 
 ### Parallelization verdict
 
-This slice has:
-
-1. one required foundation phase,
-2. one shared launch-path split that must land before runtime lane fan-out,
-3. one honest runtime lane for reattach,
-4. one fork lane with merge-risk,
-5. one docs lane,
-6. one final validation lane.
-
-Peak low-risk parallelism is `A3 + A5`. `A4` can be parallelized only if `agents_cmd.rs` ownership is tightly coordinated after A2 lands.
+Peak low-risk parallelism is `Lane B + Lane D`.  
+`Lane C` is parallel-safe only if it respects the module boundary and does not reopen the shared contract or durable attach schema.
 
 ## Validation Commands
 
-### Dependency resolution gates
+### Targeted contract and persistence tests
 
 ```bash
-rg -n "^\\[patch\\.crates-io\\]|unified-agent-api = \\{ path = " Cargo.toml
-rg -n "unified-agent-api|path\\+file:.*/unified-agent-api/crates/agent_api" Cargo.lock
-cargo tree -p shell | rg "unified-agent-api"
-```
-
-Expected result after this slice:
-
-1. no `[patch.crates-io]` override remains,
-2. `Cargo.lock` no longer references the neighboring local checkout,
-3. `cargo tree` still resolves the dependency successfully.
-
-### Static control-semantics gates
-
-```bash
-rg -n 'prompt: ""|NoPromptRecovery' \
-  crates/shell/src/execution \
-  crates/shell/src/repl \
-  crates/world-service/src
-
-rg -n 'agent_api.session.resume.v1' \
-  crates/shell/src/execution \
-  crates/shell/src/repl
-```
-
-Expected result after this slice:
-
-1. no production `NoPromptRecovery` or `prompt: ""` path backing public `reattach` or `fork`,
-2. no production `fork` path routed through `agent_api.session.resume.v1`,
-3. any remaining `resume.v1` usage must be private continuity plumbing for actual prompt-bearing flows only, never the architectural meaning of public control verbs.
-
-### Focused cargo gates
-
-```bash
+cargo test -p shell resolve_public_control_target -- --nocapture
+cargo test -p shell public_turn_prompt_requests_require_exact_session_and_backend_contract -- --nocapture
+cargo test -p shell new_session_starts_active_attached -- --nocapture
+cargo test -p shell detached_postures_enforce_pending_inbox_truth -- --nocapture
 cargo test -p shell --test agent_public_control_surface_v1 -- --nocapture
-cargo test -p shell --test agent_successor_contract_ahcsitc0 -- --nocapture
-cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
-cargo test -p world-service -- --nocapture
 ```
 
-### Full workspace gates
+### World-member and parity validation
+
+```bash
+cargo test -p shell --test repl_world_first_routing_v1 -- --nocapture
+```
+
+### Workspace gates
 
 ```bash
 cargo fmt --all -- --check
@@ -851,61 +812,47 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace -- --nocapture
 ```
 
-### Manual validation proof points
+### Manual validation expectations
 
-Manual validation for this slice must prove:
+Manual validation must prove:
 
-1. host `start` still uses the real user prompt as the first prompt,
-2. host `turn` still uses the real user prompt as the follow-up prompt,
-3. `reattach` restores the same durable session without submitting a prompt,
-4. `reattach` fails closed when no continuity contract exists,
-5. `fork` allocates a new durable session without submitting a prompt,
-6. the fork result is honest about parked successor posture,
-7. the successor does not retain the parent's continuity token,
-8. the durable attach contract exists after host session birth and survives detach,
-9. detached-world follow-up still fails closed until host ownership returns,
-10. downstream slices 29/30/31 no longer describe blank-prompt control semantics as live architecture.
+1. inventory-backed defaults resolve deterministically;
+2. persisted attach truth is used for reattach/fork and detached-turn attach planning;
+3. supported overrides narrow or select the effective launch contract correctly;
+4. policy-denied overrides fail closed with field-specific reasons;
+5. persisted host attach truth matches the resolved host launch contract;
+6. equivalent human and orchestrator-controlled inventory-backed inputs resolve to equivalent launch truth.
 
-## Decision Audit Trail
+## Deferred Work
 
-| # | Phase | Decision | Classification | Principle | Rationale | Rejected |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | Scope freeze | `reattach` remains continuity-only in this slice | locked decision | fail closed beats guess-and-heal | avoids smuggling slice 31 fresh-attach work into this correction | auto-fresh-attach during `reattach` |
-| 2 | Successor truth | forked successors return `parked_resumable` with `attached_participant_id = null` | locked decision | durable truth over ambient inference | successor has not attached a client, so it must not claim active posture | helper-driven fake `active` response |
-| 3 | Successor normalization | copy attach-contract shape but clear successor `continuity_uaa_session_id` | ambiguity resolution | one token, one owner | prevents two durable sessions from claiming one backend-native continuity token | copying parent continuity token unchanged |
-| 4 | Sequencing | A0 and A1 land before launch-path split and runtime fan-out | execution decision | freeze before extend | later work is untrustworthy until dependency source and durable contract are stable | parallelizing schema work with runtime edits |
-| 5 | Validation | successor truth gets its own targeted test coverage, not only broad workspace tests | quality gate | regressions require proof | the highest-risk behavior change is successor/control truth drift | relying on full workspace tests alone |
+There is no root `TODOS.md` today, so the real deferrals stay here and in the downstream slice docs.
 
-## Completion Summary
+1. public capability-flag CLI syntax
+   - deferred to slice 30 after the internal contract is frozen;
+2. born-unattached status semantics
+   - deferred to slice 31;
+3. automatic attach-worker launch from pending work
+   - deferred to slice 31 after the operator contract is chosen;
+4. richer explain surfaces such as a dedicated `dispatch explain` command
+   - optional future DX slice, not needed to land the internal contract;
+5. any wire-level expansion of `MemberDispatchTransportRequest`
+   - only if orchestrator-controlled parity proves existing fields are insufficient.
 
-This plan is implementation-ready because it now freezes one architecture and one execution order:
+## Completion Checklist
 
-1. Objective: Substrate owns control-only recovery and successor allocation explicitly; UAA stays prompt-bearing only.
-2. Locked decisions: public verbs, durable authority, successor normalization, world follow-up transport, and downstream stack direction are fixed.
-3. Step 0: the minimum honest change, reuse surfaces, complexity budget, and dependency floor are explicit.
-4. Current repo truth: the exact blank-prompt convergence points and missing durable attach seam are named.
-5. Target architecture: the authority split between durable session, attach contract, attach worker, prompt-turn launcher, and successor allocator is explicit.
-6. Implementation plan: there is a concrete A0-A7 sequence with clear ownership boundaries, exact success/failure semantics, and exit gates.
-7. Code quality review: the plan constrains abstraction growth and keeps the change boring.
-8. Test review: the required coverage, regression rules, and exact suites are defined.
-9. Failure modes: silent control drift, false successor truth, copied continuity aliasing, and world-follow-up regressions are all blockers.
-10. Parallelization: one foundation phase, one shared launch split, one low-risk doc lane, one reattach lane, one merge-risk fork lane, and one final validation lane.
-11. Validation: dependency-source proof, grep gates, targeted cargo tests, and full workspace gates are all specified.
-
-After this slice lands, the repo should read and behave as one coherent system:
-
-1. durable orchestration session is the authority,
-2. persisted host attach contract is the durable launch truth,
-3. `reattach` is control-only attach,
-4. `fork` is successor allocation,
-5. `start` and `turn` remain prompt-bearing,
-6. the downstream stack builds on that architecture instead of working around it.
-
-## GSTACK REVIEW REPORT
-
-Review type: final cohesion pass with `/plan-eng-review` structure applied manually  
-Outcome: approved for implementation after ambiguity closure  
-Most important ambiguity resolved: successor sessions copy the attach-contract shape but do not inherit the parent's live continuity token  
-Highest-risk implementation seam: shared edits in `crates/shell/src/execution/agents_cmd.rs` across reattach and fork lanes  
-Parallelization included: yes  
-Remaining architectural ambiguity: none intentionally left open for this slice
+- [ ] one shared internal dispatch request envelope exists
+- [ ] inventory-backed and persisted-attach-backed baseline domains are explicit
+- [ ] one resolved launch contract exists with exact provenance
+- [ ] denial taxonomy is explicit and fail closed
+- [ ] supported override families are explicit and bounded
+- [ ] policy narrowing is deterministic and explanation-ready
+- [ ] `HostAttachContract` persists generalized host launch truth
+- [ ] successor attach-contract copy clears continuity and preserves exact launch truth
+- [ ] human `start` consumes the shared inventory-backed resolver
+- [ ] detached attach planning consumes persisted attach truth from that resolver
+- [ ] orchestrator-controlled world-member dispatch consumes the shared resolver
+- [ ] no caller-specific launch dialect remains
+- [ ] docs publish merge precedence and baseline domains exactly once
+- [ ] slices 30 and 31 reference the frozen contract instead of inventing their own
+- [ ] targeted tests are green
+- [ ] full workspace gates are green
