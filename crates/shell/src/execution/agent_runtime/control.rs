@@ -747,18 +747,20 @@ pub(crate) fn wait_for_hidden_owner_helper_readiness(
             plan.participant_id(),
             plan.requires_internal_session_id(),
         )?;
-        let startup_prompt_ready = if plan.mode == OwnerHelperMode::Start {
+        let startup_prompt_ready = if plan.startup_prompt.is_some() {
             start_launch_startup_prompt_is_accepted_or_terminal(store, plan)?
         } else {
             true
         };
         if startup_prompt_ready
             && (readiness == super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyAttached
-                || (plan.mode == OwnerHelperMode::Start
-                    && matches!(
-                        readiness,
-                        super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
-                    )))
+                || (matches!(
+                    plan.mode,
+                    OwnerHelperMode::Start | OwnerHelperMode::ResumeOneTurn
+                ) && matches!(
+                    readiness,
+                    super::state_store::HiddenOwnerHelperLaunchReadiness::ReadyDetached(_)
+                )))
         {
             return Ok(());
         }
@@ -2566,9 +2568,12 @@ mod tests {
             OrchestrationSessionPosture, OrchestrationSessionRecord, OrchestrationSessionState,
             StartupPromptStreamState,
         },
-        session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionState},
+        session::{
+            AgentRuntimeParticipantRecord, AgentRuntimeReplacementParticipantInit,
+            AgentRuntimeSessionState,
+        },
         validator::RuntimeSelectionDescriptor,
-        AgentRuntimeStateStore,
+        AgentRuntimeStateStore, ORCHESTRATOR_ROLE,
     };
     use crate::execution::config_model::AgentExecutionScope;
     use std::path::PathBuf;
@@ -2613,6 +2618,44 @@ mod tests {
                 run_id: "run_start".to_string(),
                 resumed_from_participant_id: None,
                 internal_uaa_session_id: None,
+            },
+            startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
+                prompt_text: "hello".to_string(),
+                stream_path: PathBuf::from("/tmp/startup.sock"),
+            }),
+            source_orchestration_session_id: None,
+        }
+    }
+
+    fn resumed_turn_test_plan(
+        orchestration_session_id: &str,
+        participant_id: &str,
+        resumed_from_participant_id: &str,
+        internal_uaa_session_id: &str,
+    ) -> HiddenOwnerHelperLaunchPlan {
+        HiddenOwnerHelperLaunchPlan {
+            mode: OwnerHelperMode::ResumeOneTurn,
+            descriptor: ResolvedRuntimeDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: ResolvedRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: "/usr/bin/codex".to_string(),
+            },
+            session: HiddenOwnerHelperSessionPlan {
+                orchestration_session_id: orchestration_session_id.to_string(),
+                shell_trace_session_id: "trace_session".to_string(),
+                workspace_root: "/workspace".to_string(),
+                world_id: None,
+                world_generation: None,
+            },
+            participant: HiddenOwnerHelperParticipantPlan {
+                participant_id: participant_id.to_string(),
+                lease_token: format!("lease_{participant_id}"),
+                run_id: "run_resume_one_turn".to_string(),
+                resumed_from_participant_id: Some(resumed_from_participant_id.to_string()),
+                internal_uaa_session_id: Some(internal_uaa_session_id.to_string()),
             },
             startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
                 prompt_text: "hello".to_string(),
@@ -2846,6 +2889,71 @@ mod tests {
                 &test_plan("sess_start_ready_attached", "ash_start_ready_attached"),
             )
             .expect("attached live readiness should not wait for startup prompt completion");
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn helper_readiness_accepts_resume_one_turn_after_fast_detach_once_prompt_is_terminal() {
+        with_store(|store| {
+            let descriptor = RuntimeSelectionDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: AgentRuntimeBackendKind::Codex,
+                protocol: PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: PathBuf::from("/usr/bin/codex"),
+            };
+            let mut participant = AgentRuntimeParticipantRecord::new_replacement_participant(
+                &descriptor,
+                AgentRuntimeReplacementParticipantInit {
+                    orchestration_session_id: "sess_resume_turn_ready".to_string(),
+                    participant_id: "ash_resume_turn_ready".to_string(),
+                    role: ORCHESTRATOR_ROLE.to_string(),
+                    orchestrator_participant_id: None,
+                    parent_participant_id: None,
+                    resumed_from_participant_id: "ash_source".to_string(),
+                    world: None,
+                    lease_token: "lease_resume_turn_ready".to_string(),
+                },
+            )
+            .expect("replacement participant");
+            participant.transition_state(AgentRuntimeSessionState::Ready);
+            participant.set_uaa_session_id("thread-test");
+            participant.mark_client_detached("owner detached cleanly");
+
+            let mut orchestration = OrchestrationSessionRecord::new(
+                "sess_resume_turn_ready".to_string(),
+                "trace_session".to_string(),
+                "/workspace".to_string(),
+                &participant,
+            );
+            orchestration.transition_state(OrchestrationSessionState::Active);
+            orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
+            orchestration.mark_parked_resumable("owner detached cleanly");
+            orchestration.initialize_startup_prompt(participant.handle.participant_id.clone());
+            orchestration.mark_startup_prompt_completed(
+                participant.handle.participant_id.as_str(),
+                "success",
+            );
+
+            store
+                .persist_orchestration_session(&orchestration)
+                .expect("persist orchestration");
+            store
+                .persist_participant(&participant)
+                .expect("persist participant");
+
+            super::wait_for_hidden_owner_helper_readiness(
+                store,
+                &resumed_turn_test_plan(
+                    "sess_resume_turn_ready",
+                    "ash_resume_turn_ready",
+                    "ash_source",
+                    "thread-test",
+                ),
+            )
+            .expect("resume_one_turn readiness should accept a terminalized fast-detach handoff");
         });
     }
 
