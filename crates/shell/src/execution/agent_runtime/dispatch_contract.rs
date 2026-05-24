@@ -7,6 +7,7 @@ use crate::execution::agent_inventory::{
     project_inventory_entry, AgentCapabilitiesV1, AgentConfigKind, AgentInventoryBaselineOrigin,
     AgentInventoryEntryV1, ProjectedInventoryEntryV1, ProjectedInventoryValueOrigin,
 };
+use crate::execution::policy_model::{apply_policy_patch, PolicyPatch};
 use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
 
@@ -469,6 +470,7 @@ fn resolve_inventory_projected_contract(
 ) -> Result<ResolvedLaunchContract, DispatchResolutionError> {
     validate_inventory_projected_candidate(&projected)?;
     validate_dispatch_overrides(envelope, projected.execution_scope)?;
+    let effective_policy = resolve_inventory_effective_policy(base_policy, projected.policy_overlay.as_ref());
     if !base_policy
         .agents_allowed_backends
         .iter()
@@ -533,6 +535,17 @@ fn resolve_inventory_projected_contract(
             value_origin: FieldValueOrigin::InventoryExplicit,
         },
     );
+    field_provenance.insert(
+        "effective_policy".to_string(),
+        FieldProvenance {
+            baseline_origin,
+            value_origin: if projected.policy_overlay.is_some() {
+                FieldValueOrigin::DispatchOverrideNarrowedByPolicy
+            } else {
+                FieldValueOrigin::InventoryExplicit
+            },
+        },
+    );
 
     let backend_kind = orchestrator_backend_kind(projected.agent_id.as_str()).map_err(|err| {
         DispatchResolutionError {
@@ -560,7 +573,7 @@ fn resolve_inventory_projected_contract(
         },
         capabilities: projected.capabilities,
         attach_launch_knobs: envelope.attach_launch_knobs,
-        effective_policy: base_policy.clone(),
+        effective_policy,
         baseline_source: BaselineSourceMetadata {
             baseline_kind: DispatchBaselineKind::InventoryLaunch,
             baseline_origin,
@@ -619,6 +632,16 @@ fn validate_inventory_projected_candidate(
     }
 
     Ok(())
+}
+
+fn resolve_inventory_effective_policy(
+    base_policy: &Policy,
+    overlay: Option<&PolicyPatch>,
+) -> Policy {
+    match overlay {
+        Some(overlay) => apply_policy_patch(base_policy, overlay),
+        None => base_policy.clone(),
+    }
 }
 
 fn validate_dispatch_overrides(
@@ -701,6 +724,7 @@ mod tests {
         AgentCapabilitiesV1, AgentCliConfigV1, AgentConfigKind, AgentConfigV1,
         AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
+    use crate::execution::policy_model::PolicyPatch;
     use crate::execution::agent_runtime::control::{
         ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
     };
@@ -750,6 +774,17 @@ mod tests {
         cli_mode: Option<AgentCliMode>,
         capabilities: AgentCapabilitiesV1,
     ) -> AgentInventoryEntryV1 {
+        make_entry_with_overlay(path, agent_id, scope, cli_mode, capabilities, None)
+    }
+
+    fn make_entry_with_overlay(
+        path: PathBuf,
+        agent_id: &str,
+        scope: Option<AgentExecutionScope>,
+        cli_mode: Option<AgentCliMode>,
+        capabilities: AgentCapabilitiesV1,
+        policy_overlay: Option<PolicyPatch>,
+    ) -> AgentInventoryEntryV1 {
         AgentInventoryEntryV1 {
             path,
             file: AgentFileV1 {
@@ -767,7 +802,7 @@ mod tests {
                     api: None,
                     capabilities,
                 },
-                policy_overlay: None,
+                policy_overlay,
             },
         }
     }
@@ -845,6 +880,104 @@ mod tests {
         );
         assert_eq!(resolved.backend_id, "cli:codex");
         assert_eq!(resolved.execution_scope, AgentExecutionScope::Host);
+    }
+
+    #[test]
+    fn inventory_contract_merges_policy_overlay_into_effective_policy() {
+        let cwd = PathBuf::from(".");
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry_with_overlay(
+                PathBuf::from("codex.yaml"),
+                "codex",
+                Some(AgentExecutionScope::Host),
+                Some(AgentCliMode::Persistent),
+                required_capabilities(),
+                Some(PolicyPatch {
+                    require_approval: Some(true),
+                    ..PolicyPatch::default()
+                }),
+            ),
+        );
+        let policy = Policy {
+            agents_allowed_backends: vec!["cli:codex".to_string()],
+            require_approval: false,
+            ..Policy::default()
+        };
+        let config = SubstrateConfig::default();
+
+        let resolved = resolve_inventory_contract_for_exact_backend(
+            &cwd,
+            &config,
+            &inventory,
+            &policy,
+            &exact_backend_envelope(
+                DispatchCallerKind::HumanStart,
+                DispatchBaselineKind::InventoryLaunch,
+                "cli:codex",
+            ),
+            AgentExecutionScope::Host,
+        )
+        .expect("resolution should succeed")
+        .expect("contract");
+
+        assert!(resolved.effective_policy.require_approval);
+        assert_eq!(
+            resolved
+                .field_provenance
+                .get("effective_policy")
+                .expect("policy provenance")
+                .value_origin,
+            FieldValueOrigin::DispatchOverrideNarrowedByPolicy
+        );
+    }
+
+    #[test]
+    fn inventory_contract_without_policy_overlay_keeps_base_policy() {
+        let cwd = PathBuf::from(".");
+        let mut inventory = BTreeMap::new();
+        inventory.insert(
+            "codex".to_string(),
+            make_entry(
+                PathBuf::from("codex.yaml"),
+                "codex",
+                Some(AgentExecutionScope::Host),
+                Some(AgentCliMode::Persistent),
+                required_capabilities(),
+            ),
+        );
+        let policy = Policy {
+            agents_allowed_backends: vec!["cli:codex".to_string()],
+            require_approval: false,
+            ..Policy::default()
+        };
+        let config = SubstrateConfig::default();
+
+        let resolved = resolve_inventory_contract_for_exact_backend(
+            &cwd,
+            &config,
+            &inventory,
+            &policy,
+            &exact_backend_envelope(
+                DispatchCallerKind::HumanStart,
+                DispatchBaselineKind::InventoryLaunch,
+                "cli:codex",
+            ),
+            AgentExecutionScope::Host,
+        )
+        .expect("resolution should succeed")
+        .expect("contract");
+
+        assert!(!resolved.effective_policy.require_approval);
+        assert_eq!(
+            resolved
+                .field_provenance
+                .get("effective_policy")
+                .expect("policy provenance")
+                .value_origin,
+            FieldValueOrigin::InventoryExplicit
+        );
     }
 
     #[test]

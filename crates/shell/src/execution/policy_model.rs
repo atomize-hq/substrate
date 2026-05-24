@@ -1062,6 +1062,12 @@ fn validate_dotted_id_list(values: &[String], key: &str) -> Result<()> {
     Ok(())
 }
 
+pub(crate) fn apply_policy_patch(base: &Policy, patch: &PolicyPatch) -> Policy {
+    let mut effective = base.clone();
+    apply_policy_patch_over(&mut effective, patch);
+    effective
+}
+
 fn apply_policy_patch_over(target: &mut Policy, patch: &PolicyPatch) {
     if let Some(v) = &patch.id {
         target.id = v.clone();
