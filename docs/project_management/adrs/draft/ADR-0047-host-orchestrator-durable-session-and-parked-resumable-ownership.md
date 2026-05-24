@@ -259,6 +259,18 @@ These decisions are no longer open in this ADR. They are pinned here so the dura
   - preserves the distinction between operational ownership recovery and foreground turn submission,
   - and avoids reintroducing ambiguous `resume` semantics into the public lifecycle surface.
 
+### `fork` semantics are successor allocation only
+- `substrate agent fork --session <orchestration_session_id>` is the explicit successor-allocation verb.
+- `fork` MUST allocate a new durable orchestration session before any later follow-up work is considered.
+- `fork` MUST copy the source session's persisted host attach-contract shape but MUST clear inherited `continuity_uaa_session_id` on the successor.
+- `fork` MUST return the successor honestly as `parked_resumable` with `attached_participant_id = null`.
+- `fork` MUST preserve source lineage truth through the successor participant/session records.
+- `fork` MUST NOT submit a prompt, attach a live owner loop immediately, or reuse the parent's continuity token as if the successor were already attached.
+- Rationale:
+  - successor allocation is durable-state work, not prompt execution,
+  - keeping the successor unattached avoids ownership theater and false `active_attached` truth,
+  - and clearing inherited continuity preserves the distinction between "resume this exact backend session" and "allocate a new durable successor session".
+
 ### Resolved inbox items remain retained for audit, then compacted later
 - Resolving an inbox item MUST remove it from authoritative pending/live counts immediately.
 - Resolving an inbox item MUST NOT immediately delete the persisted inbox artifact.

@@ -1,6 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::execution::agent_runtime::control::{
+    ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
+};
+use crate::execution::config_model::AgentExecutionScope;
+
 use super::mapping::{protocol_validation_error, PURE_AGENT_PROTOCOL};
 use super::session::AgentRuntimeSessionManifest;
 
@@ -67,6 +72,47 @@ pub(crate) enum OrchestrationSessionPosture {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub(crate) struct HostAttachContract {
+    pub backend_id: String,
+    pub execution_scope: AgentExecutionScope,
+    pub protocol: String,
+    pub launch_descriptor: ResolvedRuntimeDescriptor,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuity_uaa_session_id: Option<String>,
+}
+
+impl HostAttachContract {
+    fn from_manifest(manifest: &AgentRuntimeSessionManifest) -> Option<Self> {
+        if manifest.handle.role != super::mapping::ORCHESTRATOR_ROLE
+            || manifest.handle.execution.scope != AgentExecutionScope::Host
+        {
+            return None;
+        }
+
+        let backend_kind = match manifest.internal.resolved_agent_kind.as_str() {
+            "codex" => ResolvedRuntimeBackendKind::Codex,
+            "claude_code" => ResolvedRuntimeBackendKind::ClaudeCode,
+            _ => return None,
+        };
+
+        Some(Self {
+            backend_id: manifest.handle.backend_id.clone(),
+            execution_scope: manifest.handle.execution.scope,
+            protocol: manifest.handle.protocol.clone(),
+            launch_descriptor: ResolvedRuntimeDescriptor {
+                agent_id: manifest.handle.agent_id.clone(),
+                backend_id: manifest.handle.backend_id.clone(),
+                backend_kind,
+                protocol: manifest.handle.protocol.clone(),
+                execution_scope: manifest.handle.execution.scope,
+                binary_path: manifest.internal.resolved_binary_path.clone(),
+            },
+            continuity_uaa_session_id: manifest.internal_uaa_session_id().map(ToOwned::to_owned),
+        })
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct OrchestrationSessionRecord {
     // This is the public/operator-facing selector for the parent orchestration row.
     pub orchestration_session_id: String,
@@ -102,6 +148,8 @@ pub(crate) struct OrchestrationSessionRecord {
     pub parked_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub startup_prompt: Option<StartupPromptRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_attach_contract: Option<HostAttachContract>,
 }
 
 impl OrchestrationSessionRecord {
@@ -137,6 +185,7 @@ impl OrchestrationSessionRecord {
             last_attention_at: None,
             parked_reason: None,
             startup_prompt: None,
+            host_attach_contract: HostAttachContract::from_manifest(child_manifest),
         }
     }
 
@@ -169,6 +218,34 @@ impl OrchestrationSessionRecord {
 
     pub(crate) fn has_world_binding(&self) -> bool {
         self.world_id.is_some() && self.world_generation.is_some()
+    }
+
+    pub(crate) fn host_attach_contract(&self) -> Option<&HostAttachContract> {
+        self.host_attach_contract.as_ref()
+    }
+
+    pub(crate) fn sync_host_attach_contract(&mut self, manifest: &AgentRuntimeSessionManifest) {
+        let Some(contract) = self.host_attach_contract.as_mut() else {
+            self.host_attach_contract = HostAttachContract::from_manifest(manifest);
+            return;
+        };
+        if manifest.handle.role != super::mapping::ORCHESTRATOR_ROLE
+            || manifest.handle.execution.scope != AgentExecutionScope::Host
+            || manifest.handle.orchestration_session_id != self.orchestration_session_id
+            || manifest.handle.agent_id != self.orchestrator_agent_id
+        {
+            return;
+        }
+
+        if let Some(session_id) = manifest.internal_uaa_session_id() {
+            contract.continuity_uaa_session_id = Some(session_id.to_string());
+        }
+    }
+
+    pub(crate) fn fork_successor_attach_contract(&self) -> Option<HostAttachContract> {
+        let mut contract = self.host_attach_contract.clone()?;
+        contract.continuity_uaa_session_id = None;
+        Some(contract)
     }
 
     pub(crate) fn bind_active_session_handle(&mut self, participant_id: impl Into<String>) {
@@ -232,6 +309,27 @@ impl OrchestrationSessionRecord {
                 "orchestration session {}",
                 protocol_validation_error("it", Some(self.orchestrator_protocol.as_str()))
             );
+        }
+
+        if let Some(contract) = self.host_attach_contract.as_ref() {
+            if contract.execution_scope != AgentExecutionScope::Host {
+                anyhow::bail!("host_attach_contract must remain host scoped");
+            }
+            if contract.protocol != PURE_AGENT_PROTOCOL {
+                anyhow::bail!("host_attach_contract must use the pure agent protocol");
+            }
+            if contract.backend_id != self.orchestrator_backend_id {
+                anyhow::bail!("host_attach_contract backend_id must match the session backend");
+            }
+            if contract.launch_descriptor.backend_id != contract.backend_id {
+                anyhow::bail!("host_attach_contract launch_descriptor backend drifted");
+            }
+            if contract.launch_descriptor.execution_scope != contract.execution_scope {
+                anyhow::bail!("host_attach_contract launch_descriptor scope drifted");
+            }
+            if contract.launch_descriptor.protocol != contract.protocol {
+                anyhow::bail!("host_attach_contract launch_descriptor protocol drifted");
+            }
         }
 
         match self.posture {

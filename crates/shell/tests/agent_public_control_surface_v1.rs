@@ -760,6 +760,32 @@ fn write_json_file(path: &Path, value: &Value) {
     .unwrap_or_else(|err| panic!("failed to write {}: {err}", path.display()));
 }
 
+fn host_attach_contract_manifest(
+    fixture: &AgentControlFixture,
+    agent_id: &str,
+    orchestration_session_id: &str,
+) -> Value {
+    let backend_kind = if agent_id == "claude_code" {
+        "claude_code"
+    } else {
+        "codex"
+    };
+    json!({
+        "backend_id": format!("cli:{agent_id}"),
+        "execution_scope": "host",
+        "protocol": PURE_AGENT_PROTOCOL,
+        "launch_descriptor": {
+            "agent_id": agent_id,
+            "backend_id": format!("cli:{agent_id}"),
+            "backend_kind": backend_kind,
+            "protocol": PURE_AGENT_PROTOCOL,
+            "execution_scope": "host",
+            "binary_path": fixture.fake_codex.display().to_string()
+        },
+        "continuity_uaa_session_id": format!("uaa-{orchestration_session_id}")
+    })
+}
+
 fn write_active_orchestration_session(
     fixture: &AgentControlFixture,
     agent_id: &str,
@@ -792,7 +818,12 @@ fn write_active_orchestration_session(
             "world_id": Value::Null,
             "world_generation": Value::Null,
             "invalidation_reason": Value::Null,
-            "closed_at": Value::Null
+            "closed_at": Value::Null,
+            "host_attach_contract": host_attach_contract_manifest(
+                fixture,
+                agent_id,
+                orchestration_session_id
+            )
         }),
     );
 }
@@ -829,7 +860,12 @@ fn write_parked_orchestration_session(
             "world_id": Value::Null,
             "world_generation": Value::Null,
             "invalidation_reason": Value::Null,
-            "closed_at": Value::Null
+            "closed_at": Value::Null,
+            "host_attach_contract": host_attach_contract_manifest(
+                fixture,
+                agent_id,
+                orchestration_session_id
+            )
         }),
     );
 }
@@ -869,7 +905,12 @@ fn write_parked_world_orchestration_session(
             "world_id": world_id,
             "world_generation": world_generation,
             "invalidation_reason": Value::Null,
-            "closed_at": Value::Null
+            "closed_at": Value::Null,
+            "host_attach_contract": host_attach_contract_manifest(
+                fixture,
+                agent_id,
+                orchestration_session_id
+            )
         }),
     );
 }
@@ -1656,7 +1697,11 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
     assert_eq!(fork_json.get("scope").and_then(Value::as_str), Some("host"));
     assert_eq!(
         fork_json.get("state").and_then(Value::as_str),
-        Some("active")
+        Some("parked_resumable")
+    );
+    assert!(
+        fork_json.get("participant_id").is_none(),
+        "fork should return only the successor orchestration session handle: {fork_json}"
     );
     assert_empty_warnings(&fork_json);
 
@@ -1668,9 +1713,10 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
         fork_session_id, "sess_resume_source",
         "fork must allocate a new orchestration session id"
     );
-    let fork_participant_id = fork_json["participant_id"]
+    let fork_session = fixture.load_orchestration_session(&fork_session_id);
+    let fork_participant_id = fork_session["active_session_handle_id"]
         .as_str()
-        .expect("fork participant id")
+        .expect("fork successor active participant id")
         .to_string();
     let fork_participant = fixture.load_participant(&fork_session_id, &fork_participant_id);
     assert_eq!(
@@ -1680,21 +1726,22 @@ fn public_reattach_and_fork_preserve_exact_session_and_lineage_contracts() {
         Some(resumed_participant_id.as_str()),
         "fork successor persistence must point lineage at the exact live source participant"
     );
-    let fork_owner_pid = fixture.load_orchestration_session(&fork_session_id)["shell_owner_pid"]
-        .as_u64()
-        .expect("fork owner pid") as u32;
     assert!(
-        pid_is_alive(fork_owner_pid),
-        "fork must leave a live owner loop"
+        matches!(
+            fork_session.get("posture").and_then(Value::as_str),
+            Some("parked_resumable")
+        ),
+        "fork successor must persist detached resumable posture: {fork_session}"
     );
-    let fork_stdin = fixture.read_fake_codex_stdin(1);
     assert!(
-        fork_stdin.trim().is_empty(),
-        "fork successor launch must not send a hidden bootstrap prompt or any other user prompt payload: {fork_stdin:?}"
+        matches!(
+            fork_session.get("shell_owner_pid").and_then(Value::as_u64),
+            Some(0)
+        ),
+        "fork successor allocation should not leave an attached owner loop: {fork_session}"
     );
 
     terminate_pid(resumed_owner_pid);
-    terminate_pid(fork_owner_pid);
 }
 
 #[test]

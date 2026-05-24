@@ -34,6 +34,7 @@ use crate::execution::agent_runtime::orchestration_session::StartupPromptStreamS
 #[cfg(target_os = "linux")]
 use crate::execution::build_agent_client_and_pending_diff_request;
 use crate::execution::config_model::AgentExecutionScope;
+use crate::execution::prompt_fulfillment::PromptFulfillmentCancelHandle;
 
 use super::{
     mapping::AgentRuntimeBackendKind, session::AgentRuntimeSessionManifest,
@@ -63,9 +64,8 @@ const STARTUP_PROMPT_STREAM_ACCEPT_TIMEOUT: Duration = Duration::from_secs(10);
 #[serde(rename_all = "snake_case")]
 pub(crate) enum OwnerHelperMode {
     Start,
-    Resume,
+    Attach,
     ResumeOneTurn,
-    Fork,
 }
 
 #[allow(dead_code)]
@@ -73,9 +73,8 @@ impl OwnerHelperMode {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Start => "start",
-            Self::Resume => "resume",
+            Self::Attach => "attach",
             Self::ResumeOneTurn => "resume_one_turn",
-            Self::Fork => "fork",
         }
     }
 }
@@ -285,7 +284,7 @@ impl HiddenOwnerHelperLaunchPlan {
     pub(crate) fn requires_internal_session_id(&self) -> bool {
         matches!(
             self.mode,
-            OwnerHelperMode::Resume | OwnerHelperMode::ResumeOneTurn | OwnerHelperMode::Fork
+            OwnerHelperMode::Attach | OwnerHelperMode::ResumeOneTurn
         )
     }
 }
@@ -1048,7 +1047,9 @@ pub(crate) fn persist_runtime_snapshots(
     orchestration_session: &OrchestrationSessionRecord,
     manifest: &AgentRuntimeSessionManifest,
 ) -> Result<()> {
-    store.persist_orchestration_session(orchestration_session)?;
+    let mut orchestration_snapshot = orchestration_session.clone();
+    orchestration_snapshot.sync_host_attach_contract(manifest);
+    store.persist_orchestration_session(&orchestration_snapshot)?;
     store.persist_participant(manifest)
 }
 
@@ -1268,7 +1269,7 @@ pub(crate) fn spawn_local_private_stop_owner(
     orchestration_session: Arc<Mutex<OrchestrationSessionRecord>>,
     manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
     shutdown_requested: Arc<AtomicBool>,
-    cancel: agent_api::AgentWrapperCancelHandle,
+    cancel: PromptFulfillmentCancelHandle,
     mut stop_rx: PrivateStopRequestReceiver,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
@@ -1354,11 +1355,10 @@ where
         .run_control(request)
         .await
         .map_err(|err| anyhow::anyhow!("substrate: error: {}", err))?;
-    let agent_api::AgentWrapperRunControl { handle, cancel: _ } = control;
     let agent_api::AgentWrapperRunHandle {
         mut events,
         completion,
-    } = handle;
+    } = control.handle;
 
     while let Some(wrapper_event) = events.next().await {
         let (orchestration_snapshot, manifest_snapshot, event) = {
@@ -2625,9 +2625,8 @@ mod tests {
     #[test]
     fn owner_helper_modes_remain_internal_and_exact() {
         assert_eq!(OwnerHelperMode::Start.as_str(), "start");
-        assert_eq!(OwnerHelperMode::Resume.as_str(), "resume");
+        assert_eq!(OwnerHelperMode::Attach.as_str(), "attach");
         assert_eq!(OwnerHelperMode::ResumeOneTurn.as_str(), "resume_one_turn");
-        assert_eq!(OwnerHelperMode::Fork.as_str(), "fork");
     }
 
     #[test]

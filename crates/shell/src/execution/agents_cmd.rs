@@ -13,7 +13,7 @@ use crate::execution::agent_runtime::control::{
     HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
     HiddenOwnerHelperStartTimeoutReconciliation, OwnerHelperMode, PublicPromptAction,
     PublicPromptCommandRequest, PublicPromptInput, PublicSessionPosture,
-    ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor, HIDDEN_OWNER_HELPER_SUBCOMMAND,
+    HIDDEN_OWNER_HELPER_SUBCOMMAND,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::{
@@ -24,6 +24,7 @@ use crate::execution::agent_runtime::control::{
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, OrchestrationSessionRecord,
 };
+use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 #[cfg(unix)]
 use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
 use crate::execution::agent_runtime::validator::{
@@ -622,8 +623,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
     if target.session_posture == PublicSessionPosture::DetachedReattachable
         && target.target_kind == PublicTurnTargetKind::Host
     {
-        let mut plan =
-            build_successor_launch_plan(cli, &args.session, OwnerHelperMode::ResumeOneTurn)?;
+        let mut plan = build_resumed_turn_launch_plan(&args.session)?;
         if plan.descriptor.backend_id != backend_id {
             anyhow::bail!(config_model::user_error(format!(
                 "backend_not_in_session: orchestration session {} has no exact backend slot for {}",
@@ -707,11 +707,11 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
 }
 
 fn run_reattach(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
-    let plan = build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Resume)?;
+    let plan = build_attach_launch_plan(&args.session)?;
     let receipt = launch_hidden_owner_helper(&plan, cli).map_err(runtime_start_error)?;
     if receipt.orchestration_session_id != args.session {
         anyhow::bail!(runtime_start_error(anyhow::anyhow!(
-            "hidden owner-helper resumed orchestration session {} instead of requested session {}",
+            "hidden owner-helper attached orchestration session {} instead of requested session {}",
             receipt.orchestration_session_id,
             args.session
         )));
@@ -790,20 +790,19 @@ fn runtime_start_error(err: anyhow::Error) -> anyhow::Error {
     config_model::user_error(format!("runtime_start_failed: {err}"))
 }
 
-fn run_fork(args: &AgentSessionControlArgs, cli: &Cli) -> Result<()> {
-    let plan = build_successor_launch_plan(cli, &args.session, OwnerHelperMode::Fork)?;
-    let receipt = launch_hidden_owner_helper(&plan, cli)?;
+fn run_fork(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
+    let allocation = allocate_fork_successor(&args.session)?;
     render_agent_control_result(
         args.json,
         &AgentControlResultJson {
             action: "fork",
-            orchestration_session_id: &receipt.orchestration_session_id,
-            backend_id: &receipt.backend_id,
+            orchestration_session_id: &allocation.orchestration_session_id,
+            backend_id: &allocation.backend_id,
             scope: "host",
-            state: "active",
+            state: "parked_resumable",
             warnings: Vec::new(),
-            participant_id: Some(&receipt.participant_id),
-            source_orchestration_session_id: plan.source_orchestration_session_id.as_deref(),
+            participant_id: None,
+            source_orchestration_session_id: Some(&allocation.source_orchestration_session_id),
         },
     )
 }
@@ -990,38 +989,28 @@ fn build_start_launch_plan(
     })
 }
 
-fn build_successor_launch_plan(
-    _cli: &Cli,
-    orchestration_session_id: &str,
-    mode: OwnerHelperMode,
-) -> Result<HiddenOwnerHelperLaunchPlan> {
+fn build_attach_launch_plan(orchestration_session_id: &str) -> Result<HiddenOwnerHelperLaunchPlan> {
     let store = AgentRuntimeStateStore::new()?;
-    let action = match mode {
-        OwnerHelperMode::Resume | OwnerHelperMode::ResumeOneTurn => PublicControlAction::Resume,
-        OwnerHelperMode::Fork => PublicControlAction::Fork,
-        OwnerHelperMode::Start => anyhow::bail!("invalid successor launch mode"),
-    };
     let target = store
-        .resolve_public_control_target(orchestration_session_id, action)
+        .resolve_public_control_target(orchestration_session_id, PublicControlAction::Resume)
         .map_err(|err| config_model::user_error(err.to_string()))?;
-    let descriptor = descriptor_from_participant(&target.active_participant)?;
-    let target_session_id = if mode == OwnerHelperMode::Fork {
-        Uuid::now_v7().to_string()
-    } else {
-        target.session.orchestration_session_id.clone()
-    };
-    let trace_session_id = if mode == OwnerHelperMode::Fork {
-        Uuid::now_v7().to_string()
-    } else {
-        target.session.shell_trace_session_id.clone()
-    };
+    let descriptor = target
+        .host_attach_contract
+        .as_ref()
+        .map(|contract| contract.launch_descriptor.clone())
+        .ok_or_else(|| {
+            config_model::user_error(format!(
+                "owner_unreachable: orchestration session {} is missing durable host attach contract state",
+                orchestration_session_id
+            ))
+        })?;
 
     Ok(HiddenOwnerHelperLaunchPlan {
-        mode,
+        mode: OwnerHelperMode::Attach,
         descriptor,
         session: HiddenOwnerHelperSessionPlan {
-            orchestration_session_id: target_session_id,
-            shell_trace_session_id: trace_session_id,
+            orchestration_session_id: target.session.orchestration_session_id.clone(),
+            shell_trace_session_id: target.session.shell_trace_session_id.clone(),
             workspace_root: target.session.workspace_root.clone(),
             world_id: target.session.world_id.clone(),
             world_generation: target.session.world_generation,
@@ -1034,13 +1023,105 @@ fn build_successor_launch_plan(
                 target.active_participant.handle.participant_id.clone(),
             ),
             internal_uaa_session_id: target
-                .active_participant
-                .internal_uaa_session_id()
-                .map(ToOwned::to_owned),
+                .host_attach_contract
+                .as_ref()
+                .and_then(|contract| contract.continuity_uaa_session_id.clone()),
         },
         startup_prompt: None,
-        source_orchestration_session_id: (mode == OwnerHelperMode::Fork)
-            .then(|| target.session.orchestration_session_id.clone()),
+        source_orchestration_session_id: None,
+    })
+}
+
+fn build_resumed_turn_launch_plan(
+    orchestration_session_id: &str,
+) -> Result<HiddenOwnerHelperLaunchPlan> {
+    let mut plan = build_attach_launch_plan(orchestration_session_id)?;
+    plan.mode = OwnerHelperMode::ResumeOneTurn;
+    Ok(plan)
+}
+
+#[derive(Clone, Debug)]
+struct ForkSuccessorAllocation {
+    orchestration_session_id: String,
+    backend_id: String,
+    source_orchestration_session_id: String,
+}
+
+fn allocate_fork_successor(orchestration_session_id: &str) -> Result<ForkSuccessorAllocation> {
+    let store = AgentRuntimeStateStore::new()?;
+    let target = store
+        .resolve_public_control_target(orchestration_session_id, PublicControlAction::Fork)
+        .map_err(|err| config_model::user_error(err.to_string()))?;
+    let attach_contract = target.host_attach_contract.clone().ok_or_else(|| {
+        config_model::user_error(format!(
+            "owner_unreachable: orchestration session {} is missing durable host attach contract state",
+            orchestration_session_id
+        ))
+    })?;
+    let descriptor = (&attach_contract.launch_descriptor)
+        .try_into()
+        .map_err(|err| config_model::user_error(format!("owner_unreachable: {err:#}")))?;
+    let successor_session_id = Uuid::now_v7().to_string();
+    let successor_participant_id = format!("ash_{}", Uuid::now_v7());
+    let lease_token = Uuid::now_v7().to_string();
+    let run_id = Uuid::now_v7().to_string();
+    let mut successor_participant = AgentRuntimeParticipantRecord::new_replacement_participant(
+        &descriptor,
+        AgentRuntimeReplacementParticipantInit {
+            orchestration_session_id: successor_session_id.clone(),
+            participant_id: successor_participant_id.clone(),
+            role: ORCHESTRATOR_ROLE.to_string(),
+            orchestrator_participant_id: None,
+            parent_participant_id: None,
+            resumed_from_participant_id: target.active_participant.handle.participant_id.clone(),
+            world: None,
+            lease_token,
+        },
+    )
+    .context("failed to allocate fork successor participant")?;
+    successor_participant
+        .transition_state(crate::execution::agent_runtime::AgentRuntimeSessionState::Ready);
+    successor_participant.internal.latest_run_id = Some(run_id.clone());
+    successor_participant.internal.shell_owner_pid = 0;
+    successor_participant.internal.uaa_session_id = None;
+    successor_participant.internal.control_owner_retained = false;
+    successor_participant.internal.event_stream_active = false;
+    successor_participant.internal.completion_observer_retained = false;
+    successor_participant.internal.ownership_valid = false;
+    successor_participant.internal.ownership_verified_at = None;
+    successor_participant.internal.attached_client_present = false;
+    successor_participant.internal.last_attached_at = None;
+    successor_participant.internal.last_detached_at = None;
+    successor_participant.internal.detach_reason = None;
+    successor_participant.internal.resume_eligible = false;
+    successor_participant.touch_heartbeat();
+
+    let mut successor_session = OrchestrationSessionRecord::new(
+        successor_session_id.clone(),
+        Uuid::now_v7().to_string(),
+        target.session.workspace_root.clone(),
+        &successor_participant,
+    );
+    successor_session.shell_owner_pid = 0;
+    successor_session.latest_run_id = Some(run_id);
+    successor_session.world_id = target.session.world_id.clone();
+    successor_session.world_generation = target.session.world_generation;
+    successor_session.host_attach_contract = target.session.fork_successor_attach_contract();
+    successor_session
+        .transition_state(crate::execution::agent_runtime::OrchestrationSessionState::Active);
+    successor_session.active_session_handle_id = Some(successor_participant_id);
+    successor_session.pending_inbox_count = 0;
+    successor_session.last_attention_at = None;
+    successor_session
+        .mark_parked_resumable("fork successor allocated without attached host client");
+
+    store.persist_orchestration_session(&successor_session)?;
+    store.persist_participant(&successor_participant)?;
+
+    Ok(ForkSuccessorAllocation {
+        orchestration_session_id: successor_session_id,
+        backend_id: attach_contract.backend_id,
+        source_orchestration_session_id: target.session.orchestration_session_id,
     })
 }
 
@@ -1097,29 +1178,6 @@ fn wait_for_resumed_public_turn_detach(
 
         thread::sleep(TURN_DETACH_NORMALIZATION_POLL_INTERVAL);
     }
-}
-
-fn descriptor_from_participant(
-    participant: &AgentRuntimeParticipantRecord,
-) -> Result<ResolvedRuntimeDescriptor> {
-    let backend_kind = match participant.internal.resolved_agent_kind.as_str() {
-        "codex" => ResolvedRuntimeBackendKind::Codex,
-        "claude_code" => ResolvedRuntimeBackendKind::ClaudeCode,
-        other => {
-            anyhow::bail!(config_model::user_error(format!(
-                "unsupported_platform_or_posture: unsupported hidden owner-helper backend kind '{}'",
-                other
-            )));
-        }
-    };
-    Ok(ResolvedRuntimeDescriptor {
-        agent_id: participant.handle.agent_id.clone(),
-        backend_id: participant.handle.backend_id.clone(),
-        backend_kind,
-        protocol: participant.handle.protocol.clone(),
-        execution_scope: participant.handle.execution.scope,
-        binary_path: participant.internal.resolved_binary_path.clone(),
-    })
 }
 
 fn wait_for_terminal_session_state(

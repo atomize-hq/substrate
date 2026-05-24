@@ -169,6 +169,24 @@ It is not intended to:
 
 If `reattach` reports success, the intended truth is that attached ownership was actually restored.
 
+## Meaning Of `agent fork`
+
+`substrate agent fork --session <orchestration_session_id>` is successor allocation only.
+
+It is intended to:
+
+- allocate a new durable orchestration session that points back to the exact source session lineage
+- copy the source session's persisted host attach-contract shape
+- clear any inherited backend-native continuity selector from the successor
+- return the successor honestly as `parked_resumable` with no attached owner loop
+
+It is not intended to:
+
+- submit a prompt
+- attach a live owner loop immediately
+- borrow the parent's continuity token
+- report false `active_attached` truth for the successor session
+
 ## Meaning Of `agent stop`
 
 `substrate agent stop --session <orchestration_session_id>` is the explicit shutdown action for the durable orchestration session.
@@ -208,6 +226,7 @@ The current public durable-session contract is:
 
 - `substrate agent turn --session ... --backend ... --prompt ...` is prompt-taking follow-up on the same durable orchestration session
 - `substrate agent reattach --session ...` is attached-owner recovery only for that same durable orchestration session
+- `substrate agent fork --session ...` is successor durable-session allocation only and returns a parked unattached successor
 - `substrate agent stop --session ...` is the canonical closeout path for attached and parked durable host sessions
 - `substrate agent status --json` is the authoritative parked-session read surface for live-runtime durable-session posture truth
 - detached-world follow-up remains fail-closed until `reattach` restores an active host owner
@@ -222,10 +241,11 @@ The intended final shape is:
 4. `parked_resumable` means the session is idle/detached but still alive, routable, resumable, and still Substrate-owned for orchestration responsibilities.
 5. `turn` resumes prompt-taking against that same durable session.
 6. `reattach` restores actual attached host ownership for that same durable session without submitting a prompt.
-7. `stop` cleanly stops that same durable session.
-8. `status` shows that same durable session even while parked.
-9. Durable inbox state remains narrow: persistence exists, `awaiting_attention` posture normalization exists, internal ack/dismiss support exists, and no public inbox workflow is implied.
-10. Detached-world follow-up remains fail-closed until `reattach` restores an active host owner.
+7. `fork` allocates a successor durable session without submitting a prompt and returns that successor as `parked_resumable` with no attached owner loop.
+8. `stop` cleanly stops that same durable session.
+9. `status` shows that same durable session even while parked.
+10. Durable inbox state remains narrow: persistence exists, `awaiting_attention` posture normalization exists, internal ack/dismiss support exists, and no public inbox workflow is implied.
+11. Detached-world follow-up remains fail-closed until `reattach` restores an active host owner.
 
 ## Non-Negotiable Truths
 

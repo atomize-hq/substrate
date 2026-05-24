@@ -59,6 +59,8 @@ base64 = "0.22"
 url = "2"
 rand = "0.8"
 agent_api = { package = "unified-agent-api", version = "=0.3.5", default-features = false, features = ["codex", "claude_code"] }
+claude_code = { package = "unified-agent-api-claude-code", version = "=0.3.5" }
+codex = { package = "unified-agent-api-codex", version = "=0.3.5" }
 transport-api-client = { version = "0.2.8", path = "../transport-api-client" }
 transport-api-types = { version = "0.2.8", path = "../transport-api-types" }
 substrate-gateway = { version = "0.2.8", path = "../gateway" }

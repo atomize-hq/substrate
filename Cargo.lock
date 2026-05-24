@@ -5145,6 +5145,8 @@ dependencies = [
  "transport-api-client",
  "transport-api-types",
  "unified-agent-api",
+ "unified-agent-api-claude-code",
+ "unified-agent-api-codex",
  "url",
  "uuid",
  "which 6.0.3",
@@ -6328,6 +6330,8 @@ checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 [[package]]
 name = "unified-agent-api"
 version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed6756fe97439580f64d317a8b9e8b471e4c21d08e6e1681ff86850665239cdb"
 dependencies = [
  "futures-core",
  "futures-util",
@@ -6342,6 +6346,8 @@ dependencies = [
 [[package]]
 name = "unified-agent-api-claude-code"
 version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93a2b0d39a51ac9e642bebe947d377921b5a5ee366af733ac95d692be31fc915"
 dependencies = [
  "futures-core",
  "portable-pty 0.9.0",
@@ -6355,6 +6361,8 @@ dependencies = [
 [[package]]
 name = "unified-agent-api-codex"
 version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbb1725e74fa859d0893a61380f3fe5b866a49471706e0280fdb88c9f9078a86"
 dependencies = [
  "futures-core",
  "semver",

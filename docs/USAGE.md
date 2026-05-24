@@ -114,8 +114,8 @@ substrate agent stop --session <orchestration_session_id> --json
 
 - `substrate agent start` is the canonical public root prompt-taking surface and remains host-only in v1.
 - `substrate agent turn` is the canonical public follow-up surface and requires the exact pair `(--session <orchestration_session_id>, --backend <backend_id>)`.
-- `substrate agent reattach` is attached-owner recovery only for the same durable session; it does not submit a prompt.
-- `substrate agent fork` allocates a successor durable host session without reinterpreting it as a prompt-taking action.
+- `substrate agent reattach` is attached-owner recovery only for the same durable session; it does not submit a prompt and fails closed when durable continuity is absent or stale.
+- `substrate agent fork` allocates a successor durable host session without reinterpreting it as a prompt-taking action; the returned successor starts as `parked_resumable` with no attached owner loop.
 - `substrate agent stop` is the canonical closeout path for attached and parked durable host sessions.
 - `substrate agent status --json` is the authoritative parked-session read surface for live-runtime `posture`, `attached_participant_id`, and `pending_inbox_count`.
 - Public follow-up never falls back to `participant_id`, legacy `session_handle_id`, `active_session_handle_id`, or `internal.uaa_session_id`; those selector shapes fail closed.

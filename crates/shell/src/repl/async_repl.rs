@@ -71,7 +71,9 @@ use crate::execution::agent_runtime::{
 };
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
-use crate::execution::prompt_fulfillment::PromptFulfillmentBridge;
+use crate::execution::prompt_fulfillment::{
+    PromptFulfillmentBridge, PromptFulfillmentCancelHandle,
+};
 use crate::execution::ReplSessionTelemetry;
 use crate::execution::WorldRootSettings;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1697,7 +1699,6 @@ enum RuntimeStartupSignal {
 #[derive(Clone, Debug)]
 enum InitialExecPromptPlan {
     Replace(String),
-    NoPromptRecovery,
     StartupPrompt {
         prompt: String,
         stream_path: PathBuf,
@@ -1738,7 +1739,7 @@ impl StartupPromptBackchannel {
 // long-lived tasks that own the non-clonable `run_control.handle` facets. A manifest
 // may only advertise a live orchestrator session while all three remain retained.
 struct LocalRetainedRunControl {
-    cancel: agent_api::AgentWrapperCancelHandle,
+    cancel: PromptFulfillmentCancelHandle,
     event_task: Option<tokio::task::JoinHandle<()>>,
     completion_task: Option<tokio::task::JoinHandle<()>>,
 }
@@ -2091,6 +2092,7 @@ async fn start_host_orchestrator_runtime(
         )),
         false,
         false,
+        false,
         agent_printer,
         telemetry,
     )
@@ -2307,7 +2309,7 @@ fn owner_helper_startup_extensions(
 ) -> std::result::Result<BTreeMap<String, serde_json::Value>, RuntimeBootstrapFailure> {
     match plan.mode {
         OwnerHelperMode::Start => Ok(BTreeMap::new()),
-        OwnerHelperMode::Resume | OwnerHelperMode::ResumeOneTurn | OwnerHelperMode::Fork => {
+        OwnerHelperMode::Attach | OwnerHelperMode::ResumeOneTurn => {
             let session_id = plan
                 .participant
                 .internal_uaa_session_id
@@ -2340,7 +2342,7 @@ fn owner_helper_manifest(
             participant_id,
             lease_token,
         ),
-        OwnerHelperMode::Resume | OwnerHelperMode::ResumeOneTurn | OwnerHelperMode::Fork => {
+        OwnerHelperMode::Attach | OwnerHelperMode::ResumeOneTurn => {
             let resumed_from_participant_id = plan
                 .participant
                 .resumed_from_participant_id
@@ -2867,24 +2869,17 @@ pub(crate) fn run_hidden_owner_helper(plan: HiddenOwnerHelperLaunchPlan) -> Resu
         let mut telemetry = ReplSessionTelemetry::new(config.clone(), "agent_owner_helper");
         let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
             .map_err(|failure| anyhow!(failure.message))?;
-        let initial_prompt = match plan.startup_prompt.as_ref() {
-            Some(startup_prompt) => Some(InitialExecPromptPlan::StartupPrompt {
+        let initial_prompt = plan.startup_prompt.as_ref().map(|startup_prompt| {
+            InitialExecPromptPlan::StartupPrompt {
                 prompt: startup_prompt.prompt_text.clone(),
                 stream_path: startup_prompt.stream_path.clone(),
-            }),
-            None if matches!(
-                plan.mode,
-                OwnerHelperMode::Resume | OwnerHelperMode::ResumeOneTurn | OwnerHelperMode::Fork
-            ) =>
-            {
-                Some(InitialExecPromptPlan::NoPromptRecovery)
             }
-            None => None,
-        };
+        });
         let runtime = start_host_orchestrator_runtime_with_prepared_prompt(
             Some(prepared),
             None,
             initial_prompt,
+            matches!(plan.mode, OwnerHelperMode::Attach),
             true,
             matches!(plan.mode, OwnerHelperMode::ResumeOneTurn),
             &ReplPrinter::Stdout,
@@ -2911,16 +2906,19 @@ async fn start_host_orchestrator_runtime_with_prepared(
         None,
         false,
         false,
+        false,
         agent_printer,
         telemetry,
     )
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn start_host_orchestrator_runtime_with_prepared_prompt(
     prepared: Option<PreparedAgentRuntime>,
     initial_world_binding: Option<&PersistedWorldBinding>,
     initial_prompt: Option<InitialExecPromptPlan>,
+    control_only_attach: bool,
     runtime_owns_private_stop: bool,
     auto_park_after_public_turn: bool,
     agent_printer: &ReplPrinter,
@@ -3014,26 +3012,6 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         agent_printer,
     );
 
-    let request = agent_api::AgentWrapperRunRequest {
-        prompt: match initial_prompt.as_ref() {
-            Some(InitialExecPromptPlan::Replace(prompt)) => prompt.clone(),
-            Some(InitialExecPromptPlan::NoPromptRecovery) => String::new(),
-            Some(InitialExecPromptPlan::StartupPrompt { prompt, .. }) => prompt.clone(),
-            None => {
-                return Err(RuntimeBootstrapFailure {
-                    exit_code: 1,
-                    message: format!(
-                        "missing explicit initial prompt plan for retained {} startup",
-                        runtime_role
-                    ),
-                });
-            }
-        },
-        working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
-        timeout: None,
-        env: BTreeMap::new(),
-        extensions: startup_extensions,
-    };
     let startup_backchannel = match initial_prompt.as_ref() {
         Some(InitialExecPromptPlan::StartupPrompt { stream_path, .. }) => {
             Some(connect_startup_prompt_backchannel(stream_path).await?)
@@ -3069,7 +3047,47 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             scope: "host".to_string(),
         });
     }
-    let control = match prompt_fulfillment.run_control(request).await {
+    let control = match if control_only_attach {
+        let continuity_session_id = startup_extensions
+            .get(AGENT_API_SESSION_RESUME_V1)
+            .and_then(|value| value.as_object())
+            .filter(|value| value.get("selector").and_then(serde_json::Value::as_str) == Some("id"))
+            .and_then(|value| value.get("id"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: format!(
+                    "missing {} id selector for control-only attach startup: {}",
+                    AGENT_API_SESSION_RESUME_V1, runtime_role
+                ),
+            })?;
+        prompt_fulfillment
+            .run_attach_control(&continuity_session_id)
+            .await
+    } else {
+        let request = agent_api::AgentWrapperRunRequest {
+            prompt: match initial_prompt.as_ref() {
+                Some(InitialExecPromptPlan::Replace(prompt)) => prompt.clone(),
+                Some(InitialExecPromptPlan::StartupPrompt { prompt, .. }) => prompt.clone(),
+                None => {
+                    return Err(RuntimeBootstrapFailure {
+                        exit_code: 1,
+                        message: format!(
+                            "missing explicit initial prompt plan for retained {} startup",
+                            runtime_role
+                        ),
+                    });
+                }
+            },
+            working_dir: Some(std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
+            timeout: None,
+            env: BTreeMap::new(),
+            extensions: startup_extensions,
+        };
+        prompt_fulfillment.run_control(request).await
+    } {
         Ok(control) => control,
         Err(err) => {
             let failure = runtime_bootstrap_failure_from_wrapper_error(err);
@@ -3102,8 +3120,8 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
             return Err(failure);
         }
     };
-    let agent_api::AgentWrapperRunControl { handle, cancel } = control;
-    let agent_api::AgentWrapperRunHandle { events, completion } = handle;
+    let agent_api::AgentWrapperRunHandle { events, completion } = control.handle;
+    let cancel = control.cancel;
     let shutdown_requested = Arc::new(AtomicBool::new(false));
     let (startup_tx, startup_rx) = tokio::sync::oneshot::channel::<RuntimeStartupSignal>();
     let startup_signal = Arc::new(Mutex::new(Some(startup_tx)));
@@ -3701,6 +3719,52 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
         exit_code: 1,
         message: format!("failed to persist retained runtime ownership: {err:#}"),
     })?;
+    let reconciled_ready_after_early_handle = {
+        let mut orchestration_guard = startup_context
+            .orchestration_session
+            .lock()
+            .expect("orchestration session mutex poisoned");
+        let mut manifest_guard = manifest.lock().expect("runtime manifest mutex poisoned");
+        if manifest_guard.handle.state == AgentRuntimeSessionState::Allocating
+            && manifest_guard.can_advertise_live()
+        {
+            manifest_guard.transition_state(AgentRuntimeSessionState::Ready);
+            manifest_guard.touch_heartbeat();
+            if controls_parent_session {
+                orchestration_guard
+                    .bind_active_session_handle(manifest_guard.handle.participant_id.clone());
+                orchestration_guard.transition_state(OrchestrationSessionState::Active);
+            } else if orchestration_guard.state == OrchestrationSessionState::Active {
+                orchestration_guard.touch_active();
+            }
+            Some((orchestration_guard.clone(), manifest_guard.clone()))
+        } else {
+            None
+        }
+    };
+    if let Some((orchestration_snapshot, manifest_snapshot)) = reconciled_ready_after_early_handle {
+        persist_runtime_snapshots(
+            &startup_context.store,
+            &orchestration_snapshot,
+            &manifest_snapshot,
+        )
+        .map_err(|err| RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: format!("failed to persist reconciled runtime ownership: {err:#}"),
+        })?;
+        emit_runtime_event(
+            build_runtime_message_event(
+                &manifest_snapshot,
+                &orchestration_snapshot,
+                run_id.clone(),
+                MessageEventKind::Status,
+                runtime_ready_message(&runtime_role),
+            ),
+            telemetry,
+            agent_printer,
+        );
+        signal_runtime_startup(&startup_signal, RuntimeStartupSignal::Running);
+    }
     let mut retained_control = LocalRetainedRunControl {
         cancel,
         event_task: Some(event_task),
@@ -4099,6 +4163,7 @@ async fn dispatch_targeted_follow_up_turn(
                     )),
                     false,
                     false,
+                    false,
                     agent_printer,
                     telemetry,
                 )
@@ -4410,6 +4475,7 @@ async fn start_member_runtime_with_prepared(
         Some(InitialExecPromptPlan::Replace(
             "test retained member startup".to_string(),
         )),
+        false,
         false,
         false,
         agent_printer,
@@ -7687,7 +7753,13 @@ mod tests {
         acquire_event_test_guard, clear_agent_event_sender, init_event_channel,
     };
     #[cfg(unix)]
+    use crate::execution::agent_runtime::control::{
+        HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
+    };
+    #[cfg(unix)]
     use crate::execution::agent_runtime::orchestration_session::OrchestrationSessionPosture;
+    #[cfg(unix)]
+    use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
     #[cfg(unix)]
     use crate::execution::config_model::AgentExecutionScope;
     #[cfg(unix)]
@@ -8117,6 +8189,24 @@ mod tests {
         perms.set_mode(0o755);
         fs::set_permissions(&path, perms).expect("set fake codex permissions");
         path
+    }
+
+    #[cfg(unix)]
+    fn write_fake_codex_attach_capture_script(temp: &TempDir) -> (PathBuf, PathBuf) {
+        let path = temp.path().join("fake-codex-attach-capture.sh");
+        let stdin_path = temp.path().join("fake-codex-attach.stdin");
+        let body = format!(
+            "#!/bin/sh\ncat > '{}'\ntrap 'exit 0' INT TERM\nprintf '{{\"type\":\"thread.started\",\"thread_id\":\"thread-test\"}}\\r\\n'\nprintf '{{\"type\":\"turn.started\",\"thread_id\":\"thread-test\",\"turn_id\":\"turn-1\"}}\\r\\n'\nwhile :; do sleep 1; done\n",
+            stdin_path.display()
+        );
+        fs::write(&path, body).expect("write fake codex attach capture script");
+        let mut perms = fs::metadata(&path)
+            .expect("fake codex metadata")
+            .permissions();
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).expect("set fake codex permissions");
+        (path, stdin_path)
     }
 
     #[cfg(unix)]
@@ -8861,6 +8951,7 @@ mod tests {
                 Some(InitialExecPromptPlan::Replace(
                     "test hidden helper startup".to_string(),
                 )),
+                false,
                 true,
                 false,
                 &ReplPrinter::Stdout,
@@ -8957,6 +9048,121 @@ mod tests {
                 manifest.internal.last_error_bucket.as_deref(),
                 Some("runtime_shutdown")
             );
+        });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn hidden_owner_helper_attach_startup_reaches_ready_attached() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let (fake_codex, stdin_capture_path) = write_fake_codex_attach_capture_script(&temp);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        fs::write(
+            substrate_home.join("config.yaml"),
+            "agents:\n  enabled: true\n  hub:\n    orchestrator_agent_id: codex\n",
+        )
+        .expect("write config");
+        fs::write(
+            substrate_home.join("policy.yaml"),
+            "agents:\n  allowed_backends:\n    - cli:codex\n",
+        )
+        .expect("write policy");
+        let agents_dir = substrate_home.join("agents");
+        fs::create_dir_all(&agents_dir).expect("agents dir");
+        fs::write(
+            agents_dir.join("codex.yaml"),
+            format!(
+                "version: 1\nid: codex\nconfig:\n  kind: cli\n  enabled: true\n  protocol: {PURE_AGENT_PROTOCOL}\n  execution:\n    scope: host\n  cli:\n    binary: {}\n    mode: persistent\n  capabilities:\n    session_start: true\n    session_resume: true\n    session_fork: true\n    session_stop: true\n    status_snapshot: true\n    event_stream: true\n    llm: true\n    mcp_client: false\n",
+                fake_codex.display()
+            ),
+        )
+        .expect("write codex agent file");
+
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let mut descriptor = test_runtime_selection_descriptor();
+            descriptor.binary_path = fake_codex.clone();
+            let plan = super::HiddenOwnerHelperLaunchPlan {
+                mode: super::OwnerHelperMode::Attach,
+                descriptor: super::ResolvedRuntimeDescriptor::from(&descriptor),
+                session: HiddenOwnerHelperSessionPlan {
+                    orchestration_session_id: "orch-attach".to_string(),
+                    shell_trace_session_id: "trace-attach".to_string(),
+                    workspace_root: workspace_root.display().to_string(),
+                    world_id: None,
+                    world_generation: None,
+                },
+                participant: HiddenOwnerHelperParticipantPlan {
+                    participant_id: "ash-attach".to_string(),
+                    lease_token: "lease-attach".to_string(),
+                    run_id: "run-attach".to_string(),
+                    resumed_from_participant_id: Some("ash-source".to_string()),
+                    internal_uaa_session_id: Some("uaa-attach-source".to_string()),
+                },
+                startup_prompt: None,
+                source_orchestration_session_id: Some("orch-source".to_string()),
+            };
+            let config = Arc::new(
+                owner_helper_shell_config(&plan)
+                    .expect("owner helper attach shell config should resolve"),
+            );
+            let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
+                .expect("prepare hidden owner-helper attach runtime should succeed");
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            let runtime = start_host_orchestrator_runtime_with_prepared_prompt(
+                Some(prepared),
+                None,
+                None,
+                true,
+                true,
+                false,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("hidden owner-helper attach runtime should start")
+            .expect("runtime");
+
+            let readiness = runtime
+                .store
+                .classify_hidden_owner_helper_launch_readiness("orch-attach", "ash-attach", true)
+                .expect("readiness classification");
+            assert_eq!(readiness, HiddenOwnerHelperLaunchReadiness::ReadyAttached);
+
+            let session = runtime
+                .store
+                .load_session("orch-attach")
+                .expect("load attached session")
+                .expect("attached session record");
+            let participant = session
+                .participants
+                .iter()
+                .find(|participant| participant.participant_id() == "ash-attach")
+                .expect("attached participant");
+            assert_eq!(session.session.active_participant_id(), Some("ash-attach"));
+            assert_eq!(participant.internal_uaa_session_id(), Some("thread-test"));
+            assert_eq!(
+                fs::read_to_string(&stdin_capture_path).expect("read attach stdin capture"),
+                "",
+                "control-only attach must close stdin without sending a bootstrap prompt"
+            );
+
+            let mut shutdown_telemetry = ReplSessionTelemetry::new(config, "async-test-stop");
+            shutdown_host_orchestrator_runtime(
+                runtime,
+                &ReplPrinter::Stdout,
+                &mut shutdown_telemetry,
+            )
+            .await;
         });
         std::env::remove_var("SUBSTRATE_HOME");
     }

@@ -18,8 +18,8 @@ use super::{
     control::PublicSessionPosture,
     mapping::{MEMBER_ROLE, ORCHESTRATOR_ROLE},
     orchestration_session::{
-        OrchestrationSessionPosture, OrchestrationSessionRecord, OrchestrationSessionState,
-        StartupPromptStreamState,
+        HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionRecord,
+        OrchestrationSessionState, StartupPromptStreamState,
     },
     session::{AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest},
 };
@@ -252,8 +252,12 @@ pub(crate) enum PublicControlAction {
 }
 
 impl PublicControlAction {
-    fn requires_internal_session_id(self) -> bool {
+    fn requires_attach_contract(self) -> bool {
         matches!(self, Self::Resume | Self::Fork)
+    }
+
+    fn requires_continuity_contract(self) -> bool {
+        matches!(self, Self::Resume)
     }
 
     fn rejects_live_owner(self) -> bool {
@@ -266,6 +270,7 @@ pub(crate) struct ResolvedPublicControlTarget {
     pub session: OrchestrationSessionRecord,
     pub active_participant: AgentRuntimeParticipantRecord,
     pub session_posture: PublicSessionPosture,
+    pub host_attach_contract: Option<HostAttachContract>,
 }
 
 impl ResolvedPublicControlTarget {
@@ -803,7 +808,25 @@ impl AgentRuntimeStateStore {
                 orchestration_session_id
             );
         }
-        if (action.requires_internal_session_id()
+        let host_attach_contract = resolved.session.host_attach_contract().cloned();
+        if action.requires_attach_contract() && host_attach_contract.is_none() {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} is missing durable host attach contract state",
+                orchestration_session_id
+            );
+        }
+        if action.requires_continuity_contract()
+            && host_attach_contract
+                .as_ref()
+                .and_then(|contract| contract.continuity_uaa_session_id.as_deref())
+                .is_none()
+        {
+            anyhow::bail!(
+                "owner_unreachable: orchestration session {} no longer has continuity required for control-only reattach",
+                orchestration_session_id
+            );
+        }
+        if (matches!(action, PublicControlAction::Resume)
             || matches!(
                 (action, resolved.session_posture),
                 (
@@ -818,15 +841,13 @@ impl AgentRuntimeStateStore {
                 orchestration_session_id
             );
         }
-        if (action.requires_internal_session_id()
-            || matches!(
-                (action, resolved.session_posture),
-                (
-                    PublicControlAction::Stop,
-                    PublicSessionPosture::DetachedReattachable
-                )
-            ))
-            && resolved.participant.internal_uaa_session_id().is_none()
+        if matches!(
+            (action, resolved.session_posture),
+            (
+                PublicControlAction::Stop,
+                PublicSessionPosture::DetachedReattachable
+            )
+        ) && resolved.participant.internal_uaa_session_id().is_none()
         {
             anyhow::bail!(
                 "missing_internal_session_id: orchestration session {} active participant {} is missing internal.uaa_session_id",
@@ -839,6 +860,7 @@ impl AgentRuntimeStateStore {
             session: resolved.session,
             active_participant: resolved.participant,
             session_posture: resolved.session_posture,
+            host_attach_contract,
         })
     }
 
@@ -3445,7 +3467,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn resolve_public_control_target_requires_internal_session_id_for_resume_and_fork() {
+    fn resolve_public_control_target_requires_continuity_for_resume_but_not_fork() {
         with_store(|store| {
             let participant =
                 detached_orchestrator("codex", "sess_missing_internal", "ash_detached");
@@ -3462,13 +3484,20 @@ mod tests {
 
             let resume_err = store
                 .resolve_public_control_target("sess_missing_internal", PublicControlAction::Resume)
-                .expect_err("resume must require internal.uaa_session_id");
+                .expect_err("resume must require continuity");
             assert!(resume_err.to_string().contains("owner_unreachable"));
 
-            let fork_err = store
+            let fork_target = store
                 .resolve_public_control_target("sess_missing_internal", PublicControlAction::Fork)
-                .expect_err("fork must require internal.uaa_session_id");
-            assert!(fork_err.to_string().contains("owner_unreachable"));
+                .expect("fork should allow durable successor allocation without continuity");
+            assert_eq!(
+                fork_target.active_participant.handle.participant_id,
+                "ash_detached"
+            );
+            assert!(
+                fork_target.host_attach_contract.is_some(),
+                "fork must still require the durable host attach contract"
+            );
         });
     }
 
