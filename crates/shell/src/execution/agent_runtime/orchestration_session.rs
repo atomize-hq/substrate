@@ -1,11 +1,15 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::execution::agent_runtime::control::{
     ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
 };
 use crate::execution::config_model::AgentExecutionScope;
 
+use super::dispatch_contract::{
+    AttachLaunchKnobs, AttachModePreference, HostExecutionClientStart, ResolvedLaunchContract,
+};
 use super::mapping::{protocol_validation_error, PURE_AGENT_PROTOCOL};
 use super::session::AgentRuntimeSessionManifest;
 
@@ -81,6 +85,8 @@ pub(crate) struct HostAttachContract {
     pub capabilities: HostAttachCapabilities,
     #[serde(default)]
     pub attach_launch_knobs: HostAttachLaunchKnobs,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_policy: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuity_uaa_session_id: Option<String>,
 }
@@ -173,7 +179,38 @@ impl HostAttachContract {
                 requested_execution_scope: manifest.handle.execution.scope,
                 ..HostAttachLaunchKnobs::default()
             },
+            effective_policy: None,
             continuity_uaa_session_id: manifest.internal_uaa_session_id().map(ToOwned::to_owned),
+        })
+    }
+
+    pub(crate) fn from_resolved_contract(
+        resolved: &ResolvedLaunchContract,
+        continuity_uaa_session_id: Option<String>,
+    ) -> Option<Self> {
+        if resolved.execution_scope != AgentExecutionScope::Host {
+            return None;
+        }
+
+        Some(Self {
+            backend_id: resolved.backend_id.clone(),
+            execution_scope: resolved.execution_scope,
+            protocol: resolved.protocol.clone(),
+            launch_descriptor: ResolvedRuntimeDescriptor {
+                agent_id: resolved.agent_id.clone(),
+                backend_id: resolved.backend_id.clone(),
+                backend_kind: resolved.backend_kind.into(),
+                protocol: resolved.protocol.clone(),
+                execution_scope: resolved.execution_scope,
+                binary_path: resolved.runtime.cli_binary.clone().unwrap_or_default(),
+            },
+            capabilities: HostAttachCapabilities::from(&resolved.capabilities),
+            attach_launch_knobs: HostAttachLaunchKnobs::from(&resolved.attach_launch_knobs),
+            effective_policy: Some(
+                serde_json::to_value(&resolved.effective_policy)
+                    .expect("effective policy should serialize"),
+            ),
+            continuity_uaa_session_id,
         })
     }
 
@@ -199,6 +236,39 @@ impl HostAttachContract {
 
     pub(crate) fn has_continuity_selector(&self) -> bool {
         self.continuity_uaa_session_id.is_some()
+    }
+}
+
+impl From<&crate::execution::agent_inventory::AgentCapabilitiesV1> for HostAttachCapabilities {
+    fn from(value: &crate::execution::agent_inventory::AgentCapabilitiesV1) -> Self {
+        Self {
+            session_resume: value.session_resume,
+            session_fork: value.session_fork,
+            session_stop: value.session_stop,
+            status_snapshot: value.status_snapshot,
+            event_stream: value.event_stream,
+        }
+    }
+}
+
+impl From<&AttachLaunchKnobs> for HostAttachLaunchKnobs {
+    fn from(value: &AttachLaunchKnobs) -> Self {
+        Self {
+            requested_execution_scope: value.requested_execution_scope,
+            host_execution_client_start: match value.host_execution_client_start {
+                HostExecutionClientStart::StartNow => HostAttachExecutionClientStart::StartNow,
+                HostExecutionClientStart::Defer => HostAttachExecutionClientStart::Defer,
+            },
+            attach_mode_preference: match value.attach_mode_preference {
+                AttachModePreference::ContinuityRequired => {
+                    HostAttachModePreference::ContinuityRequired
+                }
+                AttachModePreference::ContinuityPreferred => {
+                    HostAttachModePreference::ContinuityPreferred
+                }
+                AttachModePreference::FreshAllowed => HostAttachModePreference::FreshAllowed,
+            },
+        }
     }
 }
 
@@ -567,9 +637,16 @@ mod tests {
 
     use super::*;
     use crate::execution::agent_runtime::{
-        mapping::AgentRuntimeBackendKind, validator::RuntimeSelectionDescriptor,
+        dispatch_contract::{
+            BaselineSourceMetadata, DispatchBaselineKind, DispatchCallerKind, FieldBaselineOrigin,
+            ResolvedLaunchRuntime,
+        },
+        mapping::AgentRuntimeBackendKind,
+        validator::RuntimeSelectionDescriptor,
     };
+    use crate::execution::agent_inventory::{AgentCapabilitiesV1, AgentConfigKind};
     use crate::execution::config_model::AgentExecutionScope;
+    use substrate_broker::Policy;
 
     fn manifest() -> AgentRuntimeSessionManifest {
         let mut manifest =
@@ -709,5 +786,83 @@ mod tests {
         assert!(err
             .to_string()
             .contains("host_attach_contract requested_execution_scope drifted"));
+    }
+
+    #[test]
+    fn host_attach_contract_from_resolved_contract_preserves_truth() {
+        let resolved = ResolvedLaunchContract {
+            caller_kind: DispatchCallerKind::HumanStart,
+            baseline_kind: DispatchBaselineKind::InventoryLaunch,
+            agent_id: "codex".to_string(),
+            backend_id: "cli:codex".to_string(),
+            backend_kind: AgentRuntimeBackendKind::Codex,
+            protocol: PURE_AGENT_PROTOCOL.to_string(),
+            execution_scope: AgentExecutionScope::Host,
+            runtime: ResolvedLaunchRuntime {
+                kind: AgentConfigKind::Cli,
+                cli_mode: crate::execution::config_model::AgentCliMode::Persistent,
+                cli_binary: Some("/opt/codex/bin/codex".to_string()),
+            },
+            capabilities: AgentCapabilitiesV1 {
+                session_start: true,
+                session_resume: false,
+                session_fork: true,
+                session_stop: false,
+                status_snapshot: true,
+                event_stream: false,
+                llm: true,
+                mcp_client: false,
+            },
+            attach_launch_knobs: AttachLaunchKnobs {
+                requested_execution_scope: AgentExecutionScope::Host,
+                host_execution_client_start: HostExecutionClientStart::Defer,
+                attach_mode_preference: AttachModePreference::FreshAllowed,
+            },
+            effective_policy: Policy {
+                agents_allowed_backends: vec!["cli:codex".to_string()],
+                ..Policy::default()
+            },
+            baseline_source: BaselineSourceMetadata {
+                baseline_kind: DispatchBaselineKind::InventoryLaunch,
+                baseline_origin: FieldBaselineOrigin::WorkspaceInventory,
+                inventory_path: None,
+                orchestration_session_id: None,
+            },
+            field_provenance: Default::default(),
+        };
+
+        let contract = HostAttachContract::from_resolved_contract(
+            &resolved,
+            Some("uaa_resolved".to_string()),
+        )
+        .expect("host attach contract");
+
+        assert_eq!(contract.backend_id, "cli:codex");
+        assert_eq!(contract.launch_descriptor.binary_path, "/opt/codex/bin/codex");
+        assert!(!contract.capabilities.session_resume);
+        assert!(contract.capabilities.session_fork);
+        assert!(!contract.capabilities.session_stop);
+        assert!(contract.capabilities.status_snapshot);
+        assert!(!contract.capabilities.event_stream);
+        assert_eq!(
+            contract.attach_launch_knobs.host_execution_client_start,
+            HostAttachExecutionClientStart::Defer
+        );
+        assert_eq!(
+            contract.attach_launch_knobs.attach_mode_preference,
+            HostAttachModePreference::FreshAllowed
+        );
+        let persisted_policy: Policy = serde_json::from_value(
+            contract
+                .effective_policy
+                .clone()
+                .expect("persisted policy snapshot"),
+        )
+        .expect("deserialize persisted policy");
+        assert_eq!(persisted_policy.agents_allowed_backends, vec!["cli:codex".to_string()]);
+        assert_eq!(
+            contract.continuity_uaa_session_id.as_deref(),
+            Some("uaa_resolved")
+        );
     }
 }

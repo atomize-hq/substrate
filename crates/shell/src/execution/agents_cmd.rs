@@ -23,7 +23,7 @@ use crate::execution::agent_runtime::control::{
     run_hidden_owner_helper_startup_prompt_stream_with_action, HiddenOwnerHelperStartupPromptPlan,
 };
 use crate::execution::agent_runtime::orchestration_session::{
-    OrchestrationSessionPosture, OrchestrationSessionRecord,
+    HostAttachContract, OrchestrationSessionPosture, OrchestrationSessionRecord,
 };
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 #[cfg(unix)]
@@ -39,8 +39,9 @@ use crate::execution::agent_runtime::{
     validate_runtime_realizability, AgentRuntimeParticipantRecord, AgentRuntimeSessionRecord,
     AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
     DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRequestEnvelope,
-    HostExecutionClientStart, PublicControlAction, PublicTurnTargetKind, MEMBER_ROLE,
-    NESTED_ROUTER, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
+    HostExecutionClientStart, PublicControlAction, PublicTurnTargetKind,
+    ResolvedLaunchContract, MEMBER_ROLE, NESTED_ROUTER, ORCHESTRATOR_ROLE,
+    PURE_AGENT_PROTOCOL, PURE_AGENT_ROUTER,
 };
 use crate::execution::cli::{
     AgentAction, AgentCmd, AgentDoctorArgs, AgentOwnerHelperArgs, AgentScopeArg,
@@ -366,6 +367,11 @@ struct AgentControlResultJson<'a> {
     source_orchestration_session_id: Option<&'a str>,
 }
 
+struct StartLaunchPlan {
+    helper_plan: HiddenOwnerHelperLaunchPlan,
+    resolved_contract: ResolvedLaunchContract,
+}
+
 fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     let prompt = load_public_prompt_source(&PublicPromptInput {
         prompt: args.prompt_source.prompt.clone(),
@@ -374,12 +380,16 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
     .map_err(normalize_public_prompt_error)?;
     let context = resolve_command_context(cli)?;
     let store = AgentRuntimeStateStore::new()?;
-    let plan = build_start_launch_plan(args, &context)?;
+    let StartLaunchPlan {
+        helper_plan,
+        resolved_contract,
+    } = build_start_launch_plan(args, &context)?;
 
     #[cfg(not(unix))]
     {
         let _ = store;
-        let _ = plan;
+        let _ = helper_plan;
+        let _ = resolved_contract;
         let _ = prompt;
         anyhow::bail!(config_model::user_error(
             "unsupported_platform_or_posture: public start prompt streaming requires a Unix launch-time backchannel"
@@ -388,7 +398,7 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
 
     #[cfg(unix)]
     {
-        let mut plan = plan;
+        let mut plan = helper_plan;
         let startup_listener = register_hidden_owner_helper_startup_prompt_listener(
             &store,
             plan.orchestration_session_id(),
@@ -407,6 +417,13 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
                 &receipt.orchestration_session_id,
                 &receipt.participant_id,
             )
+            .and_then(|()| {
+                persist_resolved_start_attach_contract(
+                    &store,
+                    &receipt.orchestration_session_id,
+                    &resolved_contract,
+                )
+            })
             .map_err(runtime_start_error),
             Err(err)
                 if recoverable_detached_start_retry(
@@ -435,6 +452,13 @@ fn run_start(args: &AgentStartArgs, cli: &Cli) -> Result<()> {
                     &retry_receipt.orchestration_session_id,
                     &retry_receipt.participant_id,
                 )
+                .and_then(|()| {
+                    persist_resolved_start_attach_contract(
+                        &store,
+                        &retry_receipt.orchestration_session_id,
+                        &resolved_contract,
+                    )
+                })
                 .map_err(runtime_start_error)
             }
             Err(err) => Err(normalize_public_prompt_error(err)),
@@ -1047,7 +1071,7 @@ fn run_stop(args: &AgentSessionControlArgs, _cli: &Cli) -> Result<()> {
 fn build_start_launch_plan(
     args: &AgentStartArgs,
     context: &AgentCommandContext,
-) -> Result<HiddenOwnerHelperLaunchPlan> {
+) -> Result<StartLaunchPlan> {
     let backend_id = args.backend.trim();
     if backend_id.is_empty() {
         anyhow::bail!(config_model::user_error(
@@ -1103,26 +1127,47 @@ fn build_start_launch_plan(
         .map_err(|err| runtime_materialization_user_error("runtime_start_failed", err.reason))?;
 
     let orchestration_session_id = Uuid::now_v7().to_string();
-    Ok(HiddenOwnerHelperLaunchPlan {
-        mode: OwnerHelperMode::Start,
-        descriptor: (&descriptor).into(),
-        session: HiddenOwnerHelperSessionPlan {
-            orchestration_session_id,
-            shell_trace_session_id: Uuid::now_v7().to_string(),
-            workspace_root: current_dir().display().to_string(),
-            world_id: None,
-            world_generation: None,
+    Ok(StartLaunchPlan {
+        helper_plan: HiddenOwnerHelperLaunchPlan {
+            mode: OwnerHelperMode::Start,
+            descriptor: (&descriptor).into(),
+            session: HiddenOwnerHelperSessionPlan {
+                orchestration_session_id,
+                shell_trace_session_id: Uuid::now_v7().to_string(),
+                workspace_root: current_dir().display().to_string(),
+                world_id: None,
+                world_generation: None,
+            },
+            participant: HiddenOwnerHelperParticipantPlan {
+                participant_id: format!("ash_{}", Uuid::now_v7()),
+                lease_token: Uuid::now_v7().to_string(),
+                run_id: Uuid::now_v7().to_string(),
+                resumed_from_participant_id: None,
+                internal_uaa_session_id: None,
+            },
+            startup_prompt: None,
+            source_orchestration_session_id: None,
         },
-        participant: HiddenOwnerHelperParticipantPlan {
-            participant_id: format!("ash_{}", Uuid::now_v7()),
-            lease_token: Uuid::now_v7().to_string(),
-            run_id: Uuid::now_v7().to_string(),
-            resumed_from_participant_id: None,
-            internal_uaa_session_id: None,
-        },
-        startup_prompt: None,
-        source_orchestration_session_id: None,
+        resolved_contract: resolved,
     })
+}
+
+fn persist_resolved_start_attach_contract(
+    store: &AgentRuntimeStateStore,
+    orchestration_session_id: &str,
+    resolved: &ResolvedLaunchContract,
+) -> Result<()> {
+    let mut session = store
+        .load_orchestration_session(orchestration_session_id)?
+        .ok_or_else(|| anyhow::anyhow!(
+            "runtime_start_failed: orchestration session {orchestration_session_id} disappeared before durable attach truth could be persisted"
+        ))?;
+    let continuity = session
+        .host_attach_contract()
+        .and_then(|contract| contract.continuity_uaa_session_id.clone());
+    session.host_attach_contract = HostAttachContract::from_resolved_contract(resolved, continuity);
+    store.persist_orchestration_session(&session)?;
+    Ok(())
 }
 
 fn build_attach_launch_plan(

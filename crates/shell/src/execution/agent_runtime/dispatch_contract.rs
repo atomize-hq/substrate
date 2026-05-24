@@ -386,6 +386,19 @@ pub(crate) fn resolve_persisted_host_attach_contract(
         });
     }
 
+    let effective_policy = contract
+        .effective_policy
+        .clone()
+        .map(serde_json::from_value::<Policy>)
+        .transpose()
+        .map_err(|err| DispatchResolutionError {
+            kind: DispatchResolutionErrorKind::BaselineIneligible,
+            field: "effective_policy",
+            rejecting_layer: DispatchRejectingLayer::BaselineTruth,
+            reason: format!("persisted host attach contract stored an invalid policy snapshot: {err}"),
+        })?
+        .unwrap_or_default();
+
     let mut field_provenance = BTreeMap::new();
     for field in [
         "agent_id",
@@ -394,6 +407,12 @@ pub(crate) fn resolve_persisted_host_attach_contract(
         "execution_scope",
         "cli_mode",
         "cli_binary",
+        "session_resume",
+        "session_fork",
+        "session_stop",
+        "status_snapshot",
+        "event_stream",
+        "effective_policy",
     ] {
         field_provenance.insert(
             field.to_string(),
@@ -419,16 +438,20 @@ pub(crate) fn resolve_persisted_host_attach_contract(
         },
         capabilities: AgentCapabilitiesV1 {
             session_start: true,
-            session_resume: true,
-            session_fork: true,
-            session_stop: true,
-            status_snapshot: true,
-            event_stream: true,
+            session_resume: contract.capabilities.session_resume,
+            session_fork: contract.capabilities.session_fork,
+            session_stop: contract.capabilities.session_stop,
+            status_snapshot: contract.capabilities.status_snapshot,
+            event_stream: contract.capabilities.event_stream,
             llm: true,
             mcp_client: false,
         },
-        attach_launch_knobs: envelope.attach_launch_knobs,
-        effective_policy: Policy::default(),
+        attach_launch_knobs: AttachLaunchKnobs {
+            requested_execution_scope: contract.attach_launch_knobs.requested_execution_scope,
+            host_execution_client_start: envelope.attach_launch_knobs.host_execution_client_start,
+            attach_mode_preference: envelope.attach_launch_knobs.attach_mode_preference,
+        },
+        effective_policy,
         baseline_source: BaselineSourceMetadata {
             baseline_kind: DispatchBaselineKind::PersistedHostAttach,
             baseline_origin: FieldBaselineOrigin::PersistedHostAttachContract,
@@ -842,6 +865,13 @@ mod tests {
                 crate::execution::agent_runtime::orchestration_session::HostAttachCapabilities::default(),
             attach_launch_knobs:
                 crate::execution::agent_runtime::orchestration_session::HostAttachLaunchKnobs::default(),
+            effective_policy: Some(
+                serde_json::to_value(Policy {
+                    agents_allowed_backends: vec!["cli:codex".to_string()],
+                    ..Policy::default()
+                })
+                .expect("serialize policy"),
+            ),
             continuity_uaa_session_id: Some("uaa_123".to_string()),
         };
 
@@ -865,6 +895,73 @@ mod tests {
         );
         assert_eq!(resolved.backend_id, "cli:codex");
         assert_eq!(resolved.agent_id, "codex");
+        assert_eq!(
+            resolved.effective_policy.agents_allowed_backends,
+            vec!["cli:codex".to_string()]
+        );
+    }
+
+    #[test]
+    fn persisted_attach_contract_reuses_persisted_capabilities_and_scope_knob() {
+        let contract = HostAttachContract {
+            backend_id: "cli:codex".to_string(),
+            execution_scope: AgentExecutionScope::Host,
+            protocol: super::PURE_AGENT_PROTOCOL.to_string(),
+            launch_descriptor: ResolvedRuntimeDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: ResolvedRuntimeBackendKind::Codex,
+                protocol: super::PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: "cargo".to_string(),
+            },
+            capabilities:
+                crate::execution::agent_runtime::orchestration_session::HostAttachCapabilities {
+                    session_resume: false,
+                    session_fork: true,
+                    session_stop: false,
+                    status_snapshot: true,
+                    event_stream: false,
+                },
+            attach_launch_knobs:
+                crate::execution::agent_runtime::orchestration_session::HostAttachLaunchKnobs::default(),
+            effective_policy: Some(
+                serde_json::to_value(Policy {
+                    agents_allowed_backends: vec!["cli:codex".to_string()],
+                    ..Policy::default()
+                })
+                .expect("serialize policy"),
+            ),
+            continuity_uaa_session_id: Some("uaa_123".to_string()),
+        };
+        let mut envelope = exact_backend_envelope(
+            DispatchCallerKind::HumanFork,
+            DispatchBaselineKind::PersistedHostAttach,
+            "cli:codex",
+        );
+        envelope.attach_launch_knobs.host_execution_client_start = HostExecutionClientStart::Defer;
+        envelope.attach_launch_knobs.attach_mode_preference = AttachModePreference::FreshAllowed;
+
+        let resolved =
+            resolve_persisted_host_attach_contract(&envelope, &contract).expect("resolution");
+
+        assert!(!resolved.capabilities.session_resume);
+        assert!(resolved.capabilities.session_fork);
+        assert!(!resolved.capabilities.session_stop);
+        assert!(resolved.capabilities.status_snapshot);
+        assert!(!resolved.capabilities.event_stream);
+        assert_eq!(
+            resolved.attach_launch_knobs.requested_execution_scope,
+            AgentExecutionScope::Host
+        );
+        assert_eq!(
+            resolved.attach_launch_knobs.host_execution_client_start,
+            HostExecutionClientStart::Defer
+        );
+        assert_eq!(
+            resolved.attach_launch_knobs.attach_mode_preference,
+            AttachModePreference::FreshAllowed
+        );
     }
 
     #[test]
