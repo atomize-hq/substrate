@@ -442,6 +442,13 @@ impl AgentRuntimeStateStore {
                 return Ok(());
             }
         }
+        self.write_participant_snapshot(participant)
+    }
+
+    fn write_participant_snapshot(
+        &self,
+        participant: &AgentRuntimeParticipantRecord,
+    ) -> Result<()> {
         self.ensure_participants_dir()?;
         write_atomic_json(
             &self.participant_path(&participant.handle.participant_id),
@@ -563,6 +570,7 @@ impl AgentRuntimeStateStore {
         active_generation: u64,
     ) -> Result<Vec<String>> {
         let mut invalidated_participant_ids = Vec::new();
+        let mut invalidated_participants = Vec::new();
 
         for mut participant in self.list_participants_across_sources()? {
             if participant.handle.orchestration_session_id != orchestration_session_id
@@ -582,8 +590,19 @@ impl AgentRuntimeStateStore {
 
             if participant.invalidate_for_world_generation_rollover() {
                 invalidated_participant_ids.push(participant.handle.participant_id.clone());
-                self.persist_participant(&participant)?;
+                invalidated_participants.push(participant);
             }
+        }
+        if invalidated_participants.is_empty() {
+            return Ok(invalidated_participant_ids);
+        }
+
+        let _write_guard = snapshot_write_lock()
+            .lock()
+            .expect("snapshot write mutex poisoned");
+        for participant in &invalidated_participants {
+            self.validate_participant_record(participant)?;
+            self.write_participant_snapshot(participant)?;
         }
 
         Ok(invalidated_participant_ids)
@@ -3310,6 +3329,44 @@ mod tests {
                 stale_member.internal.termination_reason.as_deref(),
                 Some("world generation invalidated by replacement binding")
             );
+        });
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn invalidate_stale_world_members_for_session_handles_large_batches() {
+        with_store(|store| {
+            let orchestrator = live_orchestrator("claude_code", "sess_live", "ash_orchestrator");
+            store
+                .persist_participant(&orchestrator)
+                .expect("persist orchestrator");
+
+            for idx in 0..256 {
+                let participant_id = format!("ash_member_stale_{idx:03}");
+                let stale_member =
+                    live_member("codex", "sess_live", &participant_id, "ash_orchestrator");
+                store
+                    .persist_participant(&stale_member)
+                    .expect("persist stale member");
+            }
+
+            let invalidated = store
+                .invalidate_stale_world_members_for_session("sess_live", 3)
+                .expect("invalidate stale members");
+
+            assert_eq!(invalidated.len(), 256);
+            for idx in 0..256 {
+                let participant_id = format!("ash_member_stale_{idx:03}");
+                let stale_member = store
+                    .load_participant(&participant_id)
+                    .expect("load stale member")
+                    .expect("stale member exists");
+                assert_eq!(
+                    stale_member.handle.state,
+                    AgentRuntimeSessionState::Invalidated,
+                    "{participant_id} must be invalidated in the same sweep"
+                );
+            }
         });
     }
 

@@ -1555,6 +1555,17 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
         turn_stdin.contains("hello from turn"),
         "resume-backed follow-up turns must continue to send the prompt on stdin: {turn_stdin:?}"
     );
+    let reparked_session = wait_for_session_posture(
+        &fixture,
+        &orchestration_session_id,
+        "parked_resumable",
+        Duration::from_secs(5),
+    );
+    let authoritative_participant_id = reparked_session
+        .get("active_session_handle_id")
+        .and_then(Value::as_str)
+        .expect("authoritative participant id after detached turn")
+        .to_string();
 
     let stop_output = fixture.run(&[
         "agent",
@@ -1580,7 +1591,7 @@ fn public_start_turn_and_stop_emit_streaming_ndjson_and_authoritative_state() {
     );
     assert_eq!(
         stop_json.get("participant_id").and_then(Value::as_str),
-        Some(participant_id.as_str())
+        Some(authoritative_participant_id.as_str())
     );
     assert_eq!(
         stop_json.get("backend_id").and_then(Value::as_str),

@@ -562,7 +562,6 @@ fn wait_for_start_prompt_completion_normalization(
     participant_id: &str,
 ) -> Result<()> {
     let normalization_started_at = std::time::Instant::now();
-    let mut attached_grace_started_at: Option<std::time::Instant> = None;
     loop {
         match store.classify_hidden_owner_helper_launch_readiness(
             orchestration_session_id,
@@ -570,16 +569,8 @@ fn wait_for_start_prompt_completion_normalization(
             true,
         )? {
             HiddenOwnerHelperLaunchReadiness::ReadyDetached(_) => return Ok(()),
-            HiddenOwnerHelperLaunchReadiness::ReadyAttached => {
-                let grace_started_at =
-                    attached_grace_started_at.get_or_insert_with(std::time::Instant::now);
-                if grace_started_at.elapsed() >= START_ATTACHED_GRACE_TIMEOUT {
-                    return Ok(());
-                }
-            }
-            HiddenOwnerHelperLaunchReadiness::Pending => {
-                attached_grace_started_at = None;
-            }
+            HiddenOwnerHelperLaunchReadiness::ReadyAttached
+            | HiddenOwnerHelperLaunchReadiness::Pending => {}
         }
 
         if normalization_started_at.elapsed() >= START_DETACH_NORMALIZATION_TIMEOUT {
