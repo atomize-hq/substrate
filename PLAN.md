@@ -379,6 +379,10 @@ Primary files:
 2. [crates/shell/src/execution/agent_runtime/state_store.rs](crates/shell/src/execution/agent_runtime/state_store.rs)
 3. [crates/shell/src/execution/agent_runtime/control.rs](crates/shell/src/execution/agent_runtime/control.rs)
 
+Implementation note:
+
+Current runtime/tests still tolerate some partial persisted `HostAttachContract` rows because `HostAttachContract`, `HostAttachCapabilities`, and `HostAttachLaunchKnobs` deserialize with defaults. Phase C must tighten that behavior so incomplete attach-contract rows fail validation/load instead of silently inheriting defaults, and any tests that currently expect partial-contract backfill on load must be updated to expect fail-closed rejection instead.
+
 Required changes:
 
 1. Keep `HostAttachContract::from_manifest(...)` out of steady-state modern birth paths.

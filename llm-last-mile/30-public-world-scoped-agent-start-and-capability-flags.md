@@ -53,6 +53,7 @@ Before this public surface is promoted, it must inherit the 29.75 closeout floor
 3. `session_start`, `llm`, and `mcp_client` remain dispatch-time unsupported and must stay fail closed until a later slice deliberately broadens scope;
 4. retained world-member follow-up turns already consume a shared-contract-derived parity subset, so this slice must not invent a second public world-start follow-up dialect.
 5. host session birth now persists authoritative attach-relevant truth from resolved-contract semantics across both public start and REPL host cold start, so this slice must not repair durable attach truth itself.
+6. missing or invalid persisted durable attach truth now fails closed with no repair/backfill branch in 29.75, so this slice must not reintroduce one.
 
 ## Draft Work Breakdown
 

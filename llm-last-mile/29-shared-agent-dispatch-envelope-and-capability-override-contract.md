@@ -4,13 +4,15 @@ Status: implementation-ready follow-on slice. This SOW follows [28.5-explicit-co
 
 This slice is not a generic capability-injection exercise. It is the contract-definition slice that turns inventory defaults, dispatch-time overrides, and policy narrowing into one resolved launch contract and one generalized persisted host attach contract that later slices can reuse without guessing.
 
-29.5 closeout has now frozen the shipped contract floor for this SOW:
+29.5 and 29.75 closeout have now frozen the shipped contract floor for this SOW:
 
 1. inventory `policy_overlay` is merged into `ResolvedLaunchContract.effective_policy` as restriction-only truth,
 2. dispatch-time capability narrowing is supported only for `session_resume`, `session_fork`, `session_stop`, `status_snapshot`, and `event_stream`, and only from `true` to `false`,
 3. `session_start`, `llm`, and `mcp_client` remain dispatch-time unsupported and fail closed with field-scoped diagnostics,
-4. persisted host attach launches reuse durable attach capabilities, attach launch knobs, and effective policy instead of ambient defaults,
-5. retained world-member follow-up turns consume a shared-contract-derived parity subset rather than re-running hidden launch selection.
+4. persisted host attach launches reuse durable attach capabilities, attach launch defaults, and effective policy from `HostAttachContract` baseline rather than ambient defaults,
+5. later attach requests may only honor or narrow that persisted baseline, and may not silently replace or broaden it,
+6. missing or invalid durable attach truth now fails closed instead of silently reconstructing from manifest or default state,
+7. retained world-member follow-up turns consume a shared-contract-derived parity subset rather than re-running hidden launch selection.
 
 ## Objective
 
@@ -36,7 +38,7 @@ The current repo already has the minimum durable attach seam that 28.5 said it w
 1. exact backend/runtime selection already resolves through `RuntimeSelectionDescriptor`,
 2. durable launch-descriptor persistence already exists through `ResolvedRuntimeDescriptor` plus `HostAttachContract`,
 3. durable orchestration-session state already stores that contract under `OrchestrationSessionRecord.host_attach_contract`,
-4. session-birth persistence, continuity sync, and successor-copy behavior already exist through `HostAttachContract::from_manifest(...)`, `sync_host_attach_contract(...)`, and `fork_successor_attach_contract(...)`,
+4. the initial durable host-attach seam already exists through `HostAttachContract`, `sync_host_attach_contract(...)`, and `fork_successor_attach_contract(...)`, with 29.75 later hardening birth-time authority and fail-closed semantics on top of that seam,
 5. public `reattach` already plans from the persisted attach contract and fails closed when required continuity is missing,
 6. public `fork` already allocates a successor durable session, copies the attach-contract shape forward, clears inherited continuity, and returns truthful `parked_resumable` posture.
 

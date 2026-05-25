@@ -12,9 +12,11 @@ This slice no longer tries to discover the architecture. The validated architect
 
 The 29.75 closeout floor this slice inherits is also fixed:
 
-1. persisted host attach resolution already reuses durable backend, protocol, scope, capabilities, effective policy, and continuity selector truth from `HostAttachContract`, while attach-time caller inputs remain explicitly scoped to attach mode/start selection,
-2. successor allocation already copies generalized attach truth forward while clearing only continuity-specific state,
-3. retained world-member follow-up turns already avoid hidden baseline re-resolution and therefore must stay orthogonal to lazy host attach.
+1. persisted host attach resolution already reuses durable backend, protocol, scope, capabilities, effective policy, continuity selector truth, and attach policy defaults from `HostAttachContract`,
+2. later attach-time requests are bounded overlays on that baseline: they may honor it, narrow it where permitted, and may not silently broaden or replace it,
+3. missing or invalid persisted durable attach truth fails closed with no repair/backfill branch in 29.75,
+4. successor allocation already copies generalized attach truth forward while clearing only continuity-specific state,
+5. retained world-member follow-up turns already avoid hidden baseline re-resolution and therefore must stay orthogonal to lazy host attach.
 
 ## Objective
 
@@ -56,7 +58,7 @@ Required direction:
 2. if no continuity selector exists, the attach worker must be able to perform fresh attach from the persisted host attach contract;
 3. attach-mode choice must be explicit and auditable;
 4. neither mode may invent a second durable attach object or re-derive launch truth from the last live participant snapshot,
-5. both modes must trust the persisted effective policy and attach-relevant capability truth that 29.5 now stores durably.
+5. both modes must trust the persisted effective policy, attach-relevant capability truth, and attach policy defaults that 29.75 freezes durably.
 
 ### 3. Define how lazy attach is triggered
 
