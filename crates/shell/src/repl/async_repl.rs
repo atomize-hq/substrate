@@ -9312,7 +9312,7 @@ mod tests {
         rt.block_on(async {
             let mut descriptor = test_runtime_selection_descriptor();
             descriptor.binary_path = fake_codex.clone();
-            let plan = super::HiddenOwnerHelperLaunchPlan {
+            let mut plan = super::HiddenOwnerHelperLaunchPlan {
                 mode: super::OwnerHelperMode::Attach,
                 descriptor: super::ResolvedRuntimeDescriptor::from(&descriptor),
                 session: HiddenOwnerHelperSessionPlan {
@@ -9336,6 +9336,13 @@ mod tests {
             let config = Arc::new(
                 owner_helper_shell_config(&plan)
                     .expect("owner helper attach shell config should resolve"),
+            );
+            let resolved = resolve_host_orchestrator_bootstrap(&config)
+                .expect("resolve host bootstrap for attach test should succeed")
+                .expect("agents-enabled host bootstrap should be present");
+            plan.host_attach_contract = HostAttachContract::from_resolved_contract(
+                &resolved.resolved_contract,
+                Some("uaa-attach-source".to_string()),
             );
             let prepared = prepare_hidden_owner_helper_runtime(&config, &plan)
                 .expect("prepare hidden owner-helper attach runtime should succeed");
@@ -9372,6 +9379,13 @@ mod tests {
                 .expect("attached participant");
             assert_eq!(session.session.active_participant_id(), Some("ash-attach"));
             assert_eq!(participant.internal_uaa_session_id(), Some("thread-test"));
+            assert_eq!(
+                session
+                    .session
+                    .host_attach_contract()
+                    .and_then(|contract| contract.continuity_uaa_session_id.as_deref()),
+                Some("thread-test")
+            );
             assert_eq!(
                 fs::read_to_string(&stdin_capture_path).expect("read attach stdin capture"),
                 "",
