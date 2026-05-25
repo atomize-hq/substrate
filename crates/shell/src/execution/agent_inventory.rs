@@ -197,22 +197,45 @@ pub(crate) fn inventory_entry_origin(
     cwd: &Path,
     entry: &AgentInventoryEntryV1,
 ) -> AgentInventoryBaselineOrigin {
-    let workspace_root = workspace::find_workspace_root(cwd);
-    let workspace_agents_root = workspace_root.map(|root| {
-        root.join(workspace::SUBSTRATE_DIR_NAME)
-            .join("agents")
-            .to_string_lossy()
-            .to_string()
-    });
-    let entry_path = entry.path.to_string_lossy();
+    let Some(workspace_root) = workspace::find_workspace_root(cwd) else {
+        return AgentInventoryBaselineOrigin::GlobalInventory;
+    };
+    let workspace_agents_root = normalize_inventory_origin_path(
+        &workspace_root
+            .join(workspace::SUBSTRATE_DIR_NAME)
+            .join("agents"),
+    );
+    let entry_path = normalize_inventory_origin_path(&entry.path);
 
-    if workspace_agents_root
-        .as_deref()
-        .is_some_and(|root| entry_path.starts_with(root))
-    {
+    if entry_path.starts_with(&workspace_agents_root) {
         AgentInventoryBaselineOrigin::WorkspaceInventory
     } else {
         AgentInventoryBaselineOrigin::GlobalInventory
+    }
+}
+
+fn normalize_inventory_origin_path(path: &Path) -> PathBuf {
+    let mut current = path;
+    let mut suffix = Vec::new();
+
+    loop {
+        if let Ok(canonical) = current.canonicalize() {
+            let mut normalized = canonical;
+            for component in suffix.iter().rev() {
+                normalized.push(component);
+            }
+            return normalized;
+        }
+
+        let Some(name) = current.file_name() else {
+            return path.to_path_buf();
+        };
+        let Some(parent) = current.parent() else {
+            return path.to_path_buf();
+        };
+
+        suffix.push(name.to_os_string());
+        current = parent;
     }
 }
 
@@ -804,4 +827,53 @@ fn validate_overlay_subset(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        inventory_entry_origin, AgentCapabilitiesV1, AgentCliConfigV1, AgentConfigKind,
+        AgentConfigV1, AgentExecutionConfigV1, AgentFileV1, AgentInventoryBaselineOrigin,
+        AgentInventoryEntryV1,
+    };
+    use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
+    use tempfile::tempdir;
+
+    #[test]
+    fn inventory_entry_origin_treats_noncanonical_workspace_paths_as_workspace_inventory() {
+        let temp = tempdir().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let workspace_agents = workspace_root.join(SUBSTRATE_DIR_NAME).join("agents");
+        std::fs::create_dir_all(&workspace_agents).expect("workspace agents");
+        std::fs::write(workspace_marker_path(&workspace_root), "version: 1\n")
+            .expect("workspace marker");
+
+        let cwd = workspace_root.join("src");
+        std::fs::create_dir_all(&cwd).expect("cwd");
+        let entry = AgentInventoryEntryV1 {
+            path: workspace_agents.join("codex.yaml"),
+            file: AgentFileV1 {
+                version: 1,
+                id: "codex".to_string(),
+                config: AgentConfigV1 {
+                    enabled: true,
+                    kind: AgentConfigKind::Cli,
+                    protocol: Some("transport.iframe.v1".to_string()),
+                    execution: AgentExecutionConfigV1::default(),
+                    cli: Some(AgentCliConfigV1 {
+                        binary: "codex".to_string(),
+                        mode: None,
+                    }),
+                    api: None,
+                    capabilities: AgentCapabilitiesV1::default(),
+                },
+                policy_overlay: None,
+            },
+        };
+
+        assert_eq!(
+            inventory_entry_origin(&cwd, &entry),
+            AgentInventoryBaselineOrigin::WorkspaceInventory
+        );
+    }
 }

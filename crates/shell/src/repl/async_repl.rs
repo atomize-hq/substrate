@@ -9559,6 +9559,7 @@ mod tests {
         std::env::remove_var("SUBSTRATE_HOME");
     }
 
+    #[cfg(unix)]
     #[test]
     #[serial_test::serial]
     fn can_park_host_runtime_after_detach_accepts_completed_one_turn_when_store_lags() {

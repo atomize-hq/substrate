@@ -8,8 +8,7 @@ use crate::execution::agent_runtime::control::{
     hidden_owner_helper_readiness_timed_out, load_hidden_owner_helper_launch_plan,
     load_public_prompt_source, persist_hidden_owner_helper_launch_plan,
     persist_runtime_stop_closeout, public_prompt_rendered_exit_code,
-    reconcile_hidden_owner_helper_start_timeout, reconcile_resumed_public_turn_detach_timeout,
-    reconcile_start_prompt_completion_timeout, remove_hidden_owner_helper_launch_plan,
+    reconcile_hidden_owner_helper_start_timeout, remove_hidden_owner_helper_launch_plan,
     run_public_prompt_command, wait_for_hidden_owner_helper_readiness, HiddenOwnerHelperLaunchPlan,
     HiddenOwnerHelperParticipantPlan, HiddenOwnerHelperSessionPlan,
     HiddenOwnerHelperStartTimeoutReconciliation, OwnerHelperMode, PublicPromptAction,
@@ -18,7 +17,9 @@ use crate::execution::agent_runtime::control::{
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::control::{
-    private_stop_transport_path, register_hidden_owner_helper_startup_prompt_listener,
+    private_stop_transport_path, reconcile_resumed_public_turn_detach_timeout,
+    reconcile_start_prompt_completion_timeout,
+    register_hidden_owner_helper_startup_prompt_listener,
     run_hidden_owner_helper_startup_prompt_stream,
     run_hidden_owner_helper_startup_prompt_stream_with_action, HiddenOwnerHelperStartupPromptPlan,
 };
@@ -672,6 +673,7 @@ fn run_turn(args: &AgentTurnArgs, cli: &Cli) -> Result<()> {
         .map_err(|err| config_model::user_error(err.to_string()))?;
     let orchestration_session_id = target.session.orchestration_session_id.clone();
     let backend_id = target.participant.handle.backend_id.clone();
+    #[cfg(unix)]
     let exact_backend_id = backend_id.clone();
 
     #[cfg(unix)]
@@ -1451,6 +1453,7 @@ fn wait_for_resumed_public_turn_detach(
     }
 }
 
+#[cfg(unix)]
 fn resumed_public_turn_detach_ready(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -1463,6 +1466,7 @@ fn resumed_public_turn_detach_ready(
         || exact_detached_host_turn_target_ready(store, orchestration_session_id, backend_id)?)
 }
 
+#[cfg(unix)]
 fn resumed_public_turn_detach_stable_after_grace(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -1478,6 +1482,7 @@ fn resumed_public_turn_detach_stable_after_grace(
     )? && resumed_public_turn_runtime_released(store, resumed_participant_id)?)
 }
 
+#[cfg(unix)]
 fn exact_detached_host_turn_target_ready(
     store: &AgentRuntimeStateStore,
     orchestration_session_id: &str,
@@ -1490,6 +1495,7 @@ fn exact_detached_host_turn_target_ready(
     }
 }
 
+#[cfg(unix)]
 fn resumed_public_turn_runtime_released(
     store: &AgentRuntimeStateStore,
     resumed_participant_id: &str,
