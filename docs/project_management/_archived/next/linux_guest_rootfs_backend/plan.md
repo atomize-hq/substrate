@@ -23,6 +23,7 @@ Turn the approved spec into an implementation approach that is reviewable before
   - materialize the immutable base image
   - scaffold generic storage layout without requiring workspace-specific input
   - preserve overlays during repair
+  - avoid broadening warm into scope-local runtime lifecycle
 
 ### 3. Shared readiness evaluator
 - `crates/world/`
@@ -98,6 +99,7 @@ Why second:
 - Use `global` when no workspace root exists.
 - Create scope-local overlays lazily on first execution or provisioning for that scope.
 - Reuse the same overlay for execution and provisioning within one scope.
+- Keep lazy scope-local overlay creation narrow: no image fetch, provenance repair, base-store repair, ownership repair, or generic warm work in runtime paths.
 
 Why third:
 - persistence, no-cross-workspace contamination, and provisioning semantics depend on exact scope keying.

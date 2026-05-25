@@ -133,6 +133,7 @@ Success means:
 - Scope-local overlays are created lazily by runtime execution or `substrate world enable --provision-deps` when that scope is used for the first time.
 - `scripts/linux/world-rootfs-warm.sh` MUST NOT require a workspace input and MUST NOT be responsible for pre-creating `ws-<workspace-sha256>` overlays.
 - Provisioning and execution within the same scope MUST reuse the same overlay.
+- In v1, one scope-local overlay is reused per workspace scope; future internal concurrency or layering may evolve without changing the warm contract.
 - Different workspaces MUST NOT share overlays.
 - The immutable base image is shared by all overlays for the same image id.
 - Overlay cleanup rules:
@@ -157,6 +158,7 @@ Success means:
 - If invoked as a non-root user:
   - it MUST either re-exec via `sudo` or fail immediately with actionable instructions that `sudo` is required,
   - it MUST NOT partially create root-owned state as an unprivileged user.
+- Runtime execution and `substrate world enable --provision-deps` MUST NOT broaden lazy scope-local overlay creation into image fetch, provenance repair, base-store repair, ownership repair, or generic warm work.
 
 ### Shared readiness logic
 - Substrate MUST compute guest-rootfs readiness through one shared readiness evaluator reused by:

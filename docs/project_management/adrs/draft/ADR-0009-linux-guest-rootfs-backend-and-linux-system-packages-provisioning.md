@@ -22,10 +22,9 @@
 - Prior hardening track (full cage / Landlock): `docs/project_management/_archived/p0-agent-hub-isolation-hardening/ADR-0001-agent-hub-runtime-config-and-isolation.md`
 - World architecture: `docs/WORLD.md`
 - Operator reference for provisioning/runtime world-deps behavior: `docs/reference/world/deps/README.md`
-- Plan (stub): `docs/project_management/_archived/next/linux_guest_rootfs_backend/plan.md`
+- Skill Phase 2 plan: `docs/project_management/_archived/next/linux_guest_rootfs_backend/plan.md`
 - Decision Register: `docs/project_management/_archived/next/linux_guest_rootfs_backend/decision_register.md`
-- Impact / integration map (legacy stub): `docs/project_management/_archived/next/linux_guest_rootfs_backend/integration_map.md`
-- Manual Playbook (stub): `docs/project_management/_archived/next/linux_guest_rootfs_backend/manual_testing_playbook.md`
+- Skill Phase 1 spec: `docs/project_management/_archived/next/linux_guest_rootfs_backend/spec.md`
 - World-image pinning roadmap (explicitly out of scope here): `docs/BACKLOG.md`
 
 ## Executive Summary (Operator)
@@ -87,10 +86,20 @@ Without a guest-rootfs backend:
   - `scripts/linux/world-rootfs-warm.sh`
 - The warm script MUST:
   - fetch or otherwise obtain the blessed Ubuntu/Debian guest rootfs as an OCI-style rootfs image source,
+  - verify image digest and provenance against the built-in manifest,
   - unpack the immutable base image into a Substrate-owned system path,
-  - prepare the persistent writable overlay storage required by the backend,
+  - create and repair the system-path storage layout required by the backend,
+  - repair ownership and permissions under the backend storage root,
+  - perform generic backend warm and repair work that is not scope-local overlay creation,
   - be idempotent and safe to re-run as the repair path.
-- World execution and `substrate world enable --provision-deps` MUST NOT implicitly create or repair the guest rootfs.
+- World execution and `substrate world enable --provision-deps` MUST NOT implicitly:
+  - fetch images,
+  - verify or re-verify image provenance as repair work,
+  - recreate or repair the base-image store,
+  - fix ownership or permissions,
+  - perform generic warm or repair.
+- After the backend is otherwise ready, world execution and `substrate world enable --provision-deps` MAY lazily create the empty scope-local overlay directory for the resolved scope under `/var/lib/substrate/world-rootfs/overlays/...`.
+- Failure to create that scope-local overlay MUST fail the triggering operation with actionable remediation.
 - When Linux is configured for `guest_rootfs` and the guest rootfs is missing or unready, operator-facing remediation MUST point to `scripts/linux/world-rootfs-warm.sh`.
 
 #### `substrate world enable --provision-deps` (Linux behavior)
@@ -183,7 +192,8 @@ Behavioral constraints:
   - route Linux `substrate world enable --provision-deps` through the guest-rootfs readiness gate and remediation path.
 - `scripts/linux/world-rootfs-warm.sh`
   - obtain and unpack the blessed guest rootfs image,
-  - prepare the immutable base-image store and persistent writable overlay storage under a Substrate-owned system path,
+  - verify provenance and digest before making the image available,
+  - prepare the immutable base-image store and backend storage layout under a Substrate-owned system path,
   - perform explicit privileged setup and repair.
 
 ### End-to-end flow
@@ -200,6 +210,7 @@ Behavioral constraints:
   - normalized apt package requirement set for provisioning
 - Actions:
   - warm: `scripts/linux/world-rootfs-warm.sh` prepares the image/overlay store
+  - lazy overlay create: runtime execution or `substrate world enable --provision-deps` may create the empty scope-local overlay for the resolved scope once the backend is otherwise ready
   - execute: world-service runs commands against the selected backend and guest userspace
   - full isolation: `guest_rootfs` mode uses the guest image as the world root and applies the existing full-isolation semantics inside that guest-backed world
   - provision: `substrate world enable --provision-deps` installs apt packages into the guest overlay only
@@ -226,6 +237,7 @@ Behavioral constraints:
   - Base images and overlays MUST live under a Substrate-owned system path (for example, under `/var/lib/substrate/...`) and MUST NEVER be placed in the workspace or under `$SUBSTRATE_HOME`.
   - The base guest image MUST be treated as immutable after warm/unpack.
   - Package provisioning MUST mutate only the persistent guest overlay, never the base image and never the host OS package set.
+  - Runtime execution and provisioning MAY create the empty scope-local overlay directory for a resolved scope, but they MUST NOT broaden that behavior into generic backend repair.
   - All mount, overlay, and unpack operations MUST remain confined to Substrate-managed paths plus the explicit project mounts used for world execution.
 - Observability requirements:
   - `substrate world doctor --json` MUST surface, at minimum:
@@ -252,13 +264,13 @@ Behavioral constraints:
   - prove that Linux `host_native` still rejects provisioning and never invokes host package-manager commands.
 
 ### Manual validation
-- Manual playbook: `docs/project_management/_archived/next/linux_guest_rootfs_backend/manual_testing_playbook.md`
-- The manual playbook MUST cover at least:
-  - warm/repair flow,
+- Manual validation MUST cover at least:
+  - warm and repair flow,
   - backend selection and doctor output,
   - guest-rootfs execution on a non-Debian Linux host running an Ubuntu/Debian guest world,
   - provisioning success and persistence,
-  - host-native rejection and no-host-mutation evidence.
+  - host-native rejection and no-host-mutation evidence,
+  - first-use lazy creation of a scope-local overlay.
 
 ### Smoke scripts
 - Linux: `docs/project_management/_archived/next/linux_guest_rootfs_backend/smoke/linux-smoke.sh` (to be created)
