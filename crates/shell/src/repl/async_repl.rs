@@ -47,13 +47,15 @@ use crate::execution::agent_runtime::control::{
 };
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::orchestration_session::{
-    OrchestrationSessionPosture, StartupPromptStreamState,
+    HostAttachContract, OrchestrationSessionPosture, StartupPromptStreamState,
 };
 use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipantInit;
 use crate::execution::agent_runtime::state_store::valid_detached_host_continuity_posture;
+use crate::execution::config_model::AgentExecutionScope;
 use crate::execution::agent_runtime::validator::RuntimeSelectionDescriptor;
 use crate::execution::agent_runtime::validator::{
-    exact_backend_selection_error_exit_code, validate_exact_backend_selection,
+    exact_backend_selection_error_exit_code, materialize_runtime_descriptor,
+    validate_exact_backend_selection,
 };
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::validator::{
@@ -62,11 +64,14 @@ use crate::execution::agent_runtime::validator::{
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::AgentRuntimeParticipantWorldBinding;
 use crate::execution::agent_runtime::{
-    backend_allowed, build_gateway_for_descriptor, runtime_realizability_error_exit_code,
-    validate_orchestrator_selection, validate_runtime_realizability, AgentRuntimeParticipantRecord,
-    AgentRuntimeSessionManifest, AgentRuntimeSessionState, AgentRuntimeStateStore,
-    OrchestrationSessionRecord, OrchestrationSessionState, MEMBER_ROLE, ORCHESTRATOR_ROLE,
-    PURE_AGENT_PROTOCOL, SESSION_HANDLE_SCHEMA_V1,
+    backend_allowed, build_gateway_for_descriptor, resolve_inventory_contract_for_exact_backend,
+    runtime_realizability_error_exit_code, validate_orchestrator_selection,
+    AgentRuntimeParticipantRecord, AgentRuntimeSessionManifest, AgentRuntimeSessionState,
+    AgentRuntimeStateStore, AttachLaunchKnobs, AttachModePreference, DispatchBaselineKind,
+    DispatchCallerKind, DispatchCapabilityOverrideSet, DispatchRequestEnvelope,
+    HostExecutionClientStart, OrchestrationSessionRecord, OrchestrationSessionState,
+    ResolvedLaunchContract, MEMBER_ROLE, ORCHESTRATOR_ROLE, PURE_AGENT_PROTOCOL,
+    SESSION_HANDLE_SCHEMA_V1,
 };
 #[cfg(unix)]
 use crate::execution::get_terminal_size;
@@ -1746,6 +1751,7 @@ impl MemberDispatchParitySubset {
 struct ResolvedHostOrchestratorBootstrap {
     cwd: PathBuf,
     shell_session_id: String,
+    resolved_contract: ResolvedLaunchContract,
     descriptor: RuntimeSelectionDescriptor,
     prompt_fulfillment: PromptFulfillmentBridge,
     state_store: AgentRuntimeStateStore,
@@ -2181,6 +2187,7 @@ fn prepare_host_orchestrator_runtime_from_resolved(
     let ResolvedHostOrchestratorBootstrap {
         cwd,
         shell_session_id,
+        resolved_contract,
         descriptor,
         prompt_fulfillment,
         state_store,
@@ -2206,6 +2213,7 @@ fn prepare_host_orchestrator_runtime_from_resolved(
         shell_session_id,
         cwd.display().to_string(),
         &manifest,
+        HostAttachContract::from_resolved_contract(&resolved_contract, None),
     )));
     state_store
         .persist_orchestration_session(
@@ -2288,13 +2296,45 @@ fn resolve_host_orchestrator_bootstrap(
         });
     }
 
-    let descriptor =
-        validate_runtime_realizability(orchestrator, &effective_config).map_err(|err| {
-            RuntimeBootstrapFailure {
-                exit_code: runtime_realizability_error_exit_code(&err),
-                message: err.reason,
-            }
-        })?;
+    let envelope = DispatchRequestEnvelope {
+        caller_kind: DispatchCallerKind::HumanStart,
+        baseline_kind: DispatchBaselineKind::InventoryLaunch,
+        backend_id: Some(orchestrator.derived_backend_id()),
+        orchestration_session_id: None,
+        requested_execution_scope_override: None,
+        capability_overrides: DispatchCapabilityOverrideSet::default(),
+        attach_launch_knobs: AttachLaunchKnobs {
+            requested_execution_scope: AgentExecutionScope::Host,
+            host_execution_client_start: HostExecutionClientStart::StartNow,
+            attach_mode_preference: AttachModePreference::ContinuityRequired,
+        },
+        has_prompt_payload: false,
+    };
+    let resolved_contract = resolve_inventory_contract_for_exact_backend(
+        &cwd,
+        &effective_config,
+        &inventory,
+        &base_policy,
+        &envelope,
+        AgentExecutionScope::Host,
+    )
+    .map_err(|err| RuntimeBootstrapFailure {
+        exit_code: 2,
+        message: format!("runtime_start_failed: {err}"),
+    })?
+    .ok_or_else(|| RuntimeBootstrapFailure {
+        exit_code: 2,
+        message: format!(
+            "runtime_start_failed: baseline truth rejected field 'backend_id': no exact host-scoped backend match found for '{}'",
+            orchestrator.derived_backend_id()
+        ),
+    })?;
+    let descriptor = materialize_runtime_descriptor(&resolved_contract).map_err(|err| {
+        RuntimeBootstrapFailure {
+            exit_code: runtime_realizability_error_exit_code(&err),
+            message: err.reason,
+        }
+    })?;
     let state_store = AgentRuntimeStateStore::new().map_err(|err| RuntimeBootstrapFailure {
         exit_code: 1,
         message: format!("failed to initialize shell runtime state store: {err:#}"),
@@ -2308,6 +2348,7 @@ fn resolve_host_orchestrator_bootstrap(
     Ok(Some(ResolvedHostOrchestratorBootstrap {
         cwd,
         shell_session_id: config.session_id.clone(),
+        resolved_contract,
         descriptor,
         prompt_fulfillment,
         state_store,
@@ -2454,6 +2495,7 @@ fn owner_helper_orchestration_session(
         plan.session.shell_trace_session_id.clone(),
         plan.session.workspace_root.clone(),
         manifest,
+        plan.host_attach_contract.clone(),
     );
     session.latest_run_id = Some(plan.participant.run_id.clone());
     session.active_session_handle_id = None;
@@ -2483,6 +2525,7 @@ fn prepare_hidden_owner_helper_runtime(
     let ResolvedHostOrchestratorBootstrap {
         cwd: _cwd,
         shell_session_id: _shell_session_id,
+        resolved_contract: _resolved_contract,
         descriptor: validated_descriptor,
         prompt_fulfillment: _validated_prompt_fulfillment,
         state_store,
@@ -8211,6 +8254,7 @@ mod tests {
             "shell-test".to_string(),
             "/tmp".to_string(),
             &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
         );
         session.initialize_startup_prompt(manifest.handle.participant_id.clone());
         session.mark_startup_prompt_accepted(manifest.handle.participant_id.as_str());
@@ -8254,6 +8298,7 @@ mod tests {
             "shell-test".to_string(),
             "/tmp".to_string(),
             &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
         );
         session.initialize_startup_prompt(manifest.handle.participant_id.clone());
         session.mark_startup_prompt_completed(manifest.handle.participant_id.as_str(), "success");
@@ -8667,6 +8712,27 @@ mod tests {
             assert_eq!(
                 fs::canonicalize(&parent.workspace_root).expect("canonicalize parent workspace"),
                 fs::canonicalize(&workspace_root).expect("canonicalize workspace root")
+            );
+            let host_attach_contract = parent
+                .host_attach_contract()
+                .expect("repl-born host session should persist durable attach truth");
+            assert_eq!(host_attach_contract.backend_id, "cli:codex");
+            assert_eq!(host_attach_contract.protocol, PURE_AGENT_PROTOCOL);
+            assert_eq!(
+                host_attach_contract.attach_launch_knobs.requested_execution_scope,
+                AgentExecutionScope::Host
+            );
+            assert!(host_attach_contract.capabilities.session_resume);
+            let persisted_policy: substrate_broker::Policy =
+                serde_json::from_value(host_attach_contract.effective_policy.clone())
+                    .expect("deserialize persisted policy snapshot");
+            assert_eq!(
+                persisted_policy.agents_allowed_backends,
+                vec!["cli:codex".to_string()]
+            );
+            assert_eq!(
+                host_attach_contract.continuity_uaa_session_id.as_deref(),
+                Some("thread-test")
             );
             assert_eq!(
                 runtime
@@ -9261,6 +9327,7 @@ mod tests {
                     resumed_from_participant_id: Some("ash-source".to_string()),
                     internal_uaa_session_id: Some("uaa-attach-source".to_string()),
                 },
+                host_attach_contract: None,
                 startup_prompt: None,
                 source_orchestration_session_id: Some("orch-source".to_string()),
             };
@@ -9555,6 +9622,7 @@ mod tests {
             "trace_one_turn_lag".to_string(),
             "/workspace".to_string(),
             &participant,
+            HostAttachContract::from_manifest_for_test(&participant),
         );
         persisted_session.transition_state(OrchestrationSessionState::Active);
         persisted_session.bind_active_session_handle(participant.handle.participant_id.clone());

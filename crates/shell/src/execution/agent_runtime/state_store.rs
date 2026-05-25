@@ -2127,6 +2127,7 @@ fn synthesize_session_record(
         "<unknown-trace-session>".to_string(),
         "<unknown-workspace-root>".to_string(),
         template,
+        None,
     );
     session.opened_at = participants
         .iter()
@@ -2603,6 +2604,7 @@ mod tests {
             "trace_session".to_string(),
             "/workspace".to_string(),
             participant,
+            HostAttachContract::from_manifest_for_test(participant),
         );
         parent.transition_state(OrchestrationSessionState::Active);
         parent.bind_active_session_handle(participant.handle.participant_id.clone());
@@ -3885,7 +3887,7 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn load_session_backfills_generalized_attach_contract_defaults_for_legacy_json() {
+    fn load_session_fails_closed_for_incomplete_host_attach_contract_json() {
         with_store(|store| {
             let participant = live_orchestrator("codex", "sess_legacy_attach", "ash_selected");
             let parent = active_parent(&participant);
@@ -3914,21 +3916,10 @@ mod tests {
                 .persist_participant(&participant)
                 .expect("persist participant");
 
-            let loaded = store
+            let err = store
                 .load_session("sess_legacy_attach")
-                .expect("load legacy session")
-                .expect("legacy session exists");
-            let contract = loaded
-                .session
-                .host_attach_contract()
-                .expect("generalized attach contract");
-            assert!(contract.capabilities.session_resume);
-            assert!(contract.capabilities.session_fork);
-            assert!(contract.capabilities.session_stop);
-            assert_eq!(
-                contract.attach_launch_knobs.requested_execution_scope,
-                AgentExecutionScope::Host
-            );
+                .expect_err("incomplete persisted attach truth must fail closed");
+            assert!(err.to_string().contains("failed to parse"));
         });
     }
 
@@ -4506,6 +4497,7 @@ mod tests {
                 "trace_session".to_string(),
                 "/workspace".to_string(),
                 &participant,
+                HostAttachContract::from_manifest_for_test(&participant),
             );
 
             store

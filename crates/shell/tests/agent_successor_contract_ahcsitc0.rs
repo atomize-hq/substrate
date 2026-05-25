@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Output;
+use substrate_broker::Policy;
 use tempfile::{Builder, TempDir};
 
 const PURE_AGENT_PROTOCOL: &str = "substrate.agent.session";
@@ -856,7 +857,11 @@ fn orchestration_session_manifest_with_options(
         Some(Some(continuity_uaa_session_id)) => {
             host_attach_contract_manifest(agent_id, continuity_uaa_session_id)
         }
-        Some(None) | None => Value::Null,
+        Some(None) => Value::Null,
+        None => host_attach_contract_manifest(
+            agent_id,
+            &format!("uaa-{orchestration_session_id}"),
+        ),
     };
     json!({
         "orchestration_session_id": orchestration_session_id,
@@ -904,6 +909,22 @@ fn host_attach_contract_manifest(agent_id: &str, continuity_uaa_session_id: &str
             "execution_scope": "host",
             "binary_path": "sh"
         },
+        "capabilities": {
+            "session_resume": true,
+            "session_fork": true,
+            "session_stop": true,
+            "status_snapshot": true,
+            "event_stream": true
+        },
+        "attach_launch_knobs": {
+            "requested_execution_scope": "host",
+            "host_execution_client_start": "start_now",
+            "attach_mode_preference": "continuity_required"
+        },
+        "effective_policy": serde_json::to_value(Policy {
+            agents_allowed_backends: vec![format!("cli:{agent_id}")],
+            ..Policy::default()
+        }).expect("serialize effective policy"),
         "continuity_uaa_session_id": continuity_uaa_session_id
     })
 }

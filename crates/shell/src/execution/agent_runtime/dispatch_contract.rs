@@ -7,7 +7,9 @@ use crate::execution::agent_inventory::{
     project_inventory_entry, AgentCapabilitiesV1, AgentConfigKind, AgentInventoryBaselineOrigin,
     AgentInventoryEntryV1, ProjectedInventoryEntryV1, ProjectedInventoryValueOrigin,
 };
-use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
+use crate::execution::agent_runtime::orchestration_session::{
+    HostAttachContract, HostAttachExecutionClientStart, HostAttachModePreference,
+};
 use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
 use crate::execution::policy_model::{apply_policy_patch, PolicyPatch};
 
@@ -347,16 +349,20 @@ pub(crate) fn resolve_persisted_host_attach_contract(
             reason: "persisted attach launches do not accept dispatch-time capability overrides in slice 29".to_string(),
         });
     }
-    if matches!(
-        envelope.attach_launch_knobs.attach_mode_preference,
-        AttachModePreference::ContinuityRequired
-    ) && contract.continuity_uaa_session_id.is_none()
+    if envelope
+        .backend_id
+        .as_deref()
+        .is_some_and(|backend_id| backend_id != contract.backend_id)
     {
         return Err(DispatchResolutionError {
-            kind: DispatchResolutionErrorKind::MissingRequiredAttachContinuity,
-            field: "continuity_uaa_session_id",
+            kind: DispatchResolutionErrorKind::OverrideExceedsBaseline,
+            field: "backend_id",
             rejecting_layer: DispatchRejectingLayer::BaselineTruth,
-            reason: "persisted host attach contract no longer has continuity required for this attach launch".to_string(),
+            reason: format!(
+                "persisted attach launch cannot replace backend '{}' with '{}'",
+                contract.backend_id,
+                envelope.backend_id.as_deref().unwrap_or_default(),
+            ),
         });
     }
 
@@ -387,20 +393,18 @@ pub(crate) fn resolve_persisted_host_attach_contract(
         });
     }
 
-    let effective_policy = contract
-        .effective_policy
-        .clone()
-        .map(serde_json::from_value::<Policy>)
-        .transpose()
-        .map_err(|err| DispatchResolutionError {
-            kind: DispatchResolutionErrorKind::BaselineIneligible,
-            field: "effective_policy",
-            rejecting_layer: DispatchRejectingLayer::BaselineTruth,
-            reason: format!(
-                "persisted host attach contract stored an invalid policy snapshot: {err}"
-            ),
-        })?
-        .unwrap_or_default();
+    let effective_policy =
+        serde_json::from_value::<Policy>(contract.effective_policy.clone()).map_err(|err| {
+            DispatchResolutionError {
+                kind: DispatchResolutionErrorKind::BaselineIneligible,
+                field: "effective_policy",
+                rejecting_layer: DispatchRejectingLayer::BaselineTruth,
+                reason: format!(
+                    "persisted host attach contract stored an invalid policy snapshot: {err}"
+                ),
+            }
+        })?;
+    let attach_launch_knobs = resolve_persisted_attach_launch_knobs(envelope, contract)?;
 
     let mut field_provenance = BTreeMap::new();
     for field in [
@@ -416,6 +420,9 @@ pub(crate) fn resolve_persisted_host_attach_contract(
         "status_snapshot",
         "event_stream",
         "effective_policy",
+        "requested_execution_scope",
+        "host_execution_client_start",
+        "attach_mode_preference",
     ] {
         field_provenance.insert(
             field.to_string(),
@@ -449,11 +456,7 @@ pub(crate) fn resolve_persisted_host_attach_contract(
             llm: true,
             mcp_client: false,
         },
-        attach_launch_knobs: AttachLaunchKnobs {
-            requested_execution_scope: contract.attach_launch_knobs.requested_execution_scope,
-            host_execution_client_start: envelope.attach_launch_knobs.host_execution_client_start,
-            attach_mode_preference: envelope.attach_launch_knobs.attach_mode_preference,
-        },
+        attach_launch_knobs,
         effective_policy,
         baseline_source: BaselineSourceMetadata {
             baseline_kind: DispatchBaselineKind::PersistedHostAttach,
@@ -463,6 +466,103 @@ pub(crate) fn resolve_persisted_host_attach_contract(
         },
         field_provenance,
     })
+}
+
+fn resolve_persisted_attach_launch_knobs(
+    envelope: &DispatchRequestEnvelope,
+    contract: &HostAttachContract,
+) -> Result<AttachLaunchKnobs, DispatchResolutionError> {
+    let host_execution_client_start = match (
+        contract.attach_launch_knobs.host_execution_client_start,
+        envelope.attach_launch_knobs.host_execution_client_start,
+    ) {
+        (HostAttachExecutionClientStart::StartNow, HostExecutionClientStart::StartNow)
+        | (HostAttachExecutionClientStart::StartNow, HostExecutionClientStart::Defer) => {
+            envelope.attach_launch_knobs.host_execution_client_start
+        }
+        (HostAttachExecutionClientStart::Defer, HostExecutionClientStart::Defer) => {
+            HostExecutionClientStart::Defer
+        }
+        (HostAttachExecutionClientStart::Defer, HostExecutionClientStart::StartNow) => {
+            return Err(DispatchResolutionError {
+                kind: DispatchResolutionErrorKind::OverrideExceedsBaseline,
+                field: "host_execution_client_start",
+                rejecting_layer: DispatchRejectingLayer::BaselineTruth,
+                reason:
+                    "persisted attach launch cannot broaden host execution client start from defer to start_now"
+                        .to_string(),
+            });
+        }
+    };
+
+    let attach_mode_preference = if persisted_attach_mode_rank(
+        envelope.attach_launch_knobs.attach_mode_preference,
+    ) <= persisted_host_attach_mode_rank(contract.attach_launch_knobs.attach_mode_preference)
+    {
+        envelope.attach_launch_knobs.attach_mode_preference
+    } else {
+        return Err(DispatchResolutionError {
+            kind: DispatchResolutionErrorKind::OverrideExceedsBaseline,
+            field: "attach_mode_preference",
+            rejecting_layer: DispatchRejectingLayer::BaselineTruth,
+            reason: format!(
+                "persisted attach launch cannot broaden attach mode from {} to {}",
+                persisted_host_attach_mode_label(contract.attach_launch_knobs.attach_mode_preference),
+                persisted_attach_mode_label(envelope.attach_launch_knobs.attach_mode_preference),
+            ),
+        });
+    };
+
+    if matches!(attach_mode_preference, AttachModePreference::ContinuityRequired)
+        && contract.continuity_uaa_session_id.is_none()
+    {
+        return Err(DispatchResolutionError {
+            kind: DispatchResolutionErrorKind::MissingRequiredAttachContinuity,
+            field: "continuity_uaa_session_id",
+            rejecting_layer: DispatchRejectingLayer::BaselineTruth,
+            reason:
+                "persisted host attach contract no longer has continuity required for this attach launch"
+                    .to_string(),
+        });
+    }
+
+    Ok(AttachLaunchKnobs {
+        requested_execution_scope: contract.attach_launch_knobs.requested_execution_scope,
+        host_execution_client_start,
+        attach_mode_preference,
+    })
+}
+
+fn persisted_attach_mode_rank(value: AttachModePreference) -> u8 {
+    match value {
+        AttachModePreference::ContinuityRequired => 0,
+        AttachModePreference::ContinuityPreferred => 1,
+        AttachModePreference::FreshAllowed => 2,
+    }
+}
+
+fn persisted_host_attach_mode_rank(value: HostAttachModePreference) -> u8 {
+    match value {
+        HostAttachModePreference::ContinuityRequired => 0,
+        HostAttachModePreference::ContinuityPreferred => 1,
+        HostAttachModePreference::FreshAllowed => 2,
+    }
+}
+
+fn persisted_attach_mode_label(value: AttachModePreference) -> &'static str {
+    match value {
+        AttachModePreference::ContinuityRequired => "continuity_required",
+        AttachModePreference::ContinuityPreferred => "continuity_preferred",
+        AttachModePreference::FreshAllowed => "fresh_allowed",
+    }
+}
+
+fn persisted_host_attach_mode_label(value: HostAttachModePreference) -> &'static str {
+    match value {
+        HostAttachModePreference::ContinuityRequired => "continuity_required",
+        HostAttachModePreference::ContinuityPreferred => "continuity_preferred",
+        HostAttachModePreference::FreshAllowed => "fresh_allowed",
+    }
 }
 
 fn resolve_inventory_projected_contract(
@@ -1140,13 +1240,11 @@ mod tests {
                 crate::execution::agent_runtime::orchestration_session::HostAttachCapabilities::default(),
             attach_launch_knobs:
                 crate::execution::agent_runtime::orchestration_session::HostAttachLaunchKnobs::default(),
-            effective_policy: Some(
-                serde_json::to_value(Policy {
-                    agents_allowed_backends: vec!["cli:codex".to_string()],
-                    ..Policy::default()
-                })
-                .expect("serialize policy"),
-            ),
+            effective_policy: serde_json::to_value(Policy {
+                agents_allowed_backends: vec!["cli:codex".to_string()],
+                ..Policy::default()
+            })
+            .expect("serialize policy"),
             continuity_uaa_session_id: Some("uaa_123".to_string()),
         };
 
@@ -1177,7 +1275,7 @@ mod tests {
     }
 
     #[test]
-    fn persisted_attach_contract_reuses_persisted_capabilities_and_scope_knob() {
+    fn persisted_attach_contract_reuses_persisted_capabilities_and_only_honors_or_narrows_knobs() {
         let contract = HostAttachContract {
             backend_id: "cli:codex".to_string(),
             execution_scope: AgentExecutionScope::Host,
@@ -1199,14 +1297,18 @@ mod tests {
                     event_stream: false,
                 },
             attach_launch_knobs:
-                crate::execution::agent_runtime::orchestration_session::HostAttachLaunchKnobs::default(),
-            effective_policy: Some(
-                serde_json::to_value(Policy {
-                    agents_allowed_backends: vec!["cli:codex".to_string()],
-                    ..Policy::default()
-                })
-                .expect("serialize policy"),
-            ),
+                crate::execution::agent_runtime::orchestration_session::HostAttachLaunchKnobs {
+                    requested_execution_scope: AgentExecutionScope::Host,
+                    host_execution_client_start:
+                        crate::execution::agent_runtime::orchestration_session::HostAttachExecutionClientStart::StartNow,
+                    attach_mode_preference:
+                        crate::execution::agent_runtime::orchestration_session::HostAttachModePreference::FreshAllowed,
+                },
+            effective_policy: serde_json::to_value(Policy {
+                agents_allowed_backends: vec!["cli:codex".to_string()],
+                ..Policy::default()
+            })
+            .expect("serialize policy"),
             continuity_uaa_session_id: Some("uaa_123".to_string()),
         };
         let mut envelope = exact_backend_envelope(
@@ -1215,7 +1317,8 @@ mod tests {
             "cli:codex",
         );
         envelope.attach_launch_knobs.host_execution_client_start = HostExecutionClientStart::Defer;
-        envelope.attach_launch_knobs.attach_mode_preference = AttachModePreference::FreshAllowed;
+        envelope.attach_launch_knobs.attach_mode_preference =
+            AttachModePreference::ContinuityPreferred;
 
         let resolved =
             resolve_persisted_host_attach_contract(&envelope, &contract).expect("resolution");
@@ -1235,7 +1338,91 @@ mod tests {
         );
         assert_eq!(
             resolved.attach_launch_knobs.attach_mode_preference,
-            AttachModePreference::FreshAllowed
+            AttachModePreference::ContinuityPreferred
+        );
+    }
+
+    #[test]
+    fn persisted_attach_contract_missing_policy_snapshot_fails_closed() {
+        let mut payload = serde_json::json!({
+            "backend_id": "cli:codex",
+            "execution_scope": "host",
+            "protocol": super::PURE_AGENT_PROTOCOL,
+            "launch_descriptor": {
+                "agent_id": "codex",
+                "backend_id": "cli:codex",
+                "backend_kind": "codex",
+                "protocol": super::PURE_AGENT_PROTOCOL,
+                "execution_scope": "host",
+                "binary_path": "cargo"
+            },
+            "capabilities": {
+                "session_resume": true,
+                "session_fork": true,
+                "session_stop": true,
+                "status_snapshot": true,
+                "event_stream": true
+            },
+            "attach_launch_knobs": {
+                "requested_execution_scope": "host",
+                "host_execution_client_start": "start_now",
+                "attach_mode_preference": "continuity_required"
+            },
+            "continuity_uaa_session_id": "uaa_123"
+        });
+        payload
+            .as_object_mut()
+            .expect("object")
+            .remove("effective_policy");
+
+        let err = serde_json::from_value::<HostAttachContract>(payload)
+            .expect_err("missing persisted policy must fail closed");
+        assert!(err.to_string().contains("effective_policy"));
+    }
+
+    #[test]
+    fn persisted_attach_contract_broadening_knobs_fails_closed() {
+        let contract = HostAttachContract {
+            backend_id: "cli:codex".to_string(),
+            execution_scope: AgentExecutionScope::Host,
+            protocol: super::PURE_AGENT_PROTOCOL.to_string(),
+            launch_descriptor: ResolvedRuntimeDescriptor {
+                agent_id: "codex".to_string(),
+                backend_id: "cli:codex".to_string(),
+                backend_kind: ResolvedRuntimeBackendKind::Codex,
+                protocol: super::PURE_AGENT_PROTOCOL.to_string(),
+                execution_scope: AgentExecutionScope::Host,
+                binary_path: "cargo".to_string(),
+            },
+            capabilities:
+                crate::execution::agent_runtime::orchestration_session::HostAttachCapabilities::default(),
+            attach_launch_knobs:
+                crate::execution::agent_runtime::orchestration_session::HostAttachLaunchKnobs {
+                    requested_execution_scope: AgentExecutionScope::Host,
+                    host_execution_client_start:
+                        crate::execution::agent_runtime::orchestration_session::HostAttachExecutionClientStart::Defer,
+                    attach_mode_preference:
+                        crate::execution::agent_runtime::orchestration_session::HostAttachModePreference::ContinuityRequired,
+                },
+            effective_policy: serde_json::to_value(Policy {
+                agents_allowed_backends: vec!["cli:codex".to_string()],
+                ..Policy::default()
+            })
+            .expect("serialize policy"),
+            continuity_uaa_session_id: Some("uaa_123".to_string()),
+        };
+        let mut envelope = exact_backend_envelope(
+            DispatchCallerKind::HumanReattach,
+            DispatchBaselineKind::PersistedHostAttach,
+            "cli:codex",
+        );
+        envelope.attach_launch_knobs.host_execution_client_start = HostExecutionClientStart::StartNow;
+        envelope.attach_launch_knobs.attach_mode_preference = AttachModePreference::FreshAllowed;
+
+        let err = resolve_persisted_host_attach_contract(&envelope, &contract)
+            .expect_err("broadening persisted attach knobs must fail closed");
+        assert!(
+            err.field == "host_execution_client_start" || err.field == "attach_mode_preference"
         );
     }
 

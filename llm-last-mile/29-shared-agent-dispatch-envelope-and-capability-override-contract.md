@@ -40,7 +40,7 @@ The current repo already has the minimum durable attach seam that 28.5 said it w
 3. durable orchestration-session state already stores that contract under `OrchestrationSessionRecord.host_attach_contract`,
 4. the initial durable host-attach seam already exists through `HostAttachContract`, `sync_host_attach_contract(...)`, and `fork_successor_attach_contract(...)`, with 29.75 later hardening birth-time authority and fail-closed semantics on top of that seam,
 5. public `reattach` already plans from the persisted attach contract and fails closed when required continuity is missing,
-6. public `fork` already allocates a successor durable session, copies the attach-contract shape forward, clears inherited continuity, and returns truthful `parked_resumable` posture.
+6. public `fork` already allocates a successor durable session, derives the successor attach-contract baseline from persisted attach truth, clears inherited continuity, and returns truthful `parked_resumable` posture.
 
 What is still missing is the broader shared dispatch-envelope layer above that seam:
 

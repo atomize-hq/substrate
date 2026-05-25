@@ -33,6 +33,7 @@ use crate::execution::agent_runtime::session::AgentRuntimeReplacementParticipant
 use crate::execution::agent_runtime::state_store::HiddenOwnerHelperLaunchReadiness;
 use crate::execution::agent_runtime::validator::{
     materialize_runtime_descriptor, member_selection_error_exit_code, validate_member_selection,
+    RuntimeSelectionDescriptor,
 };
 #[cfg(unix)]
 use crate::execution::agent_runtime::StartupPromptReplayState;
@@ -1148,6 +1149,7 @@ fn build_start_launch_plan(
                 resumed_from_participant_id: None,
                 internal_uaa_session_id: None,
             },
+            host_attach_contract: HostAttachContract::from_resolved_contract(&resolved, None),
             startup_prompt: None,
             source_orchestration_session_id: None,
         },
@@ -1222,6 +1224,7 @@ fn build_attach_launch_plan(
             ),
             internal_uaa_session_id: attach_contract.continuity_uaa_session_id.clone(),
         },
+        host_attach_contract: Some(attach_contract),
         startup_prompt: None,
         source_orchestration_session_id: None,
     })
@@ -1257,18 +1260,15 @@ fn allocate_fork_successor(orchestration_session_id: &str) -> Result<ForkSuccess
             orchestration_session_id
         ))
     })?;
-    let envelope = build_persisted_attach_dispatch_envelope(
-        DispatchCallerKind::HumanFork,
-        orchestration_session_id,
-        &attach_contract.backend_id,
-        HostExecutionClientStart::Defer,
-        AttachModePreference::FreshAllowed,
-        false,
-    );
-    let resolved = resolve_persisted_host_attach_contract(&envelope, &attach_contract)
-        .map_err(|err| dispatch_resolution_user_error("owner_unreachable", err))?;
-    let descriptor = materialize_runtime_descriptor(&resolved)
-        .map_err(|err| runtime_materialization_user_error("owner_unreachable", err.reason))?;
+    let descriptor = RuntimeSelectionDescriptor::try_from(&attach_contract.launch_descriptor)
+        .map_err(|err| {
+            runtime_materialization_user_error(
+                "owner_unreachable",
+                format!(
+                    "persisted host attach contract stored an invalid successor launch descriptor: {err:#}"
+                ),
+            )
+        })?;
     let successor_session_id = Uuid::now_v7().to_string();
     let successor_participant_id = format!("ash_{}", Uuid::now_v7());
     let lease_token = Uuid::now_v7().to_string();
@@ -1309,12 +1309,12 @@ fn allocate_fork_successor(orchestration_session_id: &str) -> Result<ForkSuccess
         Uuid::now_v7().to_string(),
         target.session.workspace_root.clone(),
         &successor_participant,
+        target.session.fork_successor_attach_contract(),
     );
     successor_session.shell_owner_pid = 0;
     successor_session.latest_run_id = Some(run_id);
     successor_session.world_id = target.session.world_id.clone();
     successor_session.world_generation = target.session.world_generation;
-    successor_session.host_attach_contract = target.session.fork_successor_attach_contract();
     successor_session
         .transition_state(crate::execution::agent_runtime::OrchestrationSessionState::Active);
     successor_session.active_session_handle_id = Some(successor_participant_id);
@@ -1328,7 +1328,7 @@ fn allocate_fork_successor(orchestration_session_id: &str) -> Result<ForkSuccess
 
     Ok(ForkSuccessorAllocation {
         orchestration_session_id: successor_session_id,
-        backend_id: resolved.backend_id,
+        backend_id: attach_contract.backend_id,
         source_orchestration_session_id: target.session.orchestration_session_id,
     })
 }

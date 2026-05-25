@@ -2,12 +2,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::execution::agent_runtime::control::{
-    ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
-};
+#[cfg(test)]
+use crate::execution::agent_runtime::control::ResolvedRuntimeBackendKind;
+use crate::execution::agent_runtime::control::ResolvedRuntimeDescriptor;
 use crate::execution::config_model::AgentExecutionScope;
 
-#[cfg(unix)]
 use super::dispatch_contract::ResolvedLaunchContract;
 use super::dispatch_contract::{AttachLaunchKnobs, AttachModePreference, HostExecutionClientStart};
 use super::mapping::{protocol_validation_error, PURE_AGENT_PROTOCOL};
@@ -81,18 +80,14 @@ pub(crate) struct HostAttachContract {
     pub execution_scope: AgentExecutionScope,
     pub protocol: String,
     pub launch_descriptor: ResolvedRuntimeDescriptor,
-    #[serde(default)]
     pub capabilities: HostAttachCapabilities,
-    #[serde(default)]
     pub attach_launch_knobs: HostAttachLaunchKnobs,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effective_policy: Option<Value>,
+    pub effective_policy: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuity_uaa_session_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
 pub(crate) struct HostAttachCapabilities {
     pub session_resume: bool,
     pub session_fork: bool,
@@ -131,7 +126,6 @@ pub(crate) enum HostAttachModePreference {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
 pub(crate) struct HostAttachLaunchKnobs {
     pub requested_execution_scope: AgentExecutionScope,
     pub host_execution_client_start: HostAttachExecutionClientStart,
@@ -149,7 +143,8 @@ impl Default for HostAttachLaunchKnobs {
 }
 
 impl HostAttachContract {
-    fn from_manifest(manifest: &AgentRuntimeSessionManifest) -> Option<Self> {
+    #[cfg(test)]
+    pub(crate) fn from_manifest_for_test(manifest: &AgentRuntimeSessionManifest) -> Option<Self> {
         if manifest.handle.role != super::mapping::ORCHESTRATOR_ROLE
             || manifest.handle.execution.scope != AgentExecutionScope::Host
         {
@@ -179,12 +174,12 @@ impl HostAttachContract {
                 requested_execution_scope: manifest.handle.execution.scope,
                 ..HostAttachLaunchKnobs::default()
             },
-            effective_policy: None,
+            effective_policy: serde_json::to_value(substrate_broker::Policy::default())
+                .expect("test policy should serialize"),
             continuity_uaa_session_id: manifest.internal_uaa_session_id().map(ToOwned::to_owned),
         })
     }
 
-    #[cfg(unix)]
     pub(crate) fn from_resolved_contract(
         resolved: &ResolvedLaunchContract,
         continuity_uaa_session_id: Option<String>,
@@ -207,10 +202,8 @@ impl HostAttachContract {
             },
             capabilities: HostAttachCapabilities::from(&resolved.capabilities),
             attach_launch_knobs: HostAttachLaunchKnobs::from(&resolved.attach_launch_knobs),
-            effective_policy: Some(
-                serde_json::to_value(&resolved.effective_policy)
-                    .expect("effective policy should serialize"),
-            ),
+            effective_policy: serde_json::to_value(&resolved.effective_policy)
+                .expect("effective policy should serialize"),
             continuity_uaa_session_id,
         })
     }
@@ -319,6 +312,7 @@ impl OrchestrationSessionRecord {
         shell_trace_session_id: String,
         workspace_root: String,
         child_manifest: &AgentRuntimeSessionManifest,
+        host_attach_contract: Option<HostAttachContract>,
     ) -> Self {
         let now = Utc::now();
         Self {
@@ -346,7 +340,7 @@ impl OrchestrationSessionRecord {
             last_attention_at: None,
             parked_reason: None,
             startup_prompt: None,
-            host_attach_contract: HostAttachContract::from_manifest(child_manifest),
+            host_attach_contract,
         }
     }
 
@@ -387,7 +381,6 @@ impl OrchestrationSessionRecord {
 
     pub(crate) fn sync_host_attach_contract(&mut self, manifest: &AgentRuntimeSessionManifest) {
         let Some(contract) = self.host_attach_contract.as_mut() else {
-            self.host_attach_contract = HostAttachContract::from_manifest(manifest);
             return;
         };
         if manifest.handle.role != super::mapping::ORCHESTRATOR_ROLE
@@ -472,33 +465,34 @@ impl OrchestrationSessionRecord {
             );
         }
 
-        if let Some(contract) = self.host_attach_contract.as_ref() {
-            if contract.execution_scope != AgentExecutionScope::Host {
-                anyhow::bail!("host_attach_contract must remain host scoped");
-            }
-            if contract.protocol != PURE_AGENT_PROTOCOL {
-                anyhow::bail!("host_attach_contract must use the pure agent protocol");
-            }
-            if contract.backend_id != self.orchestrator_backend_id {
-                anyhow::bail!("host_attach_contract backend_id must match the session backend");
-            }
-            if contract.launch_descriptor.backend_id != contract.backend_id {
-                anyhow::bail!("host_attach_contract launch_descriptor backend drifted");
-            }
-            if contract.launch_descriptor.execution_scope != contract.execution_scope {
-                anyhow::bail!("host_attach_contract launch_descriptor scope drifted");
-            }
-            if contract.launch_descriptor.protocol != contract.protocol {
-                anyhow::bail!("host_attach_contract launch_descriptor protocol drifted");
-            }
-            if contract.attach_launch_knobs.requested_execution_scope != contract.execution_scope {
-                anyhow::bail!("host_attach_contract requested_execution_scope drifted");
-            }
-            if contract.attach_launch_knobs.host_execution_client_start
-                != HostAttachExecutionClientStart::StartNow
-            {
-                anyhow::bail!("host_attach_contract host execution client start drifted");
-            }
+        let contract = self.host_attach_contract.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("host_attach_contract is required for authoritative host sessions")
+        })?;
+        if contract.execution_scope != AgentExecutionScope::Host {
+            anyhow::bail!("host_attach_contract must remain host scoped");
+        }
+        if contract.protocol != PURE_AGENT_PROTOCOL {
+            anyhow::bail!("host_attach_contract must use the pure agent protocol");
+        }
+        if contract.backend_id != self.orchestrator_backend_id {
+            anyhow::bail!("host_attach_contract backend_id must match the session backend");
+        }
+        if contract.launch_descriptor.backend_id != contract.backend_id {
+            anyhow::bail!("host_attach_contract launch_descriptor backend drifted");
+        }
+        if contract.launch_descriptor.execution_scope != contract.execution_scope {
+            anyhow::bail!("host_attach_contract launch_descriptor scope drifted");
+        }
+        if contract.launch_descriptor.protocol != contract.protocol {
+            anyhow::bail!("host_attach_contract launch_descriptor protocol drifted");
+        }
+        if contract.attach_launch_knobs.requested_execution_scope != contract.execution_scope {
+            anyhow::bail!("host_attach_contract requested_execution_scope drifted");
+        }
+        if serde_json::from_value::<substrate_broker::Policy>(contract.effective_policy.clone())
+            .is_err()
+        {
+            anyhow::bail!("host_attach_contract effective_policy must remain a valid policy snapshot");
         }
 
         match self.posture {
@@ -679,6 +673,7 @@ mod tests {
             "trace_001".to_string(),
             "/workspace".to_string(),
             &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
         );
 
         assert_eq!(session.posture, OrchestrationSessionPosture::ActiveAttached);
@@ -724,6 +719,7 @@ mod tests {
             "trace_001".to_string(),
             "/workspace".to_string(),
             &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
         );
 
         session.mark_parked_resumable("owner detached cleanly");
@@ -748,6 +744,7 @@ mod tests {
             "trace_001".to_string(),
             "/workspace".to_string(),
             &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
         );
 
         let original = session
@@ -775,6 +772,7 @@ mod tests {
             "trace_001".to_string(),
             "/workspace".to_string(),
             &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
         );
         session
             .host_attach_contract
@@ -857,13 +855,9 @@ mod tests {
             contract.attach_launch_knobs.attach_mode_preference,
             HostAttachModePreference::FreshAllowed
         );
-        let persisted_policy: Policy = serde_json::from_value(
-            contract
-                .effective_policy
-                .clone()
-                .expect("persisted policy snapshot"),
-        )
-        .expect("deserialize persisted policy");
+        let persisted_policy: Policy =
+            serde_json::from_value(contract.effective_policy.clone())
+                .expect("deserialize persisted policy");
         assert_eq!(
             persisted_policy.agents_allowed_backends,
             vec!["cli:codex".to_string()]

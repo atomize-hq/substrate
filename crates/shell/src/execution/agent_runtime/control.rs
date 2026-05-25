@@ -30,7 +30,9 @@ use uuid::Uuid;
 
 #[cfg(unix)]
 use crate::execution::agent_events::format_event_line;
-use crate::execution::agent_runtime::orchestration_session::StartupPromptStreamState;
+use crate::execution::agent_runtime::orchestration_session::{
+    HostAttachContract, StartupPromptStreamState,
+};
 #[cfg(target_os = "linux")]
 use crate::execution::build_agent_client_and_pending_diff_request;
 use crate::execution::config_model::AgentExecutionScope;
@@ -266,6 +268,8 @@ pub(crate) struct HiddenOwnerHelperLaunchPlan {
     pub descriptor: ResolvedRuntimeDescriptor,
     pub session: HiddenOwnerHelperSessionPlan,
     pub participant: HiddenOwnerHelperParticipantPlan,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_attach_contract: Option<HostAttachContract>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub startup_prompt: Option<HiddenOwnerHelperStartupPromptPlan>,
     pub source_orchestration_session_id: Option<String>,
@@ -2656,6 +2660,7 @@ mod tests {
         PublicPromptCommandRequest, ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
         PURE_AGENT_PROTOCOL,
     };
+    use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
     #[cfg(unix)]
     use super::{
         handle_private_prompt_connection, private_prompt_request_channel, PublicPromptEnvelope,
@@ -2717,6 +2722,7 @@ mod tests {
                 resumed_from_participant_id: None,
                 internal_uaa_session_id: None,
             },
+            host_attach_contract: None,
             startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
                 prompt_text: "hello".to_string(),
                 stream_path: PathBuf::from("/tmp/startup.sock"),
@@ -2755,6 +2761,7 @@ mod tests {
                 resumed_from_participant_id: Some(resumed_from_participant_id.to_string()),
                 internal_uaa_session_id: Some(internal_uaa_session_id.to_string()),
             },
+            host_attach_contract: None,
             startup_prompt: Some(HiddenOwnerHelperStartupPromptPlan {
                 prompt_text: "hello".to_string(),
                 stream_path: PathBuf::from("/tmp/startup.sock"),
@@ -2806,6 +2813,7 @@ mod tests {
             "trace_session".to_string(),
             "/workspace".to_string(),
             &manifest,
+            HostAttachContract::from_manifest_for_test(&manifest),
         );
         orchestration.transition_state(OrchestrationSessionState::Active);
         orchestration.bind_active_session_handle(manifest.handle.participant_id.clone());
@@ -2887,6 +2895,7 @@ mod tests {
                 "trace_session".to_string(),
                 "/workspace".to_string(),
                 &participant,
+                HostAttachContract::from_manifest_for_test(&participant),
             );
             orchestration.transition_state(OrchestrationSessionState::Active);
             orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
@@ -2969,6 +2978,7 @@ mod tests {
                 "trace_session".to_string(),
                 "/workspace".to_string(),
                 &participant,
+                HostAttachContract::from_manifest_for_test(&participant),
             );
             orchestration.transition_state(OrchestrationSessionState::Active);
             orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
@@ -3025,6 +3035,7 @@ mod tests {
                 "trace_session".to_string(),
                 "/workspace".to_string(),
                 &participant,
+                HostAttachContract::from_manifest_for_test(&participant),
             );
             orchestration.transition_state(OrchestrationSessionState::Active);
             orchestration.bind_active_session_handle(participant.handle.participant_id.clone());
@@ -3082,6 +3093,7 @@ mod tests {
                 "trace_session".to_string(),
                 "/workspace".to_string(),
                 &participant,
+                HostAttachContract::from_manifest_for_test(&participant),
             );
             orchestration.transition_state(OrchestrationSessionState::Active);
             orchestration.bind_active_session_handle(participant.handle.participant_id.clone());

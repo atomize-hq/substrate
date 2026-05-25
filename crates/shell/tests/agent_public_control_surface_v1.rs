@@ -19,6 +19,7 @@ use support::{
     binary_path, ensure_substrate_built, persist_runtime_alert_for_substrate_home,
     substrate_shell_driver,
 };
+use substrate_broker::Policy;
 #[cfg(target_os = "linux")]
 use support::{MemberDispatchStreamScript, ReplWorldAgentStub, StreamBehavior};
 use tempfile::TempDir;
@@ -782,6 +783,22 @@ fn host_attach_contract_manifest(
             "execution_scope": "host",
             "binary_path": fixture.fake_codex.display().to_string()
         },
+        "capabilities": {
+            "session_resume": true,
+            "session_fork": true,
+            "session_stop": true,
+            "status_snapshot": true,
+            "event_stream": true
+        },
+        "attach_launch_knobs": {
+            "requested_execution_scope": "host",
+            "host_execution_client_start": "start_now",
+            "attach_mode_preference": "continuity_required"
+        },
+        "effective_policy": serde_json::to_value(Policy {
+            agents_allowed_backends: vec![format!("cli:{agent_id}")],
+            ..Policy::default()
+        }).expect("serialize effective policy"),
         "continuity_uaa_session_id": format!("uaa-{orchestration_session_id}")
     })
 }
@@ -978,7 +995,12 @@ fn write_orchestration_session(
             "world_id": world_id,
             "world_generation": world_generation,
             "invalidation_reason": Value::Null,
-            "closed_at": closed_at
+            "closed_at": closed_at,
+            "host_attach_contract": host_attach_contract_manifest(
+                fixture,
+                agent_id,
+                orchestration_session_id,
+            )
         }),
     );
 }
