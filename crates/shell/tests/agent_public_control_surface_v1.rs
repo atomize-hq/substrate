@@ -1970,13 +1970,7 @@ fn public_fork_and_stop_fail_closed_when_persisted_attach_contract_disables_capa
         &stopped_session,
     );
 
-    let stop_output = fixture.run(&[
-        "agent",
-        "stop",
-        "--session",
-        stopped_session_id,
-        "--json",
-    ]);
+    let stop_output = fixture.run(&["agent", "stop", "--session", stopped_session_id, "--json"]);
     assert!(
         !stop_output.status.success(),
         "public stop must fail closed when parked durable attach truth disables stop: {stop_output:?}"

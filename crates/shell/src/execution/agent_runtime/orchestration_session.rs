@@ -636,6 +636,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    use crate::execution::agent_inventory::{AgentCapabilitiesV1, AgentConfigKind};
     use crate::execution::agent_runtime::{
         dispatch_contract::{
             BaselineSourceMetadata, DispatchBaselineKind, DispatchCallerKind, FieldBaselineOrigin,
@@ -644,7 +645,6 @@ mod tests {
         mapping::AgentRuntimeBackendKind,
         validator::RuntimeSelectionDescriptor,
     };
-    use crate::execution::agent_inventory::{AgentCapabilitiesV1, AgentConfigKind};
     use crate::execution::config_model::AgentExecutionScope;
     use substrate_broker::Policy;
 
@@ -831,14 +831,15 @@ mod tests {
             field_provenance: Default::default(),
         };
 
-        let contract = HostAttachContract::from_resolved_contract(
-            &resolved,
-            Some("uaa_resolved".to_string()),
-        )
-        .expect("host attach contract");
+        let contract =
+            HostAttachContract::from_resolved_contract(&resolved, Some("uaa_resolved".to_string()))
+                .expect("host attach contract");
 
         assert_eq!(contract.backend_id, "cli:codex");
-        assert_eq!(contract.launch_descriptor.binary_path, "/opt/codex/bin/codex");
+        assert_eq!(
+            contract.launch_descriptor.binary_path,
+            "/opt/codex/bin/codex"
+        );
         assert!(!contract.capabilities.session_resume);
         assert!(contract.capabilities.session_fork);
         assert!(!contract.capabilities.session_stop);
@@ -859,7 +860,10 @@ mod tests {
                 .expect("persisted policy snapshot"),
         )
         .expect("deserialize persisted policy");
-        assert_eq!(persisted_policy.agents_allowed_backends, vec!["cli:codex".to_string()]);
+        assert_eq!(
+            persisted_policy.agents_allowed_backends,
+            vec!["cli:codex".to_string()]
+        );
         assert_eq!(
             contract.continuity_uaa_session_id.as_deref(),
             Some("uaa_resolved")

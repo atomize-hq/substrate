@@ -3727,7 +3727,9 @@ fn host_successor_session_persists_durable_attach_continuity_contract() {
         Some("ash_orchestrator_new_attach_contract")
     );
     assert_eq!(
-        successor.pointer("/attached_participant_id").and_then(Value::as_str),
+        successor
+            .pointer("/attached_participant_id")
+            .and_then(Value::as_str),
         Some("ash_orchestrator_new_attach_contract"),
         "status must keep the live successor attached to the canonical participant id"
     );

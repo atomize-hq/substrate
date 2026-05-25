@@ -4200,18 +4200,22 @@ fn retained_member_dispatch_parity_subset(
     };
     let orchestration_session_id = startup_context.orchestration_session_id();
 
-    if let Some(participant) = pending_member_replacements.get(backend_id).filter(|participant| {
-        participant.handle.orchestration_session_id == orchestration_session_id
-            && participant.handle.backend_id == backend_id
-            && participant.handle.role == MEMBER_ROLE
-            && participant.handle.execution.scope
-                == crate::execution::config_model::AgentExecutionScope::World
-    }) {
+    if let Some(participant) = pending_member_replacements
+        .get(backend_id)
+        .filter(|participant| {
+            participant.handle.orchestration_session_id == orchestration_session_id
+                && participant.handle.backend_id == backend_id
+                && participant.handle.role == MEMBER_ROLE
+                && participant.handle.execution.scope
+                    == crate::execution::config_model::AgentExecutionScope::World
+        })
+    {
         return MemberDispatchParitySubset::from_participant(participant).map(Some);
     }
 
-    select_member_runtime_descriptor_for_backend(startup_context, backend_id)
-        .map(|descriptor| descriptor.map(|descriptor| MemberDispatchParitySubset::from_descriptor(&descriptor)))
+    select_member_runtime_descriptor_for_backend(startup_context, backend_id).map(|descriptor| {
+        descriptor.map(|descriptor| MemberDispatchParitySubset::from_descriptor(&descriptor))
+    })
 }
 
 fn active_orchestrator_backend_id(runtime: &AsyncReplAgentRuntime) -> String {
@@ -4222,8 +4226,10 @@ fn resolve_targeted_turn_route(
     startup_context: Option<&RuntimeOrchestrationContext>,
     dormant_host_bootstrap: Option<&ResolvedHostOrchestratorBootstrap>,
     agent_runtime: Option<&AsyncReplAgentRuntime>,
-    #[cfg(any(target_os = "linux", target_os = "macos"))] member_runtimes: &RetainedMemberRuntimeMap,
-    #[cfg(any(target_os = "linux", target_os = "macos"))] pending_member_replacements: &PendingMemberReplacementMap,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    member_runtimes: &RetainedMemberRuntimeMap,
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pending_member_replacements: &PendingMemberReplacementMap,
     backend_id: &str,
 ) -> std::result::Result<TargetedTurnRoute, RuntimeBootstrapFailure> {
     if let Some(runtime) = agent_runtime {
@@ -4664,12 +4670,15 @@ fn build_member_dispatch_transport_request(
     prepared: &PreparedAgentRuntime,
     initial_prompt: Option<String>,
 ) -> std::result::Result<MemberDispatchTransportRequest, RuntimeBootstrapFailure> {
-    let parity = prepared.member_dispatch_parity.as_ref().ok_or_else(|| {
-        RuntimeBootstrapFailure {
-            exit_code: 1,
-            message: "missing shared-contract-derived retained member parity subset".to_string(),
-        }
-    })?;
+    let parity =
+        prepared
+            .member_dispatch_parity
+            .as_ref()
+            .ok_or_else(|| RuntimeBootstrapFailure {
+                exit_code: 1,
+                message: "missing shared-contract-derived retained member parity subset"
+                    .to_string(),
+            })?;
     let manifest = prepared
         .manifest
         .lock()
@@ -9980,7 +9989,10 @@ mod tests {
             assert_eq!(parity.agent_id, previous_member.handle.agent_id);
             assert_eq!(parity.backend_id, previous_member.handle.backend_id);
             assert_eq!(parity.protocol, previous_member.handle.protocol);
-            assert_eq!(parity.execution_scope, previous_member.handle.execution.scope);
+            assert_eq!(
+                parity.execution_scope,
+                previous_member.handle.execution.scope
+            );
             assert_eq!(
                 parity.binary_path,
                 PathBuf::from(previous_member.internal.resolved_binary_path.clone())

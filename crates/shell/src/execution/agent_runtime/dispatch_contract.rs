@@ -7,9 +7,9 @@ use crate::execution::agent_inventory::{
     project_inventory_entry, AgentCapabilitiesV1, AgentConfigKind, AgentInventoryBaselineOrigin,
     AgentInventoryEntryV1, ProjectedInventoryEntryV1, ProjectedInventoryValueOrigin,
 };
-use crate::execution::policy_model::{apply_policy_patch, PolicyPatch};
 use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
 use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
+use crate::execution::policy_model::{apply_policy_patch, PolicyPatch};
 
 use super::mapping::{
     orchestrator_backend_kind, protocol_validation_error, AgentRuntimeBackendKind,
@@ -396,7 +396,9 @@ pub(crate) fn resolve_persisted_host_attach_contract(
             kind: DispatchResolutionErrorKind::BaselineIneligible,
             field: "effective_policy",
             rejecting_layer: DispatchRejectingLayer::BaselineTruth,
-            reason: format!("persisted host attach contract stored an invalid policy snapshot: {err}"),
+            reason: format!(
+                "persisted host attach contract stored an invalid policy snapshot: {err}"
+            ),
         })?
         .unwrap_or_default();
 
@@ -470,9 +472,12 @@ fn resolve_inventory_projected_contract(
 ) -> Result<ResolvedLaunchContract, DispatchResolutionError> {
     validate_inventory_projected_candidate(&projected)?;
     validate_dispatch_overrides(envelope, projected.execution_scope)?;
-    let effective_policy = resolve_inventory_effective_policy(base_policy, projected.policy_overlay.as_ref());
-    let (capabilities, capability_origins) =
-        resolve_inventory_capabilities(projected.capabilities.clone(), &envelope.capability_overrides)?;
+    let effective_policy =
+        resolve_inventory_effective_policy(base_policy, projected.policy_overlay.as_ref());
+    let (capabilities, capability_origins) = resolve_inventory_capabilities(
+        projected.capabilities.clone(),
+        &envelope.capability_overrides,
+    )?;
     if !base_policy
         .agents_allowed_backends
         .iter()
@@ -732,7 +737,10 @@ fn resolve_inventory_capabilities(
         FieldValueOrigin::InventoryExplicit,
     );
     origins.insert("llm".to_string(), FieldValueOrigin::InventoryExplicit);
-    origins.insert("mcp_client".to_string(), FieldValueOrigin::InventoryExplicit);
+    origins.insert(
+        "mcp_client".to_string(),
+        FieldValueOrigin::InventoryExplicit,
+    );
 
     apply_supported_capability_override(
         "session_resume",
@@ -858,12 +866,12 @@ mod tests {
         AgentCapabilitiesV1, AgentCliConfigV1, AgentConfigKind, AgentConfigV1,
         AgentExecutionConfigV1, AgentFileV1, AgentInventoryEntryV1,
     };
-    use crate::execution::policy_model::PolicyPatch;
     use crate::execution::agent_runtime::control::{
         ResolvedRuntimeBackendKind, ResolvedRuntimeDescriptor,
     };
     use crate::execution::agent_runtime::orchestration_session::HostAttachContract;
     use crate::execution::config_model::{AgentCliMode, AgentExecutionScope, SubstrateConfig};
+    use crate::execution::policy_model::PolicyPatch;
     use crate::execution::workspace::{workspace_marker_path, SUBSTRATE_DIR_NAME};
     use substrate_broker::Policy;
 
@@ -1467,6 +1475,9 @@ mod tests {
         .expect_err("override must fail closed");
 
         assert_eq!(error.field, "session_resume");
-        assert_eq!(error.kind, DispatchResolutionErrorKind::OverrideExceedsBaseline);
+        assert_eq!(
+            error.kind,
+            DispatchResolutionErrorKind::OverrideExceedsBaseline
+        );
     }
 }
