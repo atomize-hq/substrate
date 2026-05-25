@@ -45,7 +45,6 @@ use crate::execution::agent_runtime::control::{
     PublicPromptEnvelope, PublicSessionPosture, ResolvedRuntimeDescriptor,
     SubmittedPromptStreamEvent, AGENT_API_SESSION_RESUME_V1, AGENT_API_TURN_LIFECYCLE_V1,
 };
-#[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::execution::agent_runtime::mapping::AgentRuntimeBackendKind;
 use crate::execution::agent_runtime::orchestration_session::{
     OrchestrationSessionPosture, StartupPromptStreamState,
@@ -1624,7 +1623,7 @@ struct TargetedTurn<'a> {
 
 enum TargetedTurnRoute {
     Host,
-    World(RuntimeSelectionDescriptor),
+    World(MemberDispatchParitySubset),
 }
 
 enum TargetedTurnDispatchStatus {
@@ -1672,11 +1671,72 @@ impl RuntimeOrchestrationContext {
 
 struct PreparedAgentRuntime {
     descriptor: RuntimeSelectionDescriptor,
+    member_dispatch_parity: Option<MemberDispatchParitySubset>,
     prompt_fulfillment: Option<PromptFulfillmentBridge>,
     startup_context: RuntimeOrchestrationContext,
     manifest: Arc<Mutex<AgentRuntimeSessionManifest>>,
     run_id: String,
     startup_extensions: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct MemberDispatchParitySubset {
+    agent_id: String,
+    backend_id: String,
+    backend_kind: AgentRuntimeBackendKind,
+    protocol: String,
+    execution_scope: crate::execution::config_model::AgentExecutionScope,
+    binary_path: PathBuf,
+}
+
+impl MemberDispatchParitySubset {
+    fn from_descriptor(descriptor: &RuntimeSelectionDescriptor) -> Self {
+        Self {
+            agent_id: descriptor.agent_id.clone(),
+            backend_id: descriptor.backend_id.clone(),
+            backend_kind: descriptor.backend_kind,
+            protocol: descriptor.protocol.clone(),
+            execution_scope: descriptor.execution_scope,
+            binary_path: descriptor.binary_path.clone(),
+        }
+    }
+
+    fn from_participant(
+        participant: &AgentRuntimeParticipantRecord,
+    ) -> std::result::Result<Self, RuntimeBootstrapFailure> {
+        let backend_kind = match participant.internal.resolved_agent_kind.as_str() {
+            "codex" => AgentRuntimeBackendKind::Codex,
+            "claude_code" => AgentRuntimeBackendKind::ClaudeCode,
+            other => {
+                return Err(RuntimeBootstrapFailure {
+                    exit_code: 1,
+                    message: format!(
+                        "retained world member has unsupported resolved_agent_kind '{}'",
+                        other
+                    ),
+                });
+            }
+        };
+        Ok(Self {
+            agent_id: participant.handle.agent_id.clone(),
+            backend_id: participant.handle.backend_id.clone(),
+            backend_kind,
+            protocol: participant.handle.protocol.clone(),
+            execution_scope: participant.handle.execution.scope,
+            binary_path: PathBuf::from(&participant.internal.resolved_binary_path),
+        })
+    }
+
+    fn to_runtime_selection_descriptor(&self) -> RuntimeSelectionDescriptor {
+        RuntimeSelectionDescriptor {
+            agent_id: self.agent_id.clone(),
+            backend_id: self.backend_id.clone(),
+            backend_kind: self.backend_kind,
+            protocol: self.protocol.clone(),
+            execution_scope: self.execution_scope,
+            binary_path: self.binary_path.clone(),
+        }
+    }
 }
 
 struct ResolvedHostOrchestratorBootstrap {
@@ -2156,6 +2216,7 @@ fn prepare_host_orchestrator_runtime_from_resolved(
 
     Ok(PreparedAgentRuntime {
         descriptor,
+        member_dispatch_parity: None,
         prompt_fulfillment: Some(prompt_fulfillment),
         startup_context: RuntimeOrchestrationContext {
             store: state_store,
@@ -2459,6 +2520,7 @@ fn prepare_hidden_owner_helper_runtime(
         })?;
     Ok(PreparedAgentRuntime {
         descriptor,
+        member_dispatch_parity: None,
         prompt_fulfillment: Some(prompt_fulfillment),
         startup_context: RuntimeOrchestrationContext {
             store: state_store,
@@ -2982,6 +3044,7 @@ async fn start_host_orchestrator_runtime_with_prepared_prompt(
     };
     let PreparedAgentRuntime {
         descriptor,
+        member_dispatch_parity: _member_dispatch_parity,
         prompt_fulfillment,
         startup_context,
         manifest,
@@ -4114,6 +4177,43 @@ fn select_host_runtime_descriptor_for_backend(
     )
 }
 
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn retained_member_dispatch_parity_subset(
+    startup_context: Option<&RuntimeOrchestrationContext>,
+    member_runtimes: &RetainedMemberRuntimeMap,
+    pending_member_replacements: &PendingMemberReplacementMap,
+    backend_id: &str,
+) -> std::result::Result<Option<MemberDispatchParitySubset>, RuntimeBootstrapFailure> {
+    if let Some(runtime) = member_runtimes.get(backend_id) {
+        let manifest_snapshot = runtime_manifest_snapshot(runtime);
+        if manifest_snapshot.handle.role == MEMBER_ROLE
+            && manifest_snapshot.handle.backend_id == backend_id
+            && manifest_snapshot.handle.execution.scope
+                == crate::execution::config_model::AgentExecutionScope::World
+        {
+            return MemberDispatchParitySubset::from_participant(&manifest_snapshot).map(Some);
+        }
+    }
+
+    let Some(startup_context) = startup_context else {
+        return Ok(None);
+    };
+    let orchestration_session_id = startup_context.orchestration_session_id();
+
+    if let Some(participant) = pending_member_replacements.get(backend_id).filter(|participant| {
+        participant.handle.orchestration_session_id == orchestration_session_id
+            && participant.handle.backend_id == backend_id
+            && participant.handle.role == MEMBER_ROLE
+            && participant.handle.execution.scope
+                == crate::execution::config_model::AgentExecutionScope::World
+    }) {
+        return MemberDispatchParitySubset::from_participant(participant).map(Some);
+    }
+
+    select_member_runtime_descriptor_for_backend(startup_context, backend_id)
+        .map(|descriptor| descriptor.map(|descriptor| MemberDispatchParitySubset::from_descriptor(&descriptor)))
+}
+
 fn active_orchestrator_backend_id(runtime: &AsyncReplAgentRuntime) -> String {
     runtime_backend_id(runtime)
 }
@@ -4122,6 +4222,8 @@ fn resolve_targeted_turn_route(
     startup_context: Option<&RuntimeOrchestrationContext>,
     dormant_host_bootstrap: Option<&ResolvedHostOrchestratorBootstrap>,
     agent_runtime: Option<&AsyncReplAgentRuntime>,
+    #[cfg(any(target_os = "linux", target_os = "macos"))] member_runtimes: &RetainedMemberRuntimeMap,
+    #[cfg(any(target_os = "linux", target_os = "macos"))] pending_member_replacements: &PendingMemberReplacementMap,
     backend_id: &str,
 ) -> std::result::Result<TargetedTurnRoute, RuntimeBootstrapFailure> {
     if let Some(runtime) = agent_runtime {
@@ -4154,10 +4256,14 @@ fn resolve_targeted_turn_route(
             });
         }
 
-        if let Some(descriptor) =
-            select_member_runtime_descriptor_for_backend(startup_context, backend_id)?
-        {
-            return Ok(TargetedTurnRoute::World(descriptor));
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        if let Some(parity) = retained_member_dispatch_parity_subset(
+            Some(startup_context),
+            member_runtimes,
+            pending_member_replacements,
+            backend_id,
+        )? {
+            return Ok(TargetedTurnRoute::World(parity));
         }
     }
 
@@ -4186,6 +4292,10 @@ async fn dispatch_targeted_follow_up_turn(
         startup_context.as_ref(),
         dormant_host_bootstrap.as_ref(),
         agent_runtime.as_ref(),
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        member_runtimes,
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        pending_member_replacements,
         targeted_turn.backend_id,
     ) {
         Ok(route) => route,
@@ -4250,7 +4360,7 @@ async fn dispatch_targeted_follow_up_turn(
                     .await?;
             }
         }
-        TargetedTurnRoute::World(descriptor) => {
+        TargetedTurnRoute::World(parity) => {
             ensure_no_policy_drift(
                 world_session,
                 startup_context.as_ref(),
@@ -4273,7 +4383,7 @@ async fn dispatch_targeted_follow_up_turn(
                     agent_printer,
                     telemetry,
                 },
-                &descriptor,
+                &parity,
                 Some(targeted_turn.prompt),
                 member_runtimes,
                 pending_member_replacements,
@@ -4490,9 +4600,11 @@ fn prepare_member_runtime_startup_for_descriptor(
     })?;
     let mut manifest = manifest;
     manifest.internal.latest_run_id = Some(run_id.clone());
+    let member_dispatch_parity = MemberDispatchParitySubset::from_descriptor(&descriptor);
 
     Ok(PreparedAgentRuntime {
         descriptor,
+        member_dispatch_parity: Some(member_dispatch_parity),
         prompt_fulfillment: None,
         startup_context: startup_context.clone(),
         manifest: Arc::new(Mutex::new(manifest)),
@@ -4539,9 +4651,9 @@ async fn start_member_runtime_with_prepared(
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn member_runtime_backend_kind(
-    descriptor: &RuntimeSelectionDescriptor,
+    backend_kind: AgentRuntimeBackendKind,
 ) -> MemberRuntimeBackendKindV1 {
-    match descriptor.backend_kind {
+    match backend_kind {
         AgentRuntimeBackendKind::Codex => MemberRuntimeBackendKindV1::Codex,
         AgentRuntimeBackendKind::ClaudeCode => MemberRuntimeBackendKindV1::ClaudeCode,
     }
@@ -4552,6 +4664,12 @@ fn build_member_dispatch_transport_request(
     prepared: &PreparedAgentRuntime,
     initial_prompt: Option<String>,
 ) -> std::result::Result<MemberDispatchTransportRequest, RuntimeBootstrapFailure> {
+    let parity = prepared.member_dispatch_parity.as_ref().ok_or_else(|| {
+        RuntimeBootstrapFailure {
+            exit_code: 1,
+            message: "missing shared-contract-derived retained member parity subset".to_string(),
+        }
+    })?;
     let manifest = prepared
         .manifest
         .lock()
@@ -4588,14 +4706,14 @@ fn build_member_dispatch_transport_request(
         orchestrator_participant_id,
         parent_participant_id: manifest.handle.parent_participant_id.clone(),
         resumed_from_participant_id: manifest.handle.resumed_from_participant_id.clone(),
-        backend_id: prepared.descriptor.backend_id.clone(),
-        protocol: prepared.descriptor.protocol.clone(),
+        backend_id: parity.backend_id.clone(),
+        protocol: parity.protocol.clone(),
         run_id: prepared.run_id.clone(),
         world_id,
         world_generation,
         initial_prompt,
-        backend_kind: member_runtime_backend_kind(&prepared.descriptor),
-        binary_path: prepared.descriptor.binary_path.display().to_string(),
+        backend_kind: member_runtime_backend_kind(parity.backend_kind),
+        binary_path: parity.binary_path.display().to_string(),
     })
 }
 
@@ -4672,6 +4790,7 @@ async fn start_remote_member_runtime_with_prepared(
     let transport_request = build_member_dispatch_transport_request(&prepared, initial_prompt)?;
     let PreparedAgentRuntime {
         descriptor,
+        member_dispatch_parity: _member_dispatch_parity,
         prompt_fulfillment: _prompt_fulfillment,
         startup_context,
         manifest,
@@ -5291,7 +5410,7 @@ struct EnsureMemberRuntimeReadyContext<'a> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 async fn ensure_member_runtime_ready_for_descriptor(
     context: EnsureMemberRuntimeReadyContext<'_>,
-    descriptor: &RuntimeSelectionDescriptor,
+    parity: &MemberDispatchParitySubset,
     initial_prompt: Option<&str>,
     member_runtimes: &mut RetainedMemberRuntimeMap,
     pending_member_replacements: &mut PendingMemberReplacementMap,
@@ -5308,11 +5427,12 @@ async fn ensure_member_runtime_ready_for_descriptor(
     let Some(world_session) = world_session else {
         return Ok(false);
     };
-    ensure_member_backend_allowed(startup_context, descriptor)
+    let descriptor = parity.to_runtime_selection_descriptor();
+    ensure_member_backend_allowed(startup_context, &descriptor)
         .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
 
     let exact_live_member =
-        live_member_for_generation(startup_context, descriptor, world_session.world_generation)
+        live_member_for_generation(startup_context, &descriptor, world_session.world_generation)
             .map_err(|failure| anyhow!("substrate: error: {}", failure.message))?;
 
     if let Some(runtime) = member_runtimes.get(&descriptor.backend_id) {
@@ -5335,16 +5455,17 @@ async fn ensure_member_runtime_ready_for_descriptor(
         shutdown_host_orchestrator_runtime(runtime, agent_printer, telemetry).await;
     }
 
+    let backend_id = descriptor.backend_id.clone();
     let resumed_from = pending_member_replacements
-        .get(&descriptor.backend_id)
+        .get(&backend_id)
         .filter(|participant| {
             participant.handle.orchestration_session_id
                 == startup_context.orchestration_session_id()
-                && participant.handle.backend_id == descriptor.backend_id
+                && participant.handle.backend_id == backend_id
         });
     let prepared = prepare_member_runtime_startup_for_descriptor(
         startup_context,
-        descriptor.clone(),
+        descriptor,
         &PersistedWorldBinding {
             world_id: world_session.world_id.clone(),
             world_generation: world_session.world_generation,
@@ -5365,7 +5486,7 @@ async fn ensure_member_runtime_ready_for_descriptor(
         Err(failure) => return Err(anyhow!("substrate: error: {}", failure.message)),
     };
     if let Some(runtime) = runtime {
-        pending_member_replacements.remove(&descriptor.backend_id);
+        pending_member_replacements.remove(&backend_id);
         member_runtimes.insert(runtime_backend_id(&runtime), runtime);
         return Ok(true);
     }
@@ -5383,7 +5504,7 @@ struct EnsureMemberRuntimeReadyContext<'a> {
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 async fn ensure_member_runtime_ready_for_descriptor(
     context: EnsureMemberRuntimeReadyContext<'_>,
-    _descriptor: &RuntimeSelectionDescriptor,
+    _parity: &MemberDispatchParitySubset,
     _initial_prompt: Option<&str>,
     _member_runtimes: &mut RetainedMemberRuntimeMap,
     _pending_member_replacements: &mut PendingMemberReplacementMap,
@@ -5423,6 +5544,7 @@ async fn ensure_member_runtime_ready(
     else {
         return Ok(());
     };
+    let parity = MemberDispatchParitySubset::from_descriptor(&descriptor);
 
     ensure_member_runtime_ready_for_descriptor(
         EnsureMemberRuntimeReadyContext {
@@ -5431,7 +5553,7 @@ async fn ensure_member_runtime_ready(
             agent_printer,
             telemetry,
         },
-        &descriptor,
+        &parity,
         None,
         member_runtimes,
         pending_member_replacements,
@@ -9713,6 +9835,165 @@ mod tests {
             )
             .await;
         });
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn build_member_dispatch_transport_request_uses_shared_contract_parity_subset() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let prepared = prepare_host_orchestrator_runtime_startup(&config)
+            .expect("prepare host runtime should succeed")
+            .expect("host runtime should be configured");
+        let startup_context = prepared.startup_context.clone();
+        let host_manifest = prepared.manifest.clone();
+        let initial_world_binding = PersistedWorldBinding {
+            world_id: "wld_member_test".to_string(),
+            world_generation: 7,
+        };
+        seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+        let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+            .expect("member selection should succeed")
+            .expect("one world-scoped member should be selected");
+        let expected_binary_path = selected_descriptor.binary_path.display().to_string();
+        let expected_protocol = selected_descriptor.protocol.clone();
+        let expected_backend_kind = selected_descriptor.backend_kind;
+        let mut member_prepared = prepare_member_runtime_startup_for_descriptor(
+            &startup_context,
+            selected_descriptor,
+            &initial_world_binding,
+            None,
+        )
+        .expect("member runtime prepare should succeed");
+        member_prepared.descriptor.protocol = "drifted.protocol".to_string();
+        member_prepared.descriptor.backend_kind = AgentRuntimeBackendKind::ClaudeCode;
+        member_prepared.descriptor.binary_path = PathBuf::from("/tmp/drifted-member-binary");
+
+        let request =
+            build_member_dispatch_transport_request(&member_prepared, Some("hello".to_string()))
+                .expect("member dispatch request");
+
+        assert_eq!(request.backend_id, "cli:codex");
+        assert_eq!(request.protocol, expected_protocol);
+        assert_eq!(request.binary_path, expected_binary_path);
+        assert_eq!(
+            request.backend_kind,
+            member_runtime_backend_kind(expected_backend_kind)
+        );
+
+        std::env::remove_var("SUBSTRATE_HOME");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn retained_member_dispatch_parity_subset_prefers_pending_replacement_truth() {
+        let _world_env_guard = crate::execution::world_env_guard();
+        let temp = TempDir::new().expect("tempdir");
+        let workspace_root = temp.path().join("workspace");
+        let substrate_home = temp.path().join("substrate-home");
+        fs::create_dir_all(&workspace_root).expect("workspace root");
+        fs::create_dir_all(&substrate_home).expect("substrate home");
+        let _cwd_guard = CurrentDirGuard::change_to(&workspace_root);
+        let fake_orchestrator =
+            write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+        let fake_member = write_fake_codex_script_with_running_and_shutdown_delay(&temp, 1, 1);
+
+        std::env::set_var("SUBSTRATE_HOME", &substrate_home);
+        write_runtime_inventory_with_world_member(
+            &substrate_home,
+            &fake_orchestrator,
+            &fake_member,
+        );
+
+        let config = Arc::new(test_shell_config(&workspace_root, &substrate_home));
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let prepared = prepare_host_orchestrator_runtime_startup(&config)
+                .expect("prepare host runtime should succeed")
+                .expect("host runtime should be configured");
+            let startup_context = prepared.startup_context.clone();
+            let host_manifest = prepared.manifest.clone();
+            let initial_world_binding = PersistedWorldBinding {
+                world_id: "wld_member_old".to_string(),
+                world_generation: 2,
+            };
+            let mut telemetry = ReplSessionTelemetry::new(config.clone(), "async-test");
+            seed_live_orchestrator_parent(&startup_context, &host_manifest, &initial_world_binding);
+
+            let selected_descriptor = select_member_runtime_descriptor(&startup_context)
+                .expect("member selection should succeed")
+                .expect("one world-scoped member should be selected");
+            let backend_id = selected_descriptor.backend_id.clone();
+            let member_prepared = prepare_member_runtime_startup_for_descriptor(
+                &startup_context,
+                selected_descriptor.clone(),
+                &initial_world_binding,
+                None,
+            )
+            .expect("member runtime prepare should succeed");
+            let member_runtime = start_member_runtime_with_prepared(
+                Some(member_prepared),
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await
+            .expect("member runtime start should succeed")
+            .expect("member runtime");
+
+            let previous_member = runtime_manifest_snapshot(&member_runtime);
+            let mut pending_member_replacements = PendingMemberReplacementMap::new();
+            pending_member_replacements.insert(backend_id.clone(), previous_member.clone());
+
+            let mut drifted_startup_context = startup_context.clone();
+            drifted_startup_context.inventory.remove("codex");
+
+            let parity = retained_member_dispatch_parity_subset(
+                Some(&drifted_startup_context),
+                &RetainedMemberRuntimeMap::new(),
+                &pending_member_replacements,
+                &backend_id,
+            )
+            .expect("parity lookup should succeed")
+            .expect("pending retained member parity");
+
+            assert_eq!(parity.agent_id, previous_member.handle.agent_id);
+            assert_eq!(parity.backend_id, previous_member.handle.backend_id);
+            assert_eq!(parity.protocol, previous_member.handle.protocol);
+            assert_eq!(parity.execution_scope, previous_member.handle.execution.scope);
+            assert_eq!(
+                parity.binary_path,
+                PathBuf::from(previous_member.internal.resolved_binary_path.clone())
+            );
+
+            shutdown_host_orchestrator_runtime(
+                member_runtime,
+                &ReplPrinter::Stdout,
+                &mut telemetry,
+            )
+            .await;
+        });
+
         std::env::remove_var("SUBSTRATE_HOME");
     }
 

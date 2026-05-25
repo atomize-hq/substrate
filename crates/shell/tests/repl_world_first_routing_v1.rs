@@ -2320,6 +2320,11 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
         .expect("typed submit route output");
 
     let guard = records.lock().expect("lock records");
+    let member_dispatch = guard
+        .member_dispatch_requests
+        .first()
+        .and_then(|request| request.member_dispatch.as_ref())
+        .expect("member dispatch request");
     assert_eq!(
         guard.member_dispatch_requests.len(),
         1,
@@ -2339,6 +2344,22 @@ fn c3_targeted_world_turn_uses_typed_submit_route_without_relaunching_member() {
     assert_eq!(submit.world_id, world_id);
     assert_eq!(submit.world_generation, world_generation);
     assert_eq!(submit.prompt, "second");
+    assert_eq!(
+        member_dispatch.backend_id, "cli:codex",
+        "retained member cold start must preserve the exact backend identity in the typed dispatch request"
+    );
+    assert_eq!(
+        member_dispatch.protocol, "substrate.agent.session",
+        "retained member cold start must keep the shared dispatch protocol unchanged"
+    );
+    assert_eq!(
+        member_dispatch.resolved_runtime.binary_path,
+        member
+            .pointer("/internal/resolved_binary_path")
+            .and_then(Value::as_str)
+            .expect("member resolved binary path"),
+        "retained member dispatch must carry the persisted resolved binary path rather than reconstructing a hidden descriptor"
+    );
     drop(guard);
 
     let live_members_after = wait_for_live_world_member_count(
@@ -2545,6 +2566,14 @@ fn c3_targeted_world_turn_relaunches_exact_backend_after_world_restart() {
     assert_eq!(
         replacement_dispatch.initial_prompt.as_deref(),
         Some("second")
+    );
+    assert_eq!(
+        replacement_dispatch.resolved_runtime.binary_path,
+        replacement
+            .pointer("/internal/resolved_binary_path")
+            .and_then(Value::as_str)
+            .expect("replacement resolved binary path"),
+        "replacement member relaunch must use the retained parity subset for resolved runtime truth"
     );
     drop(guard);
 

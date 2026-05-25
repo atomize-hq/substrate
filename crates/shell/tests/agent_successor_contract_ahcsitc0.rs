@@ -3676,6 +3676,87 @@ fn agent_status_surfaces_host_successor_lineage_for_active_orchestrator_sessions
 }
 
 #[test]
+fn host_successor_session_persists_durable_attach_continuity_contract() {
+    let fixture = AgentSuccessorFixture::new();
+    fixture.init_workspace();
+    fixture.seed_inventory_for_list_and_status_contracts();
+    write_orchestration_session_with_manifest_options(
+        &fixture,
+        OrchestrationSessionManifestSpec {
+            agent_id: "claude_code",
+            orchestration_session_id: "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5",
+            active_session_handle_id: Some("ash_orchestrator_new_attach_contract"),
+            state: "active",
+            ts: "2026-04-05T00:00:05Z",
+            world_binding: None,
+        },
+        OrchestrationSessionManifestOptions {
+            host_attach_contract: Some(Some("uaa-successor-continuity-1")),
+            ..OrchestrationSessionManifestOptions::default()
+        },
+    );
+    write_invalidated_runtime_manifest(
+        &fixture,
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5",
+        "ash_orchestrator_old_attach_contract",
+        "2026-04-05T00:00:04Z",
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_orchestrator_new_attach_contract",
+        "claude_code",
+        "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5",
+        RuntimeParticipantOptions::host_orchestrator("running", true, "2026-04-05T00:00:05Z")
+            .with_resumed_from_participant_id(Some("ash_orchestrator_old_attach_contract")),
+    );
+
+    let output = fixture.run(&["agent", "status", "--json"]);
+    assert!(
+        output.status.success(),
+        "agent status should succeed for successor attach-contract fixtures: {output:?}"
+    );
+
+    let json = parse_json_output(&output);
+    let sessions = json["sessions"]
+        .as_array()
+        .expect("sessions should be an array");
+    let successor = find_session_by_participant(sessions, "ash_orchestrator_new_attach_contract");
+    assert_eq!(
+        successor.pointer("/participant_id").and_then(Value::as_str),
+        Some("ash_orchestrator_new_attach_contract")
+    );
+    assert_eq!(
+        successor.pointer("/attached_participant_id").and_then(Value::as_str),
+        Some("ash_orchestrator_new_attach_contract"),
+        "status must keep the live successor attached to the canonical participant id"
+    );
+
+    let persisted = serde_json::from_str::<Value>(
+        &fs::read_to_string(canonical_orchestration_session_path(
+            &fixture,
+            "0195f8f1-7a34-7b7f-9c4d-9a7c2f5d6fb5",
+        ))
+        .expect("host successor session should be readable"),
+    )
+    .expect("host successor session should be valid JSON");
+    assert_eq!(
+        persisted
+            .pointer("/host_attach_contract/continuity_uaa_session_id")
+            .and_then(Value::as_str),
+        Some("uaa-successor-continuity-1"),
+        "successor sessions must retain the durable attach continuity selector"
+    );
+    assert_eq!(
+        persisted
+            .pointer("/host_attach_contract/backend_id")
+            .and_then(Value::as_str),
+        Some("cli:claude_code"),
+        "successor sessions must keep the durable attach contract bound to the same backend"
+    );
+}
+
+#[test]
 fn agent_status_json_prefers_live_runtime_member_manifest_with_top_level_world_identity() {
     let fixture = AgentSuccessorFixture::new();
     fixture.init_workspace();

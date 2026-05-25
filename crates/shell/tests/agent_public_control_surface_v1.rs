@@ -1807,6 +1807,194 @@ fn public_reattach_uses_persisted_attach_continuity_selector_for_resume_args() {
 
 #[test]
 #[serial]
+fn public_reattach_fails_closed_when_persisted_attach_contract_disables_resume() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    let orchestration_session_id = "sess_resume_disabled_contract";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        orchestration_session_id,
+        "ash_resume_disabled_contract",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_resume_disabled_contract",
+        "codex",
+        orchestration_session_id,
+        "running",
+        false,
+        Some("uaa-ambient-detached"),
+        None,
+        ts,
+    );
+
+    let mut session = fixture.load_orchestration_session(orchestration_session_id);
+    session["host_attach_contract"]["capabilities"] = json!({
+        "session_resume": false,
+        "session_fork": true,
+        "session_stop": true,
+        "status_snapshot": true,
+        "event_stream": true
+    });
+    write_json_file(
+        &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
+        &session,
+    );
+
+    let output = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        !output.status.success(),
+        "public reattach must fail closed when durable attach truth disables resume: {output:?}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("durable host attach contract does not allow resume"),
+        "reattach denial must explain the persisted attach capability gate: {output:?}"
+    );
+    assert!(
+        !fixture.fake_codex_args_path(1).exists(),
+        "reattach denial must fail before launching the backend runtime"
+    );
+}
+
+#[test]
+#[serial]
+fn public_fork_and_stop_fail_closed_when_persisted_attach_contract_disables_capabilities() {
+    let fixture = AgentControlFixture::new();
+    fixture.init_workspace();
+    fixture.write_runtime_inventory(false);
+
+    let ts = "2026-05-05T00:00:00Z";
+    let orchestration_session_id = "sess_capability_gated_public_control";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        orchestration_session_id,
+        "ash_capability_gated_source",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_capability_gated_source",
+        "codex",
+        orchestration_session_id,
+        "running",
+        false,
+        Some("uaa-capability-gated"),
+        None,
+        ts,
+    );
+
+    let reattach_output = fixture.run(&[
+        "agent",
+        "reattach",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        reattach_output.status.success(),
+        "public reattach should succeed before fork/stop capability denial is exercised: {reattach_output:?}"
+    );
+
+    let mut session = fixture.load_orchestration_session(orchestration_session_id);
+    session["host_attach_contract"]["capabilities"] = json!({
+        "session_resume": true,
+        "session_fork": false,
+        "session_stop": false,
+        "status_snapshot": true,
+        "event_stream": true
+    });
+    write_json_file(
+        &canonical_orchestration_session_path(&fixture.substrate_home, orchestration_session_id),
+        &session,
+    );
+
+    let fork_output = fixture.run(&[
+        "agent",
+        "fork",
+        "--session",
+        orchestration_session_id,
+        "--json",
+    ]);
+    assert!(
+        !fork_output.status.success(),
+        "public fork must fail closed when durable attach truth disables fork: {fork_output:?}"
+    );
+    let fork_stderr = String::from_utf8_lossy(&fork_output.stderr);
+    assert!(
+        fork_stderr.contains("durable host attach contract does not allow fork"),
+        "fork denial must explain the persisted attach capability gate: {fork_output:?}"
+    );
+
+    let stopped_session_id = "sess_capability_gated_public_stop";
+    write_parked_orchestration_session(
+        &fixture,
+        "codex",
+        stopped_session_id,
+        "ash_capability_gated_stop_source",
+        ts,
+    );
+    write_runtime_participant(
+        &fixture,
+        "ash_capability_gated_stop_source",
+        "codex",
+        stopped_session_id,
+        "running",
+        false,
+        Some("uaa-capability-gated-stop"),
+        None,
+        ts,
+    );
+    let mut stopped_session = fixture.load_orchestration_session(stopped_session_id);
+    stopped_session["host_attach_contract"]["capabilities"] = json!({
+        "session_resume": true,
+        "session_fork": true,
+        "session_stop": false,
+        "status_snapshot": true,
+        "event_stream": true
+    });
+    write_json_file(
+        &canonical_orchestration_session_path(&fixture.substrate_home, stopped_session_id),
+        &stopped_session,
+    );
+
+    let stop_output = fixture.run(&[
+        "agent",
+        "stop",
+        "--session",
+        stopped_session_id,
+        "--json",
+    ]);
+    assert!(
+        !stop_output.status.success(),
+        "public stop must fail closed when parked durable attach truth disables stop: {stop_output:?}"
+    );
+    let stop_stderr = String::from_utf8_lossy(&stop_output.stderr);
+    assert!(
+        stop_stderr.contains("durable host attach contract does not allow stop"),
+        "stop denial must explain the persisted attach capability gate: {stop_output:?}"
+    );
+
+    let owner_pid = fixture.load_orchestration_session(orchestration_session_id)["shell_owner_pid"]
+        .as_u64()
+        .expect("reattach owner pid") as u32;
+    terminate_pid(owner_pid);
+}
+
+#[test]
+#[serial]
 fn public_stop_cleanly_closes_same_durable_session_after_reattach() {
     let fixture = AgentControlFixture::new();
     fixture.init_workspace();
